@@ -29,9 +29,67 @@
   transition: background 0.12s;
 }
 
-.menu-item:hover {
+.menu-item:hover,
+.menu-item[data-state="open"] {
   background: var(--bg-toolbar);
   color: var(--text);
+}
+
+/* ── Dropdown menus (Radix) ─────────────────────────────── */
+
+.dropdown-content {
+  min-width: 200px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  animation: dropdown-in 0.12s ease;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 1rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: default;
+  outline: none;
+  user-select: none;
+}
+
+.dropdown-item[data-highlighted] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.dropdown-item[data-disabled] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.dropdown-shortcut {
+  margin-left: 2rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.dropdown-item[data-highlighted] .dropdown-shortcut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dropdown-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 .menubar-title {

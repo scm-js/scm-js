@@ -1,4 +1,5 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   activeToolAtom,
   mapNameAtom,
@@ -6,7 +7,6 @@ import {
   mapHeightAtom,
   cursorTileAtom,
   zoomAtom,
-  screenAtom,
   type EditorTool,
 } from "../atoms/editorAtoms";
 import "./EditorLayout.css";
@@ -23,6 +23,140 @@ const TOOLS: { id: EditorTool; label: string; icon: string }[] = [
   { id: "fog", label: "Fog", icon: "🌫" },
 ];
 
+/* ── Classic StarEdit menu definitions ──────────────────── */
+
+interface MenuItem {
+  label: string;
+  shortcut?: string;
+  separator?: boolean;
+  disabled?: boolean;
+}
+
+const MENUS: { label: string; items: MenuItem[] }[] = [
+  {
+    label: "File",
+    items: [
+      { label: "New...", shortcut: "Ctrl+N" },
+      { label: "Open...", shortcut: "Ctrl+O" },
+      { label: "separator", separator: true },
+      { label: "Save", shortcut: "Ctrl+S" },
+      { label: "Save As...", shortcut: "Ctrl+Shift+S" },
+      { label: "separator", separator: true },
+      { label: "Close Map" },
+      { label: "separator", separator: true },
+      { label: "Test Map", shortcut: "Ctrl+T", disabled: true },
+      { label: "separator", separator: true },
+      { label: "Exit" },
+    ],
+  },
+  {
+    label: "Edit",
+    items: [
+      { label: "Undo", shortcut: "Ctrl+Z" },
+      { label: "Redo", shortcut: "Ctrl+Y" },
+      { label: "separator", separator: true },
+      { label: "Cut", shortcut: "Ctrl+X" },
+      { label: "Copy", shortcut: "Ctrl+C" },
+      { label: "Paste", shortcut: "Ctrl+V" },
+      { label: "Delete", shortcut: "Del" },
+      { label: "separator", separator: true },
+      { label: "Select All", shortcut: "Ctrl+A" },
+    ],
+  },
+  {
+    label: "View",
+    items: [
+      { label: "Zoom In", shortcut: "+" },
+      { label: "Zoom Out", shortcut: "-" },
+      { label: "Zoom 100%", shortcut: "Ctrl+1" },
+      { label: "separator", separator: true },
+      { label: "Show Grid" },
+      { label: "Show Locations" },
+      { label: "Show Fog of War" },
+      { label: "Show Sprites" },
+      { label: "separator", separator: true },
+      { label: "Minimap" },
+      { label: "Palette" },
+      { label: "Properties" },
+    ],
+  },
+  {
+    label: "Map",
+    items: [
+      { label: "Map Properties..." },
+      { label: "Map Size..." },
+      { label: "separator", separator: true },
+      { label: "Player Settings..." },
+      { label: "Force Settings..." },
+      { label: "separator", separator: true },
+      { label: "Terrain Types..." },
+      { label: "Tilesets..." },
+    ],
+  },
+  {
+    label: "Layer",
+    items: [
+      { label: "Terrain" },
+      { label: "Doodads" },
+      { label: "Units" },
+      { label: "Sprites" },
+      { label: "Locations" },
+      { label: "Fog of War" },
+    ],
+  },
+  {
+    label: "Triggers",
+    items: [
+      { label: "Trigger Editor...", shortcut: "Ctrl+G" },
+      { label: "Mission Briefing..." },
+      { label: "separator", separator: true },
+      { label: "Conditions..." },
+      { label: "Actions..." },
+      { label: "separator", separator: true },
+      { label: "AI Scripts..." },
+      { label: "Switch List..." },
+      { label: "Location List..." },
+    ],
+  },
+  {
+    label: "Help",
+    items: [
+      { label: "StarEdit Help...", shortcut: "F1" },
+      { label: "separator", separator: true },
+      { label: "About JS Edit..." },
+    ],
+  },
+];
+
+function MenuDropdown({ label, items }: { label: string; items: MenuItem[] }) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button className="menu-item">{label}</button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="dropdown-content" sideOffset={2} align="start">
+          {items.map((item, i) =>
+            item.separator ? (
+              <DropdownMenu.Separator key={i} className="dropdown-separator" />
+            ) : (
+              <DropdownMenu.Item
+                key={item.label}
+                className="dropdown-item"
+                disabled={item.disabled}
+                onSelect={() => {/* no-op for now */}}
+              >
+                <span>{item.label}</span>
+                {item.shortcut && <span className="dropdown-shortcut">{item.shortcut}</span>}
+              </DropdownMenu.Item>
+            )
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 /* ── Component ──────────────────────────────────────────── */
 
 export default function EditorLayout() {
@@ -32,22 +166,14 @@ export default function EditorLayout() {
   const mapW = useAtomValue(mapWidthAtom);
   const mapH = useAtomValue(mapHeightAtom);
   const cursor = useAtomValue(cursorTileAtom);
-  const setScreen = useSetAtom(screenAtom);
 
   return (
     <div className="editor">
       {/* ── Menu bar ──────────────────────────────────────── */}
       <header className="editor-menubar">
-        <button className="menu-item" onClick={() => setScreen("splash")}>
-          ← Back
-        </button>
-        <span className="menu-item">File</span>
-        <span className="menu-item">Edit</span>
-        <span className="menu-item">View</span>
-        <span className="menu-item">Map</span>
-        <span className="menu-item">Layer</span>
-        <span className="menu-item">Triggers</span>
-        <span className="menu-item">Help</span>
+        {MENUS.map((menu) => (
+          <MenuDropdown key={menu.label} label={menu.label} items={menu.items} />
+        ))}
         <span className="menubar-title">{mapName}</span>
       </header>
 

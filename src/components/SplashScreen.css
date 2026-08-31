@@ -1,0 +1,97 @@
+/* ── Splash Screen ──────────────────────────────────────── */
+
+.splash-backdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: radial-gradient(ellipse at center, #1a1a2e 0%, #0d0d1a 100%);
+}
+
+.splash-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  padding: 3rem 4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(22, 33, 62, 0.85);
+  box-shadow: 0 0 60px rgba(233, 69, 96, 0.12), 0 0 120px rgba(15, 52, 96, 0.25);
+  backdrop-filter: blur(6px);
+  min-width: 380px;
+}
+
+/* Logo / title area */
+.splash-logo {
+  text-align: center;
+}
+
+.splash-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 0 8px var(--gold));
+}
+
+.splash-title {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.splash-title .highlight {
+  color: var(--accent);
+}
+
+.splash-subtitle {
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+/* Navigation buttons */
+.splash-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.splash-btn {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-toolbar);
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.splash-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.splash-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Footer */
+.splash-footer {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.4rem;
+}
+
+.splash-dot {
+  opacity: 0.4;
+}

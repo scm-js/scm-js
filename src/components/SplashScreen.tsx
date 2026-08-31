@@ -75,21 +75,33 @@ export default function SplashScreen() {
     let raf = 0;
     let start = 0;
 
+    let lastW = 0;
+    let lastH = 0;
+
     function draw(time: number) {
       if (!start) start = time;
       const elapsed = time - start;
 
-      canvas!.width = canvas!.clientWidth * devicePixelRatio;
-      canvas!.height = canvas!.clientHeight * devicePixelRatio;
-      ctx.scale(devicePixelRatio, devicePixelRatio);
+      const cw = canvas!.clientWidth;
+      const ch = canvas!.clientHeight;
+      if (cw === 0 || ch === 0) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
 
-      const w = canvas!.clientWidth;
-      const h = canvas!.clientHeight;
-      const cx = w / 2;
-      const cy = h / 2;
-      const fov = Math.min(w, h) * 0.7;
+      if (cw !== lastW || ch !== lastH) {
+        lastW = cw;
+        lastH = ch;
+        canvas!.width = cw * devicePixelRatio;
+        canvas!.height = ch * devicePixelRatio;
+      }
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
 
-      ctx.clearRect(0, 0, w, h);
+      const cx = cw / 2;
+      const cy = ch / 2;
+      const fov = Math.min(cw, ch) * 0.7;
+
+      ctx.clearRect(0, 0, cw, ch);
 
       const angleY = elapsed * 0.0008;
       const angleX = 0.35;
@@ -110,14 +122,7 @@ export default function SplashScreen() {
         ctx.stroke();
       }
 
-      if (elapsed < SPLASH_DURATION - 600) {
-        raf = requestAnimationFrame(draw);
-      } else if (!fading) {
-        setFading(true);
-        raf = requestAnimationFrame(draw);
-      } else {
-        raf = requestAnimationFrame(draw);
-      }
+      raf = requestAnimationFrame(draw);
     }
 
     raf = requestAnimationFrame(draw);

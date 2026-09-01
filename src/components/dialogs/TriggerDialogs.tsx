@@ -1,45 +1,461 @@
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Braces, Copy, MessageSquare, Pencil, Plus, Trash2, Zap } from "lucide-react";
-import { TRIGGER_PLAYER_GROUPS } from "../../data/players";
-import { ACTIONS, BRIEFING_ACTIONS, CONDITIONS, SAMPLE_TRIGGERS, SAMPLE_TRIGGER_TEXT } from "../../data/triggers";
-import { Button, Check, ListBox, Select, Tabs, TextInput } from "../ui";
+/**
+ * The three trigger editors over `scenario.triggers` / `scenario.briefing`:
+ *
+ * - Classic (StarEdit-style forms) and Mission Briefing share `TriggerListEditor`, a
+ *   three-pane list ▸ trigger ▸ condition/action editor whose argument widgets are driven
+ *   entirely by `data/triggerDefs.ts`.
+ * - Text (TrigEdit syntax) prints the list through `formats/triggers/text.ts` and parses
+ *   it back on Compile.
+ *
+ * All three are dialog transactions (OK / Apply / Cancel over a working copy) like the
+ * settings dialogs, committed through `commitTriggersAtom`.
+ */
+import { useMemo, useState, type ReactNode } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { ArrowDown, ArrowUp, Braces, Code2, Copy, MessageSquare, Plus, Trash2, Zap } from "lucide-react";
+import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, scriptStateAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { findBlock, type ScriptBlock, type ScriptManifest } from "../../editor/script";
+import {
+  ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, PLAYER_GROUP_CHOICES,
+  UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
+} from "../../data/triggerDefs";
+import { UNIT_NAMES } from "../../data/units";
+import type { Scenario } from "../../formats/chk/scenario";
+import {
+  ActionFlag, ConditionFlag, ConditionType, MAX_ACTIONS, MAX_CONDITIONS, PlayerGroup, SWITCH_COUNT, cloneTrigger,
+  type ActionRecord, type ConditionRecord, type TriggerRecord,
+} from "../../formats/chk/sections/triggers";
+import { formatAction, formatCondition, formatTriggers, parseTriggers, summarizeTrigger, TriggerTextError, triggerComment, withComment, type TriggerNames } from "../../formats/triggers/text";
+import { usedLocations } from "../../editor/locations";
+import { unitCustomName } from "../../editor/settings";
+import {
+  applyBriefing, applyTriggers, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers,
+  removeTriggers, setPreserved, triggerNames,
+} from "../../editor/triggers";
+import { useScenarioForm } from "../../hooks/useScenarioForm";
+import { Button, Check, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
+/* ── Shared ─────────────────────────────────────────────── */
+
+function useNames(scenario: Scenario | null): TriggerNames | null {
+  // Locations, unit names and switch names can all change under an open dialog.
+  const settingsRev = useAtomValue(settingsRevisionAtom);
+  const locationsRev = useAtomValue(locationsRevisionAtom);
+  const triggersRev = useAtomValue(triggersRevisionAtom);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (scenario ? triggerNames(scenario) : null), [scenario, settingsRev, locationsRev, triggersRev]);
+}
+
+function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: ReactNode }) {
+  return (
+    <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
+      <p className="hint">Open or create a map first.</p>
+    </DialogFrame>
+  );
+}
+
+/** The player groups worth listing: the common 22, plus any the list actually uses. */
+function visibleGroups(list: TriggerRecord[]): number[] {
+  const hidden = new Set<number>([PlayerGroup.None, PlayerGroup.Unused1, PlayerGroup.Unused2, PlayerGroup.Unused3, PlayerGroup.Unused4]);
+  for (const t of list) t.players.forEach((v, i) => { if (v) hidden.delete(i); });
+  return PLAYER_GROUP_CHOICES.map((c) => c.value).filter((v) => !hidden.has(v));
+}
+
+/* ── Argument widgets ───────────────────────────────────── */
+
+interface ArgProps {
+  kind: ArgKind;
+  value: number;
+  onChange: (v: number) => void;
+  names: TriggerNames;
+  scenario: Scenario;
+}
+
+/** A select whose current value is kept selectable even when the table does not list it. */
+function ChoiceSelect({ value, onChange, options, width }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; width?: number }) {
+  const opts = options.map((o) => ({ value: String(o.value), label: o.label }));
+  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: `${value} (raw)` });
+  return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
+}
+
+function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
+  switch (kind) {
+    case "player":
+      return <ChoiceSelect value={value} onChange={onChange} options={PLAYER_GROUP_CHOICES} width={200} />;
+    case "unit": {
+      const options = [
+        ...UNIT_CLASS_CHOICES,
+        ...UNIT_NAMES.map((n, id) => ({ value: id, label: unitCustomName(scenario, id) || n })),
+      ];
+      return <ChoiceSelect value={value} onChange={onChange} options={options} width={260} />;
+    }
+    case "location": {
+      const options = [{ value: 0, label: "No Location" }, ...usedLocations(scenario).map((i) => ({ value: i + 1, label: names.location(i + 1) }))];
+      return <ChoiceSelect value={value} onChange={onChange} options={options} width={200} />;
+    }
+    case "switch":
+      return <ChoiceSelect value={value} onChange={onChange} options={Array.from({ length: SWITCH_COUNT }, (_, i) => ({ value: i, label: names.switch(i) }))} width={200} />;
+    case "aiScript": {
+      const options = AI_SCRIPT_CHOICES.map((s) => ({ value: aiScriptCode(s.id), label: s.name }));
+      if (!options.some((o) => o.value === value)) options.push({ value, label: `${aiScriptId(value)} (raw)` });
+      return <ChoiceSelect value={value} onChange={onChange} options={options} width={280} />;
+    }
+    case "text": case "wav":
+      return (
+        <TextInput
+          style={{ width: 360 }}
+          value={names.string(value) ?? ""}
+          placeholder={kind === "wav" ? "sound\\file.wav" : "Text"}
+          onChange={(e) => onChange(names.intern(e.target.value))}
+        />
+      );
+    case "textFlags":
+      return <Check label="Always display" checked={(value & ActionFlag.AlwaysDisplay) !== 0} onChange={(e) => onChange(e.target.checked ? ActionFlag.AlwaysDisplay : 0)} />;
+    case "count":
+      return (
+        <span className="row" style={{ gap: 6 }}>
+          <NumberInput value={value} onChange={onChange} min={0} max={255} width={90} />
+          <span className="hint">{value === 0 ? "all" : ""}</span>
+        </span>
+      );
+    case "number": case "amount": case "duration": case "percent": case "cuwp": case "slot":
+      return <NumberInput value={value} onChange={onChange} min={0} max={kind === "percent" ? 100 : 4294967295} width={120} unit={kind === "duration" ? "ms" : undefined} />;
+    default: {
+      const options = CHOICES[kind] ?? [];
+      return <ChoiceSelect value={value} onChange={onChange} options={options} width={160} />;
+    }
+  }
+}
+
+/** Argument rows for one condition or action, editing the record in place through `onChange`. */
+function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onChange, names, scenario }: {
+  record: R;
+  def: ConditionDef | ActionDef | undefined;
+  onChange: (next: R) => void;
+  names: TriggerNames;
+  scenario: Scenario;
+}) {
+  if (!def) return <p className="hint">Unknown type {record.type}; edit it through the text editor.</p>;
+  const r = record as unknown as Record<string, number>;
+  const set = (arg: ArgDef<string>, v: number) => {
+    const next = { ...record } as unknown as Record<string, number>;
+    if (arg.kind === "textFlags") next.flags = (next.flags & ~ActionFlag.AlwaysDisplay) | v;
+    else next[arg.field] = v;
+    onChange(next as unknown as R);
+  };
+  return (
+    <div className="trig-args">
+      {def.args.length === 0 && <span className="hint">No arguments.</span>}
+      {def.args.map((arg, i) => (
+        <label key={i} className="trig-arg">
+          <span className="lbl">{arg.label}</span>
+          <ArgWidget kind={arg.kind} value={arg.kind === "textFlags" ? r.flags & ActionFlag.AlwaysDisplay : r[arg.field]} onChange={(v) => set(arg, v)} names={names} scenario={scenario} />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/* ── Condition / action lists ───────────────────────────── */
+
+function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, kind, briefing, names, scenario }: {
+  items: R[];
+  setItems: (next: R[]) => void;
+  kind: "condition" | "action";
+  briefing: boolean;
+  names: TriggerNames;
+  scenario: Scenario;
+}) {
+  const [sel, setSel] = useState<number | null>(items.length ? 0 : null);
+  const defs = kind === "condition" ? CONDITION_DEFS : briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS;
+  const [addType, setAddType] = useState(defs[0].type);
+  const max = kind === "condition" ? MAX_CONDITIONS : MAX_ACTIONS;
+  const cur = sel !== null ? items[sel] : undefined;
+  const defOf = (r: R) => (kind === "condition" ? conditionDef(r.type) : actionDef(r.type, briefing));
+  const line = (r: R) => (kind === "condition" ? formatCondition(r as ConditionRecord, names) : formatAction(r as ActionRecord, names, briefing));
+  const disabledBit = kind === "condition" ? ConditionFlag.Disabled : ActionFlag.Disabled;
+
+  const replace = (i: number, r: R) => setItems(items.map((x, j) => (j === i ? r : x)));
+  const add = () => {
+    if (items.length >= max) return;
+    const r = (kind === "condition" ? newCondition(addType) : newAction(addType, briefing)) as R;
+    const at = sel === null ? items.length : sel + 1;
+    const next = items.slice();
+    next.splice(at, 0, r);
+    setItems(next);
+    setSel(at);
+  };
+  const remove = () => {
+    if (sel === null) return;
+    const next = items.filter((_, i) => i !== sel);
+    setItems(next);
+    setSel(next.length ? Math.min(sel, next.length - 1) : null);
+  };
+  const move = (d: -1 | 1) => {
+    if (sel === null) return;
+    const to = sel + d;
+    if (to < 0 || to >= items.length) return;
+    const next = items.slice();
+    [next[sel], next[to]] = [next[to], next[sel]];
+    setItems(next);
+    setSel(to);
+  };
+
+  return (
+    <div className="col" style={{ height: "100%", gap: 6 }}>
+      <ListBox
+        className="trig-items grow"
+        items={items}
+        selected={sel}
+        onSelect={setSel}
+        empty={`No ${kind}s. ${kind === "condition" ? "A trigger with no conditions never fires." : ""}`}
+        render={(r) => {
+          const text = line(r);
+          const m = /^;?([^(]+)\((.*)\);$/.exec(text);
+          const off = (r.flags & disabledBit) !== 0;
+          return (
+            <div className={`trig-line ${off ? "off" : ""}`}>
+              <span className="kw">{m ? m[1] : text}</span>
+              {m && (m[2] ? <><span className="faint">(</span><span className="param">{m[2]}</span><span className="faint">)</span></> : <span className="faint">()</span>)}
+            </div>
+          );
+        }}
+      />
+      <div className="row" style={{ gap: 4 }}>
+        <Select style={{ width: 240 }} value={String(addType)} onChange={(e) => setAddType(Number(e.target.value))} options={defs.map((d) => ({ value: String(d.type), label: d.name }))} />
+        <Button size="sm" onClick={add} disabled={items.length >= max} title={items.length >= max ? `At most ${max} ${kind}s` : undefined}><Plus size={11} /> Add</Button>
+        <Button size="sm" onClick={remove} disabled={sel === null}><Trash2 size={11} /> Delete</Button>
+        <span className="grow" />
+        <span className="hint">{items.length} / {max}</span>
+        <Button size="sm" icon title="Move up" onClick={() => move(-1)} disabled={sel === null || sel === 0}><ArrowUp size={11} /></Button>
+        <Button size="sm" icon title="Move down" onClick={() => move(1)} disabled={sel === null || sel >= items.length - 1}><ArrowDown size={11} /></Button>
+      </div>
+      {cur && sel !== null && (
+        <div className="trig-item-editor">
+          <div className="row between">
+            <Select
+              style={{ width: 240 }}
+              value={String(cur.type)}
+              onChange={(e) => replace(sel, (kind === "condition" ? newCondition(Number(e.target.value)) : newAction(Number(e.target.value), briefing)) as R)}
+              options={[...defs.map((d) => ({ value: String(d.type), label: d.name })), ...(defOf(cur) ? [] : [{ value: String(cur.type), label: `${cur.type} (raw)` }])]}
+            />
+            <Check label="Disabled" checked={(cur.flags & disabledBit) !== 0} onChange={(e) => replace(sel, { ...cur, flags: e.target.checked ? cur.flags | disabledBit : cur.flags & ~disabledBit })} />
+          </div>
+          <ItemEditor record={cur} def={defOf(cur)} onChange={(r) => replace(sel, r)} names={names} scenario={scenario} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Trigger list editor ────────────────────────────────── */
+
+function TriggerListEditor({ list, setList, briefing, names, scenario, manifest }: {
+  list: TriggerRecord[];
+  setList: (next: TriggerRecord[]) => void;
+  briefing: boolean;
+  names: TriggerNames;
+  scenario: Scenario;
+  /** The trigger script's build manifest: its block is shown locked (found by content, so it follows local edits). */
+  manifest?: ScriptManifest | null;
+}) {
+  const openDialog = useSetAtom(openDialogAtom);
+  const groups = useMemo(() => visibleGroups(list), [list]);
+  const block: ScriptBlock | null = useMemo(() => (manifest ? findBlock(list, manifest) : null), [list, manifest]);
+  const isGenerated = (i: number) => !!block && i >= block.start && i < block.start + block.count;
+  const [filter, setFilter] = useState<Set<number> | null>(null); // null = every group
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState<number | null>(list.length ? 0 : null);
+
+  const shown = useMemo(() => {
+    const out: number[] = [];
+    const needle = q.trim().toLowerCase();
+    list.forEach((t, i) => {
+      if (filter && !t.players.some((v, g) => v && filter.has(g))) return;
+      if (needle) {
+        const s = summarizeTrigger(t, names, briefing);
+        if (!`${s.players} ${s.conditions} ${s.actions} ${triggerComment(t, names) ?? ""}`.toLowerCase().includes(needle)) return;
+      }
+      out.push(i);
+    });
+    return out;
+  }, [list, filter, q, names, briefing]);
+
+  const cur = sel !== null ? list[sel] : undefined;
+  const locked = sel !== null && isGenerated(sel);
+  const replace = (t: TriggerRecord) => { if (sel !== null && !locked) setList(list.map((x, i) => (i === sel ? t : x))); };
+  const create = () => {
+    const t = newTrigger(briefing ? [PlayerGroup.Player1] : undefined);
+    if (briefing) t.conditions.push(newCondition(ConditionType.Briefing));
+    // Never inside the generated block: a new trigger after a generated one goes after the block.
+    const at = sel === null ? list.length : locked && block ? block.start + block.count : sel + 1;
+    setList(insertTrigger(list, at, t));
+    setSel(at);
+  };
+  const duplicate = () => {
+    if (!cur || sel === null || locked) return;
+    setList(insertTrigger(list, sel + 1, cloneTrigger(cur)));
+    setSel(sel + 1);
+  };
+  const remove = () => {
+    if (sel === null || locked) return;
+    const next = removeTriggers(list, [sel]);
+    setList(next);
+    setSel(next.length ? Math.min(sel, next.length - 1) : null);
+  };
+  const move = (d: -1 | 1) => {
+    if (sel === null || locked) return;
+    const to = sel + d;
+    if (to < 0 || to >= list.length) return;
+    setList(moveTrigger(list, sel, to));
+    setSel(to);
+  };
+
+  const label = briefing ? "briefing" : "trigger";
+  const sourceLine = (i: number) => (block ? block.lines[i - block.start] : undefined);
+
+  return (
+    <div className="split" style={{ ["--split" as string]: "180px", flex: 1, minHeight: 0 }}>
+      <div className="col" style={{ gap: 6, minHeight: 0 }}>
+        <div className="panel-head" style={{ borderRadius: 3 }}>Players</div>
+        <div className="listbox" style={{ flex: 1, padding: 4, overflow: "auto" }}>
+          <div className="col" style={{ gap: 0 }}>
+            {groups.map((g) => (
+              <Check
+                key={g}
+                label={PLAYER_GROUP_CHOICES[g].label}
+                checked={filter === null || filter.has(g)}
+                onChange={(e) => {
+                  const next = new Set(filter ?? groups);
+                  if (e.target.checked) next.add(g); else next.delete(g);
+                  setFilter(next.size === groups.length ? null : next);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 4 }}>
+          <Button size="sm" className="grow" onClick={() => setFilter(null)}>All</Button>
+          <Button size="sm" className="grow" onClick={() => setFilter(new Set())}>None</Button>
+        </div>
+      </div>
+
+      <div className="split" style={{ ["--split" as string]: "minmax(280px, 34%)", minHeight: 0 }}>
+        <div className="col" style={{ gap: 6, minHeight: 0 }}>
+          <TextInput placeholder={`Filter ${label}s…`} value={q} onChange={(e) => setQ(e.target.value)} />
+          <ListBox
+            className="trig-list"
+            style={{ flex: 1 }}
+            items={shown}
+            selected={sel !== null ? shown.indexOf(sel) : null}
+            onSelect={(_, i) => setSel(i)}
+            empty={list.length ? `No ${label}s match the current filter.` : `No ${label}s yet.`}
+            render={(i) => {
+              const t = list[i];
+              const s = summarizeTrigger(t, names, briefing);
+              const comment = triggerComment(t, names);
+              return (
+                <div className="body">
+                  <span className="who">{i + 1}. {s.players || <span className="faint">no players</span>}{comment ? <span className="faint"> — {comment}</span> : null}{isGenerated(i) && <span className="badge teal" title="Generated by the trigger script">script</span>}</span>
+                  {!briefing && <span className="summary">if {s.conditions || "—"}</span>}
+                  <span className="summary">{briefing ? "" : "then "}{s.actions || "—"}</span>
+                </div>
+              );
+            }}
+          />
+          <div className="row" style={{ gap: 4 }}>
+            <Button size="sm" onClick={create}><Plus size={11} /> New</Button>
+            <Button size="sm" onClick={duplicate} disabled={!cur || locked}><Copy size={11} /> Duplicate</Button>
+            <Button size="sm" onClick={remove} disabled={!cur || locked}><Trash2 size={11} /> Delete</Button>
+            <span className="grow" />
+            <Button size="sm" icon title="Move up" onClick={() => move(-1)} disabled={sel === null || sel === 0 || locked}><ArrowUp size={11} /></Button>
+            <Button size="sm" icon title="Move down" onClick={() => move(1)} disabled={sel === null || sel >= list.length - 1 || locked}><ArrowDown size={11} /></Button>
+          </div>
+        </div>
+
+        <div className="col" style={{ gap: 8, minHeight: 0 }}>
+          {cur && sel !== null && locked ? (
+            <div className="trig-generated">
+              <div className="row"><span className="badge gold">Trigger {sel + 1}</span><span className="badge teal">script</span></div>
+              <span>This trigger is generated by the map's trigger script{sourceLine(sel) ? ` (line ${sourceLine(sel)})` : ""}. Edit the source instead; a Build replaces the whole block.</span>
+              <Button size="sm" onClick={() => openDialog("scriptEditor", { line: sourceLine(sel) })}><Code2 size={11} /> Open Script Editor</Button>
+            </div>
+          ) : cur && sel !== null ? (
+            <>
+              <div className="row between">
+                <div className="row">
+                  <span className="badge gold">{briefing ? "Briefing" : "Trigger"} {sel + 1}</span>
+                  {!briefing && (
+                    <TextInput
+                      placeholder="Comment"
+                      value={triggerComment(cur, names) ?? ""}
+                      onChange={(e) => replace(withComment(cur, e.target.value, names))}
+                      style={{ width: 260 }}
+                    />
+                  )}
+                </div>
+                {!briefing && <Check label="Preserve trigger" checked={isPreserved(cur)} onChange={(e) => replace(setPreserved(cur, e.target.checked))} />}
+              </div>
+              <Tabs
+                key={sel}
+                className="grow"
+                defaultValue={briefing ? "actions" : "conditions"}
+                tabs={[
+                  {
+                    value: "players",
+                    label: "Players",
+                    content: (
+                      <div className="listbox" style={{ padding: 8, overflow: "auto" }}>
+                        <div className="player-check-grid">
+                          {PLAYER_GROUP_CHOICES.map((p) => (
+                            <Check
+                              key={p.value}
+                              label={p.label}
+                              checked={!!cur.players[p.value]}
+                              onChange={(e) => replace({ ...cur, players: cur.players.map((v, i) => (i === p.value ? (e.target.checked ? 1 : 0) : v)) })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  ...(briefing ? [] : [{
+                    value: "conditions",
+                    label: `Conditions (${cur.conditions.length})`,
+                    content: <ItemList items={cur.conditions} setItems={(c) => replace({ ...cur, conditions: c })} kind="condition" briefing={false} names={names} scenario={scenario} />,
+                  }]),
+                  {
+                    value: "actions",
+                    label: `Actions (${cur.actions.length})`,
+                    content: <ItemList items={cur.actions} setItems={(a) => replace({ ...cur, actions: a })} kind="action" briefing={briefing} names={names} scenario={scenario} />,
+                  },
+                ]}
+              />
+            </>
+          ) : (
+            <div className="props-empty">Select a {label}.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Classic Trigger Editor ─────────────────────────────── */
 
-function TrigLine({ text }: { text: string }) {
-  const m = /^([^(]+)\((.*)\)$/.exec(text);
-  if (!m) return <div className="trig-line">{text}</div>;
-  return (
-    <div className="trig-line">
-      <span className="kw">{m[1]}</span>
-      <span className="faint">(</span>
-      <span className="param">{m[2]}</span>
-      <span className="faint">)</span>
-    </div>
-  );
-}
-
-function ListActions() {
-  return (
-    <div className="row" style={{ gap: 4 }}>
-      <Button size="sm"><Plus size={11} /> New</Button>
-      <Button size="sm"><Pencil size={11} /> Edit</Button>
-      <Button size="sm"><Trash2 size={11} /> Delete</Button>
-      <span className="grow" />
-      <Button size="sm" icon title="Move up"><ArrowUp size={11} /></Button>
-      <Button size="sm" icon title="Move down"><ArrowDown size={11} /></Button>
-    </div>
-  );
-}
-
 export function TriggerEditorDialog({ entry }: DialogProps) {
-  const [filter, setFilter] = useState<Record<string, boolean>>({ "All Players": true, "Player 1": true, "Player 2": true, "Force 1": true, "Force 2": true, "Player 8": true });
-  const [sel, setSel] = useState(0);
-  const [q, setQ] = useState("");
-  const list = useMemo(() => SAMPLE_TRIGGERS.filter((t) => t.players.some((p) => filter[p]) && (q ? JSON.stringify(t).toLowerCase().includes(q.toLowerCase()) : true)), [filter, q]);
-  const cur = list[sel] ?? list[0];
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(triggersRevisionAtom);
+  const script = useAtomValue(scriptStateAtom);
+  const commit = useSetAtom(commitTriggersAtom);
+  const names = useNames(scenario);
+  const [local, setLocal] = useScenarioForm(scenario, readTriggers);
+  if (!scenario || !local || !names) return <NoMap entry={entry} title="Trigger Editor" icon={<Zap size={14} />} />;
+
+  const apply = () => { applyTriggers(scenario, local); commit(); };
 
   return (
     <DialogFrame
@@ -47,156 +463,11 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       title="Trigger Editor"
       icon={<Zap size={14} />}
       size="full"
-      footerLeft={<span>{SAMPLE_TRIGGERS.length} triggers · showing {list.length}</span>}
+      onOk={apply}
       showApply
+      footerLeft={<span>{local.length} trigger{local.length === 1 ? "" : "s"}</span>}
     >
-      <div className="split" style={{ ["--split" as string]: "180px", flex: 1 }}>
-        {/* player filter */}
-        <div className="col" style={{ gap: 6 }}>
-          <div className="panel-head" style={{ borderRadius: 3 }}>Players</div>
-          <div className="listbox" style={{ flex: 1, padding: 4 }}>
-            <div className="col" style={{ gap: 0 }}>
-              {TRIGGER_PLAYER_GROUPS.map((p) => (
-                <Check key={p} label={p} checked={!!filter[p]} onChange={(e) => setFilter({ ...filter, [p]: e.target.checked })} />
-              ))}
-            </div>
-          </div>
-          <div className="row" style={{ gap: 4 }}>
-            <Button size="sm" className="grow" onClick={() => setFilter(Object.fromEntries(TRIGGER_PLAYER_GROUPS.map((p) => [p, true])))}>All</Button>
-            <Button size="sm" className="grow" onClick={() => setFilter({})}>None</Button>
-          </div>
-        </div>
-
-        <div className="split" style={{ ["--split" as string]: "minmax(280px, 34%)" }}>
-          {/* trigger list */}
-          <div className="col" style={{ gap: 6 }}>
-            <div className="row">
-              <TextInput placeholder="Filter triggers…" value={q} onChange={(e) => { setQ(e.target.value); setSel(0); }} />
-            </div>
-            <ListBox
-              className="trig-list"
-              style={{ flex: 1 }}
-              items={list}
-              selected={list.indexOf(cur)}
-              onSelect={setSel}
-              empty="No triggers match the current player filter."
-              render={(t) => (
-                <div className="body">
-                  <span className="who">{t.players.join(", ")}{t.comment ? <span className="faint"> — {t.comment}</span> : null}</span>
-                  <span className="summary">if {t.conditions.join(" && ")}</span>
-                  <span className="summary">then {t.actions.join("; ")}</span>
-                </div>
-              )}
-            />
-            <div className="row" style={{ gap: 4 }}>
-              <Button size="sm"><Plus size={11} /> New Trigger</Button>
-              <Button size="sm"><Copy size={11} /> Duplicate</Button>
-              <Button size="sm"><Trash2 size={11} /> Delete</Button>
-              <span className="grow" />
-              <Button size="sm" icon title="Move up"><ArrowUp size={11} /></Button>
-              <Button size="sm" icon title="Move down"><ArrowDown size={11} /></Button>
-            </div>
-          </div>
-
-          {/* trigger detail */}
-          <div className="col" style={{ gap: 8, minHeight: 0 }}>
-            {cur ? (
-              <>
-                <div className="row between">
-                  <div className="row">
-                    <span className="badge gold">Trigger {cur.id}</span>
-                    <TextInput placeholder="Comment" defaultValue={cur.comment} key={cur.id} style={{ width: 260 }} />
-                  </div>
-                  <Check label="Preserve trigger" defaultChecked={cur.preserve} key={`p${cur.id}`} />
-                </div>
-                <Tabs
-                  className="grow"
-                  tabs={[
-                    {
-                      value: "players",
-                      label: "Players",
-                      content: (
-                        <div className="listbox" style={{ padding: 8 }}>
-                          <div className="player-check-grid">
-                            {TRIGGER_PLAYER_GROUPS.map((p) => <Check key={p} label={p} defaultChecked={cur.players.includes(p)} />)}
-                          </div>
-                        </div>
-                      ),
-                    },
-                    {
-                      value: "conditions",
-                      label: `Conditions (${cur.conditions.length})`,
-                      content: (
-                        <div className="col" style={{ height: "100%" }}>
-                          <div className="listbox grow">
-                            {cur.conditions.map((c, i) => <TrigLine key={i} text={c} />)}
-                            <div className="trig-line faint">+ add condition…</div>
-                          </div>
-                          <div className="row">
-                            <Select style={{ width: 240 }} options={CONDITIONS} />
-                            <ListActions />
-                          </div>
-                        </div>
-                      ),
-                    },
-                    {
-                      value: "actions",
-                      label: `Actions (${cur.actions.length})`,
-                      content: (
-                        <div className="col" style={{ height: "100%" }}>
-                          <div className="listbox grow">
-                            {cur.actions.map((a, i) => <TrigLine key={i} text={a} />)}
-                            <div className="trig-line faint">+ add action…</div>
-                          </div>
-                          <div className="row">
-                            <Select style={{ width: 240 }} options={ACTIONS} />
-                            <ListActions />
-                          </div>
-                        </div>
-                      ),
-                    },
-                  ]}
-                  defaultValue="conditions"
-                />
-              </>
-            ) : (
-              <div className="props-empty">Select a trigger.</div>
-            )}
-          </div>
-        </div>
-      </div>
-    </DialogFrame>
-  );
-}
-
-/* ── Text Trigger Editor (TrigEdit) ─────────────────────── */
-
-export function TextTriggerEditorDialog({ entry }: DialogProps) {
-  const [text, setText] = useState(SAMPLE_TRIGGER_TEXT);
-  const lines = text.split("\n").length;
-  return (
-    <DialogFrame
-      dialogKey={entry.key}
-      title="Text Trigger Editor"
-      icon={<Braces size={14} />}
-      size="full"
-      okLabel="Compile & Close"
-      footerLeft={<span>{lines} lines · TrigEdit syntax · errors will be listed here on compile</span>}
-      showApply
-    >
-      <div className="row">
-        <Button size="sm">Compile</Button>
-        <Button size="sm">Insert Condition ▾</Button>
-        <Button size="sm">Insert Action ▾</Button>
-        <Button size="sm">Format</Button>
-        <span className="grow" />
-        <Check label="Word wrap" />
-        <Check label="Line numbers" defaultChecked />
-      </div>
-      <div className="code-editor">
-        <div className="gutter">{Array.from({ length: lines }, (_, i) => i + 1).join("\n")}</div>
-        <textarea spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} />
-      </div>
+      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} manifest={script.block ? script.manifest : null} />
     </DialogFrame>
   );
 }
@@ -204,37 +475,112 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
 /* ── Mission Briefing ───────────────────────────────────── */
 
 export function MissionBriefingDialog({ entry }: DialogProps) {
-  const [player, setPlayer] = useState("Player 1");
-  const sample = ["Wait(2000)", "Show Portrait(Jim Raynor (Marine), Slot 1)", "Transmission(Slot 1, \"Commander, we've located the beacon.\", 4000)", "Mission Objectives(\"• Bring a unit to Beacon Alpha\\n• Destroy all enemy structures\")", "Hide Portrait(Slot 1)"];
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(triggersRevisionAtom);
+  const commit = useSetAtom(commitTriggersAtom);
+  const names = useNames(scenario);
+  const [local, setLocal] = useScenarioForm(scenario, readBriefing);
+  if (!scenario || !local || !names) return <NoMap entry={entry} title="Mission Briefing" icon={<MessageSquare size={14} />} />;
+
+  const apply = () => { applyBriefing(scenario, local); commit(); };
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Mission Briefing" icon={<MessageSquare size={14} />} size="lg" tall showApply footerLeft={<span>Briefing for {player} · {sample.length} actions</span>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Mission Briefing"
+      icon={<MessageSquare size={14} />}
+      size="full"
+      onOk={apply}
+      showApply
+      footerLeft={<span>{local.length} briefing{local.length === 1 ? "" : "s"} · one per player, played before the map starts</span>}
+    >
+      <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} />
+    </DialogFrame>
+  );
+}
+
+/* ── Text Trigger Editor (TrigEdit) ─────────────────────── */
+
+/** The map's triggers as text, with the script's generated block fenced in comments (parsed back as plain triggers). */
+function textOf(scn: Scenario, block: ScriptBlock | null): string {
+  const names = triggerNames(scn);
+  if (!block || block.count === 0) return formatTriggers(scn.triggers, names);
+  const { start, count } = block;
+  const parts = [
+    formatTriggers(scn.triggers.slice(0, start), names),
+    `//== Generated by the trigger script: ${count} trigger${count === 1 ? "" : "s"}. Edit the script instead — changes here make the block stale. ==//\n\n`,
+    formatTriggers(scn.triggers.slice(start, start + count), names),
+    "//== End of the generated block ==//\n",
+    formatTriggers(scn.triggers.slice(start + count), names),
+  ];
+  return parts.filter((p) => p !== "").join("\n");
+}
+
+export function TextTriggerEditorDialog({ entry }: DialogProps) {
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(triggersRevisionAtom);
+  const script = useAtomValue(scriptStateAtom);
+  const commit = useSetAtom(commitTriggersAtom);
+  const close = useSetAtom(closeDialogAtom);
+  const names = useNames(scenario);
+  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ text: textOf(scn, script.block), error: null as TriggerTextError | null, status: "" }));
+  const [wrap, setWrap] = useState(false);
+  if (!scenario || !form || !names) return <NoMap entry={entry} title="Text Trigger Editor" icon={<Braces size={14} />} />;
+
+  const lines = form.text.split("\n").length;
+
+  /** Parse the text; on success replace the scenario's triggers. Returns whether it compiled. */
+  const compile = (): boolean => {
+    try {
+      const parsed = parseTriggers(form.text, names).map((t) => t.trigger);
+      applyTriggers(scenario, parsed);
+      commit();
+      setForm({ ...form, error: null, status: `Compiled ${parsed.length} trigger${parsed.length === 1 ? "" : "s"}.` });
+      return true;
+    } catch (e) {
+      if (e instanceof TriggerTextError) setForm({ ...form, error: e, status: "" });
+      else setForm({ ...form, error: null, status: `Error: ${(e as Error).message}` });
+      return false;
+    }
+  };
+  const format = () => {
+    try {
+      const parsed = parseTriggers(form.text, names).map((t) => t.trigger);
+      setForm({ ...form, text: formatTriggers(parsed, names), error: null, status: "Formatted." });
+    } catch (e) {
+      if (e instanceof TriggerTextError) setForm({ ...form, error: e, status: "" });
+    }
+  };
+
+  return (
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Text Trigger Editor"
+      icon={<Braces size={14} />}
+      size="full"
+      footerLeft={
+        form.error
+          ? <span className="trig-error">{form.error.message}</span>
+          : <span>{lines} lines · TrigEdit syntax{form.status ? ` · ${form.status}` : ""}</span>
+      }
+      footer={
+        <>
+          <Button variant="primary" onClick={() => { if (compile()) close(entry.key); }}>Compile &amp; Close</Button>
+          <Button onClick={() => close(entry.key)}>Cancel</Button>
+          <Button onClick={compile}>Apply</Button>
+        </>
+      }
+    >
       <div className="row">
-        <span className="dim" style={{ fontSize: 11 }}>Player</span>
-        <Select style={{ width: 160 }} value={player} onChange={(e) => setPlayer(e.target.value)} options={TRIGGER_PLAYER_GROUPS.slice(0, 8).concat("All Players")} />
+        <Button size="sm" onClick={compile}>Compile</Button>
+        <Button size="sm" onClick={format}>Format</Button>
+        <Button size="sm" onClick={() => setForm({ ...form, text: textOf(scenario, script.block), error: null, status: "Reloaded from the map." })}>Reload</Button>
         <span className="grow" />
-        <Button size="sm">Preview Briefing</Button>
+        <Check label="Word wrap" checked={wrap} onChange={(e) => setWrap(e.target.checked)} />
       </div>
-      <div className="split" style={{ gridTemplateColumns: "1fr 220px", flex: 1 }}>
-        <div className="col" style={{ height: "100%" }}>
-          <div className="listbox grow">
-            {sample.map((a, i) => <TrigLine key={i} text={a} />)}
-          </div>
-          <div className="row">
-            <Select style={{ width: 220 }} options={BRIEFING_ACTIONS} />
-            <ListActions />
-          </div>
-        </div>
-        <div className="col">
-          <div className="panel-head" style={{ borderRadius: 3 }}>Portrait slots</div>
-          <div className="listbox" style={{ padding: 8, flex: 1 }}>
-            {[1, 2, 3, 4].map((s) => (
-              <div key={s} className="row" style={{ marginBottom: 6 }}>
-                <span className="badge">Slot {s}</span>
-                <span className="dim" style={{ fontSize: 11 }}>{s === 1 ? "Jim Raynor (Marine)" : "—"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className={`code-editor ${wrap ? "wrap" : ""}`}>
+        <div className="gutter">{Array.from({ length: lines }, (_, i) => (form.error && form.error.line === i + 1 ? `▶${i + 1}` : String(i + 1))).join("\n")}</div>
+        <textarea spellCheck={false} value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value, status: "" })} />
       </div>
     </DialogFrame>
   );

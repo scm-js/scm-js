@@ -204,6 +204,81 @@ tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`
 (optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
 the section choice per revision and byte-for-byte re-encoding against the fixture maps.
 
+### Triggers (`src/formats/chk/sections/triggers.ts`, `src/data/triggerDefs.ts`, `src/formats/triggers/text.ts`, `src/editor/triggers.ts`)
+
+`scenario.triggers` is TRIG and `scenario.briefing` MBRF — the same 2400-byte record (16 × 20-byte
+conditions, 64 × 32-byte actions, flags, 27 player-group bytes, the game's current-action byte),
+differing only in what the type bytes mean. Records stay close to the bytes: every field is a
+number and `triggerDefs.ts` says which field holds which argument for each type (`ArgDef { kind,
+field, label }`, argument order = SCMDraft's TrigEdit). Everything that shows a trigger — the Classic
+editor's widgets, the text printer/parser, later the script API's typings — reads that table; the
+codec knows no types. Decoding drops only *trailing* empty condition/action slots, so anything after
+a type-0 entry survives; encoding pads back to 16/64. `switchNames` is SWNM (null when absent).
+
+The text format (`formats/triggers/text.ts`) resolves names through a `TriggerNames` context
+(`triggerNames(scn)` in `editor/triggers.ts`) so it is testable without a scenario; unknown names
+print as bare numbers and parse back, unknown types print as `Condition N(...)` / `Action N(...)`.
+The one thing text cannot carry is the `UnitTypeUsed` hint bit (0x10) — Blizzard's own maps disagree
+about it — so `tests/trigger.test.ts` masks the hint bits in its fixture round trip. `intern` appends
+to the string table while parsing (never removed, so harmless). Trigger dialogs are settings-style
+transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (marks `TRIG` only on a
+real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
+`newCondition` / `newAction` seed StarEdit-like defaults.
+
+### Trigger script (`src/script/`, `src/editor/script.ts`, `dialogs/ScriptEditorDialog.tsx`)
+
+A TypeScript-subset language that *generates* a block of `scenario.triggers`. Raw level only so far
+(`trigger(players, conditions, actions, flags?)` calls and `const`s; structured code — variables,
+`if`/`while`, functions lowered EUD-style — is the next step and is Remastered-only by decision).
+
+- `names.ts` turns the scenario into five `NameTable`s (players, units, locations, switches, AI
+  scripts); each entry's keys are an identifier derived from the display name first (`identifier()`:
+  `Terran Marine` → `TerranMarine`), the display name itself second (`Units["Terran Marine"]`), then
+  custom names — unique per table by construction. `declarations.ts` generates the `.d.ts` from them
+  plus a fixed runtime; it is **`noLib`** (the runtime declares the dozen global types TS insists on and
+  nothing else — no `Math`, no `Array.prototype`), values are *branded literal types*
+  (`UnitId<0> = 0 & Brand<"unit">`; plain numbers still pass, a `LocationId` where a `UnitId` belongs
+  does not), enumerated kinds are string unions of the `CHOICES` labels and aliases, and every
+  condition/action is a `declare function` whose identifier is its `ConditionType`/`ActionType` key
+  (`api.ts`; parameter names come from the def labels, reserved words get a trailing underscore).
+- `compiler.ts` builds a real `ts.createProgram` (declarations + script, in-memory host) and walks
+  the script's AST; it takes the `typescript` namespace as an argument so `tests/script.test.ts`
+  (Node) and `compile.worker.ts` (bundled) share it. Every argument is evaluated by asking the checker
+  for the expression's literal type (`literalOf`, intersections included), else folding arithmetic /
+  template strings, else following a `const` initialiser — `value()`. Arrays flatten spreads and
+  follow consts (`list()`); `disabled(x)` sets the Disabled flag; `Condition(type, …)` /
+  `Action(type, …)` are the raw escape hatch (their text/wav numbers pass through as string
+  indices). Diagnostics from the *whole* program are reported (a broken generated declaration file
+  is a bug worth seeing); the compiler's own carry `source: "compiler"`. Strings are **not** interned
+  in the compiler: text/wav fields hold local ids into `CompileResult.strings` (`{text}` or `{index}`)
+  and `editor/script.ts#resolveStrings` interns them at build time.
+- `print.ts` is the inverse (eject): records → script, using each table's first key, bare numbers for
+  anything unnamed, `disabled(...)`, raw forms for unknown types. `tests/script.test.ts` pins
+  print → compile → identical records on the fixture maps (hint bits masked, compared through the text
+  format so duplicate string-table entries do not matter).
+- `editor/script.ts`: the source and a manifest are archive members (`SCRIPT_MEMBER`,
+  `MANIFEST_MEMBER` in `archiveExtrasAtom`, so they save with the `.scx`). The manifest records
+  `start`, `count`, a hash of the encoded block (`hashTriggers`) and per-trigger source lines;
+  `findBlock` looks at `start` first and then anywhere in the list, so a hand trigger inserted before
+  the block moves it (`commitTriggersAtom` calls `relocateScriptBlock`), while an edit *inside* it makes
+  the block stale (`scriptState().stale`) and `buildScript` appends a fresh one. `sourceHash` gives
+  `unbuilt`. `buildScript(..., { takeOver })` replaces the whole list — the "Import map triggers"
+  path, after `printScript` of the hand triggers around the block. `scriptStateAtom` derives all of
+  this; the Classic editor takes the manifest and re-finds the block in its *working copy* (indices
+  drift under local inserts), badges those rows `script`, locks their editing and offers
+  "Open Script Editor" with `payload.line`.
+- `monaco.ts` is only ever `import()`ed (by the dialog): Monaco 0.56's tree-shaken entry points
+  (`monaco-editor/editor/editor.api`, `features/register.all`, only the TypeScript language), the two
+  workers via Vite `?worker`, `typescriptDefaults` set `noLib` with the generated file as the one extra
+  lib, and a theme from `tokens.css`. `compileClient.ts` talks to `compile.worker.ts` (latest request
+  wins, `CompileSuperseded` for the rest; falls back to the main thread if the worker cannot start).
+  `typescript` is therefore a runtime dependency (bundled into the worker, ~3.5 MB; Monaco's own TS
+  worker is another copy — running the compiler inside Monaco's worker via `customWorkerPath` needs
+  a classic script, which Vite's dev server cannot serve, so two copies it is). The dialog writes the
+  source into the extras on every change (debounced check, 350 ms) and holds the Monaco host in
+  `useState`, not a ref (Radix portal timing, as in `ExportImageDialog`); `DialogFrame.onEscapeKeyDown`
+  exists so Escape inside the editor dismisses Monaco's popups instead of closing the dialog.
+
 ### Tileset graphics (`src/formats/tileset/`)
 
 `load.ts` fetches `public/tileset/<name>.{cv5,vx4,vf4,vr4,wpe}` on demand and caches per tileset

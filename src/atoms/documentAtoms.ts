@@ -19,6 +19,7 @@ import { applySpriteChanges, removeSprites, type SpriteChange } from "../editor/
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, type LocationChange } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
+import { relocateScriptBlock, scriptState, type ScriptState } from "../editor/script";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -53,6 +54,30 @@ export const isomRevisionAtom = atom(0);
  * model, and the scenario is mutated in place, so this is how the chrome learns of them.
  */
 export const settingsRevisionAtom = atom(0);
+
+/**
+ * Bumped after a trigger dialog replaces `scenario.triggers` / `scenario.briefing`
+ * (editor/triggers.ts) — like settings, a dialog transaction outside the undo model.
+ */
+export const triggersRevisionAtom = atom(0);
+
+export const commitTriggersAtom = atom(null, (get, set) => {
+  set(mapModifiedAtom, true);
+  set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
+  // A hand trigger inserted before the script's block moved it: keep the manifest pointing at it.
+  const scn = get(scenarioAtom);
+  const moved = scn ? relocateScriptBlock(scn, get(archiveExtrasAtom)) : null;
+  if (moved) set(archiveExtrasAtom, moved);
+});
+
+/**
+ * The trigger script's source, manifest and generated block (editor/script.ts), re-read
+ * whenever the triggers or the archive extras change.
+ */
+export const scriptStateAtom = atom<ScriptState>((get) => {
+  get(triggersRevisionAtom);
+  return scriptState(get(scenarioAtom), get(archiveExtrasAtom));
+});
 
 /**
  * Record that a settings dialog changed the scenario. Player colours reach every drawn

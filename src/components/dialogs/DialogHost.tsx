@@ -8,6 +8,7 @@ import { TechSettingsDialog, UnitSettingsDialog, UpgradeSettingsDialog } from ".
 import { LocationListDialog, SoundEditorDialog, StringEditorDialog, SwitchesDialog } from "./AssetDialogs";
 import { LocationPropertiesDialog, SpritePropertiesDialog, UnitPropertiesDialog } from "./ObjectDialogs";
 import { MissionBriefingDialog, TextTriggerEditorDialog, TriggerEditorDialog } from "./TriggerDialogs";
+import { ScriptEditorDialog } from "./ScriptEditorDialog";
 import { AboutDialog, FindDialog, PreferencesDialog, ShortcutsDialog, ValidateMapDialog } from "./MiscDialogs";
 
 export interface DialogProps {
@@ -41,6 +42,7 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   spriteProperties: SpritePropertiesDialog,
   triggerEditor: TriggerEditorDialog,
   textTriggerEditor: TextTriggerEditorDialog,
+  scriptEditor: ScriptEditorDialog,
   missionBriefing: MissionBriefingDialog,
   preferences: PreferencesDialog,
   shortcuts: ShortcutsDialog,

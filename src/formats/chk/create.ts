@@ -93,5 +93,8 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     sprites: [],
     doodads: [],
     locations: emptyLocations(width, height, STRING_INDEX.anywhere),
+    triggers: [],
+    briefing: [],
+    switchNames: null,
   };
 }

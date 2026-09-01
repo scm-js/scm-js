@@ -18,6 +18,9 @@ import {
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
 } from "./sections/terrain";
+import {
+  decodeSwitchNames, decodeTriggers, encodeSwitchNames, encodeTriggers, type TriggerRecord,
+} from "./sections/triggers";
 
 /**
  * A parsed scenario.
@@ -73,6 +76,13 @@ export interface Scenario {
   sprites: SpriteRecord[];
   doodads: DoodadRecord[];
   locations: LocationRecord[];
+
+  /** TRIG, in execution order. */
+  triggers: TriggerRecord[];
+  /** MBRF: mission briefings, same record layout with briefing action types. */
+  briefing: TriggerRecord[];
+  /** SWNM: string index per switch (0 = unnamed); null when the file has no section. */
+  switchNames: number[] | null;
 }
 
 export type TilesetIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -227,6 +237,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const unix = take("UNIx");
   const unis = take("UNIS");
   const puni = take("PUNI");
+  const swnm = take("SWNM");
 
   const scn: Scenario = {
     chk,
@@ -255,6 +266,9 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     sprites: decodeSprites(take("THG2") ?? new Uint8Array(0)),
     doodads: decodeDoodads(take("DD2 ") ?? new Uint8Array(0)),
     locations: decodeLocations(take("MRGN") ?? new Uint8Array(0)),
+    triggers: decodeTriggers(take("TRIG") ?? new Uint8Array(0)),
+    briefing: decodeTriggers(take("MBRF") ?? new Uint8Array(0)),
+    switchNames: swnm ? decodeSwitchNames(swnm) : null,
   };
 
   return scn;
@@ -332,6 +346,12 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
       return encodeDoodads(scn.doodads);
     case "MRGN":
       return encodeLocations(scn.locations);
+    case "TRIG":
+      return encodeTriggers(scn.triggers);
+    case "MBRF":
+      return encodeTriggers(scn.briefing);
+    case "SWNM":
+      return scn.switchNames ? encodeSwitchNames(scn.switchNames) : null;
     default:
       return null;
   }

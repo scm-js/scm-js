@@ -19,7 +19,9 @@ A browser-based StarCraft / Brood War scenario editor, built in homage to
 | Sprites | Working | Pure and unit sprites, flags, properties, selection, and movement |
 | Locations | Working | Create, resize, snap, rename, elevation flags, and `Anywhere` protection |
 | Fog of War | Working | Per-player paint, fill, copy, invert, overlay, and undo |
-| Scenario/data/trigger dialogs | In progress | Much of this UI is still scaffolding and does not write map data |
+| Triggers | Working | Classic (StarEdit-style) editor, TrigEdit-syntax text editor, mission briefings; every condition and action |
+| Trigger script | Working (raw level) | A TypeScript subset in Monaco, type-checked against the open map, compiled into a locked block of the trigger list |
+| Scenario/data dialogs | In progress | Some of this UI is still scaffolding and does not write map data |
 
 ## Run locally
 
@@ -422,6 +424,77 @@ the render at thumbnail size, so the ticks can be judged before a multi-megapixe
 encoded, and the file name follows the scale (`<map>-minimap.png` at the small end) until
 you type one of your own.
 
+## Triggers
+
+The `TRIG` section (and `MBRF`, the mission briefings, which share its layout). Three editors
+under the Triggers menu edit the same list:
+
+- **Trigger Editor** (Ctrl+T) is the StarEdit form: a player filter, the trigger list, and per
+  trigger its players, conditions (up to 16) and actions (up to 64). Every condition and action
+  the game has is available, each argument gets a widget of its kind — player group, unit
+  (custom names shown when the map sets them), location, switch, AI script, text, number —
+  and any value the tables do not list (an EUD player, an out-of-range unit) stays selectable as
+  raw. Items can be disabled individually, as in SCMDraft. The comment field is the trigger's
+  Comment action and "Preserve trigger" is its Preserve Trigger action.
+- **Text Trigger Editor** (Ctrl+Shift+T) shows the same triggers in SCMDraft 2's TrigEdit
+  syntax and compiles them back on Compile / Apply / Compile & Close, reporting the first error
+  with its line. Argument order follows SCMDraft, so its text pastes in; a leading `;` disables
+  a line, unknown names may be written as bare numbers, and a `Flags:` block carries the
+  trigger flags SCMDraft has no syntax for (`Preserve`, `Disabled`, `Ignore Game End`). Format
+  reprints the text; Reload discards edits.
+- **Mission Briefing Editor** is the same form over MBRF with the briefing action set (no
+  fixture map has a briefing, so its field layout follows the community reference unverified).
+- **Script Editor** is a TypeScript editor (Monaco) over a script that *generates* triggers —
+  see below.
+
+All are OK / Apply / Cancel transactions outside undo, like the settings dialogs. Strings
+typed into text arguments are appended to the string table as you type and never removed, so a
+cancelled edit can leave an unused string behind. A trigger re-encodes byte for byte; the one
+thing the text form cannot carry is StarEdit's "unit type used" hint bit, which Blizzard's own
+maps set inconsistently.
+
+### Trigger script
+
+The Script Editor holds one TypeScript file per map. At the current *raw* level it is a
+typed spelling of the trigger list — one `trigger(players, conditions, actions, flags?)` call
+per trigger, conditions and actions as function calls with the same argument order as the
+text editor:
+
+```ts
+const beacon = Bring(CurrentPlayer, Units.AnyUnit, Locations["Beacon Alpha"], "At least", 1);
+
+trigger([P1, Players.Force2], [beacon, Switch(Switches.DoorOpen, "set")], [
+  DisplayText("Always Display", "You found it!"),
+  SetDeaths(P1, Units.TerranMarine, "Add", 5),
+  disabled(SetSwitch(Switches.DoorOpen, "toggle")),
+  PreserveTrigger(),
+], ["Preserve"]);
+```
+
+The declarations it is checked against are generated from the open map, so `Locations.`,
+`Switches.`, `Units.` (custom names included) and `Players.` (force names included) complete
+to what the map has, and a location passed where a unit belongs is a type error before you
+build. Every value must be a compile-time constant: literals, `const`s, arithmetic on them,
+array spreads. Raw numbers are accepted wherever a name is (EUD players, odd unit ids), and
+unknown types can be written as `Condition(type, …)` / `Action(type, …)`.
+
+**Build** compiles the script and installs its triggers as one contiguous *block* of the
+map's trigger list, replacing the previous block (or appending the first). The Trigger
+Editor shows those triggers with a `script` badge and refuses to edit them — "Open Script
+Editor" jumps to the source line — and the text editor fences them in comments. Hand-made
+triggers around the block are untouched; inserting one before the block simply moves it (the
+block is found by content, not by position). Editing a generated trigger elsewhere makes the
+block *stale*: it turns back into ordinary triggers and the next Build appends a fresh block.
+**Import map triggers** does the reverse — it rewrites the hand-made triggers as script (in
+their order around the block) and rebuilds, so the whole list is script-generated from then on.
+
+The source and a build manifest are stored in the map archive itself (`scmjs\triggers.ts`
+and `scmjs\triggers.json` next to `staredit\scenario.chk`), so they travel with the `.scx`;
+edits are saved as you type, and only Build changes triggers. Type errors come from the
+TypeScript language service, compiler errors from a worker; both land in the editor and in the
+problems list. The structured level of the language (variables, `if` / `while`, functions,
+lowered through EUD tricks) is the next step and will require Remastered.
+
 ## Scenario settings
 
 The **Scenario** menu's dialogs edit the map's own tables. Each is a transaction — OK,
@@ -462,7 +535,7 @@ Upgrade and Technology Settings are still mock-ups.
 src/
   atoms/        Jotai state: editor/document atoms (incl. undo history), UI + dialog stack
   editor/       Invertible edits and placement checks for every working map layer
-  data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger vocab, samples)
+  data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger definitions)
   formats/
     chk/        CHK container, section registry, typed section codecs
     mpq/        .scm/.scx open + save on top of mopaq

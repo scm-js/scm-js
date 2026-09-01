@@ -25,6 +25,7 @@ export type DialogId =
   | "spriteProperties"
   | "triggerEditor"
   | "textTriggerEditor"
+  | "scriptEditor"
   | "missionBriefing"
   | "symmetry"
   | "gridSettings"

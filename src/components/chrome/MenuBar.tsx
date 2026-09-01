@@ -205,6 +205,7 @@ function useMenus(): { label: string; items: Item[] }[] {
       items: [
         dlg("Trigger Editor…", "triggerEditor", "Ctrl+T"),
         dlg("Text Trigger Editor…", "textTriggerEditor", "Ctrl+Shift+T"),
+        dlg("Script Editor…", "scriptEditor"),
         dlg("Mission Briefing Editor…", "missionBriefing"),
         sep,
         stub("Import Triggers…"),

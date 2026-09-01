@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, FlipHorizontal2, Grid3x3, Maximize, ScrollText } from "lucide-react";
 import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
-import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
+import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, type MapVersion, type Scenario } from "../../formats/chk/scenario";
 import { PLAYER_TYPES } from "../../data/players";
@@ -10,18 +10,9 @@ import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
 import { MAP_SIZES, terrainName, TILESET_BY_ID } from "../../data/tilesets";
-import { SAMPLE_TRIGGERS } from "../../data/triggers";
 import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
-
-/** TRIG is 2400 bytes per trigger and stays raw for now; the count is still useful. */
-function triggerCount(scenario: Scenario): number {
-  const total = scenario.chk.sections
-    .filter((sec) => sec.name === "TRIG")
-    .reduce((n, sec) => n + sec.data.length, 0);
-  return Math.floor(total / 2400);
-}
 
 /** "4 human, 2 computer, 4 neutral" — the OWNR table in a phrase. */
 function playerSummary(scenario: Scenario): string {
@@ -42,6 +33,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom); // the revision and player summary change under the other dialogs
+  useAtomValue(triggersRevisionAtom);
   const setModified = useSetAtom(mapModifiedAtom);
   const [localName, setLocalName] = useState(name);
   const [localDesc, setLocalDesc] = useState(desc);
@@ -92,7 +84,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
             <Field label="Sprites"><span className="mono">{scenario ? scenario.sprites.length : 0}</span></Field>
             <Field label="Doodads"><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
             <Field label="Locations"><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : 0}</span></Field>
-            <Field label="Triggers"><span className="mono">{scenario ? triggerCount(scenario) : SAMPLE_TRIGGERS.length}</span></Field>
+            <Field label="Triggers"><span className="mono">{scenario ? scenario.triggers.length : 0}</span></Field>
             <Field label="Strings"><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
           </div>
         </Group>

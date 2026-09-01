@@ -23,6 +23,8 @@ export interface DialogFrameProps {
   cancelLabel?: string;
   onOk?: () => void;
   showApply?: boolean;
+  /** Called before Escape closes the dialog; `preventDefault()` keeps it open (an embedded editor wants Escape for itself). */
+  onEscapeKeyDown?: (e: KeyboardEvent) => void;
 }
 
 /** Classic dialog chrome: title strip, scrollable body, button row. */
@@ -41,6 +43,7 @@ export default function DialogFrame({
   cancelLabel = "Cancel",
   onOk,
   showApply,
+  onEscapeKeyDown,
 }: DialogFrameProps) {
   const close = useSetAtom(closeDialogAtom);
   const dismiss = () => close(dialogKey);
@@ -52,6 +55,7 @@ export default function DialogFrame({
         <Dialog.Content
           className={`dlg ${size} ${tall ? "tall" : ""}`}
           aria-describedby={undefined}
+          onEscapeKeyDown={onEscapeKeyDown}
           onOpenAutoFocus={(e) => {
             // Focus the first text field if there is one, otherwise the dialog itself.
             e.preventDefault();

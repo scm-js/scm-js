@@ -371,67 +371,111 @@
   line-height: inherit;
 }
 
-/* about */
-.about-banner {
+/* about — fully pink-themed, mirroring the splash screen */
+.about-space {
   position: relative;
-  height: 100px;
   border-radius: var(--radius);
   overflow: hidden;
-  background: linear-gradient(135deg, #120818, #1a0c22);
-  margin-bottom: 12px;
+  background: linear-gradient(180deg, #120818, #0a0410);
+  padding: 28px 24px 20px;
+  min-height: 280px;
 }
 .about-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
-.about-banner-content {
+.about-content {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100%;
   text-align: center;
+  gap: 2px;
 }
 .about-app-name {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: 0.14em;
   color: #ff5fa2;
-  text-shadow: 0 0 20px rgba(255, 95, 162, 0.5), 0 1px 0 rgba(0, 0, 0, 0.6);
+  text-shadow: 0 0 24px rgba(255, 95, 162, 0.5), 0 0 60px rgba(255, 95, 162, 0.15), 0 1px 0 rgba(0, 0, 0, 0.6);
+  margin-top: 6px;
 }
 .about-app-name span {
-  color: var(--text);
+  color: #dde2ea;
 }
 .about-tagline {
   font-size: 10px;
-  letter-spacing: 0.3em;
+  letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: rgba(160, 100, 240, 0.8);
-  margin-top: 4px;
+  color: rgba(160, 100, 240, 0.85);
+  text-shadow: 0 0 16px rgba(160, 100, 240, 0.3);
+  margin-top: 2px;
 }
-.about-info {
-  text-align: center;
-  margin-bottom: 10px;
+.about-rule {
+  width: 80px;
+  height: 1px;
+  margin: 10px auto;
+  background: linear-gradient(90deg, transparent, rgba(255, 95, 162, 0.5), transparent);
 }
 .about-meta {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #ff5fa2;
-  letter-spacing: 0.08em;
+  color: #ffbedc;
+  letter-spacing: 0.06em;
 }
 .about-desc {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 2px;
+  font-size: 10.5px;
+  color: rgba(255, 190, 220, 0.6);
+  margin-top: 1px;
 }
 .about-tech {
-  font-size: 10px;
-  color: var(--text-faint);
-  margin-top: 2px;
+  font-size: 9.5px;
+  color: rgba(255, 190, 220, 0.35);
   letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+.about-homage {
+  font-size: 10px;
+  color: rgba(255, 190, 220, 0.5);
+  margin: 0;
+  line-height: 1.5;
+}
+.about-homage strong {
+  color: rgba(255, 190, 220, 0.7);
+}
+.about-disclaimer {
+  font-size: 9px;
+  color: rgba(255, 190, 220, 0.25);
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+.about-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.about-link {
+  background: none;
+  border: 1px solid rgba(255, 95, 162, 0.25);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #ff5fa2;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.about-link:hover {
+  background: rgba(255, 95, 162, 0.1);
+  border-color: rgba(255, 95, 162, 0.45);
+}
+.about-dot {
+  color: rgba(255, 95, 162, 0.25);
+  font-size: 10px;
 }
 
 /* preferences hotkeys */

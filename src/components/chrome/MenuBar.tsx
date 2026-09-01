@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Menubar } from "radix-ui";
 import { Check, ChevronRight, Dot } from "lucide-react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import AppLogo from "../ui/AppLogo";
 import {
   activeLayerAtom,
   brushSizeAtom,
@@ -297,7 +298,7 @@ export default function MenuBar() {
   return (
     <Menubar.Root className="menubar">
       <div className="brand" title="scmJS">
-        <span className="brand-mark" />
+        <AppLogo size={16} />
         scmJS
       </div>
       {menus.map((m) => (

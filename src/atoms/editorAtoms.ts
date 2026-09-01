@@ -6,6 +6,8 @@ import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import type { SymmetryMode } from "../editor/symmetry";
+import { DEFAULT_CLIP_PARTS, type Clip, type ClipParts, type PasteMode } from "../editor/clipboard";
+import type { Rect } from "../editor/terrain";
 
 /* ── Screens ────────────────────────────────────────────── */
 
@@ -102,6 +104,19 @@ export const fogPlayersAtom = atom<number>(0x01);
 export const fogModeAtom = atom<FogMode>("fog");
 /** Whose fog the viewport and minimap draw, 0–7 (shown while `viewFlags.fog` is on). */
 export const fogViewPlayerAtom = atom<number>(0);
+
+/* ── Cut / Copy / Paste layer (see editor/clipboard.ts) ──── */
+
+/** What the last Cut / Copy captured; survives the map it came from being closed. */
+export const clipboardAtom = atom<Clip | null>(null);
+/** The tile rectangle marked on the clipboard layer (exclusive x1 / y1), or null. */
+export const clipSelectionAtom = atom<Rect | null>(null);
+/** Which parts a copy captures and a paste writes. */
+export const clipPartsAtom = atom<ClipParts>(DEFAULT_CLIP_PARTS);
+/** Whether a paste adds to the target area or clears its units, sprites and doodads first. */
+export const clipPasteModeAtom = atom<PasteMode>("merge");
+/** Whether the clip follows the pointer waiting for a click to stamp it (Esc / right-click stops). */
+export const clipPastingAtom = atom<boolean>(false);
 
 /* ── Map document (placeholder — no real parsing yet) ───── */
 

@@ -21,6 +21,11 @@ import {
 import {
   activeDoodadAtom,
   activeLayerAtom,
+  clipboardAtom,
+  clipPartsAtom,
+  clipPasteModeAtom,
+  clipPastingAtom,
+  clipSelectionAtom,
   activeSpriteAtom,
   activeSpriteKindAtom,
   activeUnitAtom,
@@ -64,6 +69,8 @@ import TerrainPalette, { BrushSelect } from "./TerrainPalette";
 import { DoodadThumb } from "./DoodadThumb";
 import type { DoodadCategory, DoodadDef } from "../../formats/tileset/doodads";
 import { useDoodadTools } from "../../hooks/useDoodadTools";
+import { useClipboardTools } from "../../hooks/useClipboardTools";
+import { CLIP_PARTS, clipSummary, type ClipPart } from "../../editor/clipboard";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
@@ -638,35 +645,59 @@ function FogPalette() {
 
 /* ── Clipboard ──────────────────────────────────────────── */
 
+const CLIP_PART_LABELS: Record<ClipPart, string> = { terrain: "Terrain", doodads: "Doodads", units: "Units", sprites: "Sprites", locations: "Locations", fog: "Fog of War" };
+
+/**
+ * The Cut / Copy / Paste layer (editor/clipboard.ts): the marked area, what a copy takes
+ * and a paste writes, and whether a paste clears the target area's objects first.
+ */
 function ClipboardPalette() {
+  const [parts, setParts] = useAtom(clipPartsAtom);
+  const [mode, setMode] = useAtom(clipPasteModeAtom);
+  const clip = useAtomValue(clipboardAtom);
+  const selection = useAtomValue(clipSelectionAtom);
+  const pasting = useAtomValue(clipPastingAtom);
+  const hasMap = useAtomValue(scenarioAtom) !== null;
+  const tools = useClipboardTools();
+  const w = selection ? selection.x1 - selection.x0 : 0, h = selection ? selection.y1 - selection.y0 : 0;
   return (
     <>
       <div className="palette-toolbar">
-        <span className="lbl">Selection</span>
-        <span className="mono dim" style={{ fontSize: 11 }}>— × —</span>
+        <span className="lbl">Area</span>
+        <span className="mono dim" style={{ fontSize: 11 }}>{selection ? `${w} × ${h} at ${selection.x0}, ${selection.y0}` : "— × —"}</span>
+      </div>
+      <div className="palette-toolbar">
+        <Button size="sm" onClick={() => { tools.cut(); }} disabled={!selection} title="Copy the marked area and remove its objects (Ctrl+X)">Cut</Button>
+        <Button size="sm" onClick={() => { tools.copy(); }} disabled={!selection} title="Copy the marked area (Ctrl+C)">Copy</Button>
+        <Button size="sm" active={pasting} onClick={() => { if (pasting) tools.stopPasting(); else tools.paste(); }} disabled={!clip || !hasMap} title="Stamp the clip where you click (Ctrl+V)">Paste</Button>
+        <span className="grow" />
+        <Button size="sm" onClick={tools.selectAll} disabled={!hasMap} title="Mark the whole map (Ctrl+A)">All</Button>
+        <Button size="sm" onClick={tools.clearSelection} disabled={!selection} title="Unmark (Esc)">None</Button>
       </div>
       <div className="palette-scroll" style={{ padding: 8 }}>
         <fieldset className="group">
           <legend>Include</legend>
           <div className="col" style={{ gap: 2 }}>
-            <Check label="Terrain" defaultChecked />
-            <Check label="Doodads" defaultChecked />
-            <Check label="Units" defaultChecked />
-            <Check label="Sprites" />
-            <Check label="Locations" />
-            <Check label="Fog of War" />
+            {CLIP_PARTS.map((p) => (
+              <Check key={p} label={CLIP_PART_LABELS[p]} checked={parts[p]} onChange={(e) => setParts({ ...parts, [p]: e.target.checked })} />
+            ))}
           </div>
+          <div className="hint" style={{ marginTop: 6 }}>What a copy takes and a paste lays down. Terrain carries the ground under its doodads, so a paste without them shows plain ground.</div>
         </fieldset>
         <fieldset className="group" style={{ marginTop: 10 }}>
           <legend>Paste</legend>
           <div className="col" style={{ gap: 2 }}>
-            <Check radio name="paste" label="Replace" defaultChecked />
-            <Check radio name="paste" label="Merge units & sprites" />
-            <Check radio name="paste" label="Terrain only" />
+            <Check radio name="paste" label="Merge with what is there" checked={mode === "merge"} onChange={() => setMode("merge")} />
+            <Check radio name="paste" label="Replace objects in the area" checked={mode === "replace"} onChange={() => setMode("replace")} />
           </div>
+          <div className="hint" style={{ marginTop: 6 }}>Replace clears the units, sprites and doodads under the clip first; locations are always kept. Either way, a doodad the new ground cuts through is removed.</div>
+        </fieldset>
+        <fieldset className="group" style={{ marginTop: 10 }}>
+          <legend>Clipboard</legend>
+          <div className={clip ? "mono" : "hint"} style={{ fontSize: 11 }}>{clip ? clipSummary(clip) : "Empty — mark an area and press Ctrl+C, or select objects on their own layer and copy them."}</div>
         </fieldset>
       </div>
-      <div className="palette-footer"><span>Drag on the map to select</span></div>
+      <div className="palette-footer"><span>{pasting ? "Click on the map to stamp the clip · Esc stops" : "Drag on the map to mark an area · Ctrl+X / Ctrl+C / Ctrl+V"}</span></div>
     </>
   );
 }

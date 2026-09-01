@@ -1,22 +1,21 @@
 import { atom, type Getter, type Setter } from "jotai";
 import {
-  mapVersionOf, markDirty, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
+  mapVersionOf, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
 } from "../formats/chk/scenario";
 import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
-  doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
+  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom,
 } from "./editorAtoms";
-import { applyChanges, type TileChange } from "../editor/terrain";
-import { applyIsomChanges } from "../editor/isom";
-import { applyUnitChanges, removeUnits, type UnitChange } from "../editor/units";
-import { applyFogChanges } from "../editor/fog";
-import { applyDoodadChanges, removeDoodads, type DoodadChange } from "../editor/doodads";
-import { applySpriteChanges, removeSprites, type SpriteChange } from "../editor/sprites";
-import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, type LocationChange } from "../editor/locations";
+import { applyChanges } from "../editor/terrain";
+import { applyUnitChanges, removeUnits } from "../editor/units";
+import { applyDoodadChanges, removeDoodads } from "../editor/doodads";
+import { applySpriteChanges, removeSprites } from "../editor/sprites";
+import { applyEntry, hasEdits, touchesDoodads, type HistoryEntry } from "../editor/history";
+import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { relocateScriptBlock, scriptState, type ScriptState } from "../editor/script";
@@ -127,6 +126,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   set(selectedDoodadsAtom, []);
   set(selectedSpritesAtom, []);
   set(selectedLocationsAtom, []);
+  set(clipSelectionAtom, null);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
@@ -177,6 +177,9 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(selectedSpritesAtom, []);
   set(spritePlacingAtom, false);
   set(selectedLocationsAtom, []);
+  // The clip itself is kept — copying between maps is the point — but the marked area was on the old one.
+  set(clipSelectionAtom, null);
+  set(clipPastingAtom, false);
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
   set(undoStackAtom, []);
@@ -201,6 +204,8 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(selectedSpritesAtom, []);
   set(spritePlacingAtom, false);
   set(selectedLocationsAtom, []);
+  set(clipSelectionAtom, null);
+  set(clipPastingAtom, false);
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
@@ -208,75 +213,9 @@ export const closeDocumentAtom = atom(null, (get, set) => {
 
 /* ── Undo history ────────────────────────────────────────── */
 
-export interface HistoryEntry {
-  label: string;
-  changes: TileChange[];
-  /** The isometric brush's changes to `scenario.isom`, undone together with the tiles. */
-  isom?: TileChange[];
-  /**
-   * Set when the edit gave a map an ISOM section it did not have (Rebuild ISOM). Undo
-   * removes the section again rather than leaving an all-zero one behind.
-   */
-  createdIsom?: Uint16Array;
-  /** Unit placements, moves and deletions (see editor/units.ts). */
-  units?: UnitChange[];
-  /**
-   * Doodad tiles stamped into or lifted off MTXM alone — TILE keeps the ground beneath
-   * (see editor/doodads.ts). Applied after `changes`, so a terrain stroke that removes
-   * the doodads it painted over restores their remaining cells on top of its own edit.
-   */
-  doodadTiles?: TileChange[];
-  /** DD2 record insertions, removals and replacements. */
-  doodads?: DoodadChange[];
-  /** THG2 record changes: the Sprites layer's edits, and a doodad's overlay sprite coming and going with it. */
-  sprites?: SpriteChange[];
-  /** MRGN slot replacements — create, move, resize, rename, delete (see editor/locations.ts); a rename may carry a string. */
-  locations?: LocationChange[];
-  /** Fog of war edits to `scenario.mask` (see editor/fog.ts); `at` indexes the MASK byte. */
-  fog?: TileChange[];
-  /**
-   * Set when the edit gave a map a MASK section it did not have (the first fog stroke
-   * on such a map). Undo removes the section again.
-   */
-  createdMask?: Uint8Array;
-}
-
-/**
- * Apply an entry in either direction. The parts are applied in a fixed order going
- * forward and in reverse coming back, so a step that both paints terrain and lifts the
- * doodads it painted over undoes cleanly (doodad cells first, then the terrain).
- */
-function applyEntry(scn: Scenario, entry: HistoryEntry, direction: "do" | "undo") {
-  const steps: (() => void)[] = [
-    () => {
-      if (entry.createdIsom) {
-        scn.isom = direction === "do" ? entry.createdIsom : null;
-        markDirty(scn, "ISOM");
-      }
-      if (entry.createdMask) {
-        scn.mask = direction === "do" ? entry.createdMask : null;
-        markDirty(scn, "MASK");
-      }
-    },
-    () => applyChanges(scn, entry.changes, direction),
-    () => { if (entry.isom) applyIsomChanges(scn, entry.isom, direction); },
-    () => { if (entry.doodadTiles) applyChanges(scn, entry.doodadTiles, direction, "mtxm"); },
-    () => { if (entry.doodads) applyDoodadChanges(scn, entry.doodads, direction); },
-    () => { if (entry.sprites) applySpriteChanges(scn, entry.sprites, direction); },
-    () => { if (entry.units) applyUnitChanges(scn, entry.units, direction); },
-    () => { if (entry.locations) applyLocationChanges(scn, entry.locations, direction); },
-    () => { if (entry.fog) applyFogChanges(scn, entry.fog, direction); },
-  ];
-  if (direction === "undo") steps.reverse();
-  for (const step of steps) step();
-}
-
-const touchesDoodads = (entry: HistoryEntry) =>
-  (entry.doodadTiles?.length ?? 0) > 0 || (entry.doodads?.length ?? 0) > 0 || (entry.sprites?.length ?? 0) > 0;
-
-const hasEdits = (entry: HistoryEntry) =>
-  entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0
-  || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined || touchesDoodads(entry) || (entry.locations?.length ?? 0) > 0;
+// The entry model and its applier live in editor/history.ts (pure, testable); the type is
+// re-exported here because every hook imports it from the atoms.
+export type { HistoryEntry };
 
 /** SCMDraft's default depth; a 7x7 stroke across a whole map is still only a few hundred KB. */
 const UNDO_LEVELS = 200;

@@ -25,6 +25,7 @@ import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, type EditorLay
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
+import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { Tip } from "../ui";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
 
@@ -53,7 +54,7 @@ export default function ToolBar() {
   const [zoom, setZoom] = useAtom(zoomAtom);
 
   const dlg = (id: DialogId) => () => open(id);
-  const stub = (feature: string) => () => open("notImplemented", { feature });
+  const clipTools = useClipboardTools();
   const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
   const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
 
@@ -66,9 +67,9 @@ export default function ToolBar() {
       <TB icon={Undo2} label={undoLabel ? `Undo ${undoLabel}` : "Undo"} shortcut="Ctrl+Z" disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(`Undid: ${l}`); }} />
       <TB icon={Redo2} label={redoLabel ? `Redo ${redoLabel}` : "Redo"} shortcut="Ctrl+Y" disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(`Redid: ${l}`); }} />
       <Sep />
-      <TB icon={Scissors} label="Cut" shortcut="Ctrl+X" onClick={stub("Cut")} />
-      <TB icon={Copy} label="Copy" shortcut="Ctrl+C" onClick={stub("Copy")} />
-      <TB icon={ClipboardPaste} label="Paste" shortcut="Ctrl+V" onClick={stub("Paste")} />
+      <TB icon={Scissors} label="Cut" shortcut="Ctrl+X" onClick={() => { clipTools.cut(); }} />
+      <TB icon={Copy} label="Copy" shortcut="Ctrl+C" onClick={() => { clipTools.copy(); }} />
+      <TB icon={ClipboardPaste} label="Paste" shortcut="Ctrl+V" onClick={() => { clipTools.paste(); }} />
       <Sep />
       <div className="tb-group">
         <span className="lbl">Layer</span>

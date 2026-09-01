@@ -20,6 +20,7 @@ A browser-based StarCraft / Brood War scenario editor, built in homage to
 | Sprites | Working | Pure and unit sprites, flags, properties, selection, and movement |
 | Locations | Working | Create, resize, snap, rename, elevation flags, and `Anywhere` protection |
 | Fog of War | Working | Per-player paint, fill, copy, invert, overlay, and undo |
+| Cut / Copy / Paste | Working | Mark an area or select objects; terrain, doodads, units, sprites, locations and fog travel between maps, merge or replace, one undo step |
 | Triggers | Working | Classic (StarEdit-style) editor, TrigEdit-syntax text editor, mission briefings; every condition and action |
 | Trigger script | Working | A TypeScript subset in Monaco, type-checked against the open map, compiled into a locked block of the trigger list — raw `trigger()` calls plus a structured level (variables, if / while, functions) lowered to a death-counter state machine, with a built-in simulator |
 | Scenario/data dialogs | Working | Map properties, revision, players, forces, colours, unit / upgrade / technology settings, strings, sounds, switches, resize |
@@ -305,6 +306,41 @@ on the first stroke (undo removes it again).
   they are. Entering the layer switches the *Fog of War* view toggle on and leaving switches it
   back off (unless you had it on already); the toggle — View menu, Layers-panel eye, or **Show**
   in the palette — hides the overlay at any time. The minimap shows the same picture.
+
+## Cut / Copy / Paste layer
+
+The **C** layer is the clipboard, modelled on SCMDraft's. **Drag** on the map to mark a
+rectangle of tiles (the palette and the HUD show its size and origin; **All** / Ctrl+A marks the
+whole map, **None** / Esc unmarks); **Ctrl+C** copies it and **Ctrl+X** copies it and removes
+the objects in it. On the Units, Doodads, Sprites and Locations layers the same keys act on the
+**selection** instead — the clip is then the selection's bounding box carrying just those
+objects — so a base can be copied from either side. The Edit menu, the toolbar and the map's
+context menu offer the same three commands.
+
+- **Include** says what a copy takes *and* what a paste lays down: Terrain, Doodads, Units,
+  Sprites, Locations, Fog of War (the first four by default). Terrain carries both `MTXM`
+  (the picture) and `TILE` (the ground under the doodads), so a paste with doodads
+  reproduces both sections and a paste without them shows plain ground rather than half a tree.
+  Doodads are re-stamped from the tileset's catalogue with their overlay sprites regenerated,
+  units get fresh serials with add-on / nydus links kept when both ends came along, and
+  locations take free slots (the one thing a paste can run out of — the status bar says so).
+  A unit or sprite belongs to the rectangle by its centre, a doodad or location when its
+  whole box is inside; Anywhere is never copied.
+- **Ctrl+V** (or the palette's **Paste**) arms the layer: the clip follows the pointer as a
+  ghost — its tiles at three-quarter strength, its objects as sprites, its locations as
+  boxes — with its top-left tile under the cursor and a red outline where it would fall off
+  the map. A click stamps it and stays armed for the next; Esc or a right-click stops.
+  *Paste Here* in the context menu stamps at the clicked tile straight away. Whatever lands
+  off the map is left out: tiles cell by cell, objects whole.
+- **Merge** adds to what is there; **Replace objects in the area** removes the units, sprites
+  and doodads under the clip first (locations are always kept). Either way a doodad the new
+  ground cuts through is removed with its remaining cells restored, as a terrain stroke does.
+  Terrain from another tileset is refused (tile ids mean nothing there) while the objects still
+  paste; the clip survives File ▸ Open and File ▸ New, so that is how you move a base between
+  maps.
+- A paste, a cut and **Delete** on the layer (the marked area's objects, nothing copied) are
+  each one undo step alongside every other edit. ISOM is left alone, like the Rect and Tile
+  brushes — run *Rebuild ISOM* if you want to continue with the isometric brush over a paste.
 
 ## Terrain layer
 
@@ -647,8 +683,8 @@ already carries, so a hybrid map keeps both and an original-game map only its ow
   across the seam. The axes are drawn while a mode is active. The Isometric and Blend
   brushes and object placement are not mirrored.
 - **Fill Terrain** (Tools) — the whole map with the active terrain, pairs and ISOM
-  regenerated, as one undo step. **Edit ▸ Select All / Deselect / Delete** act on the
-  active layer. **Open Recent** lists this session's names only, since a browser hands
+  regenerated, as one undo step. **Edit ▸ Cut / Copy / Paste / Select All / Deselect /
+  Delete** act on the active layer (see the Cut / Copy / Paste layer). **Open Recent** lists this session's names only, since a browser hands
   over file contents rather than handles.
 - **Grid Settings** — spacing, colour, opacity, lines / dots / crosses, and the location
   and doodad snapping; remembered across sessions.

@@ -6,6 +6,7 @@ import AppLogo from "../ui/AppLogo";
 import {
   activeLayerAtom,
   brushSizeAtom,
+  clipboardAtom,
   mapModifiedAtom,
   mapNameAtom,
   selectedDoodadsAtom,
@@ -24,6 +25,7 @@ import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type Pane
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useIsomRebuild } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
+import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { usedLocations } from "../../editor/locations";
 import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 
@@ -73,6 +75,8 @@ function useMenus(): { label: string; items: Item[] }[] {
   const { save } = useMapFileActions();
   const [undoLabel, undo] = useAtom(undoAtom);
   const [redoLabel, redo] = useAtom(redoAtom);
+  const clipTools = useClipboardTools();
+  const hasClip = useAtomValue(clipboardAtom) !== null;
 
   const flag = (k: keyof ViewFlags, label: string, shortcut?: string): Item => ({
     kind: "check",
@@ -93,12 +97,14 @@ function useMenus(): { label: string; items: Item[] }[] {
 
   // Edit ▸ Delete / Select All / Deselect act on the active layer's selection, as the Del / Esc keys do.
   const deleteSelection = () => {
+    if (layer === "clipboard") { clipTools.deleteRegion(); return; }
     const n = layer === "doodads" ? deleteDoodads() : layer === "sprites" ? deleteSprites() : layer === "locations" ? deleteLocations() : deleteUnits();
     setStatus(n > 0 ? `Deleted ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}` : "Nothing selected");
   };
   const selectAll = () => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
+    if (layer === "clipboard") { clipTools.selectAll(); return; }
     const all = (n: number) => Array.from({ length: n }, (_, i) => i);
     let n = 0;
     if (layer === "doodads") { n = scn.doodads.length; store.set(selectedDoodadsAtom, all(n)); }
@@ -108,6 +114,8 @@ function useMenus(): { label: string; items: Item[] }[] {
     setStatus(`Selected ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
   };
   const deselect = () => {
+    clipTools.stopPasting();
+    clipTools.clearSelection();
     store.set(selectedUnitsAtom, []);
     store.set(selectedDoodadsAtom, []);
     store.set(selectedSpritesAtom, []);
@@ -181,9 +189,9 @@ function useMenus(): { label: string; items: Item[] }[] {
         { kind: "item", label: undoLabel ? `Undo ${undoLabel}` : "Undo", shortcut: "Ctrl+Z", disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(`Undid: ${l}`); } },
         { kind: "item", label: redoLabel ? `Redo ${redoLabel}` : "Redo", shortcut: "Ctrl+Y", disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(`Redid: ${l}`); } },
         sep,
-        stub("Cut", "Ctrl+X"),
-        stub("Copy", "Ctrl+C"),
-        stub("Paste", "Ctrl+V"),
+        { kind: "item", label: "Cut", shortcut: "Ctrl+X", disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
+        { kind: "item", label: "Copy", shortcut: "Ctrl+C", disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
+        { kind: "item", label: "Paste", shortcut: "Ctrl+V", disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
         { kind: "item", label: "Delete", shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
         sep,
         { kind: "item", label: "Select All", shortcut: "Ctrl+A", disabled: !hasMap, onSelect: selectAll },

@@ -31,6 +31,7 @@ const HOTKEYS: [string, string][] = [
   ["Save As", "Ctrl+Shift+S"],
   ["Map Properties", "Alt+Enter"],
   ["Undo / Redo", "Ctrl+Z · Ctrl+Y"],
+  ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
   ["Find", "Ctrl+F"],
   ["Toggle grid", "Ctrl+G"],
   ["Zoom in / out / 100%", "Ctrl++ · Ctrl+− · Ctrl+0"],

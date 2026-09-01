@@ -187,6 +187,33 @@ on when the fog layer is entered and back off on leaving if it was the one that 
 `fogImageData` gives the minimap the same picture (also drawn with `multiply`).
 `tests/fog-edit.test.ts` pins the bit semantics and the MASK round trip.
 
+### Cut / Copy / Paste (`src/editor/clipboard.ts`, `src/hooks/useClipboardTools.ts`, `src/editor/history.ts`)
+
+`editor/history.ts` now owns `HistoryEdit` / `HistoryEntry` and `applyEntry` (the fixed list
+order: terrain `changes`, `isom`, `doodadTiles`, `doodads`, `sprites`, `units`, `locations`,
+`fog`; reversed on undo) — `documentAtoms` re-exports the type. A `Clip` is self-contained
+(size, `era`, MTXM `tiles` *and* TILE `ground`, records with origin-relative pixel positions,
+`ClipLocation`s with names, MASK bytes) so it outlives the map it came from. `copyRegion` takes
+a tile `Rect` (`regionObjects`: units/sprites by centre, doodads/locations wholly inside,
+overlay sprites belong to their doodad), `copyObjects` an `ObjectSelection` (bounding box, those
+objects only, never terrain/fog). `pasteClip` and `removeObjects` **apply as they build**, list
+by list in `applyEntry` order, so every list is computed against the state the previous one
+leaves — this is what makes replace-mode pastes and doodad removals undo/redo cleanly; do not
+reorder the steps. Terrain pastes `ground` into both sections and, when doodads are included,
+the MTXM picture as `doodadTiles`; `strandedByPaste` decides from the *final* picture which
+existing doodads lose a tile (so a self-paste is a no-op), `mode: "replace"` also clears the
+area's units/sprites/doodads (locations never). Units get fresh serials and `relatedSerial`
+is remapped or dropped; locations go through `addLocation` (free slots, `ensureLocationSlots`
+first); a different `era` refuses terrain + doodads but pastes the rest; everything off the
+map is skipped with a `notes` entry. ISOM is untouched. Atoms: `clipboardAtom` (kept across
+documents), `clipSelectionAtom` (the marked `Rect`, cleared on load/close/resize),
+`clipPartsAtom`, `clipPasteModeAtom`, `clipPastingAtom`. The hook's `source()` is layer-aware
+(marked area on the clipboard/terrain/fog layers, the selection on object layers); `paste()`
+arms the clipboard layer and the viewport's `onDown` calls `pasteAt(tile)` while armed.
+`tests/clipboard-edit.test.ts` pins the region rules, both tile layers, serial remapping,
+replace/merge, stranding, edge clipping, the full undo/redo round trip and a fixture-map copy
+into a blank map.
+
 ### Scenario settings (`src/editor/settings.ts`, `src/formats/chk/sections/{players,settings}.ts`)
 
 The Map Revision, Player Settings, Force Settings, Player Colors and Unit Settings dialogs edit the
@@ -265,7 +292,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 `{ only: "triggers" }`); Edit ▸ Delete / Select All / Deselect act on the active layer's selection like
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
-over file contents, not handles. Cut / Copy / Paste, Replace Terrain, Auto-place Start Locations,
+over file contents, not handles. Replace Terrain, Auto-place Start Locations,
 Terrain from Image and Test Map are still `stub()` entries in `MenuBar.tsx`.
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)

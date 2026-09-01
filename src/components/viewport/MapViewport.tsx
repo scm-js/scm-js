@@ -13,6 +13,10 @@ import {
   activeUnitSpriteAtom,
   brushSizeAtom,
   centerViewOnAtom,
+  clipboardAtom,
+  clipPartsAtom,
+  clipPastingAtom,
+  clipSelectionAtom,
   cursorTileAtom,
   doodadPlacementAtom,
   doodadPlacingAtom,
@@ -52,6 +56,8 @@ import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDo
 import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
 import { useFogTools } from "../../hooks/useFogTools";
 import { useLocationTools } from "../../hooks/useLocationTools";
+import { useClipboardTools } from "../../hooks/useClipboardTools";
+import { clipLocationBounds, clipSummary, tileRect } from "../../editor/clipboard";
 import { boundsOf, HANDLE_CURSOR, HANDLES, handlePoint } from "../../editor/locations";
 import { drawFogOverlay } from "./fog";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
@@ -63,6 +69,7 @@ import { ANYWHERE_INDEX, SpriteFlag, UnitState, UnitUsed } from "../../formats/c
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { placementBox, unitBox, unitGeometry } from "../../editor/units";
 import type { TileRect } from "../../editor/doodads";
+import { doodadOrigin } from "../../formats/tileset/doodads";
 import { unitName } from "../../data/units";
 import { linePoints } from "../../editor/terrain";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
@@ -130,6 +137,8 @@ export default function MapViewport() {
    * ground (clears the selection) that becomes a create-drag once it travels.
    */
   const locationGestureRef = useRef<{ mode: "move" | "resize" | "create" | "click"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
+  /** A Cut / Copy / Paste-layer drag marking an area, in tiles. */
+  const clipGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
@@ -182,6 +191,12 @@ export default function MapViewport() {
   const selectedLocations = useAtomValue(selectedLocationsAtom);
   // Only read so the HUD and the create ghost redraw when the snap changes.
   const locationSnap = useAtomValue(locationSnapAtom);
+  const clipTools = useClipboardTools();
+  const clip = useAtomValue(clipboardAtom);
+  const clipParts = useAtomValue(clipPartsAtom);
+  const clipSelection = useAtomValue(clipSelectionAtom);
+  const setClipSelection = useSetAtom(clipSelectionAtom);
+  const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
   const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
@@ -208,6 +223,9 @@ export default function MapViewport() {
   const spritePlacing = spritesEditing && placingSprite;
   const fogPainting = layer === "fog" && scenario !== null;
   const locationsEditing = layer === "locations" && scenario !== null;
+  const clipEditing = layer === "clipboard" && scenario !== null;
+  /** The clip follows the pointer, a click stamps it. */
+  const clipPasting = clipEditing && pastingClip && clip !== null;
   const showFog = scenario !== null && flags.fog;
   const locations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
@@ -693,6 +711,90 @@ export default function MapViewport() {
       }
     }
 
+    // Cut / Copy / Paste layer: the marked area with its size, and the clip under the pointer while pasting
+    if (clipEditing && scenario) {
+      const g = clipGestureRef.current;
+      const marked = g ? tileRect(g.from, g.to) : clipSelection;
+      if (marked) {
+        const mx = marked.x0 * tilePx - sx, my = marked.y0 * tilePx - sy, mw = (marked.x1 - marked.x0) * tilePx, mh = (marked.y1 - marked.y0) * tilePx;
+        ctx.fillStyle = "rgba(230,185,92,0.10)";
+        ctx.fillRect(mx, my, mw, mh);
+        ctx.strokeStyle = "#e6b95c";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 3]);
+        ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
+        ctx.setLineDash([]);
+        const label = `${marked.x1 - marked.x0} × ${marked.y1 - marked.y0}`;
+        ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(10,12,16,0.8)";
+        ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
+        ctx.fillStyle = "#f4d08a";
+        ctx.fillText(label, mx + mw + 8, my + mh + 15);
+      }
+      const hvc = hoverRef.current;
+      if (clipPasting && clip && hvc && !g) {
+        // The clip with its top-left tile under the pointer: the picture at three-quarter
+        // strength (its own tiles, or the catalogue's for a doodad-only clip), the objects
+        // as ghosts, and the outline — red when part of it would fall off the map.
+        const ax = hvc.x, ay = hvc.y;
+        const ox = ax * TILE, oy = ay * TILE;
+        const sameTileset = clip.era === tilesetIndex(scenario);
+        const blit = (tx: number, ty: number, id: number) => {
+          if (!tilesetAssets || tilePx < 4 || tx < 0 || ty < 0 || tx >= mapW || ty >= mapH) return;
+          const megatile = megatileForTile(tilesetAssets.tileset, id);
+          if (megatile <= 0) return;
+          const src = atlasSource(tilesetAssets.atlas, megatile);
+          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, tx * tilePx - sx, ty * tilePx - sy, tilePx, tilePx);
+        };
+        ctx.globalAlpha = 0.75;
+        ctx.imageSmoothingEnabled = tilePx < TILE;
+        if (sameTileset && clipParts.terrain && clip.tiles && clip.ground) {
+          const picture = clipParts.doodads ? clip.tiles : clip.ground;
+          for (let y = 0; y < clip.height; y++) for (let x = 0; x < clip.width; x++) blit(ax + x, ay + y, picture[y * clip.width + x]);
+        } else if (sameTileset && clipParts.doodads) {
+          for (const d of clip.doodads) {
+            const def = doodadTools.catalogue.byId.get(d.doodadId);
+            if (!def) continue;
+            const o = doodadOrigin(def, d.x + ox, d.y + oy);
+            for (let row = 0; row < def.height; row++) for (let col = 0; col < def.width; col++) {
+              const id = def.tiles[row * def.width + col];
+              if (id !== 0) blit(o.x + col, o.y + row, id);
+            }
+          }
+        }
+        ctx.globalAlpha = 1;
+        ctx.imageSmoothingEnabled = zoom < 1;
+        if (clipParts.units) {
+          for (const u of clip.units) {
+            const ux = (u.x + ox) * zoom - sx, uy = (u.y + oy) * zoom - sy;
+            if (!drawUnitSprite(u.unitId, u.owner, ux, uy, 0.6) && u.unitId !== START_LOCATION_UNIT) drawUnitMarker(u.owner, ux, uy);
+          }
+        }
+        if (clipParts.sprites) {
+          for (const s of clip.sprites) {
+            const px = (s.x + ox) * zoom - sx, py = (s.y + oy) * zoom - sy;
+            if (!drawThg2Sprite(s.spriteId, s.flags, s.owner, px, py, 0.6)) drawSpriteMarker(px, py);
+          }
+        }
+        ctx.imageSmoothingEnabled = true;
+        if (clipParts.locations) {
+          ctx.lineWidth = 1;
+          for (const l of clip.locations) {
+            const b = boundsOf(clipLocationBounds(l, ax, ay));
+            ctx.fillStyle = "rgba(79,209,197,0.13)";
+            ctx.fillRect(b.left * zoom - sx, b.top * zoom - sy, (b.right - b.left) * zoom, (b.bottom - b.top) * zoom);
+            ctx.strokeStyle = "rgba(79,209,197,0.9)";
+            ctx.setLineDash([3, 2]);
+            ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom), Math.round((b.bottom - b.top) * zoom));
+            ctx.setLineDash([]);
+          }
+        }
+        const fits = ax + clip.width <= mapW && ay + clip.height <= mapH;
+        strokeTileRect({ x0: ax, y0: ay, x1: ax + clip.width, y1: ay + clip.height }, fits ? "#e6b95c" : "#f05a5a", null);
+      }
+    }
+
     /** The box-select rectangle of an object-layer drag. */
     const drawMarquee = (g: { from: MapPoint; to: MapPoint }) => {
       const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
@@ -788,7 +890,7 @@ export default function MapViewport() {
           ctx.setLineDash([]);
         }
       }
-    } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing) {
+    } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing && !clipEditing) {
       const b = (layer === "terrain" && !blending) || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
@@ -875,7 +977,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
@@ -1063,6 +1165,16 @@ export default function MapViewport() {
       draw();
       return;
     }
+    if (clipEditing) {
+      e.preventDefault();
+      if (clipPasting) { clipTools.pasteAt(t.x, t.y); draw(); return; }
+      // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
+      e.currentTarget.setPointerCapture(e.pointerId);
+      clipGestureRef.current = { from: t, to: t };
+      setClipSelection(tileRect(t, t));
+      draw();
+      return;
+    }
     if (fogPainting) {
       // Alt-click reads the tile's fog into the player ticks; Shift paints the opposite of the palette's mode.
       if (e.altKey) { fogTools.pickAt(t.x, t.y); return; }
@@ -1085,6 +1197,16 @@ export default function MapViewport() {
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
     const point = pointAt(e);
+    const cGesture = clipGestureRef.current;
+    if (cGesture) {
+      const c = clampToMap(t);
+      if (c.x !== cGesture.to.x || c.y !== cGesture.to.y) { cGesture.to = c; setClipSelection(tileRect(cGesture.from, c)); }
+      hoverRef.current = c;
+      hoverPointRef.current = clampPoint(point);
+      setCursor(c);
+      draw();
+      return;
+    }
     const dGesture = doodadGestureRef.current;
     if (dGesture) {
       const p = clampPoint(point);
@@ -1171,6 +1293,14 @@ export default function MapViewport() {
   };
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const cGesture = clipGestureRef.current;
+    if (cGesture) {
+      clipGestureRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      setClipSelection(tileRect(cGesture.from, cGesture.to));
+      draw();
+      return;
+    }
     const dGesture = doodadGestureRef.current;
     if (dGesture) {
       doodadGestureRef.current = null;
@@ -1245,6 +1375,7 @@ export default function MapViewport() {
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
     if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); draw(); return; }
+    if (clipPasting) { e.preventDefault(); clipTools.stopPasting(); draw(); return; }
     if (locationsEditing && hoverPointRef.current) {
       // Right-clicking a location selects it so the menu's items act on it.
       const hit = locationTools.pickAt(hoverPointRef.current);
@@ -1333,9 +1464,11 @@ export default function MapViewport() {
         ]
       : []),
     { label: "", sep: true },
-    { label: "Cut", onSelect: () => open("notImplemented", { feature: "Cut" }) },
-    { label: "Copy", onSelect: () => open("notImplemented", { feature: "Copy" }) },
-    { label: "Paste", onSelect: () => open("notImplemented", { feature: "Paste" }) },
+    { label: "Cut", disabled: !clipTools.source(), onSelect: () => { clipTools.cut(); } },
+    { label: "Copy", disabled: !clipTools.source(), onSelect: () => { clipTools.copy(); } },
+    // Paste Here stamps at the clicked tile straight away; Paste arms the layer so the clip follows the pointer.
+    { label: "Paste Here", disabled: !scenario || !clip, onSelect: withMenuTile((x, y) => { clipTools.pasteAt(x, y); }) },
+    { label: "Paste", disabled: !scenario || !clip, onSelect: () => { clipTools.paste(); } },
     { label: "", sep: true },
     { label: "Center Minimap Here", onSelect: () => open("notImplemented", { feature: "Center Minimap" }) },
     { label: "Map Properties…", onSelect: () => open("mapProperties") },
@@ -1351,7 +1484,7 @@ export default function MapViewport() {
           <div ref={scrollerRef} className="scroller" onScroll={draw} tabIndex={0}>
             <div
               ref={surfaceRef}
-              className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing ? "placing" : ""}`}
+              className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing || clipPasting ? "placing" : ""}`}
               style={{ width: worldW, height: worldH }}
               onPointerDown={onDown}
               onPointerMove={onMove}
@@ -1406,6 +1539,12 @@ export default function MapViewport() {
         {spritePlacing && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
         {doodadPlacing && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
         {locationsEditing && <span className="hud-chip">locations · drag empty ground to create · snap <b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
+        {clipEditing && !clipPasting && (
+          <span className="hud-chip">
+            cut / copy / paste · drag to mark an area{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} · Ctrl+C copies{clip && " · Ctrl+V pastes"}
+          </span>
+        )}
+        {clipPasting && clip && <span className="hud-chip">pasting <b>{clipSummary(clip)}</b> · click to stamp · Esc / right-click to stop</span>}
         {showFog && <span className="hud-chip">fog of war <b>P{fogViewPlayer + 1}</b>{fogPainting && <> · {fogMode === "fog" ? "painting" : "clearing"} · Shift inverts</>}</span>}
       </div>
     </div>

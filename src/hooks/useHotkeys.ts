@@ -11,6 +11,7 @@ import {
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
+import { useClipboardTools } from "./useClipboardTools";
 
 const LAYER_KEYS: Record<string, EditorLayer> = { t: "terrain", d: "doodads", u: "units", s: "sprites", l: "locations", f: "fog", c: "clipboard" };
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -41,11 +42,14 @@ export function useHotkeys() {
   const activeLayer = useAtomValue(activeLayerAtom);
   const dialogs = useAtomValue(dialogStackAtom);
   const { save } = useMapFileActions();
+  const clipTools = useClipboardTools();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      // A tick box or radio button keeps focus after a click but has no text to edit, so the hotkeys still apply there.
+      const textInput = t?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((t as HTMLInputElement).type);
+      const typing = !!t && (textInput || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       const mod = e.ctrlKey || e.metaKey;
 
       if (e.key === "F1") { e.preventDefault(); open("shortcuts"); return; }
@@ -59,6 +63,9 @@ export function useHotkeys() {
           s: () => { void save(); },
           z: () => { const l = undo(); setStatus(l ? `Undid: ${l}` : "Nothing to undo"); },
           y: () => { const l = redo(); setStatus(l ? `Redid: ${l}` : "Nothing to redo"); },
+          x: () => { clipTools.cut(); },
+          c: () => { clipTools.copy(); },
+          v: () => { clipTools.paste(); },
           g: () => setFlags((f) => ({ ...f, grid: !f.grid })),
           t: () => open("triggerEditor"),
           f: () => open("find"),
@@ -68,7 +75,8 @@ export function useHotkeys() {
           "-": () => setZoom((z) => [...ZOOM_LEVELS].reverse().find((v) => v < z) ?? z),
           "0": () => setZoom(1),
         };
-        if (map[k] && !(typing && ["=", "+", "-", "0", "g", "t", "f", "z", "y"].includes(k))) { e.preventDefault(); map[k](); }
+        // Inside a text field the browser keeps its own clipboard and undo.
+        if (map[k] && !(typing && ["=", "+", "-", "0", "g", "t", "f", "z", "y", "x", "c", "v"].includes(k))) { e.preventDefault(); map[k](); }
         return;
       }
       if (mod && e.shiftKey) {
@@ -83,6 +91,11 @@ export function useHotkeys() {
       if (typing || e.altKey) return;
 
       if (e.key === "Delete" || e.key === "Backspace") {
+        if (activeLayer === "clipboard") {
+          const n = clipTools.deleteRegion();
+          if (n > 0) e.preventDefault();
+          return;
+        }
         if (activeLayer === "doodads") {
           const n = deleteDoodads();
           if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} doodad${n === 1 ? "" : "s"}`); }
@@ -104,6 +117,10 @@ export function useHotkeys() {
       }
       if (e.key === "Escape") {
         // First Escape leaves placement mode, the next clears the selection.
+        if (activeLayer === "clipboard") {
+          if (!clipTools.stopPasting()) clipTools.clearSelection();
+          return;
+        }
         if (activeLayer === "doodads") {
           if (placingDoodad) { setPlacingDoodad(false); setStatus("Stopped placing — click a doodad to select it, or pick one in the palette to place"); }
           else setSelectedDoodads([]);
@@ -137,5 +154,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools]);
 }

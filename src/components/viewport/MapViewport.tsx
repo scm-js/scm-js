@@ -55,6 +55,7 @@ import { drawFogOverlay } from "./fog";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
 import { getImageFrame, getUnitSprite, subunitOf } from "../../formats/units/sprites";
 import { UnitAnimator, type SpriteState } from "../../formats/units/animate";
+import type { TeamColorSpec } from "../../formats/units/teamColor";
 import { NO_UNIT } from "../../formats/dat/dat";
 import { ANYWHERE_INDEX, SpriteFlag, UnitState, UnitUsed } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
@@ -67,7 +68,7 @@ import { atlasSource, setAtlasStep } from "../../formats/tileset/atlas";
 import { cycleStepAt, GAME_FRAME_MS } from "../../formats/tileset/cycle";
 import { megatileForTile } from "../../formats/tileset/decode";
 import { TILESET_BY_ID } from "../../data/tilesets";
-import { playerColorHex, playerColorIndex } from "../../data/players";
+import { displayColorHex, playerTeamColor } from "../../data/players";
 import { SAMPLE_START_LOCATIONS } from "../../data/samples";
 import { hashNoise } from "./noise";
 
@@ -316,17 +317,20 @@ export default function MapViewport() {
     const palette = tilesetAssets?.tileset.palette ?? null;
     const paletteKey = tilesetAssets?.name ?? "";
     const colors = scenario?.playerColors;
+    const playerRgb = scenario?.playerRgb;
+    const teamOf = (owner: number) => playerTeamColor(colors, playerRgb, owner);
+    const colorOf = (owner: number) => displayColorHex(colors, playerRgb, owner);
     const drawUnitSprite = (unitId: number, owner: number, ux: number, uy: number, alpha = 1): boolean => {
       if (!unitAssets || !palette || tilePx < 8) return false;
-      const row = playerColorIndex(colors, owner);
-      const sprite = getUnitSprite(unitAssets, unitId, row, palette, paletteKey);
+      const team = teamOf(owner);
+      const sprite = getUnitSprite(unitAssets, unitId, team, palette, paletteKey);
       if (!sprite) return false;
       const w = sprite.width * zoom, h = sprite.height * zoom;
       ctx.globalAlpha = alpha;
       ctx.drawImage(sprite.image, ux - w / 2, uy - h / 2, w, h);
       const sub = subunitOf(unitAssets, unitId);
       if (sub !== NO_UNIT) {
-        const turret = getUnitSprite(unitAssets, sub, row, palette, paletteKey);
+        const turret = getUnitSprite(unitAssets, sub, team, palette, paletteKey);
         if (turret) ctx.drawImage(turret.image, ux - (turret.width * zoom) / 2, uy - (turret.height * zoom) / 2, turret.width * zoom, turret.height * zoom);
       }
       ctx.globalAlpha = 1;
@@ -336,11 +340,11 @@ export default function MapViewport() {
      * A unit as its iscript sprite: shadow, main graphic, overlays, turret, fires and
      * smoke, each image at its own offset. False when the main graphic is not ready yet.
      */
-    const drawSpriteImages = (sprite: SpriteState, row: number, ux: number, uy: number): boolean => {
+    const drawSpriteImages = (sprite: SpriteState, team: TeamColorSpec, ux: number, uy: number): boolean => {
       if (!unitAssets || !palette) return false;
       for (const img of sprite.images) {
         if (img.hidden) continue;
-        const frame = getImageFrame(unitAssets, img.imageId, img.frame, img.flip, row, palette, paletteKey);
+        const frame = getImageFrame(unitAssets, img.imageId, img.frame, img.flip, team, palette, paletteKey);
         if (!frame) {
           if (img === sprite.main) return false;
           continue;
@@ -354,15 +358,15 @@ export default function MapViewport() {
     };
     const drawAnimatedUnit = (sprite: SpriteState, owner: number, ux: number, uy: number, alpha: number): boolean => {
       ctx.globalAlpha = alpha;
-      const row = playerColorIndex(colors, owner);
-      const drawn = drawSpriteImages(sprite, row, ux, uy);
-      if (drawn && sprite.turret) drawSpriteImages(sprite.turret, row, ux, uy);
+      const team = teamOf(owner);
+      const drawn = drawSpriteImages(sprite, team, ux, uy);
+      if (drawn && sprite.turret) drawSpriteImages(sprite.turret, team, ux, uy);
       ctx.globalAlpha = 1;
       return drawn;
     };
     const drawUnitMarker = (owner: number, ux: number, uy: number) => {
       const r = Math.max(2, tilePx * 0.34);
-      ctx.fillStyle = playerColorHex(colors, owner) + "cc";
+      ctx.fillStyle = colorOf(owner) + "cc";
       ctx.fillRect(ux - r, uy - r, r * 2, r * 2);
       if (tilePx >= 12) {
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
@@ -376,7 +380,7 @@ export default function MapViewport() {
       if (!(flags & SpriteFlag.PureSprite)) return drawUnitSprite(spriteId, owner, px, py, alpha);
       const imageId = unitAssets.sprites.image[spriteId];
       if (imageId === undefined) return false;
-      const frame = getImageFrame(unitAssets, imageId, 0, (flags & SpriteFlag.Flipped) !== 0, playerColorIndex(colors, owner), palette, paletteKey);
+      const frame = getImageFrame(unitAssets, imageId, 0, (flags & SpriteFlag.Flipped) !== 0, teamOf(owner), palette, paletteKey);
       if (!frame) return false;
       const w = frame.width * zoom, h = frame.height * zoom;
       ctx.globalAlpha = alpha;
@@ -616,10 +620,10 @@ export default function MapViewport() {
         if (cx + r < 0 || cy + r < 0 || cx - r > size.w || cy - r > size.h) continue;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = playerColorHex(colors, s.player) + "55";
+        ctx.fillStyle = colorOf(s.player) + "55";
         ctx.fill();
         ctx.lineWidth = 2;
-        ctx.strokeStyle = playerColorHex(colors, s.player);
+        ctx.strokeStyle = colorOf(s.player);
         ctx.stroke();
         if (tilePx >= 12) {
           ctx.fillStyle = "#fff";
@@ -720,7 +724,7 @@ export default function MapViewport() {
         const b = ghost.geometry.building ? placementBox(ghost.geometry, ghost.x, ghost.y) : unitBox(ghost.geometry, ghost.x, ghost.y);
         const bx = b.left * zoom - sx, by = b.top * zoom - sy, bw = (b.right - b.left) * zoom, bh = (b.bottom - b.top) * zoom;
         if (!drawn || ghost.problem) {
-          ctx.fillStyle = ghost.problem ? "rgba(240,90,90,0.28)" : playerColorHex(colors, ghost.owner) + "66";
+          ctx.fillStyle = ghost.problem ? "rgba(240,90,90,0.28)" : colorOf(ghost.owner) + "66";
           ctx.fillRect(bx, by, bw, bh);
         }
         ctx.strokeStyle = ghost.problem ? "#f05a5a" : "#e6b95c";

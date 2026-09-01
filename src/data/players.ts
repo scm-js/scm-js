@@ -3,6 +3,7 @@
 export const PLAYER_COUNT = 12;
 
 import { ColorMode, PlayerRace, PlayerType, type PlayerRgb } from "../formats/chk/sections/players";
+import { TEAM_COLOR_ROWS, type TeamColorSpec } from "../formats/units/teamColor";
 
 /** OWNR controller bytes as StarEdit's Player Settings lists them, with the rest for maps that use them. */
 export const PLAYER_TYPES: { value: number; label: string; hint?: string }[] = [
@@ -92,14 +93,31 @@ export function hexToRgb(hex: string): [number, number, number] | null {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
+/** The slot's Remastered custom RGB, when CRGB says it is on one; null otherwise. */
+function customRgb(rgb: PlayerRgb | null | undefined, owner: number): [number, number, number] | null {
+  return rgb && owner < 8 && rgb.mode[owner] === ColorMode.Custom ? rgb.rgb[owner] : null;
+}
+
 /**
- * The colour to show for a slot in the chrome: a Remastered custom RGB when the slot is
- * set to one, else its palette entry. (The viewport's team-colour remap only knows the
- * palette; a custom colour is previewed in swatches, not on the sprites.)
+ * The colour a slot shows everywhere — swatches, markers and the sprites themselves: a
+ * Remastered custom RGB when the slot is set to one, else its palette entry.
  */
 export function displayColorHex(colors: readonly number[] | null | undefined, rgb: PlayerRgb | null | undefined, owner: number): string {
-  if (rgb && owner < 8 && rgb.mode[owner] === ColorMode.Custom) return rgbToHex(rgb.rgb[owner]);
-  return playerColorHex(colors, owner);
+  const custom = customRgb(rgb, owner);
+  return custom ? rgbToHex(custom) : playerColorHex(colors, owner);
+}
+
+/**
+ * What the sprite renderer paints a player's units with. The sixteen classic colours are
+ * `tunit.pcx` rows; the later table entries (Pink … Black) and a custom RGB have no row,
+ * so they go out as an RGB for the renderer to build a ramp from (`synthesizeRamp`).
+ */
+export function playerTeamColor(colors: readonly number[] | null | undefined, rgb: PlayerRgb | null | undefined, owner: number): TeamColorSpec {
+  const custom = customRgb(rgb, owner);
+  if (custom) return { rgb: custom };
+  const index = playerColorIndex(colors, owner);
+  if (index < TEAM_COLOR_ROWS) return { row: index };
+  return { rgb: hexToRgb(PLAYER_COLORS[index].hex) ?? [0, 0, 0] };
 }
 
 /** Player groups selectable in triggers. */

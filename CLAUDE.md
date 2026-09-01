@@ -188,8 +188,11 @@ may be shared with a trigger.
 
 Sections: OWNR is always written together with IOWN (StarEdit's copy); `playerRgb` is CRGB
 (Remastered: an RGB triple and a `ColorMode` per playable slot; `null` = no section, and Player
-Colors drops it again when every slot is back on `Palette`) — the chrome shows a custom colour via
-`displayColorHex`, the viewport's team-colour remap only knows the COLR palette. `unitSettings` is
+Colors drops it again when every slot is back on `Palette`) — `displayColorHex` is the colour a slot shows
+anywhere in the chrome and `playerTeamColor` what its sprites are painted with (`TeamColorSpec`: a `tunit.pcx`
+row for the sixteen classic colours, else an RGB — Pink … Black and any CRGB custom colour — for which
+`teamColor.ts` synthesises a ramp and `sprites.ts` draws through a palette copy with slots 8–15 overridden,
+since the tileset palettes have no pink to remap to; `tests/team-color.test.ts`). `unitSettings` is
 one model for UNIS (100 weapons) and UNIx (130), read from UNIx when both exist; `unitSettingsSections`
 decides which to write (the file's revision plus whichever it already carries, so a hybrid map keeps
 both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` until the dialog first

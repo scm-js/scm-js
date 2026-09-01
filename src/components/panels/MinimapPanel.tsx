@@ -8,7 +8,7 @@ import { fogImageData } from "../viewport/fog";
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { SAMPLE_START_LOCATIONS } from "../../data/samples";
-import { playerColorHex } from "../../data/players";
+import { displayColorHex } from "../../data/players";
 import { isResource, unitGeometry } from "../../editor/units";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { hashNoise } from "../viewport/noise";
@@ -109,13 +109,13 @@ export default function MinimapPanel() {
         if (u.unitId === 214) continue;
         const g = unitGeometry(tables, u.unitId);
         const uw = Math.max(2, (g.placeW / 32) * scale), uh = Math.max(2, (g.placeH / 32) * scale);
-        ctx.fillStyle = isResource(u.unitId) ? "#5fd7ff" : playerColorHex(scenario.playerColors, u.owner);
+        ctx.fillStyle = isResource(u.unitId) ? "#5fd7ff" : displayColorHex(scenario.playerColors, scenario.playerRgb, u.owner);
         ctx.fillRect(ox + (u.x / 32) * scale - uw / 2, oy + (u.y / 32) * scale - uh / 2, uw, uh);
       }
     }
     if (flags.startLocations) {
       for (const s of startLocations) {
-        ctx.fillStyle = playerColorHex(scenario?.playerColors, s.player);
+        ctx.fillStyle = displayColorHex(scenario?.playerColors, scenario?.playerRgb, s.player);
         ctx.beginPath();
         ctx.arc(ox + s.x * scale, oy + s.y * scale, 4, 0, Math.PI * 2);
         ctx.fill();

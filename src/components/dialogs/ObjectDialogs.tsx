@@ -103,7 +103,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
         <Field label="Unit">
           <div className="row" style={{ alignItems: "flex-start" }}>
             <div className="unit-frame" title="The unit as it will be drawn, in the owner's colour">
-              <SpritePreview kind="unit" id={form.unitId} owner={form.owner} colors={scenario?.playerColors} size={56} />
+              <SpritePreview kind="unit" id={form.unitId} owner={form.owner} colors={scenario?.playerColors} rgb={scenario?.playerRgb} size={56} />
             </div>
             <select className="select grow" value={form.unitId} onChange={(e) => set("unitId", Number(e.target.value))}>
               {UNIT_GROUPS.map((g) => (
@@ -345,7 +345,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
         </Field>
         <Field label={kind === "pure" ? "Sprite" : "Unit"}>
           <div className="row">
-            <SpritePreview kind={kind} id={form.spriteId} owner={form.owner} colors={scenario?.playerColors} size={32} flipped={has(SpriteFlag.Flipped)} />
+            <SpritePreview kind={kind} id={form.spriteId} owner={form.owner} colors={scenario?.playerColors} rgb={scenario?.playerRgb} size={32} flipped={has(SpriteFlag.Flipped)} />
             {kind === "unit" ? (
               <select className="select grow" value={form.spriteId} onChange={(e) => set("spriteId", Number(e.target.value))}>
                 {UNIT_GROUPS.map((g) => (

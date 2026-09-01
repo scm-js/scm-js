@@ -14,7 +14,7 @@ import { boundsOf, isAnywhereIntact, isInverted, locationName } from "../../edit
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { PLAYER_COLORS, playerColorHex, playerColorIndex } from "../../data/players";
+import { displayColorHex, PLAYER_COLORS, playerColorIndex } from "../../data/players";
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
@@ -110,7 +110,7 @@ function UnitProps() {
     return (
       <div className="props">
         <div className="span unit-head">
-          <UnitPreview unitId={first.unitId} owner={first.owner} colors={colors} size={48} />
+          <UnitPreview unitId={first.unitId} owner={first.owner} colors={colors} rgb={scenario?.playerRgb} size={48} />
           <div style={{ minWidth: 0 }}>
             <div className="name" title={unitName(first.unitId)}>{unitName(first.unitId)}</div>
             <div className="sub">#{first.unitId} · serial {first.serial}{many ? ` · +${selected.length - 1} more` : ""}</div>
@@ -141,7 +141,7 @@ function UnitProps() {
   return (
     <div className="props">
       <div className="span unit-head">
-        <UnitPreview unitId={activeUnit} owner={owner} colors={colors} size={48} />
+        <UnitPreview unitId={activeUnit} owner={owner} colors={colors} rgb={scenario?.playerRgb} size={48} />
         <div style={{ minWidth: 0 }}>
           <div className="name" title={unitName(activeUnit)}>{unitName(activeUnit)}</div>
           <div className="sub">#{activeUnit} · {placing ? "placing" : "select mode"}</div>
@@ -283,7 +283,7 @@ function SpriteProps() {
     return (
       <div className="props">
         <div className="span unit-head">
-          <SpritePreview kind={k} id={first.spriteId} owner={first.owner} colors={colors} size={48} flipped={flipped} />
+          <SpritePreview kind={k} id={first.spriteId} owner={first.owner} colors={colors} rgb={scenario?.playerRgb} size={48} flipped={flipped} />
           <div style={{ minWidth: 0 }}>
             <div className="name" title={spriteName(tools.assets, k, first.spriteId)}>{spriteName(tools.assets, k, first.spriteId)}</div>
             <div className="sub">{k === "pure" ? "pure sprite" : "unit sprite"} #{first.spriteId} · THG2 {selected[0]}{many ? ` · +${selected.length - 1} more` : ""}</div>
@@ -319,7 +319,7 @@ function SpriteProps() {
   return (
     <div className="props">
       <div className="span unit-head">
-        <SpritePreview kind={kind} id={id} owner={owner} colors={colors} size={48} flipped={options.flipped} />
+        <SpritePreview kind={kind} id={id} owner={owner} colors={colors} rgb={scenario?.playerRgb} size={48} flipped={options.flipped} />
         <div style={{ minWidth: 0 }}>
           <div className="name" title={label}>{label}</div>
           <div className="sub">{kind === "pure" ? "pure sprite" : "unit sprite"} #{id} · {placing ? "placing" : "select mode"}</div>
@@ -471,7 +471,7 @@ function FogProps() {
     const swatches = (players: number) => (
       <span className="row" style={{ gap: 3 }}>
         {Array.from({ length: FOG_PLAYERS }, (_, i) => (players & playerBit(i)) !== 0 && (
-          <span key={i} className="swatch" title={`Player ${i + 1}`} style={{ background: playerColorHex(scenario?.playerColors, i), width: 10, height: 10 }} />
+          <span key={i} className="swatch" title={`Player ${i + 1}`} style={{ background: displayColorHex(scenario?.playerColors, scenario?.playerRgb, i), width: 10, height: 10 }} />
         ))}
       </span>
     );

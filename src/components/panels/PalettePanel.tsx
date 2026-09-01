@@ -51,7 +51,7 @@ import { ANYWHERE_INDEX, isLocationUsed } from "../../formats/chk/sections/objec
 import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/fog";
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
-import { playerColorHex } from "../../data/players";
+import { displayColorHex } from "../../data/players";
 import { RACE_LABEL, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
@@ -146,7 +146,7 @@ function DoodadPalette() {
       <div className="owner-strip" title="Owner of the doodads you place (matters for Installation doors and traps)">
         {Array.from({ length: 12 }, (_, i) => (
           <Tip key={i} label={`Player ${i + 1}`} side="right">
-            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
           </Tip>
@@ -267,7 +267,7 @@ function UnitPalette() {
       <div className="owner-strip" title="Unit owner">
         {Array.from({ length: 12 }, (_, i) => (
           <Tip key={i} label={`Player ${i + 1}`} side="right">
-            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
           </Tip>
@@ -316,7 +316,7 @@ function UnitPalette() {
       </div>
       <div className="palette-footer">
         <span>{placing ? <>Placing {unitName(active)} <span className="faint">· Esc stops</span></> : <>{unitName(active)} <span className="mono">#{active}</span> <span className="faint">· select mode</span></>}</span>
-        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: playerColorHex(colors, owner), width: 10, height: 10 }} />P{owner + 1}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />P{owner + 1}</span>
       </div>
     </>
   );
@@ -393,7 +393,7 @@ function SpritePalette() {
       <div className="owner-strip" title="Sprite owner">
         {Array.from({ length: 12 }, (_, i) => (
           <Tip key={i} label={`Player ${i + 1}`} side="right">
-            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
           </Tip>
@@ -437,7 +437,7 @@ function SpritePalette() {
       />
       <div className="palette-footer">
         <span>{placing ? <>Placing {activeLabel} <span className="faint">· Esc stops</span></> : <>{activeLabel} <span className="mono">#{activeId}</span> <span className="faint">· select mode</span></>}</span>
-        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: playerColorHex(colors, owner), width: 10, height: 10 }} />P{owner + 1}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />P{owner + 1}</span>
       </div>
     </>
   );
@@ -566,7 +566,7 @@ function FogPalette() {
           <Tip key={i} label={`Player ${i + 1} — ${on ? "selected" : "not selected"}`} side="right">
             <button
               className={`owner-chip ${on ? "is-active" : ""}`}
-              style={{ ["--c" as string]: playerColorHex(colors, i) }}
+              style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }}
               onClick={() => toggle(i)}
               aria-pressed={on}
             >

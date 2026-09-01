@@ -1,22 +1,25 @@
 import { memo, useEffect, useRef } from "react";
-import { PLAYER_COLORS, playerColorIndex } from "../../data/players";
+import { displayColorHex, playerTeamColor } from "../../data/players";
+import type { PlayerRgb } from "../../formats/chk/sections/players";
 import { getImageFrame, getUnitSprite, type ImageFrame } from "../../formats/units/sprites";
 import type { SpriteKind } from "../../editor/sprites";
 import { spriteFrame, spriteGrp, spriteImageId } from "../../hooks/useSpriteTools";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
 import { useTileset } from "../../hooks/useTileset";
+import { teamColorKey } from "../../formats/units/teamColor";
 
 /**
  * A unit type drawn in a player's colour, scaled to fit `size`. Uses the open map's
  * tileset palette like the viewport does; a coloured swatch stands in until the
  * graphics arrive.
  */
-export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, size }: { unitId: number; owner: number; colors: readonly number[] | null | undefined; size: number }) {
+export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, rgb, size }: { unitId: number; owner: number; colors: readonly number[] | null | undefined; rgb?: PlayerRgb | null; size: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { loaded: assets } = useUnitAssets();
   const { loaded: tileset } = useTileset();
   const grpRevision = useGrpRevision();
-  const colorIndex = playerColorIndex(colors, owner);
+  const team = playerTeamColor(colors, rgb, owner);
+  const teamKey = teamColorKey(team);
 
   useEffect(() => {
     const c = ref.current;
@@ -27,9 +30,9 @@ export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, si
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
-    const sprite = assets && tileset ? getUnitSprite(assets, unitId, colorIndex, tileset.tileset.palette, tileset.name) : null;
+    const sprite = assets && tileset ? getUnitSprite(assets, unitId, team, tileset.tileset.palette, tileset.name) : null;
     if (!sprite) {
-      ctx.fillStyle = PLAYER_COLORS[colorIndex].hex;
+      ctx.fillStyle = displayColorHex(colors, rgb, owner);
       ctx.fillRect(size * 0.3, size * 0.3, size * 0.4, size * 0.4);
       return;
     }
@@ -37,7 +40,8 @@ export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, si
     const w = sprite.width * scale, h = sprite.height * scale;
     ctx.imageSmoothingEnabled = scale < 1;
     ctx.drawImage(sprite.image, (size - w) / 2, (size - h) / 2, w, h);
-  }, [assets, tileset, grpRevision, unitId, colorIndex, size]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `team` is re-derived per render; `teamKey` is its identity
+  }, [assets, tileset, grpRevision, unitId, teamKey, size]);
 
   return <canvas ref={ref} className="unit-preview" style={{ width: size, height: size }} />;
 });
@@ -47,12 +51,13 @@ export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, si
  * editor pose for a unit sprite — mirrored when `flipped`. A diamond stands in until the
  * GRP arrives (or when the unit data is not installed).
  */
-export const SpritePreview = memo(function SpritePreview({ kind, id, owner, colors, size, flipped = false }: { kind: SpriteKind; id: number; owner: number; colors: readonly number[] | null | undefined; size: number; flipped?: boolean }) {
+export const SpritePreview = memo(function SpritePreview({ kind, id, owner, colors, rgb, size, flipped = false }: { kind: SpriteKind; id: number; owner: number; colors: readonly number[] | null | undefined; rgb?: PlayerRgb | null; size: number; flipped?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { loaded: assets } = useUnitAssets();
   const { loaded: tileset } = useTileset();
   const grpRevision = useGrpRevision();
-  const colorIndex = playerColorIndex(colors, owner);
+  const team = playerTeamColor(colors, rgb, owner);
+  const teamKey = teamColorKey(team);
 
   useEffect(() => {
     const c = ref.current;
@@ -66,8 +71,8 @@ export const SpritePreview = memo(function SpritePreview({ kind, id, owner, colo
     let frame: ImageFrame | null = null;
     if (assets && tileset) {
       const imageId = spriteImageId(assets, kind, id);
-      if (kind === "unit") frame = getUnitSprite(assets, id, colorIndex, tileset.tileset.palette, tileset.name);
-      else if (imageId >= 0) frame = getImageFrame(assets, imageId, 0, flipped, colorIndex, tileset.tileset.palette, tileset.name);
+      if (kind === "unit") frame = getUnitSprite(assets, id, team, tileset.tileset.palette, tileset.name);
+      else if (imageId >= 0) frame = getImageFrame(assets, imageId, 0, flipped, team, tileset.tileset.palette, tileset.name);
     }
     if (!frame) {
       ctx.fillStyle = "rgba(201,168,255,0.85)";
@@ -95,7 +100,8 @@ export const SpritePreview = memo(function SpritePreview({ kind, id, owner, colo
     ctx.globalCompositeOperation = frame.additive ? "lighter" : "source-over";
     ctx.drawImage(frame.image, sx, sy, sw, sh, (size - w) / 2, (size - h) / 2, w, h);
     ctx.globalCompositeOperation = "source-over";
-  }, [assets, tileset, grpRevision, kind, id, colorIndex, size, flipped]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `team` is re-derived per render; `teamKey` is its identity
+  }, [assets, tileset, grpRevision, kind, id, teamKey, size, flipped]);
 
   return <canvas ref={ref} className="unit-preview" style={{ width: size, height: size }} />;
 });

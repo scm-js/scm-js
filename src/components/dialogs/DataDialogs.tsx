@@ -194,7 +194,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="unit-frame" title="Drawn in Player 1's colour">
-              <SpritePreview kind="unit" id={sel} owner={0} colors={scenario.playerColors} size={64} />
+              <SpritePreview kind="unit" id={sel} owner={0} colors={scenario.playerColors} rgb={scenario.playerRgb} size={64} />
             </div>
             <div className="col" style={{ gap: 2, flex: 1 }}>
               <span className="title">{customName || unitName(sel)}</span>

@@ -247,7 +247,7 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
             </div>
             <p className="hint" style={{ marginTop: 6 }}>
               {version === "remastered"
-                ? "Custom colours are drawn in swatches here; the sprites on the map keep the palette colour."
+                ? "The map draws a custom colour with a ramp built from the RGB — an approximation of Remastered's shading."
                 : `This map is ${MAP_VERSIONS[version].label}: older clients ignore CRGB and read COLR. Set the revision to Remastered in Map Revision for it to take effect.`}
             </p>
           </Group>

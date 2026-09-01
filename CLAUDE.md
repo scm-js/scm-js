@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A browser-based StarCraft 1 / Brood War map editor (React 19 + Vite + TypeScript + Jotai), modelled on
 StarEdit / SCMDraft 2. It opens real `.scm`/`.scx` maps (MPQ archives via `mopaq`), renders terrain from
-the game's own tileset graphics, and writes playable archives back. The README is accurate and
-detailed on user-facing behaviour (brush modes, tile id round-trip, deep-links) — read it first.
+the game's own tileset graphics, and writes playable archives back. `README.md` is the map-maker's
+guide (what each layer does, and the table of what is and is not implemented) — read it first; the
+technical companions are `docs/file-formats.md`, `docs/game-data.md`, `docs/trigger-script.md` and
+`docs/development.md`. Keep all five current when behaviour changes.
 
 ## Commands
 
@@ -42,7 +44,7 @@ The `tsconfig.app.json` is strict-ish: `noUnusedLocals`, `noUnusedParameters`, `
 type-check; `npm run lint` does not type-check.
 
 Dev deep-links (`/?nosplash&layer=units&dialog=playerSettings&mode=tile&tileset=ice&zoom=0.5`) are
-the fastest way to reach a specific UI state — see README and `src/hooks/useDevDeepLinks.ts`.
+the fastest way to reach a specific UI state — see `docs/development.md` and `src/hooks/useDevDeepLinks.ts`.
 
 ## Architecture
 

@@ -218,6 +218,41 @@ canvas cache; shadows draw as 50% black, `DrawFunction.Remap` images through the
 running game (attacks, sounds, projectile sprites, condition jumps) is a no-op. `tests/iscript.test.ts`
 and `tests/animate.test.ts` run against the real files when `public/` is populated.
 
+### Startup preload (`src/services/preload.ts`, `src/hooks/usePreload.ts`)
+
+The splash used to run a fixed 3.3 s script of invented log lines while the real fetches happened behind
+it, so you landed in the editor on top of the viewport's own "Loading … terrain" plate and unit markers.
+`runPreload` replaces that with an ordered `PreloadTask[]` that actually awaits the work — the startup
+tileset (`ensureTileset`), the unit tables (`getUnitAssets`), the GRPs a blank map draws (`warmUnitGrps`),
+and finally the startup document itself (injected by the hook, which subscribes to `scenarioAtom` so it
+does not race `useStartupMap`). Progress lands in `preloadStepAtom` / `preloadLogAtom`; the splash shows
+it and only leaves once `done`, held to `MIN_MS`/`MAX_MS` bounds. **Do not add a task that is not really
+awaiting something** — the bar reaching the end is the promise that the editor is warm.
+
+Tasks carry a `weight` (the tileset is worth ~6× the rest) and may `report(0..1)` within themselves;
+`onTilesetProgress` in `formats/tileset/load.ts` is a *module-level* subscription rather than an argument
+to `getTileset` because the loader shares one promise per tileset and child effects (`MapViewport` →
+`useTileset`) run before the root's, so the preload is often not the caller that starts the load. Every
+task is best-effort: a failure is logged as "unavailable" and stepped over, since missing game data is a
+normal state everywhere else. `warmRemainingTilesets` then pulls the other seven tilesets' *bytes* into
+the HTTP cache — bytes only, because an atlas is ~20 MB of pixels and decoding all eight would cost more
+resident memory than the rest of the editor.
+
+The splash canvas draws the wireframe sphere, the orbiting rings and the progress sweep through one
+shared projection, so the rings genuinely pass behind and in front of the sphere. It is deliberately
+off-theme (pink, scoped to `--sp-*` in `splash.css`); `tokens.css` stays the editor's gold + teal.
+
+`src/devReactTracks.ts` (imported first by `main.tsx`, and only there) exists because React 19's
+dev-only "Components" performance track made startup unusable: it logs every component render to the
+performance timeline and serialises its props, and mounting the chrome is ~1700 renders in one commit —
+about **seven seconds of unbroken main thread**, during which the splash cannot paint a frame. Measured
+in dev: worst long task 6978 ms → 142 ms with the track off. A production build never had the problem
+(zero long tasks), so this only makes `npm run dev` behave like the built app. It works by hiding
+`console.timeStamp` (part of react-dom's one-time `supportsUserTiming` check) for exactly as long as
+react-dom takes to evaluate — hence "imported first", and hence the microtask that puts it back.
+`VITE_REACT_TRACKS=1` keeps React's track if you want to profile renders. If startup ever feels frozen
+again, measure `longtask` entries before blaming the loading code.
+
 ### UI
 
 - All state is Jotai; there is no context/provider layering beyond the default store.

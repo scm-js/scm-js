@@ -1,12 +1,19 @@
 /* ── Splash (square card over the editor) ───────────────── */
 
+/* The splash is deliberately off-theme: the editor keeps StarEdit's gold + teal, and the
+   way in gets its own pink identity. Scoped here so tokens.css stays the app's palette. */
 .splash-veil {
+  --sp-pink: #ff5fa2;
+  --sp-pink-hi: #ffbedc;
+  --sp-pink-dim: #a83a68;
+  --sp-violet: #c77dff;
+
   position: fixed;
   inset: 0;
   z-index: 300;
   display: grid;
   place-items: center;
-  background: rgba(3, 5, 8, 0.72);
+  background: rgba(10, 3, 8, 0.74);
   backdrop-filter: blur(3px) saturate(0.8);
   transition: opacity 0.55s ease;
 }
@@ -21,14 +28,15 @@
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(ellipse at 50% 32%, rgba(79, 209, 197, 0.08), transparent 55%),
-    linear-gradient(180deg, #171b23, #0d1015);
-  border: 1px solid #3a3222;
+    radial-gradient(ellipse at 50% 30%, rgba(255, 95, 162, 0.1), transparent 58%),
+    radial-gradient(ellipse at 82% 96%, rgba(199, 125, 255, 0.07), transparent 55%),
+    linear-gradient(180deg, #1b1219, #100a0f);
+  border: 1px solid #4a2438;
   box-shadow:
-    0 0 0 1px #0a0c10,
-    inset 0 0 0 1px rgba(230, 185, 92, 0.18),
+    0 0 0 1px #0a0508,
+    inset 0 0 0 1px rgba(255, 95, 162, 0.2),
     0 30px 90px rgba(0, 0, 0, 0.8),
-    0 0 60px rgba(230, 185, 92, 0.08);
+    0 0 70px rgba(255, 95, 162, 0.12);
   overflow: hidden;
   transition: transform 0.55s ease, opacity 0.55s ease;
   cursor: pointer;
@@ -41,14 +49,14 @@
   content: "";
   position: absolute;
   inset: 8px;
-  border: 1px solid rgba(230, 185, 92, 0.16);
+  border: 1px solid rgba(255, 95, 162, 0.18);
   pointer-events: none;
 }
 .splash-corner {
   position: absolute;
   width: 14px;
   height: 14px;
-  border: 1px solid var(--gold-dim);
+  border: 1px solid var(--sp-pink-dim);
   pointer-events: none;
 }
 .splash-corner.tl {
@@ -93,7 +101,7 @@
 }
 .splash-center {
   position: relative;
-  background: radial-gradient(ellipse 46% 34% at 50% 52%, rgba(13, 16, 21, 0.9), rgba(13, 16, 21, 0.55) 60%, transparent 100%);
+  background: radial-gradient(ellipse 46% 34% at 50% 52%, rgba(16, 10, 15, 0.9), rgba(16, 10, 15, 0.55) 60%, transparent 100%);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -108,9 +116,10 @@
   letter-spacing: 0.22em;
   padding-left: 0.22em;
   line-height: 1;
-  color: var(--gold);
+  color: var(--sp-pink);
   text-shadow:
-    0 0 24px rgba(230, 185, 92, 0.35),
+    0 0 28px rgba(255, 95, 162, 0.45),
+    0 0 60px rgba(255, 95, 162, 0.18),
     0 2px 0 rgba(0, 0, 0, 0.6);
 }
 .splash-title span {
@@ -122,13 +131,13 @@
   letter-spacing: 0.32em;
   padding-left: 0.32em;
   text-transform: uppercase;
-  color: var(--teal);
+  color: var(--sp-violet);
 }
 .splash-rule {
   margin: 14px auto 0;
   width: 120px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  background: linear-gradient(90deg, transparent, var(--sp-pink), transparent);
 }
 .splash-homage {
   margin-top: 10px;
@@ -139,12 +148,14 @@
 .splash-bottom {
   position: relative;
   padding: 0 24px 20px;
+  /* The orbits pass behind the log, so the text gets its own scrim to stay readable. */
+  background: linear-gradient(180deg, transparent, rgba(16, 10, 15, 0.82) 22%, rgba(16, 10, 15, 0.92));
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-dim);
 }
 .splash-log {
-  height: 54px;
+  height: 68px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -157,13 +168,16 @@
   text-overflow: ellipsis;
   opacity: 0.55;
 }
-.splash-log div:last-child {
-  opacity: 1;
-  color: var(--text);
+.splash-log div.failed {
+  color: var(--warn);
 }
-.splash-log div:last-child::after {
+.splash-log div.current {
+  opacity: 1;
+  color: var(--sp-pink-hi);
+}
+.splash-log div.current::after {
   content: "▍";
-  color: var(--teal);
+  color: var(--sp-pink);
   animation: blink 1s steps(2) infinite;
 }
 @keyframes blink {
@@ -174,15 +188,16 @@
 .splash-bar {
   margin-top: 10px;
   height: 3px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 95, 162, 0.12);
   overflow: hidden;
 }
 .splash-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--gold-dim), var(--gold-hi));
-  box-shadow: 0 0 8px var(--gold);
-  transition: width 0.25s linear;
+  background: linear-gradient(90deg, var(--sp-pink-dim), var(--sp-pink), var(--sp-pink-hi));
+  box-shadow: 0 0 10px var(--sp-pink);
+  /* Tasks land at their own pace, so ease the width rather than snapping between them. */
+  transition: width 0.45s cubic-bezier(0.33, 1, 0.68, 1);
 }
 .splash-foot {
   margin-top: 8px;

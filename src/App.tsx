@@ -5,6 +5,7 @@ import { panelsAtom } from "./atoms/uiAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useMapFileActions } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
+import { usePreload } from "./hooks/usePreload";
 import { useStartupMap } from "./hooks/useStartupMap";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
@@ -22,6 +23,7 @@ export default function App() {
   const [dropTarget, setDropTarget] = useState(false);
   useHotkeys();
   useDevDeepLinks();
+  usePreload();
   useStartupMap();
 
   const rightVisible = panels.minimap || panels.layers || panels.properties;

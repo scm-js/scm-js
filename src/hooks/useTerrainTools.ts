@@ -64,7 +64,7 @@ export function useTerrainTools() {
       }
       return stampTerrainAt(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, x, y, size);
     }
-    if (mode === "subtile" || mode === "index") return stampTileAt(scn, x, y, size, store.get(activeTileAtom));
+    if (mode === "tile") return stampTileAt(scn, x, y, size, store.get(activeTileAtom));
     return null;
   }, [store, loaded, currentTerrain, setStatus]);
 
@@ -138,7 +138,7 @@ export function useTerrainTools() {
 
   /**
    * Eyedropper. In Rect mode a flat tile picks its terrain type; anything else (a
-   * cliff piece, a doodad tile) drops into Subtile mode so it can be placed as-is.
+   * cliff piece, a doodad tile) drops into Tile mode so it can be placed as-is.
    */
   const pickAt = useCallback((x: number, y: number) => {
     const scn = store.get(scenarioAtom);
@@ -152,7 +152,7 @@ export function useTerrainTools() {
         setStatus(`Picked ${type.name}`);
         return;
       }
-      setMode("subtile");
+      setMode("tile");
     }
     setActiveTile(id);
     setStatus(`Picked tile ${hexTile(id)} (group ${id >> 4}, slot ${id & 15})`);
@@ -172,7 +172,7 @@ export function useTerrainTools() {
       for (let ty = rect.y0; ty < rect.y1; ty++) {
         for (let tx = rect.x0; tx < rect.x1; tx++) out.push({ x: tx, y: ty, id: ((terrain.group + (tx & 1)) << 4) | variation });
       }
-    } else if (mode === "subtile" || mode === "index") {
+    } else if (mode === "tile") {
       const id = store.get(activeTileAtom);
       for (let ty = rect.y0; ty < rect.y1; ty++) for (let tx = rect.x0; tx < rect.x1; tx++) out.push({ x: tx, y: ty, id });
     }

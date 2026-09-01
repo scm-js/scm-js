@@ -290,6 +290,51 @@
 .tile-row.is-selected .tile-row-lbl .mono {
   color: var(--gold);
 }
+.tile-grid {
+  position: relative;
+  padding: 4px 6px;
+}
+.tile-grid-row {
+  position: absolute;
+  left: 0;
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+.palette-toolbar .search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 100%;
+}
+.palette-toolbar .search > svg {
+  position: absolute;
+  left: 5px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.palette-toolbar .search .input {
+  width: 100%;
+  padding-left: 21px;
+  padding-right: 18px;
+}
+.palette-toolbar .search .clear {
+  position: absolute;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.palette-toolbar .search .clear:hover {
+  color: var(--text);
+}
+
 .tile-info {
   display: flex;
   gap: 10px;

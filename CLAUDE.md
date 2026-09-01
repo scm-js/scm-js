@@ -32,7 +32,7 @@ The `tsconfig.app.json` is strict-ish: `noUnusedLocals`, `noUnusedParameters`, `
 (use `import type`), `erasableSyntaxOnly` (no enums / parameter properties). `npm run build` is the
 type-check; `npm run lint` does not type-check.
 
-Dev deep-links (`/?nosplash&layer=units&dialog=playerSettings&mode=subtile&tileset=ice&zoom=0.5`) are
+Dev deep-links (`/?nosplash&layer=units&dialog=playerSettings&mode=tile&tileset=ice&zoom=0.5`) are
 the fastest way to reach a specific UI state — see README and `src/hooks/useDevDeepLinks.ts`.
 
 ## Architecture

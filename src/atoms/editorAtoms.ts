@@ -21,7 +21,8 @@ export type EditorLayer =
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
 /** Terrain sub-mode inside the Terrain palette. */
-export type TerrainMode = "isom" | "rect" | "subtile" | "index";
+export type TerrainMode = "isom" | "rect" | "tile";
+export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile"];
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
 export const brushSizeAtom = atom<number>(1);
@@ -29,7 +30,7 @@ export const brushSizeAtom = atom<number>(1);
 export const activeTerrainAtom = atom<number>(2);
 /** Variation slot the Rect brush uses for every pair, or -1 for StarEdit's random pick. */
 export const rectVariationAtom = atom<number>(-1);
-/** Raw MTXM tile id the Subtile and Index brushes paint. */
+/** Raw MTXM tile id the Tile brush paints. */
 export const activeTileAtom = atom<number>(0x20);
 export const activeUnitAtom = atom<string>("Marine");
 export const unitOwnerAtom = atom<number>(0);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAtom, useAtomValue } from "jotai";
-import { Shuffle } from "lucide-react";
+import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
   activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, rectVariationAtom, terrainModeAtom,
   type TerrainMode,
@@ -8,9 +8,9 @@ import {
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
 import { variationsOf } from "../../formats/tileset/terrain";
-import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind } from "../../formats/tileset/palette";
-import { Check, NumberInput, Tabs, Tip } from "../ui";
-import { TileBrowser, TileThumb } from "./TileBrowser";
+import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
+import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
+import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
 
@@ -61,7 +61,7 @@ function IsomTab() {
           ))}
         </div>
         <div className="hint" style={{ padding: "8px 10px" }}>
-          The isometric brush is not implemented yet. Use <strong>Rect</strong> to lay flat ground, or <strong>Subtile</strong> to place cliff pieces by hand.
+          The isometric brush is not implemented yet. Use <strong>Rect</strong> to lay flat ground, or <strong>Tile</strong> to place cliff pieces by hand.
         </div>
       </div>
       <div className="palette-footer"><span>{list.length} terrain types</span><span>{info.name}</span></div>
@@ -127,7 +127,7 @@ function RectTab() {
   );
 }
 
-/* ── Subtile: any megatile from any group ───────────────── */
+/* ── Tile: any single megatile, browsed or typed ────────── */
 
 const KIND_FILTERS: { value: GroupKind | "all"; label: string }[] = [
   { value: "all", label: "All groups" },
@@ -137,12 +137,23 @@ const KIND_FILTERS: { value: GroupKind | "all"; label: string }[] = [
   { value: "other", label: "Unlisted" },
 ];
 
-function useGroups(kind: GroupKind | "all") {
-  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
-  const { loaded, error } = useTileset();
-  const all = useMemo(() => (loaded ? tileGroups(loaded.tileset, info.terrain) : []), [loaded, info]);
-  const groups = useMemo(() => (kind === "all" ? all : all.filter((g) => g.kind === kind)), [all, kind]);
-  return { info, loaded, error, all, groups };
+/**
+ * Search over the group list: `0x1234` homes in on that tile's group, a bare number
+ * matches a group or CV5 index, anything else is a substring of the group label
+ * ("dirt", "edge set 12", "doodad").
+ */
+function searchGroups(groups: TileGroupInfo[], query: string): TileGroupInfo[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return groups;
+  if (/^0x[0-9a-f]+$/.test(q)) {
+    const id = parseTileId(q);
+    return id === null ? [] : groups.filter((g) => g.group === id >> 4);
+  }
+  if (/^\d+$/.test(q)) {
+    const n = Number(q);
+    return groups.filter((g) => g.group === n || g.index === n || g.label.toLowerCase().includes(q));
+  }
+  return groups.filter((g) => g.label.toLowerCase().includes(q));
 }
 
 function SelectedTileFooter({ id }: { id: number }) {
@@ -157,38 +168,24 @@ function SelectedTileFooter({ id }: { id: number }) {
   );
 }
 
-function SubtileTab() {
+/** Grouped rows (label per CV5 group) or one dense wall of tiles. */
+type TileView = "groups" | "grid";
+
+function TileTab() {
+  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
+  const { loaded, error } = useTileset();
+  const [active, setActive] = useAtom(activeTileAtom);
   const [kind, setKind] = useState<GroupKind | "all">("all");
-  const { loaded, error, all, groups } = useGroups(kind);
-  const [active, setActive] = useAtom(activeTileAtom);
-
-  return (
-    <>
-      <div className="palette-toolbar">
-        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label="Group filter">
-          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-        </select>
-        <BrushSelect />
-      </div>
-      {loaded ? (
-        <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={setActive} />
-      ) : (
-        <div className="palette-scroll">
-          <div className="hint" style={{ padding: 12 }}>{error ? "No tileset graphics installed — nothing to browse. Tile ids can still be typed under Index." : "Loading tileset…"}</div>
-        </div>
-      )}
-      <SelectedTileFooter id={active} />
-      {loaded && <div className="palette-footer sub"><span>{groups.length} / {all.length} groups</span><span>Alt+click map picks</span></div>}
-    </>
-  );
-}
-
-/* ── Index: raw MTXM id ─────────────────────────────────── */
-
-function IndexTab() {
-  const { info, loaded, error, all } = useGroups("all");
-  const [active, setActive] = useAtom(activeTileAtom);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<TileView>("groups");
   const [text, setText] = useState<string | null>(null);
+
+  const all = useMemo(() => (loaded ? tileGroups(loaded.tileset, info.terrain) : []), [loaded, info]);
+  const groups = useMemo(
+    () => searchGroups(kind === "all" ? all : all.filter((g) => g.kind === kind), query),
+    [all, kind, query],
+  );
+  const tiles = useMemo(() => groups.flatMap((g) => g.slots.map((s) => (g.group << 4) | s)), [groups]);
   const ti = loaded ? tileInfo(loaded.tileset, info.terrain, active) : null;
 
   const commitText = () => {
@@ -212,8 +209,6 @@ function IndexTab() {
           aria-label="Tile id (decimal or 0x hex)"
         />
         <span className="mono dim" style={{ fontSize: 11 }}>{hexTile(active)}</span>
-        <span className="grow" />
-        <span className="dim" style={{ fontSize: 11 }}>{ti?.label ?? ""}</span>
       </div>
       <div className="tile-info">
         <TileThumb loaded={loaded} id={active} size={64} className="preview" />
@@ -226,14 +221,47 @@ function IndexTab() {
           <span className="k">Walkable</span><span>{ti ? `${ti.walkable} / 16` : "—"}</span>
         </div>
       </div>
+      <div className="palette-toolbar">
+        <div className="search">
+          <Search size={12} />
+          <input
+            className="input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            placeholder="Search groups…"
+            aria-label="Search tile groups"
+          />
+          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><X size={11} /></button>}
+        </div>
+        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label="Group filter">
+          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+        <Tip label="Grouped rows">
+          <Button icon size="sm" active={view === "groups"} onClick={() => setView("groups")} aria-label="Grouped rows"><Rows3 size={13} /></Button>
+        </Tip>
+        <Tip label="All tiles in one grid">
+          <Button icon size="sm" active={view === "grid"} onClick={() => setView("grid")} aria-label="All tiles in one grid"><LayoutGrid size={13} /></Button>
+        </Tip>
+      </div>
       {loaded ? (
-        <TileBrowser loaded={loaded} groups={all} selected={active} onSelect={setActive} />
+        view === "grid"
+          ? <TileGrid loaded={loaded} tiles={tiles} selected={active} onSelect={setActive} />
+          : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={setActive} />
       ) : (
         <div className="palette-scroll">
-          <div className="hint" style={{ padding: 12 }}>{error ? "No tileset graphics installed. Ids still paint; the map shows flat colour until the files are extracted." : "Loading tileset…"}</div>
+          <div className="hint" style={{ padding: 12 }}>
+            {error ? "No tileset graphics installed — nothing to browse. Ids still paint; the map shows flat colour until the files are extracted." : "Loading tileset…"}
+          </div>
         </div>
       )}
       <SelectedTileFooter id={active} />
+      {loaded && (
+        <div className="palette-footer sub">
+          <span>{view === "grid" ? `${tiles.length} tiles` : `${groups.length} / ${all.length} groups`}</span>
+          <span>Alt+click map picks</span>
+        </div>
+      )}
     </>
   );
 }
@@ -250,8 +278,7 @@ export default function TerrainPalette() {
       tabs={[
         { value: "isom", label: "Isometric", content: <IsomTab /> },
         { value: "rect", label: "Rect", content: <RectTab /> },
-        { value: "subtile", label: "Subtile", content: <SubtileTab /> },
-        { value: "index", label: "Index", content: <IndexTab /> },
+        { value: "tile", label: "Tile", content: <TileTab /> },
       ]}
     />
   );

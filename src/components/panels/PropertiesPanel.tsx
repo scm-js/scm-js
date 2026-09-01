@@ -23,7 +23,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", subtile: "Subtile", index: "Tile index" } as const;
+const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", tile: "Tile" } as const;
 
 function TerrainProps() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];

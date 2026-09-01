@@ -1,10 +1,18 @@
 import { useEffect } from "react";
 import { useStore } from "jotai";
-import { activeLayerAtom, mapTilesetAtom, screenAtom, terrainModeAtom, zoomAtom, type EditorLayer, type TerrainMode } from "../atoms/editorAtoms";
+import { activeLayerAtom, mapTilesetAtom, screenAtom, terrainModeAtom, TERRAIN_MODES, zoomAtom, type EditorLayer, type TerrainMode } from "../atoms/editorAtoms";
 import { openDialogAtom, type DialogId } from "../atoms/uiAtoms";
 import { TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 
 let applied = false;
+
+/** `subtile` and `index` were the two halves of today's single Tile mode. */
+const LEGACY_MODES: Record<string, TerrainMode> = { subtile: "tile", index: "tile" };
+
+function terrainMode(raw: string): TerrainMode | null {
+  const mode = LEGACY_MODES[raw] ?? raw;
+  return (TERRAIN_MODES as readonly string[]).includes(mode) ? (mode as TerrainMode) : null;
+}
 
 /**
  * Development deep-links, e.g. `/?nosplash&layer=units&dialog=playerSettings&zoom=0.5`.
@@ -19,8 +27,8 @@ export function useDevDeepLinks() {
     if (p.has("nosplash")) store.set(screenAtom, "editor");
     const layer = p.get("layer");
     if (layer) store.set(activeLayerAtom, layer as EditorLayer);
-    const mode = p.get("mode");
-    if (mode) store.set(terrainModeAtom, mode as TerrainMode);
+    const mode = p.get("mode") ? terrainMode(p.get("mode")!) : null;
+    if (mode) store.set(terrainModeAtom, mode);
     const zoom = Number(p.get("zoom"));
     if (zoom > 0) store.set(zoomAtom, zoom);
     const tileset = p.get("tileset");

@@ -145,7 +145,7 @@ export function TileBrowser({ loaded, groups, selected, onSelect }: TileBrowserP
   const rowOf = useMemo(() => new Map(groups.map((g, i) => [g.group, i])), [groups]);
 
   // Keep the selected group in view when the selection comes from elsewhere (the
-  // Index box, the eyedropper); a click inside the browser is already visible.
+  // Tile # box, the eyedropper); a click inside the browser is already visible.
   useEffect(() => {
     const el = ref.current;
     const row = rowOf.get(selected >> 4);
@@ -168,6 +168,138 @@ export function TileBrowser({ loaded, groups, selected, onSelect }: TileBrowserP
         ))}
       </div>
       {groups.length === 0 && <div className="hint" style={{ padding: 12 }}>No tile groups match.</div>}
+    </div>
+  );
+}
+
+/* ── Flat tile grid ─────────────────────────────────────── */
+
+const GRID_PX = 24;
+
+interface GridRowProps {
+  loaded: LoadedTileset;
+  tiles: number[];
+  from: number;
+  count: number;
+  cols: number;
+  top: number;
+  /** Column of the selected tile within this row, or -1. */
+  selectedCol: number;
+  onSelect: (id: number) => void;
+}
+
+const GridRow = memo(function GridRow({ loaded, tiles, from, count, cols, top, selectedCol, onSelect }: GridRowProps) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const w = cols * GRID_PX;
+
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = w * dpr;
+    c.height = GRID_PX * dpr;
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = GRID_PX < MEGATILE_PX;
+    ctx.fillStyle = "#12151b";
+    ctx.fillRect(0, 0, w, GRID_PX);
+    for (let i = 0; i < count; i++) drawTile(ctx, loaded, tiles[from + i], i * GRID_PX, 0, GRID_PX);
+    if (selectedCol >= 0) {
+      ctx.strokeStyle = "#e6b95c";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(selectedCol * GRID_PX + 1, 1, GRID_PX - 2, GRID_PX - 2);
+    }
+  }, [loaded, tiles, from, count, cols, w, selectedCol]);
+
+  const colAt = (e: React.MouseEvent<HTMLCanvasElement>) =>
+    Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / GRID_PX);
+
+  return (
+    <canvas
+      ref={ref}
+      className="tile-grid-row"
+      style={{ top, width: w, height: GRID_PX }}
+      onClick={(e) => {
+        const col = colAt(e);
+        if (col >= 0 && col < count) onSelect(tiles[from + col]);
+      }}
+      onMouseMove={(e) => {
+        const col = colAt(e);
+        e.currentTarget.title = col >= 0 && col < count ? `${tiles[from + col]} · 0x${tiles[from + col].toString(16).toUpperCase().padStart(4, "0")}` : "";
+      }}
+    />
+  );
+});
+
+export interface TileGridProps {
+  loaded: LoadedTileset;
+  /** Every drawable tile id to show, in order. */
+  tiles: number[];
+  selected: number;
+  onSelect: (id: number) => void;
+}
+
+/**
+ * Every tile in one dense grid, group boundaries ignored — the "wall of tiles" view.
+ * Windowed by row like {@link TileBrowser}, so 25,000 tiles cost a handful of canvases.
+ */
+export function TileGrid({ loaded, tiles, selected, onSelect }: TileGridProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { setWidth(el.clientWidth); setViewH(el.clientHeight); });
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    setViewH(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  const cols = Math.max(2, Math.floor((width - 12) / GRID_PX));
+  const rows = Math.ceil(tiles.length / cols);
+  const selectedIdx = useMemo(() => tiles.indexOf(selected), [tiles, selected]);
+
+  // Follow a selection made elsewhere (the Tile # box, the eyedropper, a search).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || selectedIdx < 0 || cols < 1) return;
+    const top = Math.floor(selectedIdx / cols) * GRID_PX;
+    if (top < el.scrollTop || top + GRID_PX > el.scrollTop + el.clientHeight) {
+      el.scrollTop = Math.max(0, top - el.clientHeight / 2 + GRID_PX / 2);
+      setScrollTop(el.scrollTop);
+    }
+  }, [selectedIdx, cols]);
+
+  const first = Math.max(0, Math.floor(scrollTop / GRID_PX) - OVERSCAN);
+  const last = Math.min(rows, Math.ceil((scrollTop + viewH) / GRID_PX) + OVERSCAN);
+  const selectedRow = selectedIdx < 0 ? -1 : Math.floor(selectedIdx / cols);
+
+  return (
+    <div ref={ref} className="palette-scroll tile-grid" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+      <div style={{ position: "relative", height: rows * GRID_PX }}>
+        {width > 0 && Array.from({ length: Math.max(0, last - first) }, (_, i) => {
+          const row = first + i;
+          const from = row * cols;
+          return (
+            <GridRow
+              key={row}
+              loaded={loaded}
+              tiles={tiles}
+              from={from}
+              count={Math.min(cols, tiles.length - from)}
+              cols={cols}
+              top={row * GRID_PX}
+              selectedCol={selectedRow === row ? selectedIdx - from : -1}
+              onSelect={onSelect}
+            />
+          );
+        })}
+      </div>
+      {tiles.length === 0 && <div className="hint" style={{ padding: 12 }}>No tiles match.</div>}
     </div>
   );
 }

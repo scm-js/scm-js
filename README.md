@@ -4,8 +4,8 @@ A StarCraft 1 / Brood War map editor for the browser, built in homage to **StarE
 
 > Status: reads, renders and writes real maps. Opening a `.scm`/`.scx` parses its
 > `scenario.chk`, draws the terrain from the game's own tileset graphics, and saving
-> writes a playable archive back out. The terrain layer's Rect, Subtile and Index
-> brushes work, with undo; the isometric brush and the other layers are still stubs.
+> writes a playable archive back out. The terrain layer's Rect and Tile brushes work,
+> with undo; the isometric brush and the other layers are still stubs.
 
 ## Run
 
@@ -39,19 +39,24 @@ VX4 megatile ──▶ 16 minitile refs (bit 0 = h-flip) ──▶ VR4 8x8 bitma
 
 ## Terrain layer
 
-The Terrain palette has the four modes SCMDraft has. Three of them place tiles:
+The Terrain palette has three modes; two of them place tiles:
 
 | Mode | What it paints | Palette |
 | --- | --- | --- |
 | **Isometric** | *(not yet)* | the tileset's terrain list |
 | **Rect** | flat ground of one terrain type, in left/right tile pairs with StarEdit's random variation mix (or one fixed variation) | terrain types, read off the CV5 |
-| **Subtile** | any single megatile — cliff pieces, doodad tiles, the lot | every CV5 tile group, 16 slots each, filterable by kind |
-| **Index** | a raw MTXM id you type (decimal or `0x` hex) | the same browser, plus group/slot spinners and a readout |
+| **Tile** | any single megatile — cliff pieces, doodad tiles, the lot | a raw MTXM id (decimal or `0x` hex) with group/slot spinners and a readout, over a browser of every CV5 tile group |
+
+The Tile browser searches and filters the same set two ways: **grouped rows** label each
+CV5 group and show its 16 slots, and the **grid** view drops the labels for one dense
+wall of every matching tile, StarForge-style. Search takes a label substring (`dirt`,
+`edge set 12`), a group or CV5 index number, or a `0x` tile id; the kind dropdown narrows
+to flat terrain, cliffs and edges, doodad tiles or unlisted groups.
 
 Click-drags paint the brush (1×1 to 7×7, `[` / `]` to resize); the viewport previews
 what the brush will leave under the cursor. **Alt+click** picks the tile under the
 cursor into the brush — a flat tile picks its terrain type in Rect mode, anything else
-drops into Subtile. Right-click gives **Pick** and **Fill Area** (flood fill by terrain
+drops into Tile mode. Right-click gives **Pick** and **Fill Area** (flood fill by terrain
 type in Rect mode, by exact tile otherwise). Every stroke is one undo step (Ctrl+Z /
 Ctrl+Y, up to 200).
 
@@ -119,5 +124,5 @@ Query params jump straight to a state, handy while iterating on a screen:
 /?nosplash&layer=units           select a layer (terrain|doodads|units|sprites|locations|fog|clipboard)
 /?nosplash&dialog=playerSettings open a dialog (any DialogId in src/atoms/uiAtoms.ts; repeatable)
 /?nosplash&zoom=0.5&tileset=ice  zoom level and tileset
-/?nosplash&mode=subtile          terrain palette mode (isom|rect|subtile|index)
+/?nosplash&mode=tile             terrain palette mode (isom|rect|tile; subtile/index still map to tile)
 ```

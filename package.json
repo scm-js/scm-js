@@ -15,7 +15,8 @@
     "extract": "node scripts/extract-assets.mjs",
     "extract:tilesets": "node scripts/extract-tilesets.mjs",
     "extract:units": "node scripts/extract-units.mjs",
-    "check:assets": "node scripts/extract-assets.mjs --check"
+    "check:assets": "node scripts/extract-assets.mjs --check",
+    "build:plugin-types": "tsc -p tsconfig.plugin-api.json"
   },
   "dependencies": {
     "jotai": "^2.20.3",

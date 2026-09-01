@@ -1,0 +1,389 @@
+/**
+ * The plugin API: everything a plugin can see and do, as types.
+ *
+ * This file is the contract. `host.ts` implements it over the editor's store; a plugin
+ * repository type-checks against the declarations `npm run build:plugin-types` emits
+ * from it. Nothing here is React, and nothing here is a Jotai atom: a plugin gets plain
+ * functions and plain data. Changing a signature or a meaning in a way an existing
+ * plugin would notice is an API change — bump `PLUGIN_API_VERSION`.
+ *
+ * `docs/plugins.md` is the prose tour; keep the two in step.
+ */
+import type { Scenario } from "../formats/chk/scenario";
+import type { DoodadRecord, LocationRecord, SpriteRecord, UnitRecord } from "../formats/chk/sections/objects";
+import type { LoadedTileset } from "../formats/tileset/load";
+import type { TerrainType, TileInfo } from "../formats/tileset/palette";
+import type { TilesetId } from "../data/tilesets";
+import type { Rect } from "../editor/terrain";
+import type { Diamond } from "../editor/isom";
+import type { Bounds, LocationPatch } from "../editor/locations";
+import type { FogMode } from "../editor/fog";
+import type { SpriteKind } from "../editor/sprites";
+import type { EditorLayer, TerrainMode } from "../atoms/editorAtoms";
+import type { DialogId } from "../atoms/uiAtoms";
+
+export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, EditorLayer, TerrainMode, DialogId };
+
+/** Bumped when the API changes incompatibly; a manifest may say which version it was written against. */
+export const PLUGIN_API_VERSION = 1;
+
+export interface Disposable {
+  dispose(): void;
+}
+
+/* ── Manifest and module ────────────────────────────────── */
+
+/** `plugin.json`, next to the entry file. Only `name` is required. */
+export interface PluginManifest {
+  name: string;
+  /** Stable identifier (storage prefix, log prefix); derived from the name when absent. */
+  id?: string;
+  version?: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  /** Entry file relative to the manifest; `plugin.ts` by default, then `plugin.js`. */
+  entry?: string;
+  /**
+   * The plugin's face in Manage Plugins and on its own dialogs: an emoji (`"🗺️"`), a
+   * `data:image/…` URI, an `https://…` image, or an image file beside the manifest
+   * (`"icon.svg"`). Anything else is ignored — see `resolveIcon` in `loader.ts`.
+   */
+  icon?: string;
+  /** The `PLUGIN_API_VERSION` the plugin was written against. */
+  api?: number;
+}
+
+/** What `activate` may hand back: nothing, a cleanup function, or a Disposable. */
+export type Deactivate = void | (() => void) | Disposable;
+
+export type PluginActivate = (api: PluginApi) => Deactivate | Promise<Deactivate>;
+
+/**
+ * The shape of the entry module: `export default function activate(api) {…}`, or
+ * `export default { activate }`, or `export function activate(api) {…}`.
+ */
+export interface PluginModule {
+  activate: PluginActivate;
+}
+
+/** A manifest `icon` after resolution: a glyph to print, or an image to show. */
+export type PluginIcon = { kind: "text"; text: string } | { kind: "image"; url: string };
+
+export interface PluginInfo {
+  /** Manifest id (or slug of the name). */
+  id: string;
+  name: string;
+  /** The spec the plugin was installed from (`builtin:…`, `github:…`, a URL). */
+  source: string;
+  version?: string;
+  /** The manifest's `icon`, resolved; absent when it declared none (or an unusable one). */
+  icon?: PluginIcon;
+}
+
+/* ── The API ────────────────────────────────────────────── */
+
+export interface PluginApi {
+  readonly apiVersion: number;
+  readonly plugin: PluginInfo;
+  readonly document: DocumentApi;
+  readonly terrain: TerrainApi;
+  readonly tileset: TilesetApi;
+  readonly selection: SelectionApi;
+  readonly ui: UiApi;
+  readonly menu: MenuApi;
+  readonly contextMenu: ContextMenuApi;
+  readonly hotkeys: HotkeyApi;
+  readonly events: EventsApi;
+  readonly storage: StorageApi;
+  /** `console.log` with the plugin's name in front. */
+  log(...args: unknown[]): void;
+}
+
+/* ── Document ───────────────────────────────────────────── */
+
+export interface DocumentInfo {
+  name: string;
+  description: string;
+  width: number;
+  height: number;
+  tileset: TilesetId;
+  /** ERA as stored (the tileset is `era & 7`). */
+  era: number;
+  /** CHK VER: 59 original, 63 hybrid, 205 Brood War, 206 Remastered. */
+  version: number;
+  fileName: string | null;
+  modified: boolean;
+}
+
+/** What one `document.edit` changed, per list. */
+export interface EditResult {
+  changed: boolean;
+  tiles: number;
+  isom: number;
+  units: number;
+  sprites: number;
+  doodads: number;
+  locations: number;
+  fog: number;
+  notes: string[];
+}
+
+export interface DocumentApi {
+  isOpen(): boolean;
+  info(): DocumentInfo | null;
+  /**
+   * The live scenario, for reading. Writing to it directly bypasses undo, dirty
+   * tracking and repaints — use `edit`.
+   */
+  scenario(): Scenario | null;
+  /**
+   * Run `build` against a transaction and record what it did as one undo entry.
+   * Operations apply as they are called, so later ones see earlier ones' results.
+   * Returns an all-zero result with `changed: false` when no map is open.
+   */
+  edit(label: string, build: (tx: EditTransaction) => void): EditResult;
+  undo(): string | null;
+  redo(): string | null;
+}
+
+/** Cells for the bulk terrain operations: a tile rect, or cell indices (`y * width + x`). */
+export type Cells = Rect | Iterable<number>;
+
+export interface EditTransaction {
+  readonly scenario: Scenario;
+  readonly width: number;
+  readonly height: number;
+
+  /** MTXM (what the game draws) at a cell. */
+  tileAt(x: number, y: number): number;
+  /** TILE (the ground without doodads) at a cell. */
+  groundAt(x: number, y: number): number;
+  /** One tile into both sections. */
+  setTile(x: number, y: number, id: number): void;
+  /** Many tiles into both sections; returns how many changed. */
+  setTiles(cells: Cells, id: number): number;
+  /**
+   * The Rect brush: flat left/right pairs by column parity, one random variation per
+   * pair (`variation` pins it). Needs the tileset graphics; returns tiles changed.
+   */
+  stampTerrain(cells: Cells, terrainId: number, variation?: number): number;
+  /** Lay terrain the way a new map is laid over `rect`, ISOM lattice included when the map has one. */
+  fillFlat(rect: Rect, terrainId: number): number;
+  /**
+   * The isometric brush on one diamond: sets its ISOM value and regenerates the tiles
+   * around it, cliffs and shores included. Needs ISOM and the tileset; returns whether
+   * the terrain could be painted there.
+   */
+  paintIsom(d: Diamond, terrainId: number, extent?: number): boolean;
+
+  /** A StarEdit-style unit record (fresh serial, valid/used masks) centred on map pixels. */
+  makeUnit(unitId: number, owner: number, x: number, y: number): UnitRecord;
+  addUnits(records: UnitRecord[]): number[];
+  removeUnits(indices: number[]): number;
+  updateUnits(indices: number[], patch: (u: UnitRecord) => Partial<UnitRecord>): number;
+
+  makeSprite(kind: SpriteKind, id: number, owner: number, x: number, y: number, opts?: { flipped?: boolean; disabled?: boolean }): SpriteRecord;
+  addSprites(records: SpriteRecord[]): number[];
+  removeSprites(indices: number[]): number;
+
+  /** Stamp a doodad (a `dddata.bin` id) at a tile; returns its record index, or -1 when unknown or off the map. */
+  placeDoodad(doodadId: number, tx: number, ty: number, owner?: number): number;
+  removeDoodads(indices: number[]): number;
+
+  /** A location in the lowest free slot (pixel bounds); returns the slot, or -1 when the table is full. */
+  addLocation(bounds: Bounds, name?: string, elevationFlags?: number): number;
+  editLocation(index: number, patch: LocationPatch): boolean;
+  removeLocations(indices: number[]): number;
+
+  /** Set (`"fog"`) or clear the `players` bits (bit n = player n + 1) over cells; creates MASK on first use. */
+  setFog(cells: Cells, players: number, mode: FogMode): number;
+
+  /** A line for the status bar, appended to the label. */
+  note(text: string): void;
+}
+
+/* ── Terrain and tileset ────────────────────────────────── */
+
+export interface ActiveBrush {
+  mode: TerrainMode;
+  /** The Rect / isometric brush's terrain id. */
+  terrain: number;
+  /** The Tile brush's MTXM id. */
+  tile: number;
+  brushSize: number;
+}
+
+export interface TerrainApi {
+  /** Paintable flat terrains of the open map's tileset (empty without the graphics). */
+  types(): TerrainType[];
+  /** Terrain ids the isometric brush can paint on this tileset. */
+  isomTypes(): number[];
+  /** Whether the open map carries an ISOM section the isometric brush can work on. */
+  hasIsom(): boolean;
+  tileInfo(id: number): TileInfo | null;
+  /** The atlas average of a tile, packed `0xRRGGBB`, or null without graphics. */
+  color(tileId: number): number | null;
+  /** The mean colour of a terrain's common flat variations, packed `0xRRGGBB`. */
+  terrainColor(terrainId: number): number | null;
+  /** The lattice diamond under a map pixel. */
+  diamondAt(px: number, py: number): Diamond;
+  isDiamond(d: Diamond): boolean;
+  /** Every in-bounds diamond whose centre tile lies in `rect`, row by row. */
+  diamondsIn(rect: Rect): Diamond[];
+  active(): ActiveBrush;
+  setActive(brush: Partial<ActiveBrush>): void;
+}
+
+export interface TilesetApi {
+  id(): TilesetId | null;
+  name(): string;
+  isLoaded(): boolean;
+  /** Fetch and decode the graphics; resolves false when they were never extracted. */
+  load(): Promise<boolean>;
+  raw(): LoadedTileset | null;
+}
+
+/* ── Selection ──────────────────────────────────────────── */
+
+export interface SelectionApi {
+  /** The Cut / Copy / Paste layer's marked rectangle, in tiles. */
+  markedArea(): Rect | null;
+  markArea(rect: Rect | null): void;
+  units(): number[];
+  setUnits(indices: number[]): void;
+  sprites(): number[];
+  setSprites(indices: number[]): void;
+  doodads(): number[];
+  setDoodads(indices: number[]): void;
+  locations(): number[];
+  setLocations(indices: number[]): void;
+  layer(): EditorLayer;
+  setLayer(layer: EditorLayer): void;
+}
+
+/* ── UI ─────────────────────────────────────────────────── */
+
+export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
+
+export interface DialogButton {
+  label: string;
+  primary?: boolean;
+  /** Return `false` (or a promise of it) to keep the dialog open. */
+  run?: (dialog: DialogHandle) => void | boolean | Promise<void | boolean>;
+  /** Close after `run`; default true. */
+  closes?: boolean;
+}
+
+export interface DialogSpec {
+  title: string;
+  size?: DialogSize;
+  tall?: boolean;
+  /** Fill `body` (an empty `<div>` inside the dialog); return a cleanup if you need one. */
+  mount(body: HTMLElement, dialog: DialogHandle): void | (() => void);
+  /** Footer buttons, left to right; a single Close when omitted. */
+  buttons?: DialogButton[];
+}
+
+export interface DialogHandle {
+  close(): void;
+  /** Whether the dialog is still on screen. */
+  isOpen(): boolean;
+}
+
+export interface PickFilesOptions {
+  /** `accept` for the file input, e.g. `"image/*"` or `".png,.jpg"`. */
+  accept?: string;
+  multiple?: boolean;
+}
+
+export interface UiApi {
+  status(text: string): void;
+  dialog(spec: DialogSpec): DialogHandle;
+  /** The browser's file picker; resolves with an empty list on cancel. */
+  pickFiles(options?: PickFilesOptions): Promise<File[]>;
+  /** Open a built-in dialog. */
+  open(dialog: DialogId, payload?: Record<string, unknown>): void;
+  /** Ask the viewport to repaint (a transaction does this by itself). */
+  repaint(): void;
+}
+
+/* ── Menus, context menus, hotkeys ──────────────────────── */
+
+export type TopMenu = "File" | "Edit" | "View" | "Layer" | "Scenario" | "Triggers" | "Tools" | "Plugins" | "Help";
+
+/** A top-level menu, or a submenu by label: `"File/Import"`. */
+export type MenuPath = TopMenu | `${TopMenu}/${string}`;
+
+export interface MenuItemSpec {
+  label: string;
+  /** Display only — bind the key with `hotkeys.add`. */
+  shortcut?: string;
+  enabled?: () => boolean;
+  run: () => void;
+}
+
+export interface MenuApi {
+  add(path: MenuPath, item: MenuItemSpec): Disposable;
+}
+
+export type ContextSurface = "viewport" | "terrainPalette";
+
+export interface ContextMenuContext {
+  surface: ContextSurface;
+  /** The tile under the pointer (viewport only). */
+  tile: { x: number; y: number } | null;
+  /** The map pixel under the pointer (viewport only). */
+  point: { px: number; py: number } | null;
+  layer: EditorLayer;
+  terrainMode: TerrainMode;
+  /** The palette's active terrain id. */
+  terrain: number;
+  markedArea: Rect | null;
+}
+
+export interface ContextItemSpec {
+  label: string | ((ctx: ContextMenuContext) => string);
+  enabled?: (ctx: ContextMenuContext) => boolean;
+  visible?: (ctx: ContextMenuContext) => boolean;
+  run: (ctx: ContextMenuContext) => void;
+}
+
+export interface ContextMenuApi {
+  add(surface: ContextSurface, item: ContextItemSpec): Disposable;
+}
+
+export interface HotkeyApi {
+  /** `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name. */
+  add(combo: string, run: () => void): Disposable;
+}
+
+/* ── Events and storage ─────────────────────────────────── */
+
+export type PluginEvent =
+  /** A map was opened, closed or replaced. */
+  | "document"
+  | "terrain"
+  | "units"
+  | "doodads"
+  | "locations"
+  | "settings"
+  | "triggers"
+  | "layer"
+  | "selection";
+
+export interface EventsApi {
+  on(event: PluginEvent, listener: () => void): Disposable;
+}
+
+export interface StorageApi {
+  get<T>(key: string, fallback: T): T;
+  set(key: string, value: unknown): void;
+  remove(key: string): void;
+}
+
+/** A slug for storage keys and log prefixes. */
+export function pluginIdOf(manifest: { id?: string; name: string }): string {
+  const raw = manifest.id?.trim() || manifest.name;
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "plugin";
+}

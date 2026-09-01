@@ -40,7 +40,9 @@ export type DialogId =
   | "find"
   | "about"
   | "confirmClose"
-  | "notImplemented";
+  | "notImplemented"
+  | "plugins"
+  | "pluginDialog";
 
 export interface DialogEntry {
   id: DialogId;
@@ -53,9 +55,11 @@ let dialogSeq = 0;
 
 export const dialogStackAtom = atom<DialogEntry[]>([]);
 
-/** Push a dialog onto the stack (dialogs may stack, e.g. Player Colors from Player Settings). */
-export const openDialogAtom = atom(null, (get, set, id: DialogId, payload?: Record<string, unknown>) => {
-  set(dialogStackAtom, [...get(dialogStackAtom), { id, key: ++dialogSeq, payload }]);
+/** Push a dialog onto the stack (dialogs may stack, e.g. Player Colors from Player Settings). Returns its key. */
+export const openDialogAtom = atom(null, (get, set, id: DialogId, payload?: Record<string, unknown>): number => {
+  const key = ++dialogSeq;
+  set(dialogStackAtom, [...get(dialogStackAtom), { id, key, payload }]);
+  return key;
 });
 
 /** Close the top-most dialog, or a specific one by key. */

@@ -12,6 +12,7 @@ import { ScriptEditorDialog } from "./ScriptEditorDialog";
 import { ExportStringsDialog, ExportTriggersDialog, ImportStringsDialog, ImportTriggersDialog } from "./ExchangeDialogs";
 import { StatisticsDialog } from "./StatisticsDialog";
 import { AboutDialog, FindDialog, PreferencesDialog, ShortcutsDialog, ValidateMapDialog } from "./MiscDialogs";
+import { PluginDialog, PluginsDialog } from "./PluginDialogs";
 
 export interface DialogProps {
   entry: DialogEntry;
@@ -56,6 +57,8 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   exportStrings: ExportStringsDialog,
   find: FindDialog,
   about: AboutDialog,
+  plugins: PluginsDialog,
+  pluginDialog: PluginDialog,
 };
 
 /** Renders every open dialog (stacked in order). */

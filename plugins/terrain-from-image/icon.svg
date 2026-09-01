@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Terrain from Image">
+  <!-- An image becoming terrain: a sun and three picture pixels above, one isometric
+       diamond below (grass on one side, water on the other). No rectangular frame —
+       the silhouette has to stay clearly unlike the tick box it sits next to in the
+       Manage Plugins list. A few big shapes, so it still reads at 14 px in a title. -->
+  <circle cx="5.6" cy="5.2" r="3.1" fill="#e8c96b"/>
+  <rect x="11.2" y="2.4" width="4.2" height="4.2" rx="1" fill="#7a8fa8"/>
+  <rect x="16.6" y="2.4" width="4.2" height="4.2" rx="1" fill="#4d6178"/>
+  <rect x="16.6" y="7.6" width="4.2" height="4.2" rx="1" fill="#7a8fa8"/>
+  <path d="M12 8.6 2.2 15.2 12 21.8Z" fill="#3f9a5f"/>
+  <path d="M12 8.6 21.8 15.2 12 21.8Z" fill="#2f7fbe"/>
+</svg>

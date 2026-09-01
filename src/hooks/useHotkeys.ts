@@ -9,6 +9,7 @@ import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, undoAtom,
 } from "../atoms/documentAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
@@ -43,6 +44,7 @@ export function useHotkeys() {
   const dialogs = useAtomValue(dialogStackAtom);
   const { save } = useMapFileActions();
   const clipTools = useClipboardTools();
+  const pluginHotkeys = useAtomValue(pluginHotkeysAtom);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,6 +56,17 @@ export function useHotkeys() {
 
       if (e.key === "F1") { e.preventDefault(); open("shortcuts"); return; }
       if (dialogs.length > 0) return;
+
+      // Plugin hotkeys come first, never while typing (a plugin cannot know which fields are safe).
+      if (!typing && pluginHotkeys.length > 0) {
+        const combo = comboOfEvent(e);
+        const hit = pluginHotkeys.find((h) => h.combo === combo);
+        if (hit) {
+          e.preventDefault();
+          try { hit.run(); } catch (err) { console.error(`[plugins] hotkey ${combo} failed`, err); }
+          return;
+        }
+      }
 
       if (mod && !e.shiftKey) {
         const k = e.key.toLowerCase();
@@ -154,5 +167,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys]);
 }

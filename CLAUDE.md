@@ -294,8 +294,8 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 `{ only: "triggers" }`); Edit ▸ Delete / Select All / Deselect act on the active layer's selection like
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
-over file contents, not handles. Replace Terrain, Auto-place Start Locations,
-Terrain from Image and Test Map are still `stub()` entries in `MenuBar.tsx`.
+over file contents, not handles. Replace Terrain, Auto-place Start Locations
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image is the built-in plugin.
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -428,6 +428,56 @@ game and their addresses unknowable at save time).
   Monaco host in `useState`, not a ref (Radix portal timing, as in `ExportImageDialog`);
   `DialogFrame.onEscapeKeyDown` exists so Escape inside the editor dismisses Monaco's popups instead of
   closing the dialog.
+
+### Plugins (`src/plugins/`, `src/atoms/pluginAtoms.ts`, `plugins/*/`)
+
+`docs/plugins.md` is the author's guide and API tour; keep it in step with `src/plugins/api.ts`,
+which is the contract (types only, `PLUGIN_API_VERSION` bumps on an incompatible change). A plugin
+is `activate(api)` in a `plugin.ts`/`.js` next to a `plugin.json`; `host.ts#createPluginApi` builds
+its `PluginApi` over the Jotai store — no React, no atoms exposed — and a `Contributions` bag every
+`add`/`on` lands in so `deactivatePlugin` sweeps everything back whatever the plugin returned.
+`api.document.edit(label, tx => …)` is `runTransaction`: an `EditTransaction` whose operations
+**apply as they are called** (later ones see earlier ones) and accumulate change lists in `applyEntry`
+order (terrain through `Stroke`, so a cell written twice is one change), then one `HistoryEntry` goes
+to `commitTerrainAtom` — the stranded-doodad / stranded-unit pass pulled out of `useTerrainTools`
+(which now calls the same atom) — so a plugin edit undoes, dirties and repaints exactly like a stroke.
+Anything that needs the graphics (`stampTerrain`, `fillFlat`, `paintIsom`, `placeDoodad`) degrades
+to a `notes` entry and `0` without them, never throws. `terrain.diamondsIn(rect)` is inclusive of the
+far edges so a whole-map rect covers the last lattice column and row.
+
+`loader.ts` is pure apart from `LoaderDeps` (fetch, transpile, module URL, import, built-ins):
+`parseSpec` (`builtin:`, `github:owner/repo[@ref][/dir]`, github.com URLs, any URL to a `plugin.json`
+/ entry file / directory) → `resolvePlugin` (manifest, entry) → `bundleModule` (fetch **as text** —
+raw.githubusercontent serves `text/plain`, which `import()` refuses — transpile `.ts` in the compile
+worker via `compileClient#transpileInBackground` / `plugins/transpile.ts`, follow relative imports
+depth first, refuse bare package names and cycles, rewrite specifiers to `blob:` URLs) → `import()`.
+Built-ins come from `builtin.ts` (`import.meta.glob` over `plugins/*/plugin.{ts,json}`, bundled by
+Vite, type-checked because `tsconfig.app.json` includes `plugins`); they take the same `activate(api)`
+path, minus the fetch. A manifest `icon` — an emoji, a `data:`/`https:` image, or an image file beside
+the manifest — becomes a `PluginIcon` in `loader.ts#resolveIcon` (anything else, `javascript:` above
+all, resolves to null and the plugin keeps the default mark); a built-in's file URL comes from a second
+`import.meta.glob` in `builtin.ts` because Vite hashes (and here inlines) the asset. It rides on the
+runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
+icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }` (built-ins are merged in by
+`effectiveInstalls` and can only be turned off); `pluginRuntimesAtom` is status/manifest/error per
+spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Contribution registries
+`pluginMenuItemsAtom` / `pluginContextItemsAtom` / `pluginHotkeysAtom` are read by `MenuBar`
+(`withPluginItems`, path `"File/Import"` → that submenu after a separator; a `Plugins` menu holds
+Manage Plugins…), `MapViewport` and `TerrainPalette` (`plugins/contextMenu.ts#pluginContextRows`,
+surfaces `viewport` / `terrainPalette`, the palette got a Radix ContextMenu of its own for this) and
+`useHotkeys` (plugin combos first, never while typing). `PluginDialogs.tsx`: Manage Plugins, and
+`PluginDialog` — the `DialogFrame` a plugin's `ui.dialog(spec)` mounts plain DOM into (host element
+in state, Radix portal timing). `npm run build:plugin-types` emits `plugin-api/` (gitignored) for
+external repos. There is no sandbox: a plugin runs with the page's privileges, and the dialog says so.
+
+`plugins/terrain-from-image/` is the first plugin and the worked example: `convert.ts` is pure
+(resample → optional box blur → `adaptiveMatcher`: chromaticity plus auto-levelled brightness, since
+every tileset average is a murky brown and a saturated blue must still reach Water; or brightness
+bands in list order for heightmaps), `plugin.ts` is the dialog (`h()` builder, its own scoped `<style>`)
+and the transaction — every `diamondsIn` diamond through `tx.paintIsom` (cliffs and shores generated),
+or `tx.stampTerrain` per terrain for flat tiles. `tests/plugins.test.ts` (loader, host, transactions,
+lifecycle, menu merge, context rows, and the real-tileset suite via `primeTileset`) and
+`tests/terrain-from-image.test.ts`.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

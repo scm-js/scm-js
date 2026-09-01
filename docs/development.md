@@ -48,6 +48,7 @@ src/
     units/      Unit data, lazy GRP/.lo/remap loading, frame cache, the iscript animator
     triggers/   TrigEdit-syntax printer and parser
   script/       The TypeScript-subset trigger compiler and its simulator
+  plugins/      Plugin API (the contract), host, loader, built-in registry
   services/     Map open/save pickers, PNG export, startup preload
   components/
     chrome/     MenuBar (Radix Menubar), ToolBar, StatusBar
@@ -57,6 +58,7 @@ src/
     splash/     Splash card that fades over the editor
     ui/         Primitives: Button, inputs, Check, Group, ListBox, Tabs, Tip, DialogFrame
   styles/       tokens → base → ui → chrome → panels → viewport → dialogs → splash
+plugins/        Built-in plugins (plugin.json + plugin.ts each), bundled by Vite, loaded like remote ones
 ```
 
 State is all Jotai, with no context or provider layering beyond the default store.
@@ -114,5 +116,6 @@ want to profile renders. Production builds never had the problem.
 | CHK and MPQ handling, section coverage | [file-formats.md](file-formats.md) |
 | Extracting and using Blizzard data | [game-data.md](game-data.md) |
 | The trigger scripting language | [trigger-script.md](trigger-script.md) |
+| Writing and installing plugins, the plugin API | [plugins.md](plugins.md) |
 | Per-subsystem implementation notes | [../CLAUDE.md](../CLAUDE.md) |
 | Provenance of adapted code and data | [../ATTRIBUTION.md](../ATTRIBUTION.md) |

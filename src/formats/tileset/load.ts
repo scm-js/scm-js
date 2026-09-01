@@ -193,3 +193,9 @@ export async function ensureTileset(name: TilesetFileName): Promise<LoadedTilese
   ready.set(name, loaded);
   return loaded;
 }
+
+/** Install an already-decoded tileset as if it had been fetched (tests, or a loader that read the files itself). */
+export function primeTileset(loaded: LoadedTileset) {
+  cache.set(loaded.name, Promise.resolve(loaded));
+  ready.set(loaded.name, loaded);
+}

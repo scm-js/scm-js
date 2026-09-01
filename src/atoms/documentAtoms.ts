@@ -7,12 +7,15 @@ import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
   clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
-  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom,
 } from "./editorAtoms";
+import { statusMessageAtom } from "./uiAtoms";
 import { applyChanges } from "../editor/terrain";
 import { applyUnitChanges, removeUnits } from "../editor/units";
-import { applyDoodadChanges, removeDoodads } from "../editor/doodads";
+import { applyDoodadChanges, removeDoodads, strandedDoodads } from "../editor/doodads";
+import { strandedUnits } from "../editor/placement";
+import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { applyEntry, hasEdits, touchesDoodads, type HistoryEntry } from "../editor/history";
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations } from "../editor/locations";
@@ -236,6 +239,48 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (entry.units) set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+});
+
+/**
+ * Record a finished terrain edit the way a brush stroke is recorded. Doodads the edit
+ * painted over come off the map in the same undo step (their remaining cells go back to
+ * the ground, their records and overlay sprites go), and with "remove stranded units"
+ * on so do units the new terrain can no longer hold; the status line says how many of
+ * each. The entry's own lists must already be applied to the scenario. Shared by
+ * `useTerrainTools` and the plugin host so a plugin's edit behaves exactly like a stroke.
+ */
+export const commitTerrainAtom = atom(null, (get, set, req: { entry: HistoryEntry; summary: string }) => {
+  const scn = get(scenarioAtom);
+  if (!scn) return;
+  const { entry } = req;
+  const loaded = peekTileset(get(tilesetFileNameAtom));
+  let note = "";
+  if (loaded && entry.changes.length > 0) {
+    const stranded = strandedDoodads(scn, loaded.doodads, entry.changes.map((c) => c.at));
+    if (stranded.length > 0) {
+      const edit = removeDoodads(scn, loaded.tileset, loaded.doodads, stranded);
+      applyChanges(scn, edit.tiles, "do", "mtxm");
+      applyDoodadChanges(scn, edit.doodads);
+      applySpriteChanges(scn, edit.sprites);
+      entry.doodadTiles = [...(entry.doodadTiles ?? []), ...edit.tiles];
+      entry.doodads = [...(entry.doodads ?? []), ...edit.doodads];
+      entry.sprites = [...(entry.sprites ?? []), ...edit.sprites];
+      set(selectedDoodadsAtom, []);
+      note += `, removed ${stranded.length} doodad${stranded.length === 1 ? "" : "s"}`;
+    }
+  }
+  if (get(placementOptionsAtom).removeStranded && loaded && (entry.changes.length > 0 || (entry.doodadTiles?.length ?? 0) > 0)) {
+    const stranded = strandedUnits(scn, loaded.tileset, peekUnitAssets()?.units ?? null, [...entry.changes, ...(entry.doodadTiles ?? [])].map((c) => c.at));
+    if (stranded.length > 0) {
+      const removed = removeUnits(scn, stranded);
+      applyUnitChanges(scn, removed);
+      entry.units = [...(entry.units ?? []), ...removed];
+      set(selectedUnitsAtom, []);
+      note += `, removed ${stranded.length} stranded unit${stranded.length === 1 ? "" : "s"}`;
+    }
+  }
+  set(commitEditAtom, entry);
+  set(statusMessageAtom, req.summary + note);
 });
 
 /**

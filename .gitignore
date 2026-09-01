@@ -17,3 +17,6 @@ fixtures/
 /public/game/
 /public/scripts/
 /public/unit/
+
+# Plugin API declarations (regenerate with `npm run build:plugin-types`)
+/plugin-api/

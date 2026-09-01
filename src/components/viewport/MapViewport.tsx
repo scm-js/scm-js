@@ -50,6 +50,8 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
+import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import { pluginContextRows } from "../../plugins/contextMenu";
 import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDoodadTools";
@@ -196,6 +198,7 @@ export default function MapViewport() {
   const clipParts = useAtomValue(clipPartsAtom);
   const clipSelection = useAtomValue(clipSelectionAtom);
   const setClipSelection = useSetAtom(clipSelectionAtom);
+  const pluginContextItems = useAtomValue(pluginContextItemsAtom);
   const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
@@ -1473,6 +1476,17 @@ export default function MapViewport() {
     { label: "Center Minimap Here", onSelect: () => open("notImplemented", { feature: "Center Minimap" }) },
     { label: "Map Properties…", onSelect: () => open("mapProperties") },
   ];
+  // What plugins registered for the map, after their own separator.
+  const pluginRows = pluginContextRows(pluginContextItems, "viewport", {
+    surface: "viewport",
+    tile: menuTileRef.current,
+    point: menuPointRef.current,
+    layer,
+    terrainMode,
+    terrain: activeTerrain,
+    markedArea: clipSelection,
+  });
+  if (pluginRows.length > 0) ctxItems.push({ label: "", sep: true }, ...pluginRows.map((r) => ({ label: r.label, disabled: r.disabled, onSelect: r.onSelect })));
 
   return (
     <div className="viewport">

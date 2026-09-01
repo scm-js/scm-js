@@ -4,13 +4,15 @@
  * If the worker cannot start (an old browser, a broken bundle) the compiler runs on the
  * main thread instead — slower, never silent.
  */
-import type { CompileRequest, CompileResponse } from "./compile.worker";
+import type { CompileRequest, CompileResponse, TranspileRequest, TranspileResponse } from "./compile.worker";
 import type { CompileOptions, CompileResult } from "./compiler";
+import { transpileTs } from "../plugins/transpile";
 
 let worker: Worker | null = null;
 let workerBroken = false;
 let seq = 0;
 const pending = new Map<number, { resolve: (r: CompileResult) => void; reject: (e: Error) => void }>();
+const pendingTranspile = new Map<number, { resolve: (code: string) => void; reject: (e: Error) => void }>();
 
 function getWorker(): Worker | null {
   if (workerBroken) return null;
@@ -21,12 +23,21 @@ function getWorker(): Worker | null {
     workerBroken = true;
     return null;
   }
-  worker.onmessage = (e: MessageEvent<CompileResponse>) => {
-    const p = pending.get(e.data.id);
+  worker.onmessage = (e: MessageEvent<CompileResponse | TranspileResponse>) => {
+    if ("kind" in e.data && e.data.kind === "transpile") {
+      const t = pendingTranspile.get(e.data.id);
+      if (!t) return;
+      pendingTranspile.delete(e.data.id);
+      if (e.data.code !== undefined) t.resolve(e.data.code);
+      else t.reject(new Error(e.data.error ?? "Transpile failed."));
+      return;
+    }
+    const data = e.data as CompileResponse;
+    const p = pending.get(data.id);
     if (!p) return;
-    pending.delete(e.data.id);
-    if (e.data.result) p.resolve(e.data.result);
-    else p.reject(new Error(e.data.error ?? "Compile failed."));
+    pending.delete(data.id);
+    if (data.result) p.resolve(data.result);
+    else p.reject(new Error(data.error ?? "Compile failed."));
   };
   worker.onerror = () => {
     // The worker script itself failed: fall back for every outstanding request and from now on.
@@ -36,6 +47,10 @@ function getWorker(): Worker | null {
     for (const [id, p] of pending) {
       pending.delete(id);
       p.reject(new Error("worker unavailable"));
+    }
+    for (const [id, t] of pendingTranspile) {
+      pendingTranspile.delete(id);
+      t.reject(new Error("worker unavailable"));
     }
   };
   return worker;
@@ -69,6 +84,29 @@ export function compileInBackground(source: string, declarations: string, option
     w.postMessage(req);
   }).catch((err: Error) => {
     if (err.message === "worker unavailable") return compileHere(source, declarations, options);
+    throw err;
+  });
+}
+
+async function transpileHere(source: string, fileName: string): Promise<string> {
+  const { default: ts } = await import("typescript");
+  return transpileTs(ts, source, fileName);
+}
+
+/**
+ * TypeScript → JavaScript for a plugin file, in the worker (no supersede rule — every
+ * request is answered, since a plugin bundle needs all of its files).
+ */
+export function transpileInBackground(source: string, fileName: string): Promise<string> {
+  const w = getWorker();
+  if (!w) return transpileHere(source, fileName);
+  const id = ++seq;
+  return new Promise<string>((resolve, reject) => {
+    pendingTranspile.set(id, { resolve, reject });
+    const req: TranspileRequest = { kind: "transpile", id, source, fileName };
+    w.postMessage(req);
+  }).catch((err: Error) => {
+    if (err.message === "worker unavailable") return transpileHere(source, fileName);
     throw err;
   });
 }

@@ -22,6 +22,7 @@ import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, undoAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
+import { pluginMenuItemsAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useIsomRebuild } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
@@ -43,6 +44,65 @@ type Item =
 
 const sep: Item = { kind: "sep" };
 
+export interface Menu {
+  label: string;
+  items: Item[];
+}
+
+/**
+ * Merge what plugins registered into the menu model: each item goes to the end of the
+ * top-level menu or submenu its path names (`"File/Import"`), after one separator; a
+ * path that names nothing falls back to the Plugins menu. Pure, so it is testable.
+ */
+export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]): Menu[] {
+  if (plugin.length === 0) return menus;
+  const out = menus.map((m) => ({ ...m, items: [...m.items] }));
+  const findSub = (items: Item[], label: string): Extract<Item, { kind: "sub" }> | null => {
+    for (const it of items) {
+      if (it.kind !== "sub") continue;
+      if (it.label === label) return it;
+      const deeper = findSub(it.items, label);
+      if (deeper) return deeper;
+    }
+    return null;
+  };
+  const separated = new Set<Item[]>();
+  const copied = new Set<Item>();
+  for (const p of plugin) {
+    const [top, ...rest] = p.path.split("/");
+    let target: Item[] | null = null;
+    const menu = out.find((m) => m.label === top) ?? out.find((m) => m.label === "Plugins") ?? null;
+    if (menu) {
+      target = menu.items;
+      for (const label of rest) {
+        const sub = findSub(target, label);
+        if (!sub) { target = null; break; }
+        if (copied.has(sub)) { target = sub.items; continue; }
+        // Copy the submenu once so the caller's model is untouched.
+        const copy = { ...sub, items: [...sub.items] };
+        copied.add(copy);
+        target.splice(target.indexOf(sub), 1, copy);
+        target = copy.items;
+      }
+      if (!target) target = menu.items;
+    }
+    if (!target) continue;
+    if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
+    target.push({
+      kind: "item",
+      label: p.label,
+      shortcut: p.shortcut,
+      disabled: p.enabled ? !safely(p.enabled, true) : false,
+      onSelect: () => { safely(p.run, undefined); },
+    });
+  }
+  return out;
+}
+
+function safely<T>(fn: () => T, fallback: T): T {
+  try { return fn(); } catch (err) { console.error("[plugins] menu item failed", err); return fallback; }
+}
+
 export const LAYERS: { id: EditorLayer; label: string; key: string }[] = [
   { id: "terrain", label: "Terrain", key: "T" },
   { id: "doodads", label: "Doodads", key: "D" },
@@ -55,8 +115,9 @@ export const LAYERS: { id: EditorLayer; label: string; key: string }[] = [
 
 export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
-function useMenus(): { label: string; items: Item[] }[] {
+function useMenus(): Menu[] {
   const open = useSetAtom(openDialogAtom);
+  const pluginItems = useAtomValue(pluginMenuItemsAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const store = useStore();
   const hasMap = useAtomValue(scenarioAtom) !== null;
@@ -131,7 +192,7 @@ function useMenus(): { label: string; items: Item[] }[] {
   const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
   const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
 
-  return [
+  const menus: Menu[] = [
     {
       label: "File",
       items: [
@@ -161,7 +222,6 @@ function useMenus(): { label: string; items: Item[] }[] {
             dlgWith("Triggers (.trg)…", "importTriggers", { format: "trg" }),
             dlgWith("Text Triggers (.txt)…", "importTriggers", { format: "txt" }),
             dlg("Strings (.txt)…", "importStrings"),
-            stub("Terrain from Image…"),
           ],
         },
         {
@@ -296,6 +356,12 @@ function useMenus(): { label: string; items: Item[] }[] {
       ],
     },
     {
+      label: "Plugins",
+      items: [
+        dlg("Manage Plugins…", "plugins"),
+      ],
+    },
+    {
       label: "Help",
       items: [
         dlg("Keyboard Shortcuts…", "shortcuts", "F1"),
@@ -306,6 +372,7 @@ function useMenus(): { label: string; items: Item[] }[] {
       ],
     },
   ];
+  return withPluginItems(menus, pluginItems);
 }
 
 /* ── Rendering ──────────────────────────────────────────── */

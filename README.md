@@ -65,7 +65,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Water and lava animation | Yes |
 | Symmetry | Partial. Rect, Tile and Fog strokes mirror; objects, the isometric brush and Blend do not. |
 | Replace Terrain | Not yet |
-| Terrain from Image | Not yet |
+| Terrain from Image | Yes, as the built-in plugin (File ▸ Import, or the terrain palette's right-click menu for the marked area). |
 
 ### Objects
 
@@ -111,6 +111,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Statistics | Yes |
 | Export the map as a PNG, from full art down to a minimap | Yes |
 | Import and export strings | Yes |
+| Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys and dialogs and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
 
 ## Working in the editor
@@ -353,6 +354,25 @@ Those breaks are the viewport's own far-zoom thresholds, so an export looks like
 map does on screen at that zoom. Units, locations, fog and the grid are each a tick,
 and the ones a given scale cannot draw grey out.
 
+### Plugins
+
+Plugins ▸ Manage Plugins… lists what is installed. Paste a location and press Add:
+`github:owner/repo` (optionally `@tag` and `/sub/dir`), a github.com URL, or any URL
+to a `plugin.json`, a `.ts`/`.js` file, or a folder holding `plugin.json`
+(`http://localhost:3000/` while you write one). A plugin is one TypeScript file with
+an `activate(api)` export; it runs with the editor's own privileges, so only add ones
+you trust. Tick boxes turn plugins off without removing them; Reload re-fetches one
+after a change. [docs/plugins.md](docs/plugins.md) has the API.
+
+**Terrain from Image** ships built in: File ▸ Import ▸ Terrain from Image…, or
+right-click the terrain palette (with an area marked on the Cut / Copy / Paste layer
+it offers the marked area as the target). Pick a picture, choose which terrains it
+may become, match by nearest colour or by brightness bands (a heightmap: the ticked
+terrains in palette order run dark → light), and Apply. *Isometric terrain* paints
+every lattice diamond with the isometric brush, so cliffs and shorelines are
+generated at the boundaries; *Flat tiles* stamps pairs and leaves the ISOM alone.
+Either way it is one undo step.
+
 ## Keyboard
 
 F1 lists the lot. The ones worth knowing up front:
@@ -379,6 +399,7 @@ animate at startup.
 | [docs/game-data.md](docs/game-data.md) | Extracting Blizzard data, and how the graphics get drawn |
 | [docs/file-formats.md](docs/file-formats.md) | CHK and MPQ handling, which sections are modelled |
 | [docs/trigger-script.md](docs/trigger-script.md) | The scripting language, in full |
+| [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
 | [docs/development.md](docs/development.md) | Building, testing, repository layout |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |
 

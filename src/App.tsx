@@ -8,6 +8,7 @@ import { useMapFileActions } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
 import { useStartupMap } from "./hooks/useStartupMap";
+import { usePlugins } from "./hooks/usePlugins";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
 import ToolBar from "./components/chrome/ToolBar";
@@ -27,6 +28,7 @@ export default function App() {
   useDevDeepLinks();
   usePreload();
   useStartupMap();
+  usePlugins();
 
   const rightVisible = panels.minimap || panels.layers || panels.properties;
 

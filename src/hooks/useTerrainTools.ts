@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
-  rectVariationAtom, selectedUnitsAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
+  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom,
+  rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
-import { commitEditAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
+import { commitTerrainAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   applyChanges, brushRect, floodRegion, stampTerrain, stampTile,
@@ -18,11 +18,6 @@ import { flatTerrain } from "../formats/tileset/terrain";
 import { inMap, neighbourOf, placeBlend, type Side } from "../editor/blend";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
-import { peekUnitAssets } from "../formats/units/load";
-import { applyUnitChanges, removeUnits } from "../editor/units";
-import { strandedUnits } from "../editor/placement";
-import { applyDoodadChanges, applySpriteChanges, removeDoodads, strandedDoodads } from "../editor/doodads";
-import { selectedDoodadsAtom } from "../atoms/editorAtoms";
 import { hexTile, terrainTypes, type TerrainType } from "../formats/tileset/palette";
 import { TILESET_BY_ID, terrainName } from "../data/tilesets";
 
@@ -52,7 +47,7 @@ export function paintsTiles(mode: TerrainMode): boolean {
  */
 export function useTerrainTools() {
   const store = useStore();
-  const commit = useSetAtom(commitEditAtom);
+  const commit = useSetAtom(commitTerrainAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const bumpRevision = useSetAtom(terrainRevisionAtom);
   const setActiveTile = useSetAtom(activeTileAtom);
@@ -78,39 +73,12 @@ export function useTerrainTools() {
   const isomReady = hasIsom(scenarioForTables) && loaded !== null && isomTypes.length > 0;
 
   /**
-   * Record a finished terrain edit. Doodads the stroke painted over come off the map in
-   * the same undo step (their remaining cells go back to the ground, their records and
-   * overlay sprites go), and with "remove stranded units" on so do units the new terrain
-   * can no longer hold; the label says how many of each.
+   * Record a finished terrain edit: `commitTerrainAtom` lifts the doodads the stroke
+   * painted over and the units it stranded into the same undo step and sets the status.
    */
-  const commitTerrain = useCallback((scn: Scenario, entry: HistoryEntry, summary: string) => {
-    let note = "";
-    if (loaded) {
-      const stranded = strandedDoodads(scn, loaded.doodads, entry.changes.map((c) => c.at));
-      if (stranded.length > 0) {
-        const edit = removeDoodads(scn, loaded.tileset, loaded.doodads, stranded);
-        applyChanges(scn, edit.tiles, "do", "mtxm");
-        applyDoodadChanges(scn, edit.doodads);
-        applySpriteChanges(scn, edit.sprites);
-        entry.doodadTiles = edit.tiles;
-        entry.doodads = edit.doodads;
-        entry.sprites = edit.sprites;
-        store.set(selectedDoodadsAtom, []);
-        note += `, removed ${stranded.length} doodad${stranded.length === 1 ? "" : "s"}`;
-      }
-    }
-    if (store.get(placementOptionsAtom).removeStranded && loaded) {
-      const stranded = strandedUnits(scn, loaded.tileset, peekUnitAssets()?.units ?? null, [...entry.changes, ...(entry.doodadTiles ?? [])].map((c) => c.at));
-      if (stranded.length > 0) {
-        entry.units = removeUnits(scn, stranded);
-        applyUnitChanges(scn, entry.units);
-        store.set(selectedUnitsAtom, []);
-        note += `, removed ${stranded.length} stranded unit${stranded.length === 1 ? "" : "s"}`;
-      }
-    }
-    commit(entry);
-    setStatus(summary + note);
-  }, [store, loaded, commit, setStatus]);
+  const commitTerrain = useCallback((_scn: Scenario, entry: HistoryEntry, summary: string) => {
+    commit({ entry, summary });
+  }, [commit]);
 
   /** The Rect brush as a flat pair, or null when the graphics (and so the groups) are missing. */
   const currentTerrain = useCallback((): TerrainType | null => {

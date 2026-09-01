@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
+import { ContextMenu } from "radix-ui";
 import { useAtom, useAtomValue } from "jotai";
 import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
+import { activeLayerAtom, clipSelectionAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import { pluginContextRows } from "../../plugins/contextMenu";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
 import { useIsomRebuild, useIsomStatus } from "../../hooks/useIsom";
@@ -426,8 +430,26 @@ function BlendTab() {
 export default function TerrainPalette() {
   const [mode, setMode] = useAtom(terrainModeAtom);
   const [placement, setPlacement] = useAtom(placementOptionsAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const activeTerrain = useAtomValue(activeTerrainAtom);
+  const layer = useAtomValue(activeLayerAtom);
+  const markedArea = useAtomValue(clipSelectionAtom);
+  const pluginItems = useAtomValue(pluginContextItemsAtom);
+  const tools = useTerrainTools();
+  const rebuild = useIsomRebuild();
+
+  // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
+  const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
+    { label: mode === "tile" ? "Fill Map with This Tile" : "Fill Map with This Terrain", disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
+    { label: "Rebuild ISOM from Tiles", disabled: !scenario, onSelect: rebuild },
+  ];
+  const pluginRows = pluginContextRows(pluginItems, "terrainPalette", { surface: "terrainPalette", tile: null, point: null, layer, terrainMode: mode, terrain: activeTerrain, markedArea });
+  if (pluginRows.length > 0) rows.push({ label: "", sep: true }, ...pluginRows);
+
   return (
-    <>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>
+        <div className="terrain-palette" style={{ display: "contents" }}>
       <div className="placement-options" title="What a terrain edit does to the units on it">
         <Check
           label="Remove stranded units"
@@ -447,6 +469,21 @@ export default function TerrainPalette() {
           { value: "blend", label: "Blend", content: <BlendTab /> },
         ]}
       />
-    </>
+        </div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="menu-content">
+          {rows.map((it, i) =>
+            it.sep ? (
+              <ContextMenu.Separator key={i} className="menu-separator" />
+            ) : (
+              <ContextMenu.Item key={i} className="menu-item" disabled={it.disabled} onSelect={it.onSelect}>
+                {it.label}
+              </ContextMenu.Item>
+            ),
+          )}
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   );
 }

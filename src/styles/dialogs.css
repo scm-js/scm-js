@@ -912,3 +912,88 @@
 /* ── Check Map (MiscDialogs.tsx) ── */
 .issue.jump { cursor: pointer; }
 .issue.jump:hover { background: color-mix(in srgb, var(--accent, #d4a017) 10%, transparent); }
+
+/* ── Plugins ──────────────────────────────────────────── */
+
+/* Small section caption above a field or list ("Add a plugin", "Installed"). */
+.pane-label {
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.plugin-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-add .hint .mono,
+.plugin-list .plugin-row .mono {
+  overflow-wrap: anywhere;
+}
+
+/* The dialog is `tall`, so the list takes the slack: the stack fills the body and
+   the listbox is the only part of it that grows (and scrolls). */
+.plugin-manage {
+  flex: 1;
+  min-height: 0;
+}
+.plugin-manage > .plugin-add,
+.plugin-manage > .pane-label,
+.plugin-manage > p {
+  flex: none;
+}
+.plugin-manage > .pane-label {
+  margin-bottom: -6px;
+}
+.plugin-list {
+  flex: 1;
+  min-height: 120px;
+  max-height: none;
+}
+.plugin-list .plugin-row {
+  height: auto;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  white-space: normal;
+  cursor: default;
+}
+.plugin-list .plugin-row + .plugin-row {
+  border-top: 1px solid var(--bg-2);
+}
+.plugin-list .plugin-row .check {
+  margin-top: 1px;
+}
+/* A plugin's manifest icon: an image, an emoji, or the fallback plugin mark. Nothing
+   is drawn around it — a chip here would read as a second control next to the row's
+   tick box, which is exactly what it must not do. */
+.plugin-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: contain;
+  color: var(--text-dim);
+  line-height: 1;
+}
+.plugin-list .plugin-row .plugin-icon {
+  margin: 1px 2px 0 4px;
+}
+.plugin-list .plugin-row > .row {
+  flex: none;
+}
+.badge.teal {
+  color: var(--teal);
+}
+.badge.error-text {
+  color: #ffb3b0;
+}
+.plugin-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}

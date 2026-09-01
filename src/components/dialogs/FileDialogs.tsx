@@ -1,12 +1,16 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Construction, FilePlus2, FolderOpen, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
-import { mapFilePathAtom, mapModifiedAtom, mapNameAtom } from "../../atoms/editorAtoms";
+import { Construction, FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
+import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_NEW_MAP, useMapFileActions } from "../../hooks/useMapFileActions";
-import { MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBytes, writeMapBytes, type MapFormat } from "../../services/mapIo";
+import { MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, saveBytes, writeMapBytes, type MapFormat } from "../../services/mapIo";
+import {
+  DEFAULT_IMAGE_OPTIONS, drawsSprites, exportMapImage, IMAGE_SCALES, imageSize, loadMapImageAssets, renderMapImage,
+  type MapImageOptions,
+} from "../../services/mapImage";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -281,6 +285,188 @@ export function NotImplementedDialog({ entry }: DialogProps) {
     <DialogFrame dialogKey={entry.key} title="Not Yet Implemented" icon={<Construction size={14} />} size="sm" footer={<Button variant="primary" autoFocus onClick={() => close(entry.key)}>OK</Button>}>
       <p><strong>{feature}</strong> is part of the planned feature set but isn't wired up yet.</p>
       <p className="hint">The UI is being laid out first; real map I/O, rendering and editing land next.</p>
+    </DialogFrame>
+  );
+}
+
+/* ── Export Image ───────────────────────────────────────── */
+
+/** What each scale is; the pixel size it produces is on the footer, live. */
+const SCALE_NAMES: Record<number, string> = {
+  32: "Full",
+  16: "Half",
+  8: "Quarter",
+  4: "Overview",
+  2: "Large minimap",
+  1: "Minimap",
+};
+
+/** Past this many megapixels some browsers refuse to encode the canvas (Safari first). */
+const HUGE_MEGAPIXELS = 64;
+const PREVIEW_PX = 256;
+
+/**
+ * File ▸ Export ▸ Image. One dialog and one dial — the scale, from the game's own 32 px
+ * per tile down to a 1 px minimap. `services/mapImage.ts` has the thresholds where the
+ * picture changes character; this only has to say so. The preview is the same render at
+ * thumbnail size, so the layer ticks can be judged before a multi-megapixel PNG is
+ * encoded.
+ */
+export function ExportImageDialog({ entry }: DialogProps) {
+  const scenario = useAtomValue(scenarioAtom);
+  const name = useAtomValue(mapNameAtom);
+  const path = useAtomValue(mapFilePathAtom);
+  const gridSize = useAtomValue(gridSizeAtom);
+  const fogPlayer = useAtomValue(fogViewPlayerAtom);
+  const close = useSetAtom(closeDialogAtom);
+  const setStatus = useSetAtom(statusMessageAtom);
+
+  const [opts, setOpts] = useState<MapImageOptions>(() => ({ ...DEFAULT_IMAGE_OPTIONS, fogPlayer }));
+  const base = (path ?? name).replace(/\.(scm|scx|chk)$/i, "").replace(/[^\w\- ]+/g, "") || "scenario";
+  // The name follows the scale until the user types one of their own.
+  const [file, setFile] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A callback ref, not `useRef`: the dialog lives in a Radix portal that mounts a commit
+  // later than this component, so a ref read in the first effect pass is still null.
+  const [previewHost, setPreviewHost] = useState<HTMLDivElement | null>(null);
+
+  const set = <K extends keyof MapImageOptions>(key: K, value: MapImageOptions[K]) => setOpts((o) => ({ ...o, [key]: value }));
+
+  const sprites = drawsSprites(opts.pixelsPerTile);
+  // A grid line every under-3 px is noise the renderer skips, so do not offer it.
+  const gridVisible = (gridSize / 32) * opts.pixelsPerTile >= 3;
+  const size = scenario ? imageSize(scenario, opts) : { width: 0, height: 0 };
+  const megapixels = (size.width * size.height) / 1e6;
+  // Only the bottom of the range is really a minimap; the middle is just a small map.
+  const fileName = file ?? (opts.pixelsPerTile <= 2 ? `${base}-minimap` : base);
+
+  /* The same render at thumbnail scale. Cheap enough to redo on every tick. */
+  useEffect(() => {
+    if (!previewHost || !scenario) return;
+    let cancelled = false;
+    const preview: MapImageOptions = {
+      ...opts,
+      pixelsPerTile: Math.max(1, Math.floor(PREVIEW_PX / Math.max(scenario.width, scenario.height))),
+    };
+    void loadMapImageAssets(scenario, preview).then((assets) => {
+      if (cancelled) return;
+      const canvas = renderMapImage(scenario, assets, preview);
+      canvas.style.imageRendering = "pixelated";
+      canvas.style.maxWidth = "100%";
+      previewHost.replaceChildren(canvas);
+    });
+    return () => { cancelled = true; };
+  }, [previewHost, scenario, opts]);
+
+  const run = async () => {
+    if (!scenario) { setError("No scenario is open."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await exportMapImage(scenario, opts);
+      const out = `${fileName || "scenario"}.png`;
+      if (await saveBlob(blob, out)) {
+        setStatus(`Exported ${out} — ${size.width}×${size.height}, ${(blob.size / 1024).toFixed(0)} KB`);
+        close(entry.key);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Export Image"
+      icon={<ImageDown size={14} />}
+      size="lg"
+      footer={
+        <>
+          <Button variant="primary" disabled={busy || !scenario} onClick={() => { void run(); }}>
+            {busy ? <><Loader2 size={13} className="spin" /> Rendering…</> : "Export"}
+          </Button>
+          <Button onClick={() => close(entry.key)}>Cancel</Button>
+        </>
+      }
+      footerLeft={<span className="mono">{size.width}×{size.height} px{megapixels >= 1 ? ` · ${megapixels.toFixed(1)} MP` : ""}</span>}
+      description="The whole map as a PNG. The scale decides what it is: the game's own art at the top of the range, its minimap at the bottom."
+    >
+      <div className="split" style={{ ["--split" as string]: "1fr" }}>
+        <div className="stack">
+          <Group title="Image">
+            <div className="form">
+              <Field label="Scale" hint={sprites
+                ? "Units and sprites use their game graphics."
+                : "Units become minimap dots; sprites are not drawn."}>
+                <Select
+                  value={String(opts.pixelsPerTile)}
+                  onChange={(e) => set("pixelsPerTile", Number(e.target.value))}
+                  options={IMAGE_SCALES.map((px) => ({ value: String(px), label: `${SCALE_NAMES[px]} — ${px} px/tile` }))}
+                />
+              </Field>
+              <Field label="File name">
+                <div className="row">
+                  <TextInput value={fileName} onChange={(e) => setFile(e.target.value)} />
+                  <span className="mono dim">.png</span>
+                </div>
+              </Field>
+            </div>
+          </Group>
+          <Group title="Include">
+            <div className="col" style={{ gap: 2 }}>
+              <Check label="Units" checked={opts.units} onChange={(e) => set("units", e.target.checked)} />
+              <Check
+                label="Sprites (doodad overlays, THG2)"
+                disabled={!sprites}
+                title={sprites ? undefined : "Sprites are not drawn at this scale."}
+                checked={opts.sprites && sprites}
+                onChange={(e) => set("sprites", e.target.checked)}
+              />
+              <Check label="Start locations" checked={opts.startLocations} onChange={(e) => set("startLocations", e.target.checked)} />
+              <Check label="Locations" checked={opts.locations} onChange={(e) => set("locations", e.target.checked)} />
+              <Check
+                label="Location names"
+                disabled={!opts.locations || !sprites}
+                title={sprites ? undefined : "Names are too small to read at this scale."}
+                checked={opts.locationNames && sprites}
+                onChange={(e) => set("locationNames", e.target.checked)}
+                style={{ marginLeft: 20 }}
+              />
+              <Check
+                label={`Grid (${gridSize} px)`}
+                disabled={!gridVisible}
+                title={gridVisible ? undefined : "The grid would be finer than a pixel at this scale."}
+                checked={opts.grid > 0 && gridVisible}
+                onChange={(e) => set("grid", e.target.checked ? gridSize : 0)}
+              />
+              <div className="row">
+                <Check label="Fog of war" checked={opts.fog} onChange={(e) => set("fog", e.target.checked)} />
+                <Select
+                  style={{ width: 110 }}
+                  disabled={!opts.fog}
+                  aria-label="Player whose fog is exported"
+                  value={String(opts.fogPlayer)}
+                  onChange={(e) => set("fogPlayer", Number(e.target.value))}
+                  options={Array.from({ length: 8 }, (_, i) => ({ value: String(i), label: `Player ${i + 1}` }))}
+                />
+              </div>
+            </div>
+          </Group>
+        </div>
+        <Group title="Preview">
+          <div className="export-preview" ref={setPreviewHost} />
+          <p className="hint" style={{ marginTop: 8 }}>The whole map, reduced to fit — what the layers look like, not the final resolution.</p>
+        </Group>
+      </div>
+      {megapixels > HUGE_MEGAPIXELS && (
+        <p className="error-text">
+          {megapixels.toFixed(0)} megapixels — some browsers refuse to encode a canvas this large. Pick a smaller scale if the export fails.
+        </p>
+      )}
+      {error && <p className="error-text">{error}</p>}
     </DialogFrame>
   );
 }

@@ -12,7 +12,7 @@ A browser-based StarCraft / Brood War scenario editor, built in homage to
 
 | Area | Status | Highlights |
 | --- | --- | --- |
-| Map I/O | Working for existing maps | MPQ/CHK open and save, unknown-data preservation, drag-and-drop |
+| Map I/O | Working for existing maps | MPQ/CHK open and save, unknown-data preservation, drag-and-drop, PNG export |
 | Terrain | Working | Isometric, rectangular, raw-tile, fill, pick, animation, and undo |
 | Doodads | Working | Tileset catalogue, placement rules, overlays, selection, movement, and undo |
 | Units | Working | Placement validation, properties, team colours, game sprites, and idle animations |
@@ -397,6 +397,30 @@ generated.
 
 Reading requires a [mopaq](https://github.com/jeany55/mopaq) with PKWARE DCL support —
 StarCraft compresses nearly every file in its archives, and its own maps, with it.
+
+### Exporting a picture of the map
+
+**File ▸ Export ▸ Image** renders the whole map to a PNG. There is one dial — the scale —
+and it decides what the picture is:
+
+| Scale | A 128x128 map | What it draws |
+| --- | --- | --- |
+| 32 px/tile | 4096x4096 | The game's own art: tileset graphics, unit and sprite GRPs |
+| 16, 8 px/tile | 2048, 1024 | The same, smaller |
+| 4, 2 px/tile | 512, 256 | Terrain from mean tile colours, units as minimap dots |
+| 1 px/tile | 128x128 | The game's minimap |
+
+The two places where the picture changes character are the viewport's own far-zoom
+thresholds, so an export looks like what the map looks like on screen at that zoom: below
+8 px a tile a unit is too small for its graphic and becomes a minimap dot (sized by its
+placement box, resources in cyan, sprites dropping out as they do on the game's minimap),
+and below 4 px terrain is filled from the precomputed mean megatile colours.
+
+Units, sprites, locations and their names, start locations, fog of war (per player) and
+the grid are each a tick; the ones a given scale cannot draw grey out. The dialog previews
+the render at thumbnail size, so the ticks can be judged before a multi-megapixel PNG is
+encoded, and the file name follows the scale (`<map>-minimap.png` at the small end) until
+you type one of your own.
 
 ## Scenario settings
 

@@ -6,6 +6,7 @@ export type DialogId =
   | "newMap"
   | "openMap"
   | "saveAs"
+  | "exportImage"
   | "mapProperties"
   | "resizeMap"
   | "mapRevision"

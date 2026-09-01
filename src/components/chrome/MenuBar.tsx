@@ -102,7 +102,15 @@ function useMenus(): { label: string; items: Item[] }[] {
         dlg("Save Copy As…", "saveAs"),
         sep,
         { kind: "sub", label: "Import", items: [stub("Triggers (.trg)…"), stub("Text Triggers (.txt)…"), stub("Strings (.txt)…"), stub("Terrain from Image…")] },
-        { kind: "sub", label: "Export", items: [stub("Map Image (.png)…"), stub("Minimap (.png)…"), sep, stub("Triggers (.trg)…"), stub("Text Triggers (.txt)…"), stub("Strings (.txt)…")] },
+        {
+          kind: "sub",
+          label: "Export",
+          items: [
+            { kind: "item", label: "Image (.png)…", onSelect: () => open("exportImage") },
+            sep,
+            stub("Triggers (.trg)…"), stub("Text Triggers (.txt)…"), stub("Strings (.txt)…"),
+          ],
+        },
         sep,
         dlg("Map Properties…", "mapProperties", "Alt+Enter"),
         sep,

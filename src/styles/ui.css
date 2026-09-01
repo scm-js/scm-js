@@ -188,7 +188,8 @@ input[type="range"] {
   cursor: default;
   white-space: nowrap;
 }
-.check input {
+.check input,
+.tick {
   appearance: none;
   width: 14px;
   height: 14px;
@@ -204,11 +205,13 @@ input[type="range"] {
 .check input[type="radio"] {
   border-radius: 50%;
 }
-.check input:checked {
+.check input:checked,
+.tick:checked {
   border-color: var(--gold-dim);
   background: var(--bg-0);
 }
-.check input:checked::after {
+.check input:checked::after,
+.tick:checked::after {
   content: "";
   width: 8px;
   height: 8px;
@@ -221,7 +224,8 @@ input[type="range"] {
   height: 6px;
   border-radius: 50%;
 }
-.check input:focus-visible {
+.check input:focus-visible,
+.tick:focus-visible {
   outline: none;
   box-shadow: var(--bevel-sunken), var(--focus);
 }

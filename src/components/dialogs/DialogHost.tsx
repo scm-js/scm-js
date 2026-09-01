@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { useAtomValue } from "jotai";
 import { dialogStackAtom, type DialogEntry, type DialogId } from "../../atoms/uiAtoms";
-import { ConfirmCloseDialog, NewMapDialog, NotImplementedDialog, OpenMapDialog, SaveAsDialog } from "./FileDialogs";
+import { ConfirmCloseDialog, ExportImageDialog, NewMapDialog, NotImplementedDialog, OpenMapDialog, SaveAsDialog } from "./FileDialogs";
 import { GridSettingsDialog, MapPropertiesDialog, MapRevisionDialog, ResizeMapDialog, SymmetryDialog } from "./MapDialogs";
 import { ForceSettingsDialog, PlayerColorsDialog, PlayerSettingsDialog } from "./PlayerDialogs";
 import { TechSettingsDialog, UnitSettingsDialog, UpgradeSettingsDialog } from "./DataDialogs";
@@ -18,6 +18,7 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   newMap: NewMapDialog,
   openMap: OpenMapDialog,
   saveAs: SaveAsDialog,
+  exportImage: ExportImageDialog,
   confirmClose: ConfirmCloseDialog,
   notImplemented: NotImplementedDialog,
   mapProperties: MapPropertiesDialog,

@@ -6,7 +6,8 @@ import { TILESETS } from "../../data/tilesets";
 import { locationsAtom } from "../../atoms/documentAtoms";
 import { UNIT_GROUPS, unitName } from "../../data/units";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
-import AppLogo from "../ui/AppLogo";
+import WireSphere from "../ui/WireSphere";
+import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -222,56 +223,157 @@ export function FindDialog({ entry }: DialogProps) {
 
 /* ── About ──────────────────────────────────────────────── */
 
+/**
+ * The credits roll. This editor is a homage, and the people below are the reason there is anything
+ * to pay homage to: they reverse-engineered the file formats, wrote the editors, and documented the
+ * results on staredit.net over twenty-odd years. Descriptions are deliberately plain-English —
+ * what someone is remembered for, not a changelog.
+ */
+interface CreditGroup {
+  title: string;
+  note?: string;
+  people: { who: string; real?: string; what: string }[];
+}
+
+const CREDITS: CreditGroup[] = [
+  {
+    title: "The editors",
+    people: [
+      {
+        who: "Heimdal",
+        real: "Jonathan Cable",
+        what: "StarForge (2003) — the first editor that simply ignored StarEdit's rules. Freehand terrain brushes, map protection, half-built buildings, and a generation of mappers who found out the format was theirs to bend.",
+      },
+      {
+        who: "Suicidal Insanity",
+        real: "Henrik Arlinghaus",
+        what: "SCMDraft 2, begun weeks after StarForge shipped and first released in March 2004. Still the editor everything else is measured against — and still being updated, twenty years on, for Remastered.",
+      },
+      {
+        who: "jjf28",
+        real: "TheNitesWhoSay",
+        what: "Chkdraft — an open-source editor, and a standalone write-up of StarCraft's isometric terrain that finally made ISOM something other people could implement. This editor's ISOM brush is descended from it.",
+      },
+      {
+        who: "Heinermann",
+        what: "BWAPI and ChkForge. The person the rest of the scene asked when a question came down to what StarCraft actually does with its own memory.",
+      },
+      {
+        who: "poiuy_qwert",
+        what: "PyMS — sixteen cross-platform tools covering very nearly every file the game ships: PyGRP for graphics, PyICE for animation scripts, PyDAT, PyBIN, PyAI. Modding on a Mac exists because of this.",
+      },
+    ],
+  },
+  {
+    title: "The archive",
+    note: "Everything above had to get inside an MPQ first.",
+    people: [
+      {
+        who: "Quantam",
+        what: "MPQDraft, and the Inside MoPaQ write-up that documented the archive format everyone else then implemented — including this editor.",
+      },
+      {
+        who: "ShadowFlare",
+        what: "WinMPQ and SFmpqapi. For most of a decade, if a StarCraft tool could open an MPQ, this is what it was calling.",
+      },
+      {
+        who: "Ladislav Zezula",
+        real: "Ladik",
+        what: "StormLib and MPQ Editor — still the reference implementation, still maintained.",
+      },
+    ],
+  },
+  {
+    title: "The EUD scene",
+    note:
+      "No single person gets credit for finding them. In July 2005 the community worked out that a Set Deaths trigger " +
+      "with an out-of-range unit id reads and writes StarCraft's own memory, and the map format quietly became a " +
+      "programming environment. Blizzard patched it out in 1.13b and 1.13f — then, in Remastered 1.21, emulated the " +
+      "overflow so the maps would run again.",
+    people: [
+      {
+        who: "FaRTy1billion",
+        what: "EUDDB, EUDTrig, the EUD Action Enabler, the String Chunk Calculator, and the first EUD drop-ban. Catalogued the addresses so everyone else did not have to.",
+      },
+      {
+        who: "rockz",
+        what: "The UMS Assistance answers that explained EUDs in language a mapmaker could actually act on. Half the scene learned it from these posts.",
+      },
+      {
+        who: "yoonkwun",
+        what: "The EUD Reference; detecting player chat text and unit facing from inside a map, which nobody thought triggers could do.",
+      },
+      {
+        who: "trgk",
+        real: "phu54321",
+        what: "eudplib and euddraft — EUD map-making as an actual programming language, with epScript on top. The break between hand-placed triggers and compiled ones.",
+      },
+      {
+        who: "Armoha",
+        what: "Keeps eudplib and euddraft alive and current on Remastered, which is why EUD maps are still being made rather than just remembered.",
+      },
+    ],
+  },
+  {
+    title: "The Network",
+    note: "staredit.net itself — six versions of a forum that outlived most of the games it was about.",
+    people: [
+      {
+        who: "Clokr_",
+        what: "Reverse-engineered the map parsing behind SEN's download database, so the site could read the maps it was hosting.",
+      },
+      {
+        who: "Kenoli",
+        what: "Ran (U)nknown Productions alongside Esponeo and MindArchon — a clan operated as a workshop for mapmakers rather than a team, and hard enough to get into that people remember being intimidated by it.",
+      },
+      {
+        who: "Hamma · DevliN · Excalibur · Forsaken Archer · NudeRaider · Roy · Jamal · Beer_KeG · DavidJcobb",
+        what: "Built it, skinned it, moderated it, and paid the hosting bill.",
+      },
+    ],
+  },
+];
+
+const THANKS = [
+  { who: "Quetz", what: "who puts up with all of this." },
+  { who: "Clan (U) Unknown", what: "(U)nknown Productions — for keeping the scene worth being part of." },
+];
+
+const STACK = [
+  ["React 19 + TypeScript", "UI, strict build via tsc"],
+  ["Vite 8", "dev server and bundler"],
+  ["Jotai", "all editor state; no context layering"],
+  ["Radix UI · lucide-react", "dialog primitives and icons"],
+  ["mopaq", "MPQ archive read/write for .scm / .scx"],
+  ["Canvas 2D", "terrain atlas, sprites, minimap, this dialog's background"],
+  ["Vitest · oxlint", "tests and linting"],
+];
+
 export function AboutDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const projectPage = (path: string) => window.open(`https://github.com/jeany55/scm-js${path}`, "_blank", "noopener,noreferrer");
 
+  // Same drifting nebula and starfield the splash screen paints, at dialog scale.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const stars = generateStars(70);
     let raf = 0;
     let start = 0;
-    const stars: { x: number; y: number; r: number; phase: number; speed: number; b: number }[] = [];
-    for (let i = 0; i < 60; i++) {
-      stars.push({ x: Math.random(), y: Math.random(), r: 0.3 + Math.random() * 1.2, phase: Math.random() * Math.PI * 2, speed: 0.001 + Math.random() * 0.003, b: 0.3 + Math.random() * 0.7 });
-    }
     const frame = (t: number) => {
       if (!start) start = t;
       const el = t - start;
       const cw = canvas.clientWidth, ch = canvas.clientHeight;
-      canvas.width = cw * devicePixelRatio;
-      canvas.height = ch * devicePixelRatio;
-      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      ctx.clearRect(0, 0, cw, ch);
-      // Nebulas
-      const drift = el * 0.00004;
-      const g1 = ctx.createRadialGradient(cw * (0.3 + 0.12 * Math.sin(drift * 1.7)), ch * (0.3 + 0.1 * Math.cos(drift * 1.3)), 0, cw * 0.3, ch * 0.3, cw * 0.55);
-      g1.addColorStop(0, "rgba(160,100,240,0.18)"); g1.addColorStop(1, "transparent");
-      ctx.fillStyle = g1; ctx.fillRect(0, 0, cw, ch);
-      const g2 = ctx.createRadialGradient(cw * (0.75 + 0.08 * Math.cos(drift * 1.5)), ch * (0.7 + 0.08 * Math.sin(drift)), 0, cw * 0.75, ch * 0.7, cw * 0.45);
-      g2.addColorStop(0, "rgba(255,95,162,0.1)"); g2.addColorStop(1, "transparent");
-      ctx.fillStyle = g2; ctx.fillRect(0, 0, cw, ch);
-      const g3 = ctx.createRadialGradient(cw * (0.5 + 0.1 * Math.sin(drift * 0.7 + 2)), ch * (0.5 + 0.1 * Math.cos(drift * 1.1)), 0, cw * 0.5, ch * 0.5, cw * 0.3);
-      g3.addColorStop(0, "rgba(180,60,110,0.06)"); g3.addColorStop(1, "transparent");
-      ctx.fillStyle = g3; ctx.fillRect(0, 0, cw, ch);
-      // Stars
-      for (const s of stars) {
-        const flicker = 0.5 + 0.5 * Math.sin(el * s.speed + s.phase);
-        const a = s.b * (0.3 + 0.7 * flicker);
-        ctx.fillStyle = `rgba(255,190,220,${a})`;
-        ctx.beginPath(); ctx.arc(s.x * cw, s.y * ch, s.r, 0, Math.PI * 2); ctx.fill();
-        if (s.r > 0.9 && a > 0.5) {
-          ctx.strokeStyle = `rgba(255,190,220,${a * 0.25})`;
-          ctx.lineWidth = 0.4;
-          const sx = s.x * cw, sy = s.y * ch, gl = s.r * 2.5;
-          ctx.beginPath();
-          ctx.moveTo(sx - gl, sy); ctx.lineTo(sx + gl, sy);
-          ctx.moveTo(sx, sy - gl); ctx.lineTo(sx, sy + gl);
-          ctx.stroke();
-        }
+      if (cw && ch) {
+        const w = Math.round(cw * devicePixelRatio), h = Math.round(ch * devicePixelRatio);
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        ctx.clearRect(0, 0, cw, ch);
+        drawNebula(ctx, cw, ch, el);
+        drawStars(ctx, cw, ch, el, stars);
       }
       raf = requestAnimationFrame(frame);
     };
@@ -280,33 +382,86 @@ export function AboutDialog({ entry }: DialogProps) {
   }, []);
 
   return (
-    <DialogFrame dialogKey={entry.key} title="About scmJS" icon={<Info size={14} />} size="sm" footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
+    <DialogFrame dialogKey={entry.key} title="About scmJS" icon={<Info size={14} />} size="md" tall footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
       <div className="about-space">
         <canvas ref={canvasRef} className="about-canvas" />
         <div className="about-content">
-          <AppLogo size={48} />
+          <WireSphere size={104} className="about-logo" />
           <h2 className="about-app-name">scm<span>JS</span></h2>
           <div className="about-tagline">StarCraft · Brood War</div>
           <div className="about-rule" />
           <div className="about-meta">v0.1 alpha · by Jeany</div>
-          <div className="about-desc">Browser-based scenario editor</div>
-          <div className="about-tech">React 19 · TypeScript · Jotai · Canvas</div>
-          <div className="about-rule" />
+          <div className="about-desc">A browser-based scenario editor</div>
           <p className="about-homage">
-            In homage to <strong>StarEdit</strong>, <strong>SCMDraft 2</strong> &amp; <strong>StarForge</strong>
+            In homage to <strong>StarEdit</strong>, <strong>StarForge</strong> and <strong>SCMDraft 2</strong> — and to the
+            people of <strong>staredit.net</strong>, who spent twenty years taking this game apart to see how it worked.
           </p>
-          <p className="about-disclaimer">
-            StarCraft is a trademark of Blizzard Entertainment. Not affiliated with or endorsed by Blizzard.
+        </div>
+      </div>
+
+      <div className="about-credits">
+        {CREDITS.map((group) => (
+          <section key={group.title} className="about-group">
+            <h3>{group.title}</h3>
+            {group.note && <p className="about-note">{group.note}</p>}
+            <ul>
+              {group.people.map((p) => (
+                <li key={p.who}>
+                  <span className="who">
+                    {p.who}
+                    {p.real && <em> · {p.real}</em>}
+                  </span>
+                  <span className="what">{p.what}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+
+        <section className="about-group about-thanks">
+          <h3>Special thanks</h3>
+          <ul>
+            {THANKS.map((t) => (
+              <li key={t.who}>
+                <span className="who">{t.who}</span>
+                <span className="what">{t.what}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <details className="about-details">
+        <summary>Under the hood</summary>
+        <div className="about-details-body">
+          <dl className="about-stack">
+            {STACK.map(([name, note]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{note}</dd>
+              </div>
+            ))}
+          </dl>
+          <p>
+            Reads and writes real <code>.scm</code> / <code>.scx</code> archives. CHK sections the editor does not model are
+            copied back byte for byte, so a map survives a round trip through it. Terrain is rendered from the game's own
+            tileset files, which are not redistributed — a fresh clone extracts them from an installed copy of Brood War.
+          </p>
+          <p>
+            The isometric terrain brush is a port of Chkdraft's reverse-engineering of StarEdit (MIT). Palette-cycling
+            tables and tileset names come from Chkdraft as well.
           </p>
           <div className="about-links">
             <button className="about-link" onClick={() => projectPage("/#readme")}>Docs</button>
-            <span className="about-dot">·</span>
-            <button className="about-link" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Credits</button>
-            <span className="about-dot">·</span>
+            <button className="about-link" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Attribution</button>
             <button className="about-link" onClick={() => projectPage("")}>Source</button>
           </div>
         </div>
-      </div>
+      </details>
+
+      <p className="about-disclaimer">
+        StarCraft is a trademark of Blizzard Entertainment. Not affiliated with or endorsed by Blizzard.
+      </p>
     </DialogFrame>
   );
 }

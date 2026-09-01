@@ -396,12 +396,12 @@
 
 /* about — fully pink-themed, mirroring the splash screen */
 .about-space {
+  flex: none;
   position: relative;
   border-radius: var(--radius);
   overflow: hidden;
   background: linear-gradient(180deg, #120818, #0a0410);
-  padding: 28px 24px 20px;
-  min-height: 280px;
+  padding: 22px 24px 20px;
 }
 .about-canvas {
   position: absolute;
@@ -417,6 +417,10 @@
   align-items: center;
   text-align: center;
   gap: 2px;
+}
+.about-logo {
+  display: block;
+  margin-bottom: -6px;
 }
 .about-app-name {
   font-size: 30px;
@@ -454,31 +458,150 @@
   color: rgba(255, 190, 220, 0.6);
   margin-top: 1px;
 }
-.about-tech {
-  font-size: 9.5px;
-  color: rgba(255, 190, 220, 0.35);
-  letter-spacing: 0.04em;
-  margin-top: 1px;
-}
 .about-homage {
-  font-size: 10px;
+  max-width: 46ch;
+  font-size: 10.5px;
   color: rgba(255, 190, 220, 0.5);
-  margin: 0;
-  line-height: 1.5;
+  margin: 12px 0 0;
+  line-height: 1.6;
 }
 .about-homage strong {
+  color: rgba(255, 190, 220, 0.8);
+  font-weight: 600;
+}
+
+/* credits roll */
+.about-credits {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.about-group h3 {
+  margin: 0 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #ff5fa2;
+}
+.about-group .about-note {
+  margin: 0 0 8px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.about-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 1px solid rgba(255, 95, 162, 0.18);
+  padding-left: 10px;
+}
+.about-group li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.about-group .who {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffbedc;
+  letter-spacing: 0.02em;
+}
+.about-group .who em {
+  font-weight: 400;
+  font-style: normal;
+  font-size: 10px;
+  color: rgba(255, 190, 220, 0.4);
+}
+.about-group .what {
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.about-thanks ul {
+  border-left-color: rgba(160, 100, 240, 0.35);
+}
+.about-thanks .who {
+  color: rgba(200, 160, 255, 0.95);
+}
+
+/* under the hood */
+.about-details {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+}
+.about-details > summary {
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  user-select: none;
+  list-style: none;
+}
+.about-details > summary::-webkit-details-marker {
+  display: none;
+}
+.about-details > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 11px;
+  color: rgba(255, 95, 162, 0.7);
+  transition: transform 0.12s;
+}
+.about-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.about-details > summary:hover {
+  color: #ffbedc;
+}
+.about-details-body {
+  padding: 2px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+.about-details-body p {
+  margin: 8px 0 0;
+  font-size: 9.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.about-details-body code {
+  font-size: 9px;
   color: rgba(255, 190, 220, 0.7);
 }
-.about-disclaimer {
-  font-size: 9px;
-  color: rgba(255, 190, 220, 0.25);
-  margin: 4px 0 0;
-  line-height: 1.4;
+.about-stack {
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 10px;
+  font-size: 9.5px;
+}
+.about-stack > div {
+  display: contents;
+}
+.about-stack dt {
+  color: rgba(255, 190, 220, 0.75);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.about-stack dd {
+  margin: 0;
+  color: var(--text-dim);
 }
 .about-links {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: 10px;
 }
 .about-link {
@@ -496,9 +619,13 @@
   background: rgba(255, 95, 162, 0.1);
   border-color: rgba(255, 95, 162, 0.45);
 }
-.about-dot {
-  color: rgba(255, 95, 162, 0.25);
-  font-size: 10px;
+.about-disclaimer {
+  flex: none;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: center;
 }
 
 /* preferences hotkeys */
@@ -575,4 +702,51 @@
 .btn > .lucide-loader-2,
 .btn > svg.spin {
   animation: dialog-spin 0.9s linear infinite;
+}
+
+/* ── Unit Properties: aligned property tables ───────────── */
+/* Vitals and the state flags are the same shape — a property per row, its value, and the
+   mask ticks under a heading — so they share a grid and read as one table each. */
+.flag-grid {
+  display: grid;
+  gap: 4px 12px;
+  align-items: center;
+}
+.flag-grid.vitals {
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  column-gap: 8px;
+}
+.flag-grid.states {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+}
+.flag-grid > .head {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+}
+.flag-grid > .head.tick-col {
+  text-align: center;
+}
+.flag-grid > .tick {
+  justify-self: center;
+}
+/* A vital the 'used' mask leaves out is one the game never reads. */
+.flag-grid .unused {
+  color: var(--text-faint);
+}
+
+/* ── Export Image preview ───────────────────────────────── */
+/* The same renderer at thumbnail scale, so the layer ticks can be judged before a
+   multi-megapixel PNG is encoded. */
+.export-preview {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--bg-0);
+  box-shadow: var(--bevel-sunken);
 }

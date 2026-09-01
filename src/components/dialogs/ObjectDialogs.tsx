@@ -13,7 +13,7 @@ import { useLocationTools } from "../../hooks/useLocationTools";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
 import { SpritePreview } from "../panels/UnitPreview";
-import { Button, Check, Field, Group, NumberInput, Select, TextInput } from "../ui";
+import { Button, Check, Field, Group, NumberInput, Select, TextInput, Tick } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -29,6 +29,9 @@ const STATE_ROWS: { bit: number; valid: number; label: string }[] = [
   { bit: UnitState.Hallucinated, valid: UnitValid.Hallucinated, label: "Hallucinated" },
   { bit: UnitState.Invincible, valid: UnitValid.Invincible, label: "Invincible" },
 ];
+
+/** The UNIT fields the "properties used" mask gates. */
+type VitalKey = "hitPointsPercent" | "shieldPercent" | "energyPercent" | "resourceAmount" | "hangarUnits";
 
 const hex = (v: number, digits: number) => `0x${(v >>> 0).toString(16).toUpperCase().padStart(digits, "0")}`;
 
@@ -77,14 +80,23 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
   };
 
   /** A vital with its "used" bit: the game only reads the number when the bit is set. */
-  const vital = (label: string, key: "hitPointsPercent" | "shieldPercent" | "energyPercent" | "resourceAmount" | "hangarUnits", used: number, max: number, unit?: string, hint?: string) => (
-    <Field label={label} hint={hint}>
-      <div className="row">
-        <NumberInput value={form[key]} onChange={(v) => set(key, v)} min={0} max={max} unit={unit} width={130} />
-        <Check label="used" title="Set the matching bit in the 'properties used' mask; unset, the game ignores the value" checked={has("validStates", used)} onChange={(e) => setBit("validStates", used, e.target.checked)} />
-      </div>
-    </Field>
-  );
+  const vital = (label: string, key: VitalKey, used: number, max: number, unit?: string, hint?: string) => {
+    const on = has("validStates", used);
+    return (
+      <Fragment key={label}>
+        <span className={on ? "" : "unused"} title={hint}>{label}</span>
+        <NumberInput value={form[key]} onChange={(v) => set(key, v)} min={0} max={max} />
+        {/* The unit is its own cell so every row's input ends on the same edge. */}
+        <span className="dim">{unit ?? ""}</span>
+        <Tick
+          checked={on}
+          onChange={(e) => setBit("validStates", used, e.target.checked)}
+          aria-label={`${label} used`}
+          title="Set the matching bit in the 'properties used' mask; unset, the game ignores the value"
+        />
+      </Fragment>
+    );
+  };
 
   const owners = Array.from({ length: 12 }, (_, i) => ({ value: String(i), label: `Player ${i + 1} (${PLAYER_COLORS[playerColorIndex(scenario?.playerColors, i)].name})` }));
   if (form.owner > 11) owners.push({ value: String(form.owner), label: `Owner ${form.owner} (raw)` });
@@ -129,28 +141,32 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
       </div>
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <Group title="Vitals">
-          <div className="form">
-            {vital("Hit points", "hitPointsPercent", UnitUsed.HitPoints, 255, "%", PERCENT_HINT)}
+          <div className="flag-grid vitals">
+            <span className="head">Property</span>
+            <span className="head" style={{ gridColumn: "span 2" }}>Value</span>
+            <span className="head tick-col" title="The 'properties used' mask: whether the game reads the value at all">Used</span>
+            {vital("Hit points", "hitPointsPercent", UnitUsed.HitPoints, 255, "%")}
             {vital("Shields", "shieldPercent", UnitUsed.Shields, 255, "%")}
             {vital("Energy", "energyPercent", UnitUsed.Energy, 255, "%")}
             {vital("Resources", "resourceAmount", UnitUsed.Resources, 0xffffffff, undefined, "Minerals or gas in a resource field.")}
             {vital("Hangar", "hangarUnits", UnitUsed.Hangar, 0xffff, undefined, "Interceptors or scarabs on board.")}
           </div>
+          <p className="hint" style={{ marginTop: 8 }}>{PERCENT_HINT}</p>
         </Group>
         <Group title="Special properties">
-          <div className="form" style={{ gridTemplateColumns: "1fr max-content max-content", gap: "2px 12px", alignItems: "center" }}>
-            <span className="hint">Property</span>
-            <span className="hint" title="The unit starts in this state">State</span>
-            <span className="hint" title="The 'valid' mask: whether the game reads this property at all">Valid</span>
+          <div className="flag-grid states">
+            <span className="head">Property</span>
+            <span className="head tick-col" title="The unit starts in this state">State</span>
+            <span className="head tick-col" title="The 'valid' mask: whether the game reads this property at all">Valid</span>
             {STATE_ROWS.map((r) => (
               <Fragment key={r.label}>
-                <span>{r.label}</span>
-                <input type="checkbox" checked={has("stateFlags", r.bit)} onChange={(e) => setBit("stateFlags", r.bit, e.target.checked)} aria-label={`${r.label} state`} />
-                <input type="checkbox" checked={has("validProperties", r.valid)} onChange={(e) => setBit("validProperties", r.valid, e.target.checked)} aria-label={`${r.label} valid`} />
+                <span className={has("validProperties", r.valid) ? "" : "unused"}>{r.label}</span>
+                <Tick checked={has("stateFlags", r.bit)} onChange={(e) => setBit("stateFlags", r.bit, e.target.checked)} aria-label={`${r.label} state`} />
+                <Tick checked={has("validProperties", r.valid)} onChange={(e) => setBit("validProperties", r.valid, e.target.checked)} aria-label={`${r.label} valid`} />
               </Fragment>
             ))}
           </div>
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 8 }}>
             <Check label="State flags used" title="Bit 6 of the 'properties used' mask: the state column above applies" checked={has("validStates", UnitUsed.State)} onChange={(e) => setBit("validStates", UnitUsed.State, e.target.checked)} />
           </div>
           <div className="sep-h" style={{ margin: "8px 0" }} />

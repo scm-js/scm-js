@@ -262,6 +262,28 @@ canvas cache; shadows draw as 50% black, `DrawFunction.Remap` images through the
 running game (attacks, sounds, projectile sprites, condition jumps) is a no-op. `tests/iscript.test.ts`
 and `tests/animate.test.ts` run against the real files when `public/` is populated.
 
+### Image export (`src/services/mapImage.ts`)
+
+File ▸ Export ▸ Image is one dialog with one dial — `pixelsPerTile` — and `renderMapImage`
+is a standalone re-implementation of the viewport's draw pass with `sx = sy = 0` over the
+whole map (it deliberately shares no code with `MapViewport`, which is entangled with
+scroll, layers, hover and gestures). There is no "map vs minimap" mode: the two thresholds
+where the picture changes character are the viewport's own far-zoom ones — `drawsSprites`
+(< 8 px/tile → `drawUnitDots`, the game's minimap dots, and sprites drop out) and `FLAT_PX`
+(< 4 px/tile → `atlas.averages` instead of atlas blits) — so 1 px/tile *is* the minimap and
+nothing special-cases it. Units are drawn in their *editor* pose (`getUnitSprite` /
+`getImageFrame`, never `UnitAnimator`), so an export is deterministic.
+
+`loadMapImageAssets` must run first: it ensures the tileset and the unit tables (the dots
+need units.dat placement boxes too) and, when the scale draws graphics, awaits every GRP
+the records need via `awaitGrps` — which lives in `formats/units/load.ts` and the startup
+preload shares — so nothing lands as a marker just because a fetch had not finished.
+Missing game data stays a degradation, never a failure. `ExportImageDialog`
+(`dialogs/FileDialogs.tsx`) previews the same render at thumbnail scale and greys out the
+ticks the chosen scale cannot honour; note it holds the preview host in state rather than a
+ref, because the Radix portal mounts a commit after the dialog component and a `useRef`
+read in the first effect pass is still null.
+
 ### Startup preload (`src/services/preload.ts`, `src/hooks/usePreload.ts`)
 
 The splash used to run a fixed 3.3 s script of invented log lines while the real fetches happened behind

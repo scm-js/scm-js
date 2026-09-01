@@ -122,6 +122,14 @@ export function Check({ label, radio, className = "", ...rest }: CheckProps) {
   );
 }
 
+/**
+ * A checkbox with no label of its own, for tables whose columns carry the heading.
+ * Styled like the one inside `Check`, so a grid of ticks matches the rest of the chrome.
+ */
+export function Tick({ className = "", ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  return <input type="checkbox" className={`tick ${className}`} {...rest} />;
+}
+
 /* ── Layout helpers ─────────────────────────────────────── */
 
 export function Group({ title, children, className = "", flush }: { title: string; children: ReactNode; className?: string; flush?: boolean }) {

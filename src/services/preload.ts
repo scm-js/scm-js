@@ -4,7 +4,7 @@ import {
   ensureTileset, onTilesetProgress, peekTileset, TILESET_FILENAMES, type TilesetFileName,
 } from "../formats/tileset/load";
 import {
-  getUnitAssets, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, unitImageId,
+  awaitGrps, getUnitAssets, imageGrpPath, peekUnitAssets, unitImageId,
 } from "../formats/units/load";
 
 /**
@@ -56,31 +56,6 @@ const WARM_UNITS = [176, 177, 178, 188, START_LOCATION];
 export function tilesetFileName(id: TilesetId): TilesetFileName {
   const index = TILESETS.findIndex((t) => t.id === id);
   return TILESET_FILENAMES[index < 0 ? 0 : index];
-}
-
-/**
- * Wait for a set of lazily fetched GRPs. `requestGrp` starts the fetch and answers
- * `undefined` until it settles, so the arrival notification is the only signal there is.
- */
-function awaitGrps(paths: string[]): Promise<void> {
-  // `requestGrp` is what *starts* a fetch, so ask for every path before testing any of
-  // them — a short-circuiting `some(...)` would serialise the warm-up one round trip at
-  // a time instead of running the handful of GRPs in parallel.
-  const anyPending = () => paths.map((p) => requestGrp(p)).some((g) => g === undefined);
-  if (!anyPending()) return Promise.resolve();
-  return new Promise((resolve) => {
-    let off = () => {};
-    const check = () => {
-      if (anyPending()) return false;
-      off();
-      resolve();
-      return true;
-    };
-    off = onGrpLoaded(check);
-    // A fetch can settle between the first check and the subscription above; without this
-    // second look that notification is missed and the task hangs until the splash's cap.
-    check();
-  });
 }
 
 /** Pull the graphics for the handful of units above, so nothing pops in as markers first. */

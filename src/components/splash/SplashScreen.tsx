@@ -2,60 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { screenAtom } from "../../atoms/editorAtoms";
 import { preloadLogAtom, preloadStepAtom } from "../../atoms/preloadAtoms";
-
-/* ── Wireframe sphere ───────────────────────────────────── */
-
-interface Vec3 { x: number; y: number; z: number }
-
-const rotY = (v: Vec3, a: number): Vec3 => ({ x: v.x * Math.cos(a) + v.z * Math.sin(a), y: v.y, z: -v.x * Math.sin(a) + v.z * Math.cos(a) });
-const rotX = (v: Vec3, a: number): Vec3 => ({ x: v.x, y: v.y * Math.cos(a) - v.z * Math.sin(a), z: v.y * Math.sin(a) + v.z * Math.cos(a) });
-
-function buildSphere(rings: number, segs: number, r: number) {
-  const verts: Vec3[] = [];
-  const edges: [number, number][] = [];
-  for (let i = 0; i <= rings; i++) {
-    const phi = (Math.PI * i) / rings;
-    for (let j = 0; j < segs; j++) {
-      const th = (2 * Math.PI * j) / segs;
-      verts.push({ x: r * Math.sin(phi) * Math.cos(th), y: r * Math.cos(phi), z: r * Math.sin(phi) * Math.sin(th) });
-    }
-  }
-  for (let i = 0; i <= rings; i++) {
-    for (let j = 0; j < segs; j++) {
-      const cur = i * segs + j;
-      edges.push([cur, i * segs + ((j + 1) % segs)]);
-      if (i < rings) edges.push([cur, cur + segs]);
-    }
-  }
-  return { verts, edges };
-}
-
-/* ── Stars ──────────────────────────────────────────────── */
-
-interface Star { x: number; y: number; r: number; phase: number; speed: number; bright: number }
-
-function generateStars(count: number): Star[] {
-  const stars: Star[] = [];
-  for (let i = 0; i < count; i++) {
-    stars.push({
-      x: Math.random(),
-      y: Math.random(),
-      r: 0.3 + Math.random() * 1.4,
-      phase: Math.random() * Math.PI * 2,
-      speed: 0.0008 + Math.random() * 0.003,
-      bright: 0.3 + Math.random() * 0.7,
-    });
-  }
-  return stars;
-}
-
-/* ── Palette (pink-themed per project identity) ─────────── */
-
-const PINK = "255,95,162";
-const PINK_HI = "255,190,220";
-const PINK_DIM = "180,60,110";
-const VIOLET = "160,100,240";
-const BLUE = "40,50,130";
+import { PINK, PINK_HI, buildSphere, drawNebula, drawSphereGlow, drawSphereWire, drawStars, generateStars, projectSphere } from "./starfield";
 
 /* ── Timing ─────────────────────────────────────────────── */
 
@@ -101,99 +48,13 @@ export default function SplashScreen() {
       ctx.clearRect(0, 0, cw, ch);
       shown += (progressRef.current - shown) * 0.08;
 
-      /* ── Nebula background (animated drift) ── */
-      const nebDrift = el * 0.00003;
-      const n1x = cw * (0.3 + 0.12 * Math.sin(nebDrift * 1.7));
-      const n1y = ch * (0.25 + 0.08 * Math.cos(nebDrift * 1.3));
-      const nebGrad1 = ctx.createRadialGradient(n1x, n1y, 0, n1x, n1y, cw * 0.6);
-      nebGrad1.addColorStop(0, `rgba(${VIOLET},0.2)`);
-      nebGrad1.addColorStop(0.5, `rgba(${BLUE},0.1)`);
-      nebGrad1.addColorStop(1, "transparent");
-      ctx.fillStyle = nebGrad1;
-      ctx.fillRect(0, 0, cw, ch);
-
-      const n2x = cw * (0.75 + 0.1 * Math.cos(nebDrift * 2.1));
-      const n2y = ch * (0.7 + 0.1 * Math.sin(nebDrift * 0.9));
-      const nebGrad2 = ctx.createRadialGradient(n2x, n2y, 0, n2x, n2y, cw * 0.5);
-      nebGrad2.addColorStop(0, `rgba(${PINK},0.07)`);
-      nebGrad2.addColorStop(0.4, `rgba(${VIOLET},0.04)`);
-      nebGrad2.addColorStop(1, "transparent");
-      ctx.fillStyle = nebGrad2;
-      ctx.fillRect(0, 0, cw, ch);
-
-      // Third nebula cloud for depth
-      const n3x = cw * (0.5 + 0.15 * Math.sin(nebDrift * 0.7 + 2));
-      const n3y = ch * (0.45 + 0.12 * Math.cos(nebDrift * 1.1 + 1));
-      const nebGrad3 = ctx.createRadialGradient(n3x, n3y, 0, n3x, n3y, cw * 0.35);
-      nebGrad3.addColorStop(0, `rgba(${PINK_DIM},0.06)`);
-      nebGrad3.addColorStop(1, "transparent");
-      ctx.fillStyle = nebGrad3;
-      ctx.fillRect(0, 0, cw, ch);
-
-      /* ── Stars (twinkling + slow drift) ── */
-      const starDrift = el * 0.000008;
-      for (const s of stars) {
-        const flicker = 0.5 + 0.5 * Math.sin(el * s.speed + s.phase);
-        const a = s.bright * (0.4 + 0.6 * flicker);
-        // Slow parallax drift
-        const sx = ((s.x + starDrift * (0.5 + s.bright)) % 1.05) * cw;
-        const sy = s.y * ch;
-        ctx.fillStyle = `rgba(${PINK_HI},${a})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, s.r, 0, Math.PI * 2);
-        ctx.fill();
-        // Cross-shaped glint on brighter stars
-        if (s.r > 1.0 && a > 0.5) {
-          ctx.strokeStyle = `rgba(${PINK_HI},${a * 0.3})`;
-          ctx.lineWidth = 0.5;
-          const gl = s.r * 3;
-          ctx.beginPath();
-          ctx.moveTo(sx - gl, sy); ctx.lineTo(sx + gl, sy);
-          ctx.moveTo(sx, sy - gl); ctx.lineTo(sx, sy + gl);
-          ctx.stroke();
-        }
-      }
+      drawNebula(ctx, cw, ch, el);
+      drawStars(ctx, cw, ch, el, stars);
 
       /* ── Wireframe sphere ── */
       const cx = cw / 2, cy = ch * 0.40, fov = Math.min(cw, ch) * 0.55;
-      const ay = el * 0.0004, ax = 0.35;
-      const project = (v: Vec3) => {
-        const p = rotX(rotY(v, ay), ax);
-        const z = p.z + 4;
-        return { x: cx + (p.x * fov) / z, y: cy + (p.y * fov) / z, d: z };
-      };
-
-      // Glow behind sphere
-      const glowR = fov * 0.35;
-      const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      glowGrad.addColorStop(0, `rgba(${PINK},0.12)`);
-      glowGrad.addColorStop(0.5, `rgba(${PINK_DIM},0.04)`);
-      glowGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = glowGrad;
-      ctx.fillRect(cx - glowR, cy - glowR, glowR * 2, glowR * 2);
-
-      const pts = sphere.verts.map(project);
-      ctx.lineWidth = 0.8;
-      for (const [a, b] of sphere.edges) {
-        const pa = pts[a], pb = pts[b];
-        const depth = (pa.d + pb.d) / 2;
-        const alpha = Math.max(0.02, Math.min(0.45, 0.95 - (depth - 2.75) / 2.2));
-        ctx.strokeStyle = `rgba(${PINK},${alpha})`;
-        ctx.beginPath();
-        ctx.moveTo(pa.x, pa.y);
-        ctx.lineTo(pb.x, pb.y);
-        ctx.stroke();
-      }
-
-      // Bright equator line
-      ctx.strokeStyle = `rgba(${PINK_HI},0.35)`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      for (let j = 0; j <= 24; j++) {
-        const p = pts[8 * 24 + (j % 24)];
-        if (j === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke();
+      drawSphereGlow(ctx, cx, cy, fov * 0.35);
+      drawSphereWire(ctx, sphere, projectSphere(sphere, cx, cy, fov, el * 0.0004, 0.35));
 
       /* ── Progress ring around sphere ── */
       const pr = Math.min(cw, ch) * 0.30;

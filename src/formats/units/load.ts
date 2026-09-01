@@ -174,6 +174,33 @@ export function requestGrp(path: string): Grp | null | undefined {
   return grps.get(`unit/${path}`);
 }
 
+/**
+ * Wait for a set of lazily fetched GRPs. `requestGrp` starts the fetch and answers
+ * `undefined` until it settles, so the arrival notification is the only signal there is.
+ * Used by the startup preload and by image export, both of which want every graphic
+ * present before they draw rather than markers where one has not arrived yet.
+ */
+export function awaitGrps(paths: readonly string[]): Promise<void> {
+  // `requestGrp` is what *starts* a fetch, so ask for every path before testing any of
+  // them — a short-circuiting `some(...)` would serialise the warm-up one round trip at
+  // a time instead of running the handful of GRPs in parallel.
+  const anyPending = () => paths.map((p) => requestGrp(p)).some((g) => g === undefined);
+  if (!anyPending()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let off = () => {};
+    const check = () => {
+      if (anyPending()) return false;
+      off();
+      resolve();
+      return true;
+    };
+    off = onGrpLoaded(check);
+    // A fetch can settle between the first check and the subscription above; without this
+    // second look that notification is missed and the wait hangs.
+    check();
+  });
+}
+
 /** The decoded `.lo` file for a path under `public/unit/`. */
 export function requestLo(path: string): LoFile | null | undefined {
   return los.get(`unit/${path}`);

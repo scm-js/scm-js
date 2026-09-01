@@ -54,8 +54,12 @@ export async function pickMapFile(): Promise<File | null> {
 
 /** Write bytes to disk: a real save dialog where supported, a download otherwise. */
 export async function saveBytes(bytes: Uint8Array, fileName: string): Promise<boolean> {
+  return saveBlob(new Blob([bytes as unknown as BlobPart], { type: "application/octet-stream" }), fileName);
+}
+
+/** The same, for something already assembled as a blob (an exported PNG). */
+export async function saveBlob(blob: Blob, fileName: string): Promise<boolean> {
   const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker }).showSaveFilePicker;
-  const blob = new Blob([bytes as unknown as BlobPart], { type: "application/octet-stream" });
 
   if (picker) {
     try {

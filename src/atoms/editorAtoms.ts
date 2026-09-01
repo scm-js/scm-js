@@ -77,6 +77,18 @@ export const selectedSpritesAtom = atom<number[]>([]);
 /** Flags given to newly placed sprites: mirrored graphic, and (unit sprites only) starting disabled. */
 export const spritePlaceOptionsAtom = atom<{ flipped: boolean; disabled: boolean }>({ flipped: false, disabled: false });
 
+/* ── Locations layer (see editor/locations.ts) ──────────── */
+
+/**
+ * MRGN slot indices of the selected locations. Slots never shift, so a selection survives
+ * every edit; it is only pruned when a slot it names stops being in use. Anywhere (slot
+ * 63) can be selected from the list to read it, but never picked up on the map.
+ */
+export const selectedLocationsAtom = atom<number[]>([]);
+/** Pixel grid a create, move or resize snaps to; 0 = off. StarEdit works in whole tiles. */
+export const locationSnapAtom = atom<number>(32);
+export const LOCATION_SNAPS: readonly number[] = [0, 8, 16, 32, 64];
+
 /* ── Fog of war layer (see editor/fog.ts) ───────────────── */
 
 /** Bit mask of the players (bit n = player n+1) the fog brush paints for. */

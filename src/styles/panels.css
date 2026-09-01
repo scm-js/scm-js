@@ -492,6 +492,29 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+.loc-row .name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.loc-row .elev {
+  color: var(--warn);
+  font-size: 8px;
+}
+/* slot 63, pinned at the top with its lock */
+.loc-row.anywhere {
+  color: var(--text-dim);
+  font-style: italic;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.loc-row.anywhere.selected {
+  color: #fff;
+}
 
 /* fog palette */
 .fog-head {

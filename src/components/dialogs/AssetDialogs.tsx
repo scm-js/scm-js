@@ -1,8 +1,13 @@
 import { useMemo, useState } from "react";
-import { useSetAtom } from "jotai";
-import { Music, Pencil, Play, Plus, Replace, Search, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
-import { openDialogAtom } from "../../atoms/uiAtoms";
-import { SAMPLE_LOCATIONS, SAMPLE_SOUNDS, SAMPLE_STRINGS } from "../../data/samples";
+import { useAtomValue, useSetAtom } from "jotai";
+import { Lock, Music, Pencil, Play, Plus, Replace, Search, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
+import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { activeLayerAtom, selectedLocationsAtom } from "../../atoms/editorAtoms";
+import { locationsAtom, scenarioAtom } from "../../atoms/documentAtoms";
+import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
+import { useLocationTools } from "../../hooks/useLocationTools";
+import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
+import { SAMPLE_SOUNDS, SAMPLE_STRINGS } from "../../data/samples";
 import { Button, Check, ListBox, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -114,34 +119,79 @@ export function SwitchesDialog({ entry }: DialogProps) {
 
 /* ── Location list ──────────────────────────────────────── */
 
+/**
+ * Scenario ▸ Locations…: every slot in use as a table, Anywhere first. A row selects on
+ * the map (Shift adds); double-click jumps the view to it and closes; the buttons make,
+ * edit and delete like the palette does.
+ */
 export function LocationListDialog({ entry }: DialogProps) {
-  const [sel, setSel] = useState(1);
+  const scenario = useAtomValue(scenarioAtom);
+  const locations = useAtomValue(locationsAtom);
+  const selected = useAtomValue(selectedLocationsAtom);
   const open = useSetAtom(openDialogAtom);
-  const l = SAMPLE_LOCATIONS[sel];
+  const close = useSetAtom(closeDialogAtom);
+  const setLayer = useSetAtom(activeLayerAtom);
+  const tools = useLocationTools();
+  const [sort, setSort] = useState<"slot" | "name" | "size">("slot");
+  const rows = useMemo(() => {
+    const r = [...locations];
+    if (sort === "name") r.sort((a, b) => a.name.localeCompare(b.name) || a.index - b.index);
+    if (sort === "size") r.sort((a, b) => b.w * b.h - a.w * a.h || a.index - b.index);
+    return r;
+  }, [locations, sort]);
+  const first = selected[0];
+  const anywhere = scenario?.locations[ANYWHERE_INDEX];
+  const capacity = scenario ? locationCapacity(scenario) - 1 : 0;
+  const goTo = (index: number) => {
+    tools.select([index]);
+    tools.centerOn(index);
+    setLayer("locations");
+    close(entry.key);
+  };
+  const cell = (v: number) => <td className="num">{v}</td>;
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Locations" icon={<SquareDashed size={14} />} size="lg" tall footer={<Button variant="primary" onClick={undefined}>Close</Button>} footerLeft={<span>{SAMPLE_LOCATIONS.length} / 255 locations · slot 63 is "Anywhere"</span>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Locations"
+      icon={<SquareDashed size={14} />}
+      size="lg"
+      tall
+      footer={<Button variant="primary" onClick={() => close(entry.key)}>Close</Button>}
+      footerLeft={<span>{locations.length} / {capacity} locations · slot 63 is Anywhere · double-click to go to one</span>}
+    >
       <div className="row">
-        <Button size="sm"><Plus size={12} /> New</Button>
-        <Button size="sm" onClick={() => open("locationProperties", { location: l })}><Pencil size={12} /> Properties…</Button>
-        <Button size="sm" disabled={l.id === 63}><Trash2 size={12} /> Delete</Button>
+        <Button size="sm" disabled={!scenario} onClick={() => tools.createInView()}><Plus size={12} /> New</Button>
+        <Button size="sm" disabled={first === undefined} onClick={() => open("locationProperties", { index: first })}><Pencil size={12} /> Properties…</Button>
+        <Button size="sm" disabled={!selected.some((i) => i !== ANYWHERE_INDEX)} onClick={() => tools.deleteSelected()}><Trash2 size={12} /> Delete</Button>
         <span className="grow" />
-        <Select style={{ width: 160 }} options={["Sort by ID", "Sort by name", "Sort by size"]} />
+        <Select style={{ width: 160 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} options={[{ value: "slot", label: "Sort by slot" }, { value: "name", label: "Sort by name" }, { value: "size", label: "Sort by size" }]} />
       </div>
       <div className="listbox grow">
         <table className="table">
-          <thead><tr><th style={{ width: 40 }}>ID</th><th>Name</th><th className="num" style={{ width: 70 }}>Left</th><th style={{ width: 70 }}>Top</th><th style={{ width: 70 }}>Right</th><th style={{ width: 70 }}>Bottom</th><th style={{ width: 90 }}>Tiles</th></tr></thead>
+          <thead>
+            <tr><th style={{ width: 40 }}>Slot</th><th>Name</th><th style={{ width: 66 }}>Left</th><th style={{ width: 66 }}>Top</th><th style={{ width: 66 }}>Right</th><th style={{ width: 66 }}>Bottom</th><th style={{ width: 90 }}>Tiles</th><th style={{ width: 60 }} title="Elevations the location applies on">Elev.</th></tr>
+          </thead>
           <tbody>
-            {SAMPLE_LOCATIONS.map((x, i) => (
-              <tr key={x.id} className={sel === i ? "selected" : ""} onClick={() => setSel(i)} onDoubleClick={() => open("locationProperties", { location: x })}>
-                <td className="num">{x.id}</td>
-                <td>{x.name}</td>
-                <td className="num">{x.x * 32}</td>
-                <td className="num">{x.y * 32}</td>
-                <td className="num">{(x.x + x.w) * 32}</td>
-                <td className="num">{(x.y + x.h) * 32}</td>
-                <td className="num">{x.w} × {x.h}</td>
+            {scenario && anywhere && isLocationUsed(anywhere) && (
+              <tr className={selected.includes(ANYWHERE_INDEX) ? "selected" : ""} onClick={(e) => tools.select([ANYWHERE_INDEX], e.shiftKey)} onDoubleClick={() => open("locationProperties", { index: ANYWHERE_INDEX })}>
+                {cell(ANYWHERE_INDEX)}
+                <td><span className="row" style={{ gap: 4 }}><Lock size={10} className="faint" />{locationName(scenario, ANYWHERE_INDEX)}{!isAnywhereIntact(scenario) && <span className="badge warn">off map</span>}</span></td>
+                {cell(anywhere.left)}{cell(anywhere.top)}{cell(anywhere.right)}{cell(anywhere.bottom)}
+                <td className="num">{scenario.width} × {scenario.height}</td>
+                <td className="num">{6 - ELEVATIONS.filter((e) => anywhere.elevationFlags & e.bit).length} / 6</td>
+              </tr>
+            )}
+            {rows.map((l) => (
+              <tr key={l.index} className={selected.includes(l.index) ? "selected" : ""} onClick={(e) => tools.select([l.index], e.shiftKey)} onDoubleClick={() => goTo(l.index)}>
+                {cell(l.index)}
+                <td>{l.name}{l.inverted && <span className="faint"> · inverted</span>}</td>
+                {cell(scenario!.locations[l.index].left)}{cell(scenario!.locations[l.index].top)}{cell(scenario!.locations[l.index].right)}{cell(scenario!.locations[l.index].bottom)}
+                <td className="num">{l.w} × {l.h}</td>
+                <td className="num">{6 - ELEVATIONS.filter((e) => l.elevationFlags & e.bit).length} / 6</td>
               </tr>
             ))}
+            {locations.length === 0 && <tr><td colSpan={8} className="hint">No locations yet — drag on empty ground on the Locations layer to create one.</td></tr>}
           </tbody>
         </table>
       </div>

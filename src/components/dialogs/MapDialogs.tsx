@@ -7,7 +7,6 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { setScenarioDescription, setScenarioName, type Scenario } from "../../formats/chk/scenario";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
 import { MAP_SIZES, terrainName, TILESET_BY_ID } from "../../data/tilesets";
-import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { SAMPLE_TRIGGERS } from "../../data/triggers";
 import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -70,7 +69,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
             <Field label="Units"><span className="mono">{scenario ? scenario.units.length : 0}</span></Field>
             <Field label="Sprites"><span className="mono">{scenario ? scenario.sprites.length : 0}</span></Field>
             <Field label="Doodads"><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
-            <Field label="Locations"><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : SAMPLE_LOCATIONS.length}</span></Field>
+            <Field label="Locations"><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : 0}</span></Field>
             <Field label="Triggers"><span className="mono">{scenario ? triggerCount(scenario) : SAMPLE_TRIGGERS.length}</span></Field>
             <Field label="Strings"><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
           </div>

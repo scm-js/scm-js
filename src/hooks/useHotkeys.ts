@@ -1,16 +1,19 @@
 import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
-  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlacingAtom,
-  unitPlacingAtom, viewFlagsAtom, zoomAtom,
+  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom,
   type EditorLayer,
 } from "../atoms/editorAtoms";
-import { deleteSelectedDoodadsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, redoAtom, undoAtom } from "../atoms/documentAtoms";
+import {
+  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, undoAtom,
+} from "../atoms/documentAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
 
 const LAYER_KEYS: Record<string, EditorLayer> = { t: "terrain", d: "doodads", u: "units", s: "sprites", l: "locations", f: "fog", c: "clipboard" };
+const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 /** Global editor hotkeys (UI only). */
 export function useHotkeys() {
@@ -25,6 +28,10 @@ export function useHotkeys() {
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
   const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
   const deleteSprites = useSetAtom(deleteSelectedSpritesAtom);
+  const deleteLocations = useSetAtom(deleteSelectedLocationsAtom);
+  const nudgeLocations = useSetAtom(nudgeSelectedLocationsAtom);
+  const setSelectedLocations = useSetAtom(selectedLocationsAtom);
+  const locationSnap = useAtomValue(locationSnapAtom);
   const setSelectedUnits = useSetAtom(selectedUnitsAtom);
   const setSelectedDoodads = useSetAtom(selectedDoodadsAtom);
   const setSelectedSprites = useSetAtom(selectedSpritesAtom);
@@ -86,6 +93,11 @@ export function useHotkeys() {
           if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} sprite${n === 1 ? "" : "s"}`); }
           return;
         }
+        if (activeLayer === "locations") {
+          const n = deleteLocations();
+          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} location${n === 1 ? "" : "s"}`); }
+          return;
+        }
         const n = deleteUnits();
         if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} unit${n === 1 ? "" : "s"}`); }
         return;
@@ -102,8 +114,18 @@ export function useHotkeys() {
           else setSelectedSprites([]);
           return;
         }
+        if (activeLayer === "locations") { setSelectedLocations([]); return; }
         if (placing) { setPlacing(false); setStatus("Stopped placing — click a unit to select it, or pick one in the palette to place"); }
         else setSelectedUnits([]);
+        return;
+      }
+
+      // The arrow keys nudge the selected locations by the snap step (a tile when snapping is off); Shift moves a pixel.
+      const arrow = activeLayer === "locations" ? ARROWS[e.key] : undefined;
+      if (arrow) {
+        const step = e.shiftKey ? 1 : locationSnap || 32;
+        const n = nudgeLocations({ dx: arrow[0] * step, dy: arrow[1] * step });
+        if (n > 0) { e.preventDefault(); setStatus(`Moved ${n} location${n === 1 ? "" : "s"} by ${step} px`); }
         return;
       }
 
@@ -115,5 +137,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, setSelectedUnits, setSelectedDoodads, setSelectedSprites, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer]);
 }

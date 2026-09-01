@@ -159,6 +159,53 @@ GRP walk from every sprites.dat entry as well as the unit types, so the graphics
 placeable sprite ship in `public/unit/` (that is also what draws tree canopies on the Doodads
 layer).
 
+## Locations layer
+
+The `MRGN` section: the rectangles triggers refer to. MRGN is a fixed table of slots — 64
+in original maps, 255 in Brood War — so nothing is ever inserted or removed: a new
+location takes the lowest free slot and deleting one blanks it, which is why a selection
+survives every edit. The layer looks and works the way StarEdit / SCMDraft's does:
+
+- Locations draw as **translucent teal plates** with their name in a dark tab at the top-left
+  (View ▸ *Location Names* hides the tabs); overlaps stack darker. An amber stripe on the tab
+  marks a location that excludes some elevation. Entering the layer switches View ▸ *Locations*
+  on if it was off.
+- **Drag on empty ground to create** a location: the ghost shows its size in tiles and it takes
+  the first free slot, named `Location <slot>` like StarEdit's. *New* in the palette (or *New
+  Location Here* in the context menu) drops a 4×4-tile one instead.
+- **Click** selects (Shift adds; the selected one goes gold and the minimap outlines it), **drag**
+  moves the whole selection, **drag one of the eight handles** resizes — through the opposite
+  edge flips the box rather than collapsing it. **Arrow keys** nudge by the snap step (Shift:
+  one pixel), **Delete** blanks the slots, **Esc** clears the selection.
+- **Snap** (palette: off / 8 / 16 / tile / 64 px) applies to creating, moving and resizing; a
+  move snaps the box's corner rather than the pointer, so a box picked up off-grid lands on it.
+- The palette lists every slot in use with its tile coordinates; a row selects and scrolls the
+  map to the location when it is off screen, double-click opens its properties. The properties
+  panel edits the name and the four edges in place (a value lands on Enter / blur) and ticks the
+  six elevations; **double-click** (or *Location Properties…*) edits everything at once, and
+  Scenario ▸ *Locations…* is the same list as a sortable table.
+- **Elevation flags** are stored inverted: a *set* bit **excludes** that elevation, so 0 means
+  the location applies everywhere and StarEdit's ticked box is a clear bit. The UI shows ticks.
+- Renaming reuses an identical string already in the table (StarEdit's own recycling) and
+  otherwise appends one; undo takes the appended string out again. Deleting keeps the old name
+  string, as StarEdit does.
+- A box stored **inverted** (right < left or bottom < top — a known trick) is drawn and hit-tested
+  as its normalised rectangle and moves without losing the inversion; dragging a handle
+  normalises it, and the properties dialog accepts an inverted box typed on purpose.
+
+**Location 64.** Slot 63 is *Anywhere*, the location every trigger can pick, and the game and
+other editors depend on it being exactly the map. It is pinned at the top of the list with a
+lock, never drawn on the map (it would wash every map in tint), never picked by a click, and
+cannot be moved, resized, renamed or deleted — the properties dialog shows it read-only.
+Creating a location on a map whose Anywhere is missing puts it back in the same undo step
+(keeping an existing name), and a map whose Anywhere has drifted off the map bounds shows an
+*off map* badge with a **Reset to map bounds** button. A short MRGN (or one missing entirely) is
+grown to its full capacity on the first edit.
+
+Every edit is one undo step and marks `MRGN` (and `STR`/`STRx` for a new name) dirty.
+`tests/location-edit.test.ts` pins the slot rules, the Anywhere handling, snapping, handles,
+picking and the round trip, and checks every fixture map keeps Anywhere in slot 63.
+
 ## Fog of War layer
 
 The **F** layer edits the `MASK` section: one byte per tile, bit *n* set meaning the tile starts

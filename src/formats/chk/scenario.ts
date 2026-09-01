@@ -94,7 +94,8 @@ export function setScenarioDescription(scn: Scenario, text: string) {
   markDirty(scn, strSectionName(scn), "SPRP");
 }
 
-function strSectionName(scn: Scenario): string {
+/** Which section the string table is written to: STRx for Remastered maps, STR otherwise. */
+export function strSectionName(scn: Scenario): string {
   return scn.strings.extended ? "STRx" : "STR ";
 }
 

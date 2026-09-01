@@ -3,16 +3,17 @@ import { useStore } from "jotai";
 import { Sparkles, SquareDashed, User } from "lucide-react";
 import { scenarioAtom } from "../../atoms/documentAtoms";
 import { PLAYER_COLORS, playerColorIndex } from "../../data/players";
-import { SAMPLE_LOCATIONS, type SampleLocation } from "../../data/samples";
 import { UNIT_GROUPS, unitName } from "../../data/units";
 import { SPRITE_COUNT, spriteCatalogue } from "../../data/sprites";
-import { SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid, type SpriteRecord, type UnitRecord } from "../../formats/chk/sections/objects";
+import { ANYWHERE_INDEX, ELEVATION_MASK, ELEVATIONS, isLocationUsed, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid, type SpriteRecord, type UnitRecord } from "../../formats/chk/sections/objects";
 import { NO_UNIT } from "../../formats/dat/dat";
 import { spriteKind } from "../../editor/sprites";
+import { isAnywhereIntact, locationName } from "../../editor/locations";
+import { useLocationTools } from "../../hooks/useLocationTools";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
 import { SpritePreview } from "../panels/UnitPreview";
-import { Check, Field, Group, NumberInput, Select, TextInput } from "../ui";
+import { Button, Check, Field, Group, NumberInput, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -177,37 +178,94 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
 
 /* ── Location Properties ────────────────────────────────── */
 
+interface LocationForm {
+  name: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  elevationFlags: number;
+}
+
+/**
+ * Every field the MRGN record stores, on one location (payload `{ index }`): name, the
+ * four edges in pixels (an inverted box is accepted as typed), and the six elevation
+ * ticks. Anywhere (slot 63) is shown read-only, with a way to put it back on the map.
+ */
 export function LocationPropertiesDialog({ entry }: DialogProps) {
-  const loc = (entry.payload?.location as SampleLocation | undefined) ?? SAMPLE_LOCATIONS[1];
-  const [name, setName] = useState(loc.name);
-  const [l, setL] = useState(loc.x * 32);
-  const [t, setT] = useState(loc.y * 32);
-  const [r, setR] = useState((loc.x + loc.w) * 32);
-  const [b, setB] = useState((loc.y + loc.h) * 32);
+  const store = useStore();
+  const tools = useLocationTools();
+  const scenario = store.get(scenarioAtom);
+  const index = typeof entry.payload?.index === "number" ? entry.payload.index : -1;
+  const original = scenario?.locations[index] ?? null;
+  const [form, setForm] = useState<LocationForm | null>(() =>
+    scenario && original && isLocationUsed(original)
+      ? { name: locationName(scenario, index), left: original.left, top: original.top, right: original.right, bottom: original.bottom, elevationFlags: original.elevationFlags }
+      : null,
+  );
+
+  if (!scenario || !form || !original) {
+    return (
+      <DialogFrame dialogKey={entry.key} title="Location Properties" icon={<SquareDashed size={14} />} size="sm">
+        <p className="hint">Select a location on the map first.</p>
+      </DialogFrame>
+    );
+  }
+
+  const anywhere = index === ANYWHERE_INDEX;
+  const intact = isAnywhereIntact(scenario);
+  const set = (patch: Partial<LocationForm>) => setForm({ ...form, ...patch });
+  const has = (bit: number) => (form.elevationFlags & bit) === 0;
+  const setBit = (bit: number, on: boolean) => set({ elevationFlags: on ? form.elevationFlags & ~bit : form.elevationFlags | bit });
+  const apply = () => { if (!anywhere) tools.edit(index, form, `Edit location ${locationName(scenario, index)}`); };
+  const w = Math.abs(form.right - form.left), h = Math.abs(form.bottom - form.top);
+  const inverted = form.right < form.left || form.bottom < form.top;
+  const maxX = scenario.width * 32, maxY = scenario.height * 32;
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Location Properties" icon={<SquareDashed size={14} />} size="sm" showApply footerLeft={<span className="mono">Location #{loc.id}</span>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Location Properties"
+      icon={<SquareDashed size={14} />}
+      size="sm"
+      showApply={!anywhere}
+      onOk={apply}
+      footerLeft={<span className="mono">MRGN slot {index} · string #{original.nameIndex}</span>}
+    >
       <div className="form wide">
-        <Field label="Name"><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Name" hint={anywhere ? undefined : "A name already in the string table is reused; a new one is appended to it."}>
+          <TextInput value={form.name} disabled={anywhere} onChange={(e) => set({ name: e.target.value })} />
+        </Field>
       </div>
       <Group title="Bounds (pixels)">
         <div className="form" style={{ gridTemplateColumns: "max-content 1fr max-content 1fr" }}>
-          <Field label="Left"><NumberInput value={l} onChange={setL} min={0} step={32} /></Field>
-          <Field label="Top"><NumberInput value={t} onChange={setT} min={0} step={32} /></Field>
-          <Field label="Right"><NumberInput value={r} onChange={setR} min={0} step={32} /></Field>
-          <Field label="Bottom"><NumberInput value={b} onChange={setB} min={0} step={32} /></Field>
+          <Field label="Left"><NumberInput value={form.left} onChange={(v) => set({ left: v })} min={0} max={maxX} step={32} disabled={anywhere} /></Field>
+          <Field label="Top"><NumberInput value={form.top} onChange={(v) => set({ top: v })} min={0} max={maxY} step={32} disabled={anywhere} /></Field>
+          <Field label="Right"><NumberInput value={form.right} onChange={(v) => set({ right: v })} min={0} max={maxX} step={32} disabled={anywhere} /></Field>
+          <Field label="Bottom"><NumberInput value={form.bottom} onChange={(v) => set({ bottom: v })} min={0} max={maxY} step={32} disabled={anywhere} /></Field>
         </div>
-        <p className="hint" style={{ marginTop: 8 }}>{Math.abs(r - l) / 32} × {Math.abs(b - t) / 32} tiles · {Math.abs(r - l)} × {Math.abs(b - t)} px</p>
+        <p className="hint" style={{ marginTop: 8 }}>
+          {Number.isInteger(w / 32) ? w / 32 : (w / 32).toFixed(2)} × {Number.isInteger(h / 32) ? h / 32 : (h / 32).toFixed(2)} tiles · {w} × {h} px
+          {inverted ? " · inverted (right < left or bottom < top) — the game reads the normalised box" : ""}
+        </p>
       </Group>
-      <Group title="Elevation flags">
-        <div className="form" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <Check label="Low ground" defaultChecked />
-          <Check label="Low air" defaultChecked />
-          <Check label="Medium ground" defaultChecked />
-          <Check label="Medium air" defaultChecked />
-          <Check label="High ground" defaultChecked />
-          <Check label="High air" defaultChecked />
+      <Group title="Elevations">
+        <p className="hint" style={{ marginBottom: 6 }}>The location applies only on the ticked elevations; the file stores a set bit for each excluded one.</p>
+        <div className="form" style={{ gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
+          {ELEVATIONS.map((e) => <Check key={e.bit} label={e.label} checked={has(e.bit)} disabled={anywhere} onChange={(ev) => setBit(e.bit, ev.target.checked)} />)}
+        </div>
+        <div className="row" style={{ marginTop: 8, gap: 6 }}>
+          <Button size="sm" disabled={anywhere || form.elevationFlags === 0} onClick={() => set({ elevationFlags: 0 })}>All</Button>
+          <Button size="sm" disabled={anywhere || form.elevationFlags === ELEVATION_MASK} onClick={() => set({ elevationFlags: ELEVATION_MASK })}>None</Button>
+          <span className="faint mono">flags {hex(form.elevationFlags, 2)}</span>
         </div>
       </Group>
+      {anywhere && (
+        <p className="hint">
+          This is the 64th location — the “Anywhere” every trigger can pick. StarEdit keeps it exactly the map and refuses to edit it, and so does this editor.{" "}
+          {intact ? "It is intact." : <>It does not cover the map right now: <Button size="sm" onClick={() => tools.fixAnywhere()}>Reset to map bounds</Button></>}
+        </p>
+      )}
     </DialogFrame>
   );
 }

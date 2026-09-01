@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CloudFog,
   Clipboard,
+  Lock,
   Mountain,
   Pencil,
   Plus,
@@ -29,8 +30,11 @@ import {
   fogModeAtom,
   fogPlayersAtom,
   fogViewPlayerAtom,
+  LOCATION_SNAPS,
+  locationSnapAtom,
   mapTilesetAtom,
   placementOptionsAtom,
+  selectedLocationsAtom,
   spritePlaceOptionsAtom,
   spritePlacingAtom,
   unitOwnerAtom,
@@ -39,7 +43,10 @@ import {
   type EditorLayer,
 } from "../../atoms/editorAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { locationsAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
+import { useLocationTools } from "../../hooks/useLocationTools";
+import { ANYWHERE_INDEX, isLocationUsed } from "../../formats/chk/sections/objects";
 import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/fog";
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
@@ -50,7 +57,6 @@ import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
 import { spriteName } from "../../hooks/useSpriteTools";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
-import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { Button, Check, Tabs, Tip } from "../ui";
 import TerrainPalette, { BrushSelect } from "./TerrainPalette";
 import { DoodadThumb } from "./DoodadThumb";
@@ -372,28 +378,74 @@ function SpritePalette() {
 
 /* ── Locations ──────────────────────────────────────────── */
 
+const fmtTile = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+/**
+ * The MRGN slots in use, Anywhere pinned first with a lock. A row selects (Shift adds)
+ * and scrolls the map to the location when it is off screen; double-click opens its
+ * properties. Locations are made on the map — drag on empty ground — or with New, which
+ * drops a 4×4-tile one in the middle of the view.
+ */
 function LocationPalette() {
+  const scenario = useAtomValue(scenarioAtom);
+  const locations = useAtomValue(locationsAtom);
+  const selected = useAtomValue(selectedLocationsAtom);
+  const [snap, setSnap] = useAtom(locationSnapAtom);
   const open = useSetAtom(openDialogAtom);
-  const [sel, setSel] = useState(1);
+  const tools = useLocationTools();
+  const anywhere = scenario?.locations[ANYWHERE_INDEX];
+  const anywhereUsed = !!scenario && !!anywhere && isLocationUsed(anywhere);
+  const intact = !!scenario && isAnywhereIntact(scenario);
+  const capacity = scenario ? locationCapacity(scenario) - 1 : 0;
+  const first = selected[0];
+  const pick = (index: number, e: React.MouseEvent) => {
+    tools.select([index], e.shiftKey);
+    if (!e.shiftKey && index !== ANYWHERE_INDEX && !tools.inView(index)) tools.centerOn(index);
+  };
+
   return (
     <>
       <div className="palette-toolbar">
-        <Tip label="New location"><Button size="sm" icon><Plus size={12} /></Button></Tip>
-        <Tip label="Rename / properties"><Button size="sm" icon onClick={() => open("locationProperties", { location: SAMPLE_LOCATIONS[sel] })}><Pencil size={12} /></Button></Tip>
-        <Tip label="Delete"><Button size="sm" icon disabled={sel === 0}><Trash2 size={12} /></Button></Tip>
+        <Tip label="New location — 4×4 tiles in the middle of the view (or drag on the map)"><Button size="sm" icon disabled={!scenario} onClick={() => tools.createInView()}><Plus size={12} /></Button></Tip>
+        <Tip label="Location properties"><Button size="sm" icon disabled={first === undefined} onClick={() => open("locationProperties", { index: first })}><Pencil size={12} /></Button></Tip>
+        <Tip label="Delete"><Button size="sm" icon disabled={!selected.some((i) => i !== ANYWHERE_INDEX)} onClick={() => tools.deleteSelected()}><Trash2 size={12} /></Button></Tip>
         <span className="grow" />
-        <Check label="Snap to grid" defaultChecked />
+        <label className="row" style={{ gap: 4 }} title="The grid a create, move or resize snaps to">
+          <span className="faint" style={{ fontSize: 11 }}>Snap</span>
+          <select className="select" aria-label="Location snap" value={snap} onChange={(e) => setSnap(Number(e.target.value))} style={{ width: 66 }}>
+            {LOCATION_SNAPS.map((s) => <option key={s} value={s}>{s === 0 ? "off" : s === 32 ? "tile" : `${s} px`}</option>)}
+          </select>
+        </label>
       </div>
       <div className="palette-scroll">
-        {SAMPLE_LOCATIONS.map((l, i) => (
-          <div key={l.id} className={`loc-row ${sel === i ? "selected" : ""}`} onClick={() => setSel(i)} onDoubleClick={() => open("locationProperties", { location: l })}>
-            <span className="n">{l.id}</span>
-            <span>{l.name}</span>
-            <span className="coords">{l.x},{l.y} {l.w}×{l.h}</span>
+        {anywhereUsed && (
+          <div
+            className={`loc-row anywhere ${selected.includes(ANYWHERE_INDEX) ? "selected" : ""}`}
+            onClick={(e) => pick(ANYWHERE_INDEX, e)}
+            onDoubleClick={() => open("locationProperties", { index: ANYWHERE_INDEX })}
+            title="Slot 63 — the 64th location, every trigger's “Anywhere”. Fixed to the map; it cannot be moved, resized or deleted."
+          >
+            <span className="n">63</span>
+            <span className="name"><Lock size={10} />{locationName(scenario!, ANYWHERE_INDEX)}{!intact && <span className="badge warn">off map</span>}</span>
+            <span className="coords">{scenario!.width}×{scenario!.height}</span>
+          </div>
+        )}
+        {locations.map((l) => (
+          <div
+            key={l.index}
+            className={`loc-row ${selected.includes(l.index) ? "selected" : ""}`}
+            onClick={(e) => pick(l.index, e)}
+            onDoubleClick={() => open("locationProperties", { index: l.index })}
+            title={`${l.name} — slot ${l.index}${l.elevationFlags ? " · some elevations excluded" : ""}${l.inverted ? " · stored inverted" : ""}`}
+          >
+            <span className="n">{l.index}</span>
+            <span className="name">{l.name}{l.elevationFlags !== 0 && <span className="elev">▲</span>}</span>
+            <span className="coords">{fmtTile(l.x)},{fmtTile(l.y)} {fmtTile(l.w)}×{fmtTile(l.h)}</span>
           </div>
         ))}
+        {scenario && locations.length === 0 && <div className="hint" style={{ padding: "10px 8px" }}>No locations yet — drag on empty ground to create one.</div>}
       </div>
-      <div className="palette-footer"><span>{SAMPLE_LOCATIONS.length} / 255 locations</span><span>Double-click to edit</span></div>
+      <div className="palette-footer"><span>{locations.length} / {capacity} locations</span><span>slot 63 is Anywhere</span></div>
     </>
   );
 }

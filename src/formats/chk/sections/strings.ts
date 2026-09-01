@@ -86,3 +86,9 @@ export function setString(table: StringTable, index: number, text: string): numb
   table.strings.push(text);
   return table.strings.length - 1;
 }
+
+/** The lowest index holding exactly `text`, or -1 — StarEdit recycles identical strings rather than storing them twice. */
+export function findString(table: StringTable, text: string): number {
+  for (let i = 1; i < table.strings.length; i++) if (table.strings[i] === text) return i;
+  return -1;
+}

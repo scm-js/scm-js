@@ -2,11 +2,12 @@ import { useEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
   centerViewOnAtom, fogViewPlayerAtom, mapHeightAtom, mapTilesetAtom, mapWidthAtom, viewFlagsAtom, viewportRectAtom,
+  selectedLocationsAtom,
 } from "../../atoms/editorAtoms";
 import { fogImageData } from "../viewport/fog";
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { TILESET_BY_ID } from "../../data/tilesets";
-import { SAMPLE_LOCATIONS, SAMPLE_START_LOCATIONS } from "../../data/samples";
+import { SAMPLE_START_LOCATIONS } from "../../data/samples";
 import { playerColorHex } from "../../data/players";
 import { isResource, unitGeometry } from "../../editor/units";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
@@ -33,7 +34,8 @@ export default function MinimapPanel() {
   const centerView = useSetAtom(centerViewOnAtom);
   const mapLocations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
-  const locations = scenario ? mapLocations : SAMPLE_LOCATIONS.slice(1);
+  const locations = mapLocations;
+  const selectedLocations = useAtomValue(selectedLocationsAtom);
   const startLocations = scenario ? mapStarts : SAMPLE_START_LOCATIONS;
 
   useEffect(() => {
@@ -94,9 +96,11 @@ export default function MinimapPanel() {
     ctx.putImageData(img, ox, oy);
 
     if (flags.locations) {
-      ctx.strokeStyle = "rgba(79,209,197,0.7)";
       ctx.lineWidth = 1;
-      for (const l of locations) ctx.strokeRect(ox + l.x * scale + 0.5, oy + l.y * scale + 0.5, l.w * scale, l.h * scale);
+      for (const l of locations) {
+        ctx.strokeStyle = selectedLocations.includes(l.index) ? "#f4d08a" : "rgba(79,209,197,0.7)";
+        ctx.strokeRect(ox + l.x * scale + 0.5, oy + l.y * scale + 0.5, l.w * scale, l.h * scale);
+      }
     }
     // units as the game's minimap does: a dot per unit in its owner's colour, resources in cyan
     if (flags.units && scenario) {
@@ -133,7 +137,7 @@ export default function MinimapPanel() {
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
-  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, startLocations, fogViewPlayer]);
+  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.

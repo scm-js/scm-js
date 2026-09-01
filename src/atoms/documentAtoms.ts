@@ -2,13 +2,12 @@ import { atom, type Getter, type Setter } from "jotai";
 import {
   markDirty, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
 } from "../formats/chk/scenario";
-import { ANYWHERE_INDEX, isLocationUsed } from "../formats/chk/sections/objects";
-import { getString } from "../formats/chk/sections/strings";
+import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
   doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
-  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom,
 } from "./editorAtoms";
 import { applyChanges, type TileChange } from "../editor/terrain";
@@ -17,6 +16,7 @@ import { applyUnitChanges, removeUnits, type UnitChange } from "../editor/units"
 import { applyFogChanges } from "../editor/fog";
 import { applyDoodadChanges, removeDoodads, type DoodadChange } from "../editor/doodads";
 import { applySpriteChanges, removeSprites, type SpriteChange } from "../editor/sprites";
+import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, type LocationChange } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 
@@ -40,6 +40,9 @@ export const unitsRevisionAtom = atom(0);
 
 /** Bumped whenever `scenario.doodads` or `scenario.sprites` changes (the lists are mutated in place); the Sprites layer's repaint trigger too. */
 export const doodadsRevisionAtom = atom(0);
+
+/** Bumped whenever `scenario.locations` changes (the slots are replaced in place); `locationsAtom` re-derives from it. */
+export const locationsRevisionAtom = atom(0);
 
 /** Bumped when the ISOM section is replaced wholesale (Rebuild ISOM), so its health is re-read. */
 export const isomRevisionAtom = atom(0);
@@ -91,6 +94,8 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(doodadPlacingAtom, false);
   set(selectedSpritesAtom, []);
   set(spritePlacingAtom, false);
+  set(selectedLocationsAtom, []);
+  set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
 
@@ -112,6 +117,8 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(doodadPlacingAtom, false);
   set(selectedSpritesAtom, []);
   set(spritePlacingAtom, false);
+  set(selectedLocationsAtom, []);
+  set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
 });
@@ -140,6 +147,8 @@ export interface HistoryEntry {
   doodads?: DoodadChange[];
   /** THG2 record changes: the Sprites layer's edits, and a doodad's overlay sprite coming and going with it. */
   sprites?: SpriteChange[];
+  /** MRGN slot replacements — create, move, resize, rename, delete (see editor/locations.ts); a rename may carry a string. */
+  locations?: LocationChange[];
   /** Fog of war edits to `scenario.mask` (see editor/fog.ts); `at` indexes the MASK byte. */
   fog?: TileChange[];
   /**
@@ -172,6 +181,7 @@ function applyEntry(scn: Scenario, entry: HistoryEntry, direction: "do" | "undo"
     () => { if (entry.doodads) applyDoodadChanges(scn, entry.doodads, direction); },
     () => { if (entry.sprites) applySpriteChanges(scn, entry.sprites, direction); },
     () => { if (entry.units) applyUnitChanges(scn, entry.units, direction); },
+    () => { if (entry.locations) applyLocationChanges(scn, entry.locations, direction); },
     () => { if (entry.fog) applyFogChanges(scn, entry.fog, direction); },
   ];
   if (direction === "undo") steps.reverse();
@@ -183,7 +193,7 @@ const touchesDoodads = (entry: HistoryEntry) =>
 
 const hasEdits = (entry: HistoryEntry) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0
-  || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined || touchesDoodads(entry);
+  || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined || touchesDoodads(entry) || (entry.locations?.length ?? 0) > 0;
 
 /** SCMDraft's default depth; a 7x7 stroke across a whole map is still only a few hundred KB. */
 const UNDO_LEVELS = 200;
@@ -203,9 +213,13 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   if (entry.units) set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
+  if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
 });
 
-/** Unit and doodad indices shift under an edit or undo, so a selection never survives one. */
+/**
+ * Unit and doodad indices shift under an edit or undo, so a selection never survives one.
+ * Location slots do not shift, so that selection only loses slots that stopped being in use.
+ */
 function afterUnitEdit(get: Getter, set: Setter, entry: HistoryEntry) {
   if (entry.units) {
     set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
@@ -216,6 +230,11 @@ function afterUnitEdit(get: Getter, set: Setter, entry: HistoryEntry) {
     set(selectedDoodadsAtom, []);
   }
   if (entry.sprites) set(selectedSpritesAtom, []);
+  if (entry.locations) {
+    set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+    const scn = get(scenarioAtom);
+    set(selectedLocationsAtom, get(selectedLocationsAtom).filter((i) => scn?.locations[i] && isLocationUsed(scn.locations[i])));
+  }
 }
 
 export const undoAtom = atom(
@@ -262,30 +281,43 @@ export const START_LOCATION_UNIT = 214;
 export interface ViewLocation {
   index: number;
   name: string;
-  /** Tile coordinates; MRGN stores pixels. */
+  /** Tile coordinates (fractional when the box is not tile-aligned); MRGN stores pixels. */
   x: number;
   y: number;
   w: number;
   h: number;
+  /** The normalised box in map pixels. */
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  /** Non-zero when some elevations are excluded (see `Elevation`). */
+  elevationFlags: number;
+  /** The file stores right < left or bottom < top — a deliberate trick in some maps. */
+  inverted: boolean;
 }
 
+/** The locations to draw: every slot in use except Anywhere, in slot order. */
 export const locationsAtom = atom<ViewLocation[]>((get) => {
   const scn = get(scenarioAtom);
+  get(locationsRevisionAtom); // the slots are replaced in place
   if (!scn) return [];
   const out: ViewLocation[] = [];
-  scn.locations.forEach((l, index) => {
+  scn.locations.forEach((l: LocationRecord, index) => {
     if (!isLocationUsed(l)) return;
     // "Anywhere" spans the whole map: drawing it would wash every map in location tint.
     if (index === ANYWHERE_INDEX) return;
-    const left = Math.min(l.left, l.right);
-    const top = Math.min(l.top, l.bottom);
+    const b = boundsOf(l);
     out.push({
       index,
-      name: getString(scn.strings, l.nameIndex) ?? `Location ${index + 1}`,
-      x: left / 32,
-      y: top / 32,
-      w: Math.abs(l.right - l.left) / 32,
-      h: Math.abs(l.bottom - l.top) / 32,
+      name: locationName(scn, index),
+      x: b.left / 32,
+      y: b.top / 32,
+      w: (b.right - b.left) / 32,
+      h: (b.bottom - b.top) / 32,
+      ...b,
+      elevationFlags: l.elevationFlags,
+      inverted: isInverted(l),
     });
   });
   return out;
@@ -351,4 +383,32 @@ export const deleteSelectedUnitsAtom = atom(null, (get, set) => {
   set(selectedUnitsAtom, []);
   set(commitEditAtom, { label: `Delete ${units.length} unit${units.length === 1 ? "" : "s"}`, changes: [], units });
   return units.length;
+});
+
+/* ── Location selection edits ────────────────────────────── */
+
+/** Blank the selected slots (Anywhere is skipped) as one undo step. Returns how many went. */
+export const deleteSelectedLocationsAtom = atom(null, (get, set) => {
+  const scn = get(scenarioAtom);
+  const selected = get(selectedLocationsAtom);
+  if (!scn || selected.length === 0) return 0;
+  const locations = removeLocations(scn, selected);
+  if (locations.length === 0) return 0;
+  const label = locations.length === 1 ? `Delete location ${locationName(scn, locations[0].index)}` : `Delete ${locations.length} locations`;
+  applyLocationChanges(scn, locations);
+  set(selectedLocationsAtom, []);
+  set(commitEditAtom, { label, changes: [], locations });
+  return locations.length;
+});
+
+/** Shift the selected locations by a pixel delta (the arrow keys) as one undo step. Returns how many moved. */
+export const nudgeSelectedLocationsAtom = atom(null, (get, set, d: { dx: number; dy: number }) => {
+  const scn = get(scenarioAtom);
+  const selected = get(selectedLocationsAtom);
+  if (!scn || selected.length === 0) return 0;
+  const locations = moveLocations(scn, selected, d.dx, d.dy);
+  if (locations.length === 0) return 0;
+  applyLocationChanges(scn, locations);
+  set(commitEditAtom, { label: locations.length === 1 ? `Move location ${locationName(scn, locations[0].index)}` : `Move ${locations.length} locations`, changes: [], locations });
+  return locations.length;
 });

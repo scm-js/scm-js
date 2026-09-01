@@ -115,6 +115,26 @@ sprite's a units.dat id. `makeSprite` writes StarEdit's flags (pure → `0x1000`
 seeds the GRP walk from all 517 sprites.dat images so pure sprites (and doodad overlays) can be drawn.
 `tests/sprite-edit.test.ts` pins the flags, ordering and the THG2 round trip.
 
+### Locations (`src/editor/locations.ts`, `src/hooks/useLocationTools.ts`)
+
+`scenario.locations` is the `MRGN` table — fixed slots (64 original / 255 BW, `locationCapacity`),
+never inserted into or removed from — so `LocationChange { index, before, after }` is always a
+replacement and `selectedLocationsAtom` (slot indices) survives edits; `afterUnitEdit` only prunes
+slots that stopped being `isLocationUsed`. A change may carry a `string` (`LocationStringChange`)
+when a name had to be appended to the string table (`nameString` reuses an identical string first,
+like StarEdit); `applyLocationChanges` pops it again on undo and marks `MRGN` + `STR`/`STRx`.
+`locationsRevisionAtom` is the repaint trigger and `locationsAtom` (the drawable list, Anywhere
+excluded, normalised px bounds) derives from it. **Slot 63 is Anywhere** and is protected
+everywhere: `editable()` filters it out of every builder, `locationAt` never picks it, the
+viewport draws no box or handles for it, and the only writer is `restoreAnywhere` (also folded
+into `addLocation` when the slot is unused). `ensureLocationSlots` grows a short table to
+capacity outside the undo model (blank slots mean nothing). Elevation bits are *inverted* (set =
+excluded; `Elevation`/`ELEVATIONS` in `sections/objects.ts`). The hook applies moves/resizes live
+during a drag (`beginMove`/`beginResize` → `dragTo` → `endDrag` commits one entry); snapping is
+`locationSnapAtom` (0 = off) and a move snaps the first box's corner, not the pointer.
+`dragBounds` turns a create-drag into the grid cells it touched. `tests/location-edit.test.ts`
+pins all of this, including against the fixture maps.
+
 ### Fog of war (`src/editor/fog.ts`, `src/hooks/useFogTools.ts`, `src/components/viewport/fog.ts`)
 
 `scenario.mask` is the `MASK` section (one byte per tile, bit n = player n+1 starts *unexplored*),

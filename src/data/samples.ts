@@ -1,25 +1,5 @@
 /** Placeholder scenario content so the skeleton UI has something to show. */
 
-export interface SampleLocation {
-  id: number;
-  name: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-export const SAMPLE_LOCATIONS: SampleLocation[] = [
-  { id: 63, name: "Anywhere", x: 0, y: 0, w: 128, h: 128 },
-  { id: 0, name: "Beacon Alpha", x: 18, y: 14, w: 6, h: 6 },
-  { id: 1, name: "Beacon Bravo", x: 104, y: 108, w: 6, h: 6 },
-  { id: 2, name: "Center Arena", x: 52, y: 52, w: 24, h: 24 },
-  { id: 3, name: "P1 Base", x: 6, y: 6, w: 20, h: 16 },
-  { id: 4, name: "P2 Base", x: 102, y: 106, w: 20, h: 16 },
-  { id: 5, name: "North Expo", x: 60, y: 4, w: 12, h: 10 },
-  { id: 6, name: "South Expo", x: 56, y: 114, w: 12, h: 10 },
-];
-
 export const SAMPLE_START_LOCATIONS: { player: number; x: number; y: number }[] = [
   { player: 0, x: 12, y: 12 },
   { player: 1, x: 116, y: 116 },

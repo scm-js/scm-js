@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { BookOpen, CircleX, Info, Keyboard, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { TILESETS } from "../../data/tilesets";
-import { SAMPLE_LOCATIONS } from "../../data/samples";
+import { locationsAtom } from "../../atoms/documentAtoms";
 import { UNIT_GROUPS, unitName } from "../../data/units";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -24,6 +24,8 @@ const HOTKEYS: [string, string][] = [
   ["Layer: Terrain / Doodads / Units", "T · D · U"],
   ["Layer: Sprites / Locations / Fog", "S · L · F"],
   ["Layer: Cut/Copy/Paste", "C"],
+  ["Nudge selected locations (snap step / 1 px)", "Arrows · Shift+Arrows"],
+  ["Delete selection / clear selection", "Del · Esc"],
   ["Trigger Editor", "Ctrl+T"],
   ["Text Trigger Editor", "Ctrl+Shift+T"],
   ["Preferences", "Ctrl+,"],
@@ -202,7 +204,8 @@ export function ValidateMapDialog({ entry }: DialogProps) {
 export function FindDialog({ entry }: DialogProps) {
   const [kind, setKind] = useState("Units");
   const [q, setQ] = useState("");
-  const pool = kind === "Units" ? UNIT_GROUPS.flatMap((g) => g.units.map(unitName)) : kind === "Locations" ? SAMPLE_LOCATIONS.map((l) => l.name) : [];
+  const locations = useAtomValue(locationsAtom);
+  const pool = kind === "Units" ? UNIT_GROUPS.flatMap((g) => g.units.map(unitName)) : kind === "Locations" ? locations.map((l) => `${l.name} (slot ${l.index})`) : [];
   const results = q ? pool.filter((p) => p.toLowerCase().includes(q.toLowerCase())).slice(0, 50) : [];
   return (
     <DialogFrame dialogKey={entry.key} title="Find" icon={<Search size={14} />} size="sm" okLabel="Go To" footerLeft={<span>{results.length} result(s)</span>}>

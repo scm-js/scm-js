@@ -20,11 +20,13 @@ import {
   fogPlayersAtom,
   fogViewPlayerAtom,
   gridSizeAtom,
+  locationSnapAtom,
   mapHeightAtom,
   mapTilesetAtom,
   mapWidthAtom,
   rectVariationAtom,
   selectedDoodadsAtom,
+  selectedLocationsAtom,
   selectedSpritesAtom,
   selectedUnitsAtom,
   spritePlaceOptionsAtom,
@@ -35,6 +37,7 @@ import {
   viewFlagsAtom,
   viewportRectAtom,
   zoomAtom,
+  type ViewFlags,
 } from "../../atoms/editorAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
@@ -44,12 +47,14 @@ import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDoodadTools";
 import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
 import { useFogTools } from "../../hooks/useFogTools";
+import { useLocationTools } from "../../hooks/useLocationTools";
+import { boundsOf, HANDLE_CURSOR, HANDLES, handlePoint } from "../../editor/locations";
 import { drawFogOverlay } from "./fog";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
 import { getImageFrame, getUnitSprite, subunitOf } from "../../formats/units/sprites";
 import { UnitAnimator, type SpriteState } from "../../formats/units/animate";
 import { NO_UNIT } from "../../formats/dat/dat";
-import { SpriteFlag, UnitState, UnitUsed } from "../../formats/chk/sections/objects";
+import { ANYWHERE_INDEX, SpriteFlag, UnitState, UnitUsed } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { placementBox, unitBox, unitGeometry } from "../../editor/units";
 import type { TileRect } from "../../editor/doodads";
@@ -61,13 +66,37 @@ import { cycleStepAt, GAME_FRAME_MS } from "../../formats/tileset/cycle";
 import { megatileForTile } from "../../formats/tileset/decode";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { playerColorHex, playerColorIndex } from "../../data/players";
-import { SAMPLE_LOCATIONS, SAMPLE_START_LOCATIONS } from "../../data/samples";
+import { SAMPLE_START_LOCATIONS } from "../../data/samples";
 import { hashNoise } from "./noise";
 
 const TILE = 32;
 
+/**
+ * Entering a layer switches its overlay on; leaving switches it back off if the layer
+ * was what turned it on. The View toggle stays in charge in between, so unticking it
+ * hides the overlay even while editing.
+ */
+function useAutoShow(active: boolean, key: keyof ViewFlags, setFlags: (fn: (f: ViewFlags) => ViewFlags) => void) {
+  const auto = useRef(false);
+  useEffect(() => {
+    if (active) {
+      setFlags((f) => {
+        if (f[key]) return f;
+        auto.current = true;
+        return { ...f, [key]: true };
+      });
+    } else if (auto.current) {
+      auto.current = false;
+      setFlags((f) => (f[key] ? { ...f, [key]: false } : f));
+    }
+  }, [active, key, setFlags]);
+}
+
+const fmtTiles = (px: number) => (Number.isInteger(px / TILE) ? String(px / TILE) : (px / TILE).toFixed(2));
+
 export default function MapViewport() {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
@@ -90,6 +119,11 @@ export default function MapViewport() {
   const doodadGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
   /** And for the Sprites layer, which moves live like units do. */
   const spriteGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
+  /**
+   * A Locations-layer gesture: moving the selection, dragging a handle, a click on empty
+   * ground (clears the selection) that becomes a create-drag once it travels.
+   */
+  const locationGestureRef = useRef<{ mode: "move" | "resize" | "create" | "click"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
@@ -135,6 +169,10 @@ export default function MapViewport() {
   const activeSprite = useAtomValue(activeSpriteAtom);
   const activeUnitSprite = useAtomValue(activeUnitSpriteAtom);
   const spritePlaceOptions = useAtomValue(spritePlaceOptionsAtom);
+  const locationTools = useLocationTools();
+  const selectedLocations = useAtomValue(selectedLocationsAtom);
+  // Only read so the HUD and the create ghost redraw when the snap changes.
+  const locationSnap = useAtomValue(locationSnapAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
   const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
@@ -158,10 +196,10 @@ export default function MapViewport() {
   const spritesEditing = layer === "sprites" && scenario !== null;
   const spritePlacing = spritesEditing && placingSprite;
   const fogPainting = layer === "fog" && scenario !== null;
+  const locationsEditing = layer === "locations" && scenario !== null;
   const showFog = scenario !== null && flags.fog;
-  const mapLocations = useAtomValue(locationsAtom);
+  const locations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
-  const locations = scenario ? mapLocations : SAMPLE_LOCATIONS.slice(1);
   const startLocations = scenario ? mapStarts : SAMPLE_START_LOCATIONS;
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
 
@@ -491,23 +529,77 @@ export default function MapViewport() {
       }
     }
 
-    // locations
-    if (flags.locations) {
+    // locations: StarEdit's translucent plates with the name in the corner; overlaps
+    // stack darker, the selection goes gold and grows handles, the one under the pointer
+    // lights up. Anywhere (slot 63) is never drawn — it is the whole map.
+    if (flags.locations && scenario) {
+      const selectedSet = new Set(locationsEditing ? selectedLocations : []);
+      const hvl = hoverPointRef.current;
+      const hoverLoc = locationsEditing && hvl && !locationGestureRef.current && !locationTools.handleAtPoint(hvl, zoom) ? locationTools.pickAt(hvl) : -1;
+      const uiFont = getComputedStyle(document.body).getPropertyValue("--font-ui");
+      const fontPx = Math.max(10, Math.min(13, tilePx * 0.4));
+      ctx.font = `${fontPx}px ${uiFont}`;
       ctx.lineWidth = 1;
-      ctx.font = `${Math.max(10, Math.min(13, tilePx * 0.4))}px ${getComputedStyle(document.body).getPropertyValue("--font-ui")}`;
       for (const l of locations) {
-        const lx = l.x * tilePx - sx, ly = l.y * tilePx - sy, lw = l.w * tilePx, lh = l.h * tilePx;
+        const lx = l.left * zoom - sx, ly = l.top * zoom - sy, lw = (l.right - l.left) * zoom, lh = (l.bottom - l.top) * zoom;
         if (lx > size.w || ly > size.h || lx + lw < 0 || ly + lh < 0) continue;
-        ctx.fillStyle = "rgba(79,209,197,0.12)";
+        const sel = selectedSet.has(l.index), hot = l.index === hoverLoc;
+        ctx.fillStyle = sel ? "rgba(230,185,92,0.22)" : hot ? "rgba(79,209,197,0.20)" : "rgba(79,209,197,0.13)";
         ctx.fillRect(lx, ly, lw, lh);
-        ctx.strokeStyle = "rgba(79,209,197,0.85)";
-        ctx.strokeRect(Math.round(lx) + 0.5, Math.round(ly) + 0.5, Math.round(lw), Math.round(lh));
+        const bx = Math.round(lx) + 0.5, by = Math.round(ly) + 0.5, bw = Math.round(lw), bh = Math.round(lh);
+        // A dark hairline inside the coloured edge keeps the box legible over bright ground.
+        if (bw > 2 && bh > 2) {
+          ctx.strokeStyle = "rgba(0,0,0,0.4)";
+          ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
+        }
+        ctx.strokeStyle = sel ? "#f4d08a" : hot ? "#bff5ef" : "rgba(79,209,197,0.9)";
+        ctx.strokeRect(bx, by, Math.max(1, bw), Math.max(1, bh));
         if (flags.locationNames && tilePx >= 8) {
-          const tw = ctx.measureText(l.name).width + 8;
+          const tw = ctx.measureText(l.name).width;
+          const plateH = fontPx + 5;
+          ctx.fillStyle = sel ? "rgba(58,44,10,0.85)" : "rgba(10,12,16,0.78)";
+          ctx.fillRect(lx + 1, ly + 1, tw + 8, plateH);
+          // An elevation-restricted location gets an amber tab on its plate.
+          if (l.elevationFlags !== 0) {
+            ctx.fillStyle = "#e0a545";
+            ctx.fillRect(lx + 1, ly + 1, 2, plateH);
+          }
+          ctx.fillStyle = sel ? "#f4d08a" : "#bff5ef";
+          ctx.fillText(l.name, lx + 5, ly + 1 + fontPx);
+        }
+      }
+      if (locationsEditing) {
+        // Resize handles on a single selection; Anywhere has none, it cannot be resized.
+        const only = selectedLocations.length === 1 && selectedLocations[0] !== ANYWHERE_INDEX ? scenario.locations[selectedLocations[0]] : null;
+        if (only) {
+          const b = boundsOf(only);
+          for (const h of HANDLES) {
+            const p = handlePoint(b, h);
+            const hx = Math.round(p.x * zoom - sx), hy = Math.round(p.y * zoom - sy);
+            ctx.fillStyle = "#f4d08a";
+            ctx.fillRect(hx - 3, hy - 3, 7, 7);
+            ctx.strokeStyle = "rgba(0,0,0,0.75)";
+            ctx.strokeRect(hx - 3.5, hy - 3.5, 8, 8);
+          }
+        }
+        // The box a create-drag is about to make, with its size in tiles.
+        const g = locationGestureRef.current;
+        const ghost = g?.mode === "create" ? locationTools.dragRect(g.from, g.to) : null;
+        if (ghost) {
+          const gx = ghost.left * zoom - sx, gy = ghost.top * zoom - sy, gw = (ghost.right - ghost.left) * zoom, gh = (ghost.bottom - ghost.top) * zoom;
+          ctx.fillStyle = "rgba(230,185,92,0.14)";
+          ctx.fillRect(gx, gy, gw, gh);
+          ctx.strokeStyle = "#e6b95c";
+          ctx.setLineDash([4, 3]);
+          ctx.strokeRect(Math.round(gx) + 0.5, Math.round(gy) + 0.5, Math.round(gw), Math.round(gh));
+          ctx.setLineDash([]);
+          const label = `${fmtTiles(ghost.right - ghost.left)} × ${fmtTiles(ghost.bottom - ghost.top)}`;
+          ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+          const tw = ctx.measureText(label).width;
           ctx.fillStyle = "rgba(10,12,16,0.8)";
-          ctx.fillRect(lx + 1, ly + 1, tw, 16);
-          ctx.fillStyle = "#bff5ef";
-          ctx.fillText(l.name, lx + 5, ly + 13);
+          ctx.fillRect(gx + gw + 4, gy + gh + 4, tw + 8, 15);
+          ctx.fillStyle = "#f4d08a";
+          ctx.fillText(label, gx + gw + 8, gy + gh + 15);
         }
       }
     }
@@ -626,7 +718,7 @@ export default function MapViewport() {
           ctx.setLineDash([]);
         }
       }
-    } else if (hv && !doodadsEditing && !spritesEditing) {
+    } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing) {
       const b = layer === "terrain" || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
@@ -713,25 +805,15 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap]);
 
-  /* ── fog layer shows its overlay ─────────────────────── */
-  // Entering the Fog of War layer switches the overlay on; leaving switches it back off
-  // if the layer was what turned it on. The View toggle stays in charge in between, so
-  // unticking it hides the fog even while painting.
-  const fogAutoShown = useRef(false);
+  /* ── the fog and locations layers show their overlays ── */
+  useAutoShow(layer === "fog", "fog", setFlags);
+  useAutoShow(layer === "locations", "locations", setFlags);
+  // The Locations layer sets its own pointer cursor (move / resize); drop it on leaving.
   useEffect(() => {
-    if (layer === "fog") {
-      setFlags((f) => {
-        if (f.fog) return f;
-        fogAutoShown.current = true;
-        return { ...f, fog: true };
-      });
-    } else if (fogAutoShown.current) {
-      fogAutoShown.current = false;
-      setFlags((f) => (f.fog ? { ...f, fog: false } : f));
-    }
-  }, [layer, setFlags]);
+    if (layer !== "locations" && surfaceRef.current) surfaceRef.current.style.cursor = "";
+  }, [layer]);
 
   /* ── sizing ──────────────────────────────────────────── */
   useLayoutEffect(() => {
@@ -887,6 +969,30 @@ export default function MapViewport() {
       draw();
       return;
     }
+    if (locationsEditing) {
+      const p = pointAt(e);
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const handle = locationTools.handleAtPoint(p, zoom);
+      if (handle) {
+        locationGestureRef.current = { mode: "resize", from: p, to: p, additive: false };
+        locationTools.beginResize(selectedLocations[0], handle);
+      } else {
+        const hit = locationTools.pickAt(p);
+        if (hit >= 0) {
+          // Clicking a location selects it (shift toggles) and starts dragging the selection.
+          if (e.shiftKey) locationTools.select([hit], true);
+          else if (!selectedLocations.includes(hit)) locationTools.select([hit]);
+          locationGestureRef.current = { mode: "move", from: p, to: p, additive: false };
+          locationTools.beginMove(p);
+        } else {
+          // Empty ground: a drag creates a location, a click clears the selection.
+          locationGestureRef.current = { mode: "click", from: p, to: p, additive: e.shiftKey };
+        }
+      }
+      draw();
+      return;
+    }
     if (fogPainting) {
       // Alt-click reads the tile's fog into the player ticks; Shift paints the opposite of the palette's mode.
       if (e.altKey) { fogTools.pickAt(t.x, t.y); return; }
@@ -944,6 +1050,18 @@ export default function MapViewport() {
       draw();
       return;
     }
+    const lGesture = locationGestureRef.current;
+    if (lGesture) {
+      const p = clampPoint(point);
+      lGesture.to = p;
+      if (lGesture.mode === "move" || lGesture.mode === "resize") locationTools.dragTo(p);
+      else if (lGesture.mode === "click" && Math.hypot(p.px - lGesture.from.px, p.py - lGesture.from.py) * zoom > 4) lGesture.mode = "create";
+      hoverRef.current = clampToMap(t);
+      hoverPointRef.current = p;
+      setCursor(hoverRef.current);
+      draw();
+      return;
+    }
     const stroking = strokeRef.current;
     if (stroking) {
       // Dragging outside the map keeps painting along the edge, like StarEdit.
@@ -967,8 +1085,13 @@ export default function MapViewport() {
       return;
     }
     hoverPointRef.current = point;
+    if (locationsEditing) {
+      // A handle or a location under the pointer shows what a press would do.
+      const h = locationTools.handleAtPoint(point, zoom);
+      e.currentTarget.style.cursor = h ? HANDLE_CURSOR[h] : locationTools.pickAt(point) >= 0 ? "move" : "";
+    }
     const diamondKey = terrainMode === "isom" ? `${diamondAt(point.px, point.py).x},${diamondAt(point.px, point.py).y}` : "";
-    if (spritesEditing || !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
+    if (spritesEditing || locationsEditing || !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
       hoverRef.current = t;
       hoverDiamondRef.current = diamondKey;
       setCursor(t);
@@ -1024,6 +1147,20 @@ export default function MapViewport() {
       draw();
       return;
     }
+    const lGesture = locationGestureRef.current;
+    if (lGesture) {
+      locationGestureRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      if (lGesture.mode === "move" || lGesture.mode === "resize") locationTools.endDrag();
+      else if (lGesture.mode === "create") {
+        const box = locationTools.dragRect(lGesture.from, lGesture.to);
+        if (box) locationTools.create(box);
+      } else if (!lGesture.additive) {
+        locationTools.select([]);
+      }
+      draw();
+      return;
+    }
     if (!strokeRef.current) return;
     strokeRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
@@ -1031,16 +1168,28 @@ export default function MapViewport() {
     draw();
   };
 
-  const onLeave = () => { hoverRef.current = null; hoverPointRef.current = null; draw(); };
+  const onLeave = (e: React.PointerEvent<HTMLDivElement>) => { hoverRef.current = null; hoverPointRef.current = null; e.currentTarget.style.cursor = ""; draw(); };
   const onContextMenu = (e: React.MouseEvent) => {
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
     if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); draw(); return; }
+    if (locationsEditing && hoverPointRef.current) {
+      // Right-clicking a location selects it so the menu's items act on it.
+      const hit = locationTools.pickAt(hoverPointRef.current);
+      if (hit >= 0 && !selectedLocations.includes(hit)) locationTools.select([hit]);
+    }
     menuTileRef.current = hoverRef.current;
     menuPointRef.current = hoverPointRef.current;
   };
   const onDoubleClick = (e: React.MouseEvent) => {
+    if (locationsEditing) {
+      const hit = locationTools.pickAt(pointAt(e));
+      if (hit < 0) return;
+      if (!selectedLocations.includes(hit)) locationTools.select([hit]);
+      open("locationProperties", { index: hit });
+      return;
+    }
     if (spritesEditing) {
       const hit = spriteTools.pickAt(pointAt(e));
       if (hit < 0) return;
@@ -1093,7 +1242,13 @@ export default function MapViewport() {
           { label: "Pick Fogged Players Here", onSelect: withMenuTile(fogTools.pickAt), disabled: !fogPainting },
         ]
       : []),
-    ...(layer === "locations" ? [{ label: "Location Properties…", onSelect: () => open("locationProperties", { location: SAMPLE_LOCATIONS[1] }) }] : []),
+    ...(layer === "locations"
+      ? [
+          { label: "Location Properties…", disabled: selectedLocations.length === 0, onSelect: () => open("locationProperties", { index: selectedLocations[0] }) },
+          { label: `Delete ${selectedLocations.length > 1 ? `${selectedLocations.length} Locations` : "Location"}`, disabled: !selectedLocations.some((i) => i !== ANYWHERE_INDEX), onSelect: () => locationTools.deleteSelected() },
+          { label: "New Location Here", disabled: !locationsEditing, onSelect: withMenuTile((x, y) => locationTools.create({ left: x * TILE, top: y * TILE, right: (x + 4) * TILE, bottom: (y + 4) * TILE })) },
+        ]
+      : []),
     ...(layer === "sprites"
       ? [
           { label: "Sprite Properties…", disabled: selectedSprites.length === 0, onSelect: () => open("spriteProperties", { indices: selectedSprites }) },
@@ -1124,6 +1279,7 @@ export default function MapViewport() {
         <ContextMenu.Trigger asChild>
           <div ref={scrollerRef} className="scroller" onScroll={draw} tabIndex={0}>
             <div
+              ref={surfaceRef}
               className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing ? "placing" : ""}`}
               style={{ width: worldW, height: worldH }}
               onPointerDown={onDown}
@@ -1178,6 +1334,7 @@ export default function MapViewport() {
         {unitPlacing && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
         {spritePlacing && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
         {doodadPlacing && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
+        {locationsEditing && <span className="hud-chip">locations · drag empty ground to create · snap <b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
         {showFog && <span className="hud-chip">fog of war <b>P{fogViewPlayer + 1}</b>{fogPainting && <> · {fogMode === "fog" ? "painting" : "clearing"} · Shift inverts</>}</span>}
       </div>
     </div>

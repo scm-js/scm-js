@@ -1,19 +1,22 @@
+import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { MousePointer2, Trash2 } from "lucide-react";
+import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom,
   brushSizeAtom, cursorTileAtom, doodadPlacementAtom,
   doodadPlacingAtom, fogModeAtom, fogPlayersAtom,
-  fogViewPlayerAtom, mapTilesetAtom,
-  rectVariationAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, spritePlacingAtom, terrainModeAtom,
+  fogViewPlayerAtom, locationSnapAtom, mapTilesetAtom,
+  rectVariationAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, spritePlacingAtom, terrainModeAtom,
   unitOwnerAtom, unitPlacingAtom,
 } from "../../atoms/editorAtoms";
-import { doodadsRevisionAtom, scenarioAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
+import { doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
+import { boundsOf, isAnywhereIntact, isInverted, locationName } from "../../editor/locations";
+import { useLocationTools } from "../../hooks/useLocationTools";
+import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { PLAYER_COLORS, playerColorHex, playerColorIndex } from "../../data/players";
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
-import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
 import { unitName } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
@@ -343,6 +346,118 @@ function SpriteProps() {
   );
 }
 
+/** A text field that commits on Enter / blur rather than every keystroke, so a rename is one undo step. */
+function CommitText({ value, disabled, onCommit, ...rest }: { value: string; disabled?: boolean; onCommit: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "onBlur" | "onKeyDown">) {
+  const [draft, setDraft] = useState(value);
+  return (
+    <input
+      {...rest}
+      className="input"
+      value={draft}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onCommit(draft); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value); e.currentTarget.blur(); } }}
+    />
+  );
+}
+
+/** The same for a number: the arrow keys / spinner step by `step`, and a value lands on blur or Enter. */
+function CommitNumber({ value, step, max, disabled, onCommit, label }: { value: number; step: number; max: number; disabled?: boolean; onCommit: (v: number) => void; label: string }) {
+  const [draft, setDraft] = useState(String(value));
+  const commit = () => {
+    const v = Math.round(Number(draft));
+    if (Number.isFinite(v) && v !== value) onCommit(Math.min(max, Math.max(0, v)));
+    else setDraft(String(value));
+  };
+  return (
+    <input
+      className="input mono"
+      type="number"
+      aria-label={label}
+      value={draft}
+      min={0}
+      max={max}
+      step={step}
+      disabled={disabled}
+      style={{ width: 68 }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(String(value)); e.currentTarget.blur(); } }}
+    />
+  );
+}
+
+/**
+ * The selected location: name and bounds edited in place, the elevation ticks, and the
+ * Anywhere slot's lock. Bounds are pixels, like the dialog; the size reads in tiles.
+ */
+function LocationProps() {
+  const scenario = useAtomValue(scenarioAtom);
+  const selected = useAtomValue(selectedLocationsAtom);
+  useAtomValue(locationsRevisionAtom); // slots are replaced in place on move / resize / edit
+  const snap = useAtomValue(locationSnapAtom);
+  const open = useSetAtom(openDialogAtom);
+  const tools = useLocationTools();
+  const index = selected[0];
+  const rec = scenario && index !== undefined ? scenario.locations[index] : undefined;
+
+  if (!scenario || !rec || !isLocationUsed(rec)) {
+    return (
+      <div className="props-empty">
+        <SquareDashed size={20} />
+        Drag on empty ground to create a location. Click one to select it (Shift adds), drag it to move, drag its handles to resize; double-click for every field.
+      </div>
+    );
+  }
+
+  const anywhere = index === ANYWHERE_INDEX;
+  const many = selected.length > 1;
+  const name = locationName(scenario, index);
+  const b = boundsOf(rec);
+  const intact = isAnywhereIntact(scenario);
+  const step = snap || 1;
+  const maxX = scenario.width * 32, maxY = scenario.height * 32;
+  const edge = (key: "left" | "top" | "right" | "bottom", max: number) => (
+    <CommitNumber key={`${index}:${key}:${rec[key]}`} label={`${key} edge`} value={rec[key]} step={step} max={max} disabled={anywhere} onCommit={(v) => tools.edit(index, { [key]: v })} />
+  );
+
+  return (
+    <div className="props">
+      <div className="span unit-head">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <CommitText key={`${index}:${name}`} value={name} disabled={anywhere} onCommit={(v) => tools.rename(index, v)} aria-label="Location name" style={{ width: "100%", fontWeight: 600 }} />
+          <div className="sub">slot {index}{anywhere ? " · Anywhere" : ""}{many ? ` · +${selected.length - 1} more` : ""} · string #{rec.nameIndex}</div>
+        </div>
+      </div>
+      <Row k="Left · Top"><div className="row" style={{ gap: 4 }}>{edge("left", maxX)}{edge("top", maxY)}</div></Row>
+      <Row k="Right · Btm"><div className="row" style={{ gap: 4 }}>{edge("right", maxX)}{edge("bottom", maxY)}</div></Row>
+      <Row k="Size"><span className="mono">{fmtTiles(b.right - b.left)} × {fmtTiles(b.bottom - b.top)}</span> tiles <span className="faint mono">{b.right - b.left}×{b.bottom - b.top}px</span></Row>
+      {isInverted(rec) && <div className="span hint">Stored inverted (right &lt; left or bottom &lt; top): the game reads the normalised box; dragging a handle normalises it.</div>}
+      <div className="props-section">Elevations{many ? <span className="faint"> · edits apply to all {selected.length}</span> : null} <span className="faint mono">0x{rec.elevationFlags.toString(16).toUpperCase().padStart(2, "0")}</span></div>
+      <div className="span" style={{ display: "grid", gridAutoFlow: "column", gridTemplateRows: "repeat(3, auto)", gap: "0 8px" }}>
+        {ELEVATIONS.map((e) => (
+          <Check key={e.bit} label={e.label} title="Ticked: the location applies on this elevation (its bit is clear in the file)" checked={(rec.elevationFlags & e.bit) === 0} disabled={anywhere} onChange={(ev) => tools.setElevation(e.bit, ev.target.checked)} />
+        ))}
+      </div>
+      {anywhere && (
+        <div className="span hint" style={{ marginTop: 6 }}>
+          {intact
+            ? "The 64th location — every trigger's “Anywhere”. It stays the whole map and cannot be moved, resized, renamed or deleted."
+            : <>Anywhere should cover the whole map but does not. <Button size="sm" onClick={() => tools.fixAnywhere()}>Reset to map bounds</Button></>}
+        </div>
+      )}
+      <div className="span row" style={{ marginTop: 6, gap: 6 }}>
+        <Button size="sm" onClick={() => open("locationProperties", { index })}>Location Properties…</Button>
+        <Button size="sm" onClick={() => tools.centerOn(index)} title="Scroll the map to this location"><Crosshair size={12} /></Button>
+        <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete" disabled={!selected.some((i) => i !== ANYWHERE_INDEX)}><Trash2 size={12} /></Button>
+      </div>
+    </div>
+  );
+}
+
+const fmtTiles = (px: number) => (Number.isInteger(px / 32) ? String(px / 32) : (px / 32).toFixed(2));
+
 /** The fog layer: what the brush does, whose fog is shown, and the tile under the pointer. */
 function FogProps() {
   const brush = useAtomValue(brushSizeAtom);
@@ -374,7 +489,6 @@ function FogProps() {
 
 export default function PropertiesPanel() {
   const layer = useAtomValue(activeLayerAtom);
-  const open = useSetAtom(openDialogAtom);
 
   if (layer === "terrain") return <TerrainProps />;
   if (layer === "units") return <UnitProps />;
@@ -382,30 +496,7 @@ export default function PropertiesPanel() {
   if (layer === "sprites") return <SpriteProps />;
   if (layer === "fog") return <FogProps />;
 
-  if (layer === "locations") {
-    const l = SAMPLE_LOCATIONS[1];
-    return (
-      <div className="props">
-        <div className="span row between"><strong>{l.name}</strong><span className="badge">sample</span></div>
-        <Row k="ID"><span className="mono">{l.id}</span></Row>
-        <Row k="Left / Top"><span className="mono">{l.x * 32}, {l.y * 32}</span></Row>
-        <Row k="Right / Bottom"><span className="mono">{(l.x + l.w) * 32}, {(l.y + l.h) * 32}</span></Row>
-        <Row k="Size"><span className="mono">{l.w} × {l.h} tiles</span></Row>
-        <div className="props-section">Elevation</div>
-        <div className="span col" style={{ gap: 0 }}>
-          <Check label="Low ground" defaultChecked />
-          <Check label="Medium ground" defaultChecked />
-          <Check label="High ground" defaultChecked />
-          <Check label="Low air" defaultChecked />
-          <Check label="Medium air" defaultChecked />
-          <Check label="High air" defaultChecked />
-        </div>
-        <div className="span" style={{ marginTop: 6 }}>
-          <Button size="sm" onClick={() => open("locationProperties", { location: l })}>Location Properties…</Button>
-        </div>
-      </div>
-    );
-  }
+  if (layer === "locations") return <LocationProps />;
 
   return (
     <div className="props-empty">

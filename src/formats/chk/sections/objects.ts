@@ -164,6 +164,23 @@ export const LOCATION_STRIDE = 20;
 /** Location index 63 (1-based 64) is the fixed "Anywhere" location. */
 export const ANYWHERE_INDEX = 63;
 
+/**
+ * `elevationFlags` bits. A *set* bit **excludes** that elevation from the location — the
+ * game tests a unit's position against the location only on the elevations whose bit is
+ * clear — so StarEdit's ticked "Low ground" box is bit 0 *clear*, and 0 means "everywhere".
+ */
+export const Elevation = { LowGround: 1, MediumGround: 2, HighGround: 4, LowAir: 8, MediumAir: 16, HighAir: 32 } as const;
+export const ELEVATIONS: readonly { bit: number; label: string }[] = [
+  { bit: Elevation.LowGround, label: "Low ground" },
+  { bit: Elevation.MediumGround, label: "Medium ground" },
+  { bit: Elevation.HighGround, label: "High ground" },
+  { bit: Elevation.LowAir, label: "Low air" },
+  { bit: Elevation.MediumAir, label: "Medium air" },
+  { bit: Elevation.HighAir, label: "High air" },
+];
+/** All six bits: the mask an elevation word is confined to. */
+export const ELEVATION_MASK = 0x3f;
+
 export function decodeLocations(data: Uint8Array): LocationRecord[] {
   const r = new Reader(data);
   const out: LocationRecord[] = [];

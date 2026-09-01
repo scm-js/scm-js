@@ -1,0 +1,71 @@
+/* ── Design tokens ─────────────────────────────────────────
+   A dark "console" palette in homage to StarEdit / SCMDraft /
+   StarForge, with StarCraft's gold + teal as the two accents.  */
+
+:root {
+  /* surfaces (darkest → lightest) */
+  --bg-0: #0a0c10; /* map void, sunken wells         */
+  --bg-1: #12151b; /* app background                 */
+  --bg-2: #191d25; /* panels, dialogs                */
+  --bg-3: #222732; /* raised controls                */
+  --bg-4: #2b313e; /* hover                          */
+  --bg-5: #353c4b; /* active / pressed               */
+
+  /* bevel lines */
+  --line-hi: rgba(255, 255, 255, 0.07);
+  --line-lo: rgba(0, 0, 0, 0.65);
+  --border: #2c3341;
+  --border-strong: #3b4453;
+
+  /* text */
+  --text: #dde2ea;
+  --text-dim: #99a2b3;
+  --text-faint: #5d6675;
+  --text-inverse: #16130a;
+
+  /* accents */
+  --gold: #e6b95c;
+  --gold-hi: #f4d08a;
+  --gold-dim: #a9853c;
+  --teal: #4fd1c5;
+  --teal-dim: #2c8a83;
+  --sel: #2b4f80;
+  --sel-hi: #3a68a8;
+  --danger: #d9534f;
+  --warn: #e0a545;
+  --ok: #5cb85c;
+
+  /* effects */
+  --bevel-raised: inset 1px 1px 0 var(--line-hi), inset -1px -1px 0 var(--line-lo);
+  --bevel-sunken: inset 1px 1px 0 var(--line-lo), inset -1px -1px 0 var(--line-hi);
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-dialog: 0 24px 70px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.8);
+  --focus: 0 0 0 1px var(--teal);
+
+  /* type */
+  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace;
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-lg: 14px;
+
+  /* metrics */
+  --h-menubar: 28px;
+  --h-toolbar: 36px;
+  --h-statusbar: 24px;
+  --h-control: 26px;
+  --radius: 3px;
+  --radius-lg: 5px;
+  --tile: 32px;
+
+  /* player colours (defaults) */
+  --p1: #f40404;
+  --p2: #0c48cc;
+  --p3: #2cb494;
+  --p4: #88409c;
+  --p5: #f88c14;
+  --p6: #703014;
+  --p7: #cce0d0;
+  --p8: #fcfc38;
+}

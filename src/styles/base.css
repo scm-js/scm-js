@@ -1,0 +1,87 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg-1);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: default;
+  background: none;
+  border: none;
+}
+
+::selection {
+  background: var(--sel-hi);
+  color: #fff;
+}
+
+/* scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-5) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--bg-5);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+.dim {
+  color: var(--text-dim);
+}
+.faint {
+  color: var(--text-faint);
+}
+.gold {
+  color: var(--gold);
+}
+.teal {
+  color: var(--teal);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

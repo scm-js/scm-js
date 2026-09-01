@@ -2,7 +2,11 @@
  * The per-tileset tables StarEdit's isometric brush runs on.
  *
  * Nothing here can be read off the CV5: it is the numbering StarEdit compiled in, as
- * reverse-engineered for Chkdraft (src/mapping_core/sc.h, MIT, Justin Forsberg). Each
+ * reverse-engineered for Chkdraft (src/mapping_core/sc.h, MIT, Justin Forsberg).
+ * Upstream: https://github.com/TheNitesWhoSay/Chkdraft
+ * Full provenance and license notice: ../../ATTRIBUTION.md
+ *
+ * Each
  * tileset has one row per CV5 terrain type (the `index` field of a tile group):
  *
  *  - `isomValue` — what the ISOM section stores (shifted left 4) for a diamond of that

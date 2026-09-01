@@ -11,7 +11,8 @@
  * its shadow each run their own script; opcodes like `imgol` spawn further images with
  * their own scripts. Opcode names and argument layouts follow the community
  * disassemblers (PyICE / IceCC / OpenBW), and `tests/iscript.test.ts` walks the real file
- * to confirm every reachable instruction decodes.
+ * to confirm every reachable instruction decodes. These projects are format references;
+ * their code is not included here. Sources and licenses: ../../../ATTRIBUTION.md
  *
  * This module has no imports on purpose: `scripts/extract-units.mjs` loads it straight
  * into Node (which strips the types) to work out which graphics the scripts can reach.

@@ -223,6 +223,7 @@ export function FindDialog({ entry }: DialogProps) {
 
 export function AboutDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
+  const projectPage = (path: string) => window.open(`https://github.com/jeany55/scm-js${path}`, "_blank", "noopener,noreferrer");
   return (
     <DialogFrame dialogKey={entry.key} title="About SCM JS" icon={<Info size={14} />} size="sm" footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
       <div className="about-hero">
@@ -234,12 +235,12 @@ export function AboutDialog({ entry }: DialogProps) {
         </div>
       </div>
       <p className="hint">
-        Built in homage to <strong>StarEdit</strong> (Blizzard, 1998), <strong>SCMDraft 2</strong> (Suicidal Insanity) and <strong>StarForge</strong> (Heimdal). StarCraft is a trademark of Blizzard Entertainment; this project is not affiliated with or endorsed by Blizzard.
+        Built in homage to <strong>StarEdit</strong> (Blizzard, 1998), <strong>SCMDraft 2</strong> (Suicidal Insanity) and <strong>StarForge</strong> (Heimdal), with algorithm and format research credited to Chkdraft and the StarCraft modding community. StarCraft is a trademark of Blizzard Entertainment; this project is not affiliated with or endorsed by Blizzard.
       </p>
       <div className="row" style={{ gap: 6 }}>
-        <Button size="sm"><BookOpen size={12} /> Documentation</Button>
-        <Button size="sm">Licenses</Button>
-        <Button size="sm">Source</Button>
+        <Button size="sm" onClick={() => projectPage("/#readme")}><BookOpen size={12} /> Documentation</Button>
+        <Button size="sm" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Credits &amp; licenses</Button>
+        <Button size="sm" onClick={() => projectPage("")}>Source</Button>
       </div>
     </DialogFrame>
   );

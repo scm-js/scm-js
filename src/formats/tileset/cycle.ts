@@ -6,8 +6,10 @@
  * few ticks, and every pixel that references one of those indices moves with them. Which
  * bands rotate depends on the tileset; Platform and Installation have none.
  *
- * Band tables are from Chkdraft's `color_cycler.h` (jjf28/Chkdraft), which mirrors the
- * game's own rotator structs: each rotator counts down 8 ticks between rotations.
+ * Band tables are from Chkdraft's colour-cycler data (Justin Forsberg, MIT), which
+ * mirrors the game's own rotator structs: each rotator counts down 8 ticks between
+ * rotations. Upstream: https://github.com/TheNitesWhoSay/Chkdraft
+ * Full provenance and license notice: ../../../ATTRIBUTION.md
  *
  * Timing: Chkdraft ticks those counters on a ~15.6 ms wall clock, which runs visibly
  * faster than the game. In StarCraft the water slows down with the game-speed setting,

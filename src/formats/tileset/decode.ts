@@ -7,6 +7,8 @@
  *   VX4 megatile ──▶ 16 minitile refs ──▶ VR4 8x8 palette-index bitmaps ──▶ WPE palette
  *
  * VF4 carries the per-minitile walkability/height flags the editor overlays.
+ * Community format reference: https://wiki.staredit.net/wiki/Terrain_Format
+ * Full provenance: ../../../ATTRIBUTION.md
  */
 
 export const MINITILE_PX = 8;

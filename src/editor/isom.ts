@@ -1,6 +1,8 @@
 /**
  * The isometric terrain brush — StarEdit's, as reverse-engineered for Chkdraft
  * (Justin Forsberg, MIT; src/mapping_core/{sc,scenario,chk}.{h,cpp}).
+ * Upstream: https://github.com/TheNitesWhoSay/Chkdraft
+ * Full provenance and license notice: ../../ATTRIBUTION.md
  *
  * The model: a lattice of diamonds, each 4 tiles wide and 2 tall, centred on the
  * corners of the ISOM rect grid (a rect is a 2x1 tile pair; diamond (x, y) is centred

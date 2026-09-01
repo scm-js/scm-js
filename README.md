@@ -1,13 +1,30 @@
 # scm-js
 
-A StarCraft 1 / Brood War map editor for the browser, built in homage to **StarEdit**, **SCMDraft 2** and **StarForge**.
+A browser-based StarCraft / Brood War scenario editor, built in homage to
+**StarEdit**, **SCMDraft 2**, and **StarForge**.
 
-> Status: reads, renders and writes real maps. Opening a `.scm`/`.scx` parses its
-> `scenario.chk`, draws the terrain from the game's own tileset graphics, and saving
-> writes a playable archive back out. The terrain layer's Rect and Tile brushes work,
-> with undo, including StarEdit's isometric brush; the other layers are still stubs.
+> **Alpha status.** Existing `.scm`, `.scx`, and bare `.chk` maps can be opened,
+> rendered, edited, and round-tripped. Unmodelled CHK sections and MPQ members are
+> preserved. New maps are not yet game-loadable because the editor does not generate
+> `VCOD` or the required unit, upgrade, and technology settings sections.
 
-## Run
+## What works
+
+| Area | Status | Highlights |
+| --- | --- | --- |
+| Map I/O | Working for existing maps | MPQ/CHK open and save, unknown-data preservation, drag-and-drop |
+| Terrain | Working | Isometric, rectangular, raw-tile, fill, pick, animation, and undo |
+| Doodads | Working | Tileset catalogue, placement rules, overlays, selection, movement, and undo |
+| Units | Working | Placement validation, properties, team colours, game sprites, and idle animations |
+| Sprites | Working | Pure and unit sprites, flags, properties, selection, and movement |
+| Locations | Working | Create, resize, snap, rename, elevation flags, and `Anywhere` protection |
+| Fog of War | Working | Per-player paint, fill, copy, invert, overlay, and undo |
+| Scenario/data/trigger dialogs | In progress | Much of this UI is still scaffolding and does not write map data |
+
+## Run locally
+
+Use Node.js 22.18 or newer. The unit extraction script imports TypeScript directly and
+depends on Node's built-in type stripping.
 
 ```sh
 npm install
@@ -17,9 +34,18 @@ npm run lint
 npm test
 ```
 
-## Tileset graphics
+`npm test` skips the real-map and real-tileset suites when the gitignored files under
+`fixtures/maps/` and `fixtures/data/` are not installed.
 
-A map file only stores tile *indices*; the pixels live in StarCraft's own archives. Put
+## Game data and tileset graphics
+
+A map file only stores tile *indices*; the pixels live in StarCraft's own archives. A
+generated classic asset set is currently checked into `public/`, but those files remain
+Blizzard game data and are **not** covered by this project's MIT license. Attribution
+does not itself grant redistribution rights; see [ATTRIBUTION.md](ATTRIBUTION.md#starcraft-and-brood-war-data)
+before publishing a fork or build.
+
+To regenerate the assets from a StarCraft installation you are entitled to use, put
 `StarDat.mpq` and `BrooDat.mpq` in `fixtures/data/` (gitignored) and run:
 
 ```sh
@@ -56,11 +82,12 @@ That mirrors the relevant part of the MPQ tree into `public/`: `arr/{units,fling
 and `arr/images.tbl` (the tables that lead from a unit type to its picture), `game/tunit.pcx`
 (team colours), `scripts/iscript.bin` (the animation bytecode) and the `unit/**/*.grp` sprite
 sheets plus `unit/**/*.lo?` overlay-position files that the 228 unit types and their idle
-animations can reach (~340 GRPs, about 9 MB — found by walking the scripts, so projectiles
-and death effects stay out). GRPs and overlay files are fetched lazily the first time they
-are needed, so a melee map only pulls minerals, geysers and start locations. Without the
-files, units are drawn as player-coloured markers and the Units layer says so; without
-`iscript.bin` they are drawn but do not move.
+animations can reach. The walk is also seeded from all 517 `sprites.dat` entries for the
+Sprites and Doodads layers (about 750 GRPs and 12 MB in the current manifest). GRPs and
+overlay files are fetched lazily the first time they are needed, so a melee map only
+pulls minerals, geysers and start locations. Without the files, units are drawn as
+player-coloured markers and the Units layer says so; without `iscript.bin` they are drawn
+but do not move.
 
 ```
 units.dat[id].flingy ─▶ flingy.dat.sprite ─▶ sprites.dat.image ─▶ images.dat.grp ─▶ images.tbl ─▶ unit\…\*.grp
@@ -86,6 +113,22 @@ lower the HP and with the large effect below one third. Fire is drawn through th
 `ofire`/`bexpl` remap tables (extracted as `public/tileset/<name>.ofire.pcx` etc. by the
 tileset script) and blended additively, which is a close stand-in for the game's
 palette-index lookup. Cloaked units draw half-transparent.
+
+## Doodads layer
+
+The Doodads layer builds its palette directly from the current tileset's CV5 groups,
+using `stat_txt.tbl` for StarEdit's categories and `dddata.bin` for placement rules.
+Picking a doodad arms placement; its ghost turns red wherever the footprint leaves the
+map, covers another doodad, or does not match the required terrain. **Place anywhere**
+disables the terrain/overlap rule, and **Snap to grid** keeps the footprint on StarEdit's
+two-tile isometric grid.
+
+A placed doodad is kept as one coherent edit across all three representations StarEdit
+uses: its tiles in `MTXM`, its `DD2 ` record, and any canopy, door, or trap overlay in
+`THG2`. Click to select, Shift-click to toggle, drag to move, box-select on empty ground,
+and Delete to remove. The owner and disabled state are editable; every placement, move,
+property change, and deletion is one undo step. `TILE` retains the ground underneath so
+removing a doodad can restore it.
 
 ## Units layer
 
@@ -283,7 +326,8 @@ ground that was laid down isometrically, a best guess under doodads and for hand
 tiles. The tab also reports when the ISOM has drifted from the tiles (after Rect/Tile
 edits), since strokes near such areas will not join up until it is rebuilt.
 
-The algorithm is a port of Chkdraft's reverse-engineering of StarEdit (MIT); the shape
+The algorithm is a port of [Chkdraft](https://github.com/TheNitesWhoSay/Chkdraft)'s
+reverse-engineering of StarEdit (MIT, copyright Justin Forsberg); the shape
 tables are derived from the CV5 at load time, and only the per-tileset terrain numbering
 and adjacency lists are copied in (`src/data/isomTables.ts`). `tests/isom.test.ts` checks
 it against real maps: regenerating every tile from a map's own `ISOM` reproduces the
@@ -321,7 +365,7 @@ StarCraft compresses nearly every file in its archives, and its own maps, with i
 ```
 src/
   atoms/        Jotai state: editor/document atoms (incl. undo history), UI + dialog stack
-  editor/       Terrain and unit edit operations as invertible change lists, placement checks
+  editor/       Invertible edits and placement checks for every working map layer
   data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger vocab, samples)
   formats/
     chk/        CHK container, section registry, typed section codecs
@@ -352,3 +396,18 @@ Query params jump straight to a state, handy while iterating on a screen:
 /?nosplash&mode=tile             terrain palette mode (isom|rect|tile; subtile/index still map to tile)
 /?nosplash&layer=fog&fogPlayer=3 view (and paint for) one player's fog
 ```
+
+## Attribution and license
+
+The original scm-js source is MIT-licensed; see [LICENSE](LICENSE). That license does
+not replace the licenses or ownership of upstream code, packages, research, names, or
+game data.
+
+[ATTRIBUTION.md](ATTRIBUTION.md) records the provenance of adapted algorithms and data
+tables, community format references, editor inspirations and their creators, direct npm
+dependencies, generated Blizzard resources, repository artwork, and AI-assisted commits.
+Source-level attribution is also kept beside the Chkdraft-derived and iscript-reference
+code so it survives extraction from this README.
+
+StarCraft and Brood War are trademarks of Blizzard Entertainment. This fan project is
+not affiliated with or endorsed by Blizzard Entertainment.

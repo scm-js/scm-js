@@ -1,3 +1,8 @@
+/**
+ * CHK section layouts and validation sizes. Community format reference:
+ * https://wiki.staredit.net/wiki/Scenario.chk
+ * Full provenance: ../../../../ATTRIBUTION.md
+ */
 import type { CombineMode } from "../reader";
 
 export interface Dim {

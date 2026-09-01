@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { atlasSource } from "../../formats/tileset/atlas";
 import { megatileForTile, MEGATILE_PX } from "../../formats/tileset/decode";
 import type { LoadedTileset } from "../../formats/tileset/load";
@@ -23,7 +23,7 @@ export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, i
 
 /* ── Single tile thumbnail ──────────────────────────────── */
 
-export const TileThumb = memo(function TileThumb({ loaded, id, size, className, title }: { loaded: LoadedTileset | null; id: number; size: number; className?: string; title?: string }) {
+export const TileThumb = memo(function TileThumb({ loaded, id, size, className, title, style }: { loaded: LoadedTileset | null; id: number; size: number; className?: string; title?: string; style?: CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -40,7 +40,7 @@ export const TileThumb = memo(function TileThumb({ loaded, id, size, className, 
       ctx.fillRect(0, 0, size, size);
     }
   }, [loaded, id, size]);
-  return <canvas ref={ref} className={`tile-thumb ${className ?? ""}`} style={{ width: size, height: size }} title={title} />;
+  return <canvas ref={ref} className={`tile-thumb ${className ?? ""}`} style={{ width: size, height: size, ...style }} title={title} />;
 });
 
 /* ── Group browser ──────────────────────────────────────── */

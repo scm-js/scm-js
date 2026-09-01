@@ -25,6 +25,7 @@ import {
   mapTilesetAtom,
   mapWidthAtom,
   rectVariationAtom,
+  blendAnchorAtom,
   selectedDoodadsAtom,
   selectedLocationsAtom,
   selectedSpritesAtom,
@@ -43,6 +44,7 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
+import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDoodadTools";
 import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
@@ -144,6 +146,7 @@ export default function MapViewport() {
   const activeTile = useAtomValue(activeTileAtom);
   const activeTerrain = useAtomValue(activeTerrainAtom);
   const rectVariation = useAtomValue(rectVariationAtom);
+  const blendAnchor = useAtomValue(blendAnchorAtom);
   const tools = useTerrainTools();
   const unitTools = useUnitTools();
   const { loaded: unitAssets, error: unitError } = useUnitAssets();
@@ -188,7 +191,9 @@ export default function MapViewport() {
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
-  const painting = layer === "terrain" && scenario !== null && (paintsTiles(terrainMode) || tools.isomReady);
+  /** Blend mode: a click picks the anchor cell; tiles are placed from the palette, never by stroke. */
+  const blending = layer === "terrain" && scenario !== null && terrainMode === "blend";
+  const painting = layer === "terrain" && scenario !== null && !blending && (paintsTiles(terrainMode) || tools.isomReady);
   const unitsEditing = layer === "units" && scenario !== null;
   const unitPlacing = unitsEditing && placing;
   const doodadsEditing = layer === "doodads" && scenario !== null;
@@ -646,6 +651,17 @@ export default function MapViewport() {
       ctx.setLineDash([]);
     };
 
+    // blend brush: the anchor cell and the four neighbours the palette can fill
+    if (blending && blendAnchor && scenario && inMapBounds(scenario, blendAnchor)) {
+      for (const side of SIDES) {
+        const n = neighbourOf(blendAnchor, side);
+        if (inMapBounds(scenario, n)) strokeTileRect({ x0: n.x, y0: n.y, x1: n.x + 1, y1: n.y + 1 }, "rgba(230,185,92,0.6)", [3, 2]);
+      }
+      ctx.strokeStyle = "#e6b95c";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.round(blendAnchor.x * tilePx - sx) + 1, Math.round(blendAnchor.y * tilePx - sy) + 1, Math.round(tilePx) - 2, Math.round(tilePx) - 2);
+    }
+
     // hover brush, with a preview of what the terrain brush would leave behind
     const hv = hoverRef.current;
     const hp = hoverPointRef.current;
@@ -719,7 +735,7 @@ export default function MapViewport() {
         }
       }
     } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing) {
-      const b = layer === "terrain" || layer === "fog" ? brush : 1;
+      const b = (layer === "terrain" && !blending) || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
       if (painting && tilesetAssets && tilePx >= 4 && !strokeRef.current) {
@@ -805,7 +821,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
@@ -1003,6 +1019,7 @@ export default function MapViewport() {
       draw();
       return;
     }
+    if (blending) { tools.pickAt(t.x, t.y); return; }
     if (!painting) return;
     if (e.altKey) { tools.pickAt(t.x, t.y, pointAt(e)); return; }
     e.preventDefault();
@@ -1257,7 +1274,7 @@ export default function MapViewport() {
       : []),
     ...(layer === "terrain"
       ? [
-          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : "Pick Tile", onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
+          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : terrainMode === "blend" ? "Blend From Here" : "Pick Tile", onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
           { label: "Fill Area", onSelect: withMenuTile(tools.fillAt), disabled: !painting || terrainMode === "isom" },
         ]
       : []),

@@ -356,6 +356,57 @@
   border-top: none;
   padding-top: 0;
 }
+
+/* blend brush */
+.blend-side {
+  border-bottom: 1px solid var(--border);
+}
+.blend-side > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 5px 8px 3px;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.blend-side > header .dim {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.blend-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 0 8px 7px;
+}
+.blend-tile {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 1px 1px 0;
+  border-radius: 2px;
+  border: 1px solid var(--bg-0);
+  background: var(--bg-3);
+  box-shadow: var(--bevel-raised);
+  cursor: pointer;
+}
+.blend-tile:hover {
+  border-color: var(--gold);
+}
+.blend-tile.exact .d {
+  color: var(--gold);
+}
+.blend-tile .d {
+  font-size: 8.5px;
+  line-height: 10px;
+  color: var(--text-faint);
+}
+.blend-anchor .props .k:empty {
+  visibility: hidden;
+}
 .terrain-list .item {
   height: 26px;
 }

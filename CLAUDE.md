@@ -104,6 +104,18 @@ Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the sa
 Rect mode paints in left/right pairs following map column parity, sharing one random variation per
 pair — the tests in `tests/terrain-edit.test.ts` pin this behaviour.
 
+The Blend brush (`src/editor/blend.ts`) is pixel-based: `edgeTable` lifts every megatile's four
+outermost pixel strips straight from the VR4 (cached per `Tileset` in a WeakMap, ~40 ms once), and
+`blendCandidates(tileset, anchorId, side)` ranks `drawableTiles` (one id per megatile) by
+`edgeDistance` between the anchor's side and the candidate's *opposite* side — mean |ΔRGB| over the
+32 pixels, 0..255; designed L/R pairs measure 0.2–8, so `DEFAULT_BLEND_OPTIONS.maxDistance` is 16.
+The mode does not stroke: `paintsTiles("blend")` is false, a click on the map is `pickAt` setting
+`blendAnchorAtom` (map coordinates, read back through `scenarioAtom` + `terrainRevisionAtom` so the
+listed tile follows undo), and the palette's `tools.blendAt(side, id)` is the only writer —
+`placeBlend` on the neighbour cell, committed through `commitTerrain`, then the anchor moves onto it
+when `blendFollowAtom` is set. `tests/blend.test.ts` pins the edge extraction (including the minitile
+flip bit), ranking and placement against a synthetic tileset and the designed seams of the real ones.
+
 ### Sprites (`src/editor/sprites.ts`, `src/hooks/useSpriteTools.ts`, `src/data/sprites.ts`)
 
 `scenario.sprites` is the `THG2` list. `SpriteChange { index, before, after }` lists (insert / remove /

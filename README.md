@@ -295,13 +295,14 @@ on the first stroke (undo removes it again).
 
 ## Terrain layer
 
-The Terrain palette has three modes; two of them place tiles:
+The Terrain palette has four modes; three of them place tiles:
 
 | Mode | What it paints | Palette |
 | --- | --- | --- |
 | **Isometric** | StarEdit's diamond brush: paints a terrain and lays the cliffs and edges around it | the tileset's terrain list |
 | **Rect** | flat ground of one terrain type, in left/right tile pairs with StarEdit's random variation mix (or one fixed variation) | terrain types, read off the CV5 |
 | **Tile** | any single megatile — cliff pieces, doodad tiles, the lot | a raw MTXM id (decimal or `0x` hex) with group/slot spinners and a readout, over a browser of every CV5 tile group |
+| **Blend** | one tile at a time, next to a tile you picked on the map, chosen from the tiles whose facing edge continues it | the anchor tile, then Left / Top / Right / Bottom lists of matches ranked by how well the pixels along the shared edge agree |
 
 The Tile browser searches and filters the same set two ways: **grouped rows** label each
 CV5 group and show its 16 slots, and the **grid** view drops the labels for one dense
@@ -316,9 +317,22 @@ drops into Tile mode. Right-click gives **Pick** and **Fill Area** (flood fill b
 type in Rect mode, by exact tile otherwise). Every stroke is one undo step (Ctrl+Z /
 Ctrl+Y, up to 200).
 
-Rect and Tile painting write `MTXM` and `TILE` together and leave `ISOM` alone, which is
-what SCMDraft does in its non-isometric modes: these brushes place tiles the ISOM model
-has no vocabulary for. The status bar shows the tile id under the cursor and the
+**Blend** is for the joins the cliff sets never had — dirt into a doodad's base, one
+edge set into another, a hand-laid shoreline. Click a tile on the map to make it the
+*anchor*; the palette then lists, for each side, the tiles whose opposite edge continues
+the anchor's pixels (the anchor's right column against each candidate's left column, and
+so on), best seam first, with the mean colour difference (Δ) under each thumbnail — 0 is
+pixel-identical, a designed pair scores under 8, and the **Tolerance** box cuts the list
+off (16 by default). The kind dropdown narrows the pool the way the Tile browser does.
+Clicking a match places it in that neighbour cell as one undo step and makes it the Tile
+brush's tile; with **Follow** on (the default) the anchor moves onto the placed tile so
+the next click continues the seam. The viewport outlines the anchor and its four
+neighbours. There is no lookup table for any of this in the game data — it is read off
+the VR4 pixels, so the graphics must be extracted.
+
+Rect, Tile and Blend painting write `MTXM` and `TILE` together and leave `ISOM` alone,
+which is what SCMDraft does in its non-isometric modes: these brushes place tiles the ISOM
+model has no vocabulary for. The status bar shows the tile id under the cursor and the
 Properties panel breaks it down (group, slot, megatile, elevation, walkability,
 buildability).
 

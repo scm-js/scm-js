@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom,
-  selectedUnitsAtom, terrainModeAtom, type TerrainMode,
+  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
+  rectVariationAtom, selectedUnitsAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
 import { commitEditAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
@@ -13,6 +13,7 @@ import {
 import {
   brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
 } from "../editor/isom";
+import { inMap, neighbourOf, placeBlend, type Side } from "../editor/blend";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
 import { peekUnitAssets } from "../formats/units/load";
@@ -35,9 +36,12 @@ export interface MapPoint {
   py: number;
 }
 
-/** The terrain modes that place tiles directly; the ISOM brush works on diamonds. */
+/**
+ * The terrain modes that place tiles under a stroke; the ISOM brush works on diamonds and
+ * the Blend brush places from its palette (see `blendAt`).
+ */
 export function paintsTiles(mode: TerrainMode): boolean {
-  return mode !== "isom";
+  return mode === "rect" || mode === "tile";
 }
 
 /**
@@ -52,6 +56,7 @@ export function useTerrainTools() {
   const setActiveTile = useSetAtom(activeTileAtom);
   const setActiveTerrain = useSetAtom(activeTerrainAtom);
   const setMode = useSetAtom(terrainModeAtom);
+  const setBlendAnchor = useSetAtom(blendAnchorAtom);
   const stroke = useRef<Stroke | null>(null);
   const isomStroke = useRef<Stroke | null>(null);
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
@@ -206,7 +211,7 @@ export function useTerrainTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const mode = store.get(terrainModeAtom);
-    if (mode === "isom") return;
+    if (!paintsTiles(mode)) return;
     const seed = scn.tiles[y * scn.width + x];
     let changes: TileChange[] = [];
     let label = "Fill area";
@@ -240,13 +245,19 @@ export function useTerrainTools() {
    * Eyedropper. Isometric mode reads the diamond's terrain straight from the ISOM, so
    * clicking a cliff face picks the ground it belongs to; in Rect mode a flat tile
    * picks its terrain type; anything else (a cliff piece, a doodad tile) drops into
-   * Tile mode so it can be placed as-is.
+   * Tile mode so it can be placed as-is. Blend mode picks the cell itself as the
+   * anchor the palette matches against.
    */
   const pickAt = useCallback((x: number, y: number, p?: MapPoint) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const id = scn.tiles[y * scn.width + x];
     const mode = store.get(terrainModeAtom);
+    if (mode === "blend") {
+      setBlendAnchor({ x, y });
+      setStatus(`Blend from tile ${hexTile(id)} at ${x}, ${y} — pick a match in the palette`);
+      return;
+    }
     if (mode === "isom" && p && hasIsom(scn) && loaded) {
       const d = diamondAt(p.px, p.py);
       const w = isomWidth(scn);
@@ -271,7 +282,33 @@ export function useTerrainTools() {
     }
     setActiveTile(id);
     setStatus(`Picked tile ${hexTile(id)} (group ${id >> 4}, slot ${id & 15})`);
-  }, [store, loaded, info, types, isomTypes, setActiveTerrain, setActiveTile, setMode, setStatus]);
+  }, [store, loaded, info, types, isomTypes, setActiveTerrain, setActiveTile, setMode, setBlendAnchor, setStatus]);
+
+  /**
+   * Blend brush: put `id` (a candidate from the palette) on the `side` neighbour of the
+   * anchor as one undo step, make it the Tile brush's tile, and — unless Follow is off —
+   * move the anchor onto it so the next pick continues the seam.
+   */
+  const blendAt = useCallback((side: Side, id: number) => {
+    const scn = store.get(scenarioAtom);
+    const anchor = store.get(blendAnchorAtom);
+    if (!scn || !anchor || !inMap(scn, anchor)) return;
+    const at = neighbourOf(anchor, side);
+    const changes = placeBlend(scn, anchor, side, id);
+    if (!changes) {
+      setStatus(`Nothing ${side} of ${anchor.x}, ${anchor.y} — that is off the map`);
+      return;
+    }
+    setActiveTile(id);
+    const label = `Blend ${hexTile(id)} ${side} of ${anchor.x}, ${anchor.y}`;
+    if (changes.length > 0) {
+      applyChanges(scn, changes);
+      commitTerrain(scn, { label, changes }, label);
+    } else {
+      setStatus(`${hexTile(id)} is already ${side} of ${anchor.x}, ${anchor.y}`);
+    }
+    if (store.get(blendFollowAtom)) store.set(blendAnchorAtom, at);
+  }, [store, commitTerrain, setActiveTile, setStatus]);
 
   /** What the brush would leave under the cursor, for the viewport's hover preview. */
   const ghostAt = useCallback((x: number, y: number): GhostTile[] => {
@@ -302,7 +339,7 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, ghostAt, ghostDiamondsAt }),
-    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }

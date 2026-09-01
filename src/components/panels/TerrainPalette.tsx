@@ -2,14 +2,17 @@ import { useMemo, useState } from "react";
 import { useAtom, useAtomValue } from "jotai";
 import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
-  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, terrainModeAtom,
-  type TerrainMode,
+  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
+  rectVariationAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
+import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
 import { useIsomRebuild, useIsomStatus } from "../../hooks/useIsom";
+import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { variationsOf } from "../../formats/tileset/terrain";
 import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
+import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, type Side } from "../../editor/blend";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
@@ -298,6 +301,104 @@ function TileTab() {
   );
 }
 
+/* ── Blend: tiles whose edges continue the one you picked ── */
+
+const SIDE_LABEL: Record<Side, string> = { left: "Left", top: "Top", right: "Right", bottom: "Bottom" };
+
+/** One side's matches as a wrapping strip of thumbnails, best seam first. */
+function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCandidate[]; loaded: NonNullable<ReturnType<typeof useTileset>["loaded"]>; onPick: (side: Side, id: number) => void }) {
+  return (
+    <section className="blend-side">
+      <header>
+        <span>{SIDE_LABEL[side]}</span>
+        <span className="dim">{list.length === 0 ? "no match" : `${list.length} match${list.length === 1 ? "" : "es"}`}</span>
+      </header>
+      {list.length > 0 && (
+        <div className="blend-grid">
+          {list.map((c) => (
+            <button
+              key={c.id}
+              className={`blend-tile ${c.distance < 2 ? "exact" : ""}`}
+              onClick={() => onPick(side, c.id)}
+              title={`${hexTile(c.id)} · group ${c.id >> 4} slot ${c.id & 15} · Δ ${c.distance.toFixed(1)} — place ${side} of the anchor`}
+            >
+              <TileThumb loaded={loaded} id={c.id} size={28} />
+              <span className="d mono">{c.distance < 9.95 ? c.distance.toFixed(1) : Math.round(c.distance)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BlendTab() {
+  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
+  const { loaded, error } = useTileset();
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(terrainRevisionAtom); // the anchor's tile changes under undo and other brushes
+  const [anchor, setAnchor] = useAtom(blendAnchorAtom);
+  const [follow, setFollow] = useAtom(blendFollowAtom);
+  const [tolerance, setTolerance] = useState(DEFAULT_BLEND_OPTIONS.maxDistance);
+  const [kind, setKind] = useState<GroupKind | "all">("all");
+  const tools = useTerrainTools();
+
+  const at = scenario && anchor && inMap(scenario, anchor) ? anchor : null;
+  const anchorId = scenario && at ? scenario.tiles[at.y * scenario.width + at.x] : null;
+  const ti = loaded && anchorId !== null ? tileInfo(loaded.tileset, info.terrain, anchorId) : null;
+  const kindOf = useMemo(() => (loaded ? new Map(tileGroups(loaded.tileset, info.terrain).map((g) => [g.group, g.kind])) : null), [loaded, info]);
+  const sides = useMemo(() => {
+    if (!loaded || anchorId === null) return null;
+    const include = kind === "all" || !kindOf ? undefined : (id: number) => kindOf.get(id >> 4) === kind;
+    return blendSides(loaded.tileset, anchorId, { ...DEFAULT_BLEND_OPTIONS, maxDistance: tolerance, include });
+  }, [loaded, anchorId, tolerance, kind, kindOf]);
+  const total = sides ? SIDES.reduce((n, s) => n + sides[s].length, 0) : 0;
+
+  return (
+    <>
+      <div className="palette-toolbar">
+        <span className="lbl">Tolerance</span>
+        <Tip label="Largest edge difference still listed (0 = pixel-identical seams only)">
+          <span><NumberInput value={tolerance} onChange={setTolerance} min={0} max={128} width={64} /></span>
+        </Tip>
+        <Check label="Follow" title="After placing a match, move the anchor onto it so the next pick continues the seam" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label="Match filter">
+          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+      </div>
+      <div className="tile-info blend-anchor">
+        <TileThumb loaded={loaded} id={anchorId ?? 0} size={64} className="preview" style={{ opacity: anchorId === null ? 0.3 : 1 }} />
+        <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
+          <span className="k">Anchor</span>
+          <span>{at && anchorId !== null ? <span className="mono">{hexTile(anchorId)} <span className="dim">at {at.x}, {at.y}</span></span> : <span className="dim">click a tile on the map</span>}</span>
+          <span className="k">Group</span><span>{ti ? `${ti.label} · g${ti.group} s${ti.slot}` : "—"}</span>
+          <span className="k">Ground</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
+          <span className="k" />
+          <span>{at && <Button size="sm" onClick={() => setAnchor(null)}>Clear</Button>}</span>
+        </div>
+      </div>
+      <div className="palette-scroll">
+        {!loaded && (
+          <div className="hint" style={{ padding: 12 }}>
+            {error ? "No tileset graphics installed — the Blend brush compares tile pixels, so it needs them." : "Loading tileset…"}
+          </div>
+        )}
+        {loaded && !sides && (
+          <div className="hint" style={{ padding: 12, display: "grid", gap: 8 }}>
+            <span>Click a tile on the map to blend from it. Each side then lists the tiles whose facing edge continues that tile's pixels — the joins the cliff sets never had.</span>
+            <span>Clicking a match places it next to the anchor on that side; with <strong>Follow</strong> on, the anchor moves onto it so you can walk a seam one tile at a time.</span>
+          </div>
+        )}
+        {loaded && sides && SIDES.map((s) => <BlendSide key={s} side={s} list={sides[s]} loaded={loaded} onPick={tools.blendAt} />)}
+      </div>
+      <div className="palette-footer">
+        <span>{sides ? `${total} matches ≤ Δ${tolerance}` : "—"}</span>
+        <span>Δ = mean edge colour difference</span>
+      </div>
+    </>
+  );
+}
+
 /* ── Panel ──────────────────────────────────────────────── */
 
 export default function TerrainPalette() {
@@ -321,6 +422,7 @@ export default function TerrainPalette() {
           { value: "isom", label: "Isometric", content: <IsomTab /> },
           { value: "rect", label: "Rect", content: <RectTab /> },
           { value: "tile", label: "Tile", content: <TileTab /> },
+          { value: "blend", label: "Blend", content: <BlendTab /> },
         ]}
       />
     </>

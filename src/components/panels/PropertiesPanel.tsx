@@ -43,7 +43,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", tile: "Tile" } as const;
+const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", tile: "Tile", blend: "Blend" } as const;
 
 function TerrainProps() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -69,7 +69,7 @@ function TerrainProps() {
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k="Mode">{MODE_LABEL[mode]}</Row>
-      <Row k="Size">{brush} × {brush}</Row>
+      <Row k="Size">{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
       <div className="props-section">Under cursor</div>
       <Row k="Tile">{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
       <Row k="Group">{under ? <>{under.label} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>

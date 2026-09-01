@@ -25,8 +25,8 @@ export type EditorLayer =
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
 /** Terrain sub-mode inside the Terrain palette. */
-export type TerrainMode = "isom" | "rect" | "tile";
-export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile"];
+export type TerrainMode = "isom" | "rect" | "tile" | "blend";
+export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend"];
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
 export const brushSizeAtom = atom<number>(1);
@@ -36,6 +36,10 @@ export const activeTerrainAtom = atom<number>(2);
 export const rectVariationAtom = atom<number>(-1);
 /** Raw MTXM tile id the Tile brush paints. */
 export const activeTileAtom = atom<number>(0x20);
+/** Map cell the Blend brush is matching against (see editor/blend.ts), or null before one is picked. */
+export const blendAnchorAtom = atom<{ x: number; y: number } | null>(null);
+/** Whether placing a blend candidate moves the anchor onto the tile it just placed. */
+export const blendFollowAtom = atom<boolean>(true);
 /** units.dat id the Units layer places. */
 export const activeUnitAtom = atom<number>(0);
 export const unitOwnerAtom = atom<number>(0);

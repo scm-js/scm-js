@@ -4,12 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/extract-assets.mjs --check --warn",
     "dev": "vite",
+    "prebuild": "node scripts/extract-assets.mjs --check --warn",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "extract": "node scripts/extract-assets.mjs",
+    "extract:tilesets": "node scripts/extract-tilesets.mjs",
+    "extract:units": "node scripts/extract-units.mjs",
+    "check:assets": "node scripts/extract-assets.mjs --check"
   },
   "dependencies": {
     "jotai": "^2.20.3",

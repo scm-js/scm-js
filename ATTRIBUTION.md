@@ -27,9 +27,11 @@ game data described below are owned by Blizzard Entertainment or their respectiv
 rights holders. They are not licensed by scm-js's MIT license. This project is not
 affiliated with or endorsed by Blizzard Entertainment.
 
-The current repository tracks files generated from `StarDat.mpq` and `BrooDat.mpq`:
+The repository does **not** track any Blizzard data. `npm run extract` generates the
+following files locally from `StarDat.mpq` and `BrooDat.mpq`, and every path below is
+gitignored:
 
-| Repository paths | Source and use |
+| Generated paths | Source and use |
 | --- | --- |
 | `public/tileset/*.{cv5,vf4,vr4,vx4,wpe}` | Blizzard tileset groups, flags, minitiles, megatiles, and palettes |
 | `public/tileset/*.pcx`, `*.bin`, and `stat_txt.tbl` | Blizzard effect-remap, doodad-placement, and string data |
@@ -38,14 +40,15 @@ The current repository tracks files generated from `StarDat.mpq` and `BrooDat.mp
 | `public/**/manifest.json` | scm-js-generated inventories of the extracted files |
 
 The extraction code is original scm-js code, but running it does not change ownership
-of its output. `scripts/extract-tilesets.mjs` and `scripts/extract-units.mjs` are intended
-for data from a StarCraft installation the user is entitled to use. Map fixtures under
+of its output. `scripts/extract-assets.mjs` (and the `extract-tilesets.mjs` /
+`extract-units.mjs` scripts behind it) are intended for data from a StarCraft
+installation the user is entitled to use. Archive inputs and map fixtures under
 `fixtures/` are gitignored for the same reason.
 
 **Distribution note:** the repository's attribution cannot supply permission to
 redistribute Blizzard data. Maintainers of public forks, releases, and hosted builds
-should independently confirm their rights or omit the extracted files and require users
-to generate them locally.
+must keep these files out of what they publish and require users to generate them
+locally, unless they have independently confirmed their rights.
 
 Static names and vocabulary in `src/data/units.ts`, `src/data/players.ts`,
 `src/data/tilesets.ts`, and `src/data/triggers.ts` describe StarCraft game concepts and

@@ -28,33 +28,54 @@ depends on Node's built-in type stripping.
 
 ```sh
 npm install
+npm run extract  # one-time: pull the game data out of your StarCraft archives
 npm run dev      # http://localhost:5173
 npm run build    # type-check + production bundle
 npm run lint
 npm test
 ```
 
+No Blizzard data is checked in, so `npm run extract` is the step that makes the editor
+render anything: see [Game data](#game-data) below. `npm run dev` and `npm run build`
+warn (but do not fail) when it has not been run; `npm run check:assets` reports what is
+present.
+
 `npm test` skips the real-map and real-tileset suites when the gitignored files under
 `fixtures/maps/` and `fixtures/data/` are not installed.
 
-## Game data and tileset graphics
+## Game data
 
-A map file only stores tile *indices*; the pixels live in StarCraft's own archives. A
-generated classic asset set is currently checked into `public/`, but those files remain
-Blizzard game data and are **not** covered by this project's MIT license. Attribution
-does not itself grant redistribution rights; see [ATTRIBUTION.md](ATTRIBUTION.md#starcraft-and-brood-war-data)
-before publishing a fork or build.
-
-To regenerate the assets from a StarCraft installation you are entitled to use, put
-`StarDat.mpq` and `BrooDat.mpq` in `fixtures/data/` (gitignored) and run:
+A map file only stores tile *indices*; the pixels live in StarCraft's own archives. Those
+files are Blizzard game data, **not** covered by this project's MIT license and not
+redistributable, so none of them are in this repository — a clone generates them from an
+installation you are entitled to use. Attribution does not itself grant redistribution
+rights; see [ATTRIBUTION.md](ATTRIBUTION.md#starcraft-and-brood-war-data) before
+publishing a fork or hosted build.
 
 ```sh
-node scripts/extract-tilesets.mjs
+npm run extract                                              # auto-detect
+npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"
+npm run extract -- path/to/StarDat.mpq path/to/BrooDat.mpq
+SCM_DATA_DIR=~/games/sc npm run extract
 ```
 
-That writes `tileset/*.{cv5,vf4,vr4,vx4,wpe}` into `public/tileset/`, which the app
-fetches on demand and rasterises into one megatile atlas per tileset. Until the files
-are there the viewport falls back to flat tileset colours and says so.
+With no arguments it looks for `StarDat.mpq` / `BrooDat.mpq` (and `patch_rt.mpq`, which
+wins over both) in `$SCM_DATA_DIR`, then `fixtures/data/` (gitignored), then the usual
+install locations — including the Windows drives a WSL session sees under `/mnt`. Brood
+War's archive is required: its `units.dat` is the layout the decoder expects, and the Ice,
+Desert and Twilight tilesets only exist there. Everything lands in `public/`
+([inventory](public/README.md)), which is gitignored; the run takes a few seconds and is
+idempotent, so re-run it after a patch or after changing what the scripts extract.
+
+`npm run extract:tilesets` and `npm run extract:units` redo one half
+(`scripts/extract-tilesets.mjs`, `scripts/extract-units.mjs`; both take the same
+arguments). `npm run check:assets` reports what is on disk without touching the archives.
+
+### Tileset graphics
+
+`public/tileset/<name>.{cv5,vf4,vr4,vx4,wpe}` is what the app fetches on demand and
+rasterises into one megatile atlas per tileset. Until the files are there the viewport
+falls back to flat tileset colours and says so.
 
 Water and lava animate the way the game does it: the graphics are 8-bit indexed and
 StarCraft rotates a few short bands of the palette every 8 game frames (~336 ms on Fastest; the bands per tileset
@@ -72,13 +93,8 @@ VX4 megatile ──▶ 16 minitile refs (bit 0 = h-flip) ──▶ VR4 8x8 bitma
 ## Unit graphics
 
 Units are drawn with the game's own sprites, in the owner's team colour. The same
-archives hold everything needed; after the tileset step run:
-
-```sh
-node scripts/extract-units.mjs
-```
-
-That mirrors the relevant part of the MPQ tree into `public/`: `arr/{units,flingy,sprites,images}.dat`
+archives hold everything needed; `npm run extract` (or `npm run extract:units` on its
+own) mirrors the relevant part of the MPQ tree into `public/`: `arr/{units,flingy,sprites,images}.dat`
 and `arr/images.tbl` (the tables that lead from a unit type to its picture), `game/tunit.pcx`
 (team colours), `scripts/iscript.bin` (the animation bytecode) and the `unit/**/*.grp` sprite
 sheets plus `unit/**/*.lo?` overlay-position files that the 228 unit types and their idle

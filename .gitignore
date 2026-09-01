@@ -10,3 +10,10 @@ dist/
 
 # Local StarCraft data + map fixtures (not redistributable)
 fixtures/
+
+# Extracted Blizzard game data (regenerate with `npm run extract`)
+/public/tileset/
+/public/arr/
+/public/game/
+/public/scripts/
+/public/unit/

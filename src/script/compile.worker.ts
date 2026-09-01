@@ -4,12 +4,13 @@
  * user types. One request in, one result out, matched by id (see `compileClient.ts`).
  */
 import ts from "typescript";
-import { compileScript, type CompileResult } from "./compiler";
+import { compileScript, type CompileOptions, type CompileResult } from "./compiler";
 
 export interface CompileRequest {
   id: number;
   source: string;
   declarations: string;
+  options?: CompileOptions;
 }
 
 export interface CompileResponse {
@@ -19,10 +20,10 @@ export interface CompileResponse {
 }
 
 self.onmessage = (e: MessageEvent<CompileRequest>) => {
-  const { id, source, declarations } = e.data;
+  const { id, source, declarations, options } = e.data;
   let response: CompileResponse;
   try {
-    response = { id, result: compileScript(ts, source, declarations) };
+    response = { id, result: compileScript(ts, source, declarations, options) };
   } catch (err) {
     response = { id, error: err instanceof Error ? err.message : String(err) };
   }

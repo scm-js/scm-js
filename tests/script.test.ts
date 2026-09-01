@@ -130,10 +130,10 @@ describe("compiler", () => {
   });
 
   it("rejects what the raw level cannot express", () => {
-    const r = compile(`let n = 1;\nfunction f() {}\nconst s = "x";\ntrigger(P1, [Bring(P1, Units.AnyUnit, Locations.Anywhere, ">=", 1)], [Wait(s as any), DisplayText("Always Display", "" + P1)]);\ntrigger(P1, [Always()], Array);`);
+    const r = compile(`class C {}\nimport x from "y";\nconst s = "x";\ntrigger(P1, [Bring(P1, Units.AnyUnit, Locations.Anywhere, ">=", 1)], [Wait(s as any), DisplayText("Always Display", "" + P1)]);\ntrigger(P1, [Always()], Array);`);
     const msgs = r.diagnostics.filter((d) => d.source === "compiler").map((d) => `${d.line}:${d.message}`);
-    expect(msgs).toContain("1:Declare constants with const; variables belong to the structured level, which is not available yet.");
-    expect(msgs).toContain("2:Only trigger(...) calls and const declarations are allowed at the top level.");
+    expect(msgs).toContain("1:Imports, exports, classes, enums and namespaces are not part of the trigger script.");
+    expect(msgs).toContain("2:Imports, exports, classes, enums and namespaces are not part of the trigger script.");
     expect(msgs.some((m) => m.startsWith("4:Expected a duration, got text."))).toBe(true);
     expect(msgs.some((m) => m.startsWith("5:Expected an array of actions."))).toBe(true);
     // "" + P1 folds to "0" — text is text.

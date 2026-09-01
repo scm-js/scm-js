@@ -850,6 +850,39 @@
   font-size: var(--fs-xs);
   text-transform: uppercase;
 }
+.script-run .msg {
+  color: var(--text);
+}
+.script-run li {
+  cursor: default;
+}
+.script-program {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--gold);
+  cursor: pointer;
+}
+.script-program:hover {
+  text-decoration: underline;
+}
+.script-variables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+}
+.script-variables .internal {
+  color: var(--text-faint);
+}
 .script-notice {
   display: flex;
   align-items: center;

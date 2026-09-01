@@ -16,7 +16,8 @@
  */
 import type { Scenario } from "../formats/chk/scenario";
 import { cloneTrigger, encodeTriggers, type TriggerRecord } from "../formats/chk/sections/triggers";
-import type { CompileResult } from "../script/compiler";
+import type { CompileOptions, CompileResult } from "../script/compiler";
+import { ActionType, ConditionType } from "../formats/chk/sections/triggers";
 import { applyTriggers } from "./triggers";
 import { internString } from "./settings";
 
@@ -142,6 +143,30 @@ export function relocateScriptBlock(scn: Scenario, extras: Map<string, Uint8Arra
   const block = findBlock(scn.triggers, manifest);
   if (!block || block.start === manifest.start) return null;
   return withManifest(extras, { ...manifest, start: block.start });
+}
+
+/**
+ * The death counters and switches the map's hand triggers (those outside the script's
+ * block) and its switch names already use, so the structured program's variables are
+ * allocated around them. The previous block's own records are not counted: a rebuild
+ * replaces them.
+ */
+export function reservedStorage(scn: Scenario, block: ScriptBlock | null): CompileOptions {
+  const deaths = new Map<number, [number, number]>();
+  const switches = new Set<number>();
+  scn.triggers.forEach((t, i) => {
+    if (block && i >= block.start && i < block.start + block.count) return;
+    for (const c of t.conditions) {
+      if (c.type === ConditionType.Deaths) deaths.set(c.unitId * 4096 + c.player, [c.player, c.unitId]);
+      else if (c.type === ConditionType.Switch) switches.add(c.resource);
+    }
+    for (const a of t.actions) {
+      if (a.type === ActionType.SetDeaths) deaths.set(a.unitId * 4096 + a.player, [a.player, a.unitId]);
+      else if (a.type === ActionType.SetSwitch) switches.add(a.target);
+    }
+  });
+  scn.switchNames?.forEach((s, i) => { if (s) switches.add(i); });
+  return { reservedDeaths: [...deaths.values()], reservedSwitches: [...switches].sort((a, b) => a - b) };
 }
 
 /** The compiled records with their local string ids resolved against the scenario's string table. */

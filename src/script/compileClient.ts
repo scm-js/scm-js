@@ -5,7 +5,7 @@
  * main thread instead — slower, never silent.
  */
 import type { CompileRequest, CompileResponse } from "./compile.worker";
-import type { CompileResult } from "./compiler";
+import type { CompileOptions, CompileResult } from "./compiler";
 
 let worker: Worker | null = null;
 let workerBroken = false;
@@ -41,9 +41,9 @@ function getWorker(): Worker | null {
   return worker;
 }
 
-async function compileHere(source: string, declarations: string): Promise<CompileResult> {
+async function compileHere(source: string, declarations: string, options?: CompileOptions): Promise<CompileResult> {
   const [{ default: ts }, { compileScript }] = await Promise.all([import("typescript"), import("./compiler")]);
-  return compileScript(ts, source, declarations);
+  return compileScript(ts, source, declarations, options);
 }
 
 export class CompileSuperseded extends Error {
@@ -54,9 +54,9 @@ export class CompileSuperseded extends Error {
 }
 
 /** Compile in the background. Rejects with `CompileSuperseded` when a newer request arrived first. */
-export function compileInBackground(source: string, declarations: string): Promise<CompileResult> {
+export function compileInBackground(source: string, declarations: string, options?: CompileOptions): Promise<CompileResult> {
   const w = getWorker();
-  if (!w) return compileHere(source, declarations);
+  if (!w) return compileHere(source, declarations, options);
   const id = ++seq;
   // Anything still in flight is stale now.
   for (const [old, p] of pending) {
@@ -65,10 +65,10 @@ export function compileInBackground(source: string, declarations: string): Promi
   }
   return new Promise<CompileResult>((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    const req: CompileRequest = { id, source, declarations };
+    const req: CompileRequest = { id, source, declarations, options };
     w.postMessage(req);
   }).catch((err: Error) => {
-    if (err.message === "worker unavailable") return compileHere(source, declarations);
+    if (err.message === "worker unavailable") return compileHere(source, declarations, options);
     throw err;
   });
 }

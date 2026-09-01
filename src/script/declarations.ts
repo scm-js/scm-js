@@ -66,6 +66,32 @@ declare function disabled<T extends Condition | Action>(item: T): T;
 declare function Condition(${CONDITION_FIELDS.map((f) => `${f}?: number`).join(", ")}): Condition;
 /** An action by raw type number and record fields, for types the editor does not know. */
 declare function Action(${ACTION_FIELDS.map((f) => `${f}?: number`).join(", ")}): Action;
+/** EUD: compare the 32-bit value at a memory address (1.16.1 layout; Remastered emulates it). Deaths at player EPD(address). */
+declare function Memory(address: number, comparison: Comparison | number, value: number): Condition;
+/** EUD: set / add to / subtract from the 32-bit value at a memory address (1.16.1 layout; Remastered emulates it). */
+declare function SetMemory(address: number, modifier: Modifier | number, value: number): Action;
+
+// ── Structured code ──────────────────────────────────────────────────────
+// Statements other than trigger() calls form one program: \`let\` variables (numbers are
+// death counters, booleans are switches), assignments, if / while / do / for, functions
+// (inlined at each call), and action calls as statements. Statements run in order within
+// one trigger cycle; a loop's back edge waits for the next cycle, so
+// \`while (true) { … }\` runs its body once per cycle (every frame with hyper triggers).
+
+interface ProgramOptions {
+  /** The single player the program's triggers run as (default P1). It must be in the game for the program to run. */
+  owner?: PlayerId;
+  /** Emit hyper triggers so the trigger loop runs every frame: true (owned by \`owner\`) or the player to own them. */
+  hyperTriggers?: boolean | PlayerId;
+  /** Put a Comment action naming the source line on every generated trigger (default true). */
+  comments?: boolean;
+  /** Unit types whose death counters hold the variables (default: the "(Unused)" units, Cantina first). */
+  variableUnits?: readonly UnitId[];
+}
+/** Configure the structured program. Optional; call it once, anywhere at the top level. */
+declare function program(options: ProgramOptions): void;
+/** A coin toss (Randomize Switch): \`flag = random()\`, \`if (random() && …)\`. */
+declare function random(): boolean;
 `;
 
 function union(values: string[]): string {

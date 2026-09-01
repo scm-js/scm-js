@@ -227,9 +227,11 @@ real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in th
 
 ### Trigger script (`src/script/`, `src/editor/script.ts`, `dialogs/ScriptEditorDialog.tsx`)
 
-A TypeScript-subset language that *generates* a block of `scenario.triggers`. Raw level only so far
-(`trigger(players, conditions, actions, flags?)` calls and `const`s; structured code — variables,
-`if`/`while`, functions lowered EUD-style — is the next step and is Remastered-only by decision).
+A TypeScript-subset language that *generates* a block of `scenario.triggers`, at two levels: raw
+`trigger(players, conditions, actions, flags?)` calls (1:1 with records) and *structured* code —
+every other top-level statement — lowered to a death-counter state machine (no EUD, runs on every
+game version; the EUD-address route was dropped because trigger nodes are heap-allocated by the
+game and their addresses unknowable at save time).
 
 - `names.ts` turns the scenario into five `NameTable`s (players, units, locations, switches, AI
   scripts); each entry's keys are an identifier derived from the display name first (`identifier()`:
@@ -241,19 +243,58 @@ A TypeScript-subset language that *generates* a block of `scenario.triggers`. Ra
   does not), enumerated kinds are string unions of the `CHOICES` labels and aliases, and every
   condition/action is a `declare function` whose identifier is its `ConditionType`/`ActionType` key
   (`api.ts`; parameter names come from the def labels, reserved words get a trailing underscore).
+  `program(options)`, `random()`, `Memory` / `SetMemory` (Deaths at player `EPD(addr)`,
+  `DEATHS_TABLE_ADDRESS`) are declared there too.
 - `compiler.ts` builds a real `ts.createProgram` (declarations + script, in-memory host) and walks
   the script's AST; it takes the `typescript` namespace as an argument so `tests/script.test.ts`
   (Node) and `compile.worker.ts` (bundled) share it. Every argument is evaluated by asking the checker
   for the expression's literal type (`literalOf`, intersections included), else folding arithmetic /
-  template strings, else following a `const` initialiser — `value()`. Arrays flatten spreads and
-  follow consts (`list()`); `disabled(x)` sets the Disabled flag; `Condition(type, …)` /
-  `Action(type, …)` are the raw escape hatch (their text/wav numbers pass through as string
-  indices). Diagnostics from the *whole* program are reported (a broken generated declaration file
-  is a bug worth seeing); the compiler's own carry `source: "compiler"`. Strings are **not** interned
-  in the compiler: text/wav fields hold local ids into `CompileResult.strings` (`{text}` or `{index}`)
-  and `editor/script.ts#resolveStrings` interns them at build time.
-- `print.ts` is the inverse (eject): records → script, using each table's first key, bare numbers for
-  anything unnamed, `disabled(...)`, raw forms for unknown types. `tests/script.test.ts` pins
+  template strings, else following a `const` initialiser — `value()`. `value()` consults the
+  structured `Scope` first (a `let` is never a constant, whatever the checker narrowed it to; a
+  function parameter bound to a constant is one) and `initializer()` follows **const** declarations
+  only. Arrays flatten spreads and follow consts (`list()`); `disabled(x)` sets the Disabled flag;
+  `Condition(type, …)` / `Action(type, …)` are the raw escape hatch. Diagnostics from the *whole*
+  program are reported; the compiler's own carry `source: "compiler"`. Strings are **not** interned
+  in the compiler: text/wav fields hold local ids into `CompileResult.strings` and
+  `editor/script.ts#resolveStrings` interns them at build time. `CompileOptions.reservedDeaths` /
+  `reservedSwitches` (from `editor/script.ts#reservedStorage`: what the hand triggers outside the block
+  and the switch names use) keep variables off storage the map already uses. `CompileResult.variables`
+  and `.program` describe the allocation for the UI.
+- `run()` sorts top-level statements: `const` / `trigger()` / `program()` / function declarations /
+  everything else (the program, in order). Raw triggers come first in the output, then the program's,
+  then hyper triggers (`lower.ts#hyperTriggers`, three preserved triggers of 63 `Wait(0)`).
+- `lower.ts` is the machine and knows no TypeScript. Read its header: a basic block is a run of
+  preserved triggers testing `pc == S` in list order (so straight-line code runs within one cycle and a
+  back edge costs one); `[S, C] → THEN` followed by `[S] → ELSE` is negation by ordering. `Allocator`
+  hands out death counters player-major over `VARIABLE_UNITS` (the "(Unused)" units, Cantina first) and
+  switches from 255 down. `Machine` queues actions (`action`), writes steps (`step` / `raw`, always
+  prefixed with the pc condition and a `Comment` label when `comments` is on), ends states (`jump`,
+  `next`, `loopHeader` — which reuses an empty current state), and does arithmetic: `addConst` is one
+  action, `addVar` the 32+32-step binary decomposition through a temp (`move` is the destructive
+  32-step half), `assign` handles `c + Σ±v` (constants first, adds before subtracts so saturation only
+  bites when the true result is negative, via a temp when `x` appears in its own RHS other than as the
+  leading `+x`), `compareVars` builds saturating differences into temps that the caller releases after
+  the branch (`tempsHeld` / `releaseTo`). `Bool` trees go through `toDnf` (negation to the leaves,
+  `negateCondition` flips comparisons around their amount; a leaf the game cannot negate becomes a
+  *negative literal*) and `branch` emits one trigger per product, skip steps for negative literals,
+  and a fallthrough to ELSE; it asserts a branch never targets the state it is tested in (which is why
+  `do … while` gets a check state of its own). State 0 is the entry (every counter is 0 at game start),
+  `halt` is 0xFFFFFFFF.
+- `structured.ts` walks the statements: `let` → `dc` (number-like type) or `switch` (boolean-like),
+  bound in a `Scope` keyed by declaration node (so shadowing and inlining resolve as the checker does);
+  `linear()` reduces numeric expressions to `c + Σ±v`; `bool()` builds `Bool` trees (comparisons with a
+  constant are one Deaths condition; between variables they cancel common terms then go through
+  `compareVars`; `random()` randomizes a scratch switch first); functions are inlined per call with
+  parameters bound to constants or by-reference variables, `return` jumping to a lazily created end
+  state; `dead` tracks unreachable code after `break` / `continue` / `return` / an endless loop so
+  the final `halt` jump is only emitted when the program can reach it. TypeScript's literal narrowing
+  on `let` booleans (`f = true; if (f == g)` → "no overlap") is a real type error, not a compiler bug.
+- `simulate.ts` is the trigger-cycle interpreter (Deaths / Switch / Always / Never built in, other
+  conditions via callback, non-modelled actions logged as events, preserve semantics, add wraps and
+  subtract saturates like the game). `tests/script-structured.test.ts` compiles programs and asserts
+  the simulation; the dialog's **Simulate** button runs the same thing for 30 cycles.
+- `print.ts` is the inverse (eject) for raw records; a generated program prints as raw
+  `trigger()` calls (structured source cannot be recovered). `tests/script.test.ts` pins
   print → compile → identical records on the fixture maps (hint bits masked, compared through the text
   format so duplicate string-table entries do not matter).
 - `editor/script.ts`: the source and a manifest are archive members (`SCRIPT_MEMBER`,
@@ -266,18 +307,20 @@ A TypeScript-subset language that *generates* a block of `scenario.triggers`. Ra
   path, after `printScript` of the hand triggers around the block. `scriptStateAtom` derives all of
   this; the Classic editor takes the manifest and re-finds the block in its *working copy* (indices
   drift under local inserts), badges those rows `script`, locks their editing and offers
-  "Open Script Editor" with `payload.line`.
+  "Open Script Editor" with `payload.line`. Generated program triggers show their `Comment` (`L18:
+  cycles++`) as the row title.
 - `monaco.ts` is only ever `import()`ed (by the dialog): Monaco 0.56's tree-shaken entry points
   (`monaco-editor/editor/editor.api`, `features/register.all`, only the TypeScript language), the two
   workers via Vite `?worker`, `typescriptDefaults` set `noLib` with the generated file as the one extra
   lib, and a theme from `tokens.css`. `compileClient.ts` talks to `compile.worker.ts` (latest request
-  wins, `CompileSuperseded` for the rest; falls back to the main thread if the worker cannot start).
-  `typescript` is therefore a runtime dependency (bundled into the worker, ~3.5 MB; Monaco's own TS
-  worker is another copy — running the compiler inside Monaco's worker via `customWorkerPath` needs
-  a classic script, which Vite's dev server cannot serve, so two copies it is). The dialog writes the
-  source into the extras on every change (debounced check, 350 ms) and holds the Monaco host in
-  `useState`, not a ref (Radix portal timing, as in `ExportImageDialog`); `DialogFrame.onEscapeKeyDown`
-  exists so Escape inside the editor dismisses Monaco's popups instead of closing the dialog.
+  wins, `CompileSuperseded` for the rest; falls back to the main thread if the worker cannot start;
+  `CompileOptions` ride along). `typescript` is therefore a runtime dependency (bundled into the worker,
+  ~3.5 MB; Monaco's own TS worker is another copy — running the compiler inside Monaco's worker via
+  `customWorkerPath` needs a classic script, which Vite's dev server cannot serve, so two copies it is).
+  The dialog writes the source into the extras on every change (debounced check, 350 ms) and holds the
+  Monaco host in `useState`, not a ref (Radix portal timing, as in `ExportImageDialog`);
+  `DialogFrame.onEscapeKeyDown` exists so Escape inside the editor dismisses Monaco's popups instead of
+  closing the dialog.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

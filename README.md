@@ -20,7 +20,7 @@ A browser-based StarCraft / Brood War scenario editor, built in homage to
 | Locations | Working | Create, resize, snap, rename, elevation flags, and `Anywhere` protection |
 | Fog of War | Working | Per-player paint, fill, copy, invert, overlay, and undo |
 | Triggers | Working | Classic (StarEdit-style) editor, TrigEdit-syntax text editor, mission briefings; every condition and action |
-| Trigger script | Working (raw level) | A TypeScript subset in Monaco, type-checked against the open map, compiled into a locked block of the trigger list |
+| Trigger script | Working | A TypeScript subset in Monaco, type-checked against the open map, compiled into a locked block of the trigger list — raw `trigger()` calls plus a structured level (variables, if / while, functions) lowered to a death-counter state machine, with a built-in simulator |
 | Scenario/data dialogs | In progress | Some of this UI is still scaffolding and does not write map data |
 
 ## Run locally
@@ -492,8 +492,71 @@ The source and a build manifest are stored in the map archive itself (`scmjs\tri
 and `scmjs\triggers.json` next to `staredit\scenario.chk`), so they travel with the `.scx`;
 edits are saved as you type, and only Build changes triggers. Type errors come from the
 TypeScript language service, compiler errors from a worker; both land in the editor and in the
-problems list. The structured level of the language (variables, `if` / `while`, functions,
-lowered through EUD tricks) is the next step and will require Remastered.
+problems list.
+
+#### Structured code
+
+Everything at the top level that is not a `trigger()` call or a `const` is a *program*:
+
+```ts
+program({ owner: P8, hyperTriggers: true });   // optional; defaults: P1, no hyper triggers
+
+let wave = 0;
+let alarm = false;
+
+function spawn(count: number) {
+  CreateUnit(P2, Units.ZergZergling, count, Locations.Spawn);
+  wave += 1;
+}
+
+while (true) {
+  if (Bring(P1, Units.AnyUnit, Locations.Beacon, ">=", 1) && !alarm) {
+    alarm = true;
+    DisplayText("Always Display", "They are coming.");
+  }
+  if (alarm) spawn(4);
+  if (wave >= 10 || Deaths(P1, Units.TerranMarine, ">=", 50)) { Defeat(); }
+  Wait(2000);
+}
+```
+
+There is no EUD trickery in this: the program compiles to ordinary triggers that run on any
+version of the game, using the two things trigger lists can already do.
+
+- **Variables are death counters** (`let n = 0`) on units that can never die — the "(Unused)"
+  entries of units.dat, Cantina first — twelve players per unit, so there are hundreds. Booleans
+  (`let f = false`) are switches. Values are unsigned 32-bit, `-=` stops at 0. `n += 5`,
+  `n = 3`, `n++` are one action each; an operation between two variables (`a += b`, `a = b`,
+  `a < b`) is the classic binary decomposition and costs about 64 triggers, so keep those out of
+  hot loops. There is no multiplication or division between variables (the game has no
+  instruction for it); `*`, `/`, `%` work on constants.
+- **Control flow is a program counter.** Each basic block is a run of triggers that test
+  `pc == S`, in list order, so straight-line code runs *within one trigger cycle*; a loop's back
+  edge waits for the next cycle. `while (true) { … }` is therefore a game loop running once per
+  cycle — every ~2 s at Normal speed, every frame with `hyperTriggers: true`. `if` / `else`,
+  `while`, `do`, `for`, `break`, `continue` all work; `&&`, `||`, `!` are lowered to
+  disjunctive normal form, one trigger per case, with negation folded into the comparison where
+  the game can express it (`!Bring(… ">=", 1)` → `at most 0`) and a "skip" trigger where it
+  cannot (`!CommandTheMost(…)`).
+- **Functions are inlined** at every call. A parameter binds to a constant, or, when the
+  argument is a variable, to that variable (by reference); `return` works, return *values* do not.
+  Locals inside a function get their own storage per call site.
+- **The program is one thread running as one player** — the `owner`. It runs only while that
+  player is in the game, and `CurrentPlayer` means that player. Conditions from the trigger
+  vocabulary (`Bring`, `Switch`, …) can be used in `if` and `while` directly; `random()` is a
+  randomized switch.
+
+Every generated trigger carries a `Comment` naming its source line (`L18: cycles++`), which is
+what the Trigger Editor shows as the trigger's title; `comments: false` turns that off. The
+program's variables avoid every death counter and switch the map's hand-made triggers touch, and
+the toolbar's program summary lists where each one lives.
+
+**Simulate** runs the compiled triggers for thirty cycles in a built-in trigger-cycle interpreter
+and lists every action that ran (with its cycle and source line) and each variable's final value.
+It models exactly what the compiler relies on — death counters, switches, preserve, list order —
+and answers unit conditions with "false"; the same interpreter is what the test suite uses to
+prove programs behave. For EUD work the raw level also offers `Memory(address, comparison, value)`
+and `SetMemory(address, modifier, value)`, the standard `Deaths` at player `EPD(address)` forms.
 
 ## Scenario settings
 

@@ -1,14 +1,21 @@
 /**
- * The trigger script compiler, raw level: a TypeScript program of `trigger(players,
- * conditions, actions)` calls and `const` declarations, checked against the generated
- * declarations and lowered to `TriggerRecord`s.
+ * The trigger script compiler: a TypeScript program checked against the generated
+ * declarations and lowered to `TriggerRecord`s, at two levels.
+ *
+ * The *raw* level is `trigger(players, conditions, actions)` calls and `const`s — one
+ * call, one record. The *structured* level is everything else at the top level: `let`
+ * variables, assignments, `if` / `while` / `for`, functions, action calls as statements.
+ * Those statements form one program that `structured.ts` walks and `lower.ts` turns into a
+ * death-counter state machine — a run of preserved triggers owned by one player, appended
+ * after the raw triggers (see `lower.ts` for the execution model).
  *
  * The compiler owns no parser: it builds a real TypeScript program (`noLib`, the
  * declarations plus the script) and walks its AST, and it owns no name tables either —
  * `Units.TerranMarine` is a property whose *type* is the literal `0 & Brand<"unit">`, so
  * every argument is evaluated by asking the checker for the expression's literal type,
  * falling back to folding arithmetic and following `const` initialisers. Anything that is
- * not a compile-time constant is an error; there is no runtime.
+ * not a compile-time constant is an error, except a `let` variable where structured code
+ * allows one.
  *
  * Strings are not interned here (the compiler may run in a worker, away from the
  * scenario): text/wav fields hold local ids into `strings`, resolved by the build step.
@@ -17,7 +24,7 @@
  */
 import type * as TS from "typescript";
 import {
-  ActionFlag, ConditionFlag, emptyAction, emptyCondition, emptyTrigger, MAX_ACTIONS, MAX_CONDITIONS, PLAYER_GROUP_COUNT,
+  ActionFlag, ConditionFlag, ConditionType, ActionType, emptyAction, emptyCondition, emptyTrigger, MAX_ACTIONS, MAX_CONDITIONS, PLAYER_GROUP_COUNT,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
 } from "../formats/chk/sections/triggers";
 import { aiScriptByName, CHOICES, choiceValue, type ArgKind } from "../data/triggerDefs";
@@ -25,8 +32,13 @@ import { TRIGGER_FLAG_NAMES } from "../formats/triggers/text";
 import { ACTION_IDENTS, CONDITION_IDENTS } from "./api";
 import { ACTION_FIELDS, CONDITION_FIELDS } from "./record";
 import { DECLARATIONS_FILE } from "./declarations";
+import { Allocator, hyperTriggers, LowerError, Machine, PLAYER_SLOTS, storageLabel, type Var } from "./lower";
+import { Structured } from "./structured";
 
 export const SCRIPT_FILE = "triggers.ts";
+
+/** `Memory(address, …)` reads `Deaths` at player `EPD(address)`, unit 0: the deaths table starts here in 1.16.1's memory. */
+export const DEATHS_TABLE_ADDRESS = 0x58a364;
 
 export interface ScriptDiagnostic {
   /** 1-based. */
@@ -41,22 +53,76 @@ export interface ScriptDiagnostic {
 /** A string a record refers to: text to intern, or an existing string-table index (raw forms). */
 export type ScriptString = { text: string } | { index: number };
 
+export interface VariableInfo {
+  name: string;
+  kind: "number" | "boolean";
+  /** Where it lives: "P3 · Cantina (Unused)" or "Switch 256". */
+  storage: string;
+  /** Death counter (numbers). */
+  player?: number;
+  unit?: number;
+  /** Switch index (booleans). */
+  switch?: number;
+}
+
+export interface ProgramInfo {
+  /** The player the program runs as (0-based). */
+  owner: number;
+  /** Index into `triggers` of the program's first trigger. */
+  start: number;
+  /** Program triggers, hyper triggers excluded. */
+  count: number;
+  hyperTriggers: boolean;
+}
+
 export interface CompileResult {
   triggers: TriggerRecord[];
-  /** Per trigger, the 1-based line of its `trigger(` call. */
+  /** Per trigger, the 1-based line of its `trigger(` call or of the statement it came from. */
   lines: number[];
   /** Local string table: a record's `text` / `wav` field `k > 0` means `strings[k - 1]`. */
   strings: ScriptString[];
   diagnostics: ScriptDiagnostic[];
+  /** The structured program's variables (temporaries and the program counter included), in allocation order. */
+  variables: VariableInfo[];
+  /** The structured program, when the script has one. */
+  program: ProgramInfo | null;
   /** No errors: `triggers` is the complete program. */
   ok: boolean;
 }
 
-type Const = { n: number } | { s: string };
+export interface CompileOptions {
+  /** Death counters (player, unit) the map's hand triggers use; variables avoid them. */
+  reservedDeaths?: readonly (readonly [number, number])[];
+  /** Switches the map's hand triggers use or name; variables avoid them. */
+  reservedSwitches?: readonly number[];
+}
+
+export type Const = { n: number } | { s: string };
+
+/** What an identifier means inside structured code: a constant (function parameter) or a variable. */
+export type Binding = { kind: "const"; value: Const } | { kind: "var"; v: Var };
+
+/** Bindings keyed by declaration node, so shadowing and inlined functions resolve exactly as the checker does. */
+export class Scope {
+  private readonly map = new Map<TS.Node, Binding>();
+  readonly parent: Scope | null;
+  constructor(parent: Scope | null) { this.parent = parent; }
+  bind(decl: TS.Node, b: Binding) { this.map.set(decl, b); }
+  lookup(decl: TS.Node): Binding | undefined {
+    return this.map.get(decl) ?? this.parent?.lookup(decl);
+  }
+}
+
+export interface ProgramOptions {
+  owner: number;
+  hyperTriggers: number | null;
+  comments: boolean;
+  variableUnits: number[];
+}
 
 const MAX_DEPTH = 32;
 
-class Compiler {
+export class Compiler {
   readonly ts: typeof TS;
   readonly checker: TS.TypeChecker;
   readonly sf: TS.SourceFile;
@@ -64,17 +130,27 @@ class Compiler {
   readonly strings: ScriptString[] = [];
   readonly triggers: TriggerRecord[] = [];
   readonly lines: number[] = [];
+  readonly variables: VariableInfo[] = [];
+  program: ProgramInfo | null = null;
+  readonly options: CompileOptions;
+  /** The structured program's innermost scope while it is being lowered; null in raw code. */
+  scope: Scope | null = null;
 
-  constructor(ts: typeof TS, program: TS.Program, sf: TS.SourceFile) {
+  constructor(ts: typeof TS, program: TS.Program, sf: TS.SourceFile, options: CompileOptions) {
     this.ts = ts;
     this.checker = program.getTypeChecker();
     this.sf = sf;
+    this.options = options;
   }
 
   error(node: TS.Node, message: string) {
     const start = this.sf.getLineAndCharacterOfPosition(node.getStart(this.sf));
     const end = this.sf.getLineAndCharacterOfPosition(node.getEnd());
     this.diagnostics.push({ line: start.line + 1, column: start.character + 1, endLine: end.line + 1, endColumn: end.character + 1, message, source: "compiler" });
+  }
+
+  lineOf(node: TS.Node): number {
+    return this.sf.getLineAndCharacterOfPosition(node.getStart(this.sf)).line + 1;
   }
 
   localString(s: ScriptString): number {
@@ -84,21 +160,131 @@ class Compiler {
     return this.strings.length;
   }
 
+  /** Is this call to one of the runtime's functions (declared in the generated file), by name? */
+  isRuntimeCall(e: TS.Node, name: string): e is TS.CallExpression {
+    const { ts } = this;
+    return ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === name && !this.scriptDeclaration(e.expression);
+  }
+
+  /** The script's own declaration an identifier refers to (a `let`, a parameter, a function), if any. */
+  scriptDeclaration(id: TS.Identifier): TS.Declaration | undefined {
+    const decl = this.checker.getSymbolAtLocation(id)?.valueDeclaration;
+    return decl && decl.getSourceFile() === this.sf ? decl : undefined;
+  }
+
+  /** The structured binding of an identifier, if it has one. */
+  binding(expr: TS.Expression): Binding | undefined {
+    const e = this.unwrap(expr);
+    if (!this.ts.isIdentifier(e) || !this.scope) return undefined;
+    const decl = this.scriptDeclaration(e);
+    return decl ? this.scope.lookup(decl) : undefined;
+  }
+
+  varOf(expr: TS.Expression): Var | undefined {
+    const b = this.binding(expr);
+    return b?.kind === "var" ? b.v : undefined;
+  }
+
   run() {
     const { ts } = this;
+    const structured: TS.Statement[] = [];
+    let programCall: TS.CallExpression | null = null;
     for (const stmt of this.sf.statements) {
       if (ts.isVariableStatement(stmt)) {
-        if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) this.error(stmt, "Declare constants with const; variables belong to the structured level, which is not available yet.");
-        for (const d of stmt.declarationList.declarations) if (!d.initializer) this.error(d, "A constant needs a value.");
+        if (stmt.declarationList.flags & ts.NodeFlags.Const) {
+          for (const d of stmt.declarationList.declarations) if (!d.initializer) this.error(d, "A constant needs a value.");
+        } else structured.push(stmt);
         continue;
       }
-      if (ts.isEmptyStatement(stmt)) continue;
-      if (ts.isExpressionStatement(stmt) && ts.isCallExpression(stmt.expression) && ts.isIdentifier(stmt.expression.expression) && stmt.expression.expression.text === "trigger") {
+      if (ts.isEmptyStatement(stmt) || ts.isFunctionDeclaration(stmt)) continue;
+      if (ts.isExpressionStatement(stmt) && this.isRuntimeCall(stmt.expression, "trigger")) {
         this.trigger(stmt.expression);
         continue;
       }
-      this.error(stmt, "Only trigger(...) calls and const declarations are allowed at the top level.");
+      if (ts.isExpressionStatement(stmt) && this.isRuntimeCall(stmt.expression, "program")) {
+        if (programCall) this.error(stmt, "program() may be called once.");
+        programCall = stmt.expression;
+        continue;
+      }
+      if (ts.isInterfaceDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt)) continue;
+      if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt) || ts.isExportAssignment(stmt) || ts.isClassDeclaration(stmt) || ts.isEnumDeclaration(stmt) || ts.isModuleDeclaration(stmt)) {
+        this.error(stmt, "Imports, exports, classes, enums and namespaces are not part of the trigger script.");
+        continue;
+      }
+      structured.push(stmt);
     }
+    if (structured.length === 0 && !programCall) return;
+    const options = this.programOptions(programCall);
+    const allocator = new Allocator({ units: options.variableUnits, reservedDeaths: this.options.reservedDeaths, reservedSwitches: this.options.reservedSwitches });
+    const comment = options.comments ? (text: string) => this.localString({ text }) : undefined;
+    let machine: Machine;
+    try {
+      machine = new Machine({ owner: options.owner, allocator, comment });
+    } catch (err) {
+      this.error(programCall ?? structured[0], (err as Error).message);
+      return;
+    }
+    const start = this.triggers.length;
+    new Structured(this, machine).run(structured);
+    this.triggers.push(...machine.triggers);
+    this.lines.push(...machine.lines);
+    this.program = { owner: options.owner, start, count: machine.triggers.length, hyperTriggers: options.hyperTriggers !== null };
+    if (options.hyperTriggers !== null) {
+      const line = programCall ? this.lineOf(programCall) : 1;
+      for (const t of hyperTriggers(options.hyperTriggers, comment)) { this.triggers.push(t); this.lines.push(line); }
+    }
+    for (const v of allocator.variables) {
+      this.variables.push(v.kind === "dc"
+        ? { name: v.name, kind: "number", storage: storageLabel(v), player: v.player, unit: v.unit }
+        : { name: v.name, kind: "boolean", storage: storageLabel(v), switch: v.index });
+    }
+  }
+
+  /** `program({ owner, hyperTriggers, comments, variableUnits })`, defaults filled in. */
+  programOptions(call: TS.CallExpression | null): ProgramOptions {
+    const { ts } = this;
+    const out: ProgramOptions = { owner: 0, hyperTriggers: null, comments: true, variableUnits: [] };
+    if (!call) return out;
+    const arg = call.arguments[0] ? this.resolve(call.arguments[0]) : undefined;
+    if (!arg || !ts.isObjectLiteralExpression(arg)) { if (arg) this.error(arg, "program() takes an options object literal."); return out; }
+    let hyper: boolean | number = false;
+    for (const p of arg.properties) {
+      if (!ts.isPropertyAssignment(p) || !(ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) { this.error(p, "Write program options as name: value."); continue; }
+      const name = p.name.text;
+      const init = this.unwrap(p.initializer);
+      const bool = init.kind === ts.SyntaxKind.TrueKeyword ? true : init.kind === ts.SyntaxKind.FalseKeyword ? false : undefined;
+      const v = this.value(init);
+      const player = v && "n" in v && Number.isInteger(v.n) && v.n >= 0 && v.n < PLAYER_SLOTS ? v.n : undefined;
+      switch (name) {
+        case "owner":
+          if (player !== undefined) out.owner = player;
+          else this.error(init, `The owner must be a single player, P1 … P${PLAYER_SLOTS}: the program is one thread running as that player.`);
+          break;
+        case "hyperTriggers":
+          if (bool !== undefined) hyper = bool;
+          else if (player !== undefined) hyper = player;
+          else this.error(init, "hyperTriggers is true, false, or the player to own them.");
+          break;
+        case "comments":
+          if (bool !== undefined) out.comments = bool;
+          else this.error(init, "comments is true or false.");
+          break;
+        case "variableUnits": {
+          const list = this.list(init);
+          if (!list) { this.error(init, "variableUnits is an array of unit types."); break; }
+          for (const el of list) {
+            const u = this.value(el);
+            if (u && "n" in u && Number.isInteger(u.n) && u.n >= 0) out.variableUnits.push(u.n);
+            else this.error(el, "Expected a unit type.");
+          }
+          break;
+        }
+        default:
+          this.error(p, `Unknown program option "${name}".`);
+      }
+    }
+    out.hyperTriggers = hyper === true ? out.owner : hyper === false ? null : hyper;
+    return out;
   }
 
   trigger(call: TS.CallExpression) {
@@ -126,7 +312,7 @@ class Compiler {
       }
     }
     this.triggers.push(t);
-    this.lines.push(this.sf.getLineAndCharacterOfPosition(call.getStart(this.sf)).line + 1);
+    this.lines.push(this.lineOf(call));
   }
 
   /** Strip parentheses, `as`, `satisfies`, `!` — the wrappers that change nothing at compile time. */
@@ -144,12 +330,14 @@ class Compiler {
     if (!ts.isIdentifier(expr)) return undefined;
     const sym = this.checker.getSymbolAtLocation(expr);
     const decl = sym?.valueDeclaration;
-    return decl && ts.isVariableDeclaration(decl) && decl.initializer ? decl.initializer : undefined;
+    if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return undefined;
+    return ts.isVariableDeclarationList(decl.parent) && decl.parent.flags & ts.NodeFlags.Const ? decl.initializer : undefined;
   }
 
   /** Follow wrappers and `const` references down to the expression that carries the value. */
   resolve(expr: TS.Expression, depth = 0): TS.Expression {
     const e = this.unwrap(expr);
+    if (this.binding(e)) return e;
     const init = depth < MAX_DEPTH ? this.initializer(e) : undefined;
     return init ? this.resolve(init, depth + 1) : e;
   }
@@ -209,6 +397,18 @@ class Compiler {
       if (kind === "action") for (const f of ["text", "wav"] as const) if (record[f]) record[f] = this.localString({ index: record[f] });
       return record as unknown as ConditionRecord | ActionRecord;
     }
+    if (name === "Memory" || name === "SetMemory") {
+      if ((name === "Memory") !== (kind === "condition")) { this.error(e, `${name}(...) is ${name === "Memory" ? "a condition" : "an action"}; it belongs in the ${name === "Memory" ? "conditions" : "actions"} list.`); return null; }
+      if (args.length !== 3) { this.error(e, `${name} takes an address, a ${kind === "condition" ? "comparison" : "modifier"} and a value.`); return null; }
+      const addr = this.value(args[0]);
+      if (!addr || !("n" in addr) || !Number.isInteger(addr.n) || addr.n % 4 !== 0) { this.error(args[0], "Expected a 4-byte-aligned memory address."); return null; }
+      const epd = ((addr.n - DEATHS_TABLE_ADDRESS) / 4) >>> 0;
+      const op = this.arg(kind === "condition" ? "comparison" : "modifier", args[1]);
+      const value = this.arg("amount", args[2]);
+      if (op === undefined || value === undefined) return null;
+      if (kind === "condition") return { ...emptyCondition(), type: ConditionType.Deaths, player: epd, unitId: 0, comparison: op, amount: value };
+      return { ...emptyAction(), type: ActionType.SetDeaths, player: epd, unitId: 0, modifier: op, target: value };
+    }
     const table = kind === "condition" ? CONDITION_IDENTS : ACTION_IDENTS;
     const other = kind === "condition" ? ACTION_IDENTS : CONDITION_IDENTS;
     const def = table.get(name);
@@ -236,7 +436,10 @@ class Compiler {
   arg(kind: ArgKind, expr: TS.Expression): number | undefined {
     const v = this.value(expr);
     const fail = (what: string) => { this.error(expr, what); return undefined; };
-    if (!v) return fail("Expected a compile-time constant.");
+    if (!v) {
+      const variable = this.varOf(expr);
+      return fail(variable ? `${variable.name} is a variable; this argument must be a constant. Compare or assign it in structured code instead.` : "Expected a compile-time constant.");
+    }
     switch (kind) {
       case "text": case "wav":
         return "s" in v ? (v.s === "" ? 0 : this.localString({ text: v.s })) : fail("Expected text.");
@@ -299,6 +502,9 @@ class Compiler {
       }
       return { s };
     }
+    // Structured bindings first: a variable is never a constant, whatever the checker narrowed it to.
+    const b = this.binding(e);
+    if (b) return b.kind === "const" ? b.value : undefined;
     // Names: the checker knows literal types (`Units.TerranMarine: UnitId<0>`, `const n = 5`).
     const lit = literalOf(this.checker.getTypeAtLocation(e));
     if (lit) return lit;
@@ -320,10 +526,12 @@ function literalOf(type: TS.Type): Const | undefined {
   return undefined;
 }
 
+export { LowerError };
+
 /** Compile a script against a declaration file. Never throws for script errors — read `diagnostics`. */
-export function compileScript(ts: typeof TS, source: string, declarations: string): CompileResult {
+export function compileScript(ts: typeof TS, source: string, declarations: string, options: CompileOptions = {}): CompileResult {
   const files = new Map<string, string>([[DECLARATIONS_FILE, declarations], [SCRIPT_FILE, source]]);
-  const options: TS.CompilerOptions = {
+  const compilerOptions: TS.CompilerOptions = {
     noLib: true, strict: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext,
     noEmit: true, types: [], allowNonTsExtensions: true,
   };
@@ -341,9 +549,9 @@ export function compileScript(ts: typeof TS, source: string, declarations: strin
     fileExists: (f) => files.has(f),
     readFile: (f) => files.get(f),
   };
-  const program = ts.createProgram([DECLARATIONS_FILE, SCRIPT_FILE], options, host);
+  const program = ts.createProgram([DECLARATIONS_FILE, SCRIPT_FILE], compilerOptions, host);
   const sf = program.getSourceFile(SCRIPT_FILE)!;
-  const c = new Compiler(ts, program, sf);
+  const c = new Compiler(ts, program, sf, options);
   // The whole program, not just the script: a broken declaration file is a bug worth seeing.
   for (const d of ts.getPreEmitDiagnostics(program)) {
     if (d.category !== ts.DiagnosticCategory.Error) continue;
@@ -358,5 +566,5 @@ export function compileScript(ts: typeof TS, source: string, declarations: strin
   }
   c.run();
   c.diagnostics.sort((a, b) => a.line - b.line || a.column - b.column);
-  return { triggers: c.triggers, lines: c.lines, strings: c.strings, diagnostics: c.diagnostics, ok: c.diagnostics.length === 0 };
+  return { triggers: c.triggers, lines: c.lines, strings: c.strings, diagnostics: c.diagnostics, variables: c.variables, program: c.program, ok: c.diagnostics.length === 0 };
 }

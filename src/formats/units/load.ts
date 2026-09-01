@@ -1,6 +1,7 @@
 import {
-  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
-  SPRITES_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, WEAPONS_DAT_SIZE, type FlingyDat, type ImagesDat, type SpritesDat, type UnitsDat, type WeaponsDat,
+  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeTechdataDat, decodeUnitsDat, decodeUpgradesDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
+  SPRITES_DAT_SIZE, TECHDATA_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, UPGRADES_DAT_SIZE, WEAPONS_DAT_SIZE,
+  type FlingyDat, type ImagesDat, type SpritesDat, type TechdataDat, type UnitsDat, type UpgradesDat, type WeaponsDat,
 } from "../dat/dat";
 import { decodeGrp, type Grp } from "../dat/grp";
 import { decodeIscript, type IscriptBin } from "../dat/iscript";
@@ -28,6 +29,9 @@ export interface UnitAssets {
   iscript: IscriptBin | null;
   /** weapons.dat, or null when an older extraction did not ship it (Unit Settings then shows no weapon defaults). */
   weapons: WeaponsDat | null;
+  /** upgrades.dat / techdata.dat, or null likewise (Upgrade / Technology Settings then show defaults as 0). */
+  upgrades: UpgradesDat | null;
+  techs: TechdataDat | null;
 }
 
 const BASE = import.meta.env.BASE_URL;
@@ -55,7 +59,7 @@ export function getUnitAssets(): Promise<UnitAssets> {
   if (assetsPromise) return assetsPromise;
   assetsPromise = (async () => {
     try {
-      const [units, flingy, sprites, images, tbl, pcx, iscript, weapons] = await Promise.all([
+      const [units, flingy, sprites, images, tbl, pcx, iscript, weapons, upgrades, techs] = await Promise.all([
         fetchPart("arr/units.dat", (d) => d.length === UNITS_DAT_SIZE || d.length === UNITS_DAT_SIZE_LEGACY),
         fetchPart("arr/flingy.dat", (d) => d.length === FLINGY_DAT_SIZE),
         fetchPart("arr/sprites.dat", (d) => d.length === SPRITES_DAT_SIZE),
@@ -71,6 +75,14 @@ export function getUnitAssets(): Promise<UnitAssets> {
           console.warn("arr/weapons.dat is not installed; Unit Settings will show no weapon defaults", err);
           return null;
         }),
+        fetchPart("arr/upgrades.dat", (d) => d.length === UPGRADES_DAT_SIZE).catch((err: unknown) => {
+          console.warn("arr/upgrades.dat is not installed; Upgrade Settings will show no defaults — re-run npm run extract", err);
+          return null;
+        }),
+        fetchPart("arr/techdata.dat", (d) => d.length === TECHDATA_DAT_SIZE).catch((err: unknown) => {
+          console.warn("arr/techdata.dat is not installed; Technology Settings will show no defaults — re-run npm run extract", err);
+          return null;
+        }),
       ]);
       const teamColors = decodePcx(pcx).pixels;
       if (teamColors.length < TEAM_COLOR_ROWS * TEAM_SLOT_COUNT) throw new Error("tunit.pcx: too small");
@@ -83,6 +95,8 @@ export function getUnitAssets(): Promise<UnitAssets> {
         teamColors,
         iscript: iscript ? decodeIscript(iscript) : null,
         weapons: weapons ? decodeWeaponsDat(weapons) : null,
+        upgrades: upgrades ? decodeUpgradesDat(upgrades) : null,
+        techs: techs ? decodeTechdataDat(techs) : null,
       };
       assetsReady = assets;
       return assets;

@@ -1,27 +1,45 @@
 /**
  * A scenario built from nothing, for File ▸ New and for the map the editor opens on.
  *
- * The CHK it carries starts empty and every modelled section is marked dirty, so
- * `serializeScenario` writes them all out in StarEdit's section order. VCOD and the
- * upgrade/tech settings are not modelled, and PUNI / UNIx only appear once Unit Settings
- * is applied (null here means "all defaults"), so a map created here round-trips through
- * this editor but is not yet a file StarCraft will load.
+ * The CHK it carries holds only the three sections the editor never models — StarEdit's
+ * version stamp (IVE2), the game's verification table (VCOD) and the empty CUWP slots
+ * (UPRP / UPUS) — as raw bytes; every modelled section is marked dirty, so
+ * `serializeScenario` writes them all out in StarEdit's section order. The settings
+ * tables start on their defaults but are *present*, since the game refuses a map
+ * without them: what comes out is the same set of sections a fresh StarEdit map has.
  */
 import { ANYWHERE_INDEX, type LocationRecord } from "./sections/objects";
 import { FORCE_SLOTS, PLAYER_SLOTS, PlayerRace, PlayerType } from "./sections/players";
+import {
+  defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
+} from "./sections/settings";
+import { defaultWavs } from "./sections/sounds";
+import { defaultVcod } from "./sections/vcod";
+import type { ChkSection } from "./reader";
 import type { Scenario } from "./scenario";
 import { isomSize } from "./sections/terrain";
 
 /** Brood War: TYPE "RAWB", VER 205. */
 const BROOD_WAR_VERSION = 205;
+/** IVE2 value StarEdit writes for a Brood War map. */
+const STAREDIT_VERSION = 11;
 
 /** BW maps carry 255 location slots; index 63 is the fixed "Anywhere". */
 const LOCATION_SLOTS = 255;
 
-/** Sections `createScenario` fills in, and therefore has to have written on save. */
+/** CUWP: 64 slots of 20 bytes, and the 64 "slot used" bytes. */
+const UPRP_SIZE = 1280;
+const UPUS_SIZE = 64;
+
+/**
+ * Sections `createScenario` fills in, and therefore has to have written on save: the
+ * section set of a Brood War map StarEdit creates — the `x` layouts of the settings
+ * pairs only, as in Blizzard's own maps (a hybrid map is the one that carries both).
+ */
 const CREATED_SECTIONS = [
-  "TYPE", "VER ", "ERA ", "DIM ", "SIDE", "OWNR", "COLR", "MTXM", "TILE", "ISOM",
-  "UNIT", "THG2", "DD2 ", "MRGN", "STR ", "SPRP", "FORC",
+  "TYPE", "VER ", "ERA ", "DIM ", "SIDE", "OWNR", "COLR", "MTXM", "TILE", "ISOM", "MASK",
+  "UNIT", "THG2", "DD2 ", "MRGN", "STR ", "SPRP", "FORC", "TRIG", "MBRF", "WAV ",
+  "PUNI", "UNIx", "UPGx", "PUPx", "TECx", "PTEx",
 ];
 
 /** Where each string the table is created with lands, by construction. */
@@ -50,6 +68,23 @@ function emptyLocations(width: number, height: number, anywhereName: number): Lo
   return locations;
 }
 
+/** A section the editor carries as bytes only. */
+function raw(name: string, data: Uint8Array): ChkSection {
+  return { name, offset: -1, declaredSize: data.length, data };
+}
+
+/** The unmodelled sections a game-loadable map still needs, on StarEdit's defaults. */
+export function rawCreatedSections(): ChkSection[] {
+  const ive2 = new Uint8Array(2);
+  new DataView(ive2.buffer).setUint16(0, STAREDIT_VERSION, true);
+  return [
+    raw("IVE2", ive2),
+    raw("VCOD", defaultVcod()),
+    raw("UPRP", new Uint8Array(UPRP_SIZE)),
+    raw("UPUS", new Uint8Array(UPUS_SIZE)),
+  ];
+}
+
 export function createScenario(options: CreateScenarioOptions): Scenario {
   const { width, height, era, name, description = "" } = options;
 
@@ -61,7 +96,7 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
   };
 
   return {
-    chk: { sections: [] },
+    chk: { sections: rawCreatedSections() },
     dirty: new Set(CREATED_SECTIONS),
     warnings: [],
     type: "RAWB",
@@ -78,8 +113,13 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     playerRaces: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerRace.UserSelectable : PlayerRace.Neutral)),
     playerColors: [0, 1, 2, 3, 4, 5, 6, 7],
     playerRgb: null,
-    unitSettings: null,
-    unitAvailability: null,
+    unitSettings: defaultUnitSettings(),
+    unitAvailability: defaultUnitAvailability(),
+    upgradeSettings: defaultUpgradeSettings(),
+    upgradeRestrictions: defaultUpgradeRestrictions(),
+    techSettings: defaultTechSettings(),
+    techRestrictions: defaultTechRestrictions(),
+    wavs: defaultWavs(),
     forces: {
       playerForce: Array.from({ length: FORCE_SLOTS }, () => 0),
       nameIndex: [0, 1, 2, 3].map((i) => STRING_INDEX.force1 + i),
@@ -88,7 +128,8 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     tiles: options.tiles ?? new Uint16Array(width * height),
     editorTiles: options.tiles ? new Uint16Array(options.tiles) : new Uint16Array(width * height),
     isom: options.isom ?? new Uint16Array(isomSize(width, height) / 2),
-    mask: null,
+    // Every tile unexplored for every player, as StarEdit starts a map.
+    mask: new Uint8Array(width * height).fill(0xff),
     units: [],
     sprites: [],
     doodads: [],
@@ -97,4 +138,26 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     briefing: [],
     switchNames: null,
   };
+}
+
+/**
+ * The sections StarCraft needs to load a scenario, whatever its revision. The settings
+ * pairs come on top: the original layouts for a StarCraft 1.00 file (VER < 205), the `x`
+ * layouts for anything Brood War reads (VER ≥ 63) — a hybrid map needs both. Used by
+ * Check Map to tell a map that will not load from one that merely lacks optional data.
+ */
+export const REQUIRED_SECTIONS: readonly string[] = [
+  "VER ", "VCOD", "OWNR", "ERA ", "DIM ", "SIDE", "MTXM", "PUNI", "UNIT", "THG2", "STR ", "UPRP",
+  "MRGN", "TRIG", "MBRF", "SPRP", "FORC",
+];
+export const REQUIRED_ORIGINAL_SECTIONS: readonly string[] = ["UNIS", "UPGS", "TECS", "UPGR", "PTEC"];
+export const REQUIRED_EXPANSION_SECTIONS: readonly string[] = ["UNIx", "UPGx", "TECx", "PUPx", "PTEx"];
+
+/** Everything a file of this revision must carry to load (`STR ` stands for STRx on a Remastered file). */
+export function requiredSections(fileVersion: number): string[] {
+  return [
+    ...REQUIRED_SECTIONS,
+    ...(fileVersion < 205 ? REQUIRED_ORIGINAL_SECTIONS : []),
+    ...(fileVersion >= 63 ? REQUIRED_EXPANSION_SECTIONS : []),
+  ];
 }

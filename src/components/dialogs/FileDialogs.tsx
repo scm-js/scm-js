@@ -5,7 +5,8 @@ import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapN
 import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
-import { DEFAULT_NEW_MAP, useMapFileActions } from "../../hooks/useMapFileActions";
+import { DEFAULT_NEW_MAP, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
+import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, saveBytes, writeMapBytes, type MapFormat } from "../../services/mapIo";
 import {
   DEFAULT_IMAGE_OPTIONS, drawsSprites, exportMapImage, IMAGE_SCALES, imageSize, loadMapImageAssets, renderMapImage,
@@ -18,12 +19,13 @@ import type { DialogProps } from "./DialogHost";
 /* ── New Map ────────────────────────────────────────────── */
 
 export function NewMapDialog({ entry }: DialogProps) {
-  const { newMap } = useMapFileActions();
+  const { guard } = useMapFileActions();
+  const prefs = useAtomValue(preferencesAtom);
 
-  const [tileset, setTs] = useState<TilesetId>(DEFAULT_NEW_MAP.tileset);
-  const [w, setLocalW] = useState(DEFAULT_NEW_MAP.width);
-  const [h, setLocalH] = useState(DEFAULT_NEW_MAP.height);
-  const [terrain, setTerrain] = useState(TILESET_BY_ID[DEFAULT_NEW_MAP.tileset].defaultIsom);
+  const [tileset, setTs] = useState<TilesetId>(prefs.newMap.tileset);
+  const [w, setLocalW] = useState(prefs.newMap.width);
+  const [h, setLocalH] = useState(prefs.newMap.height);
+  const [terrain, setTerrain] = useState(TILESET_BY_ID[prefs.newMap.tileset].defaultIsom);
   const [name, setLocalName] = useState(DEFAULT_NEW_MAP.name);
   const [desc, setLocalDesc] = useState(DEFAULT_NEW_MAP.description);
   const [players, setPlayers] = useState(8);
@@ -40,7 +42,7 @@ export function NewMapDialog({ entry }: DialogProps) {
       size="lg"
       okLabel="Create"
       onOk={() => {
-        void newMap({ width: w, height: h, tileset, name: name || DEFAULT_NEW_MAP.name, description: desc, terrainId: terrain });
+        guard({ action: "new", options: { width: w, height: h, tileset, name: name || DEFAULT_NEW_MAP.name, description: desc, terrainId: terrain } });
       }}
       footerLeft={<span>{ts.name} · {w}×{h} · {terrainName(ts, terrain)}</span>}
     >
@@ -106,9 +108,18 @@ export function OpenMapDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const load = useSetAtom(loadDocumentAtom);
+  const { guard } = useMapFileActions();
+  const modified = useAtomValue(mapModifiedAtom);
+  const prefs = useAtomValue(preferencesAtom);
 
   const accept = useCallback(async (file: File | null) => {
     if (!file) return;
+    // Unsaved changes: hand the file to the Close Scenario dialog and let it decide.
+    if (prefs.confirmClose && modified) {
+      close(entry.key);
+      guard({ action: "open", file });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -125,7 +136,7 @@ export function OpenMapDialog({ entry }: DialogProps) {
     } finally {
       setBusy(false);
     }
-  }, [close, entry.key, load, setStatus]);
+  }, [close, entry.key, load, setStatus, guard, modified, prefs.confirmClose]);
 
   return (
     <DialogFrame
@@ -250,11 +261,36 @@ export function SaveAsDialog({ entry }: DialogProps) {
 
 /* ── Confirm close ──────────────────────────────────────── */
 
+/**
+ * File ▸ Close / Exit, and the gate in front of New / Open / a dropped file when the map
+ * has unsaved changes (`useMapFileActions().guard`). `payload.pending` is what to do
+ * once the question is answered; without one the answer closes the map.
+ */
 export function ConfirmCloseDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const [name] = useAtom(mapNameAtom);
-  const [modified, setModified] = useAtom(mapModifiedAtom);
-  const setStatus = useSetAtom(statusMessageAtom);
+  const modified = useAtomValue(mapModifiedAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const { save, runPending } = useMapFileActions();
+  const [busy, setBusy] = useState(false);
+  const pending = (entry.payload?.pending as PendingAction | undefined) ?? { action: "close" };
+  const what = pending.action === "new" ? "creating a new scenario" : pending.action === "open" ? `opening ${pending.file.name}` : "closing";
+
+  const proceed = async () => { close(entry.key); await runPending(pending); };
+  const saveFirst = async () => {
+    setBusy(true);
+    try {
+      // A map without a file name goes through Save As instead; the pending action is dropped so nothing is lost.
+      if (await save()) await proceed();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!scenario) {
+    return <DialogFrame dialogKey={entry.key} title="Close Scenario" icon={<TriangleAlert size={14} />} size="sm" footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}><p className="hint">No scenario is open.</p></DialogFrame>;
+  }
+
   return (
     <DialogFrame
       dialogKey={entry.key}
@@ -262,16 +298,24 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
       icon={<TriangleAlert size={14} />}
       size="sm"
       footer={
-        <>
-          <Button variant="primary" onClick={() => { setModified(false); setStatus("Saved (stub)"); close(entry.key); }}>Save</Button>
-          <Button variant="danger" onClick={() => { setModified(false); setStatus("Closed (stub)"); close(entry.key); }}>Don't Save</Button>
-          <Button onClick={() => close(entry.key)}>Cancel</Button>
-        </>
+        modified ? (
+          <>
+            <Button variant="primary" disabled={busy} onClick={() => { void saveFirst(); }}>Save</Button>
+            <Button variant="danger" disabled={busy} onClick={() => { void proceed(); }}>Don't Save</Button>
+            <Button onClick={() => close(entry.key)}>Cancel</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="primary" onClick={() => { void proceed(); }}>{pending.action === "close" ? "Close" : "Continue"}</Button>
+            <Button onClick={() => close(entry.key)}>Cancel</Button>
+          </>
+        )
       }
     >
       <p>
-        {modified ? <>Save changes to <strong>{name}</strong> before closing?</> : <><strong>{name}</strong> has no unsaved changes. Close it?</>}
+        {modified ? <>Save changes to <strong>{name}</strong> before {what}?</> : <><strong>{name}</strong> has no unsaved changes. Continue {what}?</>}
       </p>
+      {modified && pending.action !== "close" && <p className="hint">Don't Save discards the changes and goes on with {what}.</p>}
     </DialogFrame>
   );
 }

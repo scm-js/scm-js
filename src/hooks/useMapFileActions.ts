@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { archiveExtrasAtom, loadDocumentAtom, scenarioAtom } from "../atoms/documentAtoms";
+import { archiveExtrasAtom, closeDocumentAtom, loadDocumentAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapModifiedAtom, screenAtom } from "../atoms/editorAtoms";
+import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
@@ -27,6 +28,16 @@ export const DEFAULT_NEW_MAP: NewMapOptions = {
   name: "Untitled Scenario",
   description: "",
 };
+
+/**
+ * Something that replaces or closes the open document. When the map has unsaved changes
+ * and the preference is on, it is held in the Close Scenario dialog's payload until the
+ * user chooses Save / Don't Save (`runPending`), else it runs at once.
+ */
+export type PendingAction =
+  | { action: "new"; options: NewMapOptions }
+  | { action: "open"; file: File }
+  | { action: "close" };
 
 /** New, open and save actions shared by the menu, hotkeys, splash and drag-and-drop. */
 export function useMapFileActions() {
@@ -104,5 +115,28 @@ export function useMapFileActions() {
     }
   }, [extras, openDialog, path, scenario, setModified, setStatus]);
 
-  return { newMap, openFile, save, setPath };
+  /** Drop the open document (File ▸ Close). */
+  const closeMap = useCallback(() => {
+    store.set(closeDocumentAtom);
+    setStatus("Closed the scenario — File ▸ New or Open to continue.");
+  }, [store, setStatus]);
+
+  const runPending = useCallback(async (p: PendingAction) => {
+    if (p.action === "new") await newMap(p.options);
+    else if (p.action === "open") await openFile(p.file);
+    else closeMap();
+  }, [newMap, openFile, closeMap]);
+
+  /**
+   * Run a document-replacing action, or park it behind the Close Scenario dialog when the
+   * map has unsaved changes and Preferences say to ask. True when the dialog took over.
+   */
+  const guard = useCallback((p: PendingAction): boolean => {
+    const ask = store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
+    if (!ask) { void runPending(p); return false; }
+    openDialog("confirmClose", { pending: p });
+    return true;
+  }, [store, openDialog, runPending]);
+
+  return { newMap, openFile, save, setPath, closeMap, runPending, guard };
 }

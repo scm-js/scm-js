@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
-import { brushSizeAtom, fogModeAtom, fogPlayersAtom, fogViewPlayerAtom } from "../atoms/editorAtoms";
+import { brushSizeAtom, fogModeAtom, fogPlayersAtom, fogViewPlayerAtom, symmetryAtom } from "../atoms/editorAtoms";
 import { commitEditAtom, scenarioAtom, terrainRevisionAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
-import { Stroke, type TileChange } from "../editor/terrain";
+import { brushRect, Stroke, type TileChange } from "../editor/terrain";
 import {
-  applyFogChanges, copyFog, ensureMask, fillFog, floodFog, fogPlayersAt, invertFog, paintFog, paintFogAt, playerBit,
+  applyFogChanges, copyFog, ensureMask, fillFog, floodFog, fogPlayersAt, invertFog, paintFog, playerBit,
   type FogMode,
 } from "../editor/fog";
+import { mirrorIndices, mirrorRect } from "../editor/symmetry";
 import type { Scenario } from "../formats/chk/scenario";
 
 /** "P1, P2 and P5" for a player bit mask. */
@@ -56,7 +57,9 @@ export function useFogTools() {
     const scn = store.get(scenarioAtom);
     const s = stroke.current;
     if (!scn || !s) return;
-    const changes = paintFogAt(scn, x, y, store.get(brushSizeAtom), store.get(fogPlayersAtom), strokeMode.current);
+    // The footprint and, under Tools ▸ Symmetry…, its mirror images.
+    const cells = mirrorRect(store.get(symmetryAtom), brushRect(x, y, store.get(brushSizeAtom), scn.width, scn.height), scn.width, scn.height);
+    const changes = paintFog(scn, cells, store.get(fogPlayersAtom), strokeMode.current);
     if (changes.length === 0) return;
     applyFogChanges(scn, changes);
     s.add(changes);
@@ -107,7 +110,7 @@ export function useFogTools() {
     const players = store.get(fogPlayersAtom);
     const mode = store.get(fogModeAtom);
     if (players === 0) { setStatus("Select at least one player to paint fog for."); return; }
-    commitFog(scn, `${verb(mode)} area for ${fogPlayersLabel(players)}`, (s) => paintFog(s, floodFog(s, x, y, store.get(fogViewPlayerAtom)), players, mode));
+    commitFog(scn, `${verb(mode)} area for ${fogPlayersLabel(players)}`, (s) => paintFog(s, mirrorIndices(store.get(symmetryAtom), floodFog(s, x, y, store.get(fogViewPlayerAtom)), s.width, s.height), players, mode));
   }, [store, commitFog, setStatus]);
 
   /** Fog or clear the whole map for the selected players. */

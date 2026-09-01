@@ -2,17 +2,19 @@ import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
-  rectVariationAtom, selectedUnitsAtom, terrainModeAtom, type TerrainMode,
+  rectVariationAtom, selectedUnitsAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
 import { commitEditAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  applyChanges, brushRect, floodRegion, stampTerrain, stampTerrainAt, stampTile, stampTileAt,
+  applyChanges, brushRect, floodRegion, stampTerrain, stampTile,
   Stroke, type TileChange,
 } from "../editor/terrain";
+import { mirrorIndices, mirrorRect } from "../editor/symmetry";
 import {
-  brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
+  applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
 } from "../editor/isom";
+import { flatTerrain } from "../formats/tileset/terrain";
 import { inMap, neighbourOf, placeBlend, type Side } from "../editor/blend";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
@@ -122,11 +124,19 @@ export function useTerrainTools() {
     return isomTypes.includes(id) ? id : isomTypes[0] ?? null;
   }, [store, isomTypes]);
 
+  /**
+   * The cells one brush application at (x, y) covers: its footprint and, under a symmetry
+   * mode (Tools ▸ Symmetry…), the footprint's mirror images — as one set, so the Rect
+   * brush still pairs columns by parity across the seam.
+   */
+  const footprint = useCallback((scn: Scenario, x: number, y: number): Set<number> => {
+    return mirrorRect(store.get(symmetryAtom), brushRect(x, y, store.get(brushSizeAtom), scn.width, scn.height), scn.width, scn.height);
+  }, [store]);
+
   /** Changes one brush application at (x, y) would make, without applying them. */
   const stampAt = useCallback((x: number, y: number): TileChange[] | null => {
     const scn = store.get(scenarioAtom);
     if (!scn) return null;
-    const size = store.get(brushSizeAtom);
     const mode = store.get(terrainModeAtom);
     if (mode === "rect") {
       const terrain = currentTerrain();
@@ -134,11 +144,11 @@ export function useTerrainTools() {
         setStatus("Rect painting needs the tileset graphics — run scripts/extract-tilesets.mjs.");
         return null;
       }
-      return stampTerrainAt(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, x, y, size);
+      return stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y));
     }
-    if (mode === "tile") return stampTileAt(scn, x, y, size, store.get(activeTileAtom));
+    if (mode === "tile") return stampTile(scn, footprint(scn, x, y), store.get(activeTileAtom));
     return null;
-  }, [store, loaded, currentTerrain, setStatus]);
+  }, [store, loaded, currentTerrain, footprint, setStatus]);
 
   /** One isometric brush application on the diamond under `p`, applied live. */
   const paintIsomAt = useCallback((p: MapPoint) => {
@@ -206,6 +216,7 @@ export function useTerrainTools() {
   /**
    * Flood the connected area under (x, y) with the current brush: in Rect mode the
    * area is "same terrain type", otherwise "same exact tile". Not an isometric operation.
+   * Under a symmetry mode the region's mirror images fill too.
    */
   const fillAt = useCallback((x: number, y: number) => {
     const scn = store.get(scenarioAtom);
@@ -225,13 +236,13 @@ export function useTerrainTools() {
       const groups = loaded.tileset.groups;
       const typeOf = (id: number) => groups[id >> 4]?.index ?? -1;
       const seedType = typeOf(seed);
-      const region = floodRegion(scn, x, y, (id) => typeOf(id) === seedType);
+      const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => typeOf(id) === seedType), scn.width, scn.height);
       changes = stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, region);
       label = `Fill ${terrain.name}`;
     } else {
       const tile = store.get(activeTileAtom);
       if (tile === seed) return;
-      const region = floodRegion(scn, x, y, (id) => id === seed);
+      const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => id === seed), scn.width, scn.height);
       changes = stampTile(scn, region, tile);
       label = `Fill with ${hexTile(tile)}`;
     }
@@ -239,6 +250,45 @@ export function useTerrainTools() {
     if (changes.length === 0) return;
     applyChanges(scn, changes);
     commitTerrain(scn, { label, changes }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+  }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
+
+  /**
+   * Tools ▸ Fill Terrain: the whole map as one terrain. In Tile mode every cell becomes the
+   * Tile brush's tile; otherwise the Rect brush's terrain is laid the way a new map is
+   * (`flatTerrain`: StarEdit's pairs, and a matching ISOM lattice when the map has one, so
+   * the isometric brush stays healthy). One undo step; doodads go with it like any stroke.
+   */
+  const fillMap = useCallback(() => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return;
+    const changes: TileChange[] = [];
+    let isom: TileChange[] | undefined;
+    let label: string;
+    if (store.get(terrainModeAtom) === "tile") {
+      const tile = store.get(activeTileAtom);
+      for (let at = 0; at < scn.tiles.length; at++) if (scn.tiles[at] !== tile) changes.push({ at, before: scn.tiles[at], after: tile });
+      label = `Fill map with ${hexTile(tile)}`;
+    } else {
+      const terrain = currentTerrain();
+      if (!terrain || !loaded) {
+        setStatus("Fill Terrain needs the tileset graphics — run scripts/extract-tilesets.mjs.");
+        return;
+      }
+      const flat = flatTerrain(scn.width, scn.height, { id: terrain.id, group: terrain.group }, loaded.tileset, Math.random, tilesetIndex(scn));
+      for (let at = 0; at < flat.tiles.length; at++) if (scn.tiles[at] !== flat.tiles[at]) changes.push({ at, before: scn.tiles[at], after: flat.tiles[at] });
+      if (hasIsom(scn) && scn.isom.length === flat.isom.length) {
+        isom = [];
+        for (let i = 0; i < flat.isom.length; i++) if (scn.isom[i] !== flat.isom[i]) isom.push({ at: i, before: scn.isom[i], after: flat.isom[i] });
+      }
+      label = `Fill map with ${terrain.name}`;
+    }
+    if (changes.length === 0 && !(isom && isom.length > 0)) {
+      setStatus("The map is already that terrain — nothing to fill.");
+      return;
+    }
+    applyChanges(scn, changes);
+    if (isom && isom.length > 0) applyIsomChanges(scn, isom);
+    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -310,26 +360,27 @@ export function useTerrainTools() {
     if (store.get(blendFollowAtom)) store.set(blendAnchorAtom, at);
   }, [store, commitTerrain, setActiveTile, setStatus]);
 
-  /** What the brush would leave under the cursor, for the viewport's hover preview. */
+  /** What the brush would leave under the cursor (and its mirror images), for the viewport's hover preview. */
   const ghostAt = useCallback((x: number, y: number): GhostTile[] => {
     const scn = store.get(scenarioAtom);
     if (!scn) return [];
     const mode = store.get(terrainModeAtom);
-    const rect = brushRect(x, y, store.get(brushSizeAtom), scn.width, scn.height);
+    const cells = footprint(scn, x, y);
     const out: GhostTile[] = [];
     if (mode === "rect") {
       const terrain = currentTerrain();
       if (!terrain) return [];
       const variation = Math.max(0, store.get(rectVariationAtom));
-      for (let ty = rect.y0; ty < rect.y1; ty++) {
-        for (let tx = rect.x0; tx < rect.x1; tx++) out.push({ x: tx, y: ty, id: ((terrain.group + (tx & 1)) << 4) | variation });
+      for (const at of cells) {
+        const tx = at % scn.width;
+        out.push({ x: tx, y: Math.floor(at / scn.width), id: ((terrain.group + (tx & 1)) << 4) | variation });
       }
     } else if (mode === "tile") {
       const id = store.get(activeTileAtom);
-      for (let ty = rect.y0; ty < rect.y1; ty++) for (let tx = rect.x0; tx < rect.x1; tx++) out.push({ x: tx, y: ty, id });
+      for (const at of cells) out.push({ x: at % scn.width, y: Math.floor(at / scn.width), id });
     }
     return out;
-  }, [store, currentTerrain]);
+  }, [store, currentTerrain, footprint]);
 
   /** The diamonds the isometric brush would set from the pointer at `p`, for the hover outline. */
   const ghostDiamondsAt = useCallback((p: MapPoint): Diamond[] => {
@@ -339,7 +390,7 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }

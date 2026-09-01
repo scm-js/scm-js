@@ -19,7 +19,7 @@ npm test               # vitest run (node environment, ~2s)
 npm run test:watch
 npx vitest run tests/chk.test.ts          # one file
 npx vitest run -t "flood fill"            # tests matching a name
-npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons.dat), game, scripts, unit (BrooDat required)
+npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons/upgrades/techdata.dat), game, scripts, unit (BrooDat required)
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"    # or explicit .mpq paths
 npm run check:assets   # what is on disk, no archives touched (predev/prebuild run this with --warn)
 node scripts/extract-tilesets.mjs         # just the tilesets
@@ -72,9 +72,17 @@ the fastest way to reach a specific UI state — see README and `src/hooks/useDe
   `markDirty(scn, "NAME", ...)` for every section it affects, or the change is silently dropped on save.
 - To model a new section: add a codec in `sections/`, decode it in `parseScenario`, add a case to
   `encodeSection`, and add a `tests/chk.test.ts` round-trip.
-- `create.ts` builds a fresh scenario (File ▸ New); it does not yet emit `VCOD`/unit-settings sections,
-  so new maps are not loadable by StarCraft. `scenario.isom` is `null` only when the *file* had no
-  `ISOM`; `encodeSection` then omits the section rather than writing a zeroed one.
+- `create.ts` builds a fresh scenario (File ▸ New) with every section the game requires: the three the
+  editor never models — `IVE2`, `VCOD` (StarEdit's fixed verification table, embedded in
+  `sections/vcod.ts`; both fixture maps carry it byte for byte) and the empty CUWP slots `UPRP`/`UPUS` —
+  go into `chk.sections` as raw bytes (`rawCreatedSections`), everything else is marked dirty and
+  encoded on save, with the settings tables (`unitSettings`, `upgradeSettings`, … `wavs`) non-null on
+  their defaults and only the Brood War (`x`) layouts of the revision pairs written — Blizzard's own
+  Brood War maps carry no UNIS/UPGS/TECS/UPGR/PTEC; a hybrid file is the one with both.
+  `requiredSections(fileVersion)` there (common + original layouts below 205 + `x` layouts from 63) is
+  what Check Map tests a file against.
+  `scenario.isom` is `null` only when the *file* had no `ISOM`; `encodeSection` then omits the section
+  rather than writing a zeroed one; the same holds for `mask`, `wavs` and the settings tables.
 - `mpq/scm.ts` wraps `mopaq`: `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
   Non-scenario archive members are kept in `archiveExtrasAtom` and written back on save so custom
   sounds/graphics survive. `scenario.chk` is written uncompressed on purpose.
@@ -87,6 +95,13 @@ scenario. `applyChanges(scn, changes, "do" | "undo")` applies them and marks `MT
 `useTerrainTools` applies changes live during a drag (bumping the revision so the canvas repaints) and
 calls `commitEditAtom` once on mouse-up so the whole stroke is one undo entry (200 levels). `ISOM` is
 intentionally left untouched by the Rect/Tile brushes, matching SCMDraft's non-isometric modes.
+
+Symmetry (`src/editor/symmetry.ts`, `symmetryAtom`): `mirrorRect` / `mirrorIndices` turn a brush
+footprint or flood region into the set of cells including its images, and the Rect / Tile / Fog
+brushes run their normal stamp over that set — so pairs still come from column parity and `Stroke`
+needs no extra merging. Square-only modes (rot90, diag, adiag) act as `none` on non-square maps
+(`symmetryAvailable`). `mirrorPixel` exists for object placement but nothing uses it yet; ISOM and
+Blend are deliberately not covered. The viewport draws the axes; `tests/symmetry.test.ts`.
 
 The Isometric brush lives in `src/editor/isom.ts` — a port of Chkdraft's reverse-engineering of StarEdit
 (MIT). Read its header comment first. Key facts: the ISOM section is a lattice of diamonds whose values
@@ -195,14 +210,77 @@ row for the sixteen classic colours, else an RGB — Pink … Black and any CRGB
 since the tileset palettes have no pink to remap to; `tests/team-color.test.ts`). `unitSettings` is
 one model for UNIS (100 weapons) and UNIx (130), read from UNIx when both exist; `unitSettingsSections`
 decides which to write (the file's revision plus whichever it already carries, so a hybrid map keeps
-both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` until the dialog first
-applies. `setMapVersion` rewrites VER/TYPE and flips `strings.extended` (STR ↔ STRx: both names go
+both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` when the file has no
+section (a new map has them). The upgrade and technology tables follow the same pattern:
+`upgradeSettings` is UPGS (46 upgrades) / UPGx (61, plus one pad byte after the use-default column),
+`upgradeRestrictions` UPGR / PUPx (player-major max / start levels over a global default pair,
+`upgradeIndex`, `upgradeLevels`; `DEFAULT_UPGRADE_MAX` is upgrades.dat's `maxRepeats`, what StarEdit
+writes for a fresh map), `techSettings` TECS (24 techs) / TECx (44), `techRestrictions` PTEC / PTEx
+(`techIndex`, `techState`). The model is always the Brood War width and the original-layout encoders
+trim it (`decode*` re-strides the per-player tables). `revisionSections` in `scenario.ts` chooses
+which of a pair to write — the revision's plus whichever the file (or its dirty set) already has —
+through `unitSettingsSections`, `upgradeSettingsSections`, `upgradeRestrictionSections`,
+`techSettingsSections`, `techRestrictionSections`. `wavs` is the WAV table (`sections/sounds.ts`,
+512 string indices of `staredit\wav\…` paths; the files themselves are archive extras). Defaults
+for the dialogs come from `assets.upgrades` / `assets.techs` (`upgrades.dat`, `techdata.dat` — decoded
+in `dat.ts`, optional like `weapons.dat`). `tests/data-settings.test.ts` pins the codecs, the
+re-striding, the new-map section set and byte-for-byte re-encoding of the fixture maps. `setMapVersion` rewrites VER/TYPE and flips `strings.extended` (STR ↔ STRx: both names go
 dirty and the inapplicable one encodes to `null`, which `serializeScenario` treats as "drop").
+Upgrade / Technology Settings (`DataDialogs.tsx`) share `CatalogueList` (a race-grouped id list) and
+follow Unit Settings exactly: `useScenarioForm(read*Settings)`, in-place typed-array edits plus a
+`bump`, `apply*Settings(clone…)`, `commitSettingsAtom`; the per-player rows show the effective value
+through `upgradeLevels` / `techState` while on Default.
 Unit Settings shows dat defaults for a type on "use default" and seeds its row from them when the
 tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`/`airWeapon`
 (a turreted vehicle's weapons live on its subunit) and `weapons.dat` ships as `assets.weapons`
 (optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
 the section choice per revision and byte-for-byte re-encoding against the fixture maps.
+
+### Resize, validation, find, preferences (`src/editor/resize.ts`, `validate.ts`, `find.ts`, `src/atoms/preferencesAtoms.ts`)
+
+`resizeScenario` is a transaction outside the undo model, applied through `resizeDocumentAtom`
+(drops both stacks, bumps every revision, mirrors width/height into the display atoms). `dx` is
+forced even so left/right tile pairs keep their columns; ISOM is `rebuildIsomFromTiles` when a
+tileset is loaded, else the flat fill's lattice; objects outside the new bounds are dropped,
+locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is pure and
+revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
+`payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
+behind Ctrl+F. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
+(`atomWithStorage` with a memory fallback, `getOnInit` because startup hooks read through
+`store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
+document-replacing actions (New / Open / Close / drop) go through `useMapFileActions().guard(PendingAction)`,
+which parks the action in `confirmClose`'s payload while the map is modified. `tests/resize.test.ts`,
+`tests/validate.test.ts`, `tests/find.test.ts`.
+
+### Import / export, statistics, menus (`src/editor/exchange.ts`, `statistics.ts`, `dialogs/ExchangeDialogs.tsx`, `StatisticsDialog.tsx`)
+
+`editor/exchange.ts` is the pure file-format layer behind File ▸ Import / Export: `.trg` is the raw
+2400-byte TRIG records (SCMDraft-compatible, string indices are the map's own), text triggers go
+through `formats/triggers/text.ts` with `triggerNames(scn)`, and strings are `index<TAB>text` with
+`<XX>` control bytes (`applyStringImport` sets indices in place and appends past the end). Import
+Triggers appends or replaces through `applyTriggers` / `applyBriefing` + `commitTriggersAtom`; Import
+Strings and the String Editor re-sync `mapNameAtom` / `mapDescriptionAtom` after apply because the
+chrome reads the mirror atoms. `editor/statistics.ts#mapStatistics` feeds Tools ▸ Statistics. Menu
+items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `validateMap` with
+`{ only: "triggers" }`); Edit ▸ Delete / Select All / Deselect act on the active layer's selection like
+the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
+the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
+over file contents, not handles. Cut / Copy / Paste, Replace Terrain, Auto-place Start Locations,
+Terrain from Image and Test Map are still `stub()` entries in `MenuBar.tsx`.
+
+### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
+
+`stringUsages(scn)` maps every string index to the records that reference it (SPRP, FORC, MRGN,
+UNIS/UNIx names, SWNM, WAV, every TRIG/MBRF action's `text` and `wav`); the String Editor edits a
+working copy of the table and `applyStrings` writes it back **without renumbering** — it trims only
+unreferenced trailing blanks and keeps a blank slot something still points at. `escapeControls` /
+`unescapeControls` show bytes below 0x20 as `<XX>` (tab, LF, CR stay literal). `editor/sounds.ts`
+joins `scn.wavs` with `archiveExtrasAtom` (`soundList`, `orphanSounds`, member names normalised for
+case and slashes); the Sound Editor's working copy carries both the table and a new extras `Map`, and
+apply replaces the atom, so an imported file only reaches the archive on OK / Apply.
+`editor/switches.ts` edits SWNM (`applySwitchNames` creates the section on the first name and interns
+names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
+`tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.
 
 ### Triggers (`src/formats/chk/sections/triggers.ts`, `src/data/triggerDefs.ts`, `src/formats/triggers/text.ts`, `src/editor/triggers.ts`)
 

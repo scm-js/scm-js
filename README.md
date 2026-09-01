@@ -3,10 +3,11 @@
 A browser-based StarCraft / Brood War scenario editor, built in homage to
 **StarEdit**, **SCMDraft 2**, and **StarForge**.
 
-> **Alpha status.** Existing `.scm`, `.scx`, and bare `.chk` maps can be opened,
+> **Beta status.** Existing `.scm`, `.scx`, and bare `.chk` maps can be opened,
 > rendered, edited, and round-tripped. Unmodelled CHK sections and MPQ members are
-> preserved. New maps are not yet game-loadable because the editor does not generate
-> `VCOD` or the required unit, upgrade, and technology settings sections.
+> preserved. New maps are written with every section the game requires — StarEdit's
+> `VCOD` verification table and the unit, upgrade and technology settings tables on
+> their defaults — so they have the same section set as a map StarEdit creates.
 
 ## What works
 
@@ -21,7 +22,8 @@ A browser-based StarCraft / Brood War scenario editor, built in homage to
 | Fog of War | Working | Per-player paint, fill, copy, invert, overlay, and undo |
 | Triggers | Working | Classic (StarEdit-style) editor, TrigEdit-syntax text editor, mission briefings; every condition and action |
 | Trigger script | Working | A TypeScript subset in Monaco, type-checked against the open map, compiled into a locked block of the trigger list — raw `trigger()` calls plus a structured level (variables, if / while, functions) lowered to a death-counter state machine, with a built-in simulator |
-| Scenario/data dialogs | In progress | Some of this UI is still scaffolding and does not write map data |
+| Scenario/data dialogs | Working | Map properties, revision, players, forces, colours, unit / upgrade / technology settings, strings, sounds, switches, resize |
+| Tools | Working | Check Map, Find, Statistics, Symmetry, trigger and string import/export, persisted preferences |
 
 ## Run locally
 
@@ -97,7 +99,8 @@ VX4 megatile ──▶ 16 minitile refs (bit 0 = h-flip) ──▶ VR4 8x8 bitma
 Units are drawn with the game's own sprites, in the owner's team colour. The same
 archives hold everything needed; `npm run extract` (or `npm run extract:units` on its
 own) mirrors the relevant part of the MPQ tree into `public/`: `arr/{units,flingy,sprites,images}.dat`
-and `arr/images.tbl` (the tables that lead from a unit type to its picture), `game/tunit.pcx`
+and `arr/images.tbl` (the tables that lead from a unit type to its picture), `arr/weapons.dat`,
+`arr/upgrades.dat` and `arr/techdata.dat` (the defaults the settings dialogs show), `game/tunit.pcx`
 (team colours), `scripts/iscript.bin` (the animation bytecode) and the `unit/**/*.grp` sprite
 sheets plus `unit/**/*.lo?` overlay-position files that the 228 unit types and their idle
 animations can reach. The walk is also seeded from all 517 `sprites.dat` entries for the
@@ -393,9 +396,13 @@ protected maps rely on.
 **File ▸ New**, and the map the editor opens on, build a scenario from scratch: a flat
 128x128 Badlands map, laid out the way StarEdit does it — MTXM in left/right tile pairs
 sharing one random dirt variation, and ISOM as the two flat quads that alternate across
-the diamond grid. Saving one writes a CHK this editor reads back, but not yet a map
-StarCraft will load: `VCOD` and the unit/upgrade/tech settings sections are not
-generated.
+the diamond grid. Saving one writes the same set of sections a StarEdit map has: the
+fixed `VCOD` verification table (identical in every unprotected map), `IVE2`, empty CUWP
+slots (`UPRP`/`UPUS`), an all-fogged `MASK`, and the unit / upgrade / technology settings
+tables in the Brood War layouts on their `.dat` defaults (Blizzard's own Brood War maps
+carry only those; a hybrid map is the one that needs both) — see
+`src/formats/chk/create.ts`. **Tools ▸ Check Map** lists what a file of its revision is
+still missing.
 
 Reading requires a [mopaq](https://github.com/jeany55/mopaq) with PKWARE DCL support —
 StarCraft compresses nearly every file in its archives, and its own maps, with it.
@@ -587,10 +594,68 @@ Apply or Cancel — and is not part of the undo history, as in StarEdit.
   shows its turret's), and per-player availability (default / enabled / disabled over a
   global default). Which of `UNIS`/`UNIx` is written follows the revision: both for a
   hybrid map, and whichever the file already had is always kept current.
+- **Resize / Crop Map** — new size, fill terrain and a 3×3 anchor (the offset is kept
+  even so left/right tile pairs stay aligned), with "clamp locations". Units, sprites and
+  doodads outside the new bounds are dropped; locations are shifted and clamped, never
+  dropped; Anywhere is reset; ISOM is rebuilt from the tiles when the tileset is loaded.
+  Not undoable — it clears the history, like the settings dialogs.
 - **Unit Properties** (double-click a unit, Units layer) — every `UNIT` field, with the
   unit drawn in its owner's colour.
 
-Upgrade and Technology Settings are still mock-ups.
+- **Upgrade Settings** — `UPGS`/`UPGx` and `UPGR`/`PUPx`. Per upgrade: use-default
+  (greyed `upgrades.dat` costs, seeded into the row when unticked), a base and a
+  per-level factor for minerals, gas and research time, and start / maximum levels per
+  player over a default pair. Ids 46–60 only exist for Brood War maps.
+- **Technology Settings** — `TECS`/`TECx` and `PTEC`/`PTEx`. Per ability: use-default
+  (`techdata.dat`), minerals, gas, research time and energy; availability per player
+  (default / available / researched / disabled) over "available by default" and
+  "researched by default". Ids 24–43 are Brood War only.
+
+- **String Editor** — every entry of `STR`/`STRx` with where it is used (name,
+  description, forces, locations, unit names, switches, sounds, trigger and briefing
+  actions). Edits keep their index, so triggers and locations keep pointing where they
+  did; control bytes are shown and typed as `<XX>` and a row of buttons inserts the
+  game's colour and layout codes. *Delete unused* blanks unreferenced entries and only
+  trailing blanks are dropped from the table.
+- **Sound Editor** — the `WAV` table joined with the archive's `staredit\wav\` members:
+  import `.wav`/`.ogg` files, play them (Web Audio; PCM and Ogg decode, ADPCM does not),
+  remove them, and adopt files the archive carries but the table does not list.
+- **Switches** — the 256 `SWNM` names with how many conditions and actions use each.
+
+Every settings dialog writes whichever layout pair its revision reads plus any the file
+already carries, so a hybrid map keeps both and an original-game map only its own.
+
+## Tools, checks and preferences
+
+- **Check Map** (Tools ▸ Check Map…) — the sections a file of its revision needs to load,
+  start locations against the player table, the unit limit and off-map units, Anywhere,
+  duplicate location names, string capacity, triggers pointing at unused locations or
+  strings past the table, Play WAV files missing from the archive, switches tested but
+  never set, disabled triggers, and ISOM health. Double-click an issue to go there.
+  **Triggers ▸ Validate Triggers** is the same run filtered to trigger issues.
+- **Find** (Ctrl+F) — units, locations, sprites, strings and triggers; *Go To* selects
+  and centres, or opens the String Editor on the entry.
+- **Statistics** (Tools ▸ Statistics…) — counts of everything in the map, per player and
+  per terrain, with *Copy as text*.
+- **Import / Export** (File menu) — triggers as `.trg` (the raw `TRIG` records, as
+  SCMDraft exports them) or as TrigEdit text, and strings as a tab-separated `.txt`
+  (`index<TAB>text`, control bytes as `<XX>`); importing triggers can append or replace.
+- **Symmetry** (Tools ▸ Symmetry…, toolbar) — mirror horizontally, vertically or both,
+  rotate 180°, and on square maps rotate 90° or mirror across either diagonal. Every
+  cell a Rect, Tile or Fog stroke (or its area fill) covers is painted on its mirror
+  images too, as one undo step, and the Rect brush still lays proper left/right pairs
+  across the seam. The axes are drawn while a mode is active. The Isometric and Blend
+  brushes and object placement are not mirrored.
+- **Fill Terrain** (Tools) — the whole map with the active terrain, pairs and ISOM
+  regenerated, as one undo step. **Edit ▸ Select All / Deselect / Delete** act on the
+  active layer. **Open Recent** lists this session's names only, since a browser hands
+  over file contents rather than handles.
+- **Grid Settings** — spacing, colour, opacity, lines / dots / crosses, and the location
+  and doodad snapping; remembered across sessions.
+- **Preferences** (Ctrl+,) — persisted in the browser: the splash screen, confirming
+  before New / Open / Close / a dropped file replaces a modified map, new-scenario
+  defaults, and whether water and units animate on startup. Only options something
+  reads are listed.
 
 ## Layout
 

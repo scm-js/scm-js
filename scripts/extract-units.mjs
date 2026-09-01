@@ -9,7 +9,8 @@
  *
  * The output mirrors the MPQ tree so the browser loader can use the game's own paths:
  *
- *     public/arr/units.dat, weapons.dat, flingy.dat, sprites.dat, images.dat, images.tbl
+ *     public/arr/units.dat, weapons.dat, upgrades.dat, techdata.dat, flingy.dat, sprites.dat,
+ *                images.dat, images.tbl
  *     public/game/tunit.pcx                      team-colour remap table
  *     public/scripts/iscript.bin                 animation bytecode
  *     public/unit/<race>/<name>.grp              every GRP the 228 unit types, the 517
@@ -35,7 +36,7 @@ import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation }
 const UNIT_COUNT = 228;
 const SPRITE_COUNT = 517;
 const IMAGE_COUNT = 999;
-const TABLES = ["arr\\units.dat", "arr\\weapons.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "arr\\images.tbl", "game\\tunit.pcx", "scripts\\iscript.bin"];
+const TABLES = ["arr\\units.dat", "arr\\weapons.dat", "arr\\upgrades.dat", "arr\\techdata.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "arr\\images.tbl", "game\\tunit.pcx", "scripts\\iscript.bin"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 

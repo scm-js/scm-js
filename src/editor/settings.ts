@@ -5,10 +5,16 @@
  * / Cancel), as in StarEdit. Every writer here marks the sections it touches dirty and
  * the caller bumps `settingsRevisionAtom` (`commitSettingsAtom`) so the chrome re-reads.
  */
-import { markDirty, strSectionName, unitSettingsSections, type Scenario } from "../formats/chk/scenario";
+import {
+  markDirty, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario,
+} from "../formats/chk/scenario";
 import { FORCE_SLOTS, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
 import { getString, findString, setString } from "../formats/chk/sections/strings";
-import { cloneUnitAvailability, cloneUnitSettings, defaultUnitAvailability, defaultUnitSettings, type UnitAvailability, type UnitSettings } from "../formats/chk/sections/settings";
+import {
+  cloneTechRestrictions, cloneTechSettings, cloneUnitAvailability, cloneUnitSettings, cloneUpgradeRestrictions, cloneUpgradeSettings,
+  defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
+  type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
+} from "../formats/chk/sections/settings";
 
 /* ── Strings ─────────────────────────────────────────────── */
 
@@ -131,4 +137,36 @@ export function applyUnitSettings(scn: Scenario, settings: UnitSettings, availab
 
 export function unitCustomName(scn: Scenario, unitId: number): string {
   return getString(scn.strings, scn.unitSettings?.nameIndex[unitId] ?? 0) ?? "";
+}
+
+/* ── Upgrade settings ────────────────────────────────────── */
+
+/** A working copy of UPGS/UPGx and UPGR/PUPx, on defaults when the file has none. */
+export function readUpgradeSettings(scn: Scenario): { settings: UpgradeSettings; restrictions: UpgradeRestrictions } {
+  return {
+    settings: scn.upgradeSettings ? cloneUpgradeSettings(scn.upgradeSettings) : defaultUpgradeSettings(),
+    restrictions: scn.upgradeRestrictions ? cloneUpgradeRestrictions(scn.upgradeRestrictions) : defaultUpgradeRestrictions(),
+  };
+}
+
+/** Install edited copies; which of UPGS / UPGx and UPGR / PUPx get written follows the file's revision. */
+export function applyUpgradeSettings(scn: Scenario, settings: UpgradeSettings, restrictions: UpgradeRestrictions) {
+  scn.upgradeSettings = settings;
+  scn.upgradeRestrictions = restrictions;
+  markDirty(scn, ...upgradeSettingsSections(scn), ...upgradeRestrictionSections(scn));
+}
+
+/* ── Technology settings ─────────────────────────────────── */
+
+export function readTechSettings(scn: Scenario): { settings: TechSettings; restrictions: TechRestrictions } {
+  return {
+    settings: scn.techSettings ? cloneTechSettings(scn.techSettings) : defaultTechSettings(),
+    restrictions: scn.techRestrictions ? cloneTechRestrictions(scn.techRestrictions) : defaultTechRestrictions(),
+  };
+}
+
+export function applyTechSettings(scn: Scenario, settings: TechSettings, restrictions: TechRestrictions) {
+  scn.techSettings = settings;
+  scn.techRestrictions = restrictions;
+  markDirty(scn, ...techSettingsSections(scn), ...techRestrictionSections(scn));
 }

@@ -23,6 +23,7 @@ redistribution rights.
     tileset/manifest.json  which tilesets came out complete
 
     arr/{units,flingy,sprites,images}.dat, arr/images.tbl   unit type -> picture
+    arr/{weapons,upgrades,techdata}.dat                       defaults the settings dialogs show
     game/tunit.pcx         team-colour remap rows
     scripts/iscript.bin    animation bytecode
     unit/**/*.grp          sprite sheets reachable from units, sprites and doodads

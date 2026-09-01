@@ -1,11 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
-import { CircleX, Info, Keyboard, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
-import { closeDialogAtom } from "../../atoms/uiAtoms";
-import { TILESETS } from "../../data/tilesets";
-import { locationsAtom } from "../../atoms/documentAtoms";
-import { UNIT_GROUPS, unitName } from "../../data/units";
-import { Button, Check, Field, Group, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { CircleX, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
+import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { activeLayerAtom, centerViewOnAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
+import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
+import {
+  archiveExtrasAtom, doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom,
+} from "../../atoms/documentAtoms";
+import { DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
+import { unitName } from "../../data/units";
+import { spriteCatalogue } from "../../data/sprites";
+import { findInScenario, FIND_KINDS, type FindKind, type FindResult } from "../../editor/find";
+import { spriteKind } from "../../editor/sprites";
+import { TILE_PX } from "../../editor/units";
+import { issueCounts, triggerIssues, validateScenario, type IssueLevel, type IssueTarget } from "../../editor/validate";
+import type { SpriteRecord } from "../../formats/chk/sections/objects";
+import { useIsomStatus } from "../../hooks/useIsom";
+import { useLocationTools } from "../../hooks/useLocationTools";
+import { useUnitAssets } from "../../hooks/useUnitAssets";
+import { Button, Check, Field, Group, ListBox, Select, Tabs, TextInput } from "../ui";
 import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
@@ -18,7 +31,6 @@ const HOTKEYS: [string, string][] = [
   ["Save As", "Ctrl+Shift+S"],
   ["Map Properties", "Alt+Enter"],
   ["Undo / Redo", "Ctrl+Z · Ctrl+Y"],
-  ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
   ["Find", "Ctrl+F"],
   ["Toggle grid", "Ctrl+G"],
   ["Zoom in / out / 100%", "Ctrl++ · Ctrl+− · Ctrl+0"],
@@ -26,8 +38,9 @@ const HOTKEYS: [string, string][] = [
   ["Layer: Terrain / Doodads / Units", "T · D · U"],
   ["Layer: Sprites / Locations / Fog", "S · L · F"],
   ["Layer: Cut/Copy/Paste", "C"],
+  ["Brush smaller / larger", "[ · ]"],
   ["Nudge selected locations (snap step / 1 px)", "Arrows · Shift+Arrows"],
-  ["Delete selection / clear selection", "Del · Esc"],
+  ["Delete selection / stop placing, clear selection", "Del · Esc"],
   ["Trigger Editor", "Ctrl+T"],
   ["Text Trigger Editor", "Ctrl+Shift+T"],
   ["Preferences", "Ctrl+,"],
@@ -35,10 +48,27 @@ const HOTKEYS: [string, string][] = [
   ["Full screen", "F11"],
 ];
 
+/**
+ * Edit ▸ Preferences: persisted in localStorage (atoms/preferencesAtoms.ts). Only
+ * settings something reads are listed; the Hotkeys tab is a reference.
+ */
 export function PreferencesDialog({ entry }: DialogProps) {
-  const [autosave, setAutosave] = useState(5);
+  const [prefs, setPrefs] = useAtom(preferencesAtom);
+  const [local, setLocal] = useState<Preferences>(prefs);
+  const patch = (p: Partial<Preferences>) => setLocal({ ...local, ...p });
+  const newMap = (p: Partial<Preferences["newMap"]>) => patch({ newMap: { ...local.newMap, ...p } });
+  const apply = () => setPrefs(local);
   return (
-    <DialogFrame dialogKey={entry.key} title="Preferences" icon={<Settings2 size={14} />} size="lg" tall showApply>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Preferences"
+      icon={<Settings2 size={14} />}
+      size="lg"
+      tall
+      showApply
+      onOk={apply}
+      footerLeft={<Button size="sm" onClick={() => setLocal(DEFAULT_PREFERENCES)}><RotateCcw size={11} /> Reset to defaults</Button>}
+    >
       <Tabs
         className="grow"
         tabs={[
@@ -49,23 +79,28 @@ export function PreferencesDialog({ entry }: DialogProps) {
               <div className="stack">
                 <Group title="Startup">
                   <div className="col" style={{ gap: 2 }}>
-                    <Check label="Show splash screen" defaultChecked />
-                    <Check label="Reopen last scenario" />
-                    <Check label="Check for updates" defaultChecked />
+                    <Check label="Show the splash screen while the game data loads" checked={local.splash} onChange={(e) => patch({ splash: e.target.checked })} />
                   </div>
+                  <p className="hint" style={{ marginTop: 4 }}>Off starts straight on the editor; terrain and units fill in as they arrive.</p>
                 </Group>
-                <Group title="Saving">
-                  <div className="form wide">
-                    <Field label="Autosave every"><div className="row"><NumberInput value={autosave} onChange={setAutosave} min={0} max={60} width={110} unit="minutes (0 = off)" /></div></Field>
-                    <Field label="Backups"><Check label="Keep a .bak copy on save" defaultChecked /></Field>
-                    <Field label="On close"><Check label="Confirm when there are unsaved changes" defaultChecked /></Field>
+                <Group title="Unsaved changes">
+                  <div className="col" style={{ gap: 2 }}>
+                    <Check label="Ask before closing or replacing a map with unsaved changes" checked={local.confirmClose} onChange={(e) => patch({ confirmClose: e.target.checked })} />
                   </div>
+                  <p className="hint" style={{ marginTop: 4 }}>Applies to File ▸ New, Open, Close and a file dropped on the window.</p>
                 </Group>
                 <Group title="New scenario defaults">
                   <div className="form wide">
-                    <Field label="Tileset"><Select options={TILESETS.map((t) => t.name)} defaultValue="Jungle World" /></Field>
-                    <Field label="Size"><Select options={["64 × 64", "96 × 96", "128 × 128", "192 × 192", "256 × 256"]} defaultValue="128 × 128" /></Field>
+                    <Field label="Tileset"><Select value={local.newMap.tileset} onChange={(e) => newMap({ tileset: e.target.value as TilesetId })} options={TILESETS.map((t) => ({ value: t.id, label: t.name }))} /></Field>
+                    <Field label="Size">
+                      <div className="row">
+                        <Select style={{ width: 90 }} value={String(local.newMap.width)} onChange={(e) => newMap({ width: Number(e.target.value) })} options={MAP_SIZES.map(String)} />
+                        <span className="dim">×</span>
+                        <Select style={{ width: 90 }} value={String(local.newMap.height)} onChange={(e) => newMap({ height: Number(e.target.value) })} options={MAP_SIZES.map(String)} />
+                      </div>
+                    </Field>
                   </div>
+                  <p className="hint" style={{ marginTop: 4 }}>Also the map the editor opens on.</p>
                 </Group>
               </div>
             ),
@@ -75,52 +110,15 @@ export function PreferencesDialog({ entry }: DialogProps) {
             label: "Display",
             content: (
               <div className="stack">
-                <Group title="Map view">
+                <Group title="Animation on startup">
                   <div className="col" style={{ gap: 2 }}>
-                    <Check label="Smooth zoom animation" defaultChecked />
-                    <Check label="Show rulers" defaultChecked />
-                    <Check label="Show cursor tile HUD" defaultChecked />
-                    <Check label="Colour-code units by player" defaultChecked />
-                    <Check label="Draw unit health bars" />
-                    <Check label="Draw location names" defaultChecked />
+                    <Check label="Animate water (palette cycling)" checked={local.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
+                    <Check label="Animate units (idle animations)" checked={local.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
                   </div>
+                  <p className="hint" style={{ marginTop: 4 }}>The View menu toggles both for the session; this is where they start.</p>
                 </Group>
-                <Group title="Overlays">
-                  <div className="form wide">
-                    <Field label="Location opacity"><input type="range" min={0} max={100} defaultValue={35} /></Field>
-                    <Field label="Fog opacity"><input type="range" min={0} max={100} defaultValue={45} /></Field>
-                    <Field label="Grid opacity"><input type="range" min={0} max={100} defaultValue={30} /></Field>
-                  </div>
-                </Group>
-                <Group title="Theme">
-                  <div className="form wide">
-                    <Field label="Accent"><Select options={["Gold (StarEdit)", "Teal (Protoss)", "Amber (Terran)", "Violet (Zerg)"]} /></Field>
-                    <Field label="Density"><Select options={["Compact", "Comfortable"]} /></Field>
-                  </div>
-                </Group>
-              </div>
-            ),
-          },
-          {
-            value: "editing",
-            label: "Editing",
-            content: (
-              <div className="stack">
-                <Group title="Placement">
-                  <div className="col" style={{ gap: 2 }}>
-                    <Check label="Allow stacking units" />
-                    <Check label="Allow placing units on unbuildable terrain" />
-                    <Check label="Snap buildings to build grid" defaultChecked />
-                    <Check label="Auto-generate ISOM cliffs" defaultChecked />
-                    <Check label="Warn when exceeding unit limit (1700)" defaultChecked />
-                  </div>
-                </Group>
-                <Group title="Defaults">
-                  <div className="form wide">
-                    <Field label="Unit owner"><Select options={Array.from({ length: 12 }, (_, i) => `Player ${i + 1}`)} /></Field>
-                    <Field label="Brush size"><Select options={["1 × 1", "2 × 2", "3 × 3", "4 × 4", "5 × 5"]} /></Field>
-                    <Field label="Undo levels"><NumberInput value={200} onChange={() => {}} min={10} max={2000} width={110} /></Field>
-                  </div>
+                <Group title="Grid">
+                  <p className="hint">The grid's spacing, colour, opacity and style are in View ▸ Grid Settings and are remembered too.</p>
                 </Group>
               </div>
             ),
@@ -168,55 +166,177 @@ export function ShortcutsDialog({ entry }: DialogProps) {
 
 /* ── Validate Map ───────────────────────────────────────── */
 
-const ISSUES: { level: "error" | "warn" | "info"; text: string; where: string }[] = [
-  { level: "error", text: "No start location for Player 5 (slot is Human)", where: "Players" },
-  { level: "warn", text: "Location 'Anywhere' has been resized", where: "Location 63" },
-  { level: "warn", text: "Trigger 5 references switch 12 which is never set", where: "Triggers" },
-  { level: "warn", text: "Unit count 0 — map has no units", where: "Units" },
-  { level: "info", text: "3 unused strings can be removed", where: "Strings" },
-  { level: "info", text: "Map version: Brood War 1.04 (.scx)", where: "Header" },
-];
+const LEVEL_ICON: Record<IssueLevel, ReactNode> = { error: <CircleX size={13} />, warn: <TriangleAlert size={13} />, info: <Info size={13} /> };
 
-export function ValidateMapDialog({ entry }: DialogProps) {
+/** Where a target lives, so the go-to switches to the right layer. */
+type Jump = (target: IssueTarget) => void;
+
+/** Selecting and centring on units / locations / sprites / triggers, shared by Check Map and Find. */
+function useJump(closeKey: number): Jump {
   const close = useSetAtom(closeDialogAtom);
-  const icon = { error: <CircleX size={13} />, warn: <TriangleAlert size={13} />, info: <Info size={13} /> };
+  const open = useSetAtom(openDialogAtom);
+  const setLayer = useSetAtom(activeLayerAtom);
+  const setSelectedUnits = useSetAtom(selectedUnitsAtom);
+  const setCenter = useSetAtom(centerViewOnAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const locationTools = useLocationTools();
+  return (target) => {
+    switch (target.kind) {
+      case "location":
+        locationTools.select([target.index]);
+        locationTools.centerOn(target.index);
+        setLayer("locations");
+        close(closeKey);
+        break;
+      case "unit": {
+        const u = scenario?.units[target.index];
+        if (!u) return;
+        setSelectedUnits([target.index]);
+        setCenter({ x: u.x / TILE_PX, y: u.y / TILE_PX });
+        setLayer("units");
+        close(closeKey);
+        break;
+      }
+      case "trigger":
+        open("triggerEditor", { index: target.index });
+        break;
+      case "dialog":
+        open(target.id);
+        break;
+    }
+  };
+}
+
+/**
+ * Tools ▸ Check Map (editor/validate.ts). `payload.only === "triggers"` is Triggers ▸
+ * Validate Triggers: the same run, filtered to what concerns the trigger list.
+ */
+export function ValidateMapDialog({ entry }: DialogProps) {
+  const scenario = useAtomValue(scenarioAtom);
+  const extras = useAtomValue(archiveExtrasAtom);
+  useAtomValue(settingsRevisionAtom);
+  useAtomValue(triggersRevisionAtom);
+  useAtomValue(unitsRevisionAtom);
+  useAtomValue(locationsRevisionAtom);
+  const isom = useIsomStatus();
+  const close = useSetAtom(closeDialogAtom);
+  const jump = useJump(entry.key);
+  const only = entry.payload?.only === "triggers";
+  const [show, setShow] = useState<Record<IssueLevel, boolean>>({ error: true, warn: true, info: true });
+  const [run, setRun] = useState(0);
+  const issues = useMemo(() => {
+    void run;
+    if (!scenario) return [];
+    const all = validateScenario(scenario, { extras, isom });
+    return only ? triggerIssues(all) : all;
+  }, [scenario, extras, isom, only, run]);
+  const counts = issueCounts(issues);
+  const listed = issues.filter((i) => show[i.level]);
+  const title = only ? "Validate Triggers" : "Check Map";
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Check Map" icon={<ShieldCheck size={14} />} size="md" footer={<><Button>Re-check</Button><Button variant="primary" onClick={() => close(entry.key)}>Close</Button></>} footerLeft={<span>1 error · 3 warnings · 2 notes</span>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title={title}
+      icon={<ShieldCheck size={14} />}
+      size="md"
+      tall
+      footer={<><Button onClick={() => setRun((n) => n + 1)}>Re-check</Button><Button variant="primary" onClick={() => close(entry.key)}>Close</Button></>}
+      footerLeft={<span>{counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn} warning{counts.warn === 1 ? "" : "s"} · {counts.info} note{counts.info === 1 ? "" : "s"}</span>}
+    >
       <div className="row">
-        <Check label="Errors" defaultChecked /><Check label="Warnings" defaultChecked /><Check label="Notes" defaultChecked />
+        <Check label="Errors" checked={show.error} onChange={(e) => setShow({ ...show, error: e.target.checked })} />
+        <Check label="Warnings" checked={show.warn} onChange={(e) => setShow({ ...show, warn: e.target.checked })} />
+        <Check label="Notes" checked={show.info} onChange={(e) => setShow({ ...show, info: e.target.checked })} />
         <span className="grow" />
-        <Check label="Check on save" />
+        {only && <span className="hint">triggers, briefings and switches only</span>}
       </div>
-      <div className="listbox" style={{ maxHeight: 320 }}>
-        {ISSUES.map((i, n) => (
-          <div key={n} className={`issue ${i.level}`}>
-            {icon[i.level]}
+      <div className="listbox grow" style={{ minHeight: 200 }}>
+        {!scenario && <div className="empty">Open or create a map first.</div>}
+        {scenario && listed.length === 0 && <div className="empty">{issues.length === 0 ? "Nothing to report." : "Nothing at the selected levels."}</div>}
+        {listed.map((i, n) => (
+          <div key={n} className={`issue ${i.level}${i.target ? " jump" : ""}`} onDoubleClick={() => i.target && jump(i.target)} title={i.target ? "Double-click to go there" : undefined}>
+            {LEVEL_ICON[i.level]}
             <span>{i.text}</span>
             <span className="where">{i.where}</span>
           </div>
         ))}
       </div>
-      <p className="hint">Double-click an issue to jump to it once map data is loaded.</p>
+      <p className="hint">Double-click an issue to go to the unit, location or dialog it is about.</p>
     </DialogFrame>
   );
 }
 
 /* ── Find ───────────────────────────────────────────────── */
 
+/** Edit ▸ Find (editor/find.ts): search units, locations, sprites, strings or triggers; Go To selects and centres. */
 export function FindDialog({ entry }: DialogProps) {
-  const [kind, setKind] = useState("Units");
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(unitsRevisionAtom);
+  useAtomValue(doodadsRevisionAtom);
+  useAtomValue(locationsRevisionAtom);
+  useAtomValue(settingsRevisionAtom);
+  useAtomValue(triggersRevisionAtom);
+  const { loaded: assets } = useUnitAssets();
+  const open = useSetAtom(openDialogAtom);
+  const close = useSetAtom(closeDialogAtom);
+  const setLayer = useSetAtom(activeLayerAtom);
+  const setSelectedSprites = useSetAtom(selectedSpritesAtom);
+  const setCenter = useSetAtom(centerViewOnAtom);
+  const jump = useJump(entry.key);
+  const [kind, setKind] = useState<FindKind>("units");
   const [q, setQ] = useState("");
-  const locations = useAtomValue(locationsAtom);
-  const pool = kind === "Units" ? UNIT_GROUPS.flatMap((g) => g.units.map(unitName)) : kind === "Locations" ? locations.map((l) => `${l.name} (slot ${l.index})`) : [];
-  const results = q ? pool.filter((p) => p.toLowerCase().includes(q.toLowerCase())).slice(0, 50) : [];
+  const [matchCase, setMatchCase] = useState(false);
+  const [sel, setSel] = useState<number | null>(null);
+  const catalogue = useMemo(() => (assets ? spriteCatalogue(assets) : null), [assets]);
+  const results = useMemo(() => {
+    if (!scenario) return [];
+    const spriteName = (r: SpriteRecord) => {
+      if (spriteKind(r) === "unit") return unitName(r.spriteId);
+      return catalogue?.entries[r.spriteId]?.label ?? `Sprite #${r.spriteId}`;
+    };
+    return findInScenario(scenario, { kind, query: q, matchCase, spriteName });
+  }, [scenario, kind, q, matchCase, catalogue]);
+
+  const goTo = (r: FindResult) => {
+    switch (r.kind) {
+      case "units": jump({ kind: "unit", index: r.index }); break;
+      case "locations": jump({ kind: "location", index: r.index }); break;
+      case "triggers": jump({ kind: "trigger", index: r.index }); break;
+      case "strings": open("stringEditor", { index: r.index }); break;
+      case "sprites":
+        setSelectedSprites([r.index]);
+        if (r.x !== undefined && r.y !== undefined) setCenter({ x: r.x, y: r.y });
+        setLayer("sprites");
+        close(entry.key);
+        break;
+    }
+  };
+  const current = sel !== null ? results[sel] : undefined;
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Find" icon={<Search size={14} />} size="sm" okLabel="Go To" footerLeft={<span>{results.length} result(s)</span>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Find"
+      icon={<Search size={14} />}
+      size="sm"
+      footer={<><Button variant="primary" disabled={!current} onClick={() => current && goTo(current)}>Go To</Button><Button onClick={() => close(entry.key)}>Close</Button></>}
+      footerLeft={<span>{q ? `${results.length} result${results.length === 1 ? "" : "s"}` : "Type to search"}</span>}
+    >
       <div className="form wide">
-        <Field label="Find in"><Select value={kind} onChange={(e) => setKind(e.target.value)} options={["Units", "Locations", "Sprites", "Strings", "Triggers"]} /></Field>
-        <Field label="Search"><TextInput autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, ID or text…" /></Field>
-        <Field label="Options"><div className="row wrap"><Check label="Match case" /><Check label="Whole word" /><Check label="Selected only" /></div></Field>
+        <Field label="Find in"><Select value={kind} onChange={(e) => { setKind(e.target.value as FindKind); setSel(null); }} options={FIND_KINDS} /></Field>
+        <Field label="Search"><TextInput autoFocus value={q} onChange={(e) => { setQ(e.target.value); setSel(null); }} placeholder={kind === "units" ? "Unit name, id or 'player 3'…" : kind === "triggers" ? "Text in a trigger, or its number…" : "Name, number or text…"} onKeyDown={(e) => { if (e.key === "Enter" && results[0]) goTo(results[sel ?? 0]); }} /></Field>
+        <Field label="Options"><div className="row wrap"><Check label="Match case" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} /></div></Field>
       </div>
-      <ListBox items={results} style={{ height: 160 }} empty={q ? "No matches." : "Type to search."} />
+      <ListBox
+        items={results}
+        selected={sel}
+        onSelect={(i) => setSel(i)}
+        style={{ height: 200 }}
+        empty={!scenario ? "Open or create a map first." : q ? "No matches." : "Type to search."}
+        render={(r) => <><span className="idx">{r.kind === "triggers" || r.kind === "locations" || r.kind === "strings" ? r.index + (r.kind === "triggers" ? 1 : 0) : r.index}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span><span className="faint" style={{ marginLeft: "auto", paddingLeft: 8, whiteSpace: "nowrap" }}>{r.detail}</span></>}
+      />
+      <p className="hint">Double-click or Go To selects the result on the map and switches to its layer.</p>
     </DialogFrame>
   );
 }

@@ -9,6 +9,8 @@ import { LocationListDialog, SoundEditorDialog, StringEditorDialog, SwitchesDial
 import { LocationPropertiesDialog, SpritePropertiesDialog, UnitPropertiesDialog } from "./ObjectDialogs";
 import { MissionBriefingDialog, TextTriggerEditorDialog, TriggerEditorDialog } from "./TriggerDialogs";
 import { ScriptEditorDialog } from "./ScriptEditorDialog";
+import { ExportStringsDialog, ExportTriggersDialog, ImportStringsDialog, ImportTriggersDialog } from "./ExchangeDialogs";
+import { StatisticsDialog } from "./StatisticsDialog";
 import { AboutDialog, FindDialog, PreferencesDialog, ShortcutsDialog, ValidateMapDialog } from "./MiscDialogs";
 
 export interface DialogProps {
@@ -47,6 +49,11 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   preferences: PreferencesDialog,
   shortcuts: ShortcutsDialog,
   validateMap: ValidateMapDialog,
+  statistics: StatisticsDialog,
+  importTriggers: ImportTriggersDialog,
+  exportTriggers: ExportTriggersDialog,
+  importStrings: ImportStringsDialog,
+  exportStrings: ExportStringsDialog,
   find: FindDialog,
   about: AboutDialog,
 };

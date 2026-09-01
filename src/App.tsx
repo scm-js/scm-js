@@ -3,6 +3,7 @@ import { useAtomValue } from "jotai";
 import { screenAtom } from "./atoms/editorAtoms";
 import { panelsAtom } from "./atoms/uiAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
+import { useApplyPreferences } from "./hooks/useApplyPreferences";
 import { useMapFileActions } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
@@ -19,8 +20,9 @@ import SplashScreen from "./components/splash/SplashScreen";
 export default function App() {
   const screen = useAtomValue(screenAtom);
   const panels = useAtomValue(panelsAtom);
-  const { openFile } = useMapFileActions();
+  const { guard } = useMapFileActions();
   const [dropTarget, setDropTarget] = useState(false);
+  useApplyPreferences();
   useHotkeys();
   useDevDeepLinks();
   usePreload();
@@ -35,7 +37,7 @@ export default function App() {
     if (!file) return;
     e.preventDefault();
     setDropTarget(false);
-    void openFile(file);
+    guard({ action: "open", file });
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;

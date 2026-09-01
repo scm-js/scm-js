@@ -12,9 +12,12 @@ import {
   FORCE_SLOTS, PLAYER_SLOTS, type Forces, type PlayerRgb,
 } from "./sections/players";
 import {
-  decodeUnitAvailability, decodeUnitSettings, encodeUnitAvailability, encodeUnitSettings,
-  WEAPONS_BW, WEAPONS_ORIGINAL, type UnitAvailability, type UnitSettings,
+  decodeTechRestrictions, decodeTechSettings, decodeUnitAvailability, decodeUnitSettings, decodeUpgradeRestrictions, decodeUpgradeSettings,
+  encodeTechRestrictions, encodeTechSettings, encodeUnitAvailability, encodeUnitSettings, encodeUpgradeRestrictions, encodeUpgradeSettings,
+  TECHS_BW, TECHS_ORIGINAL, UPGRADES_BW, UPGRADES_ORIGINAL, WEAPONS_BW, WEAPONS_ORIGINAL,
+  type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
 } from "./sections/settings";
+import { decodeWavs, encodeWavs } from "./sections/sounds";
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
 } from "./sections/terrain";
@@ -59,6 +62,16 @@ export interface Scenario {
   unitSettings: UnitSettings | null;
   /** PUNI; null when the file has none (everything buildable by everyone). */
   unitAvailability: UnitAvailability | null;
+  /** UPGx if the file has one, else UPGS; null when it has neither (every upgrade on its dat costs). */
+  upgradeSettings: UpgradeSettings | null;
+  /** PUPx else UPGR; null when absent (every player on the dat level caps, starting at 0). */
+  upgradeRestrictions: UpgradeRestrictions | null;
+  /** TECx else TECS; null when absent. */
+  techSettings: TechSettings | null;
+  /** PTEx else PTEC; null when absent (everything researchable, nothing researched). */
+  techRestrictions: TechRestrictions | null;
+  /** WAV: 512 string indices of the map's sound paths; null when the file has no section. */
+  wavs: number[] | null;
 
   /** MTXM: what the game draws — terrain with the doodads stamped over it. */
   tiles: Uint16Array;
@@ -166,16 +179,28 @@ export function setExtendedStrings(scn: Scenario, extended: boolean) {
 }
 
 /**
- * The unit settings sections this file needs written: what the game of its revision
- * reads, plus whichever of the two the file already has.
+ * Which of a revision-specific section pair this file needs written: what the game of
+ * its revision reads, plus whichever of the two the file already has (a new map's CHK is
+ * empty until its first save, so the dirty set counts as "has").
  */
-export function unitSettingsSections(scn: Scenario): string[] {
-  const has = (name: string) => scn.chk.sections.some((s) => s.name === name);
+function revisionSections(scn: Scenario, original: string, expansion: string): string[] {
+  const has = (name: string) => scn.chk.sections.some((s) => s.name === name) || scn.dirty.has(name);
   const out: string[] = [];
-  if (scn.fileVersion < 205 || has("UNIS")) out.push("UNIS");
-  if (isExpansion(scn) || has("UNIx")) out.push("UNIx");
+  if (scn.fileVersion < 205 || has(original)) out.push(original);
+  if (isExpansion(scn) || has(expansion)) out.push(expansion);
   return out;
 }
+
+/** UNIS and/or UNIx. */
+export const unitSettingsSections = (scn: Scenario) => revisionSections(scn, "UNIS", "UNIx");
+/** UPGS and/or UPGx. */
+export const upgradeSettingsSections = (scn: Scenario) => revisionSections(scn, "UPGS", "UPGx");
+/** UPGR and/or PUPx. */
+export const upgradeRestrictionSections = (scn: Scenario) => revisionSections(scn, "UPGR", "PUPx");
+/** TECS and/or TECx. */
+export const techSettingsSections = (scn: Scenario) => revisionSections(scn, "TECS", "TECx");
+/** PTEC and/or PTEx. */
+export const techRestrictionSections = (scn: Scenario) => revisionSections(scn, "PTEC", "PTEx");
 
 /* ── Parsing ─────────────────────────────────────────────── */
 
@@ -237,6 +262,15 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const unix = take("UNIx");
   const unis = take("UNIS");
   const puni = take("PUNI");
+  const upgx = take("UPGx");
+  const upgs = take("UPGS");
+  const pupx = take("PUPx");
+  const upgr = take("UPGR");
+  const tecx = take("TECx");
+  const tecs = take("TECS");
+  const ptex = take("PTEx");
+  const ptec = take("PTEC");
+  const wav = take("WAV ");
   const swnm = take("SWNM");
 
   const scn: Scenario = {
@@ -258,6 +292,11 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     forces: forcData ? decodeForces(forcData) : defaultForces(),
     unitSettings: unix ? decodeUnitSettings(unix) : unis ? decodeUnitSettings(unis) : null,
     unitAvailability: puni ? decodeUnitAvailability(puni) : null,
+    upgradeSettings: upgx ? decodeUpgradeSettings(upgx) : upgs ? decodeUpgradeSettings(upgs) : null,
+    upgradeRestrictions: pupx ? decodeUpgradeRestrictions(pupx) : upgr ? decodeUpgradeRestrictions(upgr) : null,
+    techSettings: tecx ? decodeTechSettings(tecx) : tecs ? decodeTechSettings(tecs) : null,
+    techRestrictions: ptex ? decodeTechRestrictions(ptex) : ptec ? decodeTechRestrictions(ptec) : null,
+    wavs: wav ? decodeWavs(wav) : null,
     tiles: mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     editorTiles: tileData ? decodeTiles(tileData, width, height) : mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     isom: isomData ? decodeIsom(isomData, width, height) : null,
@@ -328,6 +367,24 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
       return scn.unitSettings ? encodeUnitSettings(scn.unitSettings, WEAPONS_BW) : null;
     case "PUNI":
       return scn.unitAvailability ? encodeUnitAvailability(scn.unitAvailability) : null;
+    case "UPGS":
+      return scn.upgradeSettings ? encodeUpgradeSettings(scn.upgradeSettings, UPGRADES_ORIGINAL) : null;
+    case "UPGx":
+      return scn.upgradeSettings ? encodeUpgradeSettings(scn.upgradeSettings, UPGRADES_BW) : null;
+    case "UPGR":
+      return scn.upgradeRestrictions ? encodeUpgradeRestrictions(scn.upgradeRestrictions, UPGRADES_ORIGINAL) : null;
+    case "PUPx":
+      return scn.upgradeRestrictions ? encodeUpgradeRestrictions(scn.upgradeRestrictions, UPGRADES_BW) : null;
+    case "TECS":
+      return scn.techSettings ? encodeTechSettings(scn.techSettings, TECHS_ORIGINAL) : null;
+    case "TECx":
+      return scn.techSettings ? encodeTechSettings(scn.techSettings, TECHS_BW) : null;
+    case "PTEC":
+      return scn.techRestrictions ? encodeTechRestrictions(scn.techRestrictions, TECHS_ORIGINAL) : null;
+    case "PTEx":
+      return scn.techRestrictions ? encodeTechRestrictions(scn.techRestrictions, TECHS_BW) : null;
+    case "WAV ":
+      return scn.wavs ? encodeWavs(scn.wavs) : null;
     case "MTXM":
       return encodeTiles(scn.tiles);
     case "TILE":

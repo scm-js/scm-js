@@ -20,6 +20,8 @@ import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { relocateScriptBlock, scriptState, type ScriptState } from "../editor/script";
+import { resizeScenario, type ResizeResult } from "../editor/resize";
+import { baseTerrain } from "../formats/tileset/terrain";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -90,6 +92,48 @@ export const commitSettingsAtom = atom(null, (get, set) => {
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   const scn = get(scenarioAtom);
   if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+});
+
+export interface ResizeRequest {
+  width: number;
+  height: number;
+  /** 3×3 anchor grid, 4 = centre. */
+  anchor: number;
+  /** ISOM terrain id to fill the new area with (the tileset's default when omitted). */
+  terrainId?: number;
+  clampLocations: boolean;
+}
+
+/**
+ * Scenario ▸ Resize / Crop Map. Not an undoable edit: the history is dropped, every
+ * selection cleared and every revision bumped, since the whole document moved. Null
+ * when there is no map.
+ */
+export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): ResizeResult | null => {
+  const scn = get(scenarioAtom);
+  if (!scn) return null;
+  const loaded = peekTileset(get(tilesetFileNameAtom));
+  const tileset = loaded?.tileset ?? null;
+  const result = resizeScenario(scn, {
+    width: req.width, height: req.height, anchor: req.anchor,
+    fill: baseTerrain(tileset, req.terrainId), tileset, era: tilesetIndex(scn), clampLocations: req.clampLocations,
+  });
+  set(mapWidthAtom, scn.width);
+  set(mapHeightAtom, scn.height);
+  set(mapModifiedAtom, true);
+  set(undoStackAtom, []);
+  set(redoStackAtom, []);
+  set(selectedUnitsAtom, []);
+  set(selectedDoodadsAtom, []);
+  set(selectedSpritesAtom, []);
+  set(selectedLocationsAtom, []);
+  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+  set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
+  set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
+  set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+  set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+  set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
+  return result;
 });
 
 export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {

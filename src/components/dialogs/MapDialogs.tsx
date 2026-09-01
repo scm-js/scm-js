@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, FlipHorizontal2, Grid3x3, Maximize, ScrollText } from "lucide-react";
-import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
-import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
-import { openDialogAtom } from "../../atoms/uiAtoms";
+import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Grid3x3, Maximize, ScrollText } from "lucide-react";
+import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { gridLookAtom, type GridStyle } from "../../atoms/preferencesAtoms";
+import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
+import { resizePreview } from "../../editor/resize";
+import { useTileset } from "../../hooks/useTileset";
 import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, type MapVersion, type Scenario } from "../../formats/chk/scenario";
 import { PLAYER_TYPES } from "../../data/players";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
-import { MAP_SIZES, terrainName, TILESET_BY_ID } from "../../data/tilesets";
+import { MAP_SIZES, TILESET_BY_ID } from "../../data/tilesets";
 import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -101,46 +104,86 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
 /* ── Resize / Crop ──────────────────────────────────────── */
 
 const ANCHORS = [ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, Circle, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight];
+const ANCHOR_NAMES = ["top-left", "top", "top-right", "left", "centre", "right", "bottom-left", "bottom", "bottom-right"];
 
+/**
+ * Scenario ▸ Resize / Crop Map: the whole document moves (editor/resize.ts), so this is
+ * a transaction outside the undo history, like the settings dialogs. The preview line
+ * says what the chosen size and anchor would crop before anything happens.
+ */
 export function ResizeMapDialog({ entry }: DialogProps) {
-  const [w, setW] = useAtom(mapWidthAtom);
-  const [h, setH] = useAtom(mapHeightAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const w = useAtomValue(mapWidthAtom);
+  const h = useAtomValue(mapHeightAtom);
   const [tileset] = useAtom(mapTilesetAtom);
+  const resize = useSetAtom(resizeDocumentAtom);
+  const setStatus = useSetAtom(statusMessageAtom);
+  const { loaded } = useTileset();
   const [nw, setNw] = useState(w);
   const [nh, setNh] = useState(h);
   const [anchor, setAnchor] = useState(4);
   const ts = TILESET_BY_ID[tileset];
+  const [terrain, setTerrain] = useState(ts.defaultIsom);
+  const [clamp, setClamp] = useState(true);
+  const preview = useMemo(() => (scenario ? resizePreview(scenario, nw, nh, anchor) : null), [scenario, nw, nh, anchor]);
+  const same = nw === w && nh === h;
+
+  if (!scenario) {
+    return <DialogFrame dialogKey={entry.key} title="Resize / Crop Map" icon={<Maximize size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+  }
+
+  const apply = () => {
+    const r = resize({ width: nw, height: nh, anchor, terrainId: terrain, clampLocations: clamp });
+    if (!r) return;
+    const dropped = [r.unitsDropped && `${r.unitsDropped} units`, r.spritesDropped && `${r.spritesDropped} sprites`, r.doodadsDropped && `${r.doodadsDropped} doodads`].filter(Boolean).join(", ");
+    setStatus(`Resized to ${nw}×${nh} (${ANCHOR_NAMES[anchor]} anchor)${dropped ? ` — dropped ${dropped}` : ""}${r.locationsClamped ? `, clamped ${r.locationsClamped} locations` : ""}${r.isomRebuilt ? "" : " — ISOM is the fill's; Rebuild ISOM once the tileset is loaded"}`);
+  };
+
+  const crops = preview ? [
+    preview.unitsDropped && `${preview.unitsDropped} unit${preview.unitsDropped === 1 ? "" : "s"}`,
+    preview.spritesDropped && `${preview.spritesDropped} sprite${preview.spritesDropped === 1 ? "" : "s"}`,
+    preview.doodadsDropped && `${preview.doodadsDropped} doodad${preview.doodadsDropped === 1 ? "" : "s"}`,
+  ].filter(Boolean) : [];
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Resize / Crop Map" icon={<Maximize size={14} />} size="md" okLabel="Resize" onOk={() => { setW(nw); setH(nh); }} footerLeft={<span>{w}×{h} → {nw}×{nh}</span>}>
+    <DialogFrame dialogKey={entry.key} title="Resize / Crop Map" icon={<Maximize size={14} />} size="md" okLabel="Resize" onOk={apply} footerLeft={<span className="mono hint">{w}×{h} → {nw}×{nh}{preview ? ` · offset ${preview.dx}, ${preview.dy}` : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <div className="stack">
           <Group title="New size">
             <div className="form">
               <Field label="Width"><Select value={String(nw)} onChange={(e) => setNw(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
               <Field label="Height"><Select value={String(nh)} onChange={(e) => setNh(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
-              <Field label="Fill new area"><Select options={ts.terrain.map((t) => t.name)} defaultValue={terrainName(ts, ts.defaultIsom)} /></Field>
+              <Field label="Fill new area"><Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={ts.terrain.map((t) => ({ value: String(t.id), label: t.name }))} /></Field>
             </div>
           </Group>
           <Group title="Anchor existing terrain">
             <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
               <div className="anchor">
                 {ANCHORS.map((Icon, i) => (
-                  <button key={i} className={anchor === i ? "selected" : ""} onClick={() => setAnchor(i)}><Icon size={12} /></button>
+                  <button key={i} className={anchor === i ? "selected" : ""} onClick={() => setAnchor(i)} title={ANCHOR_NAMES[i]}><Icon size={12} /></button>
                 ))}
               </div>
-              <p className="hint">Existing tiles, units and locations keep their position relative to the chosen edge or corner. Content outside the new bounds is cropped.</p>
+              <p className="hint">Existing tiles, units and locations keep their position relative to the chosen edge or corner (whole tile pairs, so the offset is even). Content outside the new bounds is cropped.</p>
             </div>
           </Group>
         </div>
-        <Group title="Options">
-          <div className="col" style={{ gap: 2 }}>
-            <Check label="Move units and sprites" defaultChecked />
-            <Check label="Move locations" defaultChecked />
-            <Check label="Clamp locations to new bounds" defaultChecked />
-            <Check label="Resize 'Anywhere' location" defaultChecked />
-            <Check label="Extend edge terrain (smear)" />
-          </div>
-        </Group>
+        <div className="stack">
+          <Group title="Options">
+            <div className="col" style={{ gap: 2 }}>
+              <Check label="Clamp locations to new bounds" checked={clamp} onChange={(e) => setClamp(e.target.checked)} />
+            </div>
+            <p className="hint" style={{ marginTop: 6 }}>Locations are never dropped — triggers name them by slot. Anywhere becomes the new map.</p>
+          </Group>
+          <Group title="What will happen">
+            <ul className="hint" style={{ margin: 0, paddingLeft: 16 }}>
+              {same && <li>The size is unchanged; nothing will move.</li>}
+              {!same && <li>{crops.length > 0 ? `Cropped: ${crops.join(", ")}.` : "No units, sprites or doodads fall outside."}</li>}
+              {!same && preview && preview.locationsClamped > 0 && <li>{preview.locationsClamped} location{preview.locationsClamped === 1 ? "" : "s"} hang{preview.locationsClamped === 1 ? "s" : ""} past the edge{clamp ? " and will be pulled inside" : " and will stay there"}.</li>}
+              {!same && (scenario.isom ? <li>{loaded ? "ISOM will be rebuilt from the tiles." : "The tileset is not loaded, so ISOM will be the fill's lattice — run Rebuild ISOM afterwards."}</li> : <li>The map has no ISOM section; none is made.</li>)}
+              <li>This cannot be undone: the undo history is cleared.</li>
+            </ul>
+          </Group>
+        </div>
       </div>
     </DialogFrame>
   );
@@ -227,26 +270,45 @@ export function MapRevisionDialog({ entry }: DialogProps) {
 
 /* ── Grid Settings ──────────────────────────────────────── */
 
+/** View ▸ Grid Settings: spacing, the grid's look (persisted) and what snaps to it. */
 export function GridSettingsDialog({ entry }: DialogProps) {
   const [size, setSize] = useAtom(gridSizeAtom);
+  const [look, setLook] = useAtom(gridLookAtom);
+  const [locationSnap, setLocationSnap] = useAtom(locationSnapAtom);
+  const [doodadPlacement, setDoodadPlacement] = useAtom(doodadPlacementAtom);
   const [local, setLocal] = useState(size);
+  const [localLook, setLocalLook] = useState(look);
+  const [snapLocations, setSnapLocations] = useState(locationSnap !== 0);
+  const [snapDoodads, setSnapDoodads] = useState(doodadPlacement.snapToGrid);
+  const apply = () => {
+    setSize(local);
+    setLook(localLook);
+    setLocationSnap(snapLocations ? local : 0);
+    if (doodadPlacement.snapToGrid !== snapDoodads) setDoodadPlacement({ ...doodadPlacement, snapToGrid: snapDoodads });
+  };
   return (
-    <DialogFrame dialogKey={entry.key} title="Grid Settings" icon={<Grid3x3 size={14} />} size="sm" onOk={() => setSize(local)}>
+    <DialogFrame dialogKey={entry.key} title="Grid Settings" icon={<Grid3x3 size={14} />} size="sm" onOk={apply} showApply>
       <Group title="Grid">
         <div className="form">
           <Field label="Spacing">
             <Select value={String(local)} onChange={(e) => setLocal(Number(e.target.value) as typeof size)} options={[{ value: "8", label: "8 px (mini-tile)" }, { value: "16", label: "16 px" }, { value: "32", label: "32 px (tile)" }, { value: "64", label: "64 px" }, { value: "128", label: "128 px (isometric)" }]} />
           </Field>
-          <Field label="Colour"><div className="row"><input type="color" className="input" defaultValue="#000000" /><input type="range" min={0} max={100} defaultValue={30} /></div></Field>
-          <Field label="Style"><Select options={["Lines", "Dots", "Crosses"]} /></Field>
+          <Field label="Colour">
+            <div className="row">
+              <input type="color" className="input" value={localLook.color} onChange={(e) => setLocalLook({ ...localLook, color: e.target.value })} aria-label="Grid colour" />
+              <input type="range" min={0} max={100} value={localLook.opacity} onChange={(e) => setLocalLook({ ...localLook, opacity: Number(e.target.value) })} aria-label="Grid opacity" />
+              <span className="mono hint" style={{ width: 36 }}>{localLook.opacity}%</span>
+            </div>
+          </Field>
+          <Field label="Style"><Select value={localLook.style} onChange={(e) => setLocalLook({ ...localLook, style: e.target.value as GridStyle })} options={[{ value: "lines", label: "Lines" }, { value: "dots", label: "Dots" }, { value: "crosses", label: "Crosses" }]} /></Field>
         </div>
       </Group>
       <Group title="Snapping">
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Snap units to grid" />
-          <Check label="Snap locations to grid" defaultChecked />
-          <Check label="Snap sprites to grid" />
+          <Check label="Snap locations to grid" checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
+          <Check label="Snap doodads to grid" checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
         </div>
+        <p className="hint" style={{ marginTop: 6 }}>Buildings always snap to the tile grid by their placement box; other units and sprites are placed by the pixel.</p>
       </Group>
     </DialogFrame>
   );
@@ -254,28 +316,5 @@ export function GridSettingsDialog({ entry }: DialogProps) {
 
 /* ── Symmetry ───────────────────────────────────────────── */
 
-export function SymmetryDialog({ entry }: DialogProps) {
-  const [mode, setMode] = useState("none");
-  const modes = [
-    ["none", "None"], ["h", "Mirror horizontally"], ["v", "Mirror vertically"], ["hv", "Mirror both axes (4-way)"],
-    ["rot2", "Rotational 180°"], ["rot4", "Rotational 90° (4-way)"], ["diag", "Diagonal (top-left ↔ bottom-right)"], ["adiag", "Anti-diagonal"],
-  ];
-  return (
-    <DialogFrame dialogKey={entry.key} title="Symmetry Tool" icon={<FlipHorizontal2 size={14} />} size="sm">
-      <Group title="Mode">
-        <div className="col" style={{ gap: 2 }}>
-          {modes.map(([id, label]) => <Check key={id} radio name="sym" label={label} checked={mode === id} onChange={() => setMode(id)} />)}
-        </div>
-      </Group>
-      <Group title="Apply to">
-        <div className="col" style={{ gap: 2 }}>
-          <Check label="Terrain" defaultChecked />
-          <Check label="Doodads" defaultChecked />
-          <Check label="Units (mirror owner by force)" />
-          <Check label="Locations" />
-        </div>
-      </Group>
-      <p className="hint">Placement is mirrored live while a symmetry mode is active.</p>
-    </DialogFrame>
-  );
-}
+/** Tools ▸ Symmetry… lives in its own file (editor/symmetry.ts is the model); re-exported here so the registry's import stays put. */
+export { SymmetryDialog } from "./SymmetryDialog";

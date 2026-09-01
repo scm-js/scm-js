@@ -1,28 +1,38 @@
 import { Fragment, type ReactNode } from "react";
 import { Menubar } from "radix-ui";
 import { Check, ChevronRight, Dot } from "lucide-react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import AppLogo from "../ui/AppLogo";
 import {
   activeLayerAtom,
   brushSizeAtom,
   mapModifiedAtom,
   mapNameAtom,
+  selectedDoodadsAtom,
+  selectedLocationsAtom,
+  selectedSpritesAtom,
+  selectedUnitsAtom,
   viewFlagsAtom,
   zoomAtom,
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
-import { redoAtom, scenarioAtom, undoAtom } from "../../atoms/documentAtoms";
+import {
+  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, undoAtom,
+} from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useIsomRebuild } from "../../hooks/useIsom";
-import { RECENT_FILES } from "../../data/samples";
+import { useTerrainTools } from "../../hooks/useTerrainTools";
+import { usedLocations } from "../../editor/locations";
+import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
+
+const REPO_URL = "https://github.com/jeany55/scm-js";
 
 /* ── Menu model ─────────────────────────────────────────── */
 
 type Item =
-  | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect?: () => void; dialog?: DialogId }
+  | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
   | { kind: "check"; label: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
   | { kind: "radio-group"; value: string; onChange: (v: string) => void; items: { value: string; label: string; shortcut?: string }[] }
   | { kind: "sub"; label: string; items: Item[] }
@@ -46,8 +56,15 @@ export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 function useMenus(): { label: string; items: Item[] }[] {
   const open = useSetAtom(openDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const store = useStore();
   const hasMap = useAtomValue(scenarioAtom) !== null;
   const rebuildIsom = useIsomRebuild();
+  const { fillMap } = useTerrainTools();
+  const [recent, setRecent] = useAtom(recentFilesAtom);
+  const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
+  const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
+  const deleteSprites = useSetAtom(deleteSelectedSpritesAtom);
+  const deleteLocations = useSetAtom(deleteSelectedLocationsAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
@@ -71,6 +88,31 @@ function useMenus(): { label: string; items: Item[] }[] {
     onChange: (v) => setPanels({ ...panels, [k]: v }),
   });
   const dlg = (label: string, dialog: DialogId, shortcut?: string, disabled?: boolean): Item => ({ kind: "item", label, dialog, shortcut, disabled });
+  const dlgWith = (label: string, dialog: DialogId, payload: Record<string, unknown>): Item => ({ kind: "item", label, dialog, payload });
+  const link = (label: string, url: string): Item => ({ kind: "item", label, onSelect: () => { window.open(url, "_blank", "noopener,noreferrer"); } });
+
+  // Edit ▸ Delete / Select All / Deselect act on the active layer's selection, as the Del / Esc keys do.
+  const deleteSelection = () => {
+    const n = layer === "doodads" ? deleteDoodads() : layer === "sprites" ? deleteSprites() : layer === "locations" ? deleteLocations() : deleteUnits();
+    setStatus(n > 0 ? `Deleted ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}` : "Nothing selected");
+  };
+  const selectAll = () => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return;
+    const all = (n: number) => Array.from({ length: n }, (_, i) => i);
+    let n = 0;
+    if (layer === "doodads") { n = scn.doodads.length; store.set(selectedDoodadsAtom, all(n)); }
+    else if (layer === "sprites") { n = scn.sprites.length; store.set(selectedSpritesAtom, all(n)); }
+    else if (layer === "locations") { const used = usedLocations(scn).filter((i) => i !== ANYWHERE_INDEX); n = used.length; store.set(selectedLocationsAtom, used); }
+    else { n = scn.units.length; store.set(selectedUnitsAtom, all(n)); if (layer !== "units") setLayer("units"); }
+    setStatus(`Selected ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
+  };
+  const deselect = () => {
+    store.set(selectedUnitsAtom, []);
+    store.set(selectedDoodadsAtom, []);
+    store.set(selectedSpritesAtom, []);
+    store.set(selectedLocationsAtom, []);
+  };
   const stub = (label: string, shortcut?: string, disabled?: boolean): Item => ({
     kind: "item",
     label,
@@ -91,9 +133,12 @@ function useMenus(): { label: string; items: Item[] }[] {
           kind: "sub",
           label: "Open Recent",
           items: [
-            ...RECENT_FILES.map<Item>((f) => ({ kind: "item", label: f, onSelect: () => open("notImplemented", { feature: `Open ${f}` }) })),
+            // The browser hands over file contents, not handles, so a name can be remembered but not reopened by itself.
+            ...(recent.length > 0
+              ? recent.map<Item>((f) => ({ kind: "item", label: `${f} (reopen from disk)`, disabled: true }))
+              : [{ kind: "item", label: "Nothing opened this session", disabled: true } as Item]),
             sep,
-            { kind: "item", label: "Clear Recent", disabled: true },
+            { kind: "item", label: "Clear Recent", disabled: recent.length === 0, onSelect: () => setRecent([]) },
           ],
         },
         sep,
@@ -101,14 +146,25 @@ function useMenus(): { label: string; items: Item[] }[] {
         dlg("Save As…", "saveAs", "Ctrl+Shift+S"),
         dlg("Save Copy As…", "saveAs"),
         sep,
-        { kind: "sub", label: "Import", items: [stub("Triggers (.trg)…"), stub("Text Triggers (.txt)…"), stub("Strings (.txt)…"), stub("Terrain from Image…")] },
+        {
+          kind: "sub",
+          label: "Import",
+          items: [
+            dlgWith("Triggers (.trg)…", "importTriggers", { format: "trg" }),
+            dlgWith("Text Triggers (.txt)…", "importTriggers", { format: "txt" }),
+            dlg("Strings (.txt)…", "importStrings"),
+            stub("Terrain from Image…"),
+          ],
+        },
         {
           kind: "sub",
           label: "Export",
           items: [
             { kind: "item", label: "Image (.png)…", onSelect: () => open("exportImage") },
             sep,
-            stub("Triggers (.trg)…"), stub("Text Triggers (.txt)…"), stub("Strings (.txt)…"),
+            dlgWith("Triggers (.trg)…", "exportTriggers", { format: "trg" }),
+            dlgWith("Text Triggers (.txt)…", "exportTriggers", { format: "txt" }),
+            dlg("Strings (.txt)…", "exportStrings"),
           ],
         },
         sep,
@@ -128,10 +184,10 @@ function useMenus(): { label: string; items: Item[] }[] {
         stub("Cut", "Ctrl+X"),
         stub("Copy", "Ctrl+C"),
         stub("Paste", "Ctrl+V"),
-        stub("Delete", "Del"),
+        { kind: "item", label: "Delete", shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
         sep,
-        stub("Select All", "Ctrl+A"),
-        stub("Deselect", "Esc"),
+        { kind: "item", label: "Select All", shortcut: "Ctrl+A", disabled: !hasMap, onSelect: selectAll },
+        { kind: "item", label: "Deselect", shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
         sep,
         dlg("Find…", "find", "Ctrl+F"),
         sep,
@@ -208,10 +264,10 @@ function useMenus(): { label: string; items: Item[] }[] {
         dlg("Script Editor…", "scriptEditor"),
         dlg("Mission Briefing Editor…", "missionBriefing"),
         sep,
-        stub("Import Triggers…"),
-        stub("Export Triggers…"),
+        dlg("Import Triggers…", "importTriggers"),
+        dlg("Export Triggers…", "exportTriggers"),
         sep,
-        stub("Validate Triggers"),
+        dlgWith("Validate Triggers", "validateMap", { only: "triggers" }),
       ],
     },
     {
@@ -220,13 +276,13 @@ function useMenus(): { label: string; items: Item[] }[] {
         dlg("Symmetry…", "symmetry"),
         { kind: "sub", label: "Brush Size", items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,
-        stub("Fill Terrain"),
+        { kind: "item", label: "Fill Terrain", disabled: !hasMap, onSelect: fillMap },
         stub("Replace Terrain…"),
         { kind: "item", label: "Rebuild ISOM from Tiles", disabled: !hasMap, onSelect: rebuildIsom },
         stub("Auto-place Start Locations"),
         sep,
         dlg("Check Map…", "validateMap"),
-        stub("Statistics…"),
+        dlg("Statistics…", "statistics"),
         sep,
         stub("Test Map", "Ctrl+F5", true),
       ],
@@ -235,8 +291,8 @@ function useMenus(): { label: string; items: Item[] }[] {
       label: "Help",
       items: [
         dlg("Keyboard Shortcuts…", "shortcuts", "F1"),
-        stub("Documentation"),
-        stub("Report an Issue…"),
+        link("Documentation", `${REPO_URL}#readme`),
+        link("Report an Issue…", `${REPO_URL}/issues/new`),
         sep,
         dlg("About scmJS…", "about"),
       ],
@@ -256,7 +312,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return <Menubar.Label key={i} className="menu-label">{it.label}</Menubar.Label>;
       case "item":
         return (
-          <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog) : it.onSelect?.())}>
+          <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog, it.payload) : it.onSelect?.())}>
             {it.label}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.Item>

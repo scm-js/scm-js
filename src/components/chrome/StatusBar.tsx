@@ -1,9 +1,10 @@
 import { useAtomValue } from "jotai";
-import { activeLayerAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, zoomAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, zoomAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { hexTile } from "../../formats/tileset/palette";
+import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { LAYERS } from "./MenuBar";
 
 const VERSION_LABEL = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", broodwar: "Brood War", remastered: "Remastered" } as const;
@@ -18,6 +19,7 @@ export default function StatusBar() {
   const msg = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
   const scenario = useAtomValue(scenarioAtom);
+  const symmetry = useAtomValue(symmetryAtom);
   useAtomValue(terrainRevisionAtom);
   const tileId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
@@ -50,6 +52,12 @@ export default function StatusBar() {
       <span className="status-cell" title="Zoom">
         <span className="v">{Math.round(zoom * 100)}%</span>
       </span>
+      {symmetry !== "none" && (
+        <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? "Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)" : "This symmetry mode needs a square map — brushes paint normally"}>
+          <span className="k">Sym</span>
+          <span className={`badge ${symmetryAvailable(symmetry, w, h) ? "teal" : "warn"}`}>{symmetryLabel(symmetry)}</span>
+        </span>
+      )}
       <span className="status-cell grow msg">{msg}</span>
       <span className="status-cell" title="Map revision">
         <span className="badge gold">{VERSION_LABEL[version]}</span>

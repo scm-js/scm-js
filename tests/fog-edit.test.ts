@@ -28,7 +28,7 @@ describe("fog bytes", () => {
 
   it("treats a map without MASK as fogged for everyone, and creates the 0xFF section on demand", () => {
     const scn = fresh();
-    expect(scn.mask).toBeNull();
+    scn.mask = null; // a map that arrived without the section (a new one now carries the 0xFF table)
     expect(isFogged(scn, 5, 3)).toBe(true);
     expect(fogCount(scn, 0)).toBe(64);
     expect(fogPlayersAt(scn, 1, 1)).toBe(ALL_FOG_PLAYERS);
@@ -135,6 +135,7 @@ describe("MASK round trip", () => {
 
   it("does not invent a MASK section for a map that never had one", () => {
     const scn = whole(4, 4);
+    scn.mask = null;
     const created = ensureMask(scn);
     expect(created).not.toBeNull();
     // The equivalent of undoing the stroke that created it.

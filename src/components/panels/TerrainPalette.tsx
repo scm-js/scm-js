@@ -3,7 +3,7 @@ import { useAtom, useAtomValue } from "jotai";
 import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
-  rectVariationAtom, terrainModeAtom, type TerrainMode,
+  rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
@@ -13,10 +13,28 @@ import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { variationsOf } from "../../formats/tileset/terrain";
 import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
 import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, type Side } from "../../editor/blend";
+import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
+
+/**
+ * One line about the active symmetry mode (Tools ▸ Symmetry…): the Rect and Tile brushes
+ * paint mirrored under it, the isometric and Blend brushes do not.
+ */
+function SymmetryNote({ applies }: { applies: boolean }) {
+  const mode = useAtomValue(symmetryAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  if (mode === "none") return null;
+  const ok = scenario ? symmetryAvailable(mode, scenario.width, scenario.height) : true;
+  const text = !ok
+    ? `Symmetry "${symmetryLabel(mode)}" needs a square map — strokes paint normally.`
+    : applies
+      ? `Symmetry: ${symmetryLabel(mode)} — every stroke is mirrored.`
+      : `Symmetry (${symmetryLabel(mode)}) does not apply to this brush — only Rect, Tile and Fog strokes are mirrored.`;
+  return <div className={`palette-footer sub ${ok && applies ? "" : "warn"}`} title="Tools ▸ Symmetry…"><span>{text}</span></div>;
+}
 
 export function BrushSelect({ bare }: { bare?: boolean } = {}) {
   const [brush, setBrush] = useAtom(brushSizeAtom);
@@ -100,6 +118,7 @@ function IsomTab() {
         )}
       </div>
       <div className="palette-footer"><span>{list.length} terrain types</span><span>{info.name}</span></div>
+      <SymmetryNote applies={false} />
     </>
   );
 }
@@ -158,6 +177,7 @@ function RectTab() {
         <span>{current ? `${current.name} · groups ${current.group}/${current.group + 1}` : "—"}</span>
         <span>{chosen < 0 ? "random variation" : `variation ${chosen}`}</span>
       </div>
+      <SymmetryNote applies />
     </>
   );
 }
@@ -297,6 +317,7 @@ function TileTab() {
           <span>Alt+click map picks</span>
         </div>
       )}
+      <SymmetryNote applies />
     </>
   );
 }
@@ -395,6 +416,7 @@ function BlendTab() {
         <span>{sides ? `${total} matches ≤ Δ${tolerance}` : "—"}</span>
         <span>Δ = mean edge colour difference</span>
       </div>
+      <SymmetryNote applies={false} />
     </>
   );
 }

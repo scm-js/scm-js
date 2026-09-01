@@ -305,3 +305,69 @@ export function decodeImagesDat(data: Uint8Array): ImagesDat {
   const liftOff = f.u32(n);
   return { grp, graphicTurns, drawFunction, remapping, iscript, lo: [attack, damage, special, landing, liftOff, shield] };
 }
+
+/* ── upgrades.dat / techdata.dat ─────────────────────────── */
+
+export const UPGRADE_TYPES = 61;
+export const TECH_TYPES = 44;
+export const UPGRADES_DAT_SIZE = 1281;
+export const TECHDATA_DAT_SIZE = 836;
+
+/** The columns Upgrade Settings shows as defaults: base cost and per-level factor for minerals, gas and time, plus the level cap. */
+export interface UpgradesDat {
+  mineralCost: Uint16Array;
+  mineralFactor: Uint16Array;
+  vespeneCost: Uint16Array;
+  vespeneFactor: Uint16Array;
+  /** Game frames. */
+  timeCost: Uint16Array;
+  timeFactor: Uint16Array;
+  /** Highest level the upgrade goes to (3 for armour / weapons, 1 for the rest). */
+  maxRepeats: Uint8Array;
+  /** 1 for upgrades only Brood War has. */
+  broodWar: Uint8Array;
+}
+
+/** Struct of arrays: six u16 columns of cost, then unknown / icon / label u16s, then race, max repeats and the Brood War flag. */
+export function decodeUpgradesDat(data: Uint8Array): UpgradesDat {
+  expectSize("upgrades.dat", data, UPGRADES_DAT_SIZE);
+  const n = UPGRADE_TYPES;
+  const f = new Fields(data);
+  const mineralCost = f.u16(n);
+  const mineralFactor = f.u16(n);
+  const vespeneCost = f.u16(n);
+  const vespeneFactor = f.u16(n);
+  const timeCost = f.u16(n);
+  const timeFactor = f.u16(n);
+  f.skip(n * 2 * 3); // requirements, icon, label
+  f.skip(n); // race
+  const maxRepeats = f.u8(n);
+  const broodWar = f.u8(n);
+  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar };
+}
+
+/** The columns Technology Settings shows as defaults. */
+export interface TechdataDat {
+  mineralCost: Uint16Array;
+  vespeneCost: Uint16Array;
+  /** Game frames. */
+  researchTime: Uint16Array;
+  energyCost: Uint16Array;
+  /** 1 for abilities only Brood War has. */
+  broodWar: Uint8Array;
+}
+
+/** Struct of arrays: four u16 cost columns, then research / use requirements, icon and label u16s, race, an unused byte and the Brood War flag. */
+export function decodeTechdataDat(data: Uint8Array): TechdataDat {
+  expectSize("techdata.dat", data, TECHDATA_DAT_SIZE);
+  const n = TECH_TYPES;
+  const f = new Fields(data);
+  const mineralCost = f.u16(n);
+  const vespeneCost = f.u16(n);
+  const researchTime = f.u16(n);
+  const energyCost = f.u16(n);
+  f.skip(n * 2 * 4); // research requirements, use requirements, icon, label
+  f.skip(n * 2); // race, unused
+  const broodWar = f.u8(n);
+  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar };
+}

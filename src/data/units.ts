@@ -105,23 +105,47 @@ export const RACE_LABEL: Record<RaceKey, string> = {
   neutral: "Neutral",
 };
 
-export const UPGRADES = [
+/** StarEdit's upgrade names by upgrades.dat id (0–60); 46 exist in the original game, Brood War added the rest. */
+export const UPGRADE_NAMES: readonly string[] = [
   "Terran Infantry Armor", "Terran Vehicle Plating", "Terran Ship Plating", "Zerg Carapace", "Zerg Flyer Carapace",
   "Protoss Ground Armor", "Protoss Air Armor", "Protoss Plasma Shields", "Terran Infantry Weapons", "Terran Vehicle Weapons",
   "Terran Ship Weapons", "Zerg Melee Attacks", "Zerg Missile Attacks", "Zerg Flyer Attacks", "Protoss Ground Weapons",
-  "Protoss Air Weapons", "U-238 Shells", "Ion Thrusters", "Titan Reactor", "Ocular Implants", "Moebius Reactor",
-  "Apollo Reactor", "Colossus Reactor", "Ventral Sacs", "Antennae", "Pneumatized Carapace", "Metabolic Boost",
-  "Adrenal Glands", "Muscular Augments", "Grooved Spines", "Gamete Meiosis", "Metasynaptic Node", "Singularity Charge",
-  "Leg Enhancements", "Scarab Damage", "Reaver Capacity", "Gravitic Drive", "Sensor Array", "Gravitic Boosters",
-  "Khaydarin Amulet", "Apial Sensors", "Gravitic Thrusters", "Carrier Capacity", "Khaydarin Core", "Argus Jewel",
-  "Argus Talisman", "Caduceus Reactor", "Chitinous Plating", "Anabolic Synthesis", "Charon Boosters",
+  "Protoss Air Weapons", "U-238 Shells", "Ion Thrusters", "Burst Lasers (Unused)", "Titan Reactor",
+  "Ocular Implants", "Moebius Reactor", "Apollo Reactor", "Colossus Reactor", "Ventral Sacs",
+  "Antennae", "Pneumatized Carapace", "Metabolic Boost", "Adrenal Glands", "Muscular Augments",
+  "Grooved Spines", "Gamete Meiosis", "Metasynaptic Node", "Singularity Charge", "Leg Enhancements",
+  "Scarab Damage", "Reaver Capacity", "Gravitic Drive", "Sensor Array", "Gravitic Boosters",
+  "Khaydarin Amulet", "Apial Sensors", "Gravitic Thrusters", "Carrier Capacity", "Khaydarin Core",
+  "Unused (45)", "Unused (46)", "Argus Jewel", "Unused (48)", "Argus Talisman",
+  "Unused (50)", "Caduceus Reactor", "Chitinous Plating", "Anabolic Synthesis", "Charon Boosters",
+  "Unused (55)", "Unused (56)", "Unused (57)", "Unused (58)", "Unused (59)", "Unused (60)",
 ];
 
-export const TECHS = [
+/** StarEdit's technology names by techdata.dat id (0–43); 24 exist in the original game. */
+export const TECH_NAMES: readonly string[] = [
   "Stim Packs", "Lockdown", "EMP Shockwave", "Spider Mines", "Scanner Sweep", "Tank Siege Mode", "Defensive Matrix",
   "Irradiate", "Yamato Gun", "Cloaking Field", "Personnel Cloaking", "Burrowing", "Infestation", "Spawn Broodlings",
   "Dark Swarm", "Plague", "Consume", "Ensnare", "Parasite", "Psionic Storm", "Hallucination", "Recall", "Stasis Field",
-  "Archon Warp", "Restoration", "Disruption Web", "Mind Control", "Dark Archon Meld", "Feedback", "Optical Flare",
-  "Maelstrom", "Lurker Aspect", "Healing",
+  "Archon Warp", "Restoration", "Disruption Web", "Unused (26)", "Mind Control", "Dark Archon Meld", "Feedback",
+  "Optical Flare", "Maelstrom", "Lurker Aspect", "Unused (33)", "Healing",
+  "Unused (35)", "Unused (36)", "Unused (37)", "Unused (38)", "Unused (39)", "Unused (40)", "Unused (41)", "Unused (42)", "Unused (43)",
 ];
+
+export const upgradeName = (id: number) => UPGRADE_NAMES[id] ?? `Upgrade #${id}`;
+export const techName = (id: number) => TECH_NAMES[id] ?? `Technology #${id}`;
+
+const T = "terran", Z = "zerg", P = "protoss";
+/** Which race researches each upgrade, for grouping the list; null for the unused slots. */
+export const UPGRADE_RACE: readonly (RaceKey | null)[] = [
+  T, T, T, Z, Z, P, P, P, T, T, T, Z, Z, Z, P, P, T, T, T, T, T, T, T, T, Z, Z, Z, Z, Z, Z, Z, Z, Z, P, P, P, P, P, P, P, P, P, P, P, P,
+  null, null, P, null, P, null, T, Z, Z, T, null, null, null, null, null, null,
+];
+export const TECH_RACE: readonly (RaceKey | null)[] = [
+  T, T, T, T, T, T, T, T, T, T, T, Z, Z, Z, Z, Z, Z, Z, Z, P, P, P, P, P, T, P, null, P, P, P, T, P, Z, null, T,
+  null, null, null, null, null, null, null, null, null,
+];
+
+/** Ids whose name is a placeholder: nothing in the game refers to them, so the dialogs list them last. */
+export const isUnusedUpgrade = (id: number) => UPGRADE_RACE[id] === null;
+export const isUnusedTech = (id: number) => TECH_RACE[id] === null;
 

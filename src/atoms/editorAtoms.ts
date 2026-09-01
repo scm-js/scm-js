@@ -5,6 +5,7 @@ import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
 import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor/doodads";
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
+import type { SymmetryMode } from "../editor/symmetry";
 
 /* ── Screens ────────────────────────────────────────────── */
 
@@ -159,3 +160,12 @@ export const viewFlagsAtom = atom<ViewFlags>({
 });
 
 export const gridSizeAtom = atom<8 | 16 | 32 | 64 | 128>(32);
+
+/* ── Symmetry (see editor/symmetry.ts) ───────────────────── */
+
+/**
+ * The mirror mode the Rect, Tile and Fog brushes paint under (Tools ▸ Symmetry…). The
+ * isometric and Blend brushes ignore it. A square-only mode on a map that is not square
+ * behaves as "none".
+ */
+export const symmetryAtom = atom<SymmetryMode>("none");

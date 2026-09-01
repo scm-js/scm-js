@@ -766,3 +766,8 @@
   font-size: var(--fs-xs);
   font-family: var(--font-mono);
 }
+
+/* ── Symmetry note under the terrain palette (Tools ▸ Symmetry…) ── */
+.palette-footer.sub.warn {
+  color: var(--warn, #e6b95c);
+}

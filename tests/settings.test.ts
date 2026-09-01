@@ -110,7 +110,8 @@ describe("unit settings", () => {
 
   it("writes the sections the file's revision reads", () => {
     const scn = fresh();
-    expect(scn.unitSettings).toBeNull();
+    // A new Brood War map carries the `x` layout on its defaults, as a StarEdit map does.
+    expect(scn.unitSettings!.useDefault.every((v) => v === 1)).toBe(true);
     expect(unitSettingsSections(scn)).toEqual(["UNIx"]);
     const { settings, availability } = readUnitSettings(scn);
     settings.useDefault[5] = 0;
@@ -144,6 +145,7 @@ describe("unit settings", () => {
     expect(out).toContain("UNIx");
 
     const orig = fresh();
+    orig.chk.sections = orig.chk.sections.filter((s) => s.name !== "UNIx"); // a file the original game wrote never had one
     setMapVersion(orig, "original");
     expect(unitSettingsSections(orig)).toEqual(["UNIS"]);
     // A file that already has UNIx keeps it up to date whatever the revision says.

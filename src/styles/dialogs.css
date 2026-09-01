@@ -908,3 +908,7 @@
   color: var(--text-dim);
   font-size: var(--fs-sm);
 }
+
+/* ── Check Map (MiscDialogs.tsx) ── */
+.issue.jump { cursor: pointer; }
+.issue.jump:hover { background: color-mix(in srgb, var(--accent, #d4a017) 10%, transparent); }

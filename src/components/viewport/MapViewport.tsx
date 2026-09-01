@@ -32,6 +32,7 @@ import {
   selectedUnitsAtom,
   spritePlaceOptionsAtom,
   spritePlacingAtom,
+  symmetryAtom,
   terrainModeAtom,
   unitOwnerAtom,
   unitPlacingAtom,
@@ -40,6 +41,7 @@ import {
   zoomAtom,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
+import { gridLookAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
@@ -63,6 +65,7 @@ import { placementBox, unitBox, unitGeometry } from "../../editor/units";
 import type { TileRect } from "../../editor/doodads";
 import { unitName } from "../../data/units";
 import { linePoints } from "../../editor/terrain";
+import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
 import { diamondAt } from "../../editor/isom";
 import { atlasSource, setAtlasStep } from "../../formats/tileset/atlas";
 import { cycleStepAt, GAME_FRAME_MS } from "../../formats/tileset/cycle";
@@ -140,9 +143,11 @@ export default function MapViewport() {
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const flags = useAtomValue(viewFlagsAtom);
   const gridSize = useAtomValue(gridSizeAtom);
+  const gridLook = useAtomValue(gridLookAtom);
   const layer = useAtomValue(activeLayerAtom);
   const brush = useAtomValue(brushSizeAtom);
   const terrainMode = useAtomValue(terrainModeAtom);
+  const symmetry = useAtomValue(symmetryAtom);
   // Only read so the hover preview redraws when the brush changes.
   const activeTile = useAtomValue(activeTileAtom);
   const activeTerrain = useAtomValue(activeTerrainAtom);
@@ -287,24 +292,46 @@ export default function MapViewport() {
       }
     }
 
-    // grid
+    // grid: View ▸ Grid Settings picks the spacing, colour, opacity and style (lines / dots / crosses)
     if (flags.grid) {
       const step = (gridSize / TILE) * tilePx;
       if (step >= 6) {
-        ctx.strokeStyle = step >= 16 ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)";
+        const alpha = (gridLook.opacity / 100) * (step >= 16 ? 1 : 0.65);
+        ctx.strokeStyle = gridLook.color;
+        ctx.fillStyle = gridLook.color;
+        ctx.globalAlpha = alpha;
         ctx.lineWidth = 1;
+        const gx0 = Math.floor(sx / step) * step, gx1 = Math.min(worldW, sx + size.w);
+        const gy0 = Math.floor(sy / step) * step, gy1 = Math.min(worldH, sy + size.h);
         ctx.beginPath();
-        for (let gx = Math.floor(sx / step) * step; gx <= Math.min(worldW, sx + size.w); gx += step) {
-          const px = Math.round(gx - sx) + 0.5;
-          ctx.moveTo(px, Math.max(0, -sy));
-          ctx.lineTo(px, Math.min(size.h, worldH - sy));
+        if (gridLook.style === "lines") {
+          for (let gx = gx0; gx <= gx1; gx += step) {
+            const px = Math.round(gx - sx) + 0.5;
+            ctx.moveTo(px, Math.max(0, -sy));
+            ctx.lineTo(px, Math.min(size.h, worldH - sy));
+          }
+          for (let gy = gy0; gy <= gy1; gy += step) {
+            const py = Math.round(gy - sy) + 0.5;
+            ctx.moveTo(Math.max(0, -sx), py);
+            ctx.lineTo(Math.min(size.w, worldW - sx), py);
+          }
+          ctx.stroke();
+        } else {
+          const arm = gridLook.style === "crosses" ? Math.max(2, Math.min(6, step / 6)) : 0;
+          for (let gx = gx0; gx <= gx1; gx += step) {
+            for (let gy = gy0; gy <= gy1; gy += step) {
+              const px = Math.round(gx - sx), py = Math.round(gy - sy);
+              if (arm > 0) {
+                ctx.moveTo(px - arm, py + 0.5); ctx.lineTo(px + arm + 1, py + 0.5);
+                ctx.moveTo(px + 0.5, py - arm); ctx.lineTo(px + 0.5, py + arm + 1);
+              } else {
+                ctx.rect(px - 0.5, py - 0.5, 2, 2);
+              }
+            }
+          }
+          if (arm > 0) ctx.stroke(); else ctx.fill();
         }
-        for (let gy = Math.floor(sy / step) * step; gy <= Math.min(worldH, sy + size.h); gy += step) {
-          const py = Math.round(gy - sy) + 0.5;
-          ctx.moveTo(Math.max(0, -sx), py);
-          ctx.lineTo(Math.min(size.w, worldW - sx), py);
-        }
-        ctx.stroke();
+        ctx.globalAlpha = 1;
       }
     }
 
@@ -643,6 +670,29 @@ export default function MapViewport() {
     ctx.lineWidth = 1;
     ctx.strokeRect(-sx + 0.5, -sy + 0.5, worldW - 1, worldH - 1);
 
+    // symmetry axes (Tools ▸ Symmetry…): the mirror lines the Rect, Tile and Fog brushes paint across
+    if (symmetry !== "none" && (layer === "terrain" || layer === "fog") && symmetryAvailable(symmetry, mapW, mapH)) {
+      const axes = symmetryAxes(symmetry, mapW, mapH);
+      ctx.strokeStyle = "rgba(142,240,164,0.85)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      for (const l of axes.lines) {
+        ctx.moveTo(Math.round(l.x0 * tilePx - sx) + 0.5, Math.round(l.y0 * tilePx - sy) + 0.5);
+        ctx.lineTo(Math.round(l.x1 * tilePx - sx) + 0.5, Math.round(l.y1 * tilePx - sy) + 0.5);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (axes.centre) {
+        const cx = (mapW / 2) * tilePx - sx, cy = (mapH / 2) * tilePx - sy;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.moveTo(cx - 10, cy); ctx.lineTo(cx + 10, cy);
+        ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy + 10);
+        ctx.stroke();
+      }
+    }
+
     /** The box-select rectangle of an object-layer drag. */
     const drawMarquee = (g: { from: MapPoint; to: MapPoint }) => {
       const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
@@ -825,7 +875,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);

@@ -159,3 +159,274 @@ export function isUnitAvailable(a: UnitAvailability, player: number, unitId: num
   const i = puniIndex(player, unitId);
   return a.playerUsesDefault[i] ? a.defaultAvailable[unitId] !== 0 : a.playerAvailable[i] !== 0;
 }
+
+/* ── UPGS / UPGx: upgrade costs ───────────────────────────── */
+
+/** Upgrades in the original layout (UPGS, UPGR). */
+export const UPGRADES_ORIGINAL = 46;
+/** Upgrades in the Brood War layout (UPGx, PUPx); also the model's width. */
+export const UPGRADES_BW = 61;
+export const UPGS_SIZE = UPGRADES_ORIGINAL + UPGRADES_ORIGINAL * 2 * 6; // 598
+/** UPGx carries one unused byte after the use-default column. */
+export const UPGX_SIZE = UPGRADES_BW + 1 + UPGRADES_BW * 2 * 6; // 794
+
+/**
+ * Research cost per upgrade: a base and a per-level factor for minerals, gas and time.
+ * Struct of arrays over 61 upgrades; the original sections only store the first 46.
+ */
+export interface UpgradeSettings {
+  /** 1 = the game uses upgrades.dat for this upgrade and ignores the columns below. */
+  useDefault: Uint8Array;
+  mineralCost: Uint16Array;
+  mineralFactor: Uint16Array;
+  gasCost: Uint16Array;
+  gasFactor: Uint16Array;
+  /** Game frames. */
+  timeCost: Uint16Array;
+  timeFactor: Uint16Array;
+}
+
+const UPGRADE_COLUMNS = ["mineralCost", "mineralFactor", "gasCost", "gasFactor", "timeCost", "timeFactor"] as const;
+
+/** Sequential column reader tolerant of short sections (missing bytes read as 0). */
+class Columns {
+  private at = 0;
+  private readonly data: Uint8Array;
+  constructor(data: Uint8Array) { this.data = data; }
+  u8(count: number, into: Uint8Array = new Uint8Array(count)): Uint8Array {
+    for (let i = 0; i < count; i++) into[i] = this.data[this.at + i] ?? 0;
+    this.at += count;
+    return into;
+  }
+  u16(count: number, into: Uint16Array = new Uint16Array(count)): Uint16Array {
+    for (let i = 0; i < count; i++) {
+      const o = this.at + i * 2;
+      into[i] = o + 1 < this.data.length ? this.data[o] | (this.data[o + 1] << 8) : 0;
+    }
+    this.at += count * 2;
+    return into;
+  }
+  skip(bytes: number) { this.at += bytes; }
+}
+
+export function decodeUpgradeSettings(data: Uint8Array): UpgradeSettings {
+  const count = data.length >= UPGX_SIZE ? UPGRADES_BW : UPGRADES_ORIGINAL;
+  const s = defaultUpgradeSettings();
+  const c = new Columns(data);
+  c.u8(count, s.useDefault);
+  if (count === UPGRADES_BW) c.skip(1);
+  for (const col of UPGRADE_COLUMNS) c.u16(count, s[col]);
+  return s;
+}
+
+export function encodeUpgradeSettings(s: UpgradeSettings, count: number): Uint8Array {
+  const w = new Writer(UPGX_SIZE);
+  for (let i = 0; i < count; i++) w.u8(s.useDefault[i] ?? 1);
+  if (count === UPGRADES_BW) w.u8(0);
+  for (const col of UPGRADE_COLUMNS) for (let i = 0; i < count; i++) w.u16(s[col][i] ?? 0);
+  return w.finish();
+}
+
+/** Every upgrade on its upgrades.dat costs. */
+export function defaultUpgradeSettings(): UpgradeSettings {
+  const n = UPGRADES_BW;
+  return {
+    useDefault: new Uint8Array(n).fill(1),
+    mineralCost: new Uint16Array(n), mineralFactor: new Uint16Array(n),
+    gasCost: new Uint16Array(n), gasFactor: new Uint16Array(n),
+    timeCost: new Uint16Array(n), timeFactor: new Uint16Array(n),
+  };
+}
+
+export function cloneUpgradeSettings(s: UpgradeSettings): UpgradeSettings {
+  return {
+    useDefault: s.useDefault.slice(), mineralCost: s.mineralCost.slice(), mineralFactor: s.mineralFactor.slice(),
+    gasCost: s.gasCost.slice(), gasFactor: s.gasFactor.slice(), timeCost: s.timeCost.slice(), timeFactor: s.timeFactor.slice(),
+  };
+}
+
+/* ── UPGR / PUPx: upgrade levels per player ──────────────── */
+
+export const UPGR_SIZE = UPGRADES_ORIGINAL * PLAYER_SLOTS * 3 + UPGRADES_ORIGINAL * 2; // 1748
+export const PUPX_SIZE = UPGRADES_BW * PLAYER_SLOTS * 3 + UPGRADES_BW * 2; // 2318
+
+/**
+ * How far each player may research each upgrade and where they start. Player-major
+ * tables (`upgradeIndex`), a global default pair, and a per-player "use the default" flag.
+ */
+export interface UpgradeRestrictions {
+  playerMax: Uint8Array;
+  playerStart: Uint8Array;
+  defaultMax: Uint8Array;
+  defaultStart: Uint8Array;
+  playerUsesDefault: Uint8Array;
+}
+
+export function upgradeIndex(player: number, upgradeId: number): number {
+  return player * UPGRADES_BW + upgradeId;
+}
+
+/**
+ * upgrades.dat's `maxRepeats` per id — the level cap StarEdit writes for a fresh map: 3 for
+ * the sixteen armour / weapon lines, 1 for single-shot upgrades, 0 for the unused slots.
+ */
+export const DEFAULT_UPGRADE_MAX: readonly number[] = [
+  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+];
+
+/** Read a player-major table stored with `count` entries per player into the model's 61-wide rows. */
+function readPerPlayer(c: Columns, count: number, into: Uint8Array, stride: number) {
+  for (let p = 0; p < PLAYER_SLOTS; p++) c.u8(count, into.subarray(p * stride, p * stride + count));
+}
+
+function writePerPlayer(w: Writer, from: Uint8Array, count: number, stride: number) {
+  for (let p = 0; p < PLAYER_SLOTS; p++) for (let i = 0; i < count; i++) w.u8(from[p * stride + i] ?? 0);
+}
+
+export function decodeUpgradeRestrictions(data: Uint8Array): UpgradeRestrictions {
+  const count = data.length >= PUPX_SIZE ? UPGRADES_BW : UPGRADES_ORIGINAL;
+  const r = defaultUpgradeRestrictions();
+  const c = new Columns(data);
+  readPerPlayer(c, count, r.playerMax, UPGRADES_BW);
+  readPerPlayer(c, count, r.playerStart, UPGRADES_BW);
+  c.u8(count, r.defaultMax);
+  c.u8(count, r.defaultStart);
+  readPerPlayer(c, count, r.playerUsesDefault, UPGRADES_BW);
+  return r;
+}
+
+export function encodeUpgradeRestrictions(r: UpgradeRestrictions, count: number): Uint8Array {
+  const w = new Writer(PUPX_SIZE);
+  writePerPlayer(w, r.playerMax, count, UPGRADES_BW);
+  writePerPlayer(w, r.playerStart, count, UPGRADES_BW);
+  for (let i = 0; i < count; i++) w.u8(r.defaultMax[i] ?? 0);
+  for (let i = 0; i < count; i++) w.u8(r.defaultStart[i] ?? 0);
+  writePerPlayer(w, r.playerUsesDefault, count, UPGRADES_BW);
+  return w.finish();
+}
+
+/** Every player on the default, which caps each upgrade at its upgrades.dat level and starts it at 0. */
+export function defaultUpgradeRestrictions(): UpgradeRestrictions {
+  const n = UPGRADES_BW;
+  const per = n * PLAYER_SLOTS;
+  const max = Uint8Array.from(DEFAULT_UPGRADE_MAX);
+  const playerMax = new Uint8Array(per);
+  for (let p = 0; p < PLAYER_SLOTS; p++) playerMax.set(max, p * n);
+  return { playerMax, playerStart: new Uint8Array(per), defaultMax: max, defaultStart: new Uint8Array(n), playerUsesDefault: new Uint8Array(per).fill(1) };
+}
+
+export function cloneUpgradeRestrictions(r: UpgradeRestrictions): UpgradeRestrictions {
+  return { playerMax: r.playerMax.slice(), playerStart: r.playerStart.slice(), defaultMax: r.defaultMax.slice(), defaultStart: r.defaultStart.slice(), playerUsesDefault: r.playerUsesDefault.slice() };
+}
+
+/** The effective { start, max } levels for one player and upgrade. */
+export function upgradeLevels(r: UpgradeRestrictions, player: number, upgradeId: number): { start: number; max: number } {
+  const i = upgradeIndex(player, upgradeId);
+  return r.playerUsesDefault[i]
+    ? { start: r.defaultStart[upgradeId], max: r.defaultMax[upgradeId] }
+    : { start: r.playerStart[i], max: r.playerMax[i] };
+}
+
+/* ── TECS / TECx: technology costs ───────────────────────── */
+
+export const TECHS_ORIGINAL = 24;
+export const TECHS_BW = 44;
+export const TECS_SIZE = TECHS_ORIGINAL + TECHS_ORIGINAL * 2 * 4; // 216
+export const TECX_SIZE = TECHS_BW + TECHS_BW * 2 * 4; // 396
+
+export interface TechSettings {
+  /** 1 = the game uses techdata.dat for this ability. */
+  useDefault: Uint8Array;
+  mineralCost: Uint16Array;
+  gasCost: Uint16Array;
+  /** Game frames. */
+  researchTime: Uint16Array;
+  energyCost: Uint16Array;
+}
+
+const TECH_COLUMNS = ["mineralCost", "gasCost", "researchTime", "energyCost"] as const;
+
+export function decodeTechSettings(data: Uint8Array): TechSettings {
+  const count = data.length >= TECX_SIZE ? TECHS_BW : TECHS_ORIGINAL;
+  const s = defaultTechSettings();
+  const c = new Columns(data);
+  c.u8(count, s.useDefault);
+  for (const col of TECH_COLUMNS) c.u16(count, s[col]);
+  return s;
+}
+
+export function encodeTechSettings(s: TechSettings, count: number): Uint8Array {
+  const w = new Writer(TECX_SIZE);
+  for (let i = 0; i < count; i++) w.u8(s.useDefault[i] ?? 1);
+  for (const col of TECH_COLUMNS) for (let i = 0; i < count; i++) w.u16(s[col][i] ?? 0);
+  return w.finish();
+}
+
+export function defaultTechSettings(): TechSettings {
+  const n = TECHS_BW;
+  return { useDefault: new Uint8Array(n).fill(1), mineralCost: new Uint16Array(n), gasCost: new Uint16Array(n), researchTime: new Uint16Array(n), energyCost: new Uint16Array(n) };
+}
+
+export function cloneTechSettings(s: TechSettings): TechSettings {
+  return { useDefault: s.useDefault.slice(), mineralCost: s.mineralCost.slice(), gasCost: s.gasCost.slice(), researchTime: s.researchTime.slice(), energyCost: s.energyCost.slice() };
+}
+
+/* ── PTEC / PTEx: technology availability per player ─────── */
+
+export const PTEC_SIZE = TECHS_ORIGINAL * PLAYER_SLOTS * 3 + TECHS_ORIGINAL * 2; // 912
+export const PTEX_SIZE = TECHS_BW * PLAYER_SLOTS * 3 + TECHS_BW * 2; // 1672
+
+/** Whether each player may research each ability and whether they start with it. Same shape as `UpgradeRestrictions`. */
+export interface TechRestrictions {
+  playerAvailable: Uint8Array;
+  playerResearched: Uint8Array;
+  defaultAvailable: Uint8Array;
+  defaultResearched: Uint8Array;
+  playerUsesDefault: Uint8Array;
+}
+
+export function techIndex(player: number, techId: number): number {
+  return player * TECHS_BW + techId;
+}
+
+export function decodeTechRestrictions(data: Uint8Array): TechRestrictions {
+  const count = data.length >= PTEX_SIZE ? TECHS_BW : TECHS_ORIGINAL;
+  const r = defaultTechRestrictions();
+  const c = new Columns(data);
+  readPerPlayer(c, count, r.playerAvailable, TECHS_BW);
+  readPerPlayer(c, count, r.playerResearched, TECHS_BW);
+  c.u8(count, r.defaultAvailable);
+  c.u8(count, r.defaultResearched);
+  readPerPlayer(c, count, r.playerUsesDefault, TECHS_BW);
+  return r;
+}
+
+export function encodeTechRestrictions(r: TechRestrictions, count: number): Uint8Array {
+  const w = new Writer(PTEX_SIZE);
+  writePerPlayer(w, r.playerAvailable, count, TECHS_BW);
+  writePerPlayer(w, r.playerResearched, count, TECHS_BW);
+  for (let i = 0; i < count; i++) w.u8(r.defaultAvailable[i] ?? 0);
+  for (let i = 0; i < count; i++) w.u8(r.defaultResearched[i] ?? 0);
+  writePerPlayer(w, r.playerUsesDefault, count, TECHS_BW);
+  return w.finish();
+}
+
+/** Everything researchable by everyone, nothing pre-researched, every player on the default. */
+export function defaultTechRestrictions(): TechRestrictions {
+  const n = TECHS_BW;
+  const per = n * PLAYER_SLOTS;
+  return { playerAvailable: new Uint8Array(per).fill(1), playerResearched: new Uint8Array(per), defaultAvailable: new Uint8Array(n).fill(1), defaultResearched: new Uint8Array(n), playerUsesDefault: new Uint8Array(per).fill(1) };
+}
+
+export function cloneTechRestrictions(r: TechRestrictions): TechRestrictions {
+  return { playerAvailable: r.playerAvailable.slice(), playerResearched: r.playerResearched.slice(), defaultAvailable: r.defaultAvailable.slice(), defaultResearched: r.defaultResearched.slice(), playerUsesDefault: r.playerUsesDefault.slice() };
+}
+
+/** The effective { available, researched } answer for one player and ability. */
+export function techState(r: TechRestrictions, player: number, techId: number): { available: boolean; researched: boolean } {
+  const i = techIndex(player, techId);
+  return r.playerUsesDefault[i]
+    ? { available: r.defaultAvailable[techId] !== 0, researched: r.defaultResearched[techId] !== 0 }
+    : { available: r.playerAvailable[i] !== 0, researched: r.playerResearched[i] !== 0 };
+}

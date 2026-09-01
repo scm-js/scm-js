@@ -55,6 +55,14 @@ Static names and vocabulary in `src/data/units.ts`, `src/data/players.ts`,
 StarEdit terminology. They are credited to Blizzard and the mapping community's format
 research; their presence does not imply endorsement.
 
+`src/formats/chk/sections/vcod.ts` embeds the 1040-byte `VCOD` verification table that
+StarEdit writes into every scenario it creates (the same bytes appear in every
+unprotected map; the game refuses a scenario without one). It is reproduced so that
+maps created here load in the game, as other open-source editors do; it is format data
+belonging to Blizzard, not scm-js content. `DEFAULT_UPGRADE_MAX` in
+`src/formats/chk/sections/settings.ts` is the `maxRepeats` column of `upgrades.dat`,
+copied so a fresh map matches StarEdit's defaults without the extracted file present.
+
 ## Adapted algorithms and reference tables
 
 ### Chkdraft

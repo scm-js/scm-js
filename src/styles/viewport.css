@@ -103,3 +103,33 @@
   font-family: var(--font-mono);
   color: var(--gold-hi);
 }
+
+/* shown while the open map's tileset graphics are still being fetched/rasterised */
+.viewport-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(10, 12, 16, 0.85);
+  backdrop-filter: blur(4px);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+  animation: fade-in 0.18s ease both;
+}
+.viewport-loading svg {
+  color: var(--gold);
+}
+.viewport-loading .spin {
+  animation: viewport-spin 0.9s linear infinite;
+}
+@keyframes viewport-spin {
+  to { transform: rotate(360deg); }
+}

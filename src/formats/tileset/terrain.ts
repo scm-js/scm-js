@@ -7,6 +7,7 @@
  * same variation slot. A pair's `index` field is its ISOM terrain id.
  */
 import type { Tileset } from "./decode";
+import { isomValueOf } from "../../data/isomTables";
 
 export interface BaseTerrain {
   /** CV5 group `index`, which is also the ISOM terrain id. */
@@ -92,6 +93,8 @@ export function flatTerrain(
   terrain: BaseTerrain,
   tileset: Tileset | null,
   random: () => number = Math.random,
+  /** ERA of the map: the ISOM value of a terrain is numbered per tileset. */
+  era = 0,
 ): TerrainFill {
   const variations = variationsOf(tileset, terrain.group);
   const pick = () => pickVariation(variations, random);
@@ -108,10 +111,10 @@ export function flatTerrain(
     }
   }
 
-  // Each ISOM cell is four u16 (left, top, right, bottom). A terrain owns a block of
-  // sixteen consecutive values starting at id * 8, and flat ground alternates these two
-  // quads from that block by cell parity.
-  const base = terrain.id * 8;
+  // Each ISOM rect is four u16 (left, top, right, bottom): the terrain's ISOM value
+  // shifted left four, with a nibble saying which diamond quadrant the side belongs to.
+  // Flat ground alternates two fixed quads by rect parity (see editor/isom.ts).
+  const base = isomValueOf(era, terrain.id) << 4;
   const even = [base + 8, base + 10, base + 0, base + 2];
   const odd = [base + 4, base + 12, base + 14, base + 6];
   const cellsW = Math.floor(width / 2) + 1;

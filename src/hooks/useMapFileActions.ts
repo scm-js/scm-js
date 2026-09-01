@@ -57,7 +57,7 @@ export function useMapFileActions() {
     if (onlyWhenEmpty && store.get(scenarioAtom)) return;
 
     const terrain = baseTerrain(loaded?.tileset ?? null, options.terrainId ?? info.defaultIsom);
-    const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null);
+    const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null, Math.random, era);
 
     load({
       scenario: createScenario({ width, height, era, name, description, tiles, isom }),

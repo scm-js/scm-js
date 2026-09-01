@@ -5,7 +5,7 @@ A StarCraft 1 / Brood War map editor for the browser, built in homage to **StarE
 > Status: reads, renders and writes real maps. Opening a `.scm`/`.scx` parses its
 > `scenario.chk`, draws the terrain from the game's own tileset graphics, and saving
 > writes a playable archive back out. The terrain layer's Rect and Tile brushes work,
-> with undo; the isometric brush and the other layers are still stubs.
+> with undo, including StarEdit's isometric brush; the other layers are still stubs.
 
 ## Run
 
@@ -30,6 +30,12 @@ That writes `tileset/*.{cv5,vf4,vr4,vx4,wpe}` into `public/tileset/`, which the 
 fetches on demand and rasterises into one megatile atlas per tileset. Until the files
 are there the viewport falls back to flat tileset colours and says so.
 
+Water and lava animate the way the game does it: the graphics are 8-bit indexed and
+StarCraft rotates a few short bands of the palette every 8 game frames (~336 ms on Fastest; the bands per tileset
+are the game's own rotator tables; Space Platform and Installation have none). The editor
+keeps the megatiles that touch those bands in a small second atlas and re-rasterises it on
+every step. **View ▸ Animate Water** freezes it, like the in-game option.
+
 Round trip, for reference:
 
 ```
@@ -43,7 +49,7 @@ The Terrain palette has three modes; two of them place tiles:
 
 | Mode | What it paints | Palette |
 | --- | --- | --- |
-| **Isometric** | *(not yet)* | the tileset's terrain list |
+| **Isometric** | StarEdit's diamond brush: paints a terrain and lays the cliffs and edges around it | the tileset's terrain list |
 | **Rect** | flat ground of one terrain type, in left/right tile pairs with StarEdit's random variation mix (or one fixed variation) | terrain types, read off the CV5 |
 | **Tile** | any single megatile — cliff pieces, doodad tiles, the lot | a raw MTXM id (decimal or `0x` hex) with group/slot spinners and a readout, over a browser of every CV5 tile group |
 
@@ -60,11 +66,37 @@ drops into Tile mode. Right-click gives **Pick** and **Fill Area** (flood fill b
 type in Rect mode, by exact tile otherwise). Every stroke is one undo step (Ctrl+Z /
 Ctrl+Y, up to 200).
 
-Painting writes `MTXM` and `TILE` together and leaves `ISOM` alone, which is what
-SCMDraft does in its non-isometric modes: these brushes place tiles the ISOM model has no
-vocabulary for, and the ISOM brush, once it exists, will rebuild the cells it touches.
-The status bar shows the tile id under the cursor and the Properties panel breaks it
-down (group, slot, megatile, elevation, walkability, buildability).
+Rect and Tile painting write `MTXM` and `TILE` together and leave `ISOM` alone, which is
+what SCMDraft does in its non-isometric modes: these brushes place tiles the ISOM model
+has no vocabulary for. The status bar shows the tile id under the cursor and the
+Properties panel breaks it down (group, slot, megatile, elevation, walkability,
+buildability).
+
+### The isometric brush
+
+The Isometric tab is the brush StarEdit is built around. The map is overlaid with a
+lattice of diamonds (4 tiles wide, 2 tall); clicking sets the diamond under the cursor —
+or an N×N block of them, per the brush size — to the chosen terrain, and the change
+ripples outward: a neighbour that cannot legally border the new terrain (water beside
+high dirt) becomes the intermediate one, and every touched diamond is then rendered
+from the tileset's own cliff and edge pieces, cliff faces stacked as tall as the tileset
+draws them. A single click of a raised terrain gives a small mesa of cliff ring; a wider
+brush gives flat high ground inside it. Each stroke is one undo step covering both the
+tiles and the lattice.
+
+The lattice lives in the `ISOM` section, which StarCraft itself never reads — it is the
+editor's own record, and StarEdit's brush cannot work without it. Protected maps often
+strip it. When a map has no `ISOM`, the Isometric tab says so and the brush is off;
+**Rebuild ISOM from tiles** (also under Tools) reconstructs it from the terrain: exact for
+ground that was laid down isometrically, a best guess under doodads and for hand-placed
+tiles. The tab also reports when the ISOM has drifted from the tiles (after Rect/Tile
+edits), since strokes near such areas will not join up until it is rebuilt.
+
+The algorithm is a port of Chkdraft's reverse-engineering of StarEdit (MIT); the shape
+tables are derived from the CV5 at load time, and only the per-tileset terrain numbering
+and adjacency lists are copied in (`src/data/isomTables.ts`). `tests/isom.test.ts` checks
+it against real maps: regenerating every tile from a map's own `ISOM` reproduces the
+map, and rebuilding the `ISOM` from the tiles recovers the original.
 
 Terrain-type ids are the CV5 group `index` of each flat pair, which is also what `ISOM`
 stores; the names come from Chkdraft's tables and `tests/palette.test.ts` checks them

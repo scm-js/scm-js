@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TILESET_FILENAMES } from "../src/formats/tileset/load";
 import { TILESETS } from "../src/data/tilesets";
-import { buildAtlasImageData, megatileAverages } from "../src/formats/tileset/atlas";
+import { buildAtlasImageData, drawAnimationPixels, megatileAverages } from "../src/formats/tileset/atlas";
+import { CYCLE_BANDS, cycleBands, cycleLength, cyclePalette, cycleStepAt, cyclingMegatiles, CYCLE_STEP_MS } from "../src/formats/tileset/cycle";
 import {
   decodeCv5, decodePalette, drawMegatile, loadTileset, megatileForTile,
   MEGATILE_PX, minitileHeight, TileFlag, type Tileset,
@@ -192,7 +193,7 @@ describe("base terrain", () => {
     const { isom } = flatTerrain(8, 4, DIRT, terrainTileset(), seeded(3));
     const cellsW = 8 / 2 + 1;
     const cell = (cx: number, cy: number) => [...isom.subarray((cy * cellsW + cx) * 4, (cy * cellsW + cx) * 4 + 4)];
-    // Dirt owns the block of values at id * 8 = 16.
+    // Badlands Dirt is ISOM value 1, so its rects hold 16..30 (see data/isomTables.ts).
     expect(cell(0, 0)).toEqual([24, 26, 16, 18]);
     expect(cell(1, 0)).toEqual([20, 28, 30, 22]);
     expect(cell(1, 1)).toEqual([24, 26, 16, 18]);
@@ -207,6 +208,64 @@ describe("base terrain", () => {
 
 /* Runs only where scripts/extract-tilesets.mjs has been run. */
 const TILESET_DIR = join(import.meta.dirname, "..", "public", "tileset");
+describe("palette cycling", () => {
+  const WATER = [{ min: 1, max: 6 }];
+
+  it("rotates each band one entry to the right per step and wraps within the band", () => {
+    const base = new Uint8Array(syntheticTileset().palette);
+    const once = cyclePalette(base, WATER, 1);
+    // Entry 1 now holds what was at 6; entry 2 holds what was at 1.
+    expect([...once.subarray(1 * 4, 1 * 4 + 3)]).toEqual([6, 12, 249]);
+    expect([...once.subarray(2 * 4, 2 * 4 + 3)]).toEqual([1, 2, 254]);
+    // Neighbours outside the band are untouched.
+    expect([...once.subarray(0, 3)]).toEqual([0, 0, 255]);
+    expect([...once.subarray(7 * 4, 7 * 4 + 3)]).toEqual([7, 14, 248]);
+    // A full turn is the identity; negative steps go the other way.
+    expect(cyclePalette(base, WATER, 6)).toEqual(base);
+    expect(cyclePalette(base, WATER, -1)).toEqual(cyclePalette(base, WATER, 5));
+    // Rotating into a scratch buffer leaves the base alone.
+    const scratch = new Uint8Array(base.length);
+    expect(cyclePalette(base, WATER, 2, scratch)).toBe(scratch);
+    expect(base).toEqual(new Uint8Array(syntheticTileset().palette));
+  });
+
+  it("matches the game's rotator tables", () => {
+    expect(CYCLE_BANDS).toHaveLength(TILESET_FILENAMES.length);
+    expect(cycleBands(0)).toBe(cycleBands(4)); // badlands and jungle share a set
+    expect(cycleBands(1)).toEqual([]);          // platform
+    expect(cycleBands(2)).toEqual([]);          // installation
+    expect(cycleLength(cycleBands(0))).toBe(42); // lcm(6, 7, 7)
+    expect(cycleLength(cycleBands(3))).toBe(20); // ashworld: lcm(4, 4, 5)
+    expect(cycleLength(cycleBands(5))).toBe(91); // desert: lcm(13, 7)
+    expect(cycleLength([])).toBe(1);
+    expect(cycleStepAt(0, 42)).toBe(0);
+    expect(cycleStepAt(CYCLE_STEP_MS * 43, 42)).toBe(1);
+  });
+
+  it("finds the megatiles whose minitiles touch a cycling band", () => {
+    const ts = syntheticTileset();
+    // Minitile 0 is solid index 1 and minitile 1 ramps 0..7, so both megatiles cycle.
+    expect([...cyclingMegatiles(ts, WATER)]).toEqual([0, 1]);
+    // Only the ramp reaches index 7.
+    expect([...cyclingMegatiles(ts, [{ min: 7, max: 13 }])]).toEqual([0, 1]);
+    // Megatile 0 is minitile 0 everywhere but one slot, so a band above the ramp misses it.
+    expect([...cyclingMegatiles(ts, [{ min: 200, max: 210 }])]).toEqual([]);
+    expect([...cyclingMegatiles(ts, [])]).toEqual([]);
+  });
+
+  it("rasterises the animated sub-atlas with the rotated palette", () => {
+    const ts = syntheticTileset();
+    const megatiles = Uint32Array.from([1]);
+    const px = new Uint8ClampedArray(MEGATILE_PX * MEGATILE_PX * 4);
+    drawAnimationPixels(ts, megatiles, cyclePalette(ts.palette, WATER, 1), 1, px);
+    const red = (x: number) => px[x * 4];
+    expect(red(0)).toBe(0); // index 0 is outside the band
+    expect(red(1)).toBe(6); // index 1 now shows entry 6's colour
+    expect(red(2)).toBe(1);
+    expect(red(7)).toBe(7); // index 7 is outside the band
+  });
+});
+
 const installed = TILESET_FILENAMES.filter((n) => existsSync(join(TILESET_DIR, `${n}.cv5`)));
 
 describe.skipIf(installed.length === 0)("installed tilesets (public/tileset)", () => {
@@ -223,6 +282,29 @@ describe.skipIf(installed.length === 0)("installed tilesets (public/tileset)", (
       const { tiles } = flatTerrain(32, 32, terrain, ts);
       const drawable = [...tiles].every((t) => megatileForTile(ts, t) > 0);
       expect(drawable, name).toBe(true);
+    }
+  });
+
+  it("has cycling water/lava megatiles exactly where the game animates them", () => {
+    for (const name of installed) {
+      const part = (ext: string) => new Uint8Array(readFileSync(join(TILESET_DIR, `${name}.${ext}`)));
+      const ts = loadTileset({ cv5: part("cv5"), vf4: part("vf4"), vr4: part("vr4"), vx4: part("vx4"), wpe: part("wpe") });
+      const bands = cycleBands(TILESET_FILENAMES.indexOf(name));
+      const cycling = cyclingMegatiles(ts, bands);
+      if (bands.length === 0) {
+        expect(cycling.length, name).toBe(0);
+        continue;
+      }
+      // Every animated tileset has water or lava, and it is a minority of the graphics.
+      expect(cycling.length, name).toBeGreaterThan(0);
+      expect(cycling.length, name).toBeLessThan(ts.megatileCount / 2);
+      // Cycling entries are all distinct colours, otherwise the bands would not animate.
+      for (const { min, max } of bands) {
+        const seen = new Set<number>();
+        for (let i = min; i <= max; i++) seen.add((ts.palette[i * 4] << 16) | (ts.palette[i * 4 + 1] << 8) | ts.palette[i * 4 + 2]);
+        expect(seen.size, `${name} ${min}-${max}`).toBeGreaterThan(1);
+      }
+      expect(cyclePalette(ts.palette, bands, cycleLength(bands)), name).toEqual(ts.palette);
     }
   });
 });

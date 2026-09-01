@@ -64,7 +64,8 @@ the fastest way to reach a specific UI state — see README and `src/hooks/useDe
 - To model a new section: add a codec in `sections/`, decode it in `parseScenario`, add a case to
   `encodeSection`, and add a `tests/chk.test.ts` round-trip.
 - `create.ts` builds a fresh scenario (File ▸ New); it does not yet emit `VCOD`/unit-settings sections,
-  so new maps are not loadable by StarCraft.
+  so new maps are not loadable by StarCraft. `scenario.isom` is `null` only when the *file* had no
+  `ISOM`; `encodeSection` then omits the section rather than writing a zeroed one.
 - `mpq/scm.ts` wraps `mopaq`: `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
   Non-scenario archive members are kept in `archiveExtrasAtom` and written back on save so custom
   sounds/graphics survive. `scenario.chk` is written uncompressed on purpose.
@@ -76,8 +77,19 @@ Edits are **invertible change lists** (`TileChange { at, before, after }`). Brus
 scenario. `applyChanges(scn, changes, "do" | "undo")` applies them and marks `MTXM` + `TILE` dirty.
 `useTerrainTools` applies changes live during a drag (bumping the revision so the canvas repaints) and
 calls `commitEditAtom` once on mouse-up so the whole stroke is one undo entry (200 levels). `ISOM` is
-intentionally left untouched by these brushes, matching SCMDraft's non-isometric modes; the Isometric
-brush is not implemented.
+intentionally left untouched by the Rect/Tile brushes, matching SCMDraft's non-isometric modes.
+
+The Isometric brush lives in `src/editor/isom.ts` — a port of Chkdraft's reverse-engineering of StarEdit
+(MIT). Read its header comment first. Key facts: the ISOM section is a lattice of diamonds whose values
+index a per-tileset *shape-link table* built from the CV5 at load time (`isomTables`, cached per
+`Tileset`), plus the copied-in terrain numbering/adjacency in `src/data/isomTables.ts` (an ISOM value is
+**not** a CV5 index — `isomValueOf(era, index)` maps between them). `paintIsom` mutates `scn.tiles`
+*and* `scn.isom` and returns `{ tiles, isom }` change lists; `HistoryEntry.isom` carries the second list
+through undo/redo (`applyIsomChanges`). `hasIsom(scn)` gates the brush: a map without `ISOM` gets a
+notice and **Rebuild ISOM from tiles** (`rebuildIsomFromTiles`, `useIsomRebuild`), which is also the
+`createdIsom` history case. `checkIsom` measures ISOM/tile agreement (`useIsomStatus`, computed on
+load, not per stroke). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
+tests green when touching the CV5 decoder (`edges`, `stack`) or the tables.
 
 Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the same ids `ISOM` stores).
 Rect mode paints in left/right pairs following map column parity, sharing one random variation per
@@ -89,7 +101,12 @@ pair — the tests in `tests/terrain-edit.test.ts` pin this behaviour.
 (`getTileset` / `peekTileset` / `ensureTileset`); `decode.ts` parses them; `atlas.ts` rasterises one
 megatile atlas (canvas ImageData) that the viewport blits from; `terrain.ts` derives the terrain-type
 catalogue and variations from the CV5; `palette.ts` holds names (from Chkdraft's tables — verified
-against real files in `tests/palette.test.ts`). `src/hooks/useTileset.ts` exposes `{ loaded, loading, error }`;
+against real files in `tests/palette.test.ts`). `cycle.ts` is palette colour cycling — StarCraft
+animates water/lava by rotating short bands of the WPE palette (tables from Chkdraft's `color_cycler.h`,
+per tileset in ERA order), so the atlas keeps a second small canvas of just the cycling megatiles
+(`atlas.animation`) and `setAtlasStep` re-rasterises it; always blit via `atlasSource(atlas, megatile)`,
+never index `atlas.image` directly. `MapViewport` drives the step from the wall clock in a rAF loop
+gated on `viewFlags.animateWater`. Averages (minimap, far zoom) stay at step 0. `src/hooks/useTileset.ts` exposes `{ loaded, loading, error }`;
 when files are missing (`TilesetMissingError`) the viewport falls back to flat per-tileset colours
 and says so.
 

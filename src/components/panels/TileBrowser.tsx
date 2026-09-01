@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { atlasRect } from "../../formats/tileset/atlas";
+import { atlasSource } from "../../formats/tileset/atlas";
 import { megatileForTile, MEGATILE_PX } from "../../formats/tileset/decode";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import type { TileGroupInfo } from "../../formats/tileset/palette";
@@ -17,8 +17,8 @@ export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, i
     ctx.stroke();
     return;
   }
-  const { sx, sy } = atlasRect(loaded.atlas, megatile);
-  ctx.drawImage(loaded.atlas.image, sx, sy, MEGATILE_PX, MEGATILE_PX, x, y, px, px);
+  const { image, sx, sy } = atlasSource(loaded.atlas, megatile);
+  ctx.drawImage(image, sx, sy, MEGATILE_PX, MEGATILE_PX, x, y, px, px);
 }
 
 /* ── Single tile thumbnail ──────────────────────────────── */

@@ -1,4 +1,5 @@
 import { buildAtlas, type TilesetAtlas } from "./atlas";
+import { cycleBands } from "./cycle";
 import { loadTileset, type Tileset } from "./decode";
 
 /** ERA index order, which is also the on-disk file basename in `tileset/`. */
@@ -84,7 +85,7 @@ export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
       const vx4 = vx4ex ?? (await fetchPart(`${name}.vx4`, isVx4));
 
       const tileset = loadTileset({ cv5, vf4, vr4, wpe, vx4, vx4Extended: vx4ex !== null });
-      return { name, tileset, atlas: await buildAtlas(tileset) };
+      return { name, tileset, atlas: await buildAtlas(tileset, cycleBands(TILESET_FILENAMES.indexOf(name))) };
     } catch (err) {
       cache.delete(name); // let a later attempt retry after the files are installed
       throw new TilesetMissingError(name, err);

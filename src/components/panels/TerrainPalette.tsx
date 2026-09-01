@@ -7,9 +7,10 @@ import {
 } from "../../atoms/editorAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
+import { useIsomRebuild, useIsomStatus } from "../../hooks/useIsom";
 import { variationsOf } from "../../formats/tileset/terrain";
 import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
-import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
+import { Button, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
@@ -34,24 +35,30 @@ function parseTileId(text: string): number | null {
   return Number.isFinite(n) && n >= 0 && n <= 0xffff ? n : null;
 }
 
-/* ── Isometric (brush not implemented; the list mirrors StarEdit's) ── */
+/* ── Isometric: StarEdit's diamond brush ─────────────────── */
 
 function IsomTab() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded } = useTileset();
   const [active, setActive] = useAtom(activeTerrainAtom);
+  const status = useIsomStatus();
+  const rebuild = useIsomRebuild();
   const types = useMemo(() => terrainTypes(loaded?.tileset ?? null, info.terrain), [loaded, info]);
   const list = types.length > 0 ? types : info.terrain.map((t) => ({ ...t, group: -1, height: 0 as const, buildable: true }));
+  const ready = status.kind === "ready";
+  const stalePct = ready ? Math.round((100 * status.check.mismatched) / Math.max(1, status.check.rects)) : 0;
 
   return (
     <>
       <div className="palette-toolbar">
         <BrushSelect />
         <span className="grow" />
-        <Check label="Auto-cliff" defaultChecked disabled />
+        <span className="lbl">
+          {status.kind === "missing" ? "no ISOM" : ready ? (status.stale ? `ISOM stale (${stalePct}%)` : "ISOM ok") : ""}
+        </span>
       </div>
       <div className="palette-scroll">
-        <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
+        <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0, opacity: status.kind === "ready" ? 1 : 0.55 }}>
           {list.map((t) => (
             <div key={t.id} className={`item ${active === t.id ? "selected" : ""}`} onClick={() => setActive(t.id)}>
               <TileThumb loaded={loaded} id={t.group >= 0 ? t.group << 4 : 0} size={18} className="swatch" />
@@ -60,9 +67,34 @@ function IsomTab() {
             </div>
           ))}
         </div>
-        <div className="hint" style={{ padding: "8px 10px" }}>
-          The isometric brush is not implemented yet. Use <strong>Rect</strong> to lay flat ground, or <strong>Tile</strong> to place cliff pieces by hand.
-        </div>
+        {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>Loading tileset…</div>}
+        {status.kind === "no-tileset" && (
+          <div className="hint" style={{ padding: "8px 10px" }}>
+            The isometric brush needs the tileset graphics — run <span className="mono">scripts/extract-tilesets.mjs</span>.
+          </div>
+        )}
+        {status.kind === "missing" && (
+          <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
+            <span>
+              This map has no <strong>ISOM</strong> section, so the isometric brush is off. StarCraft never reads ISOM — it is
+              the editor's own record of the diamond lattice — but the brush cannot work without one.
+            </span>
+            <span>
+              You can rebuild it from the tiles: exact for terrain that was laid down isometrically, a best guess under
+              doodads and for hand-placed tiles.
+            </span>
+            <span><Button size="sm" onClick={rebuild}>Rebuild ISOM from tiles</Button></span>
+          </div>
+        )}
+        {ready && status.stale && (
+          <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
+            <span>
+              The ISOM disagrees with the tiles under about {stalePct}% of the map — terrain edited with the Rect or Tile brush,
+              or another tool. Isometric strokes near those areas will not join up until it is rebuilt.
+            </span>
+            <span><Button size="sm" onClick={rebuild}>Rebuild ISOM from tiles</Button></span>
+          </div>
+        )}
       </div>
       <div className="palette-footer"><span>{list.length} terrain types</span><span>{info.name}</span></div>
     </>

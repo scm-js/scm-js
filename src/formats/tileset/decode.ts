@@ -27,7 +27,17 @@ export interface Cv5Group {
   buildability: number;
   /** High byte of `flags`: view-blocking and the ground-height bits. */
   groundHeight: number;
+  /**
+   * ISOM link on each side: values up to 48 are "soft" links shared with whatever
+   * terrain borders this piece, higher ones are "hard" links that pair pieces of the
+   * same edge set. Flat ground has the same soft link on all four sides.
+   */
   edges: { left: number; top: number; right: number; bottom: number };
+  /**
+   * How cliff pieces stack vertically: a group whose `top` equals the `bottom` of the
+   * group above it continues that cliff face. Zero means nothing stacks that way.
+   */
+  stack: { left: number; top: number; right: number; bottom: number };
   /** VX4 megatile index for each of the 16 slots in the group. */
   megatiles: Uint16Array;
 }
@@ -92,6 +102,12 @@ export function decodeCv5(cv5: Uint8Array): Cv5Group[] {
         right: view.getUint16(at + 8, true),
         bottom: view.getUint16(at + 10, true),
       },
+      stack: {
+        left: view.getUint16(at + 12, true),
+        top: view.getUint16(at + 14, true),
+        right: view.getUint16(at + 16, true),
+        bottom: view.getUint16(at + 18, true),
+      },
       megatiles,
     };
   }
@@ -143,7 +159,8 @@ export function megatileForTile(tileset: Tileset, tileId: number): number {
 /**
  * Paint one 32x32 megatile as RGBA into `dest` at (dx, dy) of a `destWidth`-pixel row.
  * Works on a plain array, so it is equally usable against ImageData in the browser and
- * a bare buffer in tests.
+ * a bare buffer in tests. `palette` defaults to the tileset's own; colour cycling passes
+ * a rotated copy (see cycle.ts).
  */
 export function drawMegatile(
   tileset: Tileset,
@@ -152,8 +169,9 @@ export function drawMegatile(
   destWidth: number,
   dx: number,
   dy: number,
+  palette: Uint8Array = tileset.palette,
 ) {
-  const { megatileRefs, minitiles, palette } = tileset;
+  const { megatileRefs, minitiles } = tileset;
   const base = megatile * 16;
 
   for (let my = 0; my < MINITILES_PER_EDGE; my++) {

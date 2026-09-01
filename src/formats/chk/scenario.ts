@@ -12,7 +12,7 @@ import {
   FORCE_SLOTS, PLAYER_SLOTS, type Forces,
 } from "./sections/players";
 import {
-  decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles, isomSize,
+  decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
 } from "./sections/terrain";
 
 /**
@@ -224,7 +224,9 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
     case "TILE":
       return encodeTiles(scn.tiles);
     case "ISOM":
-      return scn.isom ? encodeIsom(scn.isom) : new Uint8Array(isomSize(scn.width, scn.height));
+      // A map without ISOM stays without it: an all-zero section would tell other
+      // editors the lattice is valid when there is none.
+      return scn.isom ? encodeIsom(scn.isom) : null;
     case "MASK":
       return scn.mask ?? null;
     case "UNIT":

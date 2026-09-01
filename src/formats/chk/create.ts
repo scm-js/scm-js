@@ -10,6 +10,7 @@
 import { ANYWHERE_INDEX, type LocationRecord } from "./sections/objects";
 import { FORCE_SLOTS, PLAYER_SLOTS, PlayerRace, PlayerType } from "./sections/players";
 import type { Scenario } from "./scenario";
+import { isomSize } from "./sections/terrain";
 
 /** Brood War: TYPE "RAWB", VER 205. */
 const BROOD_WAR_VERSION = 205;
@@ -35,6 +36,7 @@ export interface CreateScenarioOptions {
   description?: string;
   /** Terrain to start from; a map of null tiles when omitted. See tileset/terrain.ts. */
   tiles?: Uint16Array;
+  /** The matching ISOM lattice; all null terrain (zeros, as StarEdit starts) when omitted. */
   isom?: Uint16Array;
 }
 
@@ -81,7 +83,7 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
       flags: [0, 0, 0, 0],
     },
     tiles: options.tiles ?? new Uint16Array(width * height),
-    isom: options.isom ?? null,
+    isom: options.isom ?? new Uint16Array(isomSize(width, height) / 2),
     mask: null,
     units: [],
     sprites: [],

@@ -72,6 +72,8 @@ export interface ViewFlags {
   elevation: boolean;
   buildability: boolean;
   startLocations: boolean;
+  /** Cycle the palette so water and lava animate as they do in game. */
+  animateWater: boolean;
 }
 
 export const viewFlagsAtom = atom<ViewFlags>({
@@ -86,6 +88,7 @@ export const viewFlagsAtom = atom<ViewFlags>({
   elevation: false,
   buildability: false,
   startLocations: true,
+  animateWater: true,
 });
 
 export const gridSizeAtom = atom<8 | 16 | 32 | 64 | 128>(32);

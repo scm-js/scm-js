@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ContextMenu } from "radix-ui";
-import { Crosshair } from "lucide-react";
+import { Crosshair, Loader2 } from "lucide-react";
 import {
   activeLayerAtom,
   activeTerrainAtom,
@@ -22,9 +22,11 @@ import {
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
-import { paintsTiles, useTerrainTools } from "../../hooks/useTerrainTools";
+import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { linePoints } from "../../editor/terrain";
-import { atlasRect } from "../../formats/tileset/atlas";
+import { diamondAt } from "../../editor/isom";
+import { atlasSource, setAtlasStep } from "../../formats/tileset/atlas";
+import { cycleStepAt } from "../../formats/tileset/cycle";
 import { megatileForTile } from "../../formats/tileset/decode";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { PLAYER_COLORS } from "../../data/players";
@@ -39,10 +41,18 @@ export default function MapViewport() {
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
+  /** Pointer position in map pixels; the isometric brush needs finer than tile resolution. */
+  const hoverPointRef = useRef<MapPoint | null>(null);
+  /** Diamond under the pointer at the last redraw, so the isometric outline follows the pointer within a tile. */
+  const hoverDiamondRef = useRef("");
   /** Last tile a stroke painted, so a fast drag fills the gap with a line. */
   const strokeRef = useRef<{ x: number; y: number } | null>(null);
   /** Tile under the pointer when the context menu opened. */
   const menuTileRef = useRef<{ x: number; y: number } | null>(null);
+  const menuPointRef = useRef<MapPoint | null>(null);
+  /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
+  const animatedInViewRef = useRef(false);
+  const lastViewportRect = useRef({ x: -1, y: -1, w: -1, h: -1 });
   const [size, setSize] = useState({ w: 0, h: 0 });
 
   const mapW = useAtomValue(mapWidthAtom);
@@ -66,7 +76,7 @@ export default function MapViewport() {
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
-  const painting = layer === "terrain" && paintsTiles(terrainMode) && scenario !== null;
+  const painting = layer === "terrain" && scenario !== null && (paintsTiles(terrainMode) || tools.isomReady);
   const mapLocations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
   const locations = scenario ? mapLocations : SAMPLE_LOCATIONS.slice(1);
@@ -98,6 +108,7 @@ export default function MapViewport() {
 
     // terrain
     const tiles = scenario?.tiles;
+    let animatedInView = false;
     if (tiles && tilesetAssets) {
       const { atlas, tileset: ts } = tilesetAssets;
       // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
@@ -121,11 +132,17 @@ export default function MapViewport() {
             ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
             continue;
           }
-          const { sx: ax, sy: ay } = atlasRect(atlas, megatile);
-          ctx.drawImage(atlas.image, ax, ay, TILE, TILE, px, py, tilePx, tilePx);
+          const src = atlasSource(atlas, megatile);
+          if (src.animated) animatedInView = true;
+          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
         }
       }
       ctx.imageSmoothingEnabled = true;
+    } else if (tiles && tilesetLoading) {
+      // Map open, graphics still coming: a calm plate under the loading overlay. Anything
+      // tile-shaped here would just be wrong terrain for a moment.
+      ctx.fillStyle = "#12161d";
+      ctx.fillRect(-sx, -sy, worldW, worldH);
     } else {
       // No map or no tileset graphics installed: flat tileset colour with light noise.
       const base = parseInt(tileset.color.slice(1), 16);
@@ -239,7 +256,25 @@ export default function MapViewport() {
 
     // hover brush, with a preview of what the terrain brush would leave behind
     const hv = hoverRef.current;
-    if (hv) {
+    const hp = hoverPointRef.current;
+    if (hv && hp && painting && terrainMode === "isom") {
+      // The isometric brush works in diamonds — 4 tiles wide, 2 tall, centred on the
+      // lattice — so outline the ones this stroke would set rather than a tile square.
+      ctx.strokeStyle = "#e6b95c";
+      ctx.fillStyle = "rgba(230,185,92,0.12)";
+      ctx.lineWidth = 1.5;
+      for (const d of tools.ghostDiamondsAt(hp)) {
+        const cx = d.x * 2 * tilePx - sx, cy = d.y * tilePx - sy;
+        ctx.beginPath();
+        ctx.moveTo(cx - 2 * tilePx, cy);
+        ctx.lineTo(cx, cy - tilePx);
+        ctx.lineTo(cx + 2 * tilePx, cy);
+        ctx.lineTo(cx, cy + tilePx);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else if (hv) {
       const b = layer === "terrain" || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
@@ -255,8 +290,9 @@ export default function MapViewport() {
             ctx.fillRect(px, py, tilePx, tilePx);
             continue;
           }
-          const { sx: ax, sy: ay } = atlasRect(atlas, megatile);
-          ctx.drawImage(atlas.image, ax, ay, TILE, TILE, px, py, tilePx, tilePx);
+          const src = atlasSource(atlas, megatile);
+          if (src.animated) animatedInView = true;
+          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
         }
         ctx.globalAlpha = 1;
         ctx.imageSmoothingEnabled = true;
@@ -316,8 +352,14 @@ export default function MapViewport() {
     drawRuler(topRef.current, true);
     drawRuler(leftRef.current, false);
 
-    setViewportRect({ x: sx / tilePx, y: sy / tilePx, w: size.w / tilePx, h: size.h / tilePx });
-  }, [size, tilePx, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation]);
+    animatedInViewRef.current = animatedInView;
+    const rect = { x: sx / tilePx, y: sy / tilePx, w: size.w / tilePx, h: size.h / tilePx };
+    const prev = lastViewportRect.current;
+    if (rect.x !== prev.x || rect.y !== prev.y || rect.w !== prev.w || rect.h !== prev.h) {
+      lastViewportRect.current = rect;
+      setViewportRect(rect);
+    }
+  }, [size, tilePx, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading]);
 
   /* ── sizing ──────────────────────────────────────────── */
   useLayoutEffect(() => {
@@ -339,6 +381,25 @@ export default function MapViewport() {
     c.style.height = `${size.h}px`;
     draw();
   }, [size, draw]);
+
+  /* ── water / lava animation ──────────────────────────── */
+  const drawRef = useRef(draw);
+  useEffect(() => { drawRef.current = draw; }, [draw]);
+
+  useEffect(() => {
+    const anim = tilesetAssets?.atlas.animation;
+    if (!flags.animateWater || !anim || !scenario) return;
+    const { atlas, tileset: ts } = tilesetAssets;
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      // Palette rotations follow the wall clock, so the phase survives re-mounts and
+      // stays in step with the tile browser. Only repaint when something on screen cycles.
+      if (setAtlasStep(atlas, ts, cycleStepAt(performance.now(), anim.length)) && animatedInViewRef.current) drawRef.current();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [flags.animateWater, tilesetAssets, scenario]);
 
   /* minimap-driven recentring */
   useEffect(() => {
@@ -373,6 +434,15 @@ export default function MapViewport() {
       y: Math.floor((e.clientY - r.top + el.scrollTop) / tilePx),
     };
   };
+  const pointAt = (e: { clientX: number; clientY: number }): MapPoint => {
+    const el = scrollerRef.current!;
+    const r = el.getBoundingClientRect();
+    return { px: (e.clientX - r.left + el.scrollLeft) / zoom, py: (e.clientY - r.top + el.scrollTop) / zoom };
+  };
+  const clampPoint = (p: MapPoint): MapPoint => ({
+    px: Math.min(mapW * TILE - 1, Math.max(0, p.px)),
+    py: Math.min(mapH * TILE - 1, Math.max(0, p.py)),
+  });
   const inMap = (t: { x: number; y: number }) => t.x >= 0 && t.y >= 0 && t.x < mapW && t.y < mapH;
   const clampToMap = (t: { x: number; y: number }) => ({ x: Math.min(mapW - 1, Math.max(0, t.x)), y: Math.min(mapH - 1, Math.max(0, t.y)) });
 
@@ -380,30 +450,38 @@ export default function MapViewport() {
     if (e.button !== 0 || !painting) return;
     const t = tileAt(e);
     if (!inMap(t)) return;
-    if (e.altKey) { tools.pickAt(t.x, t.y); return; }
+    if (e.altKey) { tools.pickAt(t.x, t.y, pointAt(e)); return; }
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     strokeRef.current = t;
-    tools.beginStroke(t.x, t.y);
+    tools.beginStroke(t.x, t.y, pointAt(e));
   };
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
+    const point = pointAt(e);
     const stroking = strokeRef.current;
     if (stroking) {
       // Dragging outside the map keeps painting along the edge, like StarEdit.
       const c = clampToMap(t);
-      if (c.x !== stroking.x || c.y !== stroking.y) {
+      if (terrainMode === "isom") {
+        // The brush itself fires once per diamond, so every move can be forwarded.
+        tools.paintAt(c.x, c.y, clampPoint(point));
+        strokeRef.current = c;
+      } else if (c.x !== stroking.x || c.y !== stroking.y) {
         for (const p of linePoints(stroking.x, stroking.y, c.x, c.y).slice(1)) tools.paintAt(p.x, p.y);
         strokeRef.current = c;
       }
     }
     if (!inMap(t)) {
-      if (hoverRef.current) { hoverRef.current = null; draw(); }
+      if (hoverRef.current) { hoverRef.current = null; hoverPointRef.current = null; draw(); }
       return;
     }
-    if (!hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y) {
+    hoverPointRef.current = point;
+    const diamondKey = terrainMode === "isom" ? `${diamondAt(point.px, point.py).x},${diamondAt(point.px, point.py).y}` : "";
+    if (!hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
       hoverRef.current = t;
+      hoverDiamondRef.current = diamondKey;
       setCursor(t);
       draw();
     }
@@ -417,8 +495,8 @@ export default function MapViewport() {
     draw();
   };
 
-  const onLeave = () => { hoverRef.current = null; draw(); };
-  const onContextMenu = () => { menuTileRef.current = hoverRef.current; };
+  const onLeave = () => { hoverRef.current = null; hoverPointRef.current = null; draw(); };
+  const onContextMenu = () => { menuTileRef.current = hoverRef.current; menuPointRef.current = hoverPointRef.current; };
 
   const withMenuTile = (fn: (x: number, y: number) => void) => () => {
     const t = menuTileRef.current;
@@ -431,8 +509,8 @@ export default function MapViewport() {
     ...(layer === "sprites" ? [{ label: "Sprite Properties…", onSelect: () => open("spriteProperties") }] : []),
     ...(layer === "terrain"
       ? [
-          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : "Pick Tile", onSelect: withMenuTile(tools.pickAt), disabled: !scenario },
-          { label: "Fill Area", onSelect: withMenuTile(tools.fillAt), disabled: !painting },
+          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : "Pick Tile", onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
+          { label: "Fill Area", onSelect: withMenuTile(tools.fillAt), disabled: !painting || terrainMode === "isom" },
         ]
       : []),
     { label: "", sep: true },
@@ -481,6 +559,12 @@ export default function MapViewport() {
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>
+      {scenario && tilesetLoading && (
+        <div className="viewport-loading" role="status" aria-live="polite">
+          <Loader2 size={16} className="spin" aria-hidden />
+          <span>Loading {tileset.name} terrain…</span>
+        </div>
+      )}
       {tilesetError && (
         <div className="viewport-notice" role="status">
           <strong>No tileset graphics.</strong> Run <code>node scripts/extract-tilesets.mjs</code> against a

@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 import {
-  scenarioDescription, scenarioName, tilesetIndex, type Scenario,
+  markDirty, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
 } from "../formats/chk/scenario";
 import { ANYWHERE_INDEX, isLocationUsed } from "../formats/chk/sections/objects";
 import { getString } from "../formats/chk/sections/strings";
@@ -11,6 +11,7 @@ import {
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom,
 } from "./editorAtoms";
 import { applyChanges, type TileChange } from "../editor/terrain";
+import { applyIsomChanges } from "../editor/isom";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -26,6 +27,9 @@ export const recentFilesAtom = atom<string[]>([]);
 
 /** Bumped whenever terrain changes, so the viewport knows to repaint. */
 export const terrainRevisionAtom = atom(0);
+
+/** Bumped when the ISOM section is replaced wholesale (Rebuild ISOM), so its health is re-read. */
+export const isomRevisionAtom = atom(0);
 
 export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
   const scn = get(scenarioAtom);
@@ -90,7 +94,26 @@ export const closeDocumentAtom = atom(null, (get, set) => {
 export interface HistoryEntry {
   label: string;
   changes: TileChange[];
+  /** The isometric brush's changes to `scenario.isom`, undone together with the tiles. */
+  isom?: TileChange[];
+  /**
+   * Set when the edit gave a map an ISOM section it did not have (Rebuild ISOM). Undo
+   * removes the section again rather than leaving an all-zero one behind.
+   */
+  createdIsom?: Uint16Array;
 }
+
+/** Apply an entry in either direction, tiles and ISOM alike. */
+function applyEntry(scn: Scenario, entry: HistoryEntry, direction: "do" | "undo") {
+  if (entry.createdIsom) {
+    scn.isom = direction === "do" ? entry.createdIsom : null;
+    markDirty(scn, "ISOM");
+  }
+  applyChanges(scn, entry.changes, direction);
+  if (entry.isom) applyIsomChanges(scn, entry.isom, direction);
+}
+
+const hasEdits = (entry: HistoryEntry) => entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined;
 
 /** SCMDraft's default depth; a 7x7 stroke across a whole map is still only a few hundred KB. */
 const UNDO_LEVELS = 200;
@@ -103,7 +126,7 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  * paint live during a stroke and the whole stroke still undoes as one step.
  */
 export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
-  if (entry.changes.length === 0) return;
+  if (!hasEdits(entry)) return;
   set(undoStackAtom, [...get(undoStackAtom), entry].slice(-UNDO_LEVELS));
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);
@@ -117,7 +140,8 @@ export const undoAtom = atom(
     const stack = get(undoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
-    applyChanges(scn, entry.changes, "undo");
+    applyEntry(scn, entry, "undo");
+    if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     set(undoStackAtom, stack.slice(0, -1));
     set(redoStackAtom, [...get(redoStackAtom), entry]);
     set(mapModifiedAtom, true);
@@ -133,7 +157,8 @@ export const redoAtom = atom(
     const stack = get(redoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
-    applyChanges(scn, entry.changes, "do");
+    applyEntry(scn, entry, "do");
+    if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     set(redoStackAtom, stack.slice(0, -1));
     set(undoStackAtom, [...get(undoStackAtom), entry]);
     set(mapModifiedAtom, true);

@@ -12,9 +12,10 @@ import {
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
-import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
+import { redoAtom, scenarioAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
+import { useIsomRebuild } from "../../hooks/useIsom";
 import { RECENT_FILES } from "../../data/samples";
 
 /* ── Menu model ─────────────────────────────────────────── */
@@ -44,6 +45,8 @@ export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 function useMenus(): { label: string; items: Item[] }[] {
   const open = useSetAtom(openDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const hasMap = useAtomValue(scenarioAtom) !== null;
+  const rebuildIsom = useIsomRebuild();
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
@@ -148,6 +151,7 @@ function useMenus(): { label: string; items: Item[] }[] {
         flag("locationNames", "Location Names"),
         flag("startLocations", "Start Locations"),
         flag("fog", "Fog of War"),
+        flag("animateWater", "Animate Water"),
         sep,
         flag("elevation", "Elevation Overlay"),
         flag("buildability", "Buildability Overlay"),
@@ -207,6 +211,7 @@ function useMenus(): { label: string; items: Item[] }[] {
         sep,
         stub("Fill Terrain"),
         stub("Replace Terrain…"),
+        { kind: "item", label: "Rebuild ISOM from Tiles", disabled: !hasMap, onSelect: rebuildIsom },
         stub("Auto-place Start Locations"),
         sep,
         dlg("Check Map…", "validateMap"),

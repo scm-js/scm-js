@@ -18,7 +18,7 @@ export default function MinimapPanel() {
   const flags = useAtomValue(viewFlagsAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
-  const { loaded: tilesetAssets } = useTileset();
+  const { loaded: tilesetAssets, loading: tilesetLoading } = useTileset();
   const centerView = useSetAtom(centerViewOnAtom);
   const mapLocations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
@@ -57,6 +57,13 @@ export default function MinimapPanel() {
           img.data[i + 3] = 255;
         }
       }
+    } else if (tiles && tilesetLoading) {
+      // Graphics for the map just opened are still coming; a plain plate reads as
+      // "loading" instead of pretending to be terrain.
+      img.data.fill(255);
+      for (let i = 0; i < img.data.length; i += 4) {
+        img.data[i] = 0x12; img.data[i + 1] = 0x16; img.data[i + 2] = 0x1d;
+      }
     } else {
       const base = parseInt(tileset.color.slice(1), 16);
       const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
@@ -92,7 +99,7 @@ export default function MinimapPanel() {
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
-  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, terrainRevision, locations, startLocations]);
+  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, locations, startLocations]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.

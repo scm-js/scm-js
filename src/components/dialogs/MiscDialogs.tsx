@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { BookOpen, CircleX, Info, Keyboard, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
+import { CircleX, Info, Keyboard, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { TILESETS } from "../../data/tilesets";
 import { locationsAtom } from "../../atoms/documentAtoms";
 import { UNIT_GROUPS, unitName } from "../../data/units";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
+import AppLogo from "../ui/AppLogo";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -223,24 +224,88 @@ export function FindDialog({ entry }: DialogProps) {
 
 export function AboutDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const projectPage = (path: string) => window.open(`https://github.com/jeany55/scm-js${path}`, "_blank", "noopener,noreferrer");
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let raf = 0;
+    let start = 0;
+    const stars: { x: number; y: number; r: number; phase: number; speed: number; b: number }[] = [];
+    for (let i = 0; i < 60; i++) {
+      stars.push({ x: Math.random(), y: Math.random(), r: 0.3 + Math.random() * 1.2, phase: Math.random() * Math.PI * 2, speed: 0.001 + Math.random() * 0.003, b: 0.3 + Math.random() * 0.7 });
+    }
+    const frame = (t: number) => {
+      if (!start) start = t;
+      const el = t - start;
+      const cw = canvas.clientWidth, ch = canvas.clientHeight;
+      canvas.width = cw * devicePixelRatio;
+      canvas.height = ch * devicePixelRatio;
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+      // Nebulas
+      const drift = el * 0.00004;
+      const g1 = ctx.createRadialGradient(cw * (0.3 + 0.12 * Math.sin(drift * 1.7)), ch * (0.3 + 0.1 * Math.cos(drift * 1.3)), 0, cw * 0.3, ch * 0.3, cw * 0.55);
+      g1.addColorStop(0, "rgba(160,100,240,0.18)"); g1.addColorStop(1, "transparent");
+      ctx.fillStyle = g1; ctx.fillRect(0, 0, cw, ch);
+      const g2 = ctx.createRadialGradient(cw * (0.75 + 0.08 * Math.cos(drift * 1.5)), ch * (0.7 + 0.08 * Math.sin(drift)), 0, cw * 0.75, ch * 0.7, cw * 0.45);
+      g2.addColorStop(0, "rgba(255,95,162,0.1)"); g2.addColorStop(1, "transparent");
+      ctx.fillStyle = g2; ctx.fillRect(0, 0, cw, ch);
+      const g3 = ctx.createRadialGradient(cw * (0.5 + 0.1 * Math.sin(drift * 0.7 + 2)), ch * (0.5 + 0.1 * Math.cos(drift * 1.1)), 0, cw * 0.5, ch * 0.5, cw * 0.3);
+      g3.addColorStop(0, "rgba(180,60,110,0.06)"); g3.addColorStop(1, "transparent");
+      ctx.fillStyle = g3; ctx.fillRect(0, 0, cw, ch);
+      // Stars
+      for (const s of stars) {
+        const flicker = 0.5 + 0.5 * Math.sin(el * s.speed + s.phase);
+        const a = s.b * (0.3 + 0.7 * flicker);
+        ctx.fillStyle = `rgba(255,190,220,${a})`;
+        ctx.beginPath(); ctx.arc(s.x * cw, s.y * ch, s.r, 0, Math.PI * 2); ctx.fill();
+        if (s.r > 0.9 && a > 0.5) {
+          ctx.strokeStyle = `rgba(255,190,220,${a * 0.25})`;
+          ctx.lineWidth = 0.4;
+          const sx = s.x * cw, sy = s.y * ch, gl = s.r * 2.5;
+          ctx.beginPath();
+          ctx.moveTo(sx - gl, sy); ctx.lineTo(sx + gl, sy);
+          ctx.moveTo(sx, sy - gl); ctx.lineTo(sx, sy + gl);
+          ctx.stroke();
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
-    <DialogFrame dialogKey={entry.key} title="About SCM JS" icon={<Info size={14} />} size="sm" footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
-      <div className="about-hero">
-        <div className="about-logo"><span className="brand-mark" style={{ width: 30, height: 30 }} /></div>
-        <div>
-          <div className="about-title">SCM JS</div>
-          <div className="dim">StarCraft / Brood War scenario editor for the browser</div>
-          <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>Version 0.1.0-alpha · React 19 · TypeScript · Jotai · Canvas</div>
+    <DialogFrame dialogKey={entry.key} title="About scmJS" icon={<Info size={14} />} size="sm" footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
+      <div className="about-space">
+        <canvas ref={canvasRef} className="about-canvas" />
+        <div className="about-content">
+          <AppLogo size={48} />
+          <h2 className="about-app-name">scm<span>JS</span></h2>
+          <div className="about-tagline">StarCraft · Brood War</div>
+          <div className="about-rule" />
+          <div className="about-meta">v0.1 alpha · by Jeany</div>
+          <div className="about-desc">Browser-based scenario editor</div>
+          <div className="about-tech">React 19 · TypeScript · Jotai · Canvas</div>
+          <div className="about-rule" />
+          <p className="about-homage">
+            In homage to <strong>StarEdit</strong>, <strong>SCMDraft 2</strong> &amp; <strong>StarForge</strong>
+          </p>
+          <p className="about-disclaimer">
+            StarCraft is a trademark of Blizzard Entertainment. Not affiliated with or endorsed by Blizzard.
+          </p>
+          <div className="about-links">
+            <button className="about-link" onClick={() => projectPage("/#readme")}>Docs</button>
+            <span className="about-dot">·</span>
+            <button className="about-link" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Credits</button>
+            <span className="about-dot">·</span>
+            <button className="about-link" onClick={() => projectPage("")}>Source</button>
+          </div>
         </div>
-      </div>
-      <p className="hint">
-        Built in homage to <strong>StarEdit</strong> (Blizzard, 1998), <strong>SCMDraft 2</strong> (Suicidal Insanity) and <strong>StarForge</strong> (Heimdal), with algorithm and format research credited to Chkdraft and the StarCraft modding community. StarCraft is a trademark of Blizzard Entertainment; this project is not affiliated with or endorsed by Blizzard.
-      </p>
-      <div className="row" style={{ gap: 6 }}>
-        <Button size="sm" onClick={() => projectPage("/#readme")}><BookOpen size={12} /> Documentation</Button>
-        <Button size="sm" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Credits &amp; licenses</Button>
-        <Button size="sm" onClick={() => projectPage("")}>Source</Button>
       </div>
     </DialogFrame>
   );

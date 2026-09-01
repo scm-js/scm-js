@@ -296,9 +296,9 @@ export default function MenuBar() {
 
   return (
     <Menubar.Root className="menubar">
-      <div className="brand" title="SCM JS">
+      <div className="brand" title="scmJS">
         <span className="brand-mark" />
-        SCM JS
+        scmJS
       </div>
       {menus.map((m) => (
         <Fragment key={m.label}>

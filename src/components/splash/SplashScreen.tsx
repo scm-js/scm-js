@@ -49,13 +49,13 @@ function generateStars(count: number): Star[] {
   return stars;
 }
 
-/* ── Palette ────────────────────────────────────────────── */
+/* ── Palette (pink-themed per project identity) ─────────── */
 
-const CYAN = "80,210,255";
-const CYAN_HI = "160,235,255";
-const TEAL = "60,180,200";
-const VIOLET = "130,90,220";
-const BLUE = "40,60,140";
+const PINK = "255,95,162";
+const PINK_HI = "255,190,220";
+const PINK_DIM = "180,60,110";
+const VIOLET = "160,100,240";
+const BLUE = "40,50,130";
 
 /* ── Timing ─────────────────────────────────────────────── */
 
@@ -101,34 +101,52 @@ export default function SplashScreen() {
       ctx.clearRect(0, 0, cw, ch);
       shown += (progressRef.current - shown) * 0.08;
 
-      /* ── Nebula background ── */
-      const nebGrad1 = ctx.createRadialGradient(cw * 0.3, ch * 0.25, 0, cw * 0.3, ch * 0.25, cw * 0.6);
-      nebGrad1.addColorStop(0, `rgba(${VIOLET},0.18)`);
-      nebGrad1.addColorStop(0.5, `rgba(${BLUE},0.08)`);
+      /* ── Nebula background (animated drift) ── */
+      const nebDrift = el * 0.00003;
+      const n1x = cw * (0.3 + 0.12 * Math.sin(nebDrift * 1.7));
+      const n1y = ch * (0.25 + 0.08 * Math.cos(nebDrift * 1.3));
+      const nebGrad1 = ctx.createRadialGradient(n1x, n1y, 0, n1x, n1y, cw * 0.6);
+      nebGrad1.addColorStop(0, `rgba(${VIOLET},0.2)`);
+      nebGrad1.addColorStop(0.5, `rgba(${BLUE},0.1)`);
       nebGrad1.addColorStop(1, "transparent");
       ctx.fillStyle = nebGrad1;
       ctx.fillRect(0, 0, cw, ch);
 
-      const nebGrad2 = ctx.createRadialGradient(cw * 0.75, ch * 0.7, 0, cw * 0.75, ch * 0.7, cw * 0.5);
-      nebGrad2.addColorStop(0, "rgba(30,80,160,0.12)");
-      nebGrad2.addColorStop(0.4, `rgba(${VIOLET},0.06)`);
+      const n2x = cw * (0.75 + 0.1 * Math.cos(nebDrift * 2.1));
+      const n2y = ch * (0.7 + 0.1 * Math.sin(nebDrift * 0.9));
+      const nebGrad2 = ctx.createRadialGradient(n2x, n2y, 0, n2x, n2y, cw * 0.5);
+      nebGrad2.addColorStop(0, `rgba(${PINK},0.07)`);
+      nebGrad2.addColorStop(0.4, `rgba(${VIOLET},0.04)`);
       nebGrad2.addColorStop(1, "transparent");
       ctx.fillStyle = nebGrad2;
       ctx.fillRect(0, 0, cw, ch);
 
-      /* ── Stars ── */
+      // Third nebula cloud for depth
+      const n3x = cw * (0.5 + 0.15 * Math.sin(nebDrift * 0.7 + 2));
+      const n3y = ch * (0.45 + 0.12 * Math.cos(nebDrift * 1.1 + 1));
+      const nebGrad3 = ctx.createRadialGradient(n3x, n3y, 0, n3x, n3y, cw * 0.35);
+      nebGrad3.addColorStop(0, `rgba(${PINK_DIM},0.06)`);
+      nebGrad3.addColorStop(1, "transparent");
+      ctx.fillStyle = nebGrad3;
+      ctx.fillRect(0, 0, cw, ch);
+
+      /* ── Stars (twinkling + slow drift) ── */
+      const starDrift = el * 0.000008;
       for (const s of stars) {
         const flicker = 0.5 + 0.5 * Math.sin(el * s.speed + s.phase);
         const a = s.bright * (0.4 + 0.6 * flicker);
-        ctx.fillStyle = `rgba(${CYAN_HI},${a})`;
+        // Slow parallax drift
+        const sx = ((s.x + starDrift * (0.5 + s.bright)) % 1.05) * cw;
+        const sy = s.y * ch;
+        ctx.fillStyle = `rgba(${PINK_HI},${a})`;
         ctx.beginPath();
-        ctx.arc(s.x * cw, s.y * ch, s.r, 0, Math.PI * 2);
+        ctx.arc(sx, sy, s.r, 0, Math.PI * 2);
         ctx.fill();
         // Cross-shaped glint on brighter stars
         if (s.r > 1.0 && a > 0.5) {
-          ctx.strokeStyle = `rgba(${CYAN_HI},${a * 0.3})`;
+          ctx.strokeStyle = `rgba(${PINK_HI},${a * 0.3})`;
           ctx.lineWidth = 0.5;
-          const sx = s.x * cw, sy = s.y * ch, gl = s.r * 3;
+          const gl = s.r * 3;
           ctx.beginPath();
           ctx.moveTo(sx - gl, sy); ctx.lineTo(sx + gl, sy);
           ctx.moveTo(sx, sy - gl); ctx.lineTo(sx, sy + gl);
@@ -148,8 +166,8 @@ export default function SplashScreen() {
       // Glow behind sphere
       const glowR = fov * 0.35;
       const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      glowGrad.addColorStop(0, `rgba(${CYAN},0.12)`);
-      glowGrad.addColorStop(0.5, `rgba(${TEAL},0.04)`);
+      glowGrad.addColorStop(0, `rgba(${PINK},0.12)`);
+      glowGrad.addColorStop(0.5, `rgba(${PINK_DIM},0.04)`);
       glowGrad.addColorStop(1, "transparent");
       ctx.fillStyle = glowGrad;
       ctx.fillRect(cx - glowR, cy - glowR, glowR * 2, glowR * 2);
@@ -160,7 +178,7 @@ export default function SplashScreen() {
         const pa = pts[a], pb = pts[b];
         const depth = (pa.d + pb.d) / 2;
         const alpha = Math.max(0.02, Math.min(0.45, 0.95 - (depth - 2.75) / 2.2));
-        ctx.strokeStyle = `rgba(${CYAN},${alpha})`;
+        ctx.strokeStyle = `rgba(${PINK},${alpha})`;
         ctx.beginPath();
         ctx.moveTo(pa.x, pa.y);
         ctx.lineTo(pb.x, pb.y);
@@ -168,7 +186,7 @@ export default function SplashScreen() {
       }
 
       // Bright equator line
-      ctx.strokeStyle = `rgba(${CYAN_HI},0.35)`;
+      ctx.strokeStyle = `rgba(${PINK_HI},0.35)`;
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       for (let j = 0; j <= 24; j++) {
@@ -180,7 +198,7 @@ export default function SplashScreen() {
       /* ── Progress ring around sphere ── */
       const pr = Math.min(cw, ch) * 0.30;
       ctx.lineWidth = 1.5;
-      ctx.strokeStyle = `rgba(${CYAN},0.07)`;
+      ctx.strokeStyle = `rgba(${PINK},0.07)`;
       ctx.beginPath();
       ctx.arc(cx, cy, pr, 0, Math.PI * 2);
       ctx.stroke();
@@ -188,13 +206,13 @@ export default function SplashScreen() {
         const head = -Math.PI / 2 + shown * Math.PI * 2;
         ctx.lineCap = "round";
         ctx.lineWidth = 2;
-        ctx.strokeStyle = `rgba(${CYAN},0.55)`;
-        ctx.shadowColor = `rgba(${CYAN},0.6)`;
+        ctx.strokeStyle = `rgba(${PINK},0.55)`;
+        ctx.shadowColor = `rgba(${PINK},0.6)`;
         ctx.shadowBlur = 10;
         ctx.beginPath();
         ctx.arc(cx, cy, pr, -Math.PI / 2, head);
         ctx.stroke();
-        ctx.fillStyle = `rgba(${CYAN_HI},0.95)`;
+        ctx.fillStyle = `rgba(${PINK_HI},0.95)`;
         ctx.beginPath();
         ctx.arc(cx + Math.cos(head) * pr, cy + Math.sin(head) * pr, 2.8, 0, Math.PI * 2);
         ctx.fill();
@@ -231,7 +249,7 @@ export default function SplashScreen() {
       <div className="splash-card" onClick={(e) => { e.stopPropagation(); dismiss(); }}>
         <canvas ref={canvasRef} className="splash-canvas" />
         <div className="splash-center">
-          <h1 className="splash-title">JS<span>EDIT</span></h1>
+          <h1 className="splash-title">scm<span>JS</span></h1>
           <div className="splash-sub">StarCraft · Brood War</div>
         </div>
         <div className="splash-bottom">

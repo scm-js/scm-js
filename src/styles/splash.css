@@ -1,19 +1,19 @@
 /* ── Splash (space-themed loading screen) ────────────────── */
 
-/* Deep space palette: cyan / teal / violet over dark navy. Scoped here so tokens.css
-   stays the editor's gold + teal palette. */
+/* Pink identity palette: the splash keeps its own pink theme, scoped here so
+   tokens.css stays the editor's gold + teal palette. */
 .splash-veil {
-  --sp-cyan: #50d2ff;
-  --sp-cyan-hi: #a0ebff;
-  --sp-cyan-dim: #2a7a99;
-  --sp-violet: #825ae0;
+  --sp-pink: #ff5fa2;
+  --sp-pink-hi: #ffbedc;
+  --sp-pink-dim: #b43c6e;
+  --sp-violet: #a064f0;
 
   position: fixed;
   inset: 0;
   z-index: 300;
   display: grid;
   place-items: center;
-  background: rgba(4, 6, 18, 0.88);
+  background: rgba(6, 4, 14, 0.88);
   backdrop-filter: blur(4px) saturate(0.7);
   transition: opacity 0.55s ease;
 }
@@ -28,16 +28,16 @@
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(ellipse at 50% 25%, rgba(80, 210, 255, 0.06), transparent 60%),
-    radial-gradient(ellipse at 80% 90%, rgba(130, 90, 220, 0.05), transparent 55%),
-    linear-gradient(180deg, #0a0e1e, #060914);
-  border: 1px solid rgba(80, 210, 255, 0.15);
+    radial-gradient(ellipse at 50% 25%, rgba(255, 95, 162, 0.06), transparent 60%),
+    radial-gradient(ellipse at 80% 90%, rgba(160, 100, 240, 0.04), transparent 55%),
+    linear-gradient(180deg, #120818, #08040e);
+  border: 1px solid rgba(255, 95, 162, 0.15);
   border-radius: 8px;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.9),
-    inset 0 0 0 1px rgba(80, 210, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 95, 162, 0.08),
     0 30px 100px rgba(0, 0, 0, 0.85),
-    0 0 80px rgba(80, 210, 255, 0.06);
+    0 0 80px rgba(255, 95, 162, 0.06);
   overflow: hidden;
   transition: transform 0.55s ease, opacity 0.55s ease;
   cursor: pointer;
@@ -69,10 +69,10 @@
   letter-spacing: 0.18em;
   padding-left: 0.18em;
   line-height: 1;
-  color: var(--sp-cyan);
+  color: var(--sp-pink);
   text-shadow:
-    0 0 30px rgba(80, 210, 255, 0.5),
-    0 0 80px rgba(80, 210, 255, 0.15),
+    0 0 30px rgba(255, 95, 162, 0.5),
+    0 0 80px rgba(255, 95, 162, 0.15),
     0 2px 0 rgba(0, 0, 0, 0.7);
 }
 .splash-title span {
@@ -85,12 +85,12 @@
   padding-left: 0.35em;
   text-transform: uppercase;
   color: var(--sp-violet);
-  text-shadow: 0 0 20px rgba(130, 90, 220, 0.4);
+  text-shadow: 0 0 20px rgba(160, 100, 240, 0.4);
 }
 .splash-bottom {
   position: relative;
   padding: 0 28px 22px;
-  background: linear-gradient(180deg, transparent, rgba(6, 9, 20, 0.85) 20%, rgba(6, 9, 20, 0.95));
+  background: linear-gradient(180deg, transparent, rgba(8, 4, 14, 0.85) 20%, rgba(8, 4, 14, 0.95));
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-dim);
@@ -114,11 +114,11 @@
 }
 .splash-log div.current {
   opacity: 1;
-  color: var(--sp-cyan-hi);
+  color: var(--sp-pink-hi);
 }
 .splash-log div.current::after {
   content: "▍";
-  color: var(--sp-cyan);
+  color: var(--sp-pink);
   animation: blink 1s steps(2) infinite;
 }
 @keyframes blink {
@@ -129,15 +129,15 @@
 .splash-bar {
   margin-top: 10px;
   height: 2px;
-  background: rgba(80, 210, 255, 0.1);
+  background: rgba(255, 95, 162, 0.1);
   border-radius: 1px;
   overflow: hidden;
 }
 .splash-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--sp-cyan-dim), var(--sp-cyan), var(--sp-cyan-hi));
-  box-shadow: 0 0 12px var(--sp-cyan);
+  background: linear-gradient(90deg, var(--sp-pink-dim), var(--sp-pink), var(--sp-pink-hi));
+  box-shadow: 0 0 12px var(--sp-pink);
   transition: width 0.45s cubic-bezier(0.33, 1, 0.68, 1);
 }
 .splash-foot {
@@ -149,7 +149,7 @@
 .splash-version {
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--sp-cyan-dim);
+  color: var(--sp-pink-dim);
 }
 .splash-author {
   font-size: 10px;

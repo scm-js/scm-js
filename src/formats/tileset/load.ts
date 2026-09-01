@@ -1,0 +1,109 @@
+import { buildAtlas, type TilesetAtlas } from "./atlas";
+import { loadTileset, type Tileset } from "./decode";
+
+/** ERA index order, which is also the on-disk file basename in `tileset/`. */
+export const TILESET_FILENAMES = [
+  "badlands",
+  "platform",
+  "install",
+  "ashworld",
+  "jungle",
+  "desert",
+  "ice",
+  "twilight",
+] as const;
+
+export type TilesetFileName = (typeof TILESET_FILENAMES)[number];
+
+/** Where the extracted tileset files are served from. See scripts/extract-tilesets.mjs. */
+const BASE = `${import.meta.env.BASE_URL}tileset/`;
+
+export interface LoadedTileset {
+  name: TilesetFileName;
+  tileset: Tileset;
+  atlas: TilesetAtlas;
+}
+
+const cache = new Map<TilesetFileName, Promise<LoadedTileset>>();
+
+export class TilesetMissingError extends Error {
+  readonly tileset: TilesetFileName;
+
+  constructor(tileset: TilesetFileName, cause?: unknown) {
+    super(
+      `Tileset "${tileset}" is not available. Run scripts/extract-tilesets.mjs against a StarCraft install to populate public/tileset/.`,
+      { cause },
+    );
+    this.name = "TilesetMissingError";
+    this.tileset = tileset;
+  }
+}
+
+/**
+ * A dev server answers a missing asset with the SPA index.html and a 200, so a plain
+ * `res.ok` check is not enough — every part is size-checked against its format.
+ */
+async function fetchPart(name: string, check: (data: Uint8Array) => boolean): Promise<Uint8Array> {
+  const res = await fetch(BASE + name);
+  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  const data = new Uint8Array(await res.arrayBuffer());
+  if (!check(data)) throw new Error(`${name}: not a tileset file (${data.length} bytes)`);
+  return data;
+}
+
+const isPalette = (d: Uint8Array) => d.length === 1024;
+const isCv5 = (d: Uint8Array) => d.length > 0 && d.length % 52 === 0;
+const isVf4 = (d: Uint8Array) => d.length > 0 && d.length % 32 === 0;
+const isVr4 = (d: Uint8Array) => d.length > 0 && d.length % 64 === 0;
+const isVx4 = (d: Uint8Array) => d.length > 0 && d.length % 32 === 0;
+const isVx4Ex = (d: Uint8Array) => d.length > 0 && d.length % 64 === 0;
+
+async function fetchOptional(name: string, check: (data: Uint8Array) => boolean): Promise<Uint8Array | null> {
+  try {
+    return await fetchPart(name, check);
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch, decode and rasterise a tileset. Repeat calls share one in-flight promise. */
+export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
+  const existing = cache.get(name);
+  if (existing) return existing;
+
+  const loading = (async (): Promise<LoadedTileset> => {
+    try {
+      // Remastered ships .vx4ex alongside .vx4; prefer it when it was extracted.
+      const [cv5, vf4, vr4, wpe, vx4ex] = await Promise.all([
+        fetchPart(`${name}.cv5`, isCv5),
+        fetchPart(`${name}.vf4`, isVf4),
+        fetchPart(`${name}.vr4`, isVr4),
+        fetchPart(`${name}.wpe`, isPalette),
+        fetchOptional(`${name}.vx4ex`, isVx4Ex),
+      ]);
+      const vx4 = vx4ex ?? (await fetchPart(`${name}.vx4`, isVx4));
+
+      const tileset = loadTileset({ cv5, vf4, vr4, wpe, vx4, vx4Extended: vx4ex !== null });
+      return { name, tileset, atlas: await buildAtlas(tileset) };
+    } catch (err) {
+      cache.delete(name); // let a later attempt retry after the files are installed
+      throw new TilesetMissingError(name, err);
+    }
+  })();
+
+  cache.set(name, loading);
+  return loading;
+}
+
+/** Already-resolved tileset, for synchronous render paths. */
+const ready = new Map<TilesetFileName, LoadedTileset>();
+
+export function peekTileset(name: TilesetFileName): LoadedTileset | null {
+  return ready.get(name) ?? null;
+}
+
+export async function ensureTileset(name: TilesetFileName): Promise<LoadedTileset> {
+  const loaded = await getTileset(name);
+  ready.set(name, loaded);
+  return loaded;
+}

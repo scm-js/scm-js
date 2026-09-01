@@ -1,14 +1,25 @@
 import { useState } from "react";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, FlipHorizontal2, Grid3x3, Maximize, ScrollText } from "lucide-react";
-import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { scenarioAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { MAP_SIZES, TILESET_BY_ID } from "../../data/tilesets";
+import { setScenarioDescription, setScenarioName, type Scenario } from "../../formats/chk/scenario";
+import { isLocationUsed } from "../../formats/chk/sections/objects";
+import { MAP_SIZES, terrainName, TILESET_BY_ID } from "../../data/tilesets";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { SAMPLE_TRIGGERS } from "../../data/triggers";
 import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+
+/** TRIG is 2400 bytes per trigger and stays raw for now; the count is still useful. */
+function triggerCount(scenario: Scenario): number {
+  const total = scenario.chk.sections
+    .filter((sec) => sec.name === "TRIG")
+    .reduce((n, sec) => n + sec.data.length, 0);
+  return Math.floor(total / 2400);
+}
 
 /* ── Map Properties ─────────────────────────────────────── */
 
@@ -19,11 +30,24 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   const [w] = useAtom(mapWidthAtom);
   const [h] = useAtom(mapHeightAtom);
   const open = useSetAtom(openDialogAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const setModified = useSetAtom(mapModifiedAtom);
   const [localName, setLocalName] = useState(name);
   const [localDesc, setLocalDesc] = useState(desc);
 
+  // Writing back marks SPRP and the string table dirty; every other section is still
+  // re-emitted from the bytes we read.
+  const apply = () => {
+    setName(localName);
+    setDesc(localDesc);
+    if (!scenario) return;
+    if (localName !== name) setScenarioName(scenario, localName);
+    if (localDesc !== desc) setScenarioDescription(scenario, localDesc);
+    if (localName !== name || localDesc !== desc) setModified(true);
+  };
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Map Properties" icon={<FileText size={14} />} size="md" onOk={() => { setName(localName); setDesc(localDesc); }} showApply>
+    <DialogFrame dialogKey={entry.key} title="Map Properties" icon={<FileText size={14} />} size="md" onOk={apply} showApply>
       <Group title="Scenario">
         <div className="form wide">
           <Field label="Name" hint="Up to 128 characters. In-game colour codes (<04> etc.) are supported."><TextInput value={localName} onChange={(e) => setLocalName(e.target.value)} /></Field>
@@ -43,11 +67,12 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
         </Group>
         <Group title="Statistics">
           <div className="form">
-            <Field label="Units"><span className="mono">0</span></Field>
-            <Field label="Doodads"><span className="mono">0</span></Field>
-            <Field label="Locations"><span className="mono">{SAMPLE_LOCATIONS.length}</span></Field>
-            <Field label="Triggers"><span className="mono">{SAMPLE_TRIGGERS.length}</span></Field>
-            <Field label="Strings"><span className="mono">10 / 65535</span></Field>
+            <Field label="Units"><span className="mono">{scenario ? scenario.units.length : 0}</span></Field>
+            <Field label="Sprites"><span className="mono">{scenario ? scenario.sprites.length : 0}</span></Field>
+            <Field label="Doodads"><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
+            <Field label="Locations"><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : SAMPLE_LOCATIONS.length}</span></Field>
+            <Field label="Triggers"><span className="mono">{scenario ? triggerCount(scenario) : SAMPLE_TRIGGERS.length}</span></Field>
+            <Field label="Strings"><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
           </div>
         </Group>
       </div>
@@ -80,7 +105,7 @@ export function ResizeMapDialog({ entry }: DialogProps) {
             <div className="form">
               <Field label="Width"><Select value={String(nw)} onChange={(e) => setNw(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
               <Field label="Height"><Select value={String(nh)} onChange={(e) => setNh(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
-              <Field label="Fill new area"><Select options={ts.terrain} defaultValue={ts.defaultTerrain} /></Field>
+              <Field label="Fill new area"><Select options={ts.terrain.map((t) => t.name)} defaultValue={terrainName(ts, ts.defaultIsom)} /></Field>
             </div>
           </Group>
           <Group title="Anchor existing terrain">

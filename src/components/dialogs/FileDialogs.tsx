@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { useAtom, useSetAtom } from "jotai";
-import { Construction, FilePlus2, FolderOpen, Save, TriangleAlert, Upload } from "lucide-react";
-import { mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { useCallback, useState } from "react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { Construction, FilePlus2, FolderOpen, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
+import { mapFilePathAtom, mapModifiedAtom, mapNameAtom } from "../../atoms/editorAtoms";
+import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { MAP_SIZES, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
-import { RECENT_FILES } from "../../data/samples";
+import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
+import { DEFAULT_NEW_MAP, useMapFileActions } from "../../hooks/useMapFileActions";
+import { MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBytes, writeMapBytes, type MapFormat } from "../../services/mapIo";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -12,24 +14,18 @@ import type { DialogProps } from "./DialogHost";
 /* ── New Map ────────────────────────────────────────────── */
 
 export function NewMapDialog({ entry }: DialogProps) {
-  const setName = useSetAtom(mapNameAtom);
-  const setDesc = useSetAtom(mapDescriptionAtom);
-  const setTileset = useSetAtom(mapTilesetAtom);
-  const setW = useSetAtom(mapWidthAtom);
-  const setH = useSetAtom(mapHeightAtom);
-  const setModified = useSetAtom(mapModifiedAtom);
-  const setStatus = useSetAtom(statusMessageAtom);
+  const { newMap } = useMapFileActions();
 
-  const [tileset, setTs] = useState<TilesetId>("jungle");
-  const [w, setLocalW] = useState(128);
-  const [h, setLocalH] = useState(128);
-  const [terrain, setTerrain] = useState(TILESET_BY_ID.jungle.defaultTerrain);
-  const [name, setLocalName] = useState("Untitled Scenario");
-  const [desc, setLocalDesc] = useState("");
+  const [tileset, setTs] = useState<TilesetId>(DEFAULT_NEW_MAP.tileset);
+  const [w, setLocalW] = useState(DEFAULT_NEW_MAP.width);
+  const [h, setLocalH] = useState(DEFAULT_NEW_MAP.height);
+  const [terrain, setTerrain] = useState(TILESET_BY_ID[DEFAULT_NEW_MAP.tileset].defaultIsom);
+  const [name, setLocalName] = useState(DEFAULT_NEW_MAP.name);
+  const [desc, setLocalDesc] = useState(DEFAULT_NEW_MAP.description);
   const [players, setPlayers] = useState(8);
 
   const ts = TILESET_BY_ID[tileset];
-  const pick = (id: TilesetId) => { setTs(id); setTerrain(TILESET_BY_ID[id].defaultTerrain); };
+  const pick = (id: TilesetId) => { setTs(id); setTerrain(TILESET_BY_ID[id].defaultIsom); };
   const maxDim = Math.max(w, h);
 
   return (
@@ -40,15 +36,9 @@ export function NewMapDialog({ entry }: DialogProps) {
       size="lg"
       okLabel="Create"
       onOk={() => {
-        setName(name || "Untitled Scenario");
-        setDesc(desc);
-        setTileset(tileset);
-        setW(w);
-        setH(h);
-        setModified(true);
-        setStatus(`New ${w}×${h} ${ts.name} scenario`);
+        void newMap({ width: w, height: h, tileset, name: name || DEFAULT_NEW_MAP.name, description: desc, terrainId: terrain });
       }}
-      footerLeft={<span>{ts.name} · {w}×{h} · {terrain}</span>}
+      footerLeft={<span>{ts.name} · {w}×{h} · {terrainName(ts, terrain)}</span>}
     >
       <Group title="Tileset">
         <div className="tileset-grid">
@@ -73,7 +63,7 @@ export function NewMapDialog({ entry }: DialogProps) {
                 </div>
               </Field>
               <Field label="Initial terrain">
-                <Select value={terrain} onChange={(e) => setTerrain(e.target.value)} options={ts.terrain} />
+                <Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={ts.terrain.map((t) => ({ value: String(t.id), label: t.name }))} />
               </Field>
               <Field label="Start locations">
                 <div className="row">
@@ -104,27 +94,69 @@ export function NewMapDialog({ entry }: DialogProps) {
 /* ── Open Map ───────────────────────────────────────────── */
 
 export function OpenMapDialog({ entry }: DialogProps) {
-  const [sel, setSel] = useState<number | null>(0);
+  const recents = useAtomValue(recentFilesAtom);
+  const [sel, setSel] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const load = useSetAtom(loadDocumentAtom);
+
+  const accept = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const doc = await openMapFile(file);
+      load(doc);
+      const warnings = doc.scenario.warnings.length;
+      setStatus(
+        `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}` +
+        (warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""),
+      );
+      close(entry.key);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [close, entry.key, load, setStatus]);
+
   return (
     <DialogFrame
       dialogKey={entry.key}
       title="Open Scenario"
       icon={<FolderOpen size={14} />}
       size="md"
-      okLabel="Open"
-      onOk={() => setStatus("Open is not wired up yet")}
-      footerLeft={<span>Supports .scm · .scx · .chk</span>}
+      okLabel="Browse…"
+      onOk={() => { void accept(null); }}
+      footer={
+        <>
+          <Button variant="primary" disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>
+            {busy ? <><Loader2 size={13} className="spin" /> Opening…</> : "Browse…"}
+          </Button>
+          <Button onClick={() => close(entry.key)}>Cancel</Button>
+        </>
+      }
+      footerLeft={<span>Supports {MAP_FILE_ACCEPT.split(",").join(" · ")}</span>}
     >
-      <div className="dropzone">
+      <div
+        className={`dropzone${dragging ? " dragging" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); void accept(e.dataTransfer.files[0] ?? null); }}
+      >
         <Upload size={22} />
         <div><strong>Drop a map file here</strong></div>
         <div className="hint">or</div>
-        <Button onClick={() => { setStatus("File picker not wired up yet"); close(entry.key); }}>Browse…</Button>
+        <Button disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>Browse…</Button>
       </div>
+      {error && <p className="error-text">{error}</p>}
       <Group title="Recent" flush>
-        <ListBox items={RECENT_FILES} selected={sel} onSelect={setSel} style={{ height: 120 }} render={(f) => <><FolderOpen size={12} className="faint" /><span className="mono">{f}</span></>} />
+        {recents.length === 0
+          ? <p className="hint" style={{ padding: "10px 12px" }}>Nothing opened yet this session.</p>
+          : <ListBox items={recents} selected={sel} onSelect={setSel} style={{ height: 120 }} render={(f) => <><FolderOpen size={12} className="faint" /><span className="mono">{f}</span></>} />}
       </Group>
     </DialogFrame>
   );
@@ -134,11 +166,53 @@ export function OpenMapDialog({ entry }: DialogProps) {
 
 export function SaveAsDialog({ entry }: DialogProps) {
   const [name] = useAtom(mapNameAtom);
-  const [file, setFile] = useState(name.replace(/[^\w\- ]+/g, ""));
-  const [fmt, setFmt] = useState("scx");
+  const scenario = useAtomValue(scenarioAtom);
+  const extras = useAtomValue(archiveExtrasAtom);
+  const [path, setPath] = useAtom(mapFilePathAtom);
+  const [file, setFile] = useState(() => (path ?? name).replace(/\.(scm|scx|chk)$/i, "").replace(/[^\w\- ]+/g, ""));
+  const [fmt, setFmt] = useState<MapFormat>(scenario && scenario.fileVersion < 205 ? "scm" : "scx");
+  const [keepExtras, setKeepExtras] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const setModified = useSetAtom(mapModifiedAtom);
+
+  const save = async () => {
+    if (!scenario) { setError("No scenario is open."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const bytes = await writeMapBytes(scenario, { format: fmt, extras: keepExtras ? extras : undefined });
+      const fileName = `${file || "scenario"}.${fmt}`;
+      if (await saveBytes(bytes, fileName)) {
+        setPath(fileName);
+        setModified(false);
+        setStatus(`Saved ${fileName} — ${(bytes.length / 1024).toFixed(1)} KB`);
+        close(entry.key);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Save Scenario As" icon={<Save size={14} />} size="sm" okLabel="Save" onOk={() => setStatus("Save As is not wired up yet")}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Save Scenario As"
+      icon={<Save size={14} />}
+      size="sm"
+      footer={
+        <>
+          <Button variant="primary" disabled={busy || !scenario} onClick={() => { void save(); }}>
+            {busy ? <><Loader2 size={13} className="spin" /> Saving…</> : "Save"}
+          </Button>
+          <Button onClick={() => close(entry.key)}>Cancel</Button>
+        </>
+      }
+    >
       <div className="form wide">
         <Field label="File name">
           <div className="row">
@@ -147,16 +221,25 @@ export function SaveAsDialog({ entry }: DialogProps) {
           </div>
         </Field>
         <Field label="Format">
-          <Select value={fmt} onChange={(e) => setFmt(e.target.value)} options={[{ value: "scx", label: "Brood War scenario (.scx)" }, { value: "scm", label: "StarCraft scenario (.scm)" }, { value: "chk", label: "Raw chunk data (.chk)" }]} />
+          <Select value={fmt} onChange={(e) => setFmt(e.target.value as MapFormat)} options={[{ value: "scx", label: "Brood War scenario (.scx)" }, { value: "scm", label: "StarCraft scenario (.scm)" }, { value: "chk", label: "Raw chunk data (.chk)" }]} />
         </Field>
       </div>
       <Group title="Options">
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Compress MPQ archive" defaultChecked />
-          <Check label="Include editor-only sections (SCMDraft compatible)" defaultChecked />
-          <Check label="Protect map (strip editor data)" />
+          <Check
+            label={`Keep other archive files (${extras.size})`}
+            checked={keepExtras}
+            disabled={fmt === "chk" || extras.size === 0}
+            onChange={(e) => setKeepExtras(e.target.checked)}
+          />
         </div>
+        <p className="hint" style={{ marginTop: 6 }}>
+          scenario.chk is written uncompressed so older StarCraft builds can read it.
+          Sections the editor does not model are copied through byte for byte.
+        </p>
       </Group>
+      {!scenario && <p className="error-text">Open a map first — there is nothing to save.</p>}
+      {error && <p className="error-text">{error}</p>}
     </DialogFrame>
   );
 }

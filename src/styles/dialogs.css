@@ -439,3 +439,33 @@
 .dropzone svg {
   color: var(--text-faint);
 }
+.dropzone.dragging {
+  border-color: var(--gold);
+  border-style: solid;
+  background: color-mix(in srgb, var(--gold) 8%, var(--bg-1));
+  color: var(--text);
+}
+.dropzone.dragging svg {
+  color: var(--gold);
+}
+
+/* inline failure text inside a dialog body */
+.error-text {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: color-mix(in srgb, var(--danger) 70%, var(--text));
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* spinner used by async dialog buttons */
+@keyframes dialog-spin {
+  to { transform: rotate(360deg); }
+}
+.btn > .lucide-loader-2,
+.btn > svg.spin {
+  animation: dialog-spin 0.9s linear infinite;
+}

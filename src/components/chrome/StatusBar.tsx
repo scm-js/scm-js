@@ -1,7 +1,9 @@
 import { useAtomValue } from "jotai";
 import { activeLayerAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, zoomAtom } from "../../atoms/editorAtoms";
+import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
+import { hexTile } from "../../formats/tileset/palette";
 import { LAYERS } from "./MenuBar";
 
 const VERSION_LABEL = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", broodwar: "Brood War", remastered: "Remastered" } as const;
@@ -15,6 +17,9 @@ export default function StatusBar() {
   const zoom = useAtomValue(zoomAtom);
   const msg = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(terrainRevisionAtom);
+  const tileId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
   return (
     <footer className="statusbar">
@@ -25,6 +30,10 @@ export default function StatusBar() {
       <span className="status-cell" title="Cursor pixel">
         <span className="k">Px</span>
         <span className="v">{cursor.x * 32}, {cursor.y * 32}</span>
+      </span>
+      <span className="status-cell" title="MTXM tile id under the cursor (group · slot)">
+        <span className="k">Id</span>
+        <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileId >> 4}:${tileId & 15}`}</span>
       </span>
       <span className="status-cell" title="Map dimensions">
         <span className="k">Map</span>

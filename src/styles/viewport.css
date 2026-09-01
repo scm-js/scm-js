@@ -43,6 +43,10 @@
 .map-surface {
   position: relative;
   cursor: crosshair;
+  touch-action: none;
+}
+.map-surface.painting {
+  cursor: cell;
 }
 .map-surface canvas {
   display: block;
@@ -78,4 +82,24 @@
   place-items: center;
   color: var(--text-faint);
   pointer-events: none;
+}
+
+/* non-blocking notice over the map (e.g. tileset graphics missing) */
+.viewport-notice {
+  position: absolute;
+  left: 28px;
+  top: 28px;
+  z-index: 5;
+  max-width: 460px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-0));
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.viewport-notice code {
+  font-family: var(--font-mono);
+  color: var(--gold-hi);
 }

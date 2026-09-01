@@ -301,3 +301,14 @@
   width: 10px;
   height: 10px;
 }
+
+/* whole-window drop target while a map file is dragged over the editor */
+.app.drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  border: 2px dashed var(--gold);
+  background: color-mix(in srgb, var(--gold) 6%, transparent);
+}

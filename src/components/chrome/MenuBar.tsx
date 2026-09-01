@@ -12,7 +12,9 @@ import {
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
+import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
+import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { RECENT_FILES } from "../../data/samples";
 
 /* ── Menu model ─────────────────────────────────────────── */
@@ -47,7 +49,9 @@ function useMenus(): { label: string; items: Item[] }[] {
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
-  const setModified = useSetAtom(mapModifiedAtom);
+  const { save } = useMapFileActions();
+  const [undoLabel, undo] = useAtom(undoAtom);
+  const [redoLabel, redo] = useAtom(redoAtom);
 
   const flag = (k: keyof ViewFlags, label: string, shortcut?: string): Item => ({
     kind: "check",
@@ -89,7 +93,7 @@ function useMenus(): { label: string; items: Item[] }[] {
           ],
         },
         sep,
-        { kind: "item", label: "Save", shortcut: "Ctrl+S", onSelect: () => { setModified(false); setStatus("Saved (stub — nothing written)"); } },
+        { kind: "item", label: "Save", shortcut: "Ctrl+S", onSelect: () => { void save(); } },
         dlg("Save As…", "saveAs", "Ctrl+Shift+S"),
         dlg("Save Copy As…", "saveAs"),
         sep,
@@ -106,8 +110,8 @@ function useMenus(): { label: string; items: Item[] }[] {
     {
       label: "Edit",
       items: [
-        { kind: "item", label: "Undo", shortcut: "Ctrl+Z", disabled: true },
-        { kind: "item", label: "Redo", shortcut: "Ctrl+Y", disabled: true },
+        { kind: "item", label: undoLabel ? `Undo ${undoLabel}` : "Undo", shortcut: "Ctrl+Z", disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(`Undid: ${l}`); } },
+        { kind: "item", label: redoLabel ? `Redo ${redoLabel}` : "Redo", shortcut: "Ctrl+Y", disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(`Redid: ${l}`); } },
         sep,
         stub("Cut", "Ctrl+X"),
         stub("Copy", "Ctrl+C"),

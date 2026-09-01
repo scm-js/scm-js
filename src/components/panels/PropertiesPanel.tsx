@@ -1,10 +1,18 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { MousePointer2 } from "lucide-react";
-import { activeLayerAtom, activeTerrainAtom, activeUnitAtom, brushSizeAtom, terrainModeAtom, unitOwnerAtom } from "../../atoms/editorAtoms";
+import {
+  activeLayerAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, brushSizeAtom, cursorTileAtom, mapTilesetAtom,
+  rectVariationAtom, terrainModeAtom, unitOwnerAtom,
+} from "../../atoms/editorAtoms";
+import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { PLAYER_COLORS } from "../../data/players";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
+import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
+import { useTileset } from "../../hooks/useTileset";
+import { heightLabel, hexTile, tileInfo } from "../../formats/tileset/palette";
 import { Button, Check } from "../ui";
+import { TileThumb } from "./TileBrowser";
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
@@ -15,30 +23,52 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
+const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", subtile: "Subtile", index: "Tile index" } as const;
+
+function TerrainProps() {
+  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
+  const terrain = useAtomValue(activeTerrainAtom);
+  const tile = useAtomValue(activeTileAtom);
+  const variation = useAtomValue(rectVariationAtom);
+  const mode = useAtomValue(terrainModeAtom);
+  const brush = useAtomValue(brushSizeAtom);
+  const cursor = useAtomValue(cursorTileAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(terrainRevisionAtom); // the tile under the cursor changes as strokes land
+  const { loaded } = useTileset();
+
+  const underId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
+  const under = loaded && underId !== null ? tileInfo(loaded.tileset, info.terrain, underId) : null;
+  const dash = <span className="faint">—</span>;
+
+  return (
+    <div className="props">
+      <Row k="Brush">
+        {mode === "isom" || mode === "rect"
+          ? <>{terrainName(info, terrain)}{mode === "rect" && variation >= 0 ? <span className="faint"> · var {variation}</span> : null}</>
+          : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
+      </Row>
+      <Row k="Mode">{MODE_LABEL[mode]}</Row>
+      <Row k="Size">{brush} × {brush}</Row>
+      <div className="props-section">Under cursor</div>
+      <Row k="Tile">{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
+      <Row k="Group">{under ? <>{under.label} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>
+      <Row k="MegaTile">{under ? <span className="mono">{under.megatile >= 0 ? under.megatile : "none"}</span> : dash}</Row>
+      <Row k="Elevation">{under ? heightLabel(under.height) : dash}</Row>
+      <Row k="Walkable">{under ? `${under.walkable} / 16 minitiles` : dash}</Row>
+      <Row k="Buildable">{under ? (under.buildable ? "Yes" : "No") : dash}</Row>
+    </div>
+  );
+}
+
 export default function PropertiesPanel() {
   const layer = useAtomValue(activeLayerAtom);
-  const terrain = useAtomValue(activeTerrainAtom);
-  const mode = useAtomValue(terrainModeAtom);
   const brush = useAtomValue(brushSizeAtom);
   const unit = useAtomValue(activeUnitAtom);
   const owner = useAtomValue(unitOwnerAtom);
   const open = useSetAtom(openDialogAtom);
 
-  if (layer === "terrain") {
-    return (
-      <div className="props">
-        <Row k="Brush">{terrain}</Row>
-        <Row k="Mode">{{ isom: "Isometric", rect: "Rectangular", subtile: "Subtile", index: "Tile index" }[mode]}</Row>
-        <Row k="Size">{brush} × {brush}</Row>
-        <div className="props-section">Under cursor</div>
-        <Row k="Group"><span className="faint">—</span></Row>
-        <Row k="MegaTile"><span className="faint mono">—</span></Row>
-        <Row k="Elevation"><span className="faint">—</span></Row>
-        <Row k="Walkable"><span className="faint">—</span></Row>
-        <Row k="Buildable"><span className="faint">—</span></Row>
-      </div>
-    );
-  }
+  if (layer === "terrain") return <TerrainProps />;
 
   if (layer === "units") {
     return (

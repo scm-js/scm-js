@@ -25,7 +25,12 @@ export type TerrainMode = "isom" | "rect" | "subtile" | "index";
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
 export const brushSizeAtom = atom<number>(1);
-export const activeTerrainAtom = atom<string>("Jungle");
+/** ISOM terrain id the Isometric and Rect brushes paint. See data/tilesets.ts. */
+export const activeTerrainAtom = atom<number>(2);
+/** Variation slot the Rect brush uses for every pair, or -1 for StarEdit's random pick. */
+export const rectVariationAtom = atom<number>(-1);
+/** Raw MTXM tile id the Subtile and Index brushes paint. */
+export const activeTileAtom = atom<number>(0x20);
 export const activeUnitAtom = atom<string>("Marine");
 export const unitOwnerAtom = atom<number>(0);
 
@@ -33,7 +38,7 @@ export const unitOwnerAtom = atom<number>(0);
 
 export const mapNameAtom = atom<string>("Untitled Scenario");
 export const mapDescriptionAtom = atom<string>("Destroy all enemy buildings.");
-export const mapTilesetAtom = atom<TilesetId>("jungle");
+export const mapTilesetAtom = atom<TilesetId>("badlands");
 export const mapWidthAtom = atom<number>(128);
 export const mapHeightAtom = atom<number>(128);
 export const mapModifiedAtom = atom<boolean>(false);
@@ -49,6 +54,12 @@ export const zoomAtom = atom<number>(1);
 export const cursorTileAtom = atom<{ x: number; y: number }>({ x: 0, y: 0 });
 export const viewportRectAtom = atom<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
 
+/**
+ * One-shot request to centre the main viewport on a tile — set by the minimap,
+ * consumed (and cleared) by MapViewport.
+ */
+export const centerViewOnAtom = atom<{ x: number; y: number } | null>(null);
+
 export interface ViewFlags {
   grid: boolean;
   locations: boolean;
@@ -63,7 +74,8 @@ export interface ViewFlags {
 }
 
 export const viewFlagsAtom = atom<ViewFlags>({
-  grid: true,
+  // StarEdit draws no grid until you ask for one, and terrain reads better without it.
+  grid: false,
   locations: true,
   locationNames: true,
   units: true,

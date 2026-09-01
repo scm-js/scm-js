@@ -21,8 +21,10 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, mapModifiedAtom, viewFlagsAtom, zoomAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
+import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { Tip } from "../ui";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
 
@@ -42,7 +44,9 @@ const Sep = () => <span className="tb-sep" />;
 export default function ToolBar() {
   const open = useSetAtom(openDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
-  const setModified = useSetAtom(mapModifiedAtom);
+  const { save } = useMapFileActions();
+  const [undoLabel, undo] = useAtom(undoAtom);
+  const [redoLabel, redo] = useAtom(redoAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
@@ -57,10 +61,10 @@ export default function ToolBar() {
     <div className="toolbar" role="toolbar">
       <TB icon={FilePlus2} label="New Map" shortcut="Ctrl+N" onClick={dlg("newMap")} />
       <TB icon={FolderOpen} label="Open Map" shortcut="Ctrl+O" onClick={dlg("openMap")} />
-      <TB icon={Save} label="Save Map" shortcut="Ctrl+S" onClick={() => { setModified(false); setStatus("Saved (stub — nothing written)"); }} />
+      <TB icon={Save} label="Save Map" shortcut="Ctrl+S" onClick={() => { void save(); }} />
       <Sep />
-      <TB icon={Undo2} label="Undo" shortcut="Ctrl+Z" disabled />
-      <TB icon={Redo2} label="Redo" shortcut="Ctrl+Y" disabled />
+      <TB icon={Undo2} label={undoLabel ? `Undo ${undoLabel}` : "Undo"} shortcut="Ctrl+Z" disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(`Undid: ${l}`); }} />
+      <TB icon={Redo2} label={redoLabel ? `Redo ${redoLabel}` : "Redo"} shortcut="Ctrl+Y" disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(`Redid: ${l}`); }} />
       <Sep />
       <TB icon={Scissors} label="Cut" shortcut="Ctrl+X" onClick={stub("Cut")} />
       <TB icon={Copy} label="Copy" shortcut="Ctrl+C" onClick={stub("Copy")} />

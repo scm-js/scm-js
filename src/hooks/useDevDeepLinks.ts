@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "jotai";
-import { activeLayerAtom, mapTilesetAtom, screenAtom, zoomAtom, type EditorLayer } from "../atoms/editorAtoms";
+import { activeLayerAtom, mapTilesetAtom, screenAtom, terrainModeAtom, zoomAtom, type EditorLayer, type TerrainMode } from "../atoms/editorAtoms";
 import { openDialogAtom, type DialogId } from "../atoms/uiAtoms";
 import { TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 
@@ -19,6 +19,8 @@ export function useDevDeepLinks() {
     if (p.has("nosplash")) store.set(screenAtom, "editor");
     const layer = p.get("layer");
     if (layer) store.set(activeLayerAtom, layer as EditorLayer);
+    const mode = p.get("mode");
+    if (mode) store.set(terrainModeAtom, mode as TerrainMode);
     const zoom = Number(p.get("zoom"));
     if (zoom > 0) store.set(zoomAtom, zoom);
     const tileset = p.get("tileset");

@@ -7,3 +7,6 @@ dist/
 # Editor
 *.local
 .env*
+
+# Local StarCraft data + map fixtures (not redistributable)
+fixtures/

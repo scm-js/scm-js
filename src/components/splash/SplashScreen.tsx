@@ -33,7 +33,7 @@ function buildSphere(rings: number, segs: number, r: number) {
 
 const LOG: [number, string][] = [
   [0, "Initializing renderer"],
-  [350, "Loading tileset: Jungle World (jungle.cv5, .vx4, .vr4)"],
+  [350, "Loading tileset: Badlands (badlands.cv5, .vx4, .vr4)"],
   [800, "Reading units.dat · weapons.dat · upgrades.dat"],
   [1250, "Building doodad palette"],
   [1700, "Indexing trigger conditions and actions"],

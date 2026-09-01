@@ -4,17 +4,28 @@ import { ContextMenu } from "radix-ui";
 import { Crosshair } from "lucide-react";
 import {
   activeLayerAtom,
+  activeTerrainAtom,
+  activeTileAtom,
   brushSizeAtom,
+  centerViewOnAtom,
   cursorTileAtom,
   gridSizeAtom,
   mapHeightAtom,
   mapTilesetAtom,
   mapWidthAtom,
+  rectVariationAtom,
+  terrainModeAtom,
   viewFlagsAtom,
   viewportRectAtom,
   zoomAtom,
 } from "../../atoms/editorAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
+import { locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { useTileset } from "../../hooks/useTileset";
+import { paintsTiles, useTerrainTools } from "../../hooks/useTerrainTools";
+import { linePoints } from "../../editor/terrain";
+import { atlasRect } from "../../formats/tileset/atlas";
+import { megatileForTile } from "../../formats/tileset/decode";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { PLAYER_COLORS } from "../../data/players";
 import { SAMPLE_LOCATIONS, SAMPLE_START_LOCATIONS } from "../../data/samples";
@@ -28,6 +39,10 @@ export default function MapViewport() {
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
+  /** Last tile a stroke painted, so a fast drag fills the gap with a line. */
+  const strokeRef = useRef<{ x: number; y: number } | null>(null);
+  /** Tile under the pointer when the context menu opened. */
+  const menuTileRef = useRef<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
   const mapW = useAtomValue(mapWidthAtom);
@@ -38,9 +53,25 @@ export default function MapViewport() {
   const gridSize = useAtomValue(gridSizeAtom);
   const layer = useAtomValue(activeLayerAtom);
   const brush = useAtomValue(brushSizeAtom);
+  const terrainMode = useAtomValue(terrainModeAtom);
+  // Only read so the hover preview redraws when the brush changes.
+  const activeTile = useAtomValue(activeTileAtom);
+  const activeTerrain = useAtomValue(activeTerrainAtom);
+  const rectVariation = useAtomValue(rectVariationAtom);
+  const tools = useTerrainTools();
   const setCursor = useSetAtom(cursorTileAtom);
   const setViewportRect = useSetAtom(viewportRectAtom);
+  const centerOn = useAtomValue(centerViewOnAtom);
+  const clearCenterOn = useSetAtom(centerViewOnAtom);
   const open = useSetAtom(openDialogAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const terrainRevision = useAtomValue(terrainRevisionAtom);
+  const painting = layer === "terrain" && paintsTiles(terrainMode) && scenario !== null;
+  const mapLocations = useAtomValue(locationsAtom);
+  const mapStarts = useAtomValue(startLocationsAtom);
+  const locations = scenario ? mapLocations : SAMPLE_LOCATIONS.slice(1);
+  const startLocations = scenario ? mapStarts : SAMPLE_START_LOCATIONS;
+  const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;
@@ -65,18 +96,50 @@ export default function MapViewport() {
     const x1 = Math.min(mapW, Math.ceil((sx + size.w) / tilePx));
     const y1 = Math.min(mapH, Math.ceil((sy + size.h) / tilePx));
 
-    // terrain placeholder
-    const base = parseInt(tileset.color.slice(1), 16);
-    const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
-    ctx.fillStyle = tileset.color;
-    ctx.fillRect(-sx, -sy, worldW, worldH);
-    if (tilePx >= 4) {
+    // terrain
+    const tiles = scenario?.tiles;
+    if (tiles && tilesetAssets) {
+      const { atlas, tileset: ts } = tilesetAssets;
+      // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
+      // precomputed mean colour instead.
+      const flat = tilePx < 4;
+      ctx.imageSmoothingEnabled = tilePx < TILE;
       for (let ty = y0; ty < y1; ty++) {
+        const row = ty * mapW;
         for (let tx = x0; tx < x1; tx++) {
-          const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
-          const k = 1 + n;
-          ctx.fillStyle = `rgb(${br * k | 0},${bg * k | 0},${bb * k | 0})`;
-          ctx.fillRect(tx * tilePx - sx, ty * tilePx - sy, tilePx + 0.5, tilePx + 0.5);
+          const megatile = megatileForTile(ts, tiles[row + tx]);
+          const px = tx * tilePx - sx;
+          const py = ty * tilePx - sy;
+          if (megatile < 0) {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+            continue;
+          }
+          if (flat) {
+            const rgb = atlas.averages[megatile];
+            ctx.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
+            ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+            continue;
+          }
+          const { sx: ax, sy: ay } = atlasRect(atlas, megatile);
+          ctx.drawImage(atlas.image, ax, ay, TILE, TILE, px, py, tilePx, tilePx);
+        }
+      }
+      ctx.imageSmoothingEnabled = true;
+    } else {
+      // No map or no tileset graphics installed: flat tileset colour with light noise.
+      const base = parseInt(tileset.color.slice(1), 16);
+      const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
+      ctx.fillStyle = tileset.color;
+      ctx.fillRect(-sx, -sy, worldW, worldH);
+      if (tilePx >= 4) {
+        for (let ty = y0; ty < y1; ty++) {
+          for (let tx = x0; tx < x1; tx++) {
+            const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
+            const k = 1 + n;
+            ctx.fillStyle = `rgb(${br * k | 0},${bg * k | 0},${bb * k | 0})`;
+            ctx.fillRect(tx * tilePx - sx, ty * tilePx - sy, tilePx + 0.5, tilePx + 0.5);
+          }
         }
       }
     }
@@ -108,11 +171,29 @@ export default function MapViewport() {
       ctx.fillRect(-sx, -sy, worldW, worldH);
     }
 
-    // sample locations
+    // placed units — markers only; unit graphics need GRP decoding, which is not in yet
+    if (flags.units && scenario && tilePx >= 3) {
+      for (const u of scenario.units) {
+        if (u.unitId === START_LOCATION_UNIT) continue;
+        const ux = (u.x / TILE) * tilePx - sx;
+        const uy = (u.y / TILE) * tilePx - sy;
+        if (ux < -tilePx || uy < -tilePx || ux > size.w + tilePx || uy > size.h + tilePx) continue;
+        const r = Math.max(2, tilePx * 0.34);
+        ctx.fillStyle = (PLAYER_COLORS[u.owner] ?? PLAYER_COLORS[0]).hex + "cc";
+        ctx.fillRect(ux - r, uy - r, r * 2, r * 2);
+        if (tilePx >= 12) {
+          ctx.strokeStyle = "rgba(0,0,0,0.55)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(Math.round(ux - r) + 0.5, Math.round(uy - r) + 0.5, Math.round(r * 2), Math.round(r * 2));
+        }
+      }
+    }
+
+    // locations
     if (flags.locations) {
       ctx.lineWidth = 1;
       ctx.font = `${Math.max(10, Math.min(13, tilePx * 0.4))}px ${getComputedStyle(document.body).getPropertyValue("--font-ui")}`;
-      for (const l of SAMPLE_LOCATIONS.slice(1)) {
+      for (const l of locations) {
         const lx = l.x * tilePx - sx, ly = l.y * tilePx - sy, lw = l.w * tilePx, lh = l.h * tilePx;
         if (lx > size.w || ly > size.h || lx + lw < 0 || ly + lh < 0) continue;
         ctx.fillStyle = "rgba(79,209,197,0.12)";
@@ -129,9 +210,9 @@ export default function MapViewport() {
       }
     }
 
-    // sample start locations
+    // start locations
     if (flags.startLocations) {
-      for (const s of SAMPLE_START_LOCATIONS) {
+      for (const s of startLocations) {
         const cx = s.x * tilePx - sx, cy = s.y * tilePx - sy, r = tilePx * 1.5;
         if (cx + r < 0 || cy + r < 0 || cx - r > size.w || cy - r > size.h) continue;
         ctx.beginPath();
@@ -156,14 +237,33 @@ export default function MapViewport() {
     ctx.lineWidth = 1;
     ctx.strokeRect(-sx + 0.5, -sy + 0.5, worldW - 1, worldH - 1);
 
-    // hover brush
+    // hover brush, with a preview of what the terrain brush would leave behind
     const hv = hoverRef.current;
     if (hv) {
       const b = layer === "terrain" || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
-      ctx.fillStyle = "rgba(230,185,92,0.12)";
-      ctx.fillRect(hx, hy, tilePx * b, tilePx * b);
+      if (painting && tilesetAssets && tilePx >= 4 && !strokeRef.current) {
+        const { atlas, tileset: ts } = tilesetAssets;
+        ctx.globalAlpha = 0.75;
+        ctx.imageSmoothingEnabled = tilePx < TILE;
+        for (const g of tools.ghostAt(hv.x, hv.y)) {
+          const megatile = megatileForTile(ts, g.id);
+          const px = g.x * tilePx - sx, py = g.y * tilePx - sy;
+          if (megatile <= 0) {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(px, py, tilePx, tilePx);
+            continue;
+          }
+          const { sx: ax, sy: ay } = atlasRect(atlas, megatile);
+          ctx.drawImage(atlas.image, ax, ay, TILE, TILE, px, py, tilePx, tilePx);
+        }
+        ctx.globalAlpha = 1;
+        ctx.imageSmoothingEnabled = true;
+      } else {
+        ctx.fillStyle = "rgba(230,185,92,0.12)";
+        ctx.fillRect(hx, hy, tilePx * b, tilePx * b);
+      }
       ctx.strokeStyle = "#e6b95c";
       ctx.lineWidth = 1;
       ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(tilePx * b) - 1, Math.round(tilePx * b) - 1);
@@ -217,7 +317,7 @@ export default function MapViewport() {
     drawRuler(leftRef.current, false);
 
     setViewportRect({ x: sx / tilePx, y: sy / tilePx, w: size.w / tilePx, h: size.h / tilePx });
-  }, [size, tilePx, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect]);
+  }, [size, tilePx, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation]);
 
   /* ── sizing ──────────────────────────────────────────── */
   useLayoutEffect(() => {
@@ -240,6 +340,16 @@ export default function MapViewport() {
     draw();
   }, [size, draw]);
 
+  /* minimap-driven recentring */
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !centerOn) return;
+    el.scrollLeft = centerOn.x * tilePx - el.clientWidth / 2;
+    el.scrollTop = centerOn.y * tilePx - el.clientHeight / 2;
+    clearCenterOn(null);
+    draw();
+  }, [centerOn, tilePx, clearCenterOn, draw]);
+
   /* keep the view centred when zooming */
   const prevZoom = useRef(zoom);
   useLayoutEffect(() => {
@@ -255,28 +365,76 @@ export default function MapViewport() {
   }, [zoom, draw]);
 
   /* ── pointer ─────────────────────────────────────────── */
-  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const tileAt = (e: { clientX: number; clientY: number }) => {
     const el = scrollerRef.current!;
     const r = el.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left + el.scrollLeft) / tilePx);
-    const y = Math.floor((e.clientY - r.top + el.scrollTop) / tilePx);
-    if (x < 0 || y < 0 || x >= mapW || y >= mapH) {
+    return {
+      x: Math.floor((e.clientX - r.left + el.scrollLeft) / tilePx),
+      y: Math.floor((e.clientY - r.top + el.scrollTop) / tilePx),
+    };
+  };
+  const inMap = (t: { x: number; y: number }) => t.x >= 0 && t.y >= 0 && t.x < mapW && t.y < mapH;
+  const clampToMap = (t: { x: number; y: number }) => ({ x: Math.min(mapW - 1, Math.max(0, t.x)), y: Math.min(mapH - 1, Math.max(0, t.y)) });
+
+  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !painting) return;
+    const t = tileAt(e);
+    if (!inMap(t)) return;
+    if (e.altKey) { tools.pickAt(t.x, t.y); return; }
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    strokeRef.current = t;
+    tools.beginStroke(t.x, t.y);
+  };
+
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const t = tileAt(e);
+    const stroking = strokeRef.current;
+    if (stroking) {
+      // Dragging outside the map keeps painting along the edge, like StarEdit.
+      const c = clampToMap(t);
+      if (c.x !== stroking.x || c.y !== stroking.y) {
+        for (const p of linePoints(stroking.x, stroking.y, c.x, c.y).slice(1)) tools.paintAt(p.x, p.y);
+        strokeRef.current = c;
+      }
+    }
+    if (!inMap(t)) {
       if (hoverRef.current) { hoverRef.current = null; draw(); }
       return;
     }
-    if (!hoverRef.current || hoverRef.current.x !== x || hoverRef.current.y !== y) {
-      hoverRef.current = { x, y };
-      setCursor({ x, y });
+    if (!hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y) {
+      hoverRef.current = t;
+      setCursor(t);
       draw();
     }
   };
+
+  const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!strokeRef.current) return;
+    strokeRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    tools.endStroke();
+    draw();
+  };
+
   const onLeave = () => { hoverRef.current = null; draw(); };
+  const onContextMenu = () => { menuTileRef.current = hoverRef.current; };
+
+  const withMenuTile = (fn: (x: number, y: number) => void) => () => {
+    const t = menuTileRef.current;
+    if (t) fn(t.x, t.y);
+  };
 
   const ctxItems: { label: string; onSelect?: () => void; disabled?: boolean; sep?: boolean }[] = [
     ...(layer === "units" ? [{ label: "Unit Properties…", onSelect: () => open("unitProperties") }] : []),
     ...(layer === "locations" ? [{ label: "Location Properties…", onSelect: () => open("locationProperties", { location: SAMPLE_LOCATIONS[1] }) }] : []),
     ...(layer === "sprites" ? [{ label: "Sprite Properties…", onSelect: () => open("spriteProperties") }] : []),
-    ...(layer === "terrain" ? [{ label: "Pick Terrain", onSelect: () => open("notImplemented", { feature: "Pick Terrain" }) }, { label: "Fill Area", onSelect: () => open("notImplemented", { feature: "Fill Area" }) }] : []),
+    ...(layer === "terrain"
+      ? [
+          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : "Pick Tile", onSelect: withMenuTile(tools.pickAt), disabled: !scenario },
+          { label: "Fill Area", onSelect: withMenuTile(tools.fillAt), disabled: !painting },
+        ]
+      : []),
     { label: "", sep: true },
     { label: "Cut", onSelect: () => open("notImplemented", { feature: "Cut" }) },
     { label: "Copy", onSelect: () => open("notImplemented", { feature: "Copy" }) },
@@ -295,7 +453,16 @@ export default function MapViewport() {
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
           <div ref={scrollerRef} className="scroller" onScroll={draw} tabIndex={0}>
-            <div className="map-surface" style={{ width: worldW, height: worldH }} onMouseMove={onMove} onMouseLeave={onLeave}>
+            <div
+              className={`map-surface ${painting ? "painting" : ""}`}
+              style={{ width: worldW, height: worldH }}
+              onPointerDown={onDown}
+              onPointerMove={onMove}
+              onPointerUp={onUp}
+              onPointerCancel={onUp}
+              onPointerLeave={onLeave}
+              onContextMenu={onContextMenu}
+            >
               <canvas ref={canvasRef} style={{ position: "sticky", top: 0, left: 0 }} />
             </div>
           </div>
@@ -314,10 +481,17 @@ export default function MapViewport() {
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>
+      {tilesetError && (
+        <div className="viewport-notice" role="status">
+          <strong>No tileset graphics.</strong> Run <code>node scripts/extract-tilesets.mjs</code> against a
+          StarCraft install to fill <code>public/tileset/</code>; terrain is drawn as flat colour until then.
+        </div>
+      )}
       <div className="map-hud">
         <span className="hud-chip"><b>{tileset.name}</b></span>
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
+        {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
       </div>
     </div>
   );

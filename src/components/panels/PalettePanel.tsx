@@ -18,14 +18,11 @@ import {
 } from "lucide-react";
 import {
   activeLayerAtom,
-  activeTerrainAtom,
   activeUnitAtom,
   brushSizeAtom,
   mapTilesetAtom,
-  terrainModeAtom,
   unitOwnerAtom,
   type EditorLayer,
-  type TerrainMode,
 } from "../../atoms/editorAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { DOODAD_CATEGORIES, TILESET_BY_ID } from "../../data/tilesets";
@@ -33,6 +30,7 @@ import { PLAYER_COLORS } from "../../data/players";
 import { RACE_LABEL, SPRITES, UNIT_GROUPS, type RaceKey } from "../../data/units";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { Button, Check, Tabs, Tip } from "../ui";
+import TerrainPalette from "./TerrainPalette";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
@@ -55,123 +53,6 @@ export function shade(hex: string, amt: number) {
   const n = parseInt(hex.slice(1), 16);
   const ch = (s: number) => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * (1 + amt))));
   return `rgb(${ch(16)}, ${ch(8)}, ${ch(0)})`;
-}
-
-function elevationOf(name: string) {
-  if (/^high/i.test(name)) return "High";
-  if (/water|space|pit|magma|lava|tar|crevices/i.test(name)) return "Low";
-  return "Mid";
-}
-
-function TerrainPalette() {
-  const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
-  const [mode, setMode] = useAtom(terrainModeAtom);
-  const [active, setActive] = useAtom(activeTerrainAtom);
-  const [brush, setBrush] = useAtom(brushSizeAtom);
-  const [tileIndex, setTileIndex] = useState(0);
-
-  const isomList = (
-    <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
-      {tileset.terrain.map((t, i) => (
-        <div key={t} className={`item ${active === t ? "selected" : ""}`} onClick={() => setActive(t)}>
-          <span className="swatch" style={{ background: shade(tileset.color, (i % 5) * 0.12 - 0.2) }} />
-          <span>{t}</span>
-          <span className="elev">{elevationOf(t)}</span>
-        </div>
-      ))}
-    </div>
-  );
-
-  const tileGrid = (count: number, size: number) => (
-    <div className="tile-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}px, 1fr))` }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div
-          key={i}
-          className={`tile ${tileIndex === i ? "selected" : ""}`}
-          style={{ ["--tile-color" as string]: shade(tileset.color, ((i * 7) % 9) * 0.05 - 0.2) }}
-          onClick={() => setTileIndex(i)}
-          title={`Tile ${i}`}
-        >
-          {size >= 40 && <span className="tile-lbl">{i}</span>}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <Tabs
-      compact
-      value={mode}
-      onValueChange={(v) => setMode(v as TerrainMode)}
-      tabs={[
-        {
-          value: "isom",
-          label: "Isometric",
-          content: (
-            <>
-              <div className="palette-toolbar">
-                <span className="lbl">Brush</span>
-                <select className="select" style={{ width: 64 }} value={brush} onChange={(e) => setBrush(Number(e.target.value))}>
-                  {[1, 2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n}×{n}</option>)}
-                </select>
-                <span className="grow" />
-                <Check label="Auto-cliff" defaultChecked />
-              </div>
-              <div className="palette-scroll">{isomList}</div>
-              <div className="palette-footer"><span>{tileset.terrain.length} terrain groups</span><span>{tileset.name}</span></div>
-            </>
-          ),
-        },
-        {
-          value: "rect",
-          label: "Rect",
-          content: (
-            <>
-              <div className="palette-toolbar">
-                <span className="lbl">Group</span>
-                <select className="select grow" value={active} onChange={(e) => setActive(e.target.value)}>
-                  {tileset.terrain.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="palette-scroll">{tileGrid(48, 44)}</div>
-              <div className="palette-footer"><span>Tile {tileIndex} · {active}</span><span>MegaTile 32×32</span></div>
-            </>
-          ),
-        },
-        {
-          value: "subtile",
-          label: "Subtile",
-          content: (
-            <>
-              <div className="palette-toolbar">
-                <span className="lbl">Group</span>
-                <select className="select grow" value={active} onChange={(e) => setActive(e.target.value)}>
-                  {tileset.terrain.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="palette-scroll">{tileGrid(96, 24)}</div>
-              <div className="palette-footer"><span>MiniTile {tileIndex}</span><span>8×8</span></div>
-            </>
-          ),
-        },
-        {
-          value: "index",
-          label: "Index",
-          content: (
-            <>
-              <div className="palette-toolbar">
-                <span className="lbl">Tile #</span>
-                <input className="input mono" style={{ width: 80 }} value={tileIndex} onChange={(e) => setTileIndex(Number(e.target.value) || 0)} />
-                <span className="lbl">of 65535</span>
-              </div>
-              <div className="palette-scroll">{tileGrid(120, 36)}</div>
-              <div className="palette-footer"><span>Raw MTXM index</span><span>Group {Math.floor(tileIndex / 16)} · Var {tileIndex % 16}</span></div>
-            </>
-          ),
-        },
-      ]}
-    />
-  );
 }
 
 /* ── Doodads ────────────────────────────────────────────── */

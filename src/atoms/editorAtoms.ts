@@ -1,6 +1,9 @@
 import { atom } from "jotai";
 import type { TilesetId } from "../data/tilesets";
 import { defaultForces, defaultPlayers, type ForceInfo, type PlayerSlot } from "../data/players";
+import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
+import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor/doodads";
+import type { FogMode } from "../editor/fog";
 
 /* ── Screens ────────────────────────────────────────────── */
 
@@ -32,8 +35,40 @@ export const activeTerrainAtom = atom<number>(2);
 export const rectVariationAtom = atom<number>(-1);
 /** Raw MTXM tile id the Tile brush paints. */
 export const activeTileAtom = atom<number>(0x20);
-export const activeUnitAtom = atom<string>("Marine");
+/** units.dat id the Units layer places. */
+export const activeUnitAtom = atom<number>(0);
 export const unitOwnerAtom = atom<number>(0);
+/** Indices into `scenario.units` of the selected units; cleared whenever the list is edited under it. */
+export const selectedUnitsAtom = atom<number[]>([]);
+/**
+ * Whether a click on empty ground places `activeUnitAtom`. Picking a unit in the palette
+ * arms it; Escape or a right-click disarms it, leaving plain select mode.
+ */
+export const unitPlacingAtom = atom<boolean>(false);
+/** The Units layer's placement checks (see editor/placement.ts). */
+export const placementOptionsAtom = atom<PlacementOptions>(DEFAULT_PLACEMENT);
+
+/* ── Doodads layer (see editor/doodads.ts) ──────────────── */
+
+/** dddata index of the doodad the palette has picked, or -1 before anything was picked. */
+export const activeDoodadAtom = atom<number>(-1);
+/** Palette category the doodad grid shows; "" = the tileset's first. */
+export const doodadCategoryAtom = atom<string>("");
+/** Whether a click on the map places `activeDoodadAtom` (armed by the palette, disarmed by Esc / right-click). */
+export const doodadPlacingAtom = atom<boolean>(false);
+/** Indices into `scenario.doodads` of the selected doodads; cleared whenever the list is edited under it. */
+export const selectedDoodadsAtom = atom<number[]>([]);
+/** "Place anywhere" (off) and "Snap to grid" (on) — StarEdit's defaults. */
+export const doodadPlacementAtom = atom<DoodadPlacementOptions>(DEFAULT_DOODAD_PLACEMENT);
+
+/* ── Fog of war layer (see editor/fog.ts) ───────────────── */
+
+/** Bit mask of the players (bit n = player n+1) the fog brush paints for. */
+export const fogPlayersAtom = atom<number>(0x01);
+/** Whether the brush lays fog (unexplored) or clears it (explored). */
+export const fogModeAtom = atom<FogMode>("fog");
+/** Whose fog the viewport and minimap draw, 0–7 (shown while `viewFlags.fog` is on). */
+export const fogViewPlayerAtom = atom<number>(0);
 
 /* ── Map document (placeholder — no real parsing yet) ───── */
 
@@ -74,6 +109,8 @@ export interface ViewFlags {
   startLocations: boolean;
   /** Cycle the palette so water and lava animate as they do in game. */
   animateWater: boolean;
+  /** Run the units' iscript idle animations (turrets, pulsing buildings, fires, smoke). */
+  animateUnits: boolean;
 }
 
 export const viewFlagsAtom = atom<ViewFlags>({
@@ -89,6 +126,7 @@ export const viewFlagsAtom = atom<ViewFlags>({
   buildability: false,
   startLocations: true,
   animateWater: true,
+  animateUnits: true,
 });
 
 export const gridSizeAtom = atom<8 | 16 | 32 | 64 | 128>(32);

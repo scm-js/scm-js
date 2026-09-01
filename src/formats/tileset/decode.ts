@@ -40,7 +40,29 @@ export interface Cv5Group {
   stack: { left: number; top: number; right: number; bottom: number };
   /** VX4 megatile index for each of the 16 slots in the group. */
   megatiles: Uint16Array;
+  /** Set on doodad groups (`index` 1), which store a different record in the edge/stack bytes. */
+  doodad?: Cv5Doodad;
 }
+
+/**
+ * What a doodad group stores where terrain groups keep their ISOM links. A doodad spans
+ * one group per row: row `r` of the doodad whose first group is `g` is group `g + r`,
+ * with column `c` in megatile slot `c` (so its MTXM id is `((g + r) << 4) | c`). Every
+ * group of the doodad repeats the same `ddData`, `width` and `height`.
+ */
+export interface Cv5Doodad {
+  /** sprites.dat id (DoodadFlag.SpriteOverlay) or units.dat id (DoodadFlag.UnitOverlay) drawn over the tiles. */
+  overlay: number;
+  /** 1-based `rez\stat_txt.tbl` index of the palette category ("Trees", "Cliff", …); 0 for the unlisted ones. */
+  nameIndex: number;
+  /** Index into `tileset\<name>\dddata.bin`, and what DD2 records store. */
+  ddData: number;
+  width: number;
+  height: number;
+}
+
+/** Doodad groups mark themselves with this `index`. */
+export const DOODAD_GROUP_INDEX = 1;
 
 export interface Tileset {
   /** 256 RGBA entries, 4 bytes each. */
@@ -91,8 +113,9 @@ export function decodeCv5(cv5: Uint8Array): Cv5Group[] {
     for (let m = 0; m < MEGATILES_PER_GROUP; m++) {
       megatiles[m] = view.getUint16(at + CV5_MEGATILE_OFFSET + m * 2, true);
     }
+    const index = view.getUint16(at, true);
     groups[g] = {
-      index: view.getUint16(at, true),
+      index,
       flags: view.getUint16(at + 2, true),
       buildability: cv5[at + 2],
       groundHeight: cv5[at + 3],
@@ -110,6 +133,15 @@ export function decodeCv5(cv5: Uint8Array): Cv5Group[] {
       },
       megatiles,
     };
+    if (index === DOODAD_GROUP_INDEX) {
+      groups[g].doodad = {
+        overlay: view.getUint16(at + 4, true),
+        nameIndex: view.getUint16(at + 8, true),
+        ddData: view.getUint16(at + 12, true),
+        width: view.getUint16(at + 14, true),
+        height: view.getUint16(at + 16, true),
+      };
+    }
   }
   return groups;
 }
@@ -213,6 +245,20 @@ export const GroupFlag = {
   CliffEdge: 0x2000,
   TemporaryCreep: 0x4000,
   Startable: 0x8000,
+} as const;
+
+/**
+ * The high bits of a doodad group's flag word, where terrain groups keep creep/cliff
+ * bits. StarEdit copies the whole word into the overlay's THG2 record, which is how
+ * `SpriteFlag.PureSprite` (0x1000) ends up set on doodad sprites.
+ */
+export const DoodadFlag = {
+  /** `overlay` is a sprites.dat id, placed as a pure sprite. */
+  SpriteOverlay: 0x1000,
+  /** `overlay` is a units.dat id, placed as a unit sprite (Installation doors and traps). */
+  UnitOverlay: 0x2000,
+  /** The overlay is drawn mirrored. */
+  OverlayFlipped: 0x4000,
 } as const;
 
 /** Ground height 0/1/2 a group is flagged with. */

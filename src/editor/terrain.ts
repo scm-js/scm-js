@@ -3,9 +3,10 @@
  *
  * Every brush computes the tiles it would change without touching the scenario, the
  * caller applies them, and the same list undoes the stroke. MTXM and TILE are kept in
- * step because the game reads one and StarEdit the other; ISOM is deliberately left
- * alone — these brushes place tiles the ISOM model has no vocabulary for, which is
- * exactly what SCMDraft does in its Rectangular/Subtile modes.
+ * step because the game reads one and StarEdit the other (TILE being the ground without
+ * doodads, a change records what TILE held separately — see `TileChange.under`); ISOM
+ * is deliberately left alone — these brushes place tiles the ISOM model has no
+ * vocabulary for, which is exactly what SCMDraft does in its Rectangular/Subtile modes.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
 import type { Tileset } from "../formats/tileset/decode";
@@ -16,6 +17,12 @@ export interface TileChange {
   at: number;
   before: number;
   after: number;
+  /**
+   * What `scenario.editorTiles` (TILE) held before a terrain change, when that differs
+   * from `before` (the cell was under a doodad). Filled in by `applyChanges` the first
+   * time a change is applied, so undo can put the ground back rather than the doodad tile.
+   */
+  under?: number;
 }
 
 export interface Rect {
@@ -150,11 +157,40 @@ export function floodRegion(scn: Scenario, x: number, y: number, same: (id: numb
   return out;
 }
 
-/** Apply a change list, or take it back. */
-export function applyChanges(scn: Scenario, changes: readonly TileChange[], direction: "do" | "undo" = "do") {
+/**
+ * Apply a change list, or take it back. Terrain edits (`layer` "terrain") write MTXM and
+ * TILE alike, remembering what TILE held in `under` on first application; doodad edits
+ * ("mtxm") touch only MTXM's contents, leaving TILE as the ground beneath.
+ */
+export function applyChanges(scn: Scenario, changes: readonly TileChange[], direction: "do" | "undo" = "do", layer: "terrain" | "mtxm" = "terrain") {
   if (changes.length === 0) return;
-  for (const c of changes) scn.tiles[c.at] = direction === "do" ? c.after : c.before;
+  for (const c of changes) {
+    if (direction === "do") {
+      if (layer === "terrain") {
+        c.under ??= scn.editorTiles[c.at];
+        scn.editorTiles[c.at] = c.after;
+      }
+      scn.tiles[c.at] = c.after;
+    } else {
+      if (layer === "terrain") scn.editorTiles[c.at] = c.under ?? c.before;
+      scn.tiles[c.at] = c.before;
+    }
+  }
+  // Doodad edits leave TILE's contents alone but still write the section: a file that
+  // never had one gets the ground record it needs for the doodads to be removable later.
   markDirty(scn, "MTXM", "TILE");
+}
+
+/**
+ * For code that has already written `scn.tiles` itself (the isometric brush): bring
+ * TILE along and record what it held, exactly as `applyChanges` would have.
+ */
+export function mirrorEditorTiles(scn: Scenario, changes: readonly TileChange[]) {
+  for (const c of changes) {
+    c.under ??= scn.editorTiles[c.at];
+    scn.editorTiles[c.at] = c.after;
+  }
+  if (changes.length > 0) markDirty(scn, "TILE");
 }
 
 /**
@@ -170,6 +206,11 @@ export class Stroke {
       if (prev) prev.after = c.after;
       else this.changes.set(c.at, { ...c });
     }
+  }
+
+  /** Whether the stroke has touched this cell. */
+  has(at: number): boolean {
+    return this.changes.has(at);
   }
 
   get size(): number {

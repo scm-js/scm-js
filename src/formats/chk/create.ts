@@ -83,6 +83,7 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
       flags: [0, 0, 0, 0],
     },
     tiles: options.tiles ?? new Uint16Array(width * height),
+    editorTiles: options.tiles ? new Uint16Array(options.tiles) : new Uint16Array(width * height),
     isom: options.isom ?? new Uint16Array(isomSize(width, height) / 2),
     mask: null,
     units: [],

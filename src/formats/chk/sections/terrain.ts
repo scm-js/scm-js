@@ -1,8 +1,8 @@
 /**
- * Terrain sections. MTXM is what the game renders; TILE is StarEdit's copy of the same
- * grid and ISOM is the isometric edit history that lets the ISOM brush keep working.
- * Editors that touch terrain must keep all three consistent or the map looks correct in
- * game but re-edits wrong.
+ * Terrain sections. MTXM is what the game renders; TILE is StarEdit's copy of the grid
+ * *without* doodads (the ground under each doodad), and ISOM is the isometric edit
+ * history that lets the ISOM brush keep working. Editors that touch terrain must keep
+ * all three consistent or the map looks correct in game but re-edits wrong.
  */
 
 export function decodeTiles(data: Uint8Array, width: number, height: number): Uint16Array {

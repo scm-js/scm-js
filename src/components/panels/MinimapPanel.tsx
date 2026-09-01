@@ -1,16 +1,25 @@
 import { useEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { centerViewOnAtom, mapHeightAtom, mapTilesetAtom, mapWidthAtom, viewFlagsAtom, viewportRectAtom } from "../../atoms/editorAtoms";
+import {
+  centerViewOnAtom, fogViewPlayerAtom, mapHeightAtom, mapTilesetAtom, mapWidthAtom, viewFlagsAtom, viewportRectAtom,
+} from "../../atoms/editorAtoms";
+import { fogImageData } from "../viewport/fog";
+import { tilesetIndex } from "../../formats/chk/scenario";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { SAMPLE_LOCATIONS, SAMPLE_START_LOCATIONS } from "../../data/samples";
-import { PLAYER_COLORS } from "../../data/players";
+import { playerColorHex } from "../../data/players";
+import { isResource, unitGeometry } from "../../editor/units";
+import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { hashNoise } from "../viewport/noise";
-import { locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { megatileForTile } from "../../formats/tileset/decode";
 
 export default function MinimapPanel() {
   const ref = useRef<HTMLCanvasElement>(null);
+  /** One pixel per tile; the fog image is scaled from it so the minimap stays one drawImage. */
+  const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
   const w = useAtomValue(mapWidthAtom);
   const h = useAtomValue(mapHeightAtom);
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -18,7 +27,9 @@ export default function MinimapPanel() {
   const flags = useAtomValue(viewFlagsAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
+  const unitsRevision = useAtomValue(unitsRevisionAtom);
   const { loaded: tilesetAssets, loading: tilesetLoading } = useTileset();
+  const { loaded: unitAssets } = useUnitAssets();
   const centerView = useSetAtom(centerViewOnAtom);
   const mapLocations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
@@ -87,19 +98,42 @@ export default function MinimapPanel() {
       ctx.lineWidth = 1;
       for (const l of locations) ctx.strokeRect(ox + l.x * scale + 0.5, oy + l.y * scale + 0.5, l.w * scale, l.h * scale);
     }
+    // units as the game's minimap does: a dot per unit in its owner's colour, resources in cyan
+    if (flags.units && scenario) {
+      const tables = unitAssets?.units ?? null;
+      for (const u of scenario.units) {
+        if (u.unitId === 214) continue;
+        const g = unitGeometry(tables, u.unitId);
+        const uw = Math.max(2, (g.placeW / 32) * scale), uh = Math.max(2, (g.placeH / 32) * scale);
+        ctx.fillStyle = isResource(u.unitId) ? "#5fd7ff" : playerColorHex(scenario.playerColors, u.owner);
+        ctx.fillRect(ox + (u.x / 32) * scale - uw / 2, oy + (u.y / 32) * scale - uh / 2, uw, uh);
+      }
+    }
     if (flags.startLocations) {
       for (const s of startLocations) {
-        ctx.fillStyle = PLAYER_COLORS[s.player].hex;
+        ctx.fillStyle = playerColorHex(scenario?.playerColors, s.player);
         ctx.beginPath();
         ctx.arc(ox + s.x * scale, oy + s.y * scale, 4, 0, Math.PI * 2);
         ctx.fill();
       }
     }
+    // fog of war: the viewed player's fogged tiles darkened the way the game's fog does
+    if (scenario && flags.fog) {
+      const fog = fogCanvasRef.current ?? (fogCanvasRef.current = document.createElement("canvas"));
+      fog.width = w;
+      fog.height = h;
+      fog.getContext("2d")!.putImageData(fogImageData(scenario, tilesetIndex(scenario), fogViewPlayer), 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(fog, ox, oy, w * scale, h * scale);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.imageSmoothingEnabled = true;
+    }
     // viewport rectangle
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
-  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, locations, startLocations]);
+  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, startLocations, fogViewPlayer]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.

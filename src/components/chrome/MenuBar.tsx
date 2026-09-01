@@ -152,6 +152,7 @@ function useMenus(): { label: string; items: Item[] }[] {
         flag("startLocations", "Start Locations"),
         flag("fog", "Fog of War"),
         flag("animateWater", "Animate Water"),
+        flag("animateUnits", "Animate Units"),
         sep,
         flag("elevation", "Elevation Overlay"),
         flag("buildability", "Buildability Overlay"),

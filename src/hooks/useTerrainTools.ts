@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, rectVariationAtom,
-  terrainModeAtom, type TerrainMode,
+  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom,
+  selectedUnitsAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
-import { commitEditAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
+import { commitEditAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   applyChanges, brushRect, floodRegion, stampTerrain, stampTerrainAt, stampTile, stampTileAt,
@@ -13,8 +13,13 @@ import {
 import {
   brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
 } from "../editor/isom";
-import { tilesetIndex } from "../formats/chk/scenario";
+import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
+import { peekUnitAssets } from "../formats/units/load";
+import { applyUnitChanges, removeUnits } from "../editor/units";
+import { strandedUnits } from "../editor/placement";
+import { applyDoodadChanges, applySpriteChanges, removeDoodads, strandedDoodads } from "../editor/doodads";
+import { selectedDoodadsAtom } from "../atoms/editorAtoms";
 import { hexTile, terrainTypes, type TerrainType } from "../formats/tileset/palette";
 import { TILESET_BY_ID, terrainName } from "../data/tilesets";
 
@@ -64,6 +69,41 @@ export function useTerrainTools() {
   );
   /** True when the open map and tileset let the isometric brush run at all. */
   const isomReady = hasIsom(scenarioForTables) && loaded !== null && isomTypes.length > 0;
+
+  /**
+   * Record a finished terrain edit. Doodads the stroke painted over come off the map in
+   * the same undo step (their remaining cells go back to the ground, their records and
+   * overlay sprites go), and with "remove stranded units" on so do units the new terrain
+   * can no longer hold; the label says how many of each.
+   */
+  const commitTerrain = useCallback((scn: Scenario, entry: HistoryEntry, summary: string) => {
+    let note = "";
+    if (loaded) {
+      const stranded = strandedDoodads(scn, loaded.doodads, entry.changes.map((c) => c.at));
+      if (stranded.length > 0) {
+        const edit = removeDoodads(scn, loaded.tileset, loaded.doodads, stranded);
+        applyChanges(scn, edit.tiles, "do", "mtxm");
+        applyDoodadChanges(scn, edit.doodads);
+        applySpriteChanges(scn, edit.sprites);
+        entry.doodadTiles = edit.tiles;
+        entry.doodads = edit.doodads;
+        entry.sprites = edit.sprites;
+        store.set(selectedDoodadsAtom, []);
+        note += `, removed ${stranded.length} doodad${stranded.length === 1 ? "" : "s"}`;
+      }
+    }
+    if (store.get(placementOptionsAtom).removeStranded && loaded) {
+      const stranded = strandedUnits(scn, loaded.tileset, peekUnitAssets()?.units ?? null, [...entry.changes, ...(entry.doodadTiles ?? [])].map((c) => c.at));
+      if (stranded.length > 0) {
+        entry.units = removeUnits(scn, stranded);
+        applyUnitChanges(scn, entry.units);
+        store.set(selectedUnitsAtom, []);
+        note += `, removed ${stranded.length} stranded unit${stranded.length === 1 ? "" : "s"}`;
+      }
+    }
+    commit(entry);
+    setStatus(summary + note);
+  }, [store, loaded, commit, setStatus]);
 
   /** The Rect brush as a flat pair, or null when the graphics (and so the groups) are missing. */
   const currentTerrain = useCallback((): TerrainType | null => {
@@ -143,18 +183,18 @@ export function useTerrainTools() {
   }, [store, info, currentTerrain, currentIsomTerrain, paintAt]);
 
   const endStroke = useCallback(() => {
+    const scn = store.get(scenarioAtom);
     const s = stroke.current;
     const is = isomStroke.current;
     stroke.current = null;
     isomStroke.current = null;
     lastDiamond.current = null;
-    if (!s) return;
+    if (!s || !scn) return;
     const changes = s.finish();
     const isom = is?.finish() ?? [];
     if (changes.length === 0 && isom.length === 0) return;
-    commit({ label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined });
-    setStatus(`${strokeLabel.current} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
-  }, [commit, setStatus]);
+    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, `${strokeLabel.current} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+  }, [store, commitTerrain]);
 
   const isStroking = useCallback(() => stroke.current !== null, []);
 
@@ -193,9 +233,8 @@ export function useTerrainTools() {
 
     if (changes.length === 0) return;
     applyChanges(scn, changes);
-    commit({ label, changes });
-    setStatus(`${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
-  }, [store, loaded, currentTerrain, commit, setStatus]);
+    commitTerrain(scn, { label, changes }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+  }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
    * Eyedropper. Isometric mode reads the diamond's terrain straight from the ISOM, so

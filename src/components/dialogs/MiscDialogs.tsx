@@ -4,7 +4,7 @@ import { BookOpen, CircleX, Info, Keyboard, Search, Settings2, ShieldCheck, Tria
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { TILESETS } from "../../data/tilesets";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
-import { UNIT_GROUPS } from "../../data/units";
+import { UNIT_GROUPS, unitName } from "../../data/units";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -202,7 +202,7 @@ export function ValidateMapDialog({ entry }: DialogProps) {
 export function FindDialog({ entry }: DialogProps) {
   const [kind, setKind] = useState("Units");
   const [q, setQ] = useState("");
-  const pool = kind === "Units" ? UNIT_GROUPS.flatMap((g) => g.units) : kind === "Locations" ? SAMPLE_LOCATIONS.map((l) => l.name) : [];
+  const pool = kind === "Units" ? UNIT_GROUPS.flatMap((g) => g.units.map(unitName)) : kind === "Locations" ? SAMPLE_LOCATIONS.map((l) => l.name) : [];
   const results = q ? pool.filter((p) => p.toLowerCase().includes(q.toLowerCase())).slice(0, 50) : [];
   return (
     <DialogFrame dialogKey={entry.key} title="Find" icon={<Search size={14} />} size="sm" okLabel="Go To" footerLeft={<span>{results.length} result(s)</span>}>

@@ -43,6 +43,118 @@ MTXM tile id ──(id >> 4)──▶ CV5 group ──(id & 15)──▶ VX4 meg
 VX4 megatile ──▶ 16 minitile refs (bit 0 = h-flip) ──▶ VR4 8x8 bitmaps ──▶ WPE palette
 ```
 
+## Unit graphics
+
+Units are drawn with the game's own sprites, in the owner's team colour. The same
+archives hold everything needed; after the tileset step run:
+
+```sh
+node scripts/extract-units.mjs
+```
+
+That mirrors the relevant part of the MPQ tree into `public/`: `arr/{units,flingy,sprites,images}.dat`
+and `arr/images.tbl` (the tables that lead from a unit type to its picture), `game/tunit.pcx`
+(team colours), `scripts/iscript.bin` (the animation bytecode) and the `unit/**/*.grp` sprite
+sheets plus `unit/**/*.lo?` overlay-position files that the 228 unit types and their idle
+animations can reach (~340 GRPs, about 9 MB — found by walking the scripts, so projectiles
+and death effects stay out). GRPs and overlay files are fetched lazily the first time they
+are needed, so a melee map only pulls minerals, geysers and start locations. Without the
+files, units are drawn as player-coloured markers and the Units layer says so; without
+`iscript.bin` they are drawn but do not move.
+
+```
+units.dat[id].flingy ─▶ flingy.dat.sprite ─▶ sprites.dat.image ─▶ images.dat.grp ─▶ images.tbl ─▶ unit\…\*.grp
+GRP palette indices 8–15 ─▶ tunit.pcx row for the player's colour ─▶ tileset WPE palette
+images.dat.iscript ─▶ iscript.bin header ─▶ Init / Built / StarEditInit animations ─▶ frames, overlays, turns
+```
+
+Player colours honour the map's `COLR` section for the eight playable slots.
+
+### Animation
+
+Placed units run their in-game idle animations (**View ▸ Animate Units**), the way water
+animates: the viewport steps every unit's iscript once per game frame (42 ms, "Fastest").
+Each unit is a stack of images — shadow, main graphic, overlays — each with its own script,
+so you get Missile Turret and tank turrets turning, Hatcheries pulsing, marines looking
+around, the Nexus glow, Starport lights, and geyser/refinery smoke. Buildings play their
+`Built` animation (what a finished building shows), tanks and Goliaths their `StarEditInit`
+(StarEdit's own hook, which adds the turret overlay).
+
+Damage shows too: a building whose hit points are set below two thirds burns (Terran),
+sparks (Protoss) or bleeds (Zerg) at the positions its `.lo` file gives, more of them the
+lower the HP and with the large effect below one third. Fire is drawn through the tileset's
+`ofire`/`bexpl` remap tables (extracted as `public/tileset/<name>.ofire.pcx` etc. by the
+tileset script) and blended additively, which is a close stand-in for the game's
+palette-index lookup. Cloaked units draw half-transparent.
+
+## Units layer
+
+Picking a unit type in the palette **arms placement**: the ghost under the cursor shows
+where it would land and each click on empty ground places one. **Esc** or a **right-click**
+stops placing and drops you into select mode (the status bar and the HUD chip say which
+mode you are in; the properties panel has *Place …* / *Stop placing* buttons too).
+
+- Buildings — and everything else with the building flag: resources, start locations,
+  beacons — snap their placement box to the tile grid, exactly as StarEdit stores them (a
+  Command Center's centre is always `tile*32 + 64, 48`). Other units land where the pointer
+  is. **Snap to grid** (palette toggle, on by default) turns the snapping off, SCMDraft-style,
+  so a building can sit at any pixel.
+- **Placement checks**, toggled at the top of the palette and all on by default, refuse a
+  spot with a red ghost and a status-bar reason — the same rules the game applies when it
+  loads a map and silently drops units that do not fit:
+  - **No overlap** — ground units and buildings may not overlap another's collision box
+    (flyers and start locations are exempt). The unit in the way is outlined.
+  - **Check terrain** — a building needs buildable tiles under its whole placement box; a
+    ground unit needs walkable minitiles under its collision box.
+  Dragging a selection onto a refused spot snaps it back.
+- The Terrain palette has the matching **Remove stranded units** toggle (on by default):
+  when you paint terrain (any brush, fill, or the isometric brush) under units that can no
+  longer stand there, e.g. water over a base, they are deleted as part of the same undo
+  step; the status bar counts them.
+- **Click a unit** to select it (Shift toggles), **drag** the selection to move it,
+  **drag on empty ground** to box-select, **click empty ground** in select mode to clear the
+  selection. **Delete** removes the selection; **Esc** clears it.
+- The properties panel edits the owner and the vitals inline; **double-click** a unit (or
+  *Unit Properties…*) for everything the `UNIT` record stores: type, owner, position, hit
+  points / shields / energy / resources / hangar each with its "used" bit, the five special
+  properties as state and "valid" bits, the related-unit serial with its Nydus / add-on
+  relation flags, and the unused dword. With several units selected only the fields you
+  touch are written to all of them.
+- New records are written the way StarEdit writes them: 100% vitals, and the
+  "valid"/"used" masks describing only what applies to the type (a mineral field gets a
+  1500 resource amount, a High Templar an energy value, a marine neither).
+
+Every placement, move, re-own, property edit and deletion is one undo step, in the same
+history as terrain strokes, and marks `UNIT` dirty so it lands in the saved file.
+
+## Fog of War layer
+
+The **F** layer edits the `MASK` section: one byte per tile, bit *n* set meaning the tile starts
+the game **unexplored** for player *n+1*. StarEdit writes `0xFF` everywhere and a map without the
+section behaves the same, so the editor reads "no `MASK`" as fog everywhere and adds the section
+on the first stroke (undo removes it again).
+
+- **Players** — each player has their own fog; select any of the eight and every stroke,
+  area fill and whole-map operation edits the fog of all of them at once (**All** / **None**).
+  **View** picks whose fog the viewport and minimap draw; it follows the first selected player
+  when you deselect the one on show.
+- **Fog** / **Clear** is the brush mode; **Shift**-drag paints the opposite. The brush uses the same
+  1×1–7×7 sizes as the terrain brushes (`[` / `]`), drags interpolate so a fast stroke leaves no gaps,
+  and one drag is one undo step, in the same history as terrain and unit edits.
+- **Alt**-click selects the players that have fog on a tile (the eyedropper); the context menu has
+  *Fill Area with Fog* / *Clear Fog in Area* (the 4-connected region with the same state for the
+  viewed player) and *Pick Fogged Players Here*.
+- **Fog all**, **Clear all** and **Invert** act on the whole map for the selected players; **Copy fog**
+  gives every selected player exactly the source player's fog.
+- The overlay sits **above units, locations and start markers**, the way the game's fog covers
+  all of them: fogged tiles are darkened exactly as the game darkens ground it has explored but
+  cannot see — the per-tileset ratio of `dark.pcx` row 18 (about half the light, a touch bluer;
+  Ice is lighter), applied as a multiply tint — with the corner between two explored edges cut at
+  45° so a diagonal boundary reads as a line rather than a staircase. Explored tiles are left as
+  they are. Entering the layer switches the *Fog of War* view toggle on and leaving switches it
+  back off (unless you had it on already); the toggle — View menu, Layers-panel eye, or **Show**
+  in the palette — hides the overlay at any time. The minimap shows the same picture.
+
 ## Terrain layer
 
 The Terrain palette has three modes; two of them place tiles:
@@ -130,12 +242,14 @@ StarCraft compresses nearly every file in its archives, and its own maps, with i
 ```
 src/
   atoms/        Jotai state: editor/document atoms (incl. undo history), UI + dialog stack
-  editor/       Terrain edit operations as invertible change lists
+  editor/       Terrain and unit edit operations as invertible change lists, placement checks
   data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger vocab, samples)
   formats/
     chk/        CHK container, section registry, typed section codecs
     mpq/        .scm/.scx open + save on top of mopaq
     tileset/    cv5/vf4/vr4/vx4/wpe decoding, the megatile atlas, base terrain fills, palette catalogue
+    dat/        units/flingy/sprites/images.dat, .tbl, GRP, PCX, .lo and iscript.bin decoders
+    units/      Unit data + lazy GRP/.lo/remap loading, per-image frame cache, the iscript animator
   services/     File pickers, drag-and-drop, save-to-disk
   components/
     chrome/     MenuBar (Radix Menubar), ToolBar, StatusBar
@@ -157,4 +271,5 @@ Query params jump straight to a state, handy while iterating on a screen:
 /?nosplash&dialog=playerSettings open a dialog (any DialogId in src/atoms/uiAtoms.ts; repeatable)
 /?nosplash&zoom=0.5&tileset=ice  zoom level and tileset
 /?nosplash&mode=tile             terrain palette mode (isom|rect|tile; subtile/index still map to tile)
+/?nosplash&layer=fog&fogPlayer=3 view (and paint for) one player's fog
 ```

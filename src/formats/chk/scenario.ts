@@ -47,7 +47,15 @@ export interface Scenario {
   playerColors: number[];
   forces: Forces;
 
+  /** MTXM: what the game draws — terrain with the doodads stamped over it. */
   tiles: Uint16Array;
+  /**
+   * TILE: StarEdit's copy of the terrain *without* doodads (a doodad's cells hold the
+   * ground it was placed on). Terrain brushes write both arrays; placing a doodad writes
+   * only `tiles`, and removing one restores its cells from here. A file without TILE
+   * starts with a copy of MTXM.
+   */
+  editorTiles: Uint16Array;
   isom: Uint16Array | null;
   mask: Uint8Array | null;
 
@@ -138,6 +146,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const sprp = sprpData && sprpData.length >= 4 ? new Reader(sprpData) : null;
 
   const mtxm = take("MTXM", dim);
+  const tileData = take("TILE", dim);
   const isomData = take("ISOM", dim);
   const maskData = take("MASK", dim);
 
@@ -163,6 +172,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     playerColors: colr ? decodeBytes(colr, FORCE_SLOTS) : [0, 1, 2, 3, 4, 5, 6, 7],
     forces: forcData ? decodeForces(forcData) : defaultForces(),
     tiles: mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
+    editorTiles: tileData ? decodeTiles(tileData, width, height) : mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     isom: isomData ? decodeIsom(isomData, width, height) : null,
     mask: maskData ? decodeMask(maskData, width, height) : null,
     units: decodeUnits(take("UNIT") ?? new Uint8Array(0)),
@@ -221,8 +231,9 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
     case "FORC":
       return encodeForces(scn.forces);
     case "MTXM":
-    case "TILE":
       return encodeTiles(scn.tiles);
+    case "TILE":
+      return encodeTiles(scn.editorTiles);
     case "ISOM":
       // A map without ISOM stays without it: an all-zero section would tell other
       // editors the lattice is valid when there is none.

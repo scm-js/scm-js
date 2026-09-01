@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useStore } from "jotai";
-import { activeLayerAtom, mapTilesetAtom, screenAtom, terrainModeAtom, TERRAIN_MODES, zoomAtom, type EditorLayer, type TerrainMode } from "../atoms/editorAtoms";
+import {
+  activeLayerAtom, fogPlayersAtom, fogViewPlayerAtom, mapTilesetAtom, screenAtom, terrainModeAtom, TERRAIN_MODES, zoomAtom,
+  type EditorLayer, type TerrainMode,
+} from "../atoms/editorAtoms";
 import { openDialogAtom, type DialogId } from "../atoms/uiAtoms";
 import { TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 
@@ -33,6 +36,11 @@ export function useDevDeepLinks() {
     if (zoom > 0) store.set(zoomAtom, zoom);
     const tileset = p.get("tileset");
     if (tileset && tileset in TILESET_BY_ID) store.set(mapTilesetAtom, tileset as TilesetId);
+    const fogPlayer = Number(p.get("fogPlayer"));
+    if (fogPlayer >= 1 && fogPlayer <= 8) {
+      store.set(fogViewPlayerAtom, fogPlayer - 1);
+      store.set(fogPlayersAtom, 1 << (fogPlayer - 1));
+    }
     for (const d of p.getAll("dialog")) store.set(openDialogAtom, d as DialogId);
   }, [store]);
 }

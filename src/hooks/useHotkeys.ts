@@ -1,7 +1,10 @@
 import { useEffect } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
-import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, type EditorLayer } from "../atoms/editorAtoms";
-import { redoAtom, undoAtom } from "../atoms/documentAtoms";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import {
+  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, selectedDoodadsAtom, selectedUnitsAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom,
+  type EditorLayer,
+} from "../atoms/editorAtoms";
+import { deleteSelectedDoodadsAtom, deleteSelectedUnitsAtom, redoAtom, undoAtom } from "../atoms/documentAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
@@ -18,6 +21,13 @@ export function useHotkeys() {
   const setBrush = useSetAtom(brushSizeAtom);
   const undo = useSetAtom(undoAtom);
   const redo = useSetAtom(redoAtom);
+  const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
+  const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
+  const setSelectedUnits = useSetAtom(selectedUnitsAtom);
+  const setSelectedDoodads = useSetAtom(selectedDoodadsAtom);
+  const [placing, setPlacing] = useAtom(unitPlacingAtom);
+  const [placingDoodad, setPlacingDoodad] = useAtom(doodadPlacingAtom);
+  const activeLayer = useAtomValue(activeLayerAtom);
   const dialogs = useAtomValue(dialogStackAtom);
   const { save } = useMapFileActions();
 
@@ -61,6 +71,28 @@ export function useHotkeys() {
       if (e.altKey && e.key === "Enter") { e.preventDefault(); open("mapProperties"); return; }
       if (typing || e.altKey) return;
 
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (activeLayer === "doodads") {
+          const n = deleteDoodads();
+          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} doodad${n === 1 ? "" : "s"}`); }
+          return;
+        }
+        const n = deleteUnits();
+        if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} unit${n === 1 ? "" : "s"}`); }
+        return;
+      }
+      if (e.key === "Escape") {
+        // First Escape leaves placement mode, the next clears the selection.
+        if (activeLayer === "doodads") {
+          if (placingDoodad) { setPlacingDoodad(false); setStatus("Stopped placing — click a doodad to select it, or pick one in the palette to place"); }
+          else setSelectedDoodads([]);
+          return;
+        }
+        if (placing) { setPlacing(false); setStatus("Stopped placing — click a unit to select it, or pick one in the palette to place"); }
+        else setSelectedUnits([]);
+        return;
+      }
+
       const layer = LAYER_KEYS[e.key.toLowerCase()];
       if (layer) setLayer(layer);
       // SCMDraft grows and shrinks the brush with the bracket keys.
@@ -69,5 +101,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, setSelectedUnits, setSelectedDoodads, placing, setPlacing, placingDoodad, setPlacingDoodad, activeLayer]);
 }

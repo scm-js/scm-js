@@ -17,20 +17,34 @@ import {
   Users,
 } from "lucide-react";
 import {
+  activeDoodadAtom,
   activeLayerAtom,
   activeUnitAtom,
-  brushSizeAtom,
+  doodadCategoryAtom,
+  doodadPlacementAtom,
+  doodadPlacingAtom,
+  fogModeAtom,
+  fogPlayersAtom,
+  fogViewPlayerAtom,
   mapTilesetAtom,
+  placementOptionsAtom,
   unitOwnerAtom,
+  unitPlacingAtom,
+  viewFlagsAtom,
   type EditorLayer,
 } from "../../atoms/editorAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { DOODAD_CATEGORIES, TILESET_BY_ID } from "../../data/tilesets";
-import { PLAYER_COLORS } from "../../data/players";
-import { RACE_LABEL, SPRITES, UNIT_GROUPS, type RaceKey } from "../../data/units";
+import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/fog";
+import { useFogTools } from "../../hooks/useFogTools";
+import { TILESET_BY_ID } from "../../data/tilesets";
+import { playerColorHex } from "../../data/players";
+import { RACE_LABEL, SPRITES, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { Button, Check, Tabs, Tip } from "../ui";
-import TerrainPalette from "./TerrainPalette";
+import TerrainPalette, { BrushSelect } from "./TerrainPalette";
+import { DoodadThumb } from "./DoodadThumb";
+import { useDoodadTools } from "../../hooks/useDoodadTools";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
@@ -57,31 +71,84 @@ export function shade(hex: string, amt: number) {
 
 /* ── Doodads ────────────────────────────────────────────── */
 
+/**
+ * The tileset's doodads by StarEdit category, drawn from the tileset graphics. Picking one
+ * arms placement; the two options are StarEdit's own defaults — ground checks on, left
+ * column snapped to the two-tile isometric grid.
+ */
 function DoodadPalette() {
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
-  const [cat, setCat] = useState(DOODAD_CATEGORIES[0]);
-  const [sel, setSel] = useState(0);
+  const [category, setCategory] = useAtom(doodadCategoryAtom);
+  const [active, setActive] = useAtom(activeDoodadAtom);
+  const [placing, setPlacing] = useAtom(doodadPlacingAtom);
+  const [options, setOptions] = useAtom(doodadPlacementAtom);
+  const [owner, setOwner] = useAtom(unitOwnerAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const { loaded, catalogue } = useDoodadTools();
+  const colors = scenario?.playerColors;
+  const categories = catalogue.categories;
+  const current = categories.find((c) => c.name === category) ?? categories[0] ?? null;
+  const pick = (id: number) => { setActive(id); setPlacing(true); };
+  const activeDef = catalogue.byId.get(active);
+  const option = (key: keyof typeof options, label: string, title: string) => (
+    <Check label={label} title={title} checked={options[key]} onChange={(e) => setOptions({ ...options, [key]: e.target.checked })} />
+  );
+
   return (
     <>
+      <div className="owner-strip" title="Owner of the doodads you place (matters for Installation doors and traps)">
+        {Array.from({ length: 12 }, (_, i) => (
+          <Tip key={i} label={`Player ${i + 1}`} side="right">
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
+              {i + 1}
+            </button>
+          </Tip>
+        ))}
+      </div>
       <div className="palette-toolbar">
-        <select className="select grow" value={cat} onChange={(e) => setCat(e.target.value)}>
-          {DOODAD_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+        <select className="select grow" value={current?.name ?? ""} onChange={(e) => setCategory(e.target.value)} aria-label="Doodad category" disabled={categories.length === 0}>
+          {categories.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.doodads.length})</option>)}
         </select>
-        <Check label="Random variant" />
+      </div>
+      <div className="placement-options" title="Placement options">
+        {option("placeAnywhere", "Place anywhere", "Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground.")}
+        {option("snapToGrid", "Snap to grid", "Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for.")}
       </div>
       <div className="palette-scroll">
-        <div className="doodad-grid">
-          {Array.from({ length: 18 }, (_, i) => (
-            <button key={i} className={`doodad ${sel === i ? "selected" : ""}`} onClick={() => setSel(i)}>
-              <span className="thumb" style={{ background: `linear-gradient(160deg, ${shade(tileset.color, 0.25)}, ${shade(tileset.color, -0.4)})` }}>
-                <TreePine size={16} />
-              </span>
-              <span className="lbl">{cat.split(" ")[0]} {i + 1}</span>
-            </button>
-          ))}
-        </div>
+        {!loaded && (
+          <div className="hint" style={{ padding: 8 }}>
+            Doodads come from the tileset graphics. Run <code>node scripts/extract-tilesets.mjs</code> against a StarCraft install to fill <code>public/tileset/</code>.
+          </div>
+        )}
+        {loaded && !catalogue.hasPlacementData && (
+          <div className="hint" style={{ padding: "8px 8px 0" }}>
+            No <code>{loaded.name}.dddata.bin</code> — re-run <code>scripts/extract-tilesets.mjs</code> to get StarEdit's placement rules; until then nothing is refused for its ground.
+          </div>
+        )}
+        {current && (
+          <div className="doodad-grid">
+            {current.doodads.map((d) => (
+              <button
+                key={d.id}
+                className={`doodad ${active === d.id ? "selected" : ""}`}
+                onClick={() => pick(d.id)}
+                title={`${d.category} #${d.id} — ${d.width}×${d.height} tiles${d.overlay ? `, ${d.overlay.kind} overlay ${d.overlay.id}` : ""}${d.required.some((r) => r !== 0) ? "" : ", any ground"} — click to place`}
+              >
+                <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={56} height={40} /></span>
+                <span className="lbl">#{d.id} · {d.width}×{d.height}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="palette-footer"><span>{cat} · 18 doodads</span><span>{tileset.name}</span></div>
+      <div className="palette-footer">
+        <span>
+          {activeDef
+            ? placing ? <>Placing {activeDef.category} #{activeDef.id} <span className="faint">· Esc stops</span></> : <>{activeDef.category} #{activeDef.id} <span className="faint">· select mode</span></>
+            : <>{catalogue.doodads.length} doodads</>}
+        </span>
+        <span>{tileset.name}</span>
+      </div>
     </>
   );
 }
@@ -91,12 +158,23 @@ function DoodadPalette() {
 function UnitPalette() {
   const [owner, setOwner] = useAtom(unitOwnerAtom);
   const [active, setActive] = useAtom(activeUnitAtom);
+  const [placing, setPlacing] = useAtom(unitPlacingAtom);
+  const [placement, setPlacement] = useAtom(placementOptionsAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  /** Picking a unit arms placement: the next click on the map places it. */
+  const pick = (id: number) => { setActive(id); setPlacing(true); };
+  const option = (key: keyof typeof placement, label: string, title: string) => (
+    <Check label={label} title={title} checked={placement[key]} onChange={(e) => setPlacement({ ...placement, [key]: e.target.checked })} />
+  );
+  const colors = scenario?.playerColors;
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<Record<string, boolean>>({ "Terran Units": true, "Neutral Special": true });
+  const [open, setOpen] = useState<Record<string, boolean>>({ "Terran Units": true, "Special": true });
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return UNIT_GROUPS.map((g) => ({ ...g, units: q ? g.units.filter((u) => u.toLowerCase().includes(q)) : g.units })).filter((g) => g.units.length > 0);
+    return UNIT_GROUPS
+      .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitName(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
+      .filter((g) => g.units.length > 0);
   }, [query]);
 
   const races: RaceKey[] = ["terran", "zerg", "protoss", "neutral"];
@@ -104,9 +182,9 @@ function UnitPalette() {
   return (
     <>
       <div className="owner-strip" title="Unit owner">
-        {PLAYER_COLORS.slice(0, 12).map((c, i) => (
+        {Array.from({ length: 12 }, (_, i) => (
           <Tip key={i} label={`Player ${i + 1}`} side="right">
-            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: c.hex }} onClick={() => setOwner(i)}>
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
           </Tip>
@@ -115,6 +193,11 @@ function UnitPalette() {
       <div className="palette-toolbar">
         <Search size={12} className="faint" />
         <input className="input grow" placeholder="Search units…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+      <div className="placement-options" title="Placement checks">
+        {option("checkCollision", "No overlap", "Refuse to place or drop a ground unit or building on top of another")}
+        {option("checkTerrain", "Check terrain", "Refuse unwalkable ground for units and unbuildable tiles for buildings")}
+        {option("snapToGrid", "Snap to grid", "Buildings snap their placement box to the tile grid, as StarEdit always does; off, they land exactly at the pointer")}
       </div>
       <div className="palette-scroll tree">
         {races.map((race) => {
@@ -136,9 +219,9 @@ function UnitPalette() {
                       <span className="dim">{g.label}</span>
                       <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.units.length}</span>
                     </div>
-                    {isOpen && g.units.map((u) => (
-                      <div key={u} className={`node ${active === u ? "selected" : ""}`} style={{ paddingLeft: 40 }} onClick={() => setActive(u)}>
-                        {u}
+                    {isOpen && g.units.map((id) => (
+                      <div key={id} className={`node ${active === id ? "selected" : ""}`} style={{ paddingLeft: 40 }} onClick={() => pick(id)} title={`Unit #${id} — click to place`}>
+                        {unitName(id)}
                       </div>
                     ))}
                   </div>
@@ -149,8 +232,8 @@ function UnitPalette() {
         })}
       </div>
       <div className="palette-footer">
-        <span>{active}</span>
-        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: PLAYER_COLORS[owner].hex, width: 10, height: 10 }} />P{owner + 1}</span>
+        <span>{placing ? <>Placing {unitName(active)} <span className="faint">· Esc stops</span></> : <>{unitName(active)} <span className="mono">#{active}</span> <span className="faint">· select mode</span></>}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: playerColorHex(colors, owner), width: 10, height: 10 }} />P{owner + 1}</span>
       </div>
     </>
   );
@@ -175,7 +258,7 @@ function SpritePalette() {
       compact
       tabs={[
         { value: "pure", label: "Pure Sprites", content: <><div className="palette-scroll">{list(SPRITES)}</div><div className="palette-footer"><span>{SPRITES.length} sprites</span><span>THG2</span></div></> },
-        { value: "unit", label: "Unit Sprites", content: <><div className="palette-scroll">{list(UNIT_GROUPS[0].units.concat(UNIT_GROUPS[3].units))}</div><div className="palette-footer"><span>Unit-sprite (no owner logic)</span></div></> },
+        { value: "unit", label: "Unit Sprites", content: <><div className="palette-scroll">{list(UNIT_GROUPS[0].units.concat(UNIT_GROUPS[3].units).map(unitName))}</div><div className="palette-footer"><span>Unit-sprite (no owner logic)</span></div></> },
       ]}
     />
   );
@@ -211,30 +294,119 @@ function LocationPalette() {
 
 /* ── Fog of war ─────────────────────────────────────────── */
 
+/**
+ * The MASK section's editor: tick the players to paint for, choose whether the brush
+ * lays fog (unexplored) or clears it, and view any one player's fog. Whole-map
+ * operations and player-to-player copies act on the selected players.
+ */
 function FogPalette() {
-  const [brush, setBrush] = useAtom(brushSizeAtom);
+  const [players, setPlayers] = useAtom(fogPlayersAtom);
+  const [mode, setMode] = useAtom(fogModeAtom);
+  const [view, setView] = useAtom(fogViewPlayerAtom);
+  const [flags, setFlags] = useAtom(viewFlagsAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const revision = useAtomValue(terrainRevisionAtom);
+  const tools = useFogTools();
+  const [copySource, setCopySource] = useState(0);
+  const colors = scenario?.playerColors;
+  const hasMap = scenario !== null;
+
+  const fogged = useMemo(() => (scenario ? fogCount(scenario, view) : 0), [scenario, view, revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = scenario ? scenario.width * scenario.height : 0;
+  const pct = total > 0 ? Math.round((100 * fogged) / total) : 0;
+
+  /** Toggle a player; the view follows the first selected player when it would otherwise show a deselected one. */
+  const toggle = (p: number) => {
+    const next = players ^ playerBit(p);
+    setPlayers(next);
+    if (next !== 0 && !(next & playerBit(view))) {
+      for (let i = 0; i < FOG_PLAYERS; i++) if (next & playerBit(i)) { setView(i); break; }
+    }
+  };
+  const selected = Array.from({ length: FOG_PLAYERS }, (_, i) => (players & playerBit(i)) !== 0);
+  const selectedCount = selected.filter(Boolean).length;
+  const copyTargets = players & ~playerBit(copySource);
+
   return (
     <>
+      <div className="fog-head">
+        <span className="lbl">Players</span>
+        <span className="faint">{selectedCount === 0 ? "none selected" : selectedCount === FOG_PLAYERS ? "all selected" : `${selectedCount} selected`}</span>
+        <span className="grow" />
+        <Button size="sm" onClick={() => setPlayers(ALL_FOG_PLAYERS)} disabled={players === ALL_FOG_PLAYERS} title="Select all eight players">All</Button>
+        <Button size="sm" onClick={() => setPlayers(0)} disabled={players === 0} title="Deselect every player">None</Button>
+      </div>
+      <div className="owner-strip fog-players" role="group" aria-label="Selected players" title="Click a player to select or deselect them">
+        {selected.map((on, i) => (
+          <Tip key={i} label={`Player ${i + 1} — ${on ? "selected" : "not selected"}`} side="right">
+            <button
+              className={`owner-chip ${on ? "is-active" : ""}`}
+              style={{ ["--c" as string]: playerColorHex(colors, i) }}
+              onClick={() => toggle(i)}
+              aria-pressed={on}
+            >
+              {i + 1}
+            </button>
+          </Tip>
+        ))}
+      </div>
+      <div className="hint fog-note">Each player has their own fog. The brush, area fills and the buttons below edit it for the selected players.</div>
       <div className="palette-toolbar">
-        <span className="lbl">Brush</span>
-        <select className="select" style={{ width: 64 }} value={brush} onChange={(e) => setBrush(Number(e.target.value))}>
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n}×{n}</option>)}
+        <BrushSelect />
+        <span className="grow" />
+        <span className="seg" role="radiogroup" aria-label="Brush mode">
+          <Button size="sm" active={mode === "fog"} onClick={() => setMode("fog")} title="Left-drag lays fog (tiles start unexplored); Shift-drag clears">Fog</Button>
+          <Button size="sm" active={mode === "clear"} onClick={() => setMode("clear")} title="Left-drag clears fog (tiles start explored); Shift-drag lays it">Clear</Button>
+        </span>
+      </div>
+      <div className="palette-toolbar">
+        <span className="lbl">View</span>
+        <select className="select" style={{ width: 84 }} value={view} onChange={(e) => setView(Number(e.target.value))} aria-label="Player whose fog is shown">
+          {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>Player {i + 1}</option>)}
         </select>
         <span className="grow" />
-        <Button size="sm">All</Button>
-        <Button size="sm">None</Button>
+        <Check label="Show" title="Draw the fog overlay (View ▸ Fog of War)" checked={flags.fog} onChange={(e) => setFlags({ ...flags, fog: e.target.checked })} />
       </div>
       <div className="palette-scroll">
-        <div className="fog-grid">
-          {PLAYER_COLORS.slice(0, 8).map((c, i) => (
-            <Check key={i} defaultChecked={i < 2} label={<span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: c.hex, width: 10, height: 10 }} />Player {i + 1}</span>} />
-          ))}
+        <div className="fog-actions">
+          <fieldset className="group">
+            <legend>Whole map</legend>
+            <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("fog")} title="Every tile starts unexplored for the selected players">Fog all</Button>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("clear")} title="Every tile starts explored for the selected players">Clear all</Button>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={tools.invert} title="Swap fogged and explored tiles for the selected players">Invert</Button>
+            </div>
+          </fieldset>
+          <fieldset className="group">
+            <legend>Copy fog</legend>
+            <div className="row" style={{ gap: 6 }}>
+              <span className="lbl">From</span>
+              <select className="select" style={{ width: 84 }} value={copySource} onChange={(e) => setCopySource(Number(e.target.value))} aria-label="Player to copy fog from">
+                {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>Player {i + 1}</option>)}
+              </select>
+            </div>
+            <div className="row" style={{ marginTop: 6 }}>
+              <Button size="sm" disabled={!hasMap || copyTargets === 0} onClick={() => tools.copyFrom(copySource)} title="Give every selected player exactly this player's fog">
+                Copy to selected players
+              </Button>
+            </div>
+          </fieldset>
         </div>
         <div style={{ padding: "0 8px 8px" }} className="hint">
-          Paint fog for the checked players. Fogged tiles start unexplored for that player.
+          Drag to paint; <b>Shift</b> paints the opposite of the mode, <b>Alt</b>-click selects the players that have
+          fog on a tile. Fogged tiles start the game unexplored and are drawn under the game's own fog darkening;
+          the rest start explored. Right-click for area fills.
         </div>
+        {hasMap && !scenario.mask && (
+          <div style={{ padding: "0 8px 8px" }} className="hint">
+            This map has no <strong>MASK</strong> section, which the game reads as fog everywhere; the first stroke adds one.
+          </div>
+        )}
       </div>
-      <div className="palette-footer"><span>Mode: Paint fog</span><span>Right-click erases</span></div>
+      <div className="palette-footer">
+        <span>{hasMap ? <>P{view + 1} · {fogged.toLocaleString()} / {total.toLocaleString()} fogged ({pct}%)</> : "No map open"}</span>
+        <span>{mode === "fog" ? "Fog" : "Clear"}</span>
+      </div>
     </>
   );
 }

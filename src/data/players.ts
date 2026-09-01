@@ -54,6 +54,20 @@ export const PLAYER_COLORS: PlayerColor[] = [
   { id: 21, name: "Black", hex: "#141414" },
 ];
 
+/**
+ * The colour a player's units are drawn in: the map's COLR choice for the eight playable
+ * slots, the fixed table entries for players 9–12. Out-of-range (Remastered custom)
+ * indices fall back to the slot's default so nothing ever renders colourless.
+ */
+export function playerColorIndex(colors: readonly number[] | null | undefined, owner: number): number {
+  const c = owner < 8 ? (colors?.[owner] ?? owner) : owner;
+  return c >= 0 && c < PLAYER_COLORS.length ? c : owner & 15;
+}
+
+export function playerColorHex(colors: readonly number[] | null | undefined, owner: number): string {
+  return PLAYER_COLORS[playerColorIndex(colors, owner)].hex;
+}
+
 export interface PlayerSlot {
   id: number;
   controller: Controller;

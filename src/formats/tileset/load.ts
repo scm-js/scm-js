@@ -1,6 +1,8 @@
 import { buildAtlas, type TilesetAtlas } from "./atlas";
 import { cycleBands } from "./cycle";
 import { loadTileset, type Tileset } from "./decode";
+import { buildDoodadCatalogue, DDDATA_SIZE, type DoodadCatalogue } from "./doodads";
+import { decodeTbl } from "../dat/tbl";
 
 /** ERA index order, which is also the on-disk file basename in `tileset/`. */
 export const TILESET_FILENAMES = [
@@ -23,6 +25,8 @@ export interface LoadedTileset {
   name: TilesetFileName;
   tileset: Tileset;
   atlas: TilesetAtlas;
+  /** The doodads the CV5 holds, with their placement rules when `<name>.dddata.bin` was extracted. */
+  doodads: DoodadCatalogue;
 }
 
 const cache = new Map<TilesetFileName, Promise<LoadedTileset>>();
@@ -58,6 +62,15 @@ const isVf4 = (d: Uint8Array) => d.length > 0 && d.length % 32 === 0;
 const isVr4 = (d: Uint8Array) => d.length > 0 && d.length % 64 === 0;
 const isVx4 = (d: Uint8Array) => d.length > 0 && d.length % 32 === 0;
 const isVx4Ex = (d: Uint8Array) => d.length > 0 && d.length % 64 === 0;
+const isDdData = (d: Uint8Array) => d.length === DDDATA_SIZE;
+const isTbl = (d: Uint8Array) => d.length > 2 && (d[0] | (d[1] << 8)) > 0;
+
+/** `stat_txt.tbl` (doodad category names) is shared by every tileset, so it is fetched once. */
+let statTxt: Promise<string[] | null> | null = null;
+function getStatTxt(): Promise<string[] | null> {
+  statTxt ??= fetchOptional("stat_txt.tbl", isTbl).then((d) => (d ? decodeTbl(d) : null));
+  return statTxt;
+}
 
 async function fetchOptional(name: string, check: (data: Uint8Array) => boolean): Promise<Uint8Array | null> {
   try {
@@ -75,17 +88,21 @@ export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
   const loading = (async (): Promise<LoadedTileset> => {
     try {
       // Remastered ships .vx4ex alongside .vx4; prefer it when it was extracted.
-      const [cv5, vf4, vr4, wpe, vx4ex] = await Promise.all([
+      const [cv5, vf4, vr4, wpe, vx4ex, dddata, names] = await Promise.all([
         fetchPart(`${name}.cv5`, isCv5),
         fetchPart(`${name}.vf4`, isVf4),
         fetchPart(`${name}.vr4`, isVr4),
         fetchPart(`${name}.wpe`, isPalette),
         fetchOptional(`${name}.vx4ex`, isVx4Ex),
+        // Optional: an older extraction has no dddata.bin (doodads then place anywhere) or names.
+        fetchOptional(`${name}.dddata.bin`, isDdData),
+        getStatTxt(),
       ]);
       const vx4 = vx4ex ?? (await fetchPart(`${name}.vx4`, isVx4));
 
       const tileset = loadTileset({ cv5, vf4, vr4, wpe, vx4, vx4Extended: vx4ex !== null });
-      return { name, tileset, atlas: await buildAtlas(tileset, cycleBands(TILESET_FILENAMES.indexOf(name))) };
+      const doodads = buildDoodadCatalogue(tileset, dddata, names);
+      return { name, tileset, atlas: await buildAtlas(tileset, cycleBands(TILESET_FILENAMES.indexOf(name))), doodads };
     } catch (err) {
       cache.delete(name); // let a later attempt retry after the files are installed
       throw new TilesetMissingError(name, err);

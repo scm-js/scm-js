@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useAtom, useAtomValue } from "jotai";
 import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
-  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, rectVariationAtom, terrainModeAtom,
+  activeTerrainAtom, activeTileAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, terrainModeAtom,
   type TerrainMode,
 } from "../../atoms/editorAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
@@ -10,12 +10,12 @@ import { useTileset } from "../../hooks/useTileset";
 import { useIsomRebuild, useIsomStatus } from "../../hooks/useIsom";
 import { variationsOf } from "../../formats/tileset/terrain";
 import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
-import { Button, NumberInput, Tabs, Tip } from "../ui";
+import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
 
-function BrushSelect({ bare }: { bare?: boolean } = {}) {
+export function BrushSelect({ bare }: { bare?: boolean } = {}) {
   const [brush, setBrush] = useAtom(brushSizeAtom);
   return (
     <>
@@ -302,16 +302,27 @@ function TileTab() {
 
 export default function TerrainPalette() {
   const [mode, setMode] = useAtom(terrainModeAtom);
+  const [placement, setPlacement] = useAtom(placementOptionsAtom);
   return (
-    <Tabs
-      compact
-      value={mode}
-      onValueChange={(v) => setMode(v as TerrainMode)}
-      tabs={[
-        { value: "isom", label: "Isometric", content: <IsomTab /> },
-        { value: "rect", label: "Rect", content: <RectTab /> },
-        { value: "tile", label: "Tile", content: <TileTab /> },
-      ]}
-    />
+    <>
+      <div className="placement-options" title="What a terrain edit does to the units on it">
+        <Check
+          label="Remove stranded units"
+          title="When the new terrain can no longer hold a unit standing on it (e.g. water under a base, unbuildable ground under a building), delete it as part of the same edit"
+          checked={placement.removeStranded}
+          onChange={(e) => setPlacement({ ...placement, removeStranded: e.target.checked })}
+        />
+      </div>
+      <Tabs
+        compact
+        value={mode}
+        onValueChange={(v) => setMode(v as TerrainMode)}
+        tabs={[
+          { value: "isom", label: "Isometric", content: <IsomTab /> },
+          { value: "rect", label: "Rect", content: <RectTab /> },
+          { value: "tile", label: "Tile", content: <TileTab /> },
+        ]}
+      />
+    </>
   );
 }

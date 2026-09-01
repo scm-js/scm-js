@@ -146,16 +146,3 @@ export function terrainName(info: TilesetInfo, id: number): string {
 }
 
 export const MAP_SIZES = [64, 96, 128, 192, 256] as const;
-
-export const DOODAD_CATEGORIES = [
-  "Rocks & Boulders",
-  "Vegetation",
-  "Ruins & Structures",
-  "Craters & Pits",
-  "Cliff Decorations",
-  "Water Features",
-  "Bones & Remains",
-  "Machinery",
-  "Lights & Beacons",
-  "Miscellaneous",
-];

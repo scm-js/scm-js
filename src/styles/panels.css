@@ -400,14 +400,19 @@
   color: var(--text);
 }
 .doodad .thumb {
-  width: 44px;
-  height: 36px;
+  width: 56px;
+  height: 40px;
   border-radius: 2px;
   background: linear-gradient(160deg, var(--bg-5), var(--bg-1));
   box-shadow: var(--bevel-sunken);
   display: grid;
   place-items: center;
   color: var(--text-faint);
+  overflow: hidden;
+}
+.doodad-thumb {
+  display: block;
+  image-rendering: auto;
 }
 .doodad .lbl {
   width: 100%;
@@ -417,6 +422,18 @@
 }
 
 /* unit palette owner strip */
+.placement-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.placement-options .check {
+  gap: 4px;
+}
+
 .owner-strip {
   display: flex;
   gap: 3px;
@@ -477,11 +494,41 @@
 }
 
 /* fog palette */
-.fog-grid {
+.fog-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 0;
+}
+.fog-head .lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fog-head .faint {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.fog-head .grow {
+  flex: 1;
+}
+.fog-note {
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.fog-actions {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 4px 12px;
+  gap: 8px;
   padding: 8px;
+}
+.fog-actions .group {
+  margin: 0;
+}
+.seg {
+  display: inline-flex;
+  gap: 2px;
 }
 
 /* ── Minimap ────────────────────────────────────────────── */
@@ -595,4 +642,36 @@
   display: block;
   margin: 0 auto 8px;
   opacity: 0.5;
+}
+
+/* unit palette / properties */
+.unit-preview {
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 3px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  background-color: var(--bg-0);
+  border: 1px solid var(--border);
+  flex: none;
+}
+.unit-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+.unit-head .name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unit-head .sub {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
 }

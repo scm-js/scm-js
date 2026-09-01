@@ -133,3 +133,9 @@
 @keyframes viewport-spin {
   to { transform: rotate(360deg); }
 }
+.map-surface.placing {
+  cursor: copy;
+}
+.map-surface.moving {
+  cursor: move;
+}

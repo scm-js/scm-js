@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { FlaskConical, Search, Swords, TrendingUp } from "lucide-react";
 import { PLAYER_COLORS } from "../../data/players";
-import { TECHS, UNIT_GROUPS, UPGRADES } from "../../data/units";
+import { TECHS, UNIT_GROUPS, unitName, UPGRADES } from "../../data/units";
 import { Check, Field, Group, ListBox, NumberInput, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -43,7 +43,7 @@ function PlayerAvailability({ label, opts = PLAYER_OPTS }: { label: string; opts
 
 /* ── Unit Settings ──────────────────────────────────────── */
 
-const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units);
+const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units.map(unitName));
 
 export function UnitSettingsDialog({ entry }: DialogProps) {
   const [sel, setSel] = useState(0);

@@ -31,7 +31,7 @@ import { markDirty, tilesetIndex, type Scenario } from "../formats/chk/scenario"
 import type { Cv5Group, Tileset } from "../formats/tileset/decode";
 import { pickVariation, variationsOf } from "../formats/tileset/terrain";
 import { ISOM_TABLES, type IsomTerrainType } from "../data/isomTables";
-import type { TileChange } from "./terrain";
+import { mirrorEditorTiles, type TileChange } from "./terrain";
 
 /* ── Links, quadrants and the shape catalogue ───────────── */
 
@@ -747,7 +747,9 @@ export function paintIsom(
   const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
   if (!pass.place(d, terrainType, extent)) return null;
   pass.updateTiles();
-  return pass.finish();
+  const edit = pass.finish();
+  mirrorEditorTiles(scn, edit.tiles);
+  return edit;
 }
 
 /** Apply (or take back) the ISOM half of an edit. */

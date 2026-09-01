@@ -24,6 +24,15 @@ export interface UnitRecord {
 
 export const UNIT_STRIDE = 36;
 
+/** `validProperties` bits (offset 0x0C): which special-property fields the game reads. */
+export const UnitValid = { Cloak: 1, Burrow: 2, InTransit: 4, Hallucinated: 8, Invincible: 16 } as const;
+/** `validStates` bits (offset 0x0E): which of the fields below are set ("properties used"). */
+export const UnitUsed = { Owner: 1, HitPoints: 2, Shields: 4, Energy: 8, Resources: 16, Hangar: 32, State: 64 } as const;
+/** `stateFlags` bits (offset 0x18): the special properties themselves. */
+export const UnitState = { Cloaked: 1, Burrowed: 2, InTransit: 4, Hallucinated: 8, Invincible: 16 } as const;
+/** `relationType` bits (offset 0x0A): how `relatedSerial` is linked. */
+export const UnitRelation = { NydusLink: 0x200, Addon: 0x400 } as const;
+
 export function decodeUnits(data: Uint8Array): UnitRecord[] {
   const r = new Reader(data);
   const out: UnitRecord[] = [];
@@ -65,16 +74,30 @@ export function encodeUnits(units: UnitRecord[]): Uint8Array {
 /* ── THG2: sprites, 10 bytes each ────────────────────────── */
 
 export interface SpriteRecord {
+  /** sprites.dat id for a pure sprite, units.dat id for a unit sprite (see `SpriteFlag.PureSprite`). */
   spriteId: number;
   x: number;
   y: number;
   owner: number;
   unused: number;
-  /** 0x1000 = draw as sprite only (no unit); 0x8000 = disabled. */
+  /**
+   * `SpriteFlag` bits. StarEdit writes a doodad's overlay sprite with the doodad's whole
+   * CV5 flag word here, so real maps carry the terrain bits (0x80, 0x100, …) too.
+   */
   flags: number;
 }
 
 export const SPRITE_STRIDE = 10;
+
+/** THG2 `flags` bits. */
+export const SpriteFlag = {
+  /** Drawn as a sprite only; without it the game creates a unit of type `spriteId` (Installation doors and traps). */
+  PureSprite: 0x1000,
+  /** The doodad's overlay is mirrored (a CV5 doodad flag StarEdit copies through). */
+  Flipped: 0x4000,
+  /** Unit sprites only: the unit starts disabled (a closed door, an inactive trap). */
+  Disabled: 0x8000,
+} as const;
 
 export function decodeSprites(data: Uint8Array): SpriteRecord[] {
   const r = new Reader(data);
@@ -93,12 +116,19 @@ export function encodeSprites(sprites: SpriteRecord[]): Uint8Array {
 
 /* ── DD2: isometric doodads, 8 bytes each ────────────────── */
 
+/**
+ * One placed doodad, as StarEdit records it (the game never reads this section: it sees
+ * only the doodad's tiles in MTXM and its overlay in THG2). `doodadId` is the index into
+ * the tileset's `dddata.bin`, not a CV5 group; `x`/`y` are the pixel centre of the
+ * footprint, so the top-left tile is `x / 32 - width / 2`.
+ */
 export interface DoodadRecord {
   doodadId: number;
   x: number;
   y: number;
   owner: number;
-  enabled: number;
+  /** 0 = enabled (every doodad in Blizzard's maps), 1 = disabled. */
+  disabled: number;
 }
 
 export const DOODAD_STRIDE = 8;
@@ -107,14 +137,14 @@ export function decodeDoodads(data: Uint8Array): DoodadRecord[] {
   const r = new Reader(data);
   const out: DoodadRecord[] = [];
   while (r.remaining >= DOODAD_STRIDE) {
-    out.push({ doodadId: r.u16(), x: r.u16(), y: r.u16(), owner: r.u8(), enabled: r.u8() });
+    out.push({ doodadId: r.u16(), x: r.u16(), y: r.u16(), owner: r.u8(), disabled: r.u8() });
   }
   return out;
 }
 
 export function encodeDoodads(doodads: DoodadRecord[]): Uint8Array {
   const w = new Writer(doodads.length * DOODAD_STRIDE || 16);
-  for (const d of doodads) w.u16(d.doodadId).u16(d.x).u16(d.y).u8(d.owner).u8(d.enabled);
+  for (const d of doodads) w.u16(d.doodadId).u16(d.x).u16(d.y).u8(d.owner).u8(d.disabled);
   return w.finish();
 }
 

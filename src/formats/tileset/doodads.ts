@@ -15,7 +15,7 @@
  *
  * DD2 records store the `ddData` index, so it is the doodad's id here too.
  */
-import { DOODAD_GROUP_INDEX, megatileForTile, type Tileset } from "./decode";
+import { DOODAD_GROUP_INDEX, megatileForTile, TileFlag, type Tileset } from "./decode";
 
 export interface DoodadDef {
   /** The `dddata.bin` index, which DD2 records store. */
@@ -34,6 +34,11 @@ export interface DoodadDef {
   tiles: Uint16Array;
   /** CV5 group required under each cell, row-major; 0 = no requirement. */
   required: Uint16Array;
+  /**
+   * Whether any of its minitiles carries the VF4 ramp bit. StarEdit files ramps under the
+   * cliff categories with no name of their own; this is the only way to tell them apart.
+   */
+  ramp: boolean;
 }
 
 export interface DoodadOverlay {
@@ -55,6 +60,12 @@ export interface DoodadCatalogue {
   categories: DoodadCategory[];
   /** Whether dddata.bin was available; without it nothing is ever refused for its ground. */
   hasPlacementData: boolean;
+}
+
+function isRampMegatile(tileset: Tileset, megatile: number): boolean {
+  const base = megatile * 16;
+  for (let i = 0; i < 16; i++) if (tileset.megatileFlags[base + i] & TileFlag.Ramp) return true;
+  return false;
 }
 
 export const DDDATA_ENTRY_CELLS = 256;
@@ -108,6 +119,7 @@ export function buildDoodadCatalogue(tileset: Tileset, dddata: Uint8Array | null
     const def: DoodadDef = {
       id: d.ddData, group: g, width: d.width, height: d.height,
       category: name?.trim() || UNLISTED, flags: cv5.flags, overlay, tiles, required,
+      ramp: tiles.some((t) => t !== 0 && isRampMegatile(tileset, megatileForTile(tileset, t))),
     };
     doodads.push(def);
     byId.set(def.id, def);

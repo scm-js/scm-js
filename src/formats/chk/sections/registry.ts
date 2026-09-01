@@ -62,6 +62,7 @@ const SPECS: SectionSpec[] = [
   { name: "UPGx", mode: "last", size: 794, what: "Upgrade settings (BW)" },
   { name: "TECx", mode: "last", size: 396, what: "Tech settings (BW)" },
   { name: "STRx", mode: "last", what: "String table (Remastered, 32-bit offsets)" },
+  { name: "CRGB", mode: "last", size: 32, what: "Player colours (Remastered RGB)" },
 ];
 
 export const SECTION_SPECS: ReadonlyMap<string, SectionSpec> = new Map(SPECS.map((s) => [s.name, s]));

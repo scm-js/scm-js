@@ -1,6 +1,6 @@
 import {
-  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
-  SPRITES_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, type FlingyDat, type ImagesDat, type SpritesDat, type UnitsDat,
+  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
+  SPRITES_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, WEAPONS_DAT_SIZE, type FlingyDat, type ImagesDat, type SpritesDat, type UnitsDat, type WeaponsDat,
 } from "../dat/dat";
 import { decodeGrp, type Grp } from "../dat/grp";
 import { decodeIscript, type IscriptBin } from "../dat/iscript";
@@ -26,6 +26,8 @@ export interface UnitAssets {
   teamColors: Uint8Array;
   /** The animation bytecode, or null when `public/scripts/iscript.bin` is not installed (units then stay still). */
   iscript: IscriptBin | null;
+  /** weapons.dat, or null when an older extraction did not ship it (Unit Settings then shows no weapon defaults). */
+  weapons: WeaponsDat | null;
 }
 
 const BASE = import.meta.env.BASE_URL;
@@ -53,7 +55,7 @@ export function getUnitAssets(): Promise<UnitAssets> {
   if (assetsPromise) return assetsPromise;
   assetsPromise = (async () => {
     try {
-      const [units, flingy, sprites, images, tbl, pcx, iscript] = await Promise.all([
+      const [units, flingy, sprites, images, tbl, pcx, iscript, weapons] = await Promise.all([
         fetchPart("arr/units.dat", (d) => d.length === UNITS_DAT_SIZE || d.length === UNITS_DAT_SIZE_LEGACY),
         fetchPart("arr/flingy.dat", (d) => d.length === FLINGY_DAT_SIZE),
         fetchPart("arr/sprites.dat", (d) => d.length === SPRITES_DAT_SIZE),
@@ -63,6 +65,10 @@ export function getUnitAssets(): Promise<UnitAssets> {
         // Optional: an older extraction has no iscript.bin, and that only costs animation.
         fetchPart("scripts/iscript.bin", (d) => d.length > 4 && (d[0] | (d[1] << 8)) < d.length).catch((err: unknown) => {
           console.warn("scripts/iscript.bin is not installed; units will not animate", err);
+          return null;
+        }),
+        fetchPart("arr/weapons.dat", (d) => d.length === WEAPONS_DAT_SIZE).catch((err: unknown) => {
+          console.warn("arr/weapons.dat is not installed; Unit Settings will show no weapon defaults", err);
           return null;
         }),
       ]);
@@ -76,6 +82,7 @@ export function getUnitAssets(): Promise<UnitAssets> {
         imagePaths: decodeTbl(tbl),
         teamColors,
         iscript: iscript ? decodeIscript(iscript) : null,
+        weapons: weapons ? decodeWeaponsDat(weapons) : null,
       };
       assetsReady = assets;
       return assets;

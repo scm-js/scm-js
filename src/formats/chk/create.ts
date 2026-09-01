@@ -2,10 +2,10 @@
  * A scenario built from nothing, for File ▸ New and for the map the editor opens on.
  *
  * The CHK it carries starts empty and every modelled section is marked dirty, so
- * `serializeScenario` writes them all out in StarEdit's section order. Sections the
- * editor does not model yet — VCOD, PUNI, the unit/upgrade/tech settings — are not
- * generated, so a map created here round-trips through this editor but is not yet a
- * file StarCraft will load.
+ * `serializeScenario` writes them all out in StarEdit's section order. VCOD and the
+ * upgrade/tech settings are not modelled, and PUNI / UNIx only appear once Unit Settings
+ * is applied (null here means "all defaults"), so a map created here round-trips through
+ * this editor but is not yet a file StarCraft will load.
  */
 import { ANYWHERE_INDEX, type LocationRecord } from "./sections/objects";
 import { FORCE_SLOTS, PLAYER_SLOTS, PlayerRace, PlayerType } from "./sections/players";
@@ -77,6 +77,9 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     playerTypes: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerType.Human : PlayerType.Neutral)),
     playerRaces: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerRace.UserSelectable : PlayerRace.Neutral)),
     playerColors: [0, 1, 2, 3, 4, 5, 6, 7],
+    playerRgb: null,
+    unitSettings: null,
+    unitAvailability: null,
     forces: {
       playerForce: Array.from({ length: FORCE_SLOTS }, () => 0),
       nameIndex: [0, 1, 2, 3].map((i) => STRING_INDEX.force1 + i),

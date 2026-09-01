@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 import type { TilesetId } from "../data/tilesets";
-import { defaultForces, defaultPlayers, type ForceInfo, type PlayerSlot } from "../data/players";
+import type { MapVersion } from "../formats/chk/scenario";
 import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
 import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor/doodads";
 import type { FogMode } from "../editor/fog";
@@ -111,10 +111,7 @@ export const mapWidthAtom = atom<number>(128);
 export const mapHeightAtom = atom<number>(128);
 export const mapModifiedAtom = atom<boolean>(false);
 export const mapFilePathAtom = atom<string | null>(null);
-export const mapVersionAtom = atom<"original" | "hybrid" | "broodwar" | "remastered">("broodwar");
-
-export const playersAtom = atom<PlayerSlot[]>(defaultPlayers());
-export const forcesAtom = atom<ForceInfo[]>(defaultForces());
+export const mapVersionAtom = atom<MapVersion>("broodwar");
 
 /* ── Viewport ───────────────────────────────────────────── */
 

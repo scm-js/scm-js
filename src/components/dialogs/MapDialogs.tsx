@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, FlipHorizontal2, Grid3x3, Maximize, ScrollText } from "lucide-react";
-import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom } from "../../atoms/editorAtoms";
-import { scenarioAtom } from "../../atoms/documentAtoms";
+import { gridSizeAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { setScenarioDescription, setScenarioName, type Scenario } from "../../formats/chk/scenario";
+import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { PLAYER_TYPES } from "../../data/players";
+import { useScenarioForm } from "../../hooks/useScenarioForm";
+import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
 import { MAP_SIZES, terrainName, TILESET_BY_ID } from "../../data/tilesets";
 import { SAMPLE_TRIGGERS } from "../../data/triggers";
@@ -20,6 +23,14 @@ function triggerCount(scenario: Scenario): number {
   return Math.floor(total / 2400);
 }
 
+/** "4 human, 2 computer, 4 neutral" — the OWNR table in a phrase. */
+function playerSummary(scenario: Scenario): string {
+  const counts = new Map<number, number>();
+  for (const t of scenario.playerTypes) if (t !== PlayerType.Inactive) counts.set(t, (counts.get(t) ?? 0) + 1);
+  if (counts.size === 0) return "none";
+  return [...counts].map(([t, n]) => `${n} ${(PLAYER_TYPES.find((p) => p.value === t)?.label ?? `type ${t}`).toLowerCase()}`).join(", ");
+}
+
 /* ── Map Properties ─────────────────────────────────────── */
 
 export function MapPropertiesDialog({ entry }: DialogProps) {
@@ -30,6 +41,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   const [h] = useAtom(mapHeightAtom);
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(settingsRevisionAtom); // the revision and player summary change under the other dialogs
   const setModified = useSetAtom(mapModifiedAtom);
   const [localName, setLocalName] = useState(name);
   const [localDesc, setLocalDesc] = useState(desc);
@@ -61,6 +73,16 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
             </Field>
             <Field label="Size">
               <div className="row"><span className="mono">{w} × {h}</span><Button size="sm" onClick={() => open("resizeMap")}>Resize…</Button></div>
+            </Field>
+            <Field label="Revision">
+              <div className="row">
+                <span>{scenario ? MAP_VERSIONS[mapVersionOf(scenario.fileVersion)].label : "—"}</span>
+                {scenario && <span className="faint mono">VER {scenario.fileVersion} · {scenario.type}</span>}
+                <Button size="sm" onClick={() => open("mapRevision")}>Change…</Button>
+              </div>
+            </Field>
+            <Field label="Players">
+              <span>{scenario ? playerSummary(scenario) : "—"}</span>
             </Field>
           </div>
         </Group>
@@ -134,33 +156,78 @@ export function ResizeMapDialog({ entry }: DialogProps) {
 
 /* ── Map Revision ───────────────────────────────────────── */
 
+/** Revision-specific section pairs: which of each the file carries says what other editors wrote. */
+const REVISION_PAIRS: [string, string, string][] = [
+  ["Strings", "STR ", "STRx"],
+  ["Unit settings", "UNIS", "UNIx"],
+  ["Upgrade settings", "UPGS", "UPGx"],
+  ["Technology settings", "TECS", "TECx"],
+  ["Upgrade restrictions", "UPGR", "PUPx"],
+  ["Technology restrictions", "PTEC", "PTEx"],
+  ["Player colours", "COLR", "CRGB"],
+];
+
+/**
+ * VER / TYPE, and the string table's width. Changing the revision does not convert the
+ * settings sections — a hybrid map legitimately carries both UNIS and UNIx, and the
+ * settings dialogs write whichever the new revision reads the next time they apply.
+ */
 export function MapRevisionDialog({ entry }: DialogProps) {
-  const [version, setVersion] = useAtom(mapVersionAtom);
-  const [v, setV] = useState(version);
-  const opts: { id: typeof version; label: string; hint: string }[] = [
-    { id: "original", label: "StarCraft 1.00 (.scm)", hint: "VER 59 · original unit set only, no Brood War units" },
-    { id: "hybrid", label: "Hybrid 1.04 (.scm)", hint: "VER 63 · loads in both StarCraft and Brood War" },
-    { id: "broodwar", label: "Brood War 1.04 (.scx)", hint: "VER 205 · full Brood War unit set (recommended)" },
-    { id: "remastered", label: "Remastered 1.21+ (.scx)", hint: "VER 206 · extended unit / string limits (STRx)" },
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(settingsRevisionAtom);
+  const commit = useSetAtom(commitSettingsAtom);
+  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ v: mapVersionOf(scn.fileVersion), strx: scn.strings.extended }));
+  const v: MapVersion = form?.v ?? "broodwar";
+  const strx = form?.strx ?? false;
+  const setStrx = (on: boolean) => { if (form) setForm({ ...form, strx: on }); };
+  const opts: { id: MapVersion; hint: string }[] = [
+    { id: "original", hint: "original unit set only, no Brood War units" },
+    { id: "hybrid", hint: "loads in both StarCraft and Brood War" },
+    { id: "broodwar", hint: "full Brood War unit set (recommended)" },
+    { id: "remastered", hint: "extended unit / string limits (STRx)" },
   ];
+  // A new map's CHK is empty until its first save; what it will write is in the dirty set.
+  const has = (name: string) => (scenario?.chk.sections.some((s) => s.name === name) || scenario?.dirty.has(name)) ?? false;
+  const pick = (id: MapVersion) => { if (form) setForm({ v: id, strx: id === "remastered" && (strx || scenario?.strings.extended === false) }); };
+  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); commit(); } };
+
+  if (!scenario) {
+    return <DialogFrame dialogKey={entry.key} title="Map Revision" icon={<ScrollText size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+  }
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Map Revision" icon={<ScrollText size={14} />} size="sm" onOk={() => setVersion(v)}>
+    <DialogFrame dialogKey={entry.key} title="Map Revision" icon={<ScrollText size={14} />} size="sm" onOk={apply} showApply footerLeft={<span className="mono hint">VER {scenario.fileVersion} · {scenario.type} · {scenario.strings.extended ? "STRx" : "STR"}</span>}>
       <Group title="Scenario version">
         <div className="col" style={{ gap: 6 }}>
-          {opts.map((o) => (
-            <label key={o.id} className="check" style={{ height: "auto", alignItems: "flex-start" }}>
-              <input type="radio" name="rev" checked={v === o.id} onChange={() => setV(o.id)} style={{ marginTop: 3 }} />
-              <span><div>{o.label}</div><div className="hint">{o.hint}</div></span>
-            </label>
-          ))}
+          {opts.map((o) => {
+            const m = MAP_VERSIONS[o.id];
+            return (
+              <label key={o.id} className="check" style={{ height: "auto", alignItems: "flex-start" }}>
+                <input type="radio" name="rev" checked={v === o.id} onChange={() => pick(o.id)} style={{ marginTop: 3 }} />
+                <span><div>{m.label} (.{m.extension})</div><div className="hint">VER {m.ver} · {m.type} · {o.hint}</div></span>
+              </label>
+            );
+          })}
         </div>
       </Group>
-      <Group title="Sections">
-        <div className="col" style={{ gap: 2 }}>
-          <Check label="Write extended string table (STRx)" disabled={v !== "remastered"} defaultChecked />
-          <Check label="Write custom colours (COLR / CRGB)" defaultChecked />
-          <Check label="Keep unknown sections on save" defaultChecked />
-        </div>
+      <Group title="String table">
+        <Check label="Write the extended string table (STRx, 32-bit offsets)" disabled={v !== "remastered"} checked={v === "remastered" && strx} onChange={(e) => setStrx(e.target.checked)} />
+        <p className="hint" style={{ marginTop: 4 }}>
+          {scenario.strings.extended && v !== "remastered"
+            ? "This file has STRx; leaving Remastered converts it back to STR. Strings past 65535 or offsets past 64 KB would not fit."
+            : "Only Remastered reads STRx. The table's indices are unchanged either way; triggers and locations keep pointing where they did."}
+        </p>
+      </Group>
+      <Group title="In this file">
+        <table className="table dense">
+          <thead><tr><th></th><th>Original</th><th>Brood War</th></tr></thead>
+          <tbody>
+            {REVISION_PAIRS.map(([label, a, b]) => (
+              <tr key={label}><td>{label}</td><td className={has(a) ? "" : "faint"}>{a.trim()}{has(a) ? "" : " —"}</td><td className={has(b) ? "" : "faint"}>{b}{has(b) ? "" : " —"}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="hint" style={{ marginTop: 6 }}>Sections the editor does not model are written back byte for byte whatever the revision.</p>
       </Group>
     </DialogFrame>
   );

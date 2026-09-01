@@ -81,3 +81,58 @@ export function defaultForces(): Forces {
     flags: [0, 0, 0, 0],
   };
 }
+
+/** FORC per-force flag bits. */
+export const ForceFlag = {
+  RandomStart: 1,
+  Allied: 2,
+  AlliedVictory: 4,
+  SharedVision: 8,
+} as const;
+
+/* ── CRGB: Remastered player colours, 32 bytes ───────────── */
+
+/** How Remastered picks each of the eight playable slots' colour. */
+export const ColorMode = {
+  /** A random entry from the predefined table. */
+  Random: 0,
+  /** Whatever the player chose in the lobby. */
+  PlayerChoice: 1,
+  /** The RGB triple stored alongside. */
+  Custom: 2,
+  /** The COLR byte, as every older client reads it (StarEdit's default). */
+  Palette: 3,
+} as const;
+export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
+
+export interface PlayerRgb {
+  /** `[r, g, b]` for each of the 8 playable slots; only read when `mode` is `Custom`. */
+  rgb: [number, number, number][];
+  /** A `ColorMode` per slot. */
+  mode: number[];
+}
+
+export function decodePlayerRgb(data: Uint8Array): PlayerRgb {
+  const rgb: [number, number, number][] = [];
+  for (let i = 0; i < FORCE_SLOTS; i++) rgb.push([data[i * 3] ?? 0, data[i * 3 + 1] ?? 0, data[i * 3 + 2] ?? 0]);
+  const mode = decodeBytes(data.subarray(FORCE_SLOTS * 3), FORCE_SLOTS);
+  return { rgb, mode };
+}
+
+export function encodePlayerRgb(colors: PlayerRgb): Uint8Array {
+  const w = new Writer(32);
+  for (let i = 0; i < FORCE_SLOTS; i++) {
+    const [r, g, b] = colors.rgb[i] ?? [0, 0, 0];
+    w.u8(r).u8(g).u8(b);
+  }
+  w.bytes(encodeBytes(colors.mode, FORCE_SLOTS));
+  return w.finish();
+}
+
+/** What StarEdit writes: every slot on its COLR colour, RGB zeroed. */
+export function defaultPlayerRgb(): PlayerRgb {
+  return {
+    rgb: Array.from({ length: FORCE_SLOTS }, () => [0, 0, 0]),
+    mode: Array.from({ length: FORCE_SLOTS }, () => ColorMode.Palette),
+  };
+}

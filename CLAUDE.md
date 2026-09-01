@@ -19,7 +19,7 @@ npm test               # vitest run (node environment, ~2s)
 npm run test:watch
 npx vitest run tests/chk.test.ts          # one file
 npx vitest run -t "flood fill"            # tests matching a name
-npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr, game, scripts, unit (BrooDat required)
+npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons.dat), game, scripts, unit (BrooDat required)
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"    # or explicit .mpq paths
 npm run check:assets   # what is on disk, no archives touched (predev/prebuild run this with --warn)
 node scripts/extract-tilesets.mjs         # just the tilesets
@@ -171,6 +171,35 @@ explored tiles are untouched. It shows while `viewFlags.fog` is on; the viewport
 on when the fog layer is entered and back off on leaving if it was the one that set it.
 `fogImageData` gives the minimap the same picture (also drawn with `multiply`).
 `tests/fog-edit.test.ts` pins the bit semantics and the MASK round trip.
+
+### Scenario settings (`src/editor/settings.ts`, `src/formats/chk/sections/{players,settings}.ts`)
+
+The Map Revision, Player Settings, Force Settings, Player Colors and Unit Settings dialogs edit the
+scenario directly and are **not** in the undo model — each dialog is its own OK / Apply / Cancel
+transaction, as in StarEdit. They read a working copy through `useScenarioForm(scenario, read)`
+(re-read whenever the scenario *object* changes, so a `?dialog=` deep link that opens before the
+startup map exists fills in, and a dialog left open across File ▸ Open does not write stale values),
+write back through the `apply*` functions in `editor/settings.ts` (which `markDirty` only what
+changed), and end with `commitSettingsAtom` — it sets modified, bumps `settingsRevisionAtom` (what the
+dialogs and Map Properties subscribe to) and the units/doodads revisions, since colours reach every
+drawn sprite. Strings the dialogs need (force names, custom unit names) go through `internString`:
+an identical entry is reused, otherwise one is appended — never overwritten, because the old index
+may be shared with a trigger.
+
+Sections: OWNR is always written together with IOWN (StarEdit's copy); `playerRgb` is CRGB
+(Remastered: an RGB triple and a `ColorMode` per playable slot; `null` = no section, and Player
+Colors drops it again when every slot is back on `Palette`) — the chrome shows a custom colour via
+`displayColorHex`, the viewport's team-colour remap only knows the COLR palette. `unitSettings` is
+one model for UNIS (100 weapons) and UNIx (130), read from UNIx when both exist; `unitSettingsSections`
+decides which to write (the file's revision plus whichever it already carries, so a hybrid map keeps
+both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` until the dialog first
+applies. `setMapVersion` rewrites VER/TYPE and flips `strings.extended` (STR ↔ STRx: both names go
+dirty and the inapplicable one encodes to `null`, which `serializeScenario` treats as "drop").
+Unit Settings shows dat defaults for a type on "use default" and seeds its row from them when the
+tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`/`airWeapon`
+(a turreted vehicle's weapons live on its subunit) and `weapons.dat` ships as `assets.weapons`
+(optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
+the section choice per revision and byte-for-byte re-encoding against the fixture maps.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

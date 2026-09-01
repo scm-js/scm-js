@@ -139,6 +139,14 @@ map, covers another doodad, or does not match the required terrain. **Place anyw
 disables the terrain/overlap rule, and **Snap to grid** keeps the footprint on StarEdit's
 two-tile isometric grid.
 
+Doodads have no names of their own, so the search box above the category drop-down matches
+what the data does say: the category (`bridge`, `temple`, `coastal`), the id (`#12`), the
+footprint (`6×6` or `6x6`), the name of the sprite or unit an overlay draws (`hdrock`,
+`Xel'Naga Temple`), and the word `ramp` for any doodad whose tiles carry the VF4 ramp bit —
+StarEdit files ramps under the cliff, wall and building categories without saying so. A
+query searches every category and lists the hits under their headings; several words must
+all match, and Esc or the × clears it. The drop-down is the plain browse view.
+
 A placed doodad is kept as one coherent edit across all three representations StarEdit
 uses: its tiles in `MTXM`, its `DD2 ` record, and any canopy, door, or trap overlay in
 `THG2`. Click to select, Shift-click to toggle, drag to move, box-select on empty ground,
@@ -389,6 +397,40 @@ generated.
 
 Reading requires a [mopaq](https://github.com/jeany55/mopaq) with PKWARE DCL support —
 StarCraft compresses nearly every file in its archives, and its own maps, with it.
+
+## Scenario settings
+
+The **Scenario** menu's dialogs edit the map's own tables. Each is a transaction — OK,
+Apply or Cancel — and is not part of the undo history, as in StarEdit.
+
+- **Map Properties** — name and description (`SPRP` + the string table), with the
+  tileset, size, revision and a player summary, and the map's counts of everything.
+- **Map Revision** — `VER`/`TYPE`: StarCraft 1.00 (59, RAWS), Hybrid 1.04 (63, RAWS),
+  Brood War 1.04 (205, RAWB) or Remastered 1.21+ (206, RAWB). Remastered may write the
+  32-bit string table (`STRx`); leaving it converts back to `STR`. String indices never
+  change, so triggers and locations keep pointing where they did. The dialog lists which
+  revision-specific sections the file carries.
+- **Player Settings** — controller (`OWNR`, with `IOWN` kept in step), race (`SIDE`),
+  colour (`COLR`) and force (`FORC`) for the twelve slots; players 9–12 have no colour
+  choice and no force.
+- **Force Settings** — the four force names, membership and flags (random start,
+  allies, allied victory, shared vision). A renamed force reuses an identical string
+  from the table, else appends one.
+- **Player Colors** — the `COLR` palette entry per slot, plus Remastered's `CRGB`: a
+  slot can be *palette*, *random predefined*, *player's choice* or a *custom RGB*. The
+  section only exists while some slot needs it. Custom colours show in the editor's
+  swatches; sprites on the map keep their palette colour.
+- **Unit Settings** — `UNIS`/`UNIx` and `PUNI`, with the unit's sprite in the frame. A
+  type on *use default* shows its `units.dat` / `weapons.dat` numbers greyed out; untick
+  it and the row is seeded from them. Hit points, shields, armor, build time, cost, a
+  custom name, the weapons' damage and upgrade bonus (per weapon — a turreted vehicle
+  shows its turret's), and per-player availability (default / enabled / disabled over a
+  global default). Which of `UNIS`/`UNIx` is written follows the revision: both for a
+  hybrid map, and whichever the file already had is always kept current.
+- **Unit Properties** (double-click a unit, Units layer) — every `UNIT` field, with the
+  unit drawn in its owner's colour.
+
+Upgrade and Technology Settings are still mock-ups.
 
 ## Layout
 

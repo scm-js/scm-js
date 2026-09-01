@@ -25,6 +25,10 @@ export const IMAGES_DAT_SIZE = 37962;
 
 /** `subunit` value meaning "none". */
 export const NO_UNIT = 228;
+export const WEAPON_TYPES = 130;
+/** units.dat's "no weapon" id. */
+export const NO_WEAPON = 130;
+export const WEAPONS_DAT_SIZE = 5460;
 /** `direction` value meaning StarCraft picks one at random when the unit is created. */
 export const RANDOM_DIRECTION = 32;
 
@@ -87,6 +91,12 @@ export interface UnitsDat {
   extentDown: Uint16Array;
   mineralCost: Uint16Array;
   vespeneCost: Uint16Array;
+  /** Game frames. */
+  buildTime: Uint16Array;
+  armor: Uint8Array;
+  /** weapons.dat ids, or NO_WEAPON. */
+  groundWeapon: Uint8Array;
+  airWeapon: Uint8Array;
   /** Bit 0 Zerg, 1 Terran, 2 Protoss, 3 men, 4 building, 5 factory, 6 independent, 7 neutral. */
   groupFlags: Uint8Array;
   /** StarEdit availability flags; all zero for the legacy layout. */
@@ -197,9 +207,15 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
   const shieldAmount = f.u16(n);
   const hitPoints = f.u32(n);
   const elevation = f.u8(n);
-  f.skip(n * 12); // unknown, sublabel, 5 AI orders, weapons/hits ×4, aiInternal
+  f.skip(n * 7); // unknown, sublabel, 5 AI orders
+  const groundWeapon = f.u8(n);
+  f.skip(n); // max ground hits
+  const airWeapon = f.u8(n);
+  f.skip(n * 2); // max air hits, aiInternal
   const flags = f.u32(n);
-  f.skip(n * 6); // acquisition range, sight, armour upgrade, size, armour, right-click
+  f.skip(n * 4); // acquisition range, sight, armour upgrade, size
+  const armor = f.u8(n);
+  f.skip(n); // right-click action
   f.skip(106 * 2 + n * 2 * 2 + 106 * 2 * 4); // ready / what / pissed / yes sounds
   const placementWidth = f.u16Strided(n, 4, 0);
   const placementHeight = f.u16Strided(n, 4, 2);
@@ -213,7 +229,8 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
   f.skip(n * 2); // portrait
   const mineralCost = f.u16(n);
   const vespeneCost = f.u16(n);
-  f.skip(n * 2 * 2); // build time, requirements
+  const buildTime = f.u16(n);
+  f.skip(n * 2); // requirements
   const groupFlags = f.u8(n);
   f.skip(n * 4); // supply provided/required, space required/provided
   f.skip(n * 2 * 3); // build score, destroy score, map string
@@ -225,8 +242,31 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
   return {
     flingy, subunit, direction, shieldEnable, shieldAmount, hitPoints, elevation, flags,
     placementWidth, placementHeight, extentLeft, extentUp, extentRight, extentDown,
-    mineralCost, vespeneCost, groupFlags, availability,
+    mineralCost, vespeneCost, buildTime, armor, groundWeapon, airWeapon, groupFlags, availability,
   };
+}
+
+export interface WeaponsDat {
+  damage: Uint16Array;
+  /** Added per upgrade level. */
+  bonus: Uint16Array;
+}
+
+/** Only the two columns Unit Settings shows as defaults; the layout is 42 bytes per weapon, struct of arrays. */
+export function decodeWeaponsDat(data: Uint8Array): WeaponsDat {
+  expectSize("weapons.dat", data, WEAPONS_DAT_SIZE);
+  const n = WEAPON_TYPES;
+  const f = new Fields(data);
+  f.skip(n * 2); // label
+  f.skip(n * 4); // graphics
+  f.skip(n); // explosion
+  f.skip(n * 2); // target flags
+  f.skip(n * 4 * 2); // min / max range
+  f.skip(n * 5); // damage upgrade, type, behaviour, remove after, explosive type
+  f.skip(n * 2 * 3); // inner / medium / outer splash
+  const damage = f.u16(n);
+  const bonus = f.u16(n);
+  return { damage, bonus };
 }
 
 export type Race = "zerg" | "terran" | "protoss" | null;

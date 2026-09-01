@@ -16,6 +16,7 @@ import {
   Trash2,
   TreePine,
   Users,
+  X,
 } from "lucide-react";
 import {
   activeDoodadAtom,
@@ -52,14 +53,16 @@ import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { playerColorHex } from "../../data/players";
 import { RACE_LABEL, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
-import { SPRITE_COUNT, spriteCatalogue } from "../../data/sprites";
+import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
 import { spriteName } from "../../hooks/useSpriteTools";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
+import type { UnitAssets } from "../../formats/units/load";
 import { Button, Check, Tabs, Tip } from "../ui";
 import TerrainPalette, { BrushSelect } from "./TerrainPalette";
 import { DoodadThumb } from "./DoodadThumb";
+import type { DoodadCategory, DoodadDef } from "../../formats/tileset/doodads";
 import { useDoodadTools } from "../../hooks/useDoodadTools";
 
 /* ── Layer rail ─────────────────────────────────────────── */
@@ -87,10 +90,22 @@ export function shade(hex: string, amt: number) {
 
 /* ── Doodads ────────────────────────────────────────────── */
 
+/** What a doodad's overlay draws — the unit's name, or the sprite's label (unit / GRP file name). */
+function doodadOverlayLabel(assets: UnitAssets | null, d: DoodadDef): string | null {
+  if (!d.overlay) return null;
+  return d.overlay.kind === "unit" ? unitName(d.overlay.id) : spriteLabel(assets, d.overlay.id);
+}
+
 /**
  * The tileset's doodads by StarEdit category, drawn from the tileset graphics. Picking one
  * arms placement; the two options are StarEdit's own defaults — ground checks on, left
  * column snapped to the two-tile isometric grid.
+ *
+ * Doodads have no names of their own — only a category ("Bridges", "Coastal Cliff"), an id
+ * and a size — so the search matches those, the word "ramp" for anything the VF4 tags as
+ * one (StarEdit files ramps under the cliff categories) and, where a doodad carries an
+ * overlay, the sprite / unit name it draws. A query looks across *every* category (the
+ * drop-down only scopes the browse view) and lists the hits under their category headings.
  */
 function DoodadPalette() {
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -101,11 +116,27 @@ function DoodadPalette() {
   const [owner, setOwner] = useAtom(unitOwnerAtom);
   const scenario = useAtomValue(scenarioAtom);
   const { loaded, catalogue } = useDoodadTools();
+  const { loaded: assets } = useUnitAssets();
+  const [query, setQuery] = useState("");
   const colors = scenario?.playerColors;
   const categories = catalogue.categories;
   const current = categories.find((c) => c.name === category) ?? categories[0] ?? null;
   const pick = (id: number) => { setActive(id); setPlacing(true); };
   const activeDef = catalogue.byId.get(active);
+  const overlayLabel = (d: DoodadDef) => doodadOverlayLabel(assets, d);
+
+  const q = query.trim().toLowerCase();
+  /** The categories to show, each narrowed to its matches — every category when searching, else the chosen one. */
+  const shown = useMemo<DoodadCategory[]>(() => {
+    if (!q) return current ? [current] : [];
+    const words = q.split(/\s+/);
+    const matches = (d: DoodadDef) => {
+      const hay = `${d.category} #${d.id} ${d.width}x${d.height} ${d.width}×${d.height} ${d.ramp ? "ramp" : ""} ${doodadOverlayLabel(assets, d) ?? ""}`.toLowerCase();
+      return words.every((w) => hay.includes(w));
+    };
+    return categories.map((c) => ({ ...c, doodads: c.doodads.filter(matches) })).filter((c) => c.doodads.length > 0);
+  }, [q, current, categories, assets]);
+  const matchCount = shown.reduce((n, c) => n + c.doodads.length, 0);
   const option = (key: keyof typeof options, label: string, title: string) => (
     <Check label={label} title={title} checked={options[key]} onChange={(e) => setOptions({ ...options, [key]: e.target.checked })} />
   );
@@ -122,7 +153,27 @@ function DoodadPalette() {
         ))}
       </div>
       <div className="palette-toolbar">
-        <select className="select grow" value={current?.name ?? ""} onChange={(e) => setCategory(e.target.value)} aria-label="Doodad category" disabled={categories.length === 0}>
+        <div className="search">
+          <Search size={12} />
+          <input
+            className="input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            placeholder="Search doodads… (ramp, bridge, #12)"
+            aria-label="Search doodads"
+            disabled={categories.length === 0}
+          />
+          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><X size={11} /></button>}
+        </div>
+        <select
+          className="select grow"
+          value={current?.name ?? ""}
+          onChange={(e) => { setCategory(e.target.value); setQuery(""); }}
+          aria-label="Doodad category"
+          disabled={categories.length === 0}
+          title={q ? "Searching every category — pick one to browse it instead" : undefined}
+        >
           {categories.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.doodads.length})</option>)}
         </select>
       </div>
@@ -141,21 +192,37 @@ function DoodadPalette() {
             No <code>{loaded.name}.dddata.bin</code> — re-run <code>scripts/extract-tilesets.mjs</code> to get StarEdit's placement rules; until then nothing is refused for its ground.
           </div>
         )}
-        {current && (
-          <div className="doodad-grid">
-            {current.doodads.map((d) => (
-              <button
-                key={d.id}
-                className={`doodad ${active === d.id ? "selected" : ""}`}
-                onClick={() => pick(d.id)}
-                title={`${d.category} #${d.id} — ${d.width}×${d.height} tiles${d.overlay ? `, ${d.overlay.kind} overlay ${d.overlay.id}` : ""}${d.required.some((r) => r !== 0) ? "" : ", any ground"} — click to place`}
-              >
-                <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={56} height={40} /></span>
-                <span className="lbl">#{d.id} · {d.width}×{d.height}</span>
-              </button>
-            ))}
+        {loaded && q && shown.length === 0 && (
+          <div className="hint" style={{ padding: 8 }}>
+            No doodads match <b>{query.trim()}</b> in {tileset.name}. Try a category word (ramp, bridge, cliff, rock), a size like 4×2, or an id like #12.
           </div>
         )}
+        {shown.map((c) => (
+          <div key={c.name} className="doodad-section">
+            {q && (
+              <div className="doodad-section-head">
+                <span>{c.name}</span>
+                <span className="faint">{c.doodads.length}</span>
+              </div>
+            )}
+            <div className="doodad-grid">
+              {c.doodads.map((d) => {
+                const overlay = overlayLabel(d);
+                return (
+                  <button
+                    key={d.id}
+                    className={`doodad ${active === d.id ? "selected" : ""}`}
+                    onClick={() => pick(d.id)}
+                    title={`${d.category} #${d.id} — ${d.width}×${d.height} tiles${d.ramp ? ", ramp" : ""}${overlay ? `, ${d.overlay!.kind} overlay: ${overlay}` : ""}${d.required.some((r) => r !== 0) ? "" : ", any ground"} — click to place`}
+                  >
+                    <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={56} height={40} /></span>
+                    <span className="lbl">#{d.id} · {d.width}×{d.height}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       <div className="palette-footer">
         <span>
@@ -163,7 +230,7 @@ function DoodadPalette() {
             ? placing ? <>Placing {activeDef.category} #{activeDef.id} <span className="faint">· Esc stops</span></> : <>{activeDef.category} #{activeDef.id} <span className="faint">· select mode</span></>
             : <>{catalogue.doodads.length} doodads</>}
         </span>
-        <span>{tileset.name}</span>
+        <span>{q ? <>{matchCount} of {catalogue.doodads.length} match · </> : null}{tileset.name}</span>
       </div>
     </>
   );

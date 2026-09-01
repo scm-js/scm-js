@@ -471,6 +471,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* search results: the hits under their category headings */
+.doodad-section + .doodad-section {
+  border-top: 1px solid var(--border);
+}
+.doodad-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 8px 0;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.doodad-section-head + .doodad-grid {
+  padding-top: 4px;
+}
 
 /* unit palette owner strip */
 .placement-options {

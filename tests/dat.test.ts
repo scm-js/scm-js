@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, NO_UNIT, RANDOM_DIRECTION, UnitFlag, UNITS_DAT_SIZE,
+  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, decodeWeaponsDat, NO_UNIT, NO_WEAPON, RANDOM_DIRECTION, UnitFlag, UNITS_DAT_SIZE, WEAPONS_DAT_SIZE,
 } from "../src/formats/dat/dat";
+import { WEAPON_NAMES } from "../src/data/weapons";
 import { decodeGrp, drawGrpFrame, facingFrame } from "../src/formats/dat/grp";
 import { decodePcx } from "../src/formats/dat/pcx";
 import { decodeTbl } from "../src/formats/dat/tbl";
@@ -134,10 +135,28 @@ describe.skipIf(!haveUnitData)("real unit data (public/arr, public/unit)", () =>
     expect(units.flags[0] & UnitFlag.Organic).toBeTruthy();
     expect(units.subunit[0]).toBe(NO_UNIT);
     expect(units.hitPoints[0] / 256).toBe(40);
+    // Marine: 360 frames (24 s), no armour, Gauss Rifle at both ranges. A tank's Arclite Cannon is
+    // on its turret (unit 6), ground-only; the hull carries no weapon.
+    expect(units.buildTime[0]).toBe(360);
+    expect(units.armor[0]).toBe(0);
+    expect([units.groundWeapon[0], units.airWeapon[0]]).toEqual([0, 0]);
+    expect([units.groundWeapon[5], units.airWeapon[5]]).toEqual([NO_WEAPON, NO_WEAPON]);
+    expect([units.groundWeapon[6], units.airWeapon[6]]).toEqual([11, NO_WEAPON]);
+    expect(units.armor[106]).toBe(1);
+    expect(units.buildTime[106]).toBe(1800);
     // Goliath carries its turret; the start location is a 4×3 "building".
     expect(units.subunit[3]).toBe(4);
     expect([units.placementWidth[214], units.placementHeight[214]]).toEqual([128, 96]);
     expect(units.flags[214] & UnitFlag.Building).toBeTruthy();
+  });
+
+  it.skipIf(!existsSync(join(PUBLIC, "arr/weapons.dat")))("decodes weapons.dat damage and upgrade bonus", () => {
+    const weapons = decodeWeaponsDat(read("arr/weapons.dat"));
+    expect(read("arr/weapons.dat")).toHaveLength(WEAPONS_DAT_SIZE);
+    expect([weapons.damage[0], weapons.bonus[0]]).toEqual([6, 1]); // Gauss Rifle
+    expect([weapons.damage[11], weapons.bonus[11]]).toEqual([30, 3]); // Arclite Cannon
+    expect([weapons.damage[30], weapons.bonus[30]]).toEqual([260, 0]); // Yamato Gun
+    expect(WEAPON_NAMES).toHaveLength(130);
   });
 
   it("walks from a unit to its GRP path", () => {

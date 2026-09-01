@@ -101,13 +101,18 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
     >
       <div className="form wide">
         <Field label="Unit">
-          <select className="select" value={form.unitId} onChange={(e) => set("unitId", Number(e.target.value))}>
-            {UNIT_GROUPS.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {g.units.map((id) => <option key={id} value={id}>{unitName(id)}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <div className="row" style={{ alignItems: "flex-start" }}>
+            <div className="unit-frame" title="The unit as it will be drawn, in the owner's colour">
+              <SpritePreview kind="unit" id={form.unitId} owner={form.owner} colors={scenario?.playerColors} size={56} />
+            </div>
+            <select className="select grow" value={form.unitId} onChange={(e) => set("unitId", Number(e.target.value))}>
+              {UNIT_GROUPS.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.units.map((id) => <option key={id} value={id}>{unitName(id)}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </div>
         </Field>
         <Field label="Owner">
           <div className="row">

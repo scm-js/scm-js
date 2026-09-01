@@ -21,7 +21,7 @@ import { defaultArchives, archivesIn, noArchivesMessage, root } from "./lib/arch
 
 const TILESETS = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"];
 /** Tables the unit renderer cannot start without; the GRPs themselves are listed in unit/manifest.json. */
-const TABLES = ["arr/units.dat", "arr/flingy.dat", "arr/sprites.dat", "arr/images.dat", "arr/images.tbl", "game/tunit.pcx", "scripts/iscript.bin"];
+const TABLES = ["arr/units.dat", "arr/weapons.dat", "arr/flingy.dat", "arr/sprites.dat", "arr/images.dat", "arr/images.tbl", "game/tunit.pcx", "scripts/iscript.bin"];
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);

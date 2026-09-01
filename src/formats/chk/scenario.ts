@@ -8,9 +8,13 @@ import {
   type DoodadRecord, type LocationRecord, type SpriteRecord, type UnitRecord,
 } from "./sections/objects";
 import {
-  decodeBytes, decodeForces, encodeBytes, encodeForces, defaultForces,
-  FORCE_SLOTS, PLAYER_SLOTS, type Forces,
+  decodeBytes, decodeForces, decodePlayerRgb, encodeBytes, encodeForces, encodePlayerRgb, defaultForces,
+  FORCE_SLOTS, PLAYER_SLOTS, type Forces, type PlayerRgb,
 } from "./sections/players";
+import {
+  decodeUnitAvailability, decodeUnitSettings, encodeUnitAvailability, encodeUnitSettings,
+  WEAPONS_BW, WEAPONS_ORIGINAL, type UnitAvailability, type UnitSettings,
+} from "./sections/settings";
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
 } from "./sections/terrain";
@@ -30,7 +34,7 @@ export interface Scenario {
 
   /** TYPE, e.g. "RAWB" for Brood War. */
   type: string;
-  /** VER: 59 original, 63 hybrid, 205 Brood War. */
+  /** VER: 59 original, 63 hybrid, 205 Brood War, 206 Remastered. */
   fileVersion: number;
 
   width: number;
@@ -45,7 +49,13 @@ export interface Scenario {
   playerTypes: number[];
   playerRaces: number[];
   playerColors: number[];
+  /** CRGB, Remastered's per-slot colour choice; null when the file has none (every client then reads COLR). */
+  playerRgb: PlayerRgb | null;
   forces: Forces;
+  /** UNIx if the file has one, else UNIS; null when it has neither (every type on its dat defaults). */
+  unitSettings: UnitSettings | null;
+  /** PUNI; null when the file has none (everything buildable by everyone). */
+  unitAvailability: UnitAvailability | null;
 
   /** MTXM: what the game draws — terrain with the doodads stamped over it. */
   tiles: Uint16Array;
@@ -97,6 +107,64 @@ export function setScenarioDescription(scn: Scenario, text: string) {
 /** Which section the string table is written to: STRx for Remastered maps, STR otherwise. */
 export function strSectionName(scn: Scenario): string {
   return scn.strings.extended ? "STRx" : "STR ";
+}
+
+/* ── Map revision ────────────────────────────────────────── */
+
+export type MapVersion = "original" | "hybrid" | "broodwar" | "remastered";
+
+/** VER values StarEdit writes for each revision. */
+export const MAP_VERSIONS: Record<MapVersion, { ver: number; type: string; label: string; extension: string }> = {
+  original: { ver: 59, type: "RAWS", label: "StarCraft 1.00", extension: "scm" },
+  hybrid: { ver: 63, type: "RAWS", label: "Hybrid 1.04", extension: "scm" },
+  broodwar: { ver: 205, type: "RAWB", label: "Brood War 1.04", extension: "scx" },
+  remastered: { ver: 206, type: "RAWB", label: "Remastered 1.21+", extension: "scx" },
+};
+
+export function mapVersionOf(fileVersion: number): MapVersion {
+  if (fileVersion >= 206) return "remastered";
+  if (fileVersion >= 205) return "broodwar";
+  if (fileVersion >= 63) return "hybrid";
+  return "original";
+}
+
+/** Whether the game reads the Brood War (`x`) settings sections for this file. */
+export function isExpansion(scn: Scenario): boolean {
+  return scn.fileVersion >= 63;
+}
+
+/**
+ * Change the file's revision: VER and TYPE, and the string table's width when moving
+ * to or from Remastered. Sections of the other revision are left alone — a hybrid map
+ * legitimately carries both UNIS and UNIx.
+ */
+export function setMapVersion(scn: Scenario, version: MapVersion, extendedStrings = version === "remastered") {
+  const v = MAP_VERSIONS[version];
+  if (scn.fileVersion !== v.ver) { scn.fileVersion = v.ver; markDirty(scn, "VER "); }
+  if (scn.type !== v.type) { scn.type = v.type; markDirty(scn, "TYPE"); }
+  setExtendedStrings(scn, extendedStrings && version === "remastered");
+}
+
+/**
+ * Switch the string table between STR (16-bit) and STRx (32-bit). Both names go dirty:
+ * the one that no longer applies encodes to null and is dropped on save.
+ */
+export function setExtendedStrings(scn: Scenario, extended: boolean) {
+  if (scn.strings.extended === extended) return;
+  scn.strings.extended = extended;
+  markDirty(scn, "STR ", "STRx");
+}
+
+/**
+ * The unit settings sections this file needs written: what the game of its revision
+ * reads, plus whichever of the two the file already has.
+ */
+export function unitSettingsSections(scn: Scenario): string[] {
+  const has = (name: string) => scn.chk.sections.some((s) => s.name === name);
+  const out: string[] = [];
+  if (scn.fileVersion < 205 || has("UNIS")) out.push("UNIS");
+  if (isExpansion(scn) || has("UNIx")) out.push("UNIx");
+  return out;
 }
 
 /* ── Parsing ─────────────────────────────────────────────── */
@@ -154,7 +222,11 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const ownr = take("OWNR");
   const side = take("SIDE");
   const colr = take("COLR");
+  const crgb = take("CRGB");
   const forcData = take("FORC");
+  const unix = take("UNIx");
+  const unis = take("UNIS");
+  const puni = take("PUNI");
 
   const scn: Scenario = {
     chk,
@@ -171,7 +243,10 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     playerTypes: ownr ? decodeBytes(ownr, PLAYER_SLOTS) : Array.from({ length: PLAYER_SLOTS }, () => 0),
     playerRaces: side ? decodeBytes(side, PLAYER_SLOTS) : Array.from({ length: PLAYER_SLOTS }, () => 7),
     playerColors: colr ? decodeBytes(colr, FORCE_SLOTS) : [0, 1, 2, 3, 4, 5, 6, 7],
+    playerRgb: crgb ? decodePlayerRgb(crgb) : null,
     forces: forcData ? decodeForces(forcData) : defaultForces(),
+    unitSettings: unix ? decodeUnitSettings(unix) : unis ? decodeUnitSettings(unis) : null,
+    unitAvailability: puni ? decodeUnitAvailability(puni) : null,
     tiles: mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     editorTiles: tileData ? decodeTiles(tileData, width, height) : mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     isom: isomData ? decodeIsom(isomData, width, height) : null,
@@ -229,8 +304,16 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
       return encodeBytes(scn.playerRaces, PLAYER_SLOTS);
     case "COLR":
       return encodeBytes(scn.playerColors, FORCE_SLOTS);
+    case "CRGB":
+      return scn.playerRgb ? encodePlayerRgb(scn.playerRgb) : null;
     case "FORC":
       return encodeForces(scn.forces);
+    case "UNIS":
+      return scn.unitSettings ? encodeUnitSettings(scn.unitSettings, WEAPONS_ORIGINAL) : null;
+    case "UNIx":
+      return scn.unitSettings ? encodeUnitSettings(scn.unitSettings, WEAPONS_BW) : null;
+    case "PUNI":
+      return scn.unitAvailability ? encodeUnitAvailability(scn.unitAvailability) : null;
     case "MTXM":
       return encodeTiles(scn.tiles);
     case "TILE":
@@ -262,7 +345,7 @@ const APPEND_ORDER = [
   "TYPE", "VER ", "IVER", "IVE2", "VCOD", "IOWN", "OWNR", "ERA ", "DIM ", "SIDE",
   "MTXM", "PUNI", "UPGR", "PTEC", "UNIT", "ISOM", "TILE", "DD2 ", "THG2", "MASK",
   "STR ", "STRx", "UPRP", "UPUS", "MRGN", "TRIG", "MBRF", "SPRP", "FORC", "WAV ",
-  "UNIS", "UPGS", "TECS", "SWNM", "COLR", "PUPx", "PTEx", "UNIx", "UPGx", "TECx",
+  "UNIS", "UPGS", "TECS", "SWNM", "COLR", "PUPx", "PTEx", "UNIx", "UPGx", "TECx", "CRGB",
 ];
 
 export function serializeScenario(scn: Scenario): Uint8Array {

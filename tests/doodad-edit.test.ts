@@ -52,9 +52,12 @@ function syntheticTileset(): Tileset {
   const cv5 = new Uint8Array(groups.length * CV5);
   groups.forEach((g, i) => cv5.set(g, i * CV5));
   const megatiles = 19;
+  // The ramp's bottom-left megatile (15) carries the VF4 ramp bit on one minitile.
+  const vf4 = new Uint8Array(megatiles * 32);
+  new DataView(vf4.buffer).setUint16(15 * 32 + 6 * 2, 0x0001 | 0x0010, true);
   return loadTileset({
     cv5,
-    vf4: new Uint8Array(megatiles * 32),
+    vf4,
     vr4: new Uint8Array(64),
     vx4: new Uint8Array(megatiles * 32),
     wpe: new Uint8Array(1024),
@@ -109,7 +112,8 @@ describe("doodad catalogue", () => {
     expect(tree.overlay).toEqual({ kind: "sprite", id: 300, flipped: false });
     expect([...tree.tiles]).toEqual([0x60, 0x61]);
     expect([...tree.required]).toEqual([2, 3]);
-    expect(ramp).toMatchObject({ group: 8, width: 4, height: 2, category: "Ramps", overlay: null });
+    expect(ramp).toMatchObject({ group: 8, width: 4, height: 2, category: "Ramps", overlay: null, ramp: true });
+    expect(tree.ramp).toBe(false);
     expect([...ramp.tiles]).toEqual([0x80, 0x81, 0, 0, 0x90, 0x91, 0x92, 0x93]);
     expect([...ramp.required]).toEqual([0, 0, 4, 5, 2, 3, 2, 3]);
     expect(cat.categories.map((c) => c.name)).toEqual(["Trees", "Ramps"]);
@@ -372,6 +376,18 @@ describe.skipIf(installed.length === 0)("real tilesets", () => {
       // Every tile the doodad places is one of its own groups.
       for (let i = 0; i < d.tiles.length; i++) if (d.tiles[i]) expect(d.tiles[i] >> 4).toBe(d.group + Math.floor(i / d.width));
     }
+  });
+
+  it.each(installed)("%s tags its ramps from the VF4 ramp bit", (name) => {
+    const { catalogue } = realTileset(name);
+    const ramps = catalogue.doodads.filter((d) => d.ramp);
+    // Every tileset has a few ramps, in left/right-facing pairs, and they are a small minority.
+    expect(ramps.length).toBeGreaterThan(0);
+    expect(ramps.length % 2).toBe(0);
+    expect(ramps.length).toBeLessThan(catalogue.doodads.length / 10);
+    for (const c of catalogue.categories) expect(c.doodads.filter((d) => d.ramp).length % 2).toBe(0);
+    // Jungle's "Cliff" category: twelve 4×4 cliff ornaments, then the two 6×6 ramps.
+    if (haveNames && name === "jungle") expect(catalogue.doodads.filter((d) => d.category === "Cliff" && d.ramp).map((d) => d.id)).toEqual([12, 13]);
   });
 
   it("names the categories the way StarEdit does", () => {

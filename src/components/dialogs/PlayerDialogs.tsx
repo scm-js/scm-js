@@ -1,20 +1,49 @@
 import { useState } from "react";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight, Palette, Shield, Users } from "lucide-react";
-import { forcesAtom, playersAtom } from "../../atoms/editorAtoms";
+import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { CONTROLLERS, PLAYER_COLORS, RACES, type Controller, type Race } from "../../data/players";
+import { displayColorHex, hexToRgb, PLAYER_COLORS, PLAYER_RACES, PLAYER_TYPES, playerTypeLabel, rgbToHex } from "../../data/players";
+import { ColorMode, defaultPlayerRgb, ForceFlag, FORCE_SLOTS, PLAYER_SLOTS, type PlayerRgb } from "../../formats/chk/sections/players";
+import { MAP_VERSIONS, mapVersionOf } from "../../formats/chk/scenario";
+import { applyForceSettings, applyPlayerColors, applyPlayerSettings, readForceSettings, readPlayerSettings } from "../../editor/settings";
+import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, Group, ListBox, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
+/** A select over a byte table, keeping a value the table does not list (a map from another editor) selectable as raw. */
+function ByteSelect({ value, onChange, options, disabled }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; disabled?: boolean }) {
+  const opts = options.map((o) => ({ value: String(o.value), label: o.label }));
+  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: `${value} (raw)` });
+  return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} disabled={disabled} />;
+}
+
+function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: React.ReactNode }) {
+  return (
+    <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
+      <p className="hint">Open or create a map first.</p>
+    </DialogFrame>
+  );
+}
+
 /* ── Player Settings ────────────────────────────────────── */
 
+/**
+ * OWNR / SIDE / COLR / FORC on the twelve slots, applied as one transaction. Colour and
+ * force only exist for the eight playable slots; 9–12 draw in their fixed table colour.
+ */
 export function PlayerSettingsDialog({ entry }: DialogProps) {
-  const [players, setPlayers] = useAtom(playersAtom);
-  const [local, setLocal] = useState(players);
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(settingsRevisionAtom);
+  const commit = useSetAtom(commitSettingsAtom);
   const open = useSetAtom(openDialogAtom);
-  const upd = (i: number, patch: Partial<(typeof local)[number]>) => setLocal(local.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const [local, setLocal] = useScenarioForm(scenario, readPlayerSettings);
+  if (!scenario || !local) return <NoMap entry={entry} title="Player Settings" icon={<Users size={14} />} />;
+
+  const patch = (key: "types" | "races" | "colors" | "force", i: number, v: number) =>
+    setLocal({ ...local, [key]: local[key].map((x, j) => (j === i ? v : x)) });
+  const apply = () => { applyPlayerSettings(scenario, local); commit(); };
 
   return (
     <DialogFrame
@@ -22,143 +51,208 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
       title="Player Settings"
       icon={<Users size={14} />}
       size="lg"
-      onOk={() => setPlayers(local)}
+      onOk={apply}
       showApply
-      footerLeft={<Button size="sm" onClick={() => open("playerColors")}><Palette size={12} /> Player Colors…</Button>}
+      footerLeft={<div className="row"><Button size="sm" onClick={() => open("playerColors")}><Palette size={12} /> Player Colors…</Button><Button size="sm" onClick={() => open("forceSettings")}><Shield size={12} /> Forces…</Button></div>}
     >
       <div className="listbox" style={{ maxHeight: 420 }}>
         <table className="table">
           <thead>
-            <tr><th style={{ width: 80 }}>Player</th><th>Controller</th><th>Race</th><th style={{ width: 150 }}>Colour</th><th style={{ width: 90 }}>Force</th></tr>
+            <tr><th style={{ width: 90 }}>Player</th><th>Controller</th><th>Race</th><th style={{ width: 150 }}>Colour</th><th style={{ width: 90 }}>Force</th></tr>
           </thead>
           <tbody>
-            {local.map((p, i) => (
-              <tr key={p.id}>
-                <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: PLAYER_COLORS[p.colorId].hex }} />P{i + 1}</span></td>
+            {Array.from({ length: PLAYER_SLOTS }, (_, i) => (
+              <tr key={i}>
+                <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(local.colors, scenario.playerRgb, i) }} />P{i + 1}</span></td>
+                <td><ByteSelect value={local.types[i]} onChange={(v) => patch("types", i, v)} options={PLAYER_TYPES} /></td>
+                <td><ByteSelect value={local.races[i]} onChange={(v) => patch("races", i, v)} options={PLAYER_RACES} /></td>
                 <td>
-                  <Select value={p.controller} onChange={(e) => upd(i, { controller: e.target.value as Controller })} options={CONTROLLERS.map((c) => ({ value: c.id, label: c.label }))} />
+                  {i < FORCE_SLOTS
+                    ? <ByteSelect value={local.colors[i]} onChange={(v) => patch("colors", i, v)} options={PLAYER_COLORS.map((c) => ({ value: c.id, label: c.name }))} />
+                    : <span className="faint">{PLAYER_COLORS[i]?.name ?? "—"}</span>}
                 </td>
                 <td>
-                  <Select value={p.race} onChange={(e) => upd(i, { race: e.target.value as Race })} options={RACES.map((r) => ({ value: r.id, label: r.label }))} />
-                </td>
-                <td>
-                  <Select value={String(p.colorId)} onChange={(e) => upd(i, { colorId: Number(e.target.value) })} options={PLAYER_COLORS.map((c) => ({ value: String(c.id), label: c.name }))} disabled={i >= 8} />
-                </td>
-                <td>
-                  <Select value={String(p.force)} onChange={(e) => upd(i, { force: Number(e.target.value) })} options={[0, 1, 2, 3].map((f) => ({ value: String(f), label: `Force ${f + 1}` }))} disabled={i >= 8} />
+                  {i < FORCE_SLOTS
+                    ? <Select value={String(local.force[i])} onChange={(e) => patch("force", i, Number(e.target.value))} options={[0, 1, 2, 3].map((f) => ({ value: String(f), label: `Force ${f + 1}` }))} />
+                    : <span className="faint">—</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="hint">Players 9–12 are reserved for neutral / trigger-only ownership. Colour and force apply to players 1–8.</p>
+      <p className="hint">
+        Controller is the OWNR byte (IOWN is kept in step), race SIDE, colour COLR and force FORC. Players 9–12 are the game's neutral / trigger-only slots: no colour choice, no force.
+      </p>
     </DialogFrame>
   );
 }
 
 /* ── Force Settings ─────────────────────────────────────── */
 
-export function ForceSettingsDialog({ entry }: DialogProps) {
-  const [forces, setForces] = useAtom(forcesAtom);
-  const [players, setPlayers] = useAtom(playersAtom);
-  const [lf, setLf] = useState(forces);
-  const [lp, setLp] = useState(players);
-  const [sel, setSel] = useState<{ force: number; idx: number } | null>(null);
+const FORCE_FLAGS: { bit: number; label: string }[] = [
+  { bit: ForceFlag.RandomStart, label: "Random start location" },
+  { bit: ForceFlag.Allied, label: "Allies" },
+  { bit: ForceFlag.AlliedVictory, label: "Allied victory" },
+  { bit: ForceFlag.SharedVision, label: "Shared vision" },
+];
 
-  const move = (playerId: number, to: number) => setLp(lp.map((p) => (p.id === playerId ? { ...p, force: to } : p)));
-  const patch = (fi: number, p: Partial<(typeof lf)[number]>) => setLf(lf.map((x, j) => (j === fi ? { ...x, ...p } : x)));
+/** FORC: the four names, flags and which force each playable slot is in. */
+export function ForceSettingsDialog({ entry }: DialogProps) {
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(settingsRevisionAtom);
+  const commit = useSetAtom(commitSettingsAtom);
+  const [local, setLocal] = useScenarioForm(scenario, readForceSettings);
+  const [sel, setSel] = useState<{ force: number; player: number } | null>(null);
+  if (!scenario || !local) return <NoMap entry={entry} title="Force Settings" icon={<Shield size={14} />} />;
+
+  const move = (player: number, to: number) => setLocal({ ...local, playerForce: local.playerForce.map((f, i) => (i === player ? to : f)) });
+  const setName = (fi: number, name: string) => setLocal({ ...local, names: local.names.map((n, i) => (i === fi ? name : n)) });
+  const setFlag = (fi: number, bit: number, on: boolean) => setLocal({ ...local, flags: local.flags.map((f, i) => (i === fi ? (on ? f | bit : f & ~bit) : f)) });
+  const apply = () => { applyForceSettings(scenario, local); commit(); };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Force Settings" icon={<Shield size={14} />} size="lg" onOk={() => { setForces(lf); setPlayers(lp); }} showApply>
+    <DialogFrame dialogKey={entry.key} title="Force Settings" icon={<Shield size={14} />} size="lg" onOk={apply} showApply>
       <div className="force-grid">
-        {lf.map((f, fi) => {
-          const members = lp.filter((p) => p.force === fi && p.id < 8);
-          const picked = sel?.force === fi ? members[sel.idx] : undefined;
+        {[0, 1, 2, 3].map((fi) => {
+          const members = Array.from({ length: FORCE_SLOTS }, (_, p) => p).filter((p) => local.playerForce[p] === fi);
+          const picked = sel?.force === fi && members.includes(sel.player) ? sel.player : null;
           return (
-            <fieldset key={f.id} className="group force-box">
+            <fieldset key={fi} className="group force-box">
               <legend>Force {fi + 1}</legend>
               <div className="row" style={{ marginBottom: 6 }}>
-                <TextInput value={f.name} onChange={(e) => patch(fi, { name: e.target.value })} />
+                <TextInput value={local.names[fi]} placeholder={`Force ${fi + 1}`} onChange={(e) => setName(fi, e.target.value)} />
               </div>
               <div className="row" style={{ alignItems: "stretch" }}>
                 <ListBox
                   className="grow"
                   items={members}
-                  selected={sel?.force === fi ? sel.idx : null}
-                  onSelect={(idx) => setSel({ force: fi, idx })}
+                  selected={picked === null ? null : members.indexOf(picked)}
+                  onSelect={(_, p) => setSel({ force: fi, player: p })}
                   empty="No players"
-                  render={(p) => <><span className="swatch" style={{ background: PLAYER_COLORS[p.colorId].hex }} />Player {p.id + 1}<span className="faint" style={{ marginLeft: "auto" }}>{CONTROLLERS.find((c) => c.id === p.controller)?.label.split(" ")[0]}</span></>}
+                  render={(p) => <><span className="swatch" style={{ background: displayColorHex(scenario.playerColors, scenario.playerRgb, p) }} />Player {p + 1}<span className="faint" style={{ marginLeft: "auto" }}>{playerTypeLabel(scenario.playerTypes[p])}</span></>}
                 />
                 <div className="col" style={{ gap: 4 }}>
                   {[0, 1, 2, 3].filter((t) => t !== fi).map((t) => (
-                    <Button key={t} size="sm" disabled={!picked} title={`Move to Force ${t + 1}`} onClick={() => { if (picked) { move(picked.id, t); setSel(null); } }}>
+                    <Button key={t} size="sm" disabled={picked === null} title={`Move to Force ${t + 1}`} onClick={() => { if (picked !== null) { move(picked, t); setSel({ force: t, player: picked }); } }}>
                       {t < fi ? <ChevronLeft size={11} /> : <ChevronRight size={11} />} F{t + 1}
                     </Button>
                   ))}
                 </div>
               </div>
               <div className="row flags">
-                <Check label="Random start location" checked={f.randomStart} onChange={(e) => patch(fi, { randomStart: e.target.checked })} />
-                <Check label="Allies" checked={f.allies} onChange={(e) => patch(fi, { allies: e.target.checked })} />
-                <Check label="Allied victory" checked={f.alliedVictory} onChange={(e) => patch(fi, { alliedVictory: e.target.checked })} />
-                <Check label="Shared vision" checked={f.sharedVision} onChange={(e) => patch(fi, { sharedVision: e.target.checked })} />
+                {FORCE_FLAGS.map((f) => <Check key={f.bit} label={f.label} checked={(local.flags[fi] & f.bit) !== 0} onChange={(e) => setFlag(fi, f.bit, e.target.checked)} />)}
               </div>
             </fieldset>
           );
         })}
       </div>
-      <p className="hint">Select a player, then use the buttons to move it between forces. Players 9–12 cannot belong to a force.</p>
+      <p className="hint">Select a player, then use the buttons to move it between forces. A renamed force reuses an identical string if the table has one, else appends a new one. Players 9–12 cannot belong to a force.</p>
     </DialogFrame>
   );
 }
 
 /* ── Player Colors ──────────────────────────────────────── */
 
+const COLOR_MODES: { mode: number; label: string; hint: string }[] = [
+  { mode: ColorMode.Palette, label: "Palette colour (COLR)", hint: "The entry picked above — what every client reads" },
+  { mode: ColorMode.Random, label: "Random predefined", hint: "Any entry from the table, chosen when the game starts" },
+  { mode: ColorMode.PlayerChoice, label: "Player's choice", hint: "Whatever the player set in the lobby" },
+  { mode: ColorMode.Custom, label: "Custom RGB", hint: "The exact colour below" },
+];
+
+/** What the list says beside a slot: its palette name, or the CRGB mode that overrides it. */
+function slotLabel(colr: number, mode: number | undefined): string {
+  if (mode === undefined || mode === ColorMode.Palette) return PLAYER_COLORS[colr]?.name ?? `Colour ${colr}`;
+  return COLOR_MODES.find((m) => m.mode === mode)?.label ?? `Mode ${mode}`;
+}
+
+/**
+ * COLR for every client, plus Remastered's CRGB when the map wants a colour the table
+ * does not have. The CRGB section exists only while some slot needs it; setting every
+ * slot back to its palette colour removes it again.
+ */
 export function PlayerColorsDialog({ entry }: DialogProps) {
-  const [players, setPlayers] = useAtom(playersAtom);
-  const [local, setLocal] = useState(players);
+  const scenario = useAtomValue(scenarioAtom);
+  useAtomValue(settingsRevisionAtom);
+  const commit = useSetAtom(commitSettingsAtom);
+  const [form, setForm] = useScenarioForm(scenario, (scn) => ({
+    colors: scn.playerColors.slice(0, FORCE_SLOTS),
+    rgb: scn.playerRgb ? { rgb: scn.playerRgb.rgb.map((c) => [...c] as [number, number, number]), mode: scn.playerRgb.mode.slice() } as PlayerRgb : null,
+  }));
   const [sel, setSel] = useState(0);
-  const [custom, setCustom] = useState(false);
-  const [rgb, setRgb] = useState<Record<number, string | undefined>>({});
-  const current = rgb[sel] ?? PLAYER_COLORS[local[sel].colorId].hex;
+  const [hexText, setHexText] = useState<string | null>(null);
+  if (!scenario || !form) return <NoMap entry={entry} title="Player Colors" icon={<Palette size={14} />} />;
+  const { colors, rgb } = form;
+  const setColors = (c: number[]) => setForm({ ...form, colors: c });
+  const setRgb = (r: PlayerRgb | null) => setForm({ ...form, rgb: r });
+
+  const mode = rgb?.mode[sel] ?? ColorMode.Palette;
+  const current = displayColorHex(colors, rgb, sel);
+  const customHex = rgb ? rgbToHex(rgb.rgb[sel]) : PLAYER_COLORS[colors[sel]]?.hex ?? "#000000";
+  const version = mapVersionOf(scenario.fileVersion);
+
+  const setMode = (m: number) => {
+    const next = rgb ?? defaultPlayerRgb();
+    // Seed a fresh custom colour from the palette entry so the picker opens on something sensible.
+    if (m === ColorMode.Custom && next.rgb[sel].every((v) => v === 0)) next.rgb[sel] = hexToRgb(PLAYER_COLORS[colors[sel]]?.hex ?? "#000000") ?? [0, 0, 0];
+    setRgb({ rgb: next.rgb.map((c) => [...c] as [number, number, number]), mode: next.mode.map((v, i) => (i === sel ? m : v)) });
+    setHexText(null);
+  };
+  const setCustom = (hex: string) => {
+    const c = hexToRgb(hex);
+    if (!c || !rgb) return;
+    setRgb({ ...rgb, rgb: rgb.rgb.map((v, i) => (i === sel ? c : v)) });
+  };
+  const pickPalette = (id: number) => setColors(colors.map((c, i) => (i === sel ? id : c)));
+  const apply = () => {
+    // A CRGB that says "palette" for every slot adds nothing the file does not already say.
+    const wanted = rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? rgb : null;
+    applyPlayerColors(scenario, colors, wanted);
+    commit();
+  };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Player Colors" icon={<Palette size={14} />} size="md" onOk={() => setPlayers(local)} showApply>
+    <DialogFrame dialogKey={entry.key} title="Player Colors" icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? " + CRGB" : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "200px" }}>
         <Group title="Player" flush>
           <ListBox
-            items={local.slice(0, 8)}
+            items={colors}
             selected={sel}
             onSelect={setSel}
-            style={{ height: 232, border: "none", boxShadow: "none" }}
-            render={(p, i) => <><span className="swatch" style={{ background: rgb[i] ?? PLAYER_COLORS[p.colorId].hex }} />Player {i + 1}<span className="faint" style={{ marginLeft: "auto" }}>{rgb[i] ? "custom" : PLAYER_COLORS[p.colorId].name}</span></>}
+            style={{ height: 262, border: "none", boxShadow: "none" }}
+            render={(c, i) => <><span className="swatch" style={{ background: displayColorHex(colors, rgb, i) }} />Player {i + 1}<span className="faint" style={{ marginLeft: "auto" }}>{slotLabel(c, rgb?.mode[i])}</span></>}
           />
         </Group>
         <div className="stack">
-          <Group title={`Player ${sel + 1} colour`}>
+          <Group title={`Player ${sel + 1} palette colour`}>
             <div className="color-grid">
               {PLAYER_COLORS.map((c) => (
-                <button key={c.id} className={`color-chip ${!rgb[sel] && local[sel].colorId === c.id ? "selected" : ""}`} style={{ ["--c" as string]: c.hex }} title={c.name} onClick={() => { setLocal(local.map((p, i) => (i === sel ? { ...p, colorId: c.id } : p))); setRgb({ ...rgb, [sel]: undefined }); }} />
+                <button key={c.id} className={`color-chip ${colors[sel] === c.id ? "selected" : ""}`} style={{ ["--c" as string]: c.hex }} title={`${c.id}: ${c.name}`} onClick={() => pickPalette(c.id)} />
               ))}
             </div>
             <div className="row" style={{ marginTop: 10 }}>
-              <span className="dim" style={{ fontSize: 11 }}>Selected:</span>
+              <span className="dim" style={{ fontSize: 11 }}>Shown as:</span>
               <span className="swatch" style={{ background: current, width: 18, height: 18 }} />
-              <strong>{rgb[sel] ? rgb[sel] : PLAYER_COLORS[local[sel].colorId].name}</strong>
+              <strong>{mode === ColorMode.Custom ? current : PLAYER_COLORS[colors[sel]]?.name ?? `Colour ${colors[sel]}`}</strong>
             </div>
           </Group>
-          <Group title="Custom RGB (CRGB)">
-            <div className="row">
-              <Check label="Use custom colour" checked={custom} onChange={(e) => setCustom(e.target.checked)} />
-              <input type="color" className="input" disabled={!custom} value={current} onChange={(e) => setRgb({ ...rgb, [sel]: e.target.value })} />
-              <TextInput className="mono" disabled={!custom} style={{ width: 90 }} value={current} onChange={(e) => setRgb({ ...rgb, [sel]: e.target.value })} />
+          <Group title="Remastered (CRGB)">
+            <div className="col" style={{ gap: 2 }}>
+              {COLOR_MODES.map((m) => <Check key={m.mode} radio name="crgb-mode" label={m.label} title={m.hint} checked={mode === m.mode} onChange={() => setMode(m.mode)} />)}
             </div>
-            <p className="hint" style={{ marginTop: 6 }}>Custom colours require Remastered 1.21+. Older clients fall back to the palette entry.</p>
+            <div className="row" style={{ marginTop: 8 }}>
+              <input type="color" className="input" disabled={mode !== ColorMode.Custom} value={customHex} onChange={(e) => { setCustom(e.target.value); setHexText(null); }} />
+              <TextInput className="mono" disabled={mode !== ColorMode.Custom} style={{ width: 90 }} value={hexText ?? customHex} onChange={(e) => { setHexText(e.target.value); setCustom(e.target.value); }} onBlur={() => setHexText(null)} />
+            </div>
+            <p className="hint" style={{ marginTop: 6 }}>
+              {version === "remastered"
+                ? "Custom colours are drawn in swatches here; the sprites on the map keep the palette colour."
+                : `This map is ${MAP_VERSIONS[version].label}: older clients ignore CRGB and read COLR. Set the revision to Remastered in Map Revision for it to take effect.`}
+            </p>
           </Group>
         </div>
       </div>
-      <Check label="Randomize player colours in-game (ignore this table)" />
     </DialogFrame>
   );
 }

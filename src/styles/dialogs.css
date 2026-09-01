@@ -232,6 +232,29 @@
   outline-offset: 1px;
 }
 
+/* sprite preview frame in the unit dialogs */
+.unit-frame {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: 3px;
+  background: var(--bg-0);
+  box-shadow: var(--bevel-sunken);
+}
+.unit-frame .unit-preview {
+  border-radius: 2px;
+}
+.unit-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.unit-header .title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* force boxes */
 .force-grid {
   display: grid;

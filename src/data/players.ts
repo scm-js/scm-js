@@ -2,25 +2,36 @@
 
 export const PLAYER_COUNT = 12;
 
-export type Controller = "unused" | "human" | "computer" | "rescuable" | "neutral";
-export type Race = "zerg" | "terran" | "protoss" | "userSelect" | "random" | "inactive";
+import { ColorMode, PlayerRace, PlayerType, type PlayerRgb } from "../formats/chk/sections/players";
 
-export const CONTROLLERS: { id: Controller; label: string }[] = [
-  { id: "unused", label: "Unused" },
-  { id: "human", label: "Human (Open Slot)" },
-  { id: "computer", label: "Computer" },
-  { id: "rescuable", label: "Rescuable" },
-  { id: "neutral", label: "Neutral" },
+/** OWNR controller bytes as StarEdit's Player Settings lists them, with the rest for maps that use them. */
+export const PLAYER_TYPES: { value: number; label: string; hint?: string }[] = [
+  { value: PlayerType.Inactive, label: "Inactive", hint: "The slot does not exist" },
+  { value: PlayerType.Human, label: "Human", hint: "Open slot in the lobby" },
+  { value: PlayerType.Computer, label: "Computer", hint: "AI-controlled" },
+  { value: PlayerType.Rescuable, label: "Rescuable", hint: "Units join whoever reaches them" },
+  { value: PlayerType.Neutral, label: "Neutral", hint: "Owned by no one; players 9–12 are usually this" },
+  { value: PlayerType.ComputerGame, label: "Computer (game)", hint: "Set by the game once it starts; rarely stored" },
+  { value: PlayerType.Occupied, label: "Occupied", hint: "Set by the game for a joined human; rarely stored" },
+  { value: PlayerType.ComputerUnused, label: "Computer (unused)" },
+  { value: PlayerType.Closed, label: "Closed", hint: "Lobby slot closed" },
+  { value: PlayerType.Observer, label: "Observer" },
 ];
 
-export const RACES: { id: Race; label: string }[] = [
-  { id: "zerg", label: "Zerg" },
-  { id: "terran", label: "Terran" },
-  { id: "protoss", label: "Protoss" },
-  { id: "userSelect", label: "User Selectable" },
-  { id: "random", label: "Random" },
-  { id: "inactive", label: "Inactive" },
+/** SIDE race bytes, in StarEdit's order. */
+export const PLAYER_RACES: { value: number; label: string }[] = [
+  { value: PlayerRace.Zerg, label: "Zerg" },
+  { value: PlayerRace.Terran, label: "Terran" },
+  { value: PlayerRace.Protoss, label: "Protoss" },
+  { value: PlayerRace.UserSelectable, label: "User Selectable" },
+  { value: PlayerRace.Random, label: "Random" },
+  { value: PlayerRace.Independent, label: "Independent" },
+  { value: PlayerRace.Neutral, label: "Neutral" },
+  { value: PlayerRace.Inactive, label: "Inactive" },
 ];
+
+export const playerTypeLabel = (v: number) => PLAYER_TYPES.find((t) => t.value === v)?.label ?? `Type ${v}`;
+export const playerRaceLabel = (v: number) => PLAYER_RACES.find((r) => r.value === v)?.label ?? `Race ${v}`;
 
 export interface PlayerColor {
   id: number;
@@ -68,42 +79,27 @@ export function playerColorHex(colors: readonly number[] | null | undefined, own
   return PLAYER_COLORS[playerColorIndex(colors, owner)].hex;
 }
 
-export interface PlayerSlot {
-  id: number;
-  controller: Controller;
-  race: Race;
-  colorId: number;
-  force: number; // 0..3
+const hex2 = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+
+export function rgbToHex(rgb: readonly [number, number, number]): string {
+  return `#${hex2(rgb[0])}${hex2(rgb[1])}${hex2(rgb[2])}`;
 }
 
-export function defaultPlayers(): PlayerSlot[] {
-  return Array.from({ length: PLAYER_COUNT }, (_, i) => ({
-    id: i,
-    controller: i < 8 ? "human" : i === 11 ? "neutral" : "unused",
-    race: i < 8 ? "userSelect" : "inactive",
-    colorId: i,
-    force: i < 4 ? 0 : i < 8 ? 1 : 0,
-  }));
+export function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
-export interface ForceInfo {
-  id: number;
-  name: string;
-  randomStart: boolean;
-  allies: boolean;
-  alliedVictory: boolean;
-  sharedVision: boolean;
-}
-
-export function defaultForces(): ForceInfo[] {
-  return [0, 1, 2, 3].map((i) => ({
-    id: i,
-    name: `Force ${i + 1}`,
-    randomStart: true,
-    allies: i < 2,
-    alliedVictory: i < 2,
-    sharedVision: false,
-  }));
+/**
+ * The colour to show for a slot in the chrome: a Remastered custom RGB when the slot is
+ * set to one, else its palette entry. (The viewport's team-colour remap only knows the
+ * palette; a custom colour is previewed in swatches, not on the sprites.)
+ */
+export function displayColorHex(colors: readonly number[] | null | undefined, rgb: PlayerRgb | null | undefined, owner: number): string {
+  if (rgb && owner < 8 && rgb.mode[owner] === ColorMode.Custom) return rgbToHex(rgb.rgb[owner]);
+  return playerColorHex(colors, owner);
 }
 
 /** Player groups selectable in triggers. */

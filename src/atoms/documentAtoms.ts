@@ -1,6 +1,6 @@
 import { atom, type Getter, type Setter } from "jotai";
 import {
-  markDirty, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
+  mapVersionOf, markDirty, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
 } from "../formats/chk/scenario";
 import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
@@ -47,6 +47,26 @@ export const locationsRevisionAtom = atom(0);
 /** Bumped when the ISOM section is replaced wholesale (Rebuild ISOM), so its health is re-read. */
 export const isomRevisionAtom = atom(0);
 
+/**
+ * Bumped after a settings dialog writes to the scenario — players, forces, colours,
+ * revision, unit settings (see editor/settings.ts). Those edits are outside the undo
+ * model, and the scenario is mutated in place, so this is how the chrome learns of them.
+ */
+export const settingsRevisionAtom = atom(0);
+
+/**
+ * Record that a settings dialog changed the scenario. Player colours reach every drawn
+ * unit and sprite, so the object layers repaint too.
+ */
+export const commitSettingsAtom = atom(null, (get, set) => {
+  set(mapModifiedAtom, true);
+  set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
+  set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
+  set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
+  const scn = get(scenarioAtom);
+  if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+});
+
 export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
   const scn = get(scenarioAtom);
   if (scn) return TILESET_FILENAMES[tilesetIndex(scn)];
@@ -54,13 +74,6 @@ export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
   const index = TILESETS.findIndex((t) => t.id === id);
   return TILESET_FILENAMES[index < 0 ? 0 : index];
 });
-
-function versionLabel(fileVersion: number): "original" | "hybrid" | "broodwar" | "remastered" {
-  if (fileVersion >= 206) return "remastered";
-  if (fileVersion >= 205) return "broodwar";
-  if (fileVersion >= 63) return "hybrid";
-  return "original";
-}
 
 export interface LoadedDocument {
   scenario: Scenario;
@@ -84,7 +97,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(mapWidthAtom, scenario.width);
   set(mapHeightAtom, scenario.height);
   set(mapTilesetAtom, (TILESETS[tilesetIndex(scenario)]?.id ?? "jungle") as TilesetId);
-  set(mapVersionAtom, versionLabel(scenario.fileVersion));
+  set(mapVersionAtom, mapVersionOf(scenario.fileVersion));
   set(mapModifiedAtom, false);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
@@ -96,6 +109,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(spritePlacingAtom, false);
   set(selectedLocationsAtom, []);
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+  set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
 

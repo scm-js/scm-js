@@ -127,6 +127,38 @@ mode you are in; the properties panel has *Place …* / *Stop placing* buttons t
 Every placement, move, re-own, property edit and deletion is one undo step, in the same
 history as terrain strokes, and marks `UNIT` dirty so it lands in the saved file.
 
+## Sprites layer
+
+The `THG2` section: **pure sprites** — a sprites.dat graphic drawn where it stands, with no
+unit behind it (tree canopies, markers, glows) — and **unit sprites**, records the game turns
+into a unit of that type when the map loads (StarEdit uses these for Installation doors and
+traps, flagged *Disabled* so a door starts closed). The layer works like the Units layer:
+
+- The palette has a tab per kind. **Pure Sprites** lists all 517 sprites.dat entries grouped
+  as *Units* (named after the unit whose flingy draws with them), *Effects*, and *Doodads ·
+  <tileset>* (named after the GRP file, since the game ships no sprite name table — the
+  current map's tileset group opens by default). **Unit Sprites** is the units.dat tree.
+  Picking one **arms placement**; each click places one at the pointer, at any pixel — there
+  are no placement rules to refuse a spot. **Esc** / right-click stop placing.
+- **Flipped** (mirror the graphic) and, for unit sprites, **Disabled** are set on new
+  sprites from the palette; the owner comes from the same 12-player strip the Units layer uses.
+- **Click** a sprite to select it (Shift toggles), **drag** to move, drag on empty ground to
+  box-select, **Delete** removes the selection. Hit-testing uses the graphic's own frame box,
+  which is also what is outlined. Doodad overlays are ordinary THG2 records and can be
+  selected here too; the properties panel says which doodad one belongs to and warns that
+  moving it alone leaves the doodad's tiles behind.
+- The properties panel edits owner and the three flags inline; **double-click** (or *Sprite
+  Properties…*) edits every field of the record — kind, id (from the matching table), owner,
+  position, flags including the raw word, and the unused byte. With several selected only the
+  touched fields are written.
+- New pure sprites carry just the `0x1000` bit, unit sprites none (plus `0x8000` for
+  Disabled), which is what StarEdit writes; doodad overlays keep their CV5 flag word.
+
+Every edit is one undo step and marks `THG2` dirty. `scripts/extract-units.mjs` seeds its
+GRP walk from every sprites.dat entry as well as the unit types, so the graphics for every
+placeable sprite ship in `public/unit/` (that is also what draws tree canopies on the Doodads
+layer).
+
 ## Fog of War layer
 
 The **F** layer edits the `MASK` section: one byte per tile, bit *n* set meaning the tile starts

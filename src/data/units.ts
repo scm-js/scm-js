@@ -125,10 +125,3 @@ export const TECHS = [
   "Maelstrom", "Lurker Aspect", "Healing",
 ];
 
-export const SPRITES = [
-  "Fusion Cutter Hit", "Zergling Hit", "Vespene Geyser Smoke", "Mineral Field Type 1", "Mineral Field Type 2",
-  "Mineral Field Type 3", "Vespene Geyser", "Cursor Marker", "Circle Marker", "Zerg Building Spawn",
-  "Cliff Doodad Light", "Floor Hatch", "Ash World Rocks", "Jungle Tree Canopy", "Smoke Column", "Fire (Small)",
-  "Fire (Large)", "Sparks", "Puddle", "Pipe Steam", "Hallucination Death", "Protoss Warp Flash",
-  "Terran Building Landing Dust", "Psi Storm", "Nuke Target Dot", "Map Revealer",
-];

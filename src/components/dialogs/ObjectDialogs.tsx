@@ -4,14 +4,17 @@ import { Sparkles, SquareDashed, User } from "lucide-react";
 import { scenarioAtom } from "../../atoms/documentAtoms";
 import { PLAYER_COLORS, playerColorIndex } from "../../data/players";
 import { SAMPLE_LOCATIONS, type SampleLocation } from "../../data/samples";
-import { SPRITES, UNIT_GROUPS, unitName } from "../../data/units";
-import { UnitRelation, UnitState, UnitUsed, UnitValid, type UnitRecord } from "../../formats/chk/sections/objects";
+import { UNIT_GROUPS, unitName } from "../../data/units";
+import { SPRITE_COUNT, spriteCatalogue } from "../../data/sprites";
+import { SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid, type SpriteRecord, type UnitRecord } from "../../formats/chk/sections/objects";
+import { NO_UNIT } from "../../formats/dat/dat";
+import { spriteKind } from "../../editor/sprites";
 import { useUnitTools } from "../../hooks/useUnitTools";
+import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
+import { SpritePreview } from "../panels/UnitPreview";
 import { Check, Field, Group, NumberInput, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
-
-const PLAYER_OPTS = PLAYER_COLORS.slice(0, 12).map((c, i) => ({ value: String(i), label: `Player ${i + 1} (${c.name})` }));
 
 /* ── Unit Properties ────────────────────────────────────── */
 
@@ -211,25 +214,120 @@ export function LocationPropertiesDialog({ entry }: DialogProps) {
 
 /* ── Sprite Properties ──────────────────────────────────── */
 
+/**
+ * Every field the THG2 record stores, on the selected sprites. Only fields the user
+ * touches are written; position is single-sprite only. Switching the kind flips the
+ * `PureSprite` bit and re-reads the id against the other table, so the picker always
+ * lists what the id will mean to the game.
+ */
 export function SpritePropertiesDialog({ entry }: DialogProps) {
-  const [pure, setPure] = useState(true);
+  const store = useStore();
+  const tools = useSpriteTools();
+  const scenario = store.get(scenarioAtom);
+  const indices = useMemo(() => {
+    const raw = entry.payload?.indices;
+    return Array.isArray(raw) ? raw.filter((i): i is number => typeof i === "number" && !!scenario?.sprites[i]) : [];
+  }, [entry.payload, scenario]);
+  const original = scenario?.sprites[indices[0] ?? -1] ?? null;
+  const [form, setForm] = useState<SpriteRecord | null>(original);
+  const [touched, setTouched] = useState<Set<keyof SpriteRecord>>(() => new Set());
+  const single = indices.length === 1;
+  const catalogue = tools.assets ? spriteCatalogue(tools.assets) : null;
+
+  if (!form || !original) {
+    return (
+      <DialogFrame dialogKey={entry.key} title="Sprite Properties" icon={<Sparkles size={14} />} size="sm">
+        <p className="hint">Select a sprite on the map first.</p>
+      </DialogFrame>
+    );
+  }
+
+  const kind = spriteKind(form);
+  const set = <K extends keyof SpriteRecord>(key: K, value: SpriteRecord[K]) => {
+    setForm({ ...form, [key]: value });
+    setTouched(new Set(touched).add(key));
+  };
+  const has = (bit: number) => (form.flags & bit) !== 0;
+  const setBit = (bit: number, on: boolean) => set("flags", on ? form.flags | bit : form.flags & ~bit);
+
+  const apply = () => {
+    const patch: Partial<SpriteRecord> = {};
+    for (const key of touched) {
+      if (!single && (key === "x" || key === "y")) continue;
+      (patch as Record<string, unknown>)[key] = form[key];
+    }
+    if (Object.keys(patch).length === 0) return;
+    tools.updateSelected(`Edit ${single ? spriteName(tools.assets, kind, form.spriteId) : `${indices.length} sprites`}`, () => patch, indices);
+  };
+
+  const owners = Array.from({ length: 12 }, (_, i) => ({ value: String(i), label: `Player ${i + 1} (${PLAYER_COLORS[playerColorIndex(scenario?.playerColors, i)].name})` }));
+  if (form.owner > 11) owners.push({ value: String(form.owner), label: `Owner ${form.owner} (raw)` });
+
   return (
-    <DialogFrame dialogKey={entry.key} title="Sprite Properties" icon={<Sparkles size={14} />} size="sm" showApply>
+    <DialogFrame
+      dialogKey={entry.key}
+      title={single ? "Sprite Properties" : `Sprite Properties — ${indices.length} sprites`}
+      icon={<Sparkles size={14} />}
+      size="sm"
+      showApply
+      onOk={apply}
+      footerLeft={<span className="mono">THG2 #{single ? indices[0] : "—"} · flags {hex(form.flags, 4)}{touched.size > 0 ? ` · ${touched.size} changed` : ""}</span>}
+    >
       <div className="form wide">
-        <Field label="Sprite"><Select options={SPRITES} defaultValue="Cursor Marker" /></Field>
-        <Field label="Owner"><Select options={PLAYER_OPTS} defaultValue="11" /></Field>
-        <Field label="Position">
+        <Field label="Kind" hint="A pure sprite is drawn as it is; a unit sprite becomes a unit of that type when the map loads (Installation doors and traps).">
           <div className="row">
-            <NumberInput value={1024} onChange={() => {}} min={0} width={110} unit="x" />
-            <NumberInput value={1024} onChange={() => {}} min={0} width={110} unit="y" />
+            <Check radio name="sprite-kind" label="Pure sprite" checked={kind === "pure"} onChange={() => setBit(SpriteFlag.PureSprite, true)} />
+            <Check radio name="sprite-kind" label="Unit sprite" checked={kind === "unit"} onChange={() => setBit(SpriteFlag.PureSprite, false)} />
+          </div>
+        </Field>
+        <Field label={kind === "pure" ? "Sprite" : "Unit"}>
+          <div className="row">
+            <SpritePreview kind={kind} id={form.spriteId} owner={form.owner} colors={scenario?.playerColors} size={32} flipped={has(SpriteFlag.Flipped)} />
+            {kind === "unit" ? (
+              <select className="select grow" value={form.spriteId} onChange={(e) => set("spriteId", Number(e.target.value))}>
+                {UNIT_GROUPS.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.units.map((id) => <option key={id} value={id}>{unitName(id)}</option>)}
+                  </optgroup>
+                ))}
+                {form.spriteId >= NO_UNIT && <option value={form.spriteId}>Unit #{form.spriteId} (raw)</option>}
+              </select>
+            ) : catalogue ? (
+              <select className="select grow" value={form.spriteId} onChange={(e) => set("spriteId", Number(e.target.value))}>
+                {catalogue.groups.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.ids.map((id) => <option key={id} value={id}>{id} · {catalogue.entries[id].label}</option>)}
+                  </optgroup>
+                ))}
+                {form.spriteId >= SPRITE_COUNT && <option value={form.spriteId}>Sprite #{form.spriteId} (raw)</option>}
+              </select>
+            ) : (
+              <NumberInput value={form.spriteId} onChange={(v) => set("spriteId", v)} min={0} max={0xffff} width={130} />
+            )}
+          </div>
+        </Field>
+        <Field label="Owner">
+          <Select value={String(form.owner)} onChange={(e) => set("owner", Number(e.target.value))} options={owners} />
+        </Field>
+        <Field label="Position" hint={single ? "Map pixels; a sprite may sit at any pixel." : "Position is edited one sprite at a time."}>
+          <div className="row">
+            <NumberInput value={form.x} onChange={(v) => set("x", v)} min={0} max={0xffff} width={110} unit="x" disabled={!single} />
+            <NumberInput value={form.y} onChange={(v) => set("y", v)} min={0} max={0xffff} width={110} unit="y" disabled={!single} />
           </div>
         </Field>
       </div>
       <Group title="Flags">
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Pure sprite (THG2, not a unit sprite)" checked={pure} onChange={(e) => setPure(e.target.checked)} />
-          <Check label="Disabled (unit sprite starts inactive)" disabled={pure} />
-          <Check label="Draw as sprite (ignore unit logic)" disabled={pure} />
+          <Check label="Flipped (0x2000)" title="Mirror the graphic left-to-right" checked={has(SpriteFlag.Flipped)} onChange={(e) => setBit(SpriteFlag.Flipped, e.target.checked)} />
+          <Check label="Disabled (0x8000)" title="Unit sprites only: the unit starts inactive — a closed door, an unarmed trap" checked={has(SpriteFlag.Disabled)} disabled={kind === "pure"} onChange={(e) => setBit(SpriteFlag.Disabled, e.target.checked)} />
+        </div>
+        <div className="form" style={{ marginTop: 8 }}>
+          <Field label="Raw flags" hint="Doodad overlays carry their doodad's whole CV5 flag word here; bits other than the three above are kept as they are.">
+            <TextInput className="mono" value={hex(form.flags, 4)} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) set("flags", Math.min(0xffff, Math.max(0, Math.trunc(v)))); }} />
+          </Field>
+          <Field label="Unused byte" hint="Offset 7; the game ignores it.">
+            <NumberInput value={form.unused} onChange={(v) => set("unused", v)} min={0} max={255} width={110} />
+          </Field>
         </div>
       </Group>
     </DialogFrame>

@@ -12,15 +12,17 @@
  *     public/arr/units.dat, flingy.dat, sprites.dat, images.dat, images.tbl
  *     public/game/tunit.pcx                      team-colour remap table
  *     public/scripts/iscript.bin                 animation bytecode
- *     public/unit/<race>/<name>.grp              every GRP the 228 unit types and their
- *                                                idle animations can draw with
+ *     public/unit/<race>/<name>.grp              every GRP the 228 unit types, the 517
+ *                                                sprites.dat entries and their idle
+ *                                                animations can draw with
  *     public/unit/<race>/<name>.lo?              overlay positions (damage fires, smoke)
  *
  * "Can draw with" is decided by walking iscript.bin from each unit's main image through
  * the opcodes that spawn further images (shadows, glows, turrets, smoke), plus the
  * damage-overlay and geyser-smoke images the engine adds itself — the same set
- * src/formats/units/animate.ts can reach. Projectiles, death animations' sprites and
- * everything else stay out, which keeps the folder small.
+ * src/formats/units/animate.ts can reach — and from every sprites.dat entry, since the
+ * Sprites layer places any of them and doodad overlays (canopies, doors) are sprites no
+ * unit draws. Projectile and death images only come along when a sprite points at them.
  *
  * File names are lower-cased because MPQ lookups are case-insensitive and web servers are not.
  */
@@ -31,6 +33,7 @@ import { openArchives, parseArgs, readMember } from "./lib/archives.mjs";
 import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../src/formats/dat/iscript.ts";
 
 const UNIT_COUNT = 228;
+const SPRITE_COUNT = 517;
 const IMAGE_COUNT = 999;
 const TABLES = ["arr\\units.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "arr\\images.tbl", "game\\tunit.pcx", "scripts\\iscript.bin"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
@@ -85,6 +88,9 @@ const iscript = decodeIscript(tables.get("scripts\\iscript.bin"));
 const reachable = new Set();
 const todo = [...ENGINE_IMAGES];
 for (let unit = 0; unit < UNIT_COUNT; unit++) todo.push(u16(sprites, u16(flingy, units[unit] * 2) * 2));
+// Every sprites.dat entry too: the Sprites layer places any of them as a pure sprite, and
+// doodad overlays (tree canopies, Installation doors) are sprites no unit ever draws.
+for (let sprite = 0; sprite < SPRITE_COUNT; sprite++) todo.push(u16(sprites, sprite * 2));
 while (todo.length > 0) {
   const image = todo.pop();
   if (image >= IMAGE_COUNT || reachable.has(image)) continue;

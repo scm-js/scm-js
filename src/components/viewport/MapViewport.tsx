@@ -5,9 +5,12 @@ import { Crosshair, Loader2 } from "lucide-react";
 import {
   activeDoodadAtom,
   activeLayerAtom,
+  activeSpriteAtom,
+  activeSpriteKindAtom,
   activeTerrainAtom,
   activeTileAtom,
   activeUnitAtom,
+  activeUnitSpriteAtom,
   brushSizeAtom,
   centerViewOnAtom,
   cursorTileAtom,
@@ -22,7 +25,10 @@ import {
   mapWidthAtom,
   rectVariationAtom,
   selectedDoodadsAtom,
+  selectedSpritesAtom,
   selectedUnitsAtom,
+  spritePlaceOptionsAtom,
+  spritePlacingAtom,
   terrainModeAtom,
   unitOwnerAtom,
   unitPlacingAtom,
@@ -36,6 +42,7 @@ import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDoodadTools";
+import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
 import { useFogTools } from "../../hooks/useFogTools";
 import { drawFogOverlay } from "./fog";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
@@ -81,6 +88,8 @@ export default function MapViewport() {
   const unitGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
   /** The same for the Doodads layer; a move shows ghosts and lands on release. */
   const doodadGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
+  /** And for the Sprites layer, which moves live like units do. */
+  const spriteGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
@@ -118,6 +127,14 @@ export default function MapViewport() {
   // Only read so the placement ghost redraws when the palette choice or its options change.
   const activeDoodad = useAtomValue(activeDoodadAtom);
   const doodadPlacement = useAtomValue(doodadPlacementAtom);
+  const spriteTools = useSpriteTools();
+  const selectedSprites = useAtomValue(selectedSpritesAtom);
+  const placingSprite = useAtomValue(spritePlacingAtom);
+  // Only read so the placement ghost redraws when the palette choice or its options change.
+  const activeSpriteKind = useAtomValue(activeSpriteKindAtom);
+  const activeSprite = useAtomValue(activeSpriteAtom);
+  const activeUnitSprite = useAtomValue(activeUnitSpriteAtom);
+  const spritePlaceOptions = useAtomValue(spritePlaceOptionsAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
   const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
@@ -138,6 +155,8 @@ export default function MapViewport() {
   const unitPlacing = unitsEditing && placing;
   const doodadsEditing = layer === "doodads" && scenario !== null;
   const doodadPlacing = doodadsEditing && placingDoodad;
+  const spritesEditing = layer === "sprites" && scenario !== null;
+  const spritePlacing = spritesEditing && placingSprite;
   const fogPainting = layer === "fog" && scenario !== null;
   const showFog = scenario !== null && flags.fog;
   const mapLocations = useAtomValue(locationsAtom);
@@ -389,6 +408,26 @@ export default function MapViewport() {
         }
         ctx.setLineDash([]);
       }
+      // sprite layer: the selection's graphic boxes, and the sprite under the pointer in select mode
+      if (spritesEditing && flags.sprites) {
+        ctx.lineWidth = 1;
+        const strokeSpriteBox = (b: { left: number; top: number; right: number; bottom: number }, color: string, dash: number[]) => {
+          ctx.strokeStyle = color;
+          ctx.setLineDash(dash);
+          ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom), Math.round((b.bottom - b.top) * zoom));
+          ctx.setLineDash([]);
+        };
+        for (const i of selectedSprites) {
+          const r = scenario.sprites[i];
+          if (r) strokeSpriteBox(spriteTools.boxOf(r), "#8ef0a4", [4, 3]);
+        }
+        const hps = hoverPointRef.current;
+        if (hps && !spritePlacing && !spriteGestureRef.current) {
+          const hit = spriteTools.pickAt(hps);
+          const r = hit >= 0 ? scenario.sprites[hit] : null;
+          if (r && !selectedSprites.includes(hit)) strokeSpriteBox(spriteTools.boxOf(r), "rgba(230,185,92,0.7)", [2, 2]);
+        }
+      }
     }
 
     // doodad layer: selected footprints, and the doodad under the pointer in select mode
@@ -503,6 +542,18 @@ export default function MapViewport() {
     ctx.lineWidth = 1;
     ctx.strokeRect(-sx + 0.5, -sy + 0.5, worldW - 1, worldH - 1);
 
+    /** The box-select rectangle of an object-layer drag. */
+    const drawMarquee = (g: { from: MapPoint; to: MapPoint }) => {
+      const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
+      ctx.fillStyle = "rgba(142,240,164,0.10)";
+      ctx.fillRect(left, top, Math.abs(g.to.px - g.from.px) * zoom, Math.abs(g.to.py - g.from.py) * zoom);
+      ctx.strokeStyle = "#8ef0a4";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(Math.abs(g.to.px - g.from.px) * zoom), Math.round(Math.abs(g.to.py - g.from.py) * zoom));
+      ctx.setLineDash([]);
+    };
+
     // hover brush, with a preview of what the terrain brush would leave behind
     const hv = hoverRef.current;
     const hp = hoverPointRef.current;
@@ -526,28 +577,28 @@ export default function MapViewport() {
     } else if (doodadsEditing && doodadGestureRef.current?.mode === "move") {
       for (const g of doodadTools.dragGhosts()) drawDoodadGhost(g, 0.6);
     } else if (hp && doodadsEditing && doodadGestureRef.current?.mode === "marquee") {
-      const g = doodadGestureRef.current;
-      const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
-      ctx.fillStyle = "rgba(142,240,164,0.10)";
-      ctx.fillRect(left, top, Math.abs(g.to.px - g.from.px) * zoom, Math.abs(g.to.py - g.from.py) * zoom);
-      ctx.strokeStyle = "#8ef0a4";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(Math.abs(g.to.px - g.from.px) * zoom), Math.round(Math.abs(g.to.py - g.from.py) * zoom));
-      ctx.setLineDash([]);
+      drawMarquee(doodadGestureRef.current);
+    } else if (hp && spritesEditing && spriteGestureRef.current?.mode === "marquee") {
+      drawMarquee(spriteGestureRef.current);
+    } else if (hv && hp && spritePlacing && !spriteGestureRef.current) {
+      // Where the active sprite would land: its graphic at half strength (a marker while
+      // the GRP loads) inside its frame box. Sprites have no placement rules to fail.
+      const ghost = spriteTools.ghostAt(hp);
+      if (ghost) {
+        const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
+        ctx.imageSmoothingEnabled = zoom < 1;
+        if (!drawThg2Sprite(ghost.id, ghost.flags, ghost.owner, gx, gy, 0.6)) drawSpriteMarker(gx, gy);
+        ctx.imageSmoothingEnabled = true;
+        const b = ghost.box;
+        ctx.strokeStyle = "#e6b95c";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom) - 1, Math.round((b.bottom - b.top) * zoom) - 1);
+      }
     } else if (hv && hp && doodadPlacing && !doodadGestureRef.current) {
       const ghost = doodadTools.ghostAt(hp);
       if (ghost) drawDoodadGhost(ghost, ghost.verdict.ok ? 0.75 : 0.45);
     } else if (hp && unitsEditing && unitGestureRef.current?.mode === "marquee") {
-      const g = unitGestureRef.current;
-      const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
-      ctx.fillStyle = "rgba(142,240,164,0.10)";
-      ctx.fillRect(left, top, Math.abs(g.to.px - g.from.px) * zoom, Math.abs(g.to.py - g.from.py) * zoom);
-      ctx.strokeStyle = "#8ef0a4";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(Math.abs(g.to.px - g.from.px) * zoom), Math.round(Math.abs(g.to.py - g.from.py) * zoom));
-      ctx.setLineDash([]);
+      drawMarquee(unitGestureRef.current);
     } else if (hv && hp && unitPlacing && !unitGestureRef.current) {
       // Where the active unit would land: its sprite at half strength, and the box that
       // snaps to the grid for buildings (the collision box for everything else). Red when
@@ -575,7 +626,7 @@ export default function MapViewport() {
           ctx.setLineDash([]);
         }
       }
-    } else if (hv && !doodadsEditing) {
+    } else if (hv && !doodadsEditing && !spritesEditing) {
       const b = layer === "terrain" || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
       const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
@@ -662,7 +713,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions]);
 
   /* ── fog layer shows its overlay ─────────────────────── */
   // Entering the Fog of War layer switches the overlay on; leaving switches it back off
@@ -801,6 +852,22 @@ export default function MapViewport() {
       draw();
       return;
     }
+    if (spritesEditing) {
+      const p = pointAt(e);
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const hit = spriteTools.pickAt(p);
+      if (hit >= 0) {
+        if (e.shiftKey) spriteTools.select([hit], true);
+        else if (!selectedSprites.includes(hit)) spriteTools.select([hit]);
+        spriteGestureRef.current = { mode: "move", from: p, to: p, additive: false };
+        spriteTools.beginDrag(p);
+      } else {
+        spriteGestureRef.current = { mode: placingSprite ? "click" : "select", from: p, to: p, additive: e.shiftKey };
+      }
+      draw();
+      return;
+    }
     if (unitsEditing) {
       const p = pointAt(e);
       e.preventDefault();
@@ -853,6 +920,18 @@ export default function MapViewport() {
       draw();
       return;
     }
+    const sGesture = spriteGestureRef.current;
+    if (sGesture) {
+      const p = clampPoint(point);
+      sGesture.to = p;
+      if (sGesture.mode === "move") spriteTools.dragTo(p);
+      else if ((sGesture.mode === "click" || sGesture.mode === "select") && Math.hypot(p.px - sGesture.from.px, p.py - sGesture.from.py) * zoom > 4) sGesture.mode = "marquee";
+      hoverRef.current = clampToMap(t);
+      hoverPointRef.current = p;
+      setCursor(hoverRef.current);
+      draw();
+      return;
+    }
     const gesture = unitGestureRef.current;
     if (gesture) {
       const p = clampPoint(point);
@@ -889,7 +968,7 @@ export default function MapViewport() {
     }
     hoverPointRef.current = point;
     const diamondKey = terrainMode === "isom" ? `${diamondAt(point.px, point.py).x},${diamondAt(point.px, point.py).y}` : "";
-    if (!hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
+    if (spritesEditing || !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
       hoverRef.current = t;
       hoverDiamondRef.current = diamondKey;
       setCursor(t);
@@ -911,6 +990,21 @@ export default function MapViewport() {
         doodadTools.placeAt(dGesture.from);
       } else if (!dGesture.additive) {
         doodadTools.select([]);
+      }
+      draw();
+      return;
+    }
+    const sGesture = spriteGestureRef.current;
+    if (sGesture) {
+      spriteGestureRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      if (sGesture.mode === "move") spriteTools.endDrag();
+      else if (sGesture.mode === "marquee") spriteTools.selectInBox({ left: sGesture.from.px, top: sGesture.from.py, right: sGesture.to.px, bottom: sGesture.to.py }, sGesture.additive);
+      else if (sGesture.mode === "click") {
+        if (!sGesture.additive) spriteTools.select([]);
+        spriteTools.placeAt(sGesture.from);
+      } else if (!sGesture.additive) {
+        spriteTools.select([]);
       }
       draw();
       return;
@@ -942,10 +1036,19 @@ export default function MapViewport() {
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
+    if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); draw(); return; }
     menuTileRef.current = hoverRef.current;
     menuPointRef.current = hoverPointRef.current;
   };
   const onDoubleClick = (e: React.MouseEvent) => {
+    if (spritesEditing) {
+      const hit = spriteTools.pickAt(pointAt(e));
+      if (hit < 0) return;
+      const indices = selectedSprites.includes(hit) ? selectedSprites : [hit];
+      if (indices !== selectedSprites) spriteTools.select(indices);
+      open("spriteProperties", { indices });
+      return;
+    }
     if (!unitsEditing) return;
     const hit = unitTools.pickAt(pointAt(e));
     if (hit < 0) return;
@@ -991,7 +1094,12 @@ export default function MapViewport() {
         ]
       : []),
     ...(layer === "locations" ? [{ label: "Location Properties…", onSelect: () => open("locationProperties", { location: SAMPLE_LOCATIONS[1] }) }] : []),
-    ...(layer === "sprites" ? [{ label: "Sprite Properties…", onSelect: () => open("spriteProperties") }] : []),
+    ...(layer === "sprites"
+      ? [
+          { label: "Sprite Properties…", disabled: selectedSprites.length === 0, onSelect: () => open("spriteProperties", { indices: selectedSprites }) },
+          { label: `Delete ${selectedSprites.length > 1 ? `${selectedSprites.length} Sprites` : "Sprite"}`, disabled: selectedSprites.length === 0, onSelect: () => spriteTools.deleteSelected() },
+        ]
+      : []),
     ...(layer === "terrain"
       ? [
           { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : "Pick Tile", onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
@@ -1016,7 +1124,7 @@ export default function MapViewport() {
         <ContextMenu.Trigger asChild>
           <div ref={scrollerRef} className="scroller" onScroll={draw} tabIndex={0}>
             <div
-              className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing ? "placing" : ""}`}
+              className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing ? "placing" : ""}`}
               style={{ width: worldW, height: worldH }}
               onPointerDown={onDown}
               onPointerMove={onMove}
@@ -1050,7 +1158,7 @@ export default function MapViewport() {
           <span>Loading {tileset.name} terrain…</span>
         </div>
       )}
-      {unitError && layer === "units" && scenario && (
+      {unitError && (layer === "units" || layer === "sprites") && scenario && (
         <div className="viewport-notice" role="status">
           <strong>No unit graphics.</strong> Run <code>node scripts/extract-units.mjs</code> against a StarCraft
           install to fill <code>public/arr</code> and <code>public/unit</code>; units are drawn as player-coloured markers until then.
@@ -1068,6 +1176,7 @@ export default function MapViewport() {
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
         {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
         {unitPlacing && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
+        {spritePlacing && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
         {doodadPlacing && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
         {showFog && <span className="hud-chip">fog of war <b>P{fogViewPlayer + 1}</b>{fogPainting && <> · {fogMode === "fog" ? "painting" : "clearing"} · Shift inverts</>}</span>}
       </div>

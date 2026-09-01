@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
-  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, selectedDoodadsAtom, selectedUnitsAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom,
+  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlacingAtom,
+  unitPlacingAtom, viewFlagsAtom, zoomAtom,
   type EditorLayer,
 } from "../atoms/editorAtoms";
-import { deleteSelectedDoodadsAtom, deleteSelectedUnitsAtom, redoAtom, undoAtom } from "../atoms/documentAtoms";
+import { deleteSelectedDoodadsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, redoAtom, undoAtom } from "../atoms/documentAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
@@ -23,10 +24,13 @@ export function useHotkeys() {
   const redo = useSetAtom(redoAtom);
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
   const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
+  const deleteSprites = useSetAtom(deleteSelectedSpritesAtom);
   const setSelectedUnits = useSetAtom(selectedUnitsAtom);
   const setSelectedDoodads = useSetAtom(selectedDoodadsAtom);
+  const setSelectedSprites = useSetAtom(selectedSpritesAtom);
   const [placing, setPlacing] = useAtom(unitPlacingAtom);
   const [placingDoodad, setPlacingDoodad] = useAtom(doodadPlacingAtom);
+  const [placingSprite, setPlacingSprite] = useAtom(spritePlacingAtom);
   const activeLayer = useAtomValue(activeLayerAtom);
   const dialogs = useAtomValue(dialogStackAtom);
   const { save } = useMapFileActions();
@@ -77,6 +81,11 @@ export function useHotkeys() {
           if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} doodad${n === 1 ? "" : "s"}`); }
           return;
         }
+        if (activeLayer === "sprites") {
+          const n = deleteSprites();
+          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} sprite${n === 1 ? "" : "s"}`); }
+          return;
+        }
         const n = deleteUnits();
         if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} unit${n === 1 ? "" : "s"}`); }
         return;
@@ -86,6 +95,11 @@ export function useHotkeys() {
         if (activeLayer === "doodads") {
           if (placingDoodad) { setPlacingDoodad(false); setStatus("Stopped placing — click a doodad to select it, or pick one in the palette to place"); }
           else setSelectedDoodads([]);
+          return;
+        }
+        if (activeLayer === "sprites") {
+          if (placingSprite) { setPlacingSprite(false); setStatus("Stopped placing — click a sprite to select it, or pick one in the palette to place"); }
+          else setSelectedSprites([]);
           return;
         }
         if (placing) { setPlacing(false); setStatus("Stopped placing — click a unit to select it, or pick one in the palette to place"); }
@@ -101,5 +115,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, setSelectedUnits, setSelectedDoodads, placing, setPlacing, placingDoodad, setPlacingDoodad, activeLayer]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, setSelectedUnits, setSelectedDoodads, setSelectedSprites, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer]);
 }

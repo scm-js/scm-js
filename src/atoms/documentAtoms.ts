@@ -8,13 +8,15 @@ import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
   doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
-  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedUnitsAtom,
+  mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  spritePlacingAtom,
 } from "./editorAtoms";
 import { applyChanges, type TileChange } from "../editor/terrain";
 import { applyIsomChanges } from "../editor/isom";
 import { applyUnitChanges, removeUnits, type UnitChange } from "../editor/units";
 import { applyFogChanges } from "../editor/fog";
-import { applyDoodadChanges, applySpriteChanges, removeDoodads, type DoodadChange, type SpriteChange } from "../editor/doodads";
+import { applyDoodadChanges, removeDoodads, type DoodadChange } from "../editor/doodads";
+import { applySpriteChanges, removeSprites, type SpriteChange } from "../editor/sprites";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 
@@ -36,7 +38,7 @@ export const terrainRevisionAtom = atom(0);
 /** Bumped whenever `scenario.units` changes (place, move, delete, undo), for the same reason. */
 export const unitsRevisionAtom = atom(0);
 
-/** Bumped whenever `scenario.doodads` or `scenario.sprites` changes (the lists are mutated in place). */
+/** Bumped whenever `scenario.doodads` or `scenario.sprites` changes (the lists are mutated in place); the Sprites layer's repaint trigger too. */
 export const doodadsRevisionAtom = atom(0);
 
 /** Bumped when the ISOM section is replaced wholesale (Rebuild ISOM), so its health is re-read. */
@@ -87,6 +89,8 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(selectedUnitsAtom, []);
   set(selectedDoodadsAtom, []);
   set(doodadPlacingAtom, false);
+  set(selectedSpritesAtom, []);
+  set(spritePlacingAtom, false);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
 
@@ -106,6 +110,8 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(selectedUnitsAtom, []);
   set(selectedDoodadsAtom, []);
   set(doodadPlacingAtom, false);
+  set(selectedSpritesAtom, []);
+  set(spritePlacingAtom, false);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
 });
@@ -132,7 +138,7 @@ export interface HistoryEntry {
   doodadTiles?: TileChange[];
   /** DD2 record insertions, removals and replacements. */
   doodads?: DoodadChange[];
-  /** THG2 record changes — a doodad's overlay sprite comes and goes with it. */
+  /** THG2 record changes: the Sprites layer's edits, and a doodad's overlay sprite coming and going with it. */
   sprites?: SpriteChange[];
   /** Fog of war edits to `scenario.mask` (see editor/fog.ts); `at` indexes the MASK byte. */
   fog?: TileChange[];
@@ -209,6 +215,7 @@ function afterUnitEdit(get: Getter, set: Setter, entry: HistoryEntry) {
     set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
     set(selectedDoodadsAtom, []);
   }
+  if (entry.sprites) set(selectedSpritesAtom, []);
 }
 
 export const undoAtom = atom(
@@ -316,6 +323,20 @@ export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   const n = edit.doodads.length;
   set(commitEditAtom, { label: `Delete ${n} doodad${n === 1 ? "" : "s"}`, changes: [], doodadTiles: edit.tiles, doodads: edit.doodads, sprites: edit.sprites });
   return n;
+});
+
+/* ── Sprite selection edits ──────────────────────────────── */
+
+/** Remove the selected sprites as one undo step. Returns how many went. */
+export const deleteSelectedSpritesAtom = atom(null, (get, set) => {
+  const scn = get(scenarioAtom);
+  const selected = get(selectedSpritesAtom);
+  if (!scn || selected.length === 0) return 0;
+  const sprites = removeSprites(scn, selected);
+  applySpriteChanges(scn, sprites);
+  set(selectedSpritesAtom, []);
+  set(commitEditAtom, { label: `Delete ${sprites.length} sprite${sprites.length === 1 ? "" : "s"}`, changes: [], sprites });
+  return sprites.length;
 });
 
 /* ── Unit selection edits ────────────────────────────────── */

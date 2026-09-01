@@ -4,6 +4,7 @@ import { defaultForces, defaultPlayers, type ForceInfo, type PlayerSlot } from "
 import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
 import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor/doodads";
 import type { FogMode } from "../editor/fog";
+import type { SpriteKind } from "../editor/sprites";
 
 /* ── Screens ────────────────────────────────────────────── */
 
@@ -60,6 +61,21 @@ export const doodadPlacingAtom = atom<boolean>(false);
 export const selectedDoodadsAtom = atom<number[]>([]);
 /** "Place anywhere" (off) and "Snap to grid" (on) — StarEdit's defaults. */
 export const doodadPlacementAtom = atom<DoodadPlacementOptions>(DEFAULT_DOODAD_PLACEMENT);
+
+/* ── Sprites layer (see editor/sprites.ts) ──────────────── */
+
+/** Whether the palette places a pure sprite (sprites.dat id) or a unit sprite (units.dat id). */
+export const activeSpriteKindAtom = atom<SpriteKind>("pure");
+/** sprites.dat id the Sprites layer places when the kind is "pure". */
+export const activeSpriteAtom = atom<number>(0);
+/** units.dat id it places when the kind is "unit"; doors and traps are what StarEdit uses this for. */
+export const activeUnitSpriteAtom = atom<number>(0);
+/** Whether a click on the map places the active sprite (armed by the palette, disarmed by Esc / right-click). */
+export const spritePlacingAtom = atom<boolean>(false);
+/** Indices into `scenario.sprites` of the selected sprites; cleared whenever the list is edited under it. */
+export const selectedSpritesAtom = atom<number[]>([]);
+/** Flags given to newly placed sprites: mirrored graphic, and (unit sprites only) starting disabled. */
+export const spritePlaceOptionsAtom = atom<{ flipped: boolean; disabled: boolean }>({ flipped: false, disabled: false });
 
 /* ── Fog of war layer (see editor/fog.ts) ───────────────── */
 

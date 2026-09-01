@@ -19,7 +19,10 @@ import {
 import {
   activeDoodadAtom,
   activeLayerAtom,
+  activeSpriteAtom,
+  activeSpriteKindAtom,
   activeUnitAtom,
+  activeUnitSpriteAtom,
   doodadCategoryAtom,
   doodadPlacementAtom,
   doodadPlacingAtom,
@@ -28,6 +31,8 @@ import {
   fogViewPlayerAtom,
   mapTilesetAtom,
   placementOptionsAtom,
+  spritePlaceOptionsAtom,
+  spritePlacingAtom,
   unitOwnerAtom,
   unitPlacingAtom,
   viewFlagsAtom,
@@ -39,7 +44,12 @@ import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { playerColorHex } from "../../data/players";
-import { RACE_LABEL, SPRITES, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
+import { RACE_LABEL, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
+import { SPRITE_COUNT, spriteCatalogue } from "../../data/sprites";
+import { SpriteFlag } from "../../formats/chk/sections/objects";
+import type { SpriteKind } from "../../editor/sprites";
+import { spriteName } from "../../hooks/useSpriteTools";
+import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { SAMPLE_LOCATIONS } from "../../data/samples";
 import { Button, Check, Tabs, Tip } from "../ui";
 import TerrainPalette, { BrushSelect } from "./TerrainPalette";
@@ -241,26 +251,122 @@ function UnitPalette() {
 
 /* ── Sprites ────────────────────────────────────────────── */
 
-function SpritePalette() {
-  const [sel, setSel] = useState(0);
-  const list = (items: string[]) => (
-    <div className="listbox" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
-      {items.map((s, i) => (
-        <div key={s} className={`item ${sel === i ? "selected" : ""}`} onClick={() => setSel(i)}>
-          <span className="idx">{i}</span>
-          {s}
-        </div>
-      ))}
+interface PickerGroup { label: string; items: { id: number; label: string }[] }
+
+/** A collapsible, searchable tree of ids; the shape both sprite tabs share. */
+function GroupedPicker({ groups, active, onPick, query, defaultOpen, title }: { groups: PickerGroup[]; active: number; onPick: (id: number) => void; query: string; defaultOpen: (label: string) => boolean; title: (id: number) => string }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const q = query.trim().toLowerCase();
+  const shown = groups
+    .map((g) => ({ ...g, items: q ? g.items.filter((it) => it.label.toLowerCase().includes(q) || String(it.id) === q) : g.items }))
+    .filter((g) => g.items.length > 0);
+  return (
+    <div className="palette-scroll tree">
+      {shown.length === 0 && <div className="hint" style={{ padding: 8 }}>Nothing matches "{query}".</div>}
+      {shown.map((g) => {
+        const isOpen = q ? true : (open[g.label] ?? defaultOpen(g.label));
+        return (
+          <div key={g.label}>
+            <div className="node" onClick={() => setOpen({ ...open, [g.label]: !isOpen })}>
+              <span className="twisty">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
+              <span className="dim">{g.label}</span>
+              <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.items.length}</span>
+            </div>
+            {isOpen && g.items.map((it) => (
+              <div key={it.id} className={`node ${active === it.id ? "selected" : ""}`} style={{ paddingLeft: 28 }} onClick={() => onPick(it.id)} title={title(it.id)}>
+                <span className="mono faint" style={{ width: 30, flex: "none" }}>{it.id}</span>
+                {it.label}
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+/**
+ * THG2 sprites: pure sprites (a sprites.dat graphic, drawn as-is) and unit sprites (a
+ * unit the game creates on load — Installation doors and traps). Picking one arms
+ * placement, like the Units palette. Names come from the loaded unit tables.
+ */
+function SpritePalette() {
+  const [owner, setOwner] = useAtom(unitOwnerAtom);
+  const [kind, setKind] = useAtom(activeSpriteKindAtom);
+  const [active, setActive] = useAtom(activeSpriteAtom);
+  const [activeUnit, setActiveUnit] = useAtom(activeUnitSpriteAtom);
+  const [placing, setPlacing] = useAtom(spritePlacingAtom);
+  const [options, setOptions] = useAtom(spritePlaceOptionsAtom);
+  const scenario = useAtomValue(scenarioAtom);
+  const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
+  const { loaded: assets, error } = useUnitAssets();
+  const [query, setQuery] = useState("");
+  const colors = scenario?.playerColors;
+
+  const pureGroups = useMemo<PickerGroup[]>(() => {
+    if (!assets) return [{ label: "Sprites", items: Array.from({ length: SPRITE_COUNT }, (_, id) => ({ id, label: `Sprite #${id}` })) }];
+    const cat = spriteCatalogue(assets);
+    return cat.groups.map((g) => ({ label: g.label, items: g.ids.map((id) => ({ id, label: cat.entries[id].label })) }));
+  }, [assets]);
+  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitName(id) })) })), []);
+
+  const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
+  const activeId = kind === "pure" ? active : activeUnit;
+  const activeLabel = spriteName(assets, kind, activeId);
+  const count = scenario ? scenario.sprites.filter((r) => (r.flags & SpriteFlag.PureSprite) !== 0).length : 0;
+
   return (
-    <Tabs
-      compact
-      tabs={[
-        { value: "pure", label: "Pure Sprites", content: <><div className="palette-scroll">{list(SPRITES)}</div><div className="palette-footer"><span>{SPRITES.length} sprites</span><span>THG2</span></div></> },
-        { value: "unit", label: "Unit Sprites", content: <><div className="palette-scroll">{list(UNIT_GROUPS[0].units.concat(UNIT_GROUPS[3].units).map(unitName))}</div><div className="palette-footer"><span>Unit-sprite (no owner logic)</span></div></> },
-      ]}
-    />
+    <>
+      <div className="owner-strip" title="Sprite owner">
+        {Array.from({ length: 12 }, (_, i) => (
+          <Tip key={i} label={`Player ${i + 1}`} side="right">
+            <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: playerColorHex(colors, i) }} onClick={() => setOwner(i)}>
+              {i + 1}
+            </button>
+          </Tip>
+        ))}
+      </div>
+      <div className="palette-toolbar">
+        <Search size={12} className="faint" />
+        <input className="input grow" placeholder="Search sprites…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+      <div className="placement-options" title="Flags on newly placed sprites">
+        <Check label="Flipped" title="Mirror the graphic left-to-right (THG2 flag 0x2000)" checked={options.flipped} onChange={(e) => setOptions({ ...options, flipped: e.target.checked })} />
+        <Check label="Disabled" title="Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (THG2 flag 0x8000)" checked={options.disabled} disabled={kind !== "unit"} onChange={(e) => setOptions({ ...options, disabled: e.target.checked })} />
+      </div>
+      <Tabs
+        compact
+        value={kind}
+        onValueChange={(v) => setKind(v as SpriteKind)}
+        tabs={[
+          {
+            value: "pure",
+            label: "Pure Sprites",
+            content: (
+              <>
+                {error && <div className="hint" style={{ padding: "4px 8px" }}>Unit data not installed — sprites are listed by id and drawn as markers.</div>}
+                <GroupedPicker groups={pureGroups} active={active} onPick={(id) => pick("pure", id)} query={query} defaultOpen={(l) => l === "Units" || l === `Doodads · ${tileset.name}`} title={(id) => `Sprite #${id} — click to place`} />
+                <div className="palette-footer"><span>{count} pure sprite{count === 1 ? "" : "s"} on the map</span><span>THG2</span></div>
+              </>
+            ),
+          },
+          {
+            value: "unit",
+            label: "Unit Sprites",
+            content: (
+              <>
+                <GroupedPicker groups={unitGroups} active={activeUnit} onPick={(id) => pick("unit", id)} query={query} defaultOpen={(l) => l === "Special"} title={(id) => `Unit #${id} as a sprite — click to place`} />
+                <div className="palette-footer"><span>{scenario ? scenario.sprites.length - count : 0} unit sprite{scenario && scenario.sprites.length - count === 1 ? "" : "s"} on the map</span><span>becomes a unit on load</span></div>
+              </>
+            ),
+          },
+        ]}
+      />
+      <div className="palette-footer">
+        <span>{placing ? <>Placing {activeLabel} <span className="faint">· Esc stops</span></> : <>{activeLabel} <span className="mono">#{activeId}</span> <span className="faint">· select mode</span></>}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: playerColorHex(colors, owner), width: 10, height: 10 }} />P{owner + 1}</span>
+      </div>
+    </>
   );
 }
 

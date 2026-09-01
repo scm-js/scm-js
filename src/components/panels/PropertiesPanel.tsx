@@ -1,10 +1,12 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { MousePointer2, Trash2 } from "lucide-react";
 import {
-  activeDoodadAtom, activeLayerAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, brushSizeAtom, cursorTileAtom, doodadPlacementAtom,
+  activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom,
+  brushSizeAtom, cursorTileAtom, doodadPlacementAtom,
   doodadPlacingAtom, fogModeAtom, fogPlayersAtom,
   fogViewPlayerAtom, mapTilesetAtom,
-  rectVariationAtom, selectedDoodadsAtom, selectedUnitsAtom, terrainModeAtom, unitOwnerAtom, unitPlacingAtom,
+  rectVariationAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, spritePlacingAtom, terrainModeAtom,
+  unitOwnerAtom, unitPlacingAtom,
 } from "../../atoms/editorAtoms";
 import { doodadsRevisionAtom, scenarioAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
@@ -17,6 +19,9 @@ import { unitName } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools } from "../../hooks/useDoodadTools";
+import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
+import { spriteKind } from "../../editor/sprites";
+import { SpriteFlag } from "../../formats/chk/sections/objects";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { DoodadThumb } from "./DoodadThumb";
 import { heightLabel, hexTile, tileInfo } from "../../formats/tileset/palette";
@@ -24,7 +29,7 @@ import { UnitUsed } from "../../editor/units";
 import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
 import { TileThumb } from "./TileBrowser";
-import { UnitPreview } from "./UnitPreview";
+import { SpritePreview, UnitPreview } from "./UnitPreview";
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
@@ -243,6 +248,101 @@ function DoodadProps() {
   );
 }
 
+/** Selected sprites when there are any, otherwise the sprite about to be placed. */
+function SpriteProps() {
+  const scenario = useAtomValue(scenarioAtom);
+  const selected = useAtomValue(selectedSpritesAtom);
+  useAtomValue(doodadsRevisionAtom); // records are replaced in place on move / re-own / re-flag
+  const kind = useAtomValue(activeSpriteKindAtom);
+  const activePure = useAtomValue(activeSpriteAtom);
+  const activeUnit = useAtomValue(activeUnitSpriteAtom);
+  const [owner, setOwner] = useAtom(unitOwnerAtom);
+  const placing = useAtomValue(spritePlacingAtom);
+  const options = useAtomValue(spritePlaceOptionsAtom);
+  const open = useSetAtom(openDialogAtom);
+  const tools = useSpriteTools();
+  const { catalogue } = useDoodadTools();
+  const colors = scenario?.playerColors;
+  const dash = <span className="faint">—</span>;
+  const first = scenario && selected.length > 0 ? scenario.sprites[selected[0]] : null;
+
+  if (first && scenario) {
+    const many = selected.length > 1;
+    const k = spriteKind(first);
+    const flipped = (first.flags & SpriteFlag.Flipped) !== 0;
+    const disabled = (first.flags & SpriteFlag.Disabled) !== 0;
+    // A doodad's overlay: the DD2 record at the same centre whose definition names this sprite.
+    const ownerDoodad = scenario.doodads.findIndex((d) => {
+      const def = catalogue.byId.get(d.doodadId);
+      return def?.overlay && def.overlay.id === first.spriteId && d.x === first.x && d.y === first.y && (def.overlay.kind === "sprite") === (k === "pure");
+    });
+    const size = tools.sizeOf(first);
+    return (
+      <div className="props">
+        <div className="span unit-head">
+          <SpritePreview kind={k} id={first.spriteId} owner={first.owner} colors={colors} size={48} flipped={flipped} />
+          <div style={{ minWidth: 0 }}>
+            <div className="name" title={spriteName(tools.assets, k, first.spriteId)}>{spriteName(tools.assets, k, first.spriteId)}</div>
+            <div className="sub">{k === "pure" ? "pure sprite" : "unit sprite"} #{first.spriteId} · THG2 {selected[0]}{many ? ` · +${selected.length - 1} more` : ""}</div>
+          </div>
+        </div>
+        <Row k="Owner">
+          <select className="select" value={first.owner} onChange={(e) => tools.setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
+        </Row>
+        <Row k="Position"><span className="mono">{first.x}, {first.y}</span> <span className="faint">px · tile {Math.floor(first.x / 32)}, {Math.floor(first.y / 32)}</span></Row>
+        <Row k="Graphic"><span className="mono">{size.width} × {size.height} px</span></Row>
+        {ownerDoodad >= 0 && <Row k="Overlay of">{doodadLabel(catalogue.byId.get(scenario.doodads[ownerDoodad].doodadId)!)} <span className="faint mono">DD2 {ownerDoodad}</span></Row>}
+        <div className="props-section">Flags{many ? <span className="faint"> · edits apply to all {selected.length}</span> : null} <span className="faint mono">{`0x${first.flags.toString(16).toUpperCase().padStart(4, "0")}`}</span></div>
+        <div className="span col" style={{ gap: 0 }}>
+          <Check label="Pure sprite" title="Drawn as a graphic only; unticked, the game creates a unit of this id on load (0x1000)" checked={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.PureSprite, e.target.checked, e.target.checked ? "Make pure sprite" : "Make unit sprite")} />
+          <Check label="Flipped" title="Mirror the graphic left-to-right (0x2000)" checked={flipped} onChange={(e) => tools.setFlag(SpriteFlag.Flipped, e.target.checked, e.target.checked ? "Flip sprite" : "Unflip sprite")} />
+          <Check label="Disabled" title="Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (0x8000)" checked={disabled} disabled={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.Disabled, e.target.checked, e.target.checked ? "Disable sprite" : "Enable sprite")} />
+        </div>
+        <div className="span row" style={{ marginTop: 6, gap: 6 }}>
+          <Button size="sm" onClick={() => open("spriteProperties", { indices: selected })}>Sprite Properties…</Button>
+          <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete"><Trash2 size={12} /></Button>
+          <Button size="sm" onClick={() => tools.startPlacing(k, first.spriteId)} title="Place more of this sprite">Place more</Button>
+        </div>
+        <div className="span hint" style={{ marginTop: 4 }}>
+          {ownerDoodad >= 0 ? "This is a doodad's overlay: moving or deleting it leaves the doodad's tiles behind; edit it on the Doodads layer to keep them together." : "Double-click a sprite for every field the THG2 record stores."}
+        </div>
+      </div>
+    );
+  }
+
+  const id = kind === "pure" ? activePure : activeUnit;
+  const label = spriteName(tools.assets, kind, id);
+  const size = tools.sizeOf({ spriteId: id, x: 0, y: 0, owner: 0, unused: 0, flags: kind === "pure" ? SpriteFlag.PureSprite : 0 });
+  return (
+    <div className="props">
+      <div className="span unit-head">
+        <SpritePreview kind={kind} id={id} owner={owner} colors={colors} size={48} flipped={options.flipped} />
+        <div style={{ minWidth: 0 }}>
+          <div className="name" title={label}>{label}</div>
+          <div className="sub">{kind === "pure" ? "pure sprite" : "unit sprite"} #{id} · {placing ? "placing" : "select mode"}</div>
+        </div>
+      </div>
+      <Row k="Owner">
+        <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
+      </Row>
+      <Row k="Kind">{kind === "pure" ? "Pure sprite — a graphic, no unit behind it" : "Unit sprite — becomes a unit when the map loads"}</Row>
+      <Row k="Flags">{[options.flipped && "flipped", kind === "unit" && options.disabled && "disabled"].filter(Boolean).join(" · ") || <span className="faint">none</span>}</Row>
+      <Row k="Graphic">{tools.assets ? <span className="mono">{size.width} × {size.height} px</span> : dash}</Row>
+      <Row k="Placed">{scenario ? scenario.sprites.filter((r) => r.spriteId === id && spriteKind(r) === kind).length : dash}</Row>
+      <div className="span row" style={{ marginTop: 6, gap: 6 }}>
+        {placing
+          ? <Button size="sm" onClick={() => tools.stopPlacing()}>Stop placing</Button>
+          : <Button size="sm" onClick={() => tools.startPlacing()}>Place {label}</Button>}
+      </div>
+      <div className="span hint" style={{ marginTop: 6 }}>
+        {placing
+          ? "Click the map to place; sprites go anywhere, at any pixel. Esc or right-click stops placing."
+          : "Click a sprite to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a sprite in the palette to place it."}
+      </div>
+    </div>
+  );
+}
+
 /** The fog layer: what the brush does, whose fog is shown, and the tile under the pointer. */
 function FogProps() {
   const brush = useAtomValue(brushSizeAtom);
@@ -279,6 +379,7 @@ export default function PropertiesPanel() {
   if (layer === "terrain") return <TerrainProps />;
   if (layer === "units") return <UnitProps />;
   if (layer === "doodads") return <DoodadProps />;
+  if (layer === "sprites") return <SpriteProps />;
   if (layer === "fog") return <FogProps />;
 
   if (layer === "locations") {
@@ -301,23 +402,6 @@ export default function PropertiesPanel() {
         </div>
         <div className="span" style={{ marginTop: 6 }}>
           <Button size="sm" onClick={() => open("locationProperties", { location: l })}>Location Properties…</Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (layer === "sprites") {
-    return (
-      <div className="props">
-        <div className="span row between"><strong>Cursor Marker</strong><span className="badge">sample</span></div>
-        <Row k="Sprite ID"><span className="mono">318</span></Row>
-        <Row k="Owner"><select className="select" defaultValue={0}>{PLAYER_COLORS.slice(0, 12).map((_, i) => <option key={i} value={i}>Player {i + 1}</option>)}</select></Row>
-        <div className="span col" style={{ gap: 0 }}>
-          <Check label="Pure sprite (no unit)" defaultChecked />
-          <Check label="Disabled" />
-        </div>
-        <div className="span" style={{ marginTop: 6 }}>
-          <Button size="sm" onClick={() => open("spriteProperties")}>Sprite Properties…</Button>
         </div>
       </div>
     );

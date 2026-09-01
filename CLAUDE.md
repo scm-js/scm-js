@@ -98,6 +98,23 @@ Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the sa
 Rect mode paints in left/right pairs following map column parity, sharing one random variation per
 pair — the tests in `tests/terrain-edit.test.ts` pin this behaviour.
 
+### Sprites (`src/editor/sprites.ts`, `src/hooks/useSpriteTools.ts`, `src/data/sprites.ts`)
+
+`scenario.sprites` is the `THG2` list. `SpriteChange { index, before, after }` lists (insert / remove /
+replace, removals highest index first) are carried in `HistoryEntry.sprites` — the same slot a doodad's
+overlay sprite uses — and applied by `applySpriteChanges` (marks `THG2` dirty). `applyList` there is the
+generic in-place list applier the doodad codec shares; `editor/doodads.ts` re-exports the sprite pieces.
+`spriteKind(r)` reads `SpriteFlag.PureSprite`: a *pure* sprite's `spriteId` is a sprites.dat id, a *unit*
+sprite's a units.dat id. `makeSprite` writes StarEdit's flags (pure → `0x1000` only; unit → 0, plus
+`Disabled`); doodad overlays are the exception (`makeOverlaySprite`, whole CV5 flag word). Hit-testing
+(`spriteAt`, `spritesInBox`) takes a `sizeOf` callback — the hook reads the loaded GRP's frame box via
+`requestGrp`, tests pass a constant. Repaints go through `doodadsRevisionAtom` (it already covered
+`scenario.sprites`); `selectedSpritesAtom` is cleared by any entry with `sprites`. Names come from
+`spriteCatalogue(assets)` — the unit whose flingy uses the sprite, else the GRP file name, grouped by
+`thingy\tileset\<ts>` path — there is no sprite name table in the game data. `scripts/extract-units.mjs`
+seeds the GRP walk from all 517 sprites.dat images so pure sprites (and doodad overlays) can be drawn.
+`tests/sprite-edit.test.ts` pins the flags, ordering and the THG2 round trip.
+
 ### Fog of war (`src/editor/fog.ts`, `src/hooks/useFogTools.ts`, `src/components/viewport/fog.ts`)
 
 `scenario.mask` is the `MASK` section (one byte per tile, bit n = player n+1 starts *unexplored*),

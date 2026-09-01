@@ -23,17 +23,15 @@ import { DOODAD_GROUP_INDEX, megatileForTile, type Tileset } from "../formats/ti
 import { doodadCenter, doodadOrigin, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
 import { pickVariation, variationsOf } from "../formats/tileset/terrain";
 import { Stroke, type TileChange } from "./terrain";
+import { applyList, applySpriteChanges, type SpriteChange } from "./sprites";
+
+// The THG2 half of a doodad edit lives in editor/sprites.ts; re-exported for the callers that grew up here.
+export { applySpriteChanges, type SpriteChange };
 
 export interface DoodadChange {
   index: number;
   before: DoodadRecord | null;
   after: DoodadRecord | null;
-}
-
-export interface SpriteChange {
-  index: number;
-  before: SpriteRecord | null;
-  after: SpriteRecord | null;
 }
 
 /** Everything one doodad edit changes; each list undoes in reverse. */
@@ -47,23 +45,6 @@ export interface DoodadEdit {
 export function applyDoodadChanges(scn: Scenario, changes: readonly DoodadChange[], direction: "do" | "undo" = "do") {
   applyList(scn.doodads, changes, direction);
   if (changes.length > 0) markDirty(scn, "DD2 ");
-}
-
-export function applySpriteChanges(scn: Scenario, changes: readonly SpriteChange[], direction: "do" | "undo" = "do") {
-  applyList(scn.sprites, changes, direction);
-  if (changes.length > 0) markDirty(scn, "THG2");
-}
-
-/** Insert / remove / replace on an in-place list; removals are listed highest index first. */
-function applyList<T>(list: T[], changes: readonly { index: number; before: T | null; after: T | null }[], direction: "do" | "undo") {
-  const ordered = direction === "do" ? changes : [...changes].reverse();
-  for (const c of ordered) {
-    const before = direction === "do" ? c.before : c.after;
-    const after = direction === "do" ? c.after : c.before;
-    if (before && after) list[c.index] = after;
-    else if (after) list.splice(c.index, 0, after);
-    else if (before) list.splice(c.index, 1);
-  }
 }
 
 /* ── Options and geometry ────────────────────────────────── */

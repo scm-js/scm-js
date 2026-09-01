@@ -96,11 +96,11 @@
   color: var(--text-dim);
 }
 .splash-log {
-  height: 54px;
+  height: 64px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
 }
 .splash-log div {
@@ -108,6 +108,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 0.45;
+  line-height: 1.45;
+  font-size: 10px;
 }
 .splash-log div.failed {
   color: var(--warn);

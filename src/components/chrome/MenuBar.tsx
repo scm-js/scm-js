@@ -228,7 +228,7 @@ function useMenus(): { label: string; items: Item[] }[] {
         stub("Documentation"),
         stub("Report an Issue…"),
         sep,
-        dlg("About SCM JS…", "about"),
+        dlg("About scmJS…", "about"),
       ],
     },
   ];

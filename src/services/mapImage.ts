@@ -16,6 +16,7 @@ import { START_LOCATION } from "../data/units";
 import { boundsOf, locationName } from "../editor/locations";
 import { isResource, unitGeometry } from "../editor/units";
 import { drawFogOverlay } from "../components/viewport/fog";
+import type { Rect } from "../editor/terrain";
 
 /**
  * Rendering the open map to a picture, for File ▸ Export ▸ Image.
@@ -58,6 +59,13 @@ export interface MapImageOptions {
   fogPlayer: number;
   /** Grid spacing in map pixels (32 = one tile); 0 for no grid. */
   grid: number;
+  /**
+   * The part of the map to draw, in tiles (exclusive `x1` / `y1`). The whole map when
+   * absent. Everything is drawn in map coordinates and the canvas is translated, so a
+   * region looks exactly like that part of the full picture — a unit half outside the
+   * region still leans in.
+   */
+  rect?: Rect | null;
 }
 
 export const DEFAULT_IMAGE_OPTIONS: MapImageOptions = {
@@ -83,8 +91,22 @@ export interface MapImageAssets {
   units: UnitAssets | null;
 }
 
+/** The tiles an export covers: its `rect` clamped to the map, or the whole map. */
+export function imageArea(scn: Scenario, options: MapImageOptions): Rect {
+  const r = options.rect;
+  if (!r) return { x0: 0, y0: 0, x1: scn.width, y1: scn.height };
+  const x0 = Math.max(0, Math.min(scn.width, Math.floor(r.x0)));
+  const y0 = Math.max(0, Math.min(scn.height, Math.floor(r.y0)));
+  return {
+    x0, y0,
+    x1: Math.max(x0, Math.min(scn.width, Math.ceil(r.x1))),
+    y1: Math.max(y0, Math.min(scn.height, Math.ceil(r.y1))),
+  };
+}
+
 export function imageSize(scn: Scenario, options: MapImageOptions) {
-  return { width: scn.width * options.pixelsPerTile, height: scn.height * options.pixelsPerTile };
+  const area = imageArea(scn, options);
+  return { width: (area.x1 - area.x0) * options.pixelsPerTile, height: (area.y1 - area.y0) * options.pixelsPerTile };
 }
 
 /**
@@ -140,9 +162,13 @@ export function renderMapImage(scn: Scenario, assets: MapImageAssets, options: M
   ctx.fillStyle = "#0a0c10";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  drawTerrain(ctx, scn, assets.tileset, tilePx);
+  // Everything below draws in map pixels × tilePx; a region export just shifts the origin.
+  const area = imageArea(scn, options);
+  ctx.translate(-area.x0 * tilePx, -area.y0 * tilePx);
 
-  if (options.grid > 0) drawGrid(ctx, canvas, (options.grid / TILE) * tilePx);
+  drawTerrain(ctx, scn, assets.tileset, tilePx, area);
+
+  if (options.grid > 0) drawGrid(ctx, area, tilePx, (options.grid / TILE) * tilePx);
 
   const colorOf = (owner: number) => displayColorHex(scn.playerColors, scn.playerRgb, owner);
 
@@ -155,24 +181,25 @@ export function renderMapImage(scn: Scenario, assets: MapImageAssets, options: M
 
   if (options.fog) {
     drawFogOverlay(ctx, scn, era, options.fogPlayer, {
-      x0: 0, y0: 0, x1: scn.width, y1: scn.height, tilePx, sx: 0, sy: 0,
+      x0: area.x0, y0: area.y0, x1: area.x1, y1: area.y1, tilePx, sx: 0, sy: 0,
     });
   }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   return canvas;
 }
 
-function drawTerrain(ctx: CanvasRenderingContext2D, scn: Scenario, loaded: LoadedTileset | null, tilePx: number) {
+function drawTerrain(ctx: CanvasRenderingContext2D, scn: Scenario, loaded: LoadedTileset | null, tilePx: number, area: Rect) {
   if (!loaded) {
     // No tileset graphics installed: the flat per-tileset colour the viewport falls back to.
     ctx.fillStyle = TILESETS[tilesetIndex(scn)]?.color ?? "#20303a";
-    ctx.fillRect(0, 0, scn.width * tilePx, scn.height * tilePx);
+    ctx.fillRect(area.x0 * tilePx, area.y0 * tilePx, (area.x1 - area.x0) * tilePx, (area.y1 - area.y0) * tilePx);
     return;
   }
   const { atlas, tileset } = loaded;
   const flat = tilePx < FLAT_PX;
   ctx.imageSmoothingEnabled = !flat && tilePx < TILE;
-  for (let ty = 0; ty < scn.height; ty++) {
-    for (let tx = 0; tx < scn.width; tx++) {
+  for (let ty = area.y0; ty < area.y1; ty++) {
+    for (let tx = area.x0; tx < area.x1; tx++) {
       const megatile = megatileForTile(tileset, scn.tiles[ty * scn.width + tx]);
       const px = tx * tilePx;
       const py = ty * tilePx;
@@ -196,18 +223,21 @@ function meanColor(atlas: TilesetAtlas, megatile: number): string {
   return `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, step: number) {
+/** Grid lines every `step` output pixels, aligned to the map's origin, over `area`. */
+function drawGrid(ctx: CanvasRenderingContext2D, area: Rect, tilePx: number, step: number) {
   if (step < 3) return;
+  const left = area.x0 * tilePx, top = area.y0 * tilePx;
+  const right = area.x1 * tilePx, bottom = area.y1 * tilePx;
   ctx.strokeStyle = step >= 16 ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let x = 0; x <= canvas.width; x += step) {
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, canvas.height);
+  for (let x = Math.ceil(left / step) * step; x <= right; x += step) {
+    ctx.moveTo(Math.round(x) + 0.5, top);
+    ctx.lineTo(Math.round(x) + 0.5, bottom);
   }
-  for (let y = 0; y <= canvas.height; y += step) {
-    ctx.moveTo(0, Math.round(y) + 0.5);
-    ctx.lineTo(canvas.width, Math.round(y) + 0.5);
+  for (let y = Math.ceil(top / step) * step; y <= bottom; y += step) {
+    ctx.moveTo(left, Math.round(y) + 0.5);
+    ctx.lineTo(right, Math.round(y) + 0.5);
   }
   ctx.stroke();
 }

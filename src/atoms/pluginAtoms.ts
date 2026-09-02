@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
+  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
 } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import { browserStorage } from "./storage";
@@ -97,18 +97,37 @@ let contributionSeq = 0;
 export const nextContributionKey = () => ++contributionSeq;
 
 /** A registered menu item: the spec with `icon: "plugin"` already resolved to the plugin's icon. */
-export interface PluginMenuItem extends Omit<MenuItemSpec, "icon"> {
+export interface PluginMenuItem extends Omit<MenuItemSpec, "icon" | "run" | "command"> {
   key: number;
   pluginId: string;
   path: MenuPath;
   icon?: PluginIcon;
+  /** Always resolved: an item registered with a `command` gets a `run` that calls it. */
+  run: () => void;
 }
 
-export interface PluginContextItem extends ContextItemSpec {
+export interface PluginContextItem extends Omit<ContextItemSpec, "run" | "command"> {
   key: number;
   pluginId: string;
   surface: ContextSurface;
+  run: (ctx: ContextMenuContext) => void;
 }
+
+/**
+ * A command a plugin registered: a named thing to do, which a menu item, a hotkey, a
+ * context entry or another plugin can all reach by id (`commands.run`).
+ */
+export interface PluginCommand {
+  key: number;
+  pluginId: string;
+  /** Namespaced under the plugin unless the plugin gave a dotted id of its own. */
+  id: string;
+  title: string;
+  enabled?: () => boolean;
+  run: (...args: unknown[]) => unknown;
+}
+
+export const pluginCommandsAtom = atom<PluginCommand[]>([]);
 
 export interface PluginHotkey {
   key: number;

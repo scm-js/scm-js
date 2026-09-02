@@ -26,7 +26,22 @@ import type { DialogId } from "../atoms/uiAtoms";
 import type { MapImageOptions } from "../services/mapImage";
 import type { SectionInfo, SectionKnowledge } from "../editor/sections";
 import type { CombineMode } from "../formats/chk/reader";
+import type { ActionRecord, ConditionRecord, TriggerRecord } from "../formats/chk/sections/triggers";
+import type { ActionDef, ArgDef, ArgKind, Choice, ConditionDef } from "../data/triggerDefs";
+import type { TextTrigger, TriggerNames } from "../formats/triggers/text";
+import type { Issue, IssueLevel, IssueTarget } from "../editor/validate";
+import type { MapStatistics } from "../editor/statistics";
+import type { FindKind, FindOptions, FindResult } from "../editor/find";
+import type { StringUsage } from "../editor/strings";
+import type { PlacementProblem, PlacementVerdict } from "../editor/placement";
+import type { FlingyDat, ImagesDat, Race, SpritesDat, TechdataDat, UnitsDat, UpgradesDat, WeaponsDat } from "../formats/dat/dat";
+import type { ViewFlags } from "../atoms/editorAtoms";
 
+export type {
+  TriggerRecord, ConditionRecord, ActionRecord, ConditionDef, ActionDef, ArgDef, ArgKind, Choice, TriggerNames, TextTrigger,
+  Issue, IssueLevel, IssueTarget, MapStatistics, FindKind, FindOptions, FindResult, StringUsage, PlacementVerdict, PlacementProblem,
+  UnitsDat, WeaponsDat, UpgradesDat, TechdataDat, SpritesDat, FlingyDat, ImagesDat, Race, ViewFlags,
+};
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode };
 
 /**
@@ -96,15 +111,21 @@ export interface PluginApi {
   readonly apiVersion: number;
   readonly plugin: PluginInfo;
   readonly document: DocumentApi;
+  readonly triggers: TriggersApi;
   readonly terrain: TerrainApi;
   readonly tileset: TilesetApi;
   readonly selection: SelectionApi;
   readonly palette: PaletteApi;
   readonly names: NamesApi;
+  readonly query: QueryApi;
+  readonly data: DataApi;
+  readonly graphics: GraphicsApi;
+  readonly view: ViewApi;
   readonly ui: UiApi;
   readonly menu: MenuApi;
   readonly contextMenu: ContextMenuApi;
   readonly hotkeys: HotkeyApi;
+  readonly commands: CommandsApi;
   readonly events: EventsApi;
   readonly storage: StorageApi;
   /** `console.log` with the plugin's name in front. */
@@ -177,6 +198,14 @@ export interface DocumentApi {
    * Returns an all-zero result with `changed: false` when no map is open.
    */
   edit(label: string, build: (tx: EditTransaction) => void): EditResult;
+  /**
+   * The second kind of write: the tables and settings that live outside the undo model
+   * — triggers, the string table, switch names, the scenario's own properties — as one
+   * transaction, the way a settings dialog's OK applies its whole form at once.
+   * Operations apply as they are called; the commit marks the map modified and bumps
+   * what the chrome reads. There is no undo entry: keep your own if you need one.
+   */
+  update(label: string, build: (tx: UpdateTransaction) => void): UpdateResult;
   undo(): string | null;
   redo(): string | null;
   /**
@@ -317,6 +346,338 @@ export interface EditTransaction {
 
   /** A line for the status bar, appended to the label. */
   note(text: string): void;
+}
+
+/* ── Update transactions: tables and settings ───────────── */
+
+/**
+ * What one `document.update` changed: every section it marked dirty, in the order the
+ * operations touched them, and `changed` false when they were all no-ops.
+ */
+export interface UpdateResult {
+  changed: boolean;
+  sections: string[];
+  notes: string[];
+}
+
+/** TRIG or MBRF as a list. Operations apply as they are called, like `document.edit`'s. */
+export interface TriggerListUpdate {
+  /** The list as it stands, cloned. */
+  list(): TriggerRecord[];
+  count(): number;
+  /** Replace the whole list. */
+  set(list: TriggerRecord[]): void;
+  /** Insert one (at the end without `at`); returns its index. */
+  add(trigger: TriggerRecord, at?: number): number;
+  /** Replace one record; false when there is none at `index`. */
+  replace(index: number, trigger: TriggerRecord): boolean;
+  remove(indices: number[]): number;
+  move(from: number, to: number): boolean;
+  /**
+   * Parse the text format (`triggers.text.print`'s inverse) and append the result, or
+   * replace the list with `replace: true`. Strings the text names are interned as it
+   * parses. Throws with the line number when the text does not parse.
+   */
+  fromText(source: string, options?: { replace?: boolean }): number;
+}
+
+/**
+ * The string table. Nothing is ever renumbered: `set` overwrites a slot (every record
+ * pointing at it sees the new text) and `intern` appends rather than reusing a slot
+ * something else may share.
+ */
+export interface StringsUpdate {
+  list(): (string | null)[];
+  /** The index of `text`: an identical entry when there is one, else a new one. 0 for `""`. */
+  intern(text: string): number;
+  /** Overwrite one slot. */
+  set(index: number, text: string): void;
+  /** Install a whole table; unreferenced trailing blanks are dropped, other indices keep their place. */
+  apply(list: (string | null)[]): void;
+}
+
+export interface SwitchesUpdate {
+  names(): string[];
+  /** Name a switch (0-based); `""` clears the name. Creates SWNM on the first one. */
+  setName(index: number, name: string): void;
+}
+
+/**
+ * The second kind of write (see `document.update`): the tables and settings the editor's
+ * own dialogs edit. Operations apply to the scenario as they are called — a string
+ * interned on one line is there for the trigger added on the next — and the commit at
+ * the end marks the map modified and tells the chrome to re-read.
+ */
+export interface UpdateTransaction {
+  readonly scenario: Scenario;
+  /** TRIG. */
+  readonly triggers: TriggerListUpdate;
+  /** MBRF, the mission briefing's own list of the same records. */
+  readonly briefing: TriggerListUpdate;
+  readonly strings: StringsUpdate;
+  /** SWNM. */
+  readonly switches: SwitchesUpdate;
+  /** SPRP: the scenario's name and description (`""` restores the file-name default). */
+  properties(patch: { name?: string; description?: string }): void;
+  /** A line for the status bar, appended to the label. */
+  note(text: string): void;
+}
+
+/* ── Triggers ───────────────────────────────────────────── */
+
+/**
+ * What each condition and action type takes: the argument list in the order StarEdit's
+ * TrigEdit shows it, each naming the record field it lives in and the kind of value it
+ * is (a player group, a unit id, a location, a comparison, …). Everything that displays
+ * or edits a trigger reads this table, the editor's own dialogs included.
+ */
+export interface TriggerDefsApi {
+  conditions(): ConditionDef[];
+  condition(type: number): ConditionDef | undefined;
+  actions(briefing?: boolean): ActionDef[];
+  action(type: number, briefing?: boolean): ActionDef | undefined;
+  /** The values an enumerated argument kind can take, with their labels. */
+  choices(kind: ArgKind): Choice[];
+  choiceLabel(kind: ArgKind, value: number): string | undefined;
+  /** The value behind a label or one of its aliases, for parsing. */
+  choiceValue(kind: ArgKind, text: string): number | undefined;
+}
+
+/** Printing and parsing the text trigger format (File ▸ Import / Export ▸ Triggers). */
+export interface TriggerTextApi {
+  print(triggers: TriggerRecord[], options?: { briefing?: boolean }): string;
+  /**
+   * Parse text into records, resolving names against the open map (and interning the
+   * strings it mentions). Throws a `TriggerTextError` carrying the line on bad input.
+   */
+  parse(source: string, options?: { briefing?: boolean }): TextTrigger[];
+  /** One trigger as its `Trigger(…)` block. */
+  one(trigger: TriggerRecord, options?: { briefing?: boolean }): string;
+}
+
+/**
+ * Reading triggers, and the pure helpers that make them presentable. Writing goes
+ * through `document.update`.
+ */
+export interface TriggersApi {
+  /** TRIG, cloned. */
+  list(): TriggerRecord[];
+  /** MBRF, cloned. */
+  briefing(): TriggerRecord[];
+  /** SWNM as names, StarEdit's `Switch N` where there is none. */
+  switchNames(): string[];
+  /** How many conditions and actions mention each switch. */
+  switchUsage(): number[];
+  /** The name context the text format resolves against: the map's locations, units, switches and strings. */
+  names(): TriggerNames;
+  readonly defs: TriggerDefsApi;
+  readonly text: TriggerTextApi;
+  /** An empty trigger owned by the given player groups (All Players by default). */
+  newTrigger(players?: number[]): TriggerRecord;
+  /** A condition of a type, with StarEdit's defaults for its arguments. */
+  newCondition(type: number): ConditionRecord;
+  newAction(type: number, briefing?: boolean): ActionRecord;
+  isPreserved(trigger: TriggerRecord): boolean;
+  setPreserved(trigger: TriggerRecord, on: boolean): TriggerRecord;
+  /** The indices of the triggers any of these player groups own. */
+  triggersFor(list: TriggerRecord[], groups: number[]): number[];
+  /** The three lines the trigger list shows: players, conditions, actions. */
+  summarize(trigger: TriggerRecord, briefing?: boolean): { players: string; conditions: string; actions: string };
+  /** A trigger's `Comment` action text, when it has one. */
+  comment(trigger: TriggerRecord): string | null;
+}
+
+/* ── Query ──────────────────────────────────────────────── */
+
+/** A start location on the map: the record's index, its owner and where it sits. */
+export interface StartLocation {
+  index: number;
+  owner: number;
+  /** Map pixels. */
+  x: number;
+  y: number;
+  /** The tile it is centred on. */
+  tx: number;
+  ty: number;
+}
+
+/**
+ * Reading the open map: what is under a point, what lies in a rectangle, and the
+ * editor's own analyses — Check Map's issues, Tools ▸ Statistics, the Ctrl+F search and
+ * the string usage map the String Editor is built on.
+ *
+ * Everything here is a read: nothing changes the map, and nothing throws without one
+ * (an empty list, or null).
+ */
+export interface QueryApi {
+  /** The topmost unit whose sprite box covers a map pixel, or -1. */
+  unitAt(px: number, py: number): number;
+  /** Every unit whose centre lies in a tile rect. */
+  unitsIn(rect: Rect): number[];
+  /** Units owned by a player (0-based). */
+  unitsOf(owner: number): number[];
+  spriteAt(px: number, py: number): number;
+  spritesIn(rect: Rect): number[];
+  /** The doodad covering a tile, or -1. */
+  doodadAt(tx: number, ty: number): number;
+  /** The smallest location covering a map pixel (never Anywhere), or -1. */
+  locationAt(px: number, py: number): number;
+  /** Locations wholly inside a tile rect (never Anywhere). */
+  locationsIn(rect: Rect): number[];
+  /** The map's start locations, by player. */
+  startLocations(): StartLocation[];
+  /** Whether a unit type may be placed centred there, and what stops it. */
+  placement(unitId: number, x: number, y: number): PlacementVerdict;
+  /** Check Map: every issue the editor knows how to spot, with a `target` to go to. */
+  validate(): Issue[];
+  /** Tools ▸ Statistics: tile, unit, resource and player counts. Null without a map. */
+  statistics(): MapStatistics | null;
+  /** The Ctrl+F search over units, locations, sprites, strings and triggers. */
+  find(options: FindOptions): FindResult[];
+  /** Every record that refers to each string index. */
+  stringUsage(): Map<number, StringUsage[]>;
+  /** String slots nothing refers to. */
+  unusedStrings(): number[];
+}
+
+/* ── The view ───────────────────────────────────────────── */
+
+/** Where `view.goTo` should take the user. Issues from `query.validate` carry one. */
+export type GoTo =
+  | { kind: "tile"; x: number; y: number }
+  | { kind: "unit"; index: number }
+  | { kind: "sprite"; index: number }
+  | { kind: "location"; index: number };
+
+/**
+ * The map view: where the viewport is looking, how far in, and what it draws over the
+ * terrain. A plugin that finds something needs this to show the user where it is.
+ */
+export interface ViewApi {
+  zoom(): number;
+  /** 0.25 … 8, as the zoom control's steps. */
+  setZoom(zoom: number): void;
+  /** The tiles on screen. */
+  visible(): Rect;
+  /** Scroll so a tile is in the middle of the viewport. */
+  center(x: number, y: number): void;
+  /** Scroll to an object (and select it, for a unit, sprite or location). */
+  goTo(target: GoTo): void;
+  /** The tile under the pointer, as the status bar shows it. */
+  cursorTile(): { x: number; y: number };
+  /** The View menu's ticks: grid, locations, units, sprites, doodads, fog, … */
+  flags(): ViewFlags;
+  setFlags(patch: Partial<ViewFlags>): void;
+  /** Grid spacing in map pixels (32 = one tile). */
+  gridSize(): number;
+  setGridSize(size: 8 | 16 | 32 | 64 | 128): void;
+}
+
+/* ── Commands ───────────────────────────────────────────── */
+
+export interface CommandSpec {
+  /**
+   * The command's id. One without a dot is namespaced under the plugin
+   * (`"paint" → "paint-plugin.paint"`); one with a dot is taken as it is, so a plugin
+   * can offer a stable name others call.
+   */
+  id: string;
+  /** What a menu or a command list should call it. */
+  title: string;
+  enabled?: () => boolean;
+  run: (...args: unknown[]) => unknown;
+}
+
+export interface CommandInfo {
+  id: string;
+  title: string;
+  pluginId: string;
+  enabled: boolean;
+}
+
+/**
+ * Named things a plugin can do, so a menu item, a hotkey, a context entry and another
+ * plugin all reach the same one. `menu.add`, `contextMenu.add` and `hotkeys.add` take a
+ * `command` id in place of a `run`.
+ */
+export interface CommandsApi {
+  register(spec: CommandSpec): Disposable;
+  /** Run one, whoever registered it; the command's own return value, or undefined when there is no such command. */
+  run(id: string, ...args: unknown[]): unknown;
+  has(id: string): boolean;
+  /** Every command registered by every plugin. */
+  list(): CommandInfo[];
+}
+
+/* ── Graphics ───────────────────────────────────────────── */
+
+/** A picture the editor already has: the canvas it draws from, and its size in pixels. */
+export interface PluginImage {
+  image: HTMLCanvasElement;
+  width: number;
+  height: number;
+}
+
+/**
+ * The pictures the viewport draws, for a plugin's own lists and previews: the same
+ * cached canvases, so asking for one costs nothing after the first time. Everything is
+ * null when the graphics it needs were never extracted — a plugin shows a name instead.
+ */
+export interface GraphicsApi {
+  /** Whether the tileset graphics and the unit tables are in memory. */
+  ready(): { tileset: boolean; units: boolean };
+  /** Fetch both; resolves with what is available afterwards. */
+  load(): Promise<{ tileset: boolean; units: boolean }>;
+  /** A unit type in its editor pose, in a player's colours (`owner` 0 by default). */
+  unitImage(unitId: number, options?: { owner?: number }): PluginImage | null;
+  /** A THG2 sprite: a sprites.dat image for `"pure"`, a unit for `"unit"`. */
+  spriteImage(kind: SpriteKind, id: number, options?: { owner?: number; flipped?: boolean }): PluginImage | null;
+  /** One 32 × 32 megatile of the open map's tileset. */
+  tileImage(tileId: number): PluginImage | null;
+  /** A doodad drawn from its own tiles. */
+  doodadImage(doodadId: number): PluginImage | null;
+  /**
+   * Part of the map as File ▸ Export ▸ Image draws it — the same render, cropped to a
+   * tile rect. Everything it needs is loaded first; null without a map or a canvas.
+   */
+  renderRect(rect: Rect, options?: Partial<MapImageOptions>): Promise<Blob | null>;
+  /** The colour a player's units are drawn in, `#rrggbb`. */
+  playerColor(owner: number): string;
+  /**
+   * Start fetching the GRPs a unit type needs, and say whether they are already in
+   * memory. Graphics load lazily, so the first `unitImage` for a type is often null —
+   * ask for it here, redraw on `onImageLoaded`, and the list fills in.
+   */
+  requestUnit(unitId: number): boolean;
+  requestSprite(kind: SpriteKind, id: number): boolean;
+  /** A GRP finished loading: anything drawn from one may look different now. */
+  onImageLoaded(listener: () => void): Disposable;
+}
+
+/* ── Game data ──────────────────────────────────────────── */
+
+/**
+ * The game's own tables, as the editor decoded them: `units.dat` and its neighbours.
+ * `names` gives the labels, this gives the numbers — hit points, costs, build times,
+ * weapons, flags, the sprite and image each unit draws through.
+ *
+ * Everything is null until the tables are loaded (`load`), and stays null when the game
+ * data was never extracted.
+ */
+export interface DataApi {
+  ready(): boolean;
+  load(): Promise<boolean>;
+  units(): UnitsDat | null;
+  weapons(): WeaponsDat | null;
+  upgrades(): UpgradesDat | null;
+  techs(): TechdataDat | null;
+  sprites(): SpritesDat | null;
+  flingy(): FlingyDat | null;
+  images(): ImagesDat | null;
+  /** Which race a unit type belongs to, from its flags. */
+  race(unitId: number): Race;
+  /** The GRP path an image id draws from, relative to `unit\`. */
+  imagePath(imageId: number): string | null;
 }
 
 /* ── Terrain and tileset ────────────────────────────────── */
@@ -680,10 +1041,159 @@ export interface UiApi {
   loadImage(source: Blob | string): Promise<ImageBitmap>;
   /** The image on the system clipboard, if the browser lets the page read it (a permission prompt may appear); null otherwise. */
   readClipboardImage(): Promise<Blob | null>;
+  /** Ask a yes/no question; resolves false on Cancel, Escape or the ×. */
+  confirm(message: string, options?: ConfirmOptions): Promise<boolean>;
+  /** Say something with a single OK. */
+  alert(message: string, options?: ConfirmOptions): Promise<void>;
+  /** Ask for a line of text; null when the user cancelled. */
+  prompt(message: string, options?: PromptOptions): Promise<string | null>;
+  /** A progress bar over the map for long work, with an optional Cancel. */
+  progress(label: string, options?: ProgressOptions): ProgressHandle;
+  /** `el("div", { className: "row" }, …)`: the DOM helper the widgets are built from. */
+  el<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Record<string, unknown>, ...children: WidgetChild[]): HTMLElementTagNameMap[K];
+  /** Buttons, fields, forms and lists in the editor's own styles. */
+  readonly widgets: WidgetsApi;
   /** Open a built-in dialog. */
   open(dialog: DialogId, payload?: Record<string, unknown>): void;
   /** Ask the viewport to repaint (a transaction does this by itself). */
   repaint(): void;
+}
+
+/* ── Prompts, progress and widgets ──────────────────────── */
+
+export interface ConfirmOptions {
+  title?: string;
+  /** The primary button; `OK` by default. */
+  confirmLabel?: string;
+  cancelLabel?: string;
+  /** Paint the primary button as a destructive action. */
+  danger?: boolean;
+}
+
+export interface PromptOptions extends ConfirmOptions {
+  value?: string;
+  placeholder?: string;
+  /** A multi-line field. */
+  multiline?: boolean;
+}
+
+export interface ProgressOptions {
+  title?: string;
+  /** Show a Cancel button; `cancelled()` answers true once it is pressed. */
+  cancellable?: boolean;
+}
+
+/**
+ * A progress panel over the map. It does not block the editor — the user can still
+ * scroll and look — so a plugin doing long work should report often and check
+ * `cancelled()` in its loop.
+ */
+export interface ProgressHandle {
+  /** How far along (0…1), and optionally a line under the bar. */
+  report(fraction: number, text?: string): void;
+  cancelled(): boolean;
+  done(): void;
+  isOpen(): boolean;
+}
+
+/** Anything the widget builders accept as a child: a node, text, or nothing. */
+export type WidgetChild = Node | string | number | null | undefined | false;
+
+export interface WidgetOptions {
+  className?: string;
+  title?: string;
+  disabled?: boolean;
+}
+
+export interface ButtonOptions extends WidgetOptions {
+  primary?: boolean;
+  danger?: boolean;
+  ghost?: boolean;
+  onClick?: (event: MouseEvent) => void;
+}
+
+export interface CheckboxOptions extends WidgetOptions {
+  value?: boolean;
+  /** A radio button instead; give the group a `name`. */
+  radio?: boolean;
+  name?: string;
+  onChange?: (value: boolean) => void;
+}
+
+/** The `<label>` a checkbox is, with its `<input>` on it so you can read or set the value. */
+export type CheckboxElement = HTMLLabelElement & { input: HTMLInputElement };
+
+export interface TextFieldOptions extends WidgetOptions {
+  value?: string;
+  placeholder?: string;
+  password?: boolean;
+  onChange?: (value: string) => void;
+}
+
+export interface NumberFieldOptions extends WidgetOptions {
+  value?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange?: (value: number) => void;
+}
+
+export interface SelectOption {
+  value: string | number;
+  label: string;
+  disabled?: boolean;
+}
+
+export interface SelectOptions extends WidgetOptions {
+  value?: string | number;
+  onChange?: (value: string) => void;
+}
+
+export interface FormRow {
+  label: string;
+  field: HTMLElement;
+}
+
+export interface ListItem<T> {
+  label: string;
+  value: T;
+  /** Dimmed text at the end of the row. */
+  hint?: string;
+  /** A number in the row's gutter, as the editor's own lists show indices. */
+  index?: number;
+  title?: string;
+}
+
+export interface ListOptions<T> {
+  /** Which row starts selected. */
+  selected?: number;
+  /** Maximum height in pixels; the list scrolls past it. */
+  height?: number;
+  className?: string;
+  onPick?: (value: T, index: number) => void;
+}
+
+/**
+ * Buttons, fields, forms and lists in the editor's own styles, as plain DOM. A plugin
+ * dialog built from these looks like a built-in one; `el` is the escape hatch for
+ * anything they do not cover.
+ */
+export interface WidgetsApi {
+  button(label: string, options?: ButtonOptions): HTMLButtonElement;
+  checkbox(label: string, options?: CheckboxOptions): CheckboxElement;
+  text(options?: TextFieldOptions): HTMLInputElement;
+  number(options?: NumberFieldOptions): HTMLInputElement;
+  select(items: SelectOption[], options?: SelectOptions): HTMLSelectElement;
+  /** A two-column grid of labelled fields. */
+  form(rows: (FormRow | null | undefined | false)[]): HTMLElement;
+  /** A titled box (a `fieldset` with a legend, as the dialogs use). */
+  group(title: string, ...children: WidgetChild[]): HTMLElement;
+  row(...children: WidgetChild[]): HTMLDivElement;
+  column(...children: WidgetChild[]): HTMLDivElement;
+  /** Small dimmed explanatory text. */
+  hint(text: string): HTMLElement;
+  separator(): HTMLElement;
+  list<T>(items: ListItem<T>[], options?: ListOptions<T>): HTMLElement;
 }
 
 /* ── Menus, context menus, hotkeys ──────────────────────── */
@@ -710,7 +1220,10 @@ export interface MenuItemSpec {
    */
   after?: string;
   enabled?: () => boolean;
-  run: () => void;
+  /** What the item does. Give this or `command`. */
+  run?: () => void;
+  /** A registered command's id, instead of a `run` of its own. */
+  command?: string;
 }
 
 export interface MenuApi {
@@ -736,7 +1249,9 @@ export interface ContextItemSpec {
   label: string | ((ctx: ContextMenuContext) => string);
   enabled?: (ctx: ContextMenuContext) => boolean;
   visible?: (ctx: ContextMenuContext) => boolean;
-  run: (ctx: ContextMenuContext) => void;
+  /** Give this or `command` (which is run with the context as its argument). */
+  run?: (ctx: ContextMenuContext) => void;
+  command?: string;
 }
 
 export interface ContextMenuApi {
@@ -745,7 +1260,7 @@ export interface ContextMenuApi {
 
 export interface HotkeyApi {
   /** `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name. */
-  add(combo: string, run: () => void): Disposable;
+  add(combo: string, run: (() => void) | { command: string }): Disposable;
 }
 
 /* ── Events and storage ─────────────────────────────────── */
@@ -760,7 +1275,17 @@ export type PluginEvent =
   | "settings"
   | "triggers"
   | "layer"
+  /** THG2 sprites — the same bump doodad edits make. */
+  | "sprites"
   | "selection"
+  /** The marked area or the clip on the clipboard changed. */
+  | "clipboard"
+  /** The viewport scrolled, zoomed, or a View menu tick moved. */
+  | "view"
+  /** A map tool or a map pick started or stopped. */
+  | "tool"
+  /** The map's unsaved-changes flag changed. */
+  | "modified"
   /** A palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog players. */
   | "palette";
 

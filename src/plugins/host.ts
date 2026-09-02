@@ -10,35 +10,51 @@
 import type { createStore } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
-  clipSelectionAtom, fogModeAtom, fogPlayersAtom, mapFilePathAtom, mapModifiedAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom,
-  selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom,
+  centerViewOnAtom, clipboardAtom, clipSelectionAtom, cursorTileAtom, fogModeAtom, fogPlayersAtom, gridSizeAtom, mapDescriptionAtom, mapFilePathAtom, mapModifiedAtom,
+  mapNameAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, zoomAtom,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
-  tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
+  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, replaceScenarioAtom, scenarioAtom,
+  settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginCodeAtom, pluginContextItemsAtom,
+  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginCodeAtom, pluginCommandsAtom, pluginContextItemsAtom,
   pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
   type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
-import { scenarioDescription, scenarioName, tilesetIndex } from "../formats/chk/scenario";
+import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { megatileForTile } from "../formats/tileset/decode";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
-import { peekUnitAssets } from "../formats/units/load";
+import { getUnitAssets, imageGrpPath, peekUnitAssets, requestGrp } from "../formats/units/load";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
 import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
-import { ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CONDITION_DEFS, conditionDef, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES } from "../data/triggerDefs";
-import { getString } from "../formats/chk/sections/strings";
-import { locationName } from "../editor/locations";
-import { readSwitchNames } from "../editor/switches";
+import {
+  ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
+} from "../data/triggerDefs";
+import { getString, setString } from "../formats/chk/sections/strings";
+import { boundsOf, locationName } from "../editor/locations";
+import { applySwitchNames, readSwitchNames, switchUsage } from "../editor/switches";
+import {
+  applyBriefing, applyTriggers, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers, removeTriggers, sameTriggers,
+  setPreserved, triggerNames, triggersFor,
+} from "../editor/triggers";
+import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
+import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
+import { internString } from "../editor/settings";
+import { validateScenario } from "../editor/validate";
+import { mapStatistics } from "../editor/statistics";
+import { findInScenario } from "../editor/find";
+import { unitRace } from "../formats/dat/dat";
+import { ANYWHERE_INDEX, isLocationUsed, type SpriteRecord } from "../formats/chk/sections/objects";
+import { START_LOCATION } from "../data/units";
 import {
   combinedSection, currentChk, editRaw, insertSection, knownSections, moveSection, parseRaw, removeSection, renameSection, replaceSectionData, sectionInfos,
   sectionKnowledge,
@@ -50,19 +66,24 @@ import { doodadLabel } from "../hooks/useDoodadTools";
 import { checkPlacement } from "../editor/placement";
 import type { DoodadDef } from "../formats/tileset/doodads";
 import { applyChanges, stampTerrain, stampTile, Stroke, type Rect, type TileChange } from "../editor/terrain";
+import { createGraphicsApi } from "./graphics";
+import { alertDialog, confirmDialog, progressPanel, promptDialog } from "./prompts";
+import { createWidgets, el } from "./widgets";
 import { applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond } from "../editor/isom";
 import { hasEdits } from "../editor/history";
-import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
-import { addSprites, applySpriteChanges, clampSprite, makeSprite, removeSprites, type SpriteChange } from "../editor/sprites";
-import { applyDoodadChanges, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
-import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, removeLocations, type LocationChange } from "../editor/locations";
+import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitAt, unitBox, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
+import {
+  addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
+} from "../editor/sprites";
+import { applyDoodadChanges, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
+import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, locationAt, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
-import { markDirty } from "../formats/chk/scenario";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
-  type Cells, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle, type MapToolSpec, type MapToolStopReason,
-  type NamedValue, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule,
-  type RawEditResult, type SectionsApi,
+  type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
+  type MapToolSpec, type MapToolStopReason, type NamedValue, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
+  type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
+  type ContextMenuContext, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
 } from "./api";
 import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
@@ -437,6 +458,360 @@ export function sectionsApi(store: Store): SectionsApi {
 
 const named = (labels: readonly string[]): NamedValue[] => labels.map((label, value) => ({ value, label }));
 
+/* ── Update transactions: tables and settings ───────────── */
+
+/**
+ * Run `build` against an update transaction and commit it. This is the editor's second
+ * kind of write — the one every settings and trigger dialog performs: the scenario is
+ * mutated in place, the sections touched are marked dirty, and the commit tells the
+ * chrome to re-read. There is no history entry, so a plugin that wants one keeps its
+ * own copy of what it replaced.
+ *
+ * Operations apply as they are called, exactly as `runTransaction`'s do — a string
+ * interned on one line is in the table for the trigger added on the next — which is why
+ * the ordering hazards of a working-copy model (switch names interning while a copy of
+ * the string table is held) do not arise here.
+ */
+export function runUpdate(store: Store, label: string, build: (tx: UpdateTransaction) => void): UpdateResult {
+  const scn = store.get(scenarioAtom);
+  if (!scn) return { changed: false, sections: [], notes: ["no map is open"] };
+  const sections = new Set<string>();
+  const notes: string[] = [];
+  const touch = (name: string) => { sections.add(name); };
+  const strSection = () => strSectionName(scn);
+  /** Note the string table growing: interning happens deep inside several of these. */
+  const withStrings = <T,>(run: () => T): T => {
+    const before = scn.strings.strings.length;
+    const out = run();
+    if (scn.strings.strings.length !== before) touch(strSection());
+    return out;
+  };
+
+  const listUpdate = (briefing: boolean): TriggerListUpdate => {
+    const section = briefing ? "MBRF" : "TRIG";
+    const read = () => (briefing ? readBriefing(scn) : readTriggers(scn));
+    const write = (next: TriggerRecord[]): boolean => {
+      if (sameTriggers(briefing ? scn.briefing : scn.triggers, next)) return false;
+      if (briefing) applyBriefing(scn, next);
+      else applyTriggers(scn, next);
+      touch(section);
+      return true;
+    };
+    return {
+      list: read,
+      count: () => (briefing ? scn.briefing.length : scn.triggers.length),
+      set: (list) => { write(list); },
+      add: (trigger, at) => {
+        const list = read();
+        const index = at === undefined ? list.length : Math.max(0, Math.min(list.length, at));
+        write(insertTrigger(list, index, trigger));
+        return index;
+      },
+      replace: (index, trigger) => {
+        const list = read();
+        if (index < 0 || index >= list.length) return false;
+        list[index] = trigger;
+        return write(list);
+      },
+      remove: (indices) => {
+        const list = read();
+        const next = removeTriggers(list, indices);
+        write(next);
+        return list.length - next.length;
+      },
+      move: (from, to) => {
+        const list = read();
+        if (from < 0 || from >= list.length || to < 0 || to >= list.length) return false;
+        return write(moveTrigger(list, from, to));
+      },
+      fromText: (source, options = {}) => {
+        const parsed = withStrings(() => parseTriggers(source, triggerNames(scn), briefing).map((t) => t.trigger));
+        write(options.replace ? parsed : [...read(), ...parsed]);
+        return parsed.length;
+      },
+    };
+  };
+
+  const tx: UpdateTransaction = {
+    scenario: scn,
+    triggers: listUpdate(false),
+    briefing: listUpdate(true),
+
+    strings: {
+      list: () => readStrings(scn),
+      intern: (text) => withStrings(() => internString(scn, text)),
+      set: (index, text) => {
+        if (index <= 0) { notes.push("string 0 is reserved; use intern to add one"); return; }
+        if (getString(scn.strings, index) === text) return;
+        setString(scn.strings, index, text);
+        markDirty(scn, strSection());
+        touch(strSection());
+      },
+      apply: (list) => { if (applyStrings(scn, list)) touch(strSection()); },
+    },
+
+    switches: {
+      names: () => readSwitchNames(scn),
+      setName: (index, name) => {
+        const list = readSwitchNames(scn);
+        if (index < 0 || index >= list.length) { notes.push(`there is no switch ${index}`); return; }
+        list[index] = name;
+        withStrings(() => { if (applySwitchNames(scn, list)) touch("SWNM"); });
+      },
+    },
+
+    properties: (patch) => {
+      withStrings(() => {
+        if (patch.name !== undefined && patch.name !== (scenarioName(scn) ?? "")) { setScenarioName(scn, patch.name); touch("SPRP"); }
+        if (patch.description !== undefined && patch.description !== (scenarioDescription(scn) ?? "")) { setScenarioDescription(scn, patch.description); touch("SPRP"); }
+      });
+    },
+
+    note: (text) => { notes.push(text); },
+  };
+
+  build(tx);
+
+  const touched = [...sections];
+  if (touched.length === 0) return { changed: false, sections: [], notes };
+  // Both commits: triggers for the trigger lists and the script block's manifest, settings
+  // for everything that reads names and colours (a string is shown in half the chrome).
+  store.set(commitTriggersAtom);
+  store.set(commitSettingsAtom);
+  store.set(mapNameAtom, scenarioName(scn) ?? "");
+  store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+  store.set(statusMessageAtom, notes.length > 0 ? `${label} — ${notes.join(", ")}` : label);
+  return { changed: true, sections: touched, notes };
+}
+
+/* ── Triggers ───────────────────────────────────────────── */
+
+/** `api.triggers`: reading TRIG and MBRF, and the tables that make a record presentable. */
+export function triggersApi(store: Store): TriggersApi {
+  const scenario = () => store.get(scenarioAtom);
+  const names = () => {
+    const scn = scenario();
+    if (!scn) throw new Error("No map is open.");
+    return triggerNames(scn);
+  };
+  return {
+    list: () => { const scn = scenario(); return scn ? readTriggers(scn) : []; },
+    briefing: () => { const scn = scenario(); return scn ? readBriefing(scn) : []; },
+    switchNames: () => { const scn = scenario(); return scn ? readSwitchNames(scn) : []; },
+    switchUsage: () => { const scn = scenario(); return scn ? switchUsage(scn) : []; },
+    names,
+    defs: {
+      conditions: () => CONDITION_DEFS.slice(),
+      condition: conditionDef,
+      actions: (briefing = false) => (briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS).slice(),
+      action: actionDef,
+      choices: (kind) => (CHOICES[kind] ?? []).map((c) => ({ ...c })),
+      choiceLabel,
+      choiceValue,
+    },
+    text: {
+      print: (triggers, options = {}) => formatTriggers(triggers, names(), options.briefing ?? false),
+      one: (trigger, options = {}) => formatTrigger(trigger, names(), options.briefing ?? false),
+      parse: (source, options = {}) => parseTriggers(source, names(), options.briefing ?? false),
+    },
+    newTrigger,
+    newCondition,
+    newAction,
+    isPreserved,
+    setPreserved,
+    triggersFor,
+    summarize: (trigger, briefing = false) => summarizeTrigger(trigger, names(), briefing),
+    comment: (trigger) => triggerComment(trigger, names()),
+  };
+}
+
+/* ── Query ──────────────────────────────────────────────── */
+
+/** `api.query`: what is where, and the editor's own analyses. Never writes anything. */
+export function queryApi(store: Store): QueryApi {
+  const scenario = () => store.get(scenarioAtom);
+  const loaded = (): LoadedTileset | null => peekTileset(store.get(tilesetFileNameAtom));
+  const tables = () => peekUnitAssets()?.units ?? null;
+  const catalogue = () => loaded()?.doodads ?? NO_DOODADS;
+  /**
+   * A sprite's box for hit-testing: the loaded GRP's, a unit sprite's collision box
+   * while its graphic is still coming, one tile otherwise — the viewport's own rule.
+   */
+  const sizeOf = (r: SpriteRecord): SpriteSize => {
+    const assets = peekUnitAssets();
+    if (!assets) return FALLBACK_SIZE;
+    if (spriteKind(r) === "unit") {
+      const b = unitBox(unitGeometry(assets.units, r.spriteId), 0, 0);
+      return { width: b.right - b.left, height: b.bottom - b.top };
+    }
+    const imageId = assets.sprites.image[r.spriteId];
+    const path = imageId === undefined ? null : imageGrpPath(assets, imageId);
+    const grp = path ? requestGrp(path) : null;
+    return grp && grp.width > 0 && grp.height > 0 ? { width: grp.width, height: grp.height } : FALLBACK_SIZE;
+  };
+  const pixels = (rect: Rect) => ({ left: rect.x0 * 32, top: rect.y0 * 32, right: rect.x1 * 32, bottom: rect.y1 * 32 });
+
+  return {
+    unitAt: (px, py) => { const scn = scenario(); return scn ? unitAt(scn, tables(), px, py) : -1; },
+    unitsIn: (rect) => {
+      const scn = scenario();
+      if (!scn) return [];
+      const box = pixels(rect);
+      return scn.units.reduce<number[]>((out, u, i) => {
+        if (u.x >= box.left && u.x < box.right && u.y >= box.top && u.y < box.bottom) out.push(i);
+        return out;
+      }, []);
+    },
+    unitsOf: (owner) => { const scn = scenario(); return scn ? scn.units.reduce<number[]>((out, u, i) => (u.owner === owner ? [...out, i] : out), []) : []; },
+    spriteAt: (px, py) => { const scn = scenario(); return scn ? spriteAt(scn, px, py, sizeOf) : -1; },
+    spritesIn: (rect) => { const scn = scenario(); return scn ? spritesInBox(scn, pixels(rect), sizeOf) : []; },
+    doodadAt: (tx, ty) => { const scn = scenario(); return scn ? doodadAt(scn, catalogue(), tx, ty) : -1; },
+    locationAt: (px, py) => { const scn = scenario(); return scn ? locationAt(scn, px, py) : -1; },
+    locationsIn: (rect) => {
+      const scn = scenario();
+      if (!scn) return [];
+      const box = pixels(rect);
+      const out: number[] = [];
+      scn.locations.forEach((l, index) => {
+        if (index === ANYWHERE_INDEX || !isLocationUsed(l)) return;
+        const b = boundsOf(l);
+        if (b.left >= box.left && b.right <= box.right && b.top >= box.top && b.bottom <= box.bottom) out.push(index);
+      });
+      return out;
+    },
+    startLocations: () => {
+      const scn = scenario();
+      if (!scn) return [];
+      const out: StartLocation[] = [];
+      scn.units.forEach((u, index) => {
+        if (u.unitId === START_LOCATION) out.push({ index, owner: u.owner, x: u.x, y: u.y, tx: Math.floor(u.x / 32), ty: Math.floor(u.y / 32) });
+      });
+      return out.sort((a, b) => a.owner - b.owner);
+    },
+    placement: (unitId, x, y) => {
+      const scn = scenario();
+      if (!scn) return { problem: "terrain", blocker: -1 } as PlacementVerdict;
+      return checkPlacement(scn, loaded()?.tileset ?? null, tables(), store.get(placementOptionsAtom), unitId, x, y);
+    },
+    validate: () => {
+      const scn = scenario();
+      return scn ? validateScenario(scn, { extras: store.get(archiveExtrasAtom) }) : [];
+    },
+    statistics: () => {
+      const scn = scenario();
+      if (!scn) return null;
+      return mapStatistics(scn, loaded()?.tileset ?? null, TILESET_BY_ID[store.get(mapTilesetAtom)].terrain, tables());
+    },
+    find: (options) => { const scn = scenario(); return scn ? findInScenario(scn, options) : []; },
+    stringUsage: () => { const scn = scenario(); return scn ? stringUsages(scn) : new Map(); },
+    unusedStrings: () => { const scn = scenario(); return scn ? unusedStrings(scn) : []; },
+  };
+}
+
+/* ── The view ───────────────────────────────────────────── */
+
+/** How far the zoom control goes either way; anything between is allowed. */
+const ZOOM_RANGE = [0.05, 8] as const;
+
+/** `api.view`: where the viewport is looking and what it draws over the terrain. */
+export function viewApi(store: Store): ViewApi {
+  const scenario = () => store.get(scenarioAtom);
+  const centerOn = (x: number, y: number) => store.set(centerViewOnAtom, { x, y });
+  return {
+    zoom: () => store.get(zoomAtom),
+    setZoom: (zoom) => store.set(zoomAtom, Math.max(ZOOM_RANGE[0], Math.min(ZOOM_RANGE[1], zoom))),
+    visible: () => {
+      const r = store.get(viewportRectAtom);
+      return { x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h };
+    },
+    center: centerOn,
+    goTo: (target) => {
+      const scn = scenario();
+      if (!scn) return;
+      switch (target.kind) {
+        case "tile":
+          centerOn(target.x, target.y);
+          return;
+        case "unit": {
+          const u = scn.units[target.index];
+          if (!u) return;
+          store.set(selectedUnitsAtom, [target.index]);
+          centerOn(u.x / 32, u.y / 32);
+          return;
+        }
+        case "sprite": {
+          const s = scn.sprites[target.index];
+          if (!s) return;
+          store.set(selectedSpritesAtom, [target.index]);
+          centerOn(s.x / 32, s.y / 32);
+          return;
+        }
+        case "location": {
+          const l = scn.locations[target.index];
+          if (!l || target.index === ANYWHERE_INDEX) return;
+          const b = boundsOf(l);
+          store.set(selectedLocationsAtom, [target.index]);
+          centerOn((b.left + b.right) / 64, (b.top + b.bottom) / 64);
+        }
+      }
+    },
+    cursorTile: () => store.get(cursorTileAtom),
+    flags: () => ({ ...store.get(viewFlagsAtom) }),
+    setFlags: (patch) => store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), ...patch }),
+    gridSize: () => store.get(gridSizeAtom),
+    setGridSize: (size) => store.set(gridSizeAtom, size),
+  };
+}
+
+/* ── Game data ──────────────────────────────────────────── */
+
+/** `api.data`: the decoded `.dat` tables, once they are in memory. */
+export function dataApi(): DataApi {
+  const assets = () => peekUnitAssets();
+  return {
+    ready: () => assets() !== null,
+    load: async () => {
+      try { await getUnitAssets(); return true; } catch { return false; }
+    },
+    units: () => assets()?.units ?? null,
+    weapons: () => assets()?.weapons ?? null,
+    upgrades: () => assets()?.upgrades ?? null,
+    techs: () => assets()?.techs ?? null,
+    sprites: () => assets()?.sprites ?? null,
+    flingy: () => assets()?.flingy ?? null,
+    images: () => assets()?.images ?? null,
+    race: (unitId) => { const a = assets(); return a ? unitRace(a.units, unitId) : null; },
+    imagePath: (imageId) => { const a = assets(); return a ? imageGrpPath(a, imageId) : null; },
+  };
+}
+
+/* ── Commands ───────────────────────────────────────────── */
+
+/**
+ * A command id is namespaced under the plugin unless it already carries a dot, so
+ * `"convert"` from the Terrain from Image plugin is `image-to-terrain.convert` and a
+ * plugin offering a shared name (`"triggers.open"`) keeps it.
+ */
+export function qualifyCommand(pluginId: string, id: string): string {
+  const trimmed = id.trim();
+  return trimmed.includes(".") ? trimmed : `${pluginId}.${trimmed}`;
+}
+
+export function runCommand(store: Store, id: string, args: unknown[] = []): unknown {
+  const command = store.get(pluginCommandsAtom).find((c) => c.id === id);
+  if (!command) {
+    console.warn(`[plugins] no such command: ${id}`);
+    return undefined;
+  }
+  try {
+    if (command.enabled && !command.enabled()) return undefined;
+    return command.run(...args);
+  } catch (err) {
+    console.error(`[plugins] command ${id} failed`, err);
+    return undefined;
+  }
+}
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -448,7 +823,13 @@ const EVENT_ATOMS = {
   settings: [settingsRevisionAtom],
   triggers: [triggersRevisionAtom],
   layer: [activeLayerAtom],
+  // THG2 records ride on the doodads revision, as they do everywhere else in the editor.
+  sprites: [doodadsRevisionAtom],
   selection: [selectedUnitsAtom, selectedSpritesAtom, selectedDoodadsAtom, selectedLocationsAtom, clipSelectionAtom],
+  clipboard: [clipboardAtom, clipSelectionAtom],
+  view: [viewportRectAtom, zoomAtom, viewFlagsAtom, gridSizeAtom],
+  tool: [mapToolAtom, mapPickAtom],
+  modified: [mapModifiedAtom],
   palette: [
     terrainModeAtom, activeTerrainAtom, activeTileAtom, rectVariationAtom, brushSizeAtom, activeUnitAtom, unitOwnerAtom, activeSpriteKindAtom, activeSpriteAtom,
     activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom,
@@ -466,6 +847,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
   const names = () => TILESET_BY_ID[store.get(mapTilesetAtom)].terrain;
   const rgb = (packed: number) => [packed >> 16 & 0xff, packed >> 8 & 0xff, packed & 0xff];
   const prefix = `${STORAGE_PREFIX}plugin.${info.id}.`;
+  const widgets = createWidgets();
 
   const api: PluginApi = {
     apiVersion: PLUGIN_API_VERSION,
@@ -490,6 +872,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       scenario,
       edit: (label, build) => runTransaction(store, label, build),
+      update: (label, build) => runUpdate(store, label, build),
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
       open: (source, fileName) => openDocument(store, source, fileName),
@@ -532,6 +915,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       sections: sectionsApi(store),
     },
+
+    triggers: triggersApi(store),
+    query: queryApi(store),
+    view: viewApi(store),
+    data: dataApi(),
+    graphics: createGraphicsApi(store),
 
     names: {
       unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? unitName(id),
@@ -732,6 +1121,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       pickTile: (options) => pickOnMap(store, bag, info, "tile", options) as Promise<{ x: number; y: number } | null>,
       loadImage,
       readClipboardImage,
+      confirm: (message, options) => confirmDialog(api.ui.dialog, message, options),
+      alert: (message, options) => alertDialog(api.ui.dialog, message, options),
+      prompt: (message, options) => promptDialog(api.ui.dialog, message, options),
+      progress: (label, options) => progressPanel(api.ui.panel, label, options),
+      el,
+      widgets,
       open: (dialog, payload) => { store.set(openDialogAtom, dialog, payload); },
       repaint: () => store.set(terrainRevisionAtom, store.get(terrainRevisionAtom) + 1),
     },
@@ -739,8 +1134,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     menu: {
       add: (path, item) => {
         const key = nextContributionKey();
-        const icon = item.icon === "plugin" ? info.icon ?? { kind: "text", text: "⌘" } : item.icon;
-        store.set(pluginMenuItemsAtom, [...store.get(pluginMenuItemsAtom), { ...item, icon, key, pluginId: info.id, path }]);
+        const { run: own, command, icon: wanted, ...rest } = item;
+        const icon = wanted === "plugin" ? info.icon ?? { kind: "text", text: "⌘" } : wanted;
+        const run = () => { if (own) own(); else if (command) runCommand(store, qualifyCommand(info.id, command)); };
+        store.set(pluginMenuItemsAtom, [...store.get(pluginMenuItemsAtom), { ...rest, run, icon, key, pluginId: info.id, path }]);
         return bag.add(() => store.set(pluginMenuItemsAtom, store.get(pluginMenuItemsAtom).filter((i) => i.key !== key)), "menu");
       },
     },
@@ -748,17 +1145,33 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     contextMenu: {
       add: (surface, item) => {
         const key = nextContributionKey();
-        store.set(pluginContextItemsAtom, [...store.get(pluginContextItemsAtom), { ...item, key, pluginId: info.id, surface }]);
+        const { run: own, command, ...rest } = item;
+        const run = (ctx: ContextMenuContext) => { if (own) own(ctx); else if (command) runCommand(store, qualifyCommand(info.id, command), [ctx]); };
+        store.set(pluginContextItemsAtom, [...store.get(pluginContextItemsAtom), { ...rest, run, key, pluginId: info.id, surface }]);
         return bag.add(() => store.set(pluginContextItemsAtom, store.get(pluginContextItemsAtom).filter((i) => i.key !== key)), "contextMenu");
       },
     },
 
     hotkeys: {
-      add: (combo, run) => {
+      add: (combo, action) => {
         const key = nextContributionKey();
+        const run = typeof action === "function" ? action : () => runCommand(store, qualifyCommand(info.id, action.command));
         store.set(pluginHotkeysAtom, [...store.get(pluginHotkeysAtom), { key, pluginId: info.id, combo: normalizeCombo(combo), run }]);
         return bag.add(() => store.set(pluginHotkeysAtom, store.get(pluginHotkeysAtom).filter((i) => i.key !== key)), "hotkeys");
       },
+    },
+
+    commands: {
+      register: (spec) => {
+        const key = nextContributionKey();
+        const id = qualifyCommand(info.id, spec.id);
+        if (store.get(pluginCommandsAtom).some((c) => c.id === id)) console.warn(`[plugins] command ${id} is already registered; the newer one wins`);
+        store.set(pluginCommandsAtom, [...store.get(pluginCommandsAtom).filter((c) => c.id !== id), { key, pluginId: info.id, id, title: spec.title, enabled: spec.enabled, run: spec.run }]);
+        return bag.add(() => store.set(pluginCommandsAtom, store.get(pluginCommandsAtom).filter((c) => c.key !== key)));
+      },
+      run: (id, ...args) => runCommand(store, qualifyCommand(info.id, id), args),
+      has: (id) => store.get(pluginCommandsAtom).some((c) => c.id === qualifyCommand(info.id, id)),
+      list: (): CommandInfo[] => store.get(pluginCommandsAtom).map((c) => ({ id: c.id, title: c.title, pluginId: c.pluginId, enabled: c.enabled ? c.enabled() : true })),
     },
 
     events: {

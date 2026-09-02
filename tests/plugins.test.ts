@@ -11,13 +11,18 @@ import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import { hasIsom } from "../src/editor/isom";
 import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
-import { activeUnitAtom, clipSelectionAtom, mapModifiedAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom } from "../src/atoms/editorAtoms";
+import { scenarioName } from "../src/formats/chk/scenario";
+import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
+import { START_LOCATION } from "../src/data/units";
+import {
+  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom,
+} from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import type { PendingAction } from "../src/hooks/useMapFileActions";
 import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
 import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginCodeAtom,
-  pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -423,6 +428,254 @@ describe("plugin transactions", () => {
 function fakeDeps(builtins: LoaderDeps["builtins"]): LoaderDeps {
   return { fetchText: async () => { throw new Error("offline"); }, transpile: async (s) => s, createModuleUrl: () => "mem:0", importModule: async () => ({}), builtins };
 }
+
+/* ── Update transactions, triggers, query, view, commands ─ */
+
+describe("plugin updates", () => {
+  const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("applies triggers, strings, switches and properties as one transaction", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    let events = 0;
+    api.events.on("triggers", () => { events++; });
+
+    const result = api.document.update("wave", (tx) => {
+      const text = tx.strings.intern("Wave incoming");
+      expect(text).toBeGreaterThan(0);
+      expect(tx.strings.list()[text]).toBe("Wave incoming");
+      const trigger = api.triggers.newTrigger();
+      trigger.conditions[0] = api.triggers.newCondition(ConditionType.Always);
+      const action = api.triggers.newAction(ActionType.DisplayText);
+      action.text = text;
+      trigger.actions[0] = action;
+      expect(tx.triggers.add(trigger)).toBe(0);
+      expect(tx.triggers.count()).toBe(1);
+      tx.switches.setName(0, "armed");
+      tx.properties({ name: "Renamed" });
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.sections.sort()).toEqual(["SPRP", "STR ", "SWNM", "TRIG"]);
+    expect(scn.triggers).toHaveLength(1);
+    expect(api.triggers.switchNames()[0]).toBe("armed");
+    expect(scenarioName(scn)).toBe("Renamed");
+    expect(store.get(mapNameAtom)).toBe("Renamed");
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    expect(events).toBe(1);
+    expect(scn.dirty.has("TRIG")).toBe(true);
+  });
+
+  it("reports no change when every operation is a no-op, and refuses without a map", () => {
+    const { store } = blankStore();
+    const api = apiOf(store);
+    expect(api.document.update("nothing", (tx) => { tx.properties({ name: "p" }); tx.note("nothing to do"); }))
+      .toEqual({ changed: false, sections: [], notes: ["nothing to do"] });
+    expect(store.get(mapModifiedAtom)).toBe(false);
+    const empty = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(empty.document.update("x", () => {})).toEqual({ changed: false, sections: [], notes: ["no map is open"] });
+  });
+
+  it("edits the list: replace, move, remove and text", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    api.document.update("three", (tx) => {
+      for (let i = 0; i < 3; i++) {
+        const t = api.triggers.newTrigger();
+        t.conditions[0] = api.triggers.newCondition(ConditionType.Always);
+        const a = api.triggers.newAction(ActionType.Comment);
+        a.text = tx.strings.intern(`number ${i}`);
+        t.actions[0] = a;
+        tx.triggers.add(t);
+      }
+    });
+    expect(api.triggers.list()).toHaveLength(3);
+    expect(api.triggers.comment(api.triggers.list()[1])).toBe("number 1");
+
+    api.document.update("shuffle", (tx) => {
+      expect(tx.triggers.move(2, 0)).toBe(true);
+      expect(tx.triggers.move(9, 0)).toBe(false);
+      expect(tx.triggers.remove([1])).toBe(1);
+      expect(tx.triggers.replace(0, api.triggers.setPreserved(tx.triggers.list()[0], true))).toBe(true);
+      expect(tx.triggers.replace(9, api.triggers.newTrigger())).toBe(false);
+    });
+    const list = api.triggers.list();
+    expect(list).toHaveLength(2);
+    expect(api.triggers.comment(list[0])).toBe("number 2");
+    expect(api.triggers.isPreserved(list[0])).toBe(true);
+
+    // Print and parse: the text format is the same one File ▸ Export ▸ Triggers writes.
+    const text = api.triggers.text.print(list);
+    expect(text).toContain("Comment(\"number 2\")");
+    const back = api.document.update("import", (tx) => { expect(tx.triggers.fromText(text, { replace: true })).toBe(2); });
+    expect(back.changed).toBe(false); // the same two triggers: nothing to mark dirty
+    api.document.update("append", (tx) => { tx.triggers.fromText(text); });
+    expect(api.triggers.list()).toHaveLength(4);
+    expect(() => api.document.update("bad", (tx) => { tx.triggers.fromText("Trigger("); })).toThrow();
+    expect(scn.briefing).toHaveLength(0);
+  });
+
+  it("keeps string 0 and overwrites a slot in place", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    let index = 0;
+    api.document.update("strings", (tx) => { index = tx.strings.intern("first"); });
+    const result = api.document.update("strings", (tx) => {
+      tx.strings.set(0, "nope");
+      tx.strings.set(index, "second");
+      tx.strings.set(index, "second"); // already that text: no change
+    });
+    expect(result.notes).toEqual(["string 0 is reserved; use intern to add one"]);
+    expect(scn.strings.strings[index]).toBe("second");
+    expect(api.query.stringUsage().size).toBeGreaterThan(0);
+  });
+});
+
+describe("plugin triggers", () => {
+  const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("exposes the definition tables the editor's own dialogs read", () => {
+    const { store } = blankStore();
+    const api = apiOf(store);
+    expect(api.triggers.defs.condition(ConditionType.Bring)?.name).toBe("Bring");
+    expect(api.triggers.defs.condition(ConditionType.Bring)?.args.map((a) => a.field)).toContain("location");
+    expect(api.triggers.defs.action(ActionType.DisplayText)?.name).toBe("Display Text Message");
+    expect(api.triggers.defs.actions(true).length).toBeGreaterThan(0);
+    expect(api.triggers.defs.conditions().length).toBeGreaterThan(20);
+    expect(api.triggers.defs.choiceLabel("comparison", 0)).toBe("At least");
+    expect(api.triggers.defs.choiceValue("comparison", "At least")).toBe(0);
+    expect(api.triggers.defs.choices("comparison").length).toBeGreaterThan(1);
+    // Names resolve against the open map.
+    expect(api.triggers.names().unit(0)).toBe("Terran Marine");
+    expect(api.triggers.switchUsage()).toHaveLength(256);
+    const summary = api.triggers.summarize(api.triggers.newTrigger());
+    expect(summary.players).toContain("All Players");
+  });
+
+  it("answers empty without a map", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.triggers.list()).toEqual([]);
+    expect(api.triggers.briefing()).toEqual([]);
+    expect(api.triggers.switchNames()).toEqual([]);
+    expect(() => api.triggers.names()).toThrow(/No map/);
+  });
+});
+
+describe("plugin query", () => {
+  const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("finds what is where and runs the editor's analyses", () => {
+    const { store, scn } = blankStore(16, 16);
+    const api = apiOf(store);
+    api.document.edit("place", (tx) => {
+      tx.addUnits([tx.makeUnit(0, 0, 48, 48), tx.makeUnit(START_LOCATION, 1, 240, 80)]);
+      tx.addLocation({ left: 32, top: 32, right: 96, bottom: 96 }, "Base");
+    });
+    expect(api.query.unitAt(48, 48)).toBe(0);
+    expect(api.query.unitAt(400, 400)).toBe(-1);
+    expect(api.query.unitsIn({ x0: 0, y0: 0, x1: 4, y1: 4 })).toEqual([0]);
+    expect(api.query.unitsOf(1)).toEqual([1]);
+    expect(api.query.startLocations()).toEqual([{ index: 1, owner: 1, x: 240, y: 80, tx: 7, ty: 2 }]);
+    expect(api.query.locationAt(64, 64)).toBe(0);
+    expect(api.query.locationsIn({ x0: 0, y0: 0, x1: 8, y1: 8 })).toEqual([0]);
+    expect(api.query.locationsIn({ x0: 0, y0: 0, x1: 2, y1: 2 })).toEqual([]);
+    expect(api.query.doodadAt(0, 0)).toBe(-1);
+    expect(api.query.spriteAt(48, 48)).toBe(-1);
+    expect(api.query.find({ kind: "locations", query: "base" })).toMatchObject([{ kind: "locations", index: 0 }]);
+    expect(api.query.statistics()?.units.total).toBe(2);
+    expect(api.query.validate().every((i) => typeof i.text === "string")).toBe(true);
+    expect(api.query.placement(0, 48, 48).problem).toBe("collision");
+    expect(api.query.unusedStrings()).toBeInstanceOf(Array);
+    expect(scn.locations[0].nameIndex).toBeGreaterThan(0);
+  });
+
+  it("answers empty without a map", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.query.unitAt(0, 0)).toBe(-1);
+    expect(api.query.unitsIn({ x0: 0, y0: 0, x1: 4, y1: 4 })).toEqual([]);
+    expect(api.query.statistics()).toBeNull();
+    expect(api.query.validate()).toEqual([]);
+    expect(api.query.find({ kind: "units", query: "x" })).toEqual([]);
+    expect(api.query.stringUsage().size).toBe(0);
+  });
+});
+
+describe("plugin view", () => {
+  it("scrolls, zooms and goes to an object", () => {
+    const { store } = blankStore(32, 32);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    api.document.edit("place", (tx) => {
+      tx.addUnits([tx.makeUnit(0, 0, 320, 160)]);
+      tx.addLocation({ left: 0, top: 0, right: 64, bottom: 64 }, "Base");
+    });
+    let events = 0;
+    api.events.on("view", () => { events++; });
+
+    api.view.setZoom(99);
+    expect(api.view.zoom()).toBe(8);
+    api.view.setZoom(0.5);
+    expect(api.view.zoom()).toBe(0.5);
+    api.view.center(4, 5);
+    expect(store.get(centerViewOnAtom)).toEqual({ x: 4, y: 5 });
+    api.view.goTo({ kind: "unit", index: 0 });
+    expect(store.get(centerViewOnAtom)).toEqual({ x: 10, y: 5 });
+    expect(api.selection.units()).toEqual([0]);
+    api.view.goTo({ kind: "location", index: 0 });
+    expect(store.get(centerViewOnAtom)).toEqual({ x: 1, y: 1 });
+    expect(api.selection.locations()).toEqual([0]);
+    api.view.goTo({ kind: "unit", index: 9 }); // no such unit: nothing moves
+    expect(store.get(centerViewOnAtom)).toEqual({ x: 1, y: 1 });
+    api.view.setFlags({ grid: true });
+    expect(api.view.flags().grid).toBe(true);
+    api.view.setGridSize(64);
+    expect(api.view.gridSize()).toBe(64);
+    expect(api.view.visible()).toEqual({ x0: 0, y0: 0, x1: 1, y1: 1 });
+    expect(api.view.cursorTile()).toEqual({ x: 0, y: 0 });
+    expect(events).toBeGreaterThan(0);
+  });
+});
+
+describe("plugin commands", () => {
+  it("registers commands that menu items, hotkeys and other plugins can run", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "paint", name: "Paint", source: "s" }, bag);
+    let ran = 0;
+    let arg: unknown = null;
+    const command = api.commands.register({ id: "draw", title: "Draw", run: (...args) => { ran++; arg = args[0]; return "drawn"; } });
+    expect(store.get(pluginCommandsAtom)).toMatchObject([{ id: "paint.draw", pluginId: "paint", title: "Draw" }]);
+    expect(api.commands.has("draw")).toBe(true);
+    expect(api.commands.has("paint.draw")).toBe(true);
+    expect(api.commands.run("draw", 7)).toBe("drawn");
+    expect(arg).toBe(7);
+    expect(api.commands.list()).toEqual([{ id: "paint.draw", title: "Draw", pluginId: "paint", enabled: true }]);
+
+    api.menu.add("Tools", { label: "Draw…", command: "draw" });
+    store.get(pluginMenuItemsAtom)[0].run();
+    expect(ran).toBe(2);
+    api.hotkeys.add("Ctrl+Alt+D", { command: "draw" });
+    store.get(pluginHotkeysAtom)[0].run();
+    expect(ran).toBe(3);
+    api.contextMenu.add("viewport", { label: "Draw here", command: "draw" });
+    store.get(pluginContextItemsAtom)[0].run({ surface: "viewport", tile: { x: 1, y: 1 }, point: null, layer: "terrain", terrainMode: "rect", terrain: 0, markedArea: null });
+    expect(ran).toBe(4);
+    expect((arg as { tile: { x: number } }).tile.x).toBe(1);
+
+    // A command that says it is disabled does not run, and an unknown id is a no-op.
+    const guarded = api.commands.register({ id: "off", title: "Off", enabled: () => false, run: () => { ran++; } });
+    expect(api.commands.run("off")).toBeUndefined();
+    expect(api.commands.list().find((c) => c.id === "paint.off")?.enabled).toBe(false);
+    expect(api.commands.run("nope")).toBeUndefined();
+    expect(ran).toBe(4);
+
+    command.dispose();
+    guarded.dispose();
+    expect(store.get(pluginCommandsAtom)).toEqual([]);
+    // Disabling the plugin takes the rest back too.
+    bag.dispose();
+    expect(store.get(pluginMenuItemsAtom)).toEqual([]);
+  });
+});
 
 describe("plugin lifecycle", () => {
   it("activates, records the runtime and deactivates cleanly", async () => {

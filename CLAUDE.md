@@ -587,6 +587,34 @@ covers those atoms plus the terrain brush. `tx.placeUnit` snaps through `snapPla
 palette's snap option, `tx.canPlaceUnit` is `checkPlacement` with `placementOptionsAtom`,
 `tx.placeSprite` is make + add + `clampSprite`.
 
+A plugin writes to the map in exactly the three ways the editor itself does, and the API names
+them: `document.edit` (terrain and objects, one `HistoryEntry`), **`document.update`**
+(`host.ts#runUpdate` — the tables and settings every dialog's OK writes: `tx.triggers` /
+`tx.briefing` over `editor/triggers.ts`, `tx.strings` (`internString` / `setString` /
+`applyStrings`), `tx.switches`, `tx.properties`; operations apply as they are called, exactly as
+`runTransaction`'s do — which is what keeps a working-copy ordering hazard, switch names interning
+while a copy of the string table is held, from arising — and the commit runs *both*
+`commitTriggersAtom` and `commitSettingsAtom` and re-syncs `mapNameAtom` / `mapDescriptionAtom`;
+`UpdateResult.sections` is the sections actually touched, so `changed` is false on a no-op), and
+`document.sections` (raw bytes, re-parse, history dropped). Around them: `api.triggers`
+(read TRIG/MBRF plus `triggerDefs.ts`, the text printer/parser and the `newTrigger` /
+`isPreserved` helpers — everything a trigger editor needs that is not a write), `api.query`
+(hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,
+`findInScenario`, `stringUsages`), `api.view` (`zoomAtom`, `viewportRectAtom`, `centerViewOnAtom`,
+`viewFlagsAtom`, and `goTo` taking the same shape `Issue.target` carries, so a linter can scroll to
+what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), `api.graphics`
+(`plugins/graphics.ts`: the viewport's own sprite and atlas caches, plus `renderRect`, which is why
+`MapImageOptions` grew a `rect` — `renderMapImage` clamps its terrain loop to it and translates the
+context, everything else already drew in map coordinates) and `api.commands`
+(`pluginCommandsAtom`; ids are namespaced under the plugin unless they carry a dot, and
+`menu.add` / `contextMenu.add` / `hotkeys.add` take `command` in place of `run`).
+`api.ui` also has `confirm` / `alert` / `prompt` / `progress` (`plugins/prompts.ts`, built on the
+plugin dialog and panel — a promise settled from `mount`'s cleanup, since a dismissal presses no
+button) and `el` / `widgets` (`plugins/widgets.ts`: plain DOM in the editor's own classes, so a
+plugin's dialog looks like a built-in one). All of it is additive — `PLUGIN_API_VERSION` stays 1 —
+and the vendored `plugin-api/` in each plugin repository needs refreshing after
+`npm run build:plugin-types`.
+
 **Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
 `icon.svg`, a vendored `plugin-api/` so it type-checks alone, and `tests/convert.test.ts` under its

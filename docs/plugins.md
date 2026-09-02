@@ -227,6 +227,21 @@ in Tools ▸ Plugins ▸ Manage Plugins…, and press **Reload** after each chan
 The complete typings are in `src/plugins/api.ts`; this is the tour. Every method that
 reads the map returns `null` / `[]` / `false` when no map is open rather than throwing.
 
+### The three kinds of write
+
+Everything a plugin can change about the open map goes through one of three, and they
+differ in what they cost:
+
+| | what it covers | undo |
+| --- | --- | --- |
+| `document.edit(label, build)` | terrain and objects — tiles, ISOM, units, sprites, doodads, locations, fog | one history entry, like a brush stroke |
+| `document.update(label, build)` | the tables and settings — triggers, briefing, the string table, switch names, the scenario's name and description | none: a settings-dialog transaction, as in StarEdit |
+| `document.sections.*` | the file's own bytes, any section, modelled or not | none, and the history is dropped (as Resize) |
+
+They are the editor's own three: a stroke, a dialog's OK, and a raw file edit. Both
+transactions apply their operations **as they are called**, so later ones see earlier
+ones' results, and both commit once at the end.
+
 ### `api.document`
 
 | | |
@@ -235,6 +250,7 @@ reads the map returns `null` / `[]` / `false` when no map is open rather than th
 | `info()` | `{ name, description, width, height, tileset, era, version, fileName, modified }`. |
 | `scenario()` | The live `Scenario` object, for **reading**. Mutating it directly bypasses undo and dirty tracking. |
 | `edit(label, build)` | Run `build(tx)` and record what it did as one undo entry named `label`. Returns an `EditResult` with counts per list. |
+| `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties. Not in the undo model. Returns an `UpdateResult`. |
 | `undo()` / `redo()` | The Edit menu's. |
 | `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
 | `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
@@ -294,6 +310,136 @@ repaints.
 | `addLocation(bounds, name?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) is refused. |
 | `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask; creates MASK on first use. |
 | `note(text)` | A line for the status bar, alongside the label. |
+
+### `UpdateTransaction`
+
+The second kind of write. Operations apply immediately — a string interned on one line is
+in the table for the trigger added on the next — and the commit at the end marks the map
+modified and tells the chrome to re-read. The result is
+`{ changed, sections, notes }`: which CHK sections were actually touched (`["TRIG", "STR "]`),
+so `changed` is false when every operation was a no-op.
+
+| Triggers | |
+| --- | --- |
+| `tx.triggers` | TRIG as a list: `list()`, `count()`, `set(list)`, `add(trigger, at?)`, `replace(index, trigger)`, `remove(indices)`, `move(from, to)`, `fromText(source, { replace? })`. |
+| `tx.briefing` | MBRF, the same shape. |
+
+| Tables | |
+| --- | --- |
+| `tx.strings` | `list()`, `intern(text)` (an identical entry, else a new one; **never** overwrites, because the old index may be shared with a trigger), `set(index, text)` (overwrite one slot — everything pointing at it sees the new text), `apply(list)` (a whole table; unreferenced trailing blanks are dropped, every other index keeps its place). |
+| `tx.switches` | `names()` (256, `""` where a switch has none) and `setName(index, name)`; creates SWNM on the first name. |
+| `tx.properties({ name?, description? })` | SPRP. `""` restores the file-name default. |
+| `tx.note(text)` | A line for the status bar. |
+
+```js
+api.document.update("Add a countdown", (tx) => {
+  const text = tx.strings.intern("30 seconds remaining");
+  const trigger = api.triggers.newTrigger();
+  trigger.conditions[0] = api.triggers.newCondition(ConditionType.Countdown);
+  const say = api.triggers.newAction(ActionType.DisplayText);
+  say.text = text;
+  trigger.actions[0] = say;
+  tx.triggers.add(trigger);
+});
+```
+
+There is no undo entry, so a plugin that wants one keeps its own copy of what it replaced
+(`api.triggers.list()` before, `tx.triggers.set(...)` to put it back).
+
+### `api.triggers`
+
+Reading triggers, and everything needed to *show* one. Writing is `document.update`.
+
+| | |
+| --- | --- |
+| `list()` / `briefing()` | TRIG / MBRF, cloned. A record is 16 conditions and 64 actions of plain numbers — the editor's codec knows no types. |
+| `defs` | What each type means: `conditions()`, `condition(type)`, `actions(briefing?)`, `action(type, briefing?)`. Each def carries `args`, the argument list in the order StarEdit's TrigEdit shows it, each `{ kind, field, label }` — which record field holds it and what kind of value it is. This is the table the editor's own trigger dialogs and the text printer read; a plugin that wants to render an editable trigger reads the same one. |
+| `defs.choices(kind)` / `choiceLabel(kind, value)` / `choiceValue(kind, text)` | The values an enumerated argument can take (comparisons, switch states, resource types, orders …), with their labels and aliases. |
+| `text.print(list, { briefing? })` / `text.one(trigger)` / `text.parse(source)` | The text trigger format, resolved against the open map's names. `parse` throws a `TriggerTextError` carrying the line. |
+| `names()` | The `TriggerNames` context those use: the map's locations, units, switches and strings, by name and by number. |
+| `newTrigger(players?)` / `newCondition(type)` / `newAction(type, briefing?)` | Blank records with StarEdit's defaults. |
+| `isPreserved(t)` / `setPreserved(t, on)` | The preserve-trigger flag. |
+| `triggersFor(list, groups)` | Indices of the triggers any of those player groups own. |
+| `summarize(t, briefing?)` | The three lines the trigger list shows: players, conditions, actions. |
+| `comment(t)` | A trigger's `Comment` action text, if it has one. |
+| `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
+
+### `api.query`
+
+Reading the open map: what is where, and the analyses the editor already does. Nothing
+here writes, and everything answers empty without a map.
+
+| | |
+| --- | --- |
+| `unitAt(px, py)` / `spriteAt(px, py)` / `doodadAt(tx, ty)` / `locationAt(px, py)` | The topmost thing under a point, or -1 — the same hit-testing the layers use (a sprite's box comes from its loaded GRP, a unit's from units.dat). `locationAt` never picks Anywhere. |
+| `unitsIn(rect)` / `spritesIn(rect)` / `locationsIn(rect)` | Units and sprites whose centre is in a tile rect; locations wholly inside it. |
+| `unitsOf(owner)` | Every unit a player owns (0-based). |
+| `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
+| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker }`. |
+| `validate()` | Check Map's `Issue[]` — `{ level, text, where, target? }`, and `target` is what `view.goTo` takes. |
+| `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts. |
+| `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "strings" \| "triggers", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |
+| `stringUsage()` / `unusedStrings()` | Which records refer to each string index, and which slots nothing refers to. |
+
+A linter plugin is `validate()` plus `find()` plus `view.goTo` and nothing else.
+
+### `api.view`
+
+Where the viewport is looking. A plugin that finds something needs this to show the user
+where it is.
+
+| | |
+| --- | --- |
+| `zoom()` / `setZoom(z)` | Clamped to 0.05…8. |
+| `visible()` | The tiles on screen, as a `Rect`. |
+| `center(x, y)` | Scroll so a tile is in the middle. |
+| `goTo(target)` | `{ kind: "tile", x, y }`, or `{ kind: "unit" \| "sprite" \| "location", index }` — scrolls there and selects the object. An `Issue.target` from `query.validate()` is one of these. |
+| `cursorTile()` | The tile under the pointer, as the status bar shows it. |
+| `flags()` / `setFlags(patch)` | The View menu's ticks: `grid`, `locations`, `locationNames`, `units`, `sprites`, `doodads`, `fog`, `elevation`, `buildability`, `startLocations`, `animateWater`, `animateUnits`. |
+| `gridSize()` / `setGridSize(8 \| 16 \| 32 \| 64 \| 128)` | Grid spacing in map pixels. |
+
+### `api.data`
+
+The game's own tables as the editor decoded them — `units.dat` and its neighbours — for
+the numbers `api.names` only labels: hit points, costs, build times, armour, weapons,
+flags, the sprite and image each unit draws through. `ready()`, `load()`, then `units()`,
+`weapons()`, `upgrades()`, `techs()`, `sprites()`, `flingy()`, `images()`, plus
+`race(unitId)` and `imagePath(imageId)`. Everything is null until the tables are loaded,
+and stays null when the game data was never extracted — degrade, do not throw.
+
+### `api.graphics`
+
+The pictures the viewport draws, for a plugin's own lists and previews. Nothing is
+rendered anew: a unit or sprite frame comes out of the same cache the viewport blits
+from, so listing five hundred units costs about what the Units palette costs.
+
+| | |
+| --- | --- |
+| `ready()` / `load()` | `{ tileset, units }` — whether the graphics and the tables are in memory, and a fetch for both. |
+| `unitImage(unitId, { owner? })` | A `{ image, width, height }` canvas in the player's colours, in the unit's editor pose. |
+| `spriteImage(kind, id, { owner?, flipped? })` | The same for a THG2 sprite. |
+| `tileImage(tileId)` | One 32 × 32 megatile of the open map's tileset. |
+| `doodadImage(doodadId)` | A doodad drawn from the tiles it stamps. |
+| `renderRect(rect, options?)` | Part of the map as File ▸ Export ▸ Image draws it, cropped to a tile rect, as a PNG `Blob`. `pixelsPerTile` defaults to 8 here. |
+| `playerColor(owner)` | `#rrggbb`. |
+| `requestUnit(id)` / `requestSprite(kind, id)` / `onImageLoaded(fn)` | GRPs load lazily, so the first `unitImage` for a type is often null: ask for it, redraw on `onImageLoaded`, and the list fills in. |
+
+### `api.commands`
+
+Named things a plugin can do, so a menu item, a hotkey, a context entry and another
+plugin all reach the same one.
+
+```js
+api.commands.register({ id: "convert", title: "Convert Image…", run: () => open() });
+api.menu.add("Tools", { label: "Convert Image…", command: "convert" });
+api.hotkeys.add("Ctrl+Shift+I", { command: "convert" });
+```
+
+`register(spec)` returns a `Disposable`; `run(id, ...args)` runs one, whoever registered
+it (`undefined` when there is no such command or its `enabled()` says no); `has(id)` and
+`list()` (`{ id, title, pluginId, enabled }[]`) see every plugin's. An id without a dot is
+namespaced under the plugin (`"convert"` → `"image-to-terrain.convert"`); one with a dot
+is taken as it is, so a plugin can publish a stable name for others to call.
 
 ### `api.terrain`
 
@@ -358,6 +504,10 @@ without the tileset graphics.
 | `pickTile({ prompt })` | The same for a single click; resolves with `{ x, y }`. |
 | `loadImage(source)` | Decode a `File` / `Blob`, a `data:` URL or an `http(s)` URL into an `ImageBitmap`. A remote URL is fetched with CORS and, failing that, loaded through an `<img crossOrigin>`; a site that allows neither rejects with a message that says to save the picture and choose the file. |
 | `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use `onPaste` instead — it needs no permission. |
+| `confirm(message, opts?)` / `alert(message, opts?)` / `prompt(message, opts?)` | A yes/no, a note, and a line of text, as dialogs in the editor's chrome rather than the browser's blocking boxes. `confirm` resolves `false` and `prompt` `null` on Cancel, Escape or the ×. Options: `title`, `confirmLabel`, `cancelLabel`, `danger` (a destructive primary button), and for `prompt` also `value`, `placeholder`, `multiline`. |
+| `progress(label, { title?, cancellable? })` | A progress panel over the map for long work — it blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
+| `el(tag, props?, ...children)` | The DOM helper the widgets are built from: `style` takes an object, `on*` keys take listeners, everything else is a property or an attribute. |
+| `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, onClick })`, `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`. Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
 | `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …). |
 | `repaint()` | Bump the terrain revision when you changed something the transaction did not cover. |
 
@@ -379,13 +529,19 @@ without the tileset graphics.
 - `hotkeys.add("Ctrl+Shift+I", run)`: modifiers in any order, then a key name. Plugin
   hotkeys are checked before the built-ins and never while typing in a field or while a
   dialog is open.
+- All three take `{ command: "id" }` (or `command:` on the item) instead of a `run` of
+  their own — see `api.commands`. A context item's command is called with the
+  `ContextMenuContext` as its argument.
 
 ### `api.events`
 
-`on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"`, `"units"`,
-`"doodads"`, `"locations"`, `"settings"`, `"triggers"`, `"layer"`, `"selection"`, and
-`"palette"` (a palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog
-players).
+`on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"` (fog edits
+included — they paint the same revision), `"units"`, `"sprites"` (the doodads revision,
+which THG2 records ride on), `"doodads"`, `"locations"`, `"settings"`, `"triggers"`,
+`"layer"`, `"selection"`, `"clipboard"` (the marked area or the clip), `"view"` (scrolled,
+zoomed, or a View tick moved), `"tool"` (a map tool or pick started or stopped),
+`"modified"` (the unsaved-changes flag), and `"palette"` (a palette's pick changed:
+terrain brush, unit and owner, sprite, doodad, fog players).
 
 ### `api.storage`
 

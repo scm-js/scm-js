@@ -468,7 +468,7 @@ here writes, and everything answers empty without a map.
 | `unitsIn(rect)` / `spritesIn(rect)` / `locationsIn(rect)` | Units and sprites whose centre is in a tile rect; locations wholly inside it. |
 | `unitsOf(owner)` | Every unit a player owns (0-based). |
 | `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
-| `placement(unitId, x, y)` (a `PlacementVerdict` whose `reason` is the problem in words: "the ground is unwalkable", "it overlaps Terran Marine") | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker }`. |
+| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }` — `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. |
 | `validate()` | Check Map's `Issue[]` — `{ level, text, where, target? }`, and `target` is what `view.goTo` takes. |
 | `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts. |
 | `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "strings" \| "triggers", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |

@@ -14,13 +14,14 @@ import { activeUnitAtom, clipSelectionAtom, mapTilesetAtom, terrainModeAtom, uni
 import { dialogStackAtom } from "../src/atoms/uiAtoms";
 import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
-  pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import { bundleModule, candidateUrls, findImports, loadPlugin, parseSpec, PluginLoadError, resolveIcon, resolvePlugin, validateManifest, type LoaderDeps } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
-  activatePlugin, Contributions, createPluginApi, deactivatePlugin, effectiveInstalls, isPluginActive, resolveActivate, runTransaction, setInstalled,
+  activatePlugin, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, isPluginActive, resolveActivate,
+  runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
@@ -411,6 +412,84 @@ describe("plugin lifecycle", () => {
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
     // A fresh editor lists Paint but does not run it until the user ticks it.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
+  });
+});
+
+/* ── Describing (manifest only) ─────────────────────────── */
+
+/** Serves the named URLs and throws for anything else, counting what was asked for. */
+function servedDeps(files: Record<string, string>) {
+  const asked: string[] = [];
+  const deps: Pick<LoaderDeps, "fetchText" | "builtins"> = {
+    fetchText: async (url) => {
+      asked.push(url);
+      const body = files[url];
+      if (body === undefined) throw new Error(`404 ${url}`);
+      return body;
+    },
+    builtins: {},
+  };
+  return { deps, asked };
+}
+
+describe("plugin descriptions", () => {
+  const manifestUrl = "https://raw.githubusercontent.com/o/described/HEAD/plugin.json";
+
+  it("reads a listed plugin's manifest without fetching or running its code", async () => {
+    const { store } = blankStore();
+    // No "entry": loading would probe for plugin.ts / plugin.js, describing must not.
+    const { deps, asked } = servedDeps({ [manifestUrl]: JSON.stringify({ name: "Described", version: "2.0", description: "A plugin that says what it is.", icon: "\u{1f3a8}" }) });
+    await describePlugin(store, "github:o/described", deps);
+    expect(asked).toEqual([manifestUrl]);
+    expect(store.get(pluginRuntimesAtom)["github:o/described"]).toMatchObject({
+      status: "disabled",
+      describing: false,
+      error: null,
+      manifest: { name: "Described", version: "2.0", description: "A plugin that says what it is." },
+      icon: { kind: "text", text: "\u{1f3a8}" },
+    });
+    expect(isPluginActive(store, "github:o/described")).toBe(false);
+    // One attempt per spec, until something asks again.
+    await describePlugin(store, "github:o/described", deps);
+    expect(asked).toHaveLength(1);
+    forgetDescription(store, "github:o/described");
+    await describePlugin(store, "github:o/described", deps);
+    expect(asked).toHaveLength(2);
+  });
+
+  it("caches the manifest so the next visit renders before the network answers", async () => {
+    const url = "https://raw.githubusercontent.com/o/cached/HEAD/plugin.json";
+    const first = blankStore().store;
+    const { deps } = servedDeps({ [url]: JSON.stringify({ name: "Cached", entry: "plugin.js" }) });
+    await describePlugin(first, "github:o/cached", deps);
+    expect(first.get(pluginManifestCacheAtom)["github:o/cached"]).toMatchObject({ manifest: { name: "Cached" } });
+
+    // `atomWithStorage` reads its key once, when the module loads, so a page load starts
+    // with that cache in hand: the row is named before the refresh is even sent, and a
+    // refresh that fails leaves it alone rather than failing it.
+    const next = blankStore().store;
+    next.set(pluginManifestCacheAtom, first.get(pluginManifestCacheAtom));
+    const offline: Pick<LoaderDeps, "fetchText" | "builtins"> = { fetchText: async () => { throw new Error("offline"); }, builtins: {} };
+    const pending = describePlugin(next, "github:o/cached", offline);
+    expect(next.get(pluginRuntimesAtom)["github:o/cached"]).toMatchObject({ manifest: { name: "Cached" }, describing: true });
+    await pending;
+    expect(next.get(pluginRuntimesAtom)["github:o/cached"]).toMatchObject({ status: "disabled", error: null, describing: false, manifest: { name: "Cached" } });
+  });
+
+  it("leaves a plugin it cannot describe as merely off", async () => {
+    const { store } = blankStore();
+    const { deps } = servedDeps({});
+    await describePlugin(store, "github:o/gone", deps);
+    expect(store.get(pluginRuntimesAtom)["github:o/gone"]).toMatchObject({ status: "disabled", error: null, manifest: null, describing: false });
+    expect(store.get(pluginManifestCacheAtom)["github:o/gone"]).toBeUndefined();
+  });
+
+  it("describes a built-in from its bundled manifest and does not cache it", async () => {
+    const { store } = blankStore();
+    const deps = fakeDeps({ hello: { manifest: { name: "Hello", version: "0.1" }, load: async () => ({ default: () => {} }) } });
+    await describePlugin(store, "builtin:hello", deps);
+    expect(store.get(pluginRuntimesAtom)["builtin:hello"]).toMatchObject({ status: "disabled", manifest: { name: "Hello" } });
+    expect(store.get(pluginManifestCacheAtom)["builtin:hello"]).toBeUndefined();
   });
 });
 

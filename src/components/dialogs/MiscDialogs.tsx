@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { CircleX, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
+import { CircleX, Database, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { activeLayerAtom, centerViewOnAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import {
   archiveExtrasAtom, doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom,
 } from "../../atoms/documentAtoms";
-import { DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
+import { clearStoredDataAtom, DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
+import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize } from "../../atoms/storage";
 import { unitName } from "../../data/units";
 import { spriteCatalogue } from "../../data/sprites";
 import { findInScenario, FIND_KINDS, type FindKind, type FindResult } from "../../editor/find";
@@ -23,6 +24,104 @@ import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+
+/** What one line of the storage list shows. `size` is a rough byte count. */
+interface StoredEntry {
+  label: string;
+  detail: string;
+  size: number;
+}
+
+const STORED_LABELS: Record<string, string> = {
+  "scmjs.prefs": "Preferences",
+  "scmjs.grid": "Grid settings",
+  "scmjs.plugins": "Installed plugins",
+};
+
+/** Group the editor's keys into the rows the dialog lists; plugin keys collapse into one. */
+function storedEntries(): StoredEntry[] {
+  const rows: StoredEntry[] = [];
+  const pluginPrefix = `${STORAGE_PREFIX}plugin.`;
+  let pluginKeys = 0;
+  let pluginSize = 0;
+  for (const key of storedKeys()) {
+    if (key.startsWith(pluginPrefix)) {
+      pluginKeys++;
+      pluginSize += storedSize(key);
+    } else {
+      rows.push({ label: STORED_LABELS[key] ?? key, detail: key, size: storedSize(key) });
+    }
+  }
+  if (pluginKeys > 0) rows.push({ label: "Plugin data", detail: `${pluginKeys} entr${pluginKeys === 1 ? "y" : "ies"} kept by plugins`, size: pluginSize });
+  return rows;
+}
+
+function bytes(n: number): string {
+  return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} kB`;
+}
+
+/**
+ * Preferences ▸ General ▸ Browser storage: what the editor is keeping in this browser, and
+ * the one button that throws it away (`clearStoredDataAtom` — preferences, grid, the plugin
+ * list and the plugins' own keys). Confirms in place rather than through a dialog, since
+ * nothing about the open map is at stake; `onCleared` puts the dialog's working copy back on
+ * the defaults so pressing OK afterwards does not write the old preferences straight back.
+ */
+function StorageSection({ onCleared }: { onCleared: () => void }) {
+  const clear = useSetAtom(clearStoredDataAtom);
+  const [asking, setAsking] = useState(false);
+  const [cleared, setCleared] = useState<number | null>(null);
+  const [run, setRun] = useState(0);
+  const entries = useMemo(() => { void run; return storedEntries(); }, [run]);
+  const total = entries.reduce((n, e) => n + e.size, 0);
+  const doClear = () => {
+    const removed = clear();
+    setAsking(false);
+    setCleared(removed);
+    setRun((n) => n + 1);
+    onCleared();
+  };
+  return (
+    <Group title="Browser storage">
+      <div className="listbox" style={{ maxHeight: 132 }}>
+        {entries.length === 0 && <div className="empty">Nothing stored.</div>}
+        {entries.map((e) => (
+          <div key={e.detail} className="item">
+            <Database size={12} className="dim" />
+            <span>{e.label}</span>
+            <span className="grow dim" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{e.detail}</span>
+            <span className="dim">{bytes(e.size)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="row" style={{ marginTop: 6 }}>
+        {asking ? (
+          <>
+            <span className="hint">Clear the preferences, grid settings, installed plugins and plugin data?</span>
+            <span className="grow" />
+            <Button size="sm" onClick={() => setAsking(false)}>Cancel</Button>
+            <Button size="sm" variant="danger" onClick={doClear}><Trash2 size={11} /> Clear</Button>
+          </>
+        ) : (
+          <>
+            <span className="hint">
+              {cleared !== null
+                ? `Cleared ${cleared} entr${cleared === 1 ? "y" : "ies"}. The default plugins load again.`
+                : entries.length === 0
+                  ? "Nothing is stored for this site."
+                  : `${bytes(total)} stored on this site. The open map is never kept in the browser, so it is not affected.`}
+            </span>
+            <span className="grow" />
+            <Button size="sm" variant="danger" disabled={entries.length === 0} onClick={() => { setCleared(null); setAsking(true); }}>
+              <Trash2 size={11} /> Clear all data…
+            </Button>
+          </>
+        )}
+      </div>
+      {!storagePersists() && <p className="hint" style={{ marginTop: 4 }}>This browser is not letting the editor store anything, so settings last only until the tab closes.</p>}
+    </Group>
+  );
+}
 
 /* ── Preferences ────────────────────────────────────────── */
 
@@ -103,6 +202,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>Also the map the editor opens on.</p>
                 </Group>
+                <StorageSection onCleared={() => setLocal(DEFAULT_PREFERENCES)} />
               </div>
             ),
           },

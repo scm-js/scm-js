@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { Blocks, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Blocks, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginRuntimesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
-import { activatePlugin, deactivatePlugin, effectiveInstalls, reloadPlugin, setInstalled } from "../../plugins/host";
+import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, reloadPlugin, setInstalled } from "../../plugins/host";
 import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
 import { parseSpec, PluginLoadError } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
@@ -136,13 +136,20 @@ export function PluginDialog({ entry }: DialogProps) {
 
 /* ── Manage Plugins ─────────────────────────────────────── */
 
-function statusLabel(rt: PluginRuntime | undefined, enabled: boolean): { text: string; className: string } {
-  if (!enabled) return { text: "off", className: "dim" };
+/**
+ * The row's badge. `busy` spins it: a plugin does not appear out of nowhere — fetching,
+ * transpiling and importing it takes a moment, and so does reading the manifest of one
+ * that is only listed, so both say so rather than letting the row silently rewrite itself
+ * when the network answers.
+ */
+function statusLabel(rt: PluginRuntime | undefined, enabled: boolean): { text: string; className: string; busy?: boolean } {
+  if (enabled && rt?.status === "loading") return { text: "loading…", className: "dim", busy: true };
+  const describing = rt?.describing === true;
+  if (!enabled) return describing ? { text: "reading…", className: "dim", busy: true } : { text: "off", className: "dim" };
   switch (rt?.status) {
     case "active": return { text: "active", className: "teal" };
-    case "loading": return { text: "loading…", className: "dim" };
     case "error": return { text: "failed", className: "error-text" };
-    default: return { text: "off", className: "dim" };
+    default: return describing ? { text: "reading…", className: "dim", busy: true } : { text: "off", className: "dim" };
   }
 }
 
@@ -165,6 +172,16 @@ export function PluginsDialog({ entry }: DialogProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const defaults = defaultPluginSpecs();
   const list = effectiveInstalls(installed, defaultPlugins());
+
+  // A listed plugin the editor is not running still has a manifest to show; reading it is
+  // one `plugin.json` fetch and no code (`describePlugin`). One attempt per spec — the host
+  // remembers, so this effect re-running as rows fill in costs nothing.
+  useEffect(() => {
+    for (const p of list) {
+      const rt = runtimes[p.spec];
+      if (!rt?.manifest && rt?.status !== "loading") void describePlugin(store, p.spec);
+    }
+  }, [list, runtimes, store]);
 
   const add = useCallback(() => {
     const s = spec.trim();
@@ -233,6 +250,8 @@ export function PluginsDialog({ entry }: DialogProps) {
             const rt = runtimes[p.spec];
             const isDefault = defaults.includes(p.spec);
             const name = rt?.manifest?.name ?? (p.spec.startsWith("builtin:") ? p.spec.slice("builtin:".length) : p.spec);
+            // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
+            const named = rt?.manifest != null || p.spec.startsWith("builtin:");
             const status = statusLabel(rt, p.enabled);
             return (
               <div key={p.spec} className="item plugin-row" role="listitem">
@@ -242,11 +261,11 @@ export function PluginsDialog({ entry }: DialogProps) {
                   <div className="row" style={{ gap: 8 }}>
                     <strong>{name}</strong>
                     {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
-                    <span className={`badge ${status.className}`}>{status.text}</span>
+                    <span className={`badge ${status.className}`}>{status.busy && <LoaderCircle size={9} className="spin" />}{status.text}</span>
                     {isDefault && <span className="badge dim">default</span>}
                   </div>
                   {rt?.manifest?.description && <span className="hint">{rt.manifest.description}</span>}
-                  <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>
+                  {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
                   {rt?.status === "error" && rt.error && <span className="error-text">{rt.error}</span>}
                   {rt?.status === "active" && <span className="hint">{contributionSummary(rt)}</span>}
                 </div>

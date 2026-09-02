@@ -83,6 +83,15 @@ removed; each says whether it starts on (Terrain from Image does, Paint waits to
 ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
+A plugin that is listed but **not running** — a default that starts off, or one you
+turned off — is still described in Manage Plugins: `describePlugin` does step 1–2 only
+(`resolvePlugin(..., { entry: false })`), so the name, version, description and icon come
+out of one `plugin.json` fetch with no code fetched and nothing executed. The dialog asks
+for that the first time it shows a row it has no manifest for, and the answer is kept in
+`scmjs.plugin-manifests`, so the next visit renders from storage while the refresh runs
+behind it. A description that cannot be fetched changes nothing: the plugin is *off*, not
+failed.
+
 ## Writing a plugin
 
 `plugin.json`:
@@ -267,7 +276,10 @@ players).
 ### `api.storage`
 
 `get(key, fallback)`, `set(key, value)`, `remove(key)`: JSON in localStorage under a
-per-plugin prefix. Safe when storage is unavailable (falls back to memory).
+per-plugin prefix (`scmjs.plugin.<id>.`). Safe when storage is unavailable (falls back to
+memory). The user can throw it all away — Preferences ▸ General ▸ Browser storage ▸ Clear
+all data sweeps every `scmjs.` key, plugin keys included — so treat what you store as a
+convenience, never as the only copy of something.
 
 ### `api.plugin`, `api.apiVersion`, `api.log(...)`
 

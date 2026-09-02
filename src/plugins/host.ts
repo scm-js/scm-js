@@ -20,9 +20,10 @@ import {
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
-  pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
-  type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
+  pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
+import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { scenarioDescription, scenarioName, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
@@ -52,7 +53,7 @@ import {
   type Cells, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle, type MapToolSpec, type MapToolStopReason,
   type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule,
 } from "./api";
-import { loadPlugin, type LoaderDeps } from "./loader";
+import { loadPlugin, parseSpec, resolvePlugin, type LoaderDeps } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
@@ -369,22 +370,13 @@ function doodadInfoOf(def: DoodadDef): DoodadInfo {
   return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height };
 }
 
-function pluginStorage(): Storage | null {
-  try {
-    return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Build one plugin's view of the editor. Everything it registers lands in `bag`. */
 export function createPluginApi(store: Store, info: PluginInfo, bag: Contributions): PluginApi {
   const scenario = () => store.get(scenarioAtom);
   const loaded = (): LoadedTileset | null => peekTileset(store.get(tilesetFileNameAtom));
   const names = () => TILESET_BY_ID[store.get(mapTilesetAtom)].terrain;
   const rgb = (packed: number) => [packed >> 16 & 0xff, packed >> 8 & 0xff, packed & 0xff];
-  const memory = new Map<string, string>();
-  const prefix = `scmjs.plugin.${info.id}.`;
+  const prefix = `${STORAGE_PREFIX}plugin.${info.id}.`;
 
   const api: PluginApi = {
     apiVersion: PLUGIN_API_VERSION,
@@ -623,23 +615,22 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
     },
 
+    // Keys live under `scmjs.plugin.<id>.`, so Preferences ▸ Clear browser data sweeps them
+    // with the rest; `browserStorage()` is a memory stand-in when the browser has none.
     storage: {
       get: (key, fallback) => {
         try {
-          const raw = pluginStorage()?.getItem(prefix + key) ?? memory.get(key) ?? null;
+          const raw = browserStorage().getItem(prefix + key);
           return raw === null ? fallback : (JSON.parse(raw) as typeof fallback);
         } catch {
           return fallback;
         }
       },
       set: (key, value) => {
-        const raw = JSON.stringify(value);
-        try { pluginStorage()?.setItem(prefix + key, raw); } catch { /* quota or disabled */ }
-        memory.set(key, raw);
+        try { browserStorage().setItem(prefix + key, JSON.stringify(value)); } catch { /* quota */ }
       },
       remove: (key) => {
-        try { pluginStorage()?.removeItem(prefix + key); } catch { /* disabled */ }
-        memory.delete(key);
+        try { browserStorage().removeItem(prefix + key); } catch { /* ignore */ }
       },
     },
 
@@ -737,6 +728,73 @@ export async function activatePlugin(store: Store, spec: string, deps: LoaderDep
   }
 }
 
+/* ── Describing (manifest only, no code) ────────────────── */
+
+const describing = new WeakMap<Store, Map<string, Promise<void>>>();
+
+/** An icon URL longer than this is not worth a `localStorage` slot (a fat `data:` icon). */
+const MAX_CACHED_ICON = 32 * 1024;
+
+function describeMap(store: Store): Map<string, Promise<void>> {
+  let m = describing.get(store);
+  if (!m) { m = new Map(); describing.set(store, m); }
+  return m;
+}
+
+/**
+ * Read a plugin's manifest — name, version, description, icon — **without running it**.
+ *
+ * A plugin that is listed but turned off used to be a bare spec in Manage Plugins,
+ * because the only thing that ever filled `pluginRuntimesAtom` was `activatePlugin`,
+ * i.e. the call that also imports and executes the code. This is the other half:
+ * `resolvePlugin(..., { entry: false })` fetches the one `plugin.json` and stops, so a
+ * row can be named and described at the cost of a JSON file and no execution at all.
+ *
+ * It never touches `status` and never reports an error: a description is a nicety, and a
+ * plugin the network could not describe is still just *off*, not broken. The manifest is
+ * cached in `pluginManifestCacheAtom` so the next visit renders from storage at once and
+ * this refreshes behind it. One attempt per spec per store — `forgetDescription` (which
+ * `reloadPlugin` calls) is what asks again.
+ */
+export function describePlugin(store: Store, spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins"> = browserLoaderDeps()): Promise<void> {
+  const map = describeMap(store);
+  const existing = map.get(spec);
+  if (existing) return existing;
+  const promise = runDescribe(store, spec, deps);
+  map.set(spec, promise);
+  return promise;
+}
+
+async function runDescribe(store: Store, spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins">): Promise<void> {
+  const cached: CachedManifest | undefined = store.get(pluginManifestCacheAtom)[spec];
+  if (cached && !store.get(pluginRuntimesAtom)[spec]?.manifest) {
+    setRuntime(store, spec, { manifest: cached.manifest, icon: cached.icon });
+  }
+  setRuntime(store, spec, { describing: true });
+  try {
+    const source = parseSpec(spec);
+    const { manifest, icon } = await resolvePlugin(source, deps, { entry: false });
+    // An activation that started meanwhile has the last word: it ran the code, this did not.
+    if (!activeMap(store).has(spec)) setRuntime(store, spec, { manifest, icon: icon ?? null });
+    if (source.kind !== "builtin") {
+      const keep = icon && (icon.kind === "text" || icon.url.length <= MAX_CACHED_ICON) ? icon : null;
+      store.set(pluginManifestCacheAtom, { ...store.get(pluginManifestCacheAtom), [spec]: { manifest, icon: keep, at: Date.now() } });
+    }
+  } catch (err) {
+    // Not an error state: the row keeps whatever it had (a cached manifest, or the spec).
+    console.warn(`[plugins] could not describe ${spec}:`, err);
+  } finally {
+    setRuntime(store, spec, { describing: false });
+  }
+}
+
+/** Ask for a plugin's manifest again on the next `describePlugin` (Reload, Remove). */
+export function forgetDescription(store: Store, spec: string) {
+  describeMap(store).delete(spec);
+}
+
+/* ── Stopping ───────────────────────────────────────────── */
+
 export function deactivatePlugin(store: Store, spec: string) {
   const map = activeMap(store);
   const entry = map.get(spec);
@@ -751,6 +809,7 @@ export function deactivatePlugin(store: Store, spec: string) {
 }
 
 export async function reloadPlugin(store: Store, spec: string, deps?: LoaderDeps) {
+  forgetDescription(store, spec);
   deactivatePlugin(store, spec);
   await activatePlugin(store, spec, deps);
 }

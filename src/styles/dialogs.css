@@ -987,6 +987,14 @@
 .badge.teal {
   color: var(--teal);
 }
+/* A badge waiting on the network turns instead of sitting there (`statusLabel`): loading a
+   plugin and reading a listed one's manifest are both fetches, and a row that rewrites
+   itself out of nowhere reads as a glitch. */
+.badge > svg.spin {
+  flex: none;
+  margin-right: 3px;
+  animation: dialog-spin 0.9s linear infinite;
+}
 .badge.error-text {
   color: #ffb3b0;
 }

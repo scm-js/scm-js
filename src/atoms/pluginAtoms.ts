@@ -11,6 +11,7 @@ import type {
   ContextItemSpec, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
 } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
+import { browserStorage } from "./storage";
 
 /* ── Installed (persisted) ──────────────────────────────── */
 
@@ -20,27 +21,27 @@ export interface PluginInstall {
   enabled: boolean;
 }
 
-const memory = new Map<string, string>();
-const memoryStorage: Storage = {
-  get length() { return memory.size; },
-  clear: () => memory.clear(),
-  getItem: (k) => memory.get(k) ?? null,
-  key: (i) => [...memory.keys()][i] ?? null,
-  removeItem: (k) => { memory.delete(k); },
-  setItem: (k, v) => { memory.set(k, v); },
-};
+/** Remote plugins the user added; built-ins are merged in by `usePlugins` and only remember an `enabled: false`. */
+export const installedPluginsAtom = atomWithStorage<PluginInstall[]>("scmjs.plugins", [], createJSONStorage(browserStorage), { getOnInit: true });
 
-function storage(): Storage {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
-  } catch {
-    // Storage disabled; fall through.
-  }
-  return memoryStorage;
+/** What was last read out of a plugin's `plugin.json` — see `pluginManifestCacheAtom`. */
+export interface CachedManifest {
+  manifest: PluginManifest;
+  icon: PluginIcon | null;
+  /** When it was fetched (ms), so a stale entry can be spotted; nothing expires it today. */
+  at: number;
 }
 
-/** Remote plugins the user added; built-ins are merged in by `usePlugins` and only remember an `enabled: false`. */
-export const installedPluginsAtom = atomWithStorage<PluginInstall[]>("scmjs.plugins", [], createJSONStorage(storage), { getOnInit: true });
+/**
+ * Manifests seen before, so Manage Plugins can name and describe a plugin that is *not*
+ * running the moment it opens instead of showing a bare spec until the network answers.
+ * `describePlugin` fills it from one `plugin.json` fetch (no code) and refreshes it in the
+ * background; built-ins are never cached (nothing to fetch, and their icon URLs are
+ * build-hashed).
+ */
+export const pluginManifestCacheAtom = atomWithStorage<Record<string, CachedManifest>>(
+  "scmjs.plugin-manifests", {}, createJSONStorage(browserStorage), { getOnInit: true },
+);
 
 /* ── Runtime ────────────────────────────────────────────── */
 
@@ -54,6 +55,8 @@ export interface PluginRuntime {
   icon: PluginIcon | null;
   /** The message when `status` is `"error"`. */
   error: string | null;
+  /** A `describePlugin` fetch is in flight (the manifest shown, if any, may be stale). */
+  describing?: boolean;
   /** What the plugin added, for the Manage Plugins dialog. */
   contributions: { menu: number; contextMenu: number; hotkeys: number; events: number };
 }

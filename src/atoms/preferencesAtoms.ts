@@ -2,11 +2,15 @@
  * Preferences that survive a reload (localStorage), and the grid's look.
  *
  * Only settings something actually reads live here; `PreferencesDialog` shows nothing
- * else. `localStorage` can be unavailable (a sandboxed frame, tests) — the storage falls
- * back to memory so the atoms always work.
+ * else. The storage itself (and its memory fallback for when `localStorage` is
+ * unavailable) is `atoms/storage.ts`, which also knows how to sweep the lot —
+ * `clearStoredDataAtom` at the bottom is Preferences ▸ Clear browser data.
  */
-import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { atom } from "jotai";
+import { atomWithStorage, createJSONStorage, RESET } from "jotai/utils";
 import type { TilesetId } from "../data/tilesets";
+import { installedPluginsAtom, pluginManifestCacheAtom } from "./pluginAtoms";
+import { browserStorage, clearStoredData, storedKeys } from "./storage";
 
 export interface Preferences {
   /** Show the splash while the game data loads; off starts straight on the editor. */
@@ -40,28 +44,9 @@ export interface GridLook {
 
 export const DEFAULT_GRID_LOOK: GridLook = { color: "#000000", opacity: 28, style: "lines" };
 
-const memory = new Map<string, string>();
-const memoryStorage: Storage = {
-  get length() { return memory.size; },
-  clear: () => memory.clear(),
-  getItem: (k) => memory.get(k) ?? null,
-  key: (i) => [...memory.keys()][i] ?? null,
-  removeItem: (k) => { memory.delete(k); },
-  setItem: (k, v) => { memory.set(k, v); },
-};
-
-function storage(): Storage {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
-  } catch {
-    // Access itself can throw (storage disabled); fall through.
-  }
-  return memoryStorage;
-}
-
 /** Stored values are merged over the defaults, so a preference added later still has one. */
 function merged<T extends object>(defaults: T) {
-  const json = createJSONStorage<T>(storage);
+  const json = createJSONStorage<T>(browserStorage);
   return {
     ...json,
     getItem: (key: string, initial: T): T => {
@@ -74,3 +59,23 @@ function merged<T extends object>(defaults: T) {
 // getOnInit: the startup hooks read these through `store.get` before anything subscribes.
 export const preferencesAtom = atomWithStorage<Preferences>("scmjs.prefs", DEFAULT_PREFERENCES, merged(DEFAULT_PREFERENCES), { getOnInit: true });
 export const gridLookAtom = atomWithStorage<GridLook>("scmjs.grid", DEFAULT_GRID_LOOK, merged(DEFAULT_GRID_LOOK), { getOnInit: true });
+
+/* ── Clearing ───────────────────────────────────────────── */
+
+/**
+ * Forget everything the editor keeps in the browser: the preferences, the grid look, the
+ * installed plugin list and whatever the plugins themselves stored. The three atoms are
+ * `RESET` (which removes their keys and puts the defaults back live, so the plugin host
+ * reloads the default set), then any remaining `scmjs.` key is swept. Returns how many
+ * entries went, for the dialog to report. Nothing about the open map is touched — it was
+ * never in storage.
+ */
+export const clearStoredDataAtom = atom(null, (_get, set): number => {
+  const before = storedKeys().length;
+  set(preferencesAtom, RESET);
+  set(gridLookAtom, RESET);
+  set(installedPluginsAtom, RESET);
+  set(pluginManifestCacheAtom, RESET);
+  clearStoredData();
+  return before;
+});

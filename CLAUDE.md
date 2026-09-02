@@ -275,8 +275,14 @@ locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is 
 revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
 `payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
 behind Ctrl+F. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
-(`atomWithStorage` with a memory fallback, `getOnInit` because startup hooks read through
+(`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
+`atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory
+`Storage` when the browser has none — `storagePersists()` says which), knows that every key
+the editor writes starts with `scmjs.` (`storedKeys` / `storedSize` / `clearStoredData`),
+and backs Preferences ▸ Browser storage: `clearStoredDataAtom` `RESET`s the prefs, grid and
+installed-plugin atoms (and the plugin manifest cache) — so the defaults and the default plugins come back live — then
+sweeps whatever the plugins stored (`tests/storage.test.ts`);
 document-replacing actions (New / Open / Close / drop) go through `useMapFileActions().guard(PendingAction)`,
 which parks the action in `confirmClose`'s payload while the map is modified. `tests/resize.test.ts`,
 `tests/validate.test.ts`, `tests/find.test.ts`.
@@ -473,7 +479,18 @@ an ordinary spec fetched over the network on every start; the Manage Plugins row
 and hides its Remove button (`add` canonicalises what the user pastes through `parseSpec(...).display`,
 so pasting the default's own github.com URL is recognised as it rather than duplicating it).
 `pluginRuntimesAtom` is status/manifest/error per
-spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Contribution registries
+spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Only
+`activatePlugin` used to write that atom, so a listed-but-off plugin was a bare spec in
+Manage Plugins until you enabled it — `describePlugin` is the other half:
+`resolvePlugin(..., { entry: false })` fetches the one `plugin.json` (no entry probe, no
+code, no `import()`) and fills in name/version/description/icon without touching `status`
+or `error`, so a plugin the network cannot describe is still merely *off*. One attempt per
+spec per store (`forgetDescription`, which `reloadPlugin` calls, asks again); the dialog
+triggers it for every row with no manifest, and `pluginManifestCacheAtom`
+(`scmjs.plugin-manifests`, built-ins excluded — nothing to fetch and their icon URLs are
+build-hashed) renders the next visit from storage while the refresh runs. `PluginRuntime.describing`
+and `status: "loading"` both spin the row's badge (`statusLabel`), since a row that
+silently rewrites itself when a fetch lands reads as a glitch. Contribution registries
 `pluginMenuItemsAtom` / `pluginContextItemsAtom` / `pluginHotkeysAtom` are read by `MenuBar`
 (`withPluginItems`, path `"File/Import"` → that submenu after a separator; a `Plugins` menu holds
 Manage Plugins…), `MapViewport` and `TerrainPalette` (`plugins/contextMenu.ts#pluginContextRows`,

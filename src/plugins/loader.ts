@@ -146,8 +146,20 @@ export interface ResolvedPlugin {
   icon?: PluginIcon;
 }
 
-/** The manifest and where its entry file lives. */
-export async function resolvePlugin(source: PluginSource, deps: Pick<LoaderDeps, "fetchText" | "builtins">): Promise<ResolvedPlugin> {
+/**
+ * The manifest and where its entry file lives.
+ *
+ * With `entry: false` the entry file is neither probed for nor reported (`entryUrl` is
+ * null): that is the *describe* path — everything the chrome shows about a plugin comes
+ * out of the manifest, so a listed-but-not-running plugin can be named and described
+ * from one JSON fetch without any of its code being fetched, let alone imported.
+ */
+export async function resolvePlugin(
+  source: PluginSource,
+  deps: Pick<LoaderDeps, "fetchText" | "builtins">,
+  opts: { entry?: boolean } = {},
+): Promise<ResolvedPlugin> {
+  const wantEntry = opts.entry !== false;
   if (source.kind === "builtin") {
     const b = deps.builtins[source.name];
     if (!b) throw new PluginLoadError(`No built-in plugin called "${source.name}".`);
@@ -156,7 +168,7 @@ export async function resolvePlugin(source: PluginSource, deps: Pick<LoaderDeps,
   }
   if (source.entryUrl) {
     const file = source.entryUrl.slice(source.entryUrl.lastIndexOf("/") + 1);
-    return { manifest: { name: file.replace(ENTRY_EXT, ""), entry: file }, entryUrl: source.entryUrl };
+    return { manifest: { name: file.replace(ENTRY_EXT, ""), entry: file }, entryUrl: wantEntry ? source.entryUrl : null };
   }
   const manifestUrl = source.manifestUrl!;
   let text: string;
@@ -169,7 +181,8 @@ export async function resolvePlugin(source: PluginSource, deps: Pick<LoaderDeps,
   try { json = JSON.parse(text); } catch { throw new PluginLoadError(`${manifestUrl} is not valid JSON.`); }
   const manifest = validateManifest(json, manifestUrl);
   const icon = resolveIcon(manifest.icon, manifestUrl) ?? undefined;
-  if (manifest.entry) return { manifest, entryUrl: new URL(manifest.entry, manifestUrl).href, icon };
+  if (manifest.entry) return { manifest, entryUrl: wantEntry ? new URL(manifest.entry, manifestUrl).href : null, icon };
+  if (!wantEntry) return { manifest, entryUrl: null, icon };
   // No entry named: the first default that exists.
   const errors: string[] = [];
   for (const name of DEFAULT_ENTRIES) {

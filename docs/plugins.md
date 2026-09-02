@@ -998,8 +998,17 @@ Melee Wizard's geometry, doodads scattered by category; a trigger request answer
 script language, is compiled through `api.script.compile`, repaired against the
 diagnostics, and built with `api.script.build`; a review sends `document.renderImage`;
 the assistant panel is a tool-use loop whose tools — reads, screenshots, and one
-undoable write each — are defined and run in the plugin, with the server only adding
-the system prompt. `protocol.ts`, kept identical in both repositories, is the contract.
+undoable write (or one settings transaction) each — are defined and run in the plugin,
+with the server adding the system prompt and the caching. The assistant is the reason
+`document.update` grew the settings family, `api.settings` and `document.resize`: its
+sixty-odd tools reach everything the editor's dialogs write. With every message it sends
+the map's facts (players, counts, what is selected, where the view is, the top of the
+undo stack) and, once per map, a *reference* block built from `api.terrain.types()`,
+`api.palette.doodadCategories()`, `api.settings.unitTypes()`, `api.triggers.defs` and
+the text format — the server keeps it as a cached system block, and puts a cache
+breakpoint on the conversation, so a long session with screenshots is read from the
+cache rather than re-billed each round. `protocol.ts`, kept identical in both
+repositories, is the contract.
 Tools ▸ AI holds the whole of it; Settings there takes the server's address, an access
 token the operator issued, or your own Anthropic key, which is forwarded and never
 stored on the server.

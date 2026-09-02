@@ -104,7 +104,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
 | Switch names | Yes |
-| Sound editor | Partial. Import, remove and adopt archive files all work; playback covers PCM and Ogg, so the game's own ADPCM `.wav`s show as "cannot decode". |
+| Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV the browser decodes to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The game's own ADPCM `.wav`s neither play nor convert here. |
 
 ### Tools
 
@@ -336,6 +336,15 @@ type as `<XX>`, and a row of buttons inserts the game's colour codes.
 
 The Sound Editor joins the map's sound table with the `.wav` files in the archive:
 import, play, remove, and adopt files the archive carries but the table does not list.
+Import takes any file the browser can decode (MP3, FLAC, AAC, Ogg, WAV in any encoding)
+and writes it as PCM WAV in the format picked next to the button; the default, 22050 Hz
+16-bit mono, is what the game's own sounds are, and the other presets are the rates its
+mixer takes, down to 11025 Hz 8-bit for maps chasing the size limit. A PCM WAV already in
+that format is stored byte for byte, and "keep as they are" stores PCM WAVs and Oggs
+unchanged (an Ogg plays in Remastered only). The Format column reads each file's header,
+and Convert re-encodes a listed `.wav` in place. No decoder ships with the editor: this
+is Web Audio's `decodeAudioData` and an offline render for the resampling, so the set of
+formats is the browser's.
 
 ### Checking and exporting
 

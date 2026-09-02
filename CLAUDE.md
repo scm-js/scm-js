@@ -314,7 +314,12 @@ unreferenced trailing blanks and keeps a blank slot something still points at. `
 `unescapeControls` show bytes below 0x20 as `<XX>` (tab, LF, CR stay literal). `editor/sounds.ts`
 joins `scn.wavs` with `archiveExtrasAtom` (`soundList`, `orphanSounds`, member names normalised for
 case and slashes); the Sound Editor's working copy carries both the table and a new extras `Map`, and
-apply replaces the atom, so an imported file only reaches the archive on OK / Apply.
+apply replaces the atom, so an imported file only reaches the archive on OK / Apply. Import converts
+through `services/audioConvert.ts` (`convertToWav`: Web Audio `decodeAudioData` in a throw-away
+`OfflineAudioContext`, an offline render for resampling / downmix, `WAV_PRESETS` for the targets — no
+decoder library, the platform decoders cover MP3 / FLAC / AAC / Ogg) and `formats/wav.ts` (pure:
+`parseWavHeader` incl. WAVE_FORMAT_EXTENSIBLE, `encodeWav` 8/16-bit PCM, `decodePcmWav`; `tests/wav.test.ts`);
+a file already a PCM WAV in the target format is kept byte for byte, and a converted one is renamed `.wav`.
 `editor/switches.ts` edits SWNM (`applySwitchNames` creates the section on the first name and interns
 names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
 `tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.

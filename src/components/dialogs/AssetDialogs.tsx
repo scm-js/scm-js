@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Eraser, Lock, Music, Pencil, Play, Plus, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
+import { Eraser, Lock, Music, Pencil, Play, Plus, RefreshCw, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { activeLayerAtom, mapDescriptionAtom, mapNameAtom, selectedLocationsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, commitSettingsAtom, locationsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
@@ -12,6 +12,8 @@ import { useLocationTools } from "../../hooks/useLocationTools";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
 import { WAV_SLOTS } from "../../formats/chk/sections/sounds";
+import { isPlainPcm, parseWavHeader, wavFormatLabel, type WavInfo } from "../../formats/wav";
+import { convertToWav, DEFAULT_WAV_PRESET, IMPORT_EXTENSIONS, matchesTarget, WAV_PRESETS, withWavExtension } from "../../services/audioConvert";
 import { Button, ListBox, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -157,14 +159,35 @@ interface SoundForm {
   extras: Map<string, Uint8Array>;
 }
 
+/** What the last Import / Convert did to each file, shown under the buttons. */
+interface SoundNote {
+  name: string;
+  text: string;
+  level: "ok" | "warn";
+}
+
 const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
 const mmss = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+const KEEP = "keep";
+const IMPORT_AS = [...WAV_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: KEEP, label: "Keep PCM WAV and Ogg files as they are" }];
+const IMPORT_ACCEPT = [...IMPORT_EXTENSIONS, "audio/*"].join(",");
+
+/** The format column: what a WAV header says, or the extension for anything else. */
+function formatOf(bytes: Uint8Array | undefined, path: string): { label: string; wav: WavInfo | null } {
+  if (!bytes) return { label: "—", wav: null };
+  const wav = parseWavHeader(bytes);
+  if (wav) return { label: wavFormatLabel(wav), wav };
+  const ext = path.match(/\.([^.\\/]+)$/)?.[1]?.toLowerCase();
+  return { label: ext === "ogg" || ext === "oga" ? "Ogg" : ext ? ext.toUpperCase() : "?", wav: null };
+}
 
 /**
  * Scenario ▸ Sound Editor: the WAV table joined with the archive's sound members. Import
- * adds a member under `staredit\wav\` and a table entry; Remove clears the slot and, when
- * nothing else refers to the file, drops the member too. Playback decodes the bytes with
- * Web Audio, which handles PCM WAV and Ogg; the game's ADPCM-compressed WAVs will not play here.
+ * adds a member under `staredit\wav\` and a table entry, converting anything the browser can
+ * decode (MP3, FLAC, AAC, Ogg, any WAV) to PCM WAV in the chosen format on the way in;
+ * Convert does the same to a listed `.wav`; Remove clears the slot and, when nothing else
+ * refers to the file, drops the member too. Playback decodes the bytes with Web Audio, so
+ * the game's ADPCM-compressed WAVs neither play nor convert here.
  */
 export function SoundEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
@@ -176,6 +199,9 @@ export function SoundEditorDialog({ entry }: DialogProps) {
   const [sel, setSel] = useState(-1);
   const [playing, setPlaying] = useState<string | null>(null);
   const [durations, setDurations] = useState<Map<string, number | null>>(new Map());
+  const [preset, setPreset] = useState(DEFAULT_WAV_PRESET.id);
+  const [notes, setNotes] = useState<SoundNote[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [, bump] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const audio = useRef<{ ctx: AudioContext; source: AudioBufferSourceNode | null } | null>(null);
@@ -220,6 +246,14 @@ export function SoundEditorDialog({ entry }: DialogProps) {
 
   const row: SoundRow | undefined = rows.find((r) => r.slot === sel);
   const filled = form.wavs.filter((i) => i !== 0).length;
+  const target = WAV_PRESETS.find((p) => p.id === preset)?.target ?? null;
+  const rowBytes = row?.member ? form.extras.get(row.member) : undefined;
+  const rowFormat = row ? formatOf(rowBytes, row.path) : null;
+  const rowDecodes = row?.member ? durations.get(row.member) !== null : false;
+  // Convert works in place on a `.wav` member the browser can decode; an Ogg keeps its name
+  // and its Remastered-only playback, so it is re-imported instead.
+  const canConvert = !!row?.member && /\.wav$/i.test(row.path) && rowDecodes && !busy
+    && !!(target && rowFormat?.wav && !matchesTarget(rowFormat.wav, target));
 
   const play = async (r: SoundRow) => {
     if (!r.member) return;
@@ -239,20 +273,76 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     }
   };
 
+  /** Drop a member's cached length so the next render decodes the new bytes. */
+  const forgetLength = (member: string) => setDurations((d) => { const n = new Map(d); n.delete(member); return n; });
+
+  /**
+   * The bytes to store for `file`: as they are when the preset says keep and the file is a
+   * PCM WAV or an Ogg, else decoded and rendered to the preset (the game standard when keeping).
+   */
+  const prepare = async (name: string, bytes: Uint8Array): Promise<{ bytes: Uint8Array; name: string; note: SoundNote }> => {
+    const wav = parseWavHeader(bytes);
+    const isOgg = /\.(ogg|oga|opus)$/i.test(name);
+    if (!target && ((wav && isPlainPcm(wav)) || isOgg)) {
+      return { bytes, name, note: { name, level: "ok", text: wav ? `kept as it is (${wavFormatLabel(wav)})` : "kept as it is (Ogg plays in Remastered only)" } };
+    }
+    const t = target ?? DEFAULT_WAV_PRESET.target;
+    const result = await convertToWav(bytes, t);
+    const label = wavFormatLabel(parseWavHeader(result.bytes)!);
+    if (!result.converted) return { bytes, name, note: { name, level: "ok", text: `already ${label}` } };
+    const out = withWavExtension(name);
+    const from = wav ? wavFormatLabel(wav) : (name.match(/\.([^.\\/]+)$/)?.[1] ?? "file").toUpperCase();
+    return { bytes: result.bytes, name: out, note: { name, level: "ok", text: `${from} → ${label}, ${mmss(result.seconds)}, ${kb(result.bytes.length)}${out !== name ? `, stored as ${out.split(/[\\/]/).pop()}` : ""}` } };
+  };
+
   const importFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const extras = new Map(form.extras);
     const wavs = form.wavs.slice();
+    const done: SoundNote[] = [];
     let last = -1;
-    for (const file of Array.from(files)) {
-      const name = wavMemberName(file.name);
-      const existing = findMember(extras, name);
-      extras.set(existing ?? name, new Uint8Array(await file.arrayBuffer()));
-      last = addSound(scenario, wavs, existing ?? name);
+    setBusy("Importing…");
+    try {
+      for (const file of Array.from(files)) {
+        setBusy(`Converting ${file.name}…`);
+        try {
+          const prepared = await prepare(file.name, new Uint8Array(await file.arrayBuffer()));
+          const name = wavMemberName(prepared.name);
+          const existing = findMember(extras, name);
+          if (existing) forgetLength(existing);
+          extras.set(existing ?? name, prepared.bytes);
+          last = addSound(scenario, wavs, existing ?? name);
+          done.push(prepared.note);
+        } catch (err) {
+          done.push({ name: file.name, level: "warn", text: `not imported: the browser could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` });
+        }
+      }
+    } finally {
+      setBusy(null);
     }
     setForm({ wavs, extras });
+    setNotes(done);
     if (last >= 0) setSel(last);
     bump((n) => n + 1);
+  };
+
+  const convertRow = async (r: SoundRow) => {
+    if (!r.member || !target) return;
+    if (playing === r.member) stop();
+    setBusy(`Converting ${r.path.split(/[\\/]/).pop()}…`);
+    try {
+      const before = form.extras.get(r.member)!;
+      const result = await convertToWav(before, target);
+      const extras = new Map(form.extras);
+      extras.set(r.member, result.bytes);
+      forgetLength(r.member);
+      setForm({ ...form, extras });
+      setNotes([{ name: r.path, level: "ok", text: `${wavFormatLabel(parseWavHeader(before)!)} → ${wavFormatLabel(parseWavHeader(result.bytes)!)}, ${kb(before.length)} → ${kb(result.bytes.length)}` }]);
+    } catch (err) {
+      setNotes([{ name: r.path, level: "warn", text: `not converted: the browser could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` }]);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const addOrphan = (name: string) => {
@@ -287,6 +377,12 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     return d === null ? <span className="faint" title="Web Audio could not decode this file (the game's ADPCM WAVs are not supported here)">cannot decode</span> : mmss(d);
   };
 
+  const format = (r: SoundRow) => {
+    const f = formatOf(r.member ? form.extras.get(r.member) : undefined, r.path);
+    const odd = f.wav && !isPlainPcm(f.wav);
+    return <span className={odd ? "warn" : "dim"} title={odd ? "Not plain PCM: the game may not play it, and this editor cannot convert it" : undefined}>{f.label}</span>;
+  };
+
   return (
     <DialogFrame
       dialogKey={entry.key}
@@ -298,30 +394,41 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       onOk={apply}
       footerLeft={<span>{filled} / {WAV_SLOTS} sounds · {kb(soundBytes(form.extras))} in archive{scenario.wavs ? "" : " · no WAV section yet"}</span>}
     >
-      <input ref={fileRef} type="file" accept=".wav,.ogg" multiple hidden onChange={(e) => { void importFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept={IMPORT_ACCEPT} multiple hidden onChange={(e) => { void importFiles(e.target.files); e.target.value = ""; }} />
       <div className="row">
-        <Button size="sm" onClick={() => fileRef.current?.click()} disabled={filled >= WAV_SLOTS}><Upload size={12} /> Import WAV/OGG…</Button>
+        <Button size="sm" onClick={() => fileRef.current?.click()} disabled={filled >= WAV_SLOTS || !!busy}><Upload size={12} /> Import…</Button>
+        <label className="row" style={{ gap: 6 }}>
+          <span className="dim" style={{ fontSize: 11 }}>as</span>
+          <Select value={preset} options={IMPORT_AS} onChange={(e) => setPreset(e.target.value)} disabled={!!busy} style={{ minWidth: 290 }} title="Files are decoded by the browser and written as PCM WAV in this format. The game's own sounds are 22050 Hz, 16-bit, mono." />
+        </label>
+        <Button size="sm" disabled={!canConvert} onClick={() => row && void convertRow(row)} title={target ? "Re-encode the selected .wav to the chosen format" : "Choose a format to convert to"}><RefreshCw size={12} /> Convert</Button>
         {playing && row?.member === playing
           ? <Button size="sm" onClick={stop}><Square size={12} /> Stop</Button>
-          : <Button size="sm" disabled={!row?.member || durations.get(row.member) === null} onClick={() => row && void play(row)}><Play size={12} /> Play</Button>}
-        <Button size="sm" disabled={!row} onClick={() => row && remove(row)}><Trash2 size={12} /> Remove</Button>
+          : <Button size="sm" disabled={!row?.member || !rowDecodes} onClick={() => row && void play(row)}><Play size={12} /> Play</Button>}
+        <Button size="sm" disabled={!row || !!busy} onClick={() => row && remove(row)}><Trash2 size={12} /> Remove</Button>
         <span className="grow" />
-        <span className="hint">Files go in <span className="mono">staredit\wav\</span> inside the .scx</span>
+        <span className="hint">{busy ?? <>Files go in <span className="mono">staredit\wav\</span> inside the .scx</>}</span>
       </div>
+      {notes.length > 0 && (
+        <div className="col" style={{ gap: 2, fontSize: 11 }}>
+          {notes.map((n, i) => <div key={i} className={n.level === "warn" ? "warn" : "dim"}><span className="mono">{n.name.split(/[\\/]/).pop()}</span>: {n.text}</div>)}
+        </div>
+      )}
       <div className="listbox" style={{ flex: 1, minHeight: 200 }}>
         <table className="table">
-          <thead><tr><th style={{ width: 40 }}>#</th><th>Path in archive</th><th style={{ width: 70 }}>Size</th><th style={{ width: 70 }}>Length</th><th style={{ width: 160 }}>Used by</th></tr></thead>
+          <thead><tr><th style={{ width: 40 }}>#</th><th>Path in archive</th><th style={{ width: 70 }}>Size</th><th style={{ width: 170 }}>Format</th><th style={{ width: 70 }}>Length</th><th style={{ width: 150 }}>Used by</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.slot} className={sel === r.slot ? "selected" : ""} onClick={() => setSel(r.slot)} onDoubleClick={() => void play(r)}>
                 <td className="num">{r.slot}</td>
                 <td className="mono">{r.path}{!r.present && <span className="badge warn" style={{ marginLeft: 6 }} title="The table lists this path but the archive has no such file">missing</span>}{playing === r.member && <span className="badge teal" style={{ marginLeft: 6 }}>playing</span>}</td>
                 <td className="num">{r.present ? kb(r.size) : "—"}</td>
+                <td>{format(r)}</td>
                 <td className="num">{length(r)}</td>
                 <td className={r.usedBy.length ? "dim" : "faint"} title={r.usedBy.join(", ")}>{r.usedBy.length ? r.usedBy.join(", ") : "not referenced"}</td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={5} className="hint">No sounds in the table — import a file, or add one of the archive's files below.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={6} className="hint">No sounds in the table — import a file, or add one of the archive's files below.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -333,11 +440,10 @@ export function SoundEditorDialog({ entry }: DialogProps) {
           </div>
         </div>
       )}
-      <p className="hint">Remove clears the slot; the file is dropped from the archive too unless another slot or a trigger still refers to it. Triggers play a sound by its string, so a removed slot leaves the string in the table until String Editor's Delete unused.</p>
+      <p className="hint">Import takes MP3, FLAC, AAC, Ogg and WAV (anything the browser decodes) and writes PCM WAV in the chosen format, which every StarCraft build plays; keep an Ogg only for Remastered. Remove clears the slot; the file is dropped from the archive too unless another slot or a trigger still refers to it. Triggers play a sound by its string, so a removed slot leaves the string in the table until String Editor's Delete unused.</p>
     </DialogFrame>
   );
 }
-
 /* ── Switches ───────────────────────────────────────────── */
 
 /** Scenario ▸ Switches: the 256 switch names (SWNM) with how many triggers use each. */

@@ -72,6 +72,9 @@ button {
 .faint {
   color: var(--text-faint);
 }
+.warn {
+  color: var(--warn);
+}
 .gold {
   color: var(--gold);
 }

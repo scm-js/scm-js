@@ -12,7 +12,7 @@ import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
-import { useIsomRebuild, useIsomStatus } from "../../hooks/useIsom";
+import { useIsomStatus } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { variationsOf } from "../../formats/tileset/terrain";
 import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
@@ -67,7 +67,6 @@ function IsomTab() {
   const { loaded } = useTileset();
   const [active, setActive] = useAtom(activeTerrainAtom);
   const status = useIsomStatus();
-  const rebuild = useIsomRebuild();
   const types = useMemo(() => terrainTypes(loaded?.tileset ?? null, info.terrain), [loaded, info]);
   const list = types.length > 0 ? types : info.terrain.map((t) => ({ ...t, group: -1, height: 0 as const, buildable: true }));
   const ready = status.kind === "ready";
@@ -105,19 +104,18 @@ function IsomTab() {
               the editor's own record of the diamond lattice — but the brush cannot work without one.
             </span>
             <span>
-              You can rebuild it from the tiles: exact for terrain that was laid down isometrically, a best guess under
-              doodads and for hand-placed tiles.
+              The Repair plugin rebuilds it from the tiles (Tools ▸ Repair Map…): exact for terrain that was laid down
+              isometrically, a best guess under doodads and for hand-placed tiles.
             </span>
-            <span><Button size="sm" onClick={rebuild}>Rebuild ISOM from tiles</Button></span>
           </div>
         )}
         {ready && status.stale && (
           <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
             <span>
               The ISOM disagrees with the tiles under about {stalePct}% of the map — terrain edited with the Rect or Tile brush,
-              or another tool. Isometric strokes near those areas will not join up until it is rebuilt.
+              or another tool. Isometric strokes near those areas will not join up until it is rebuilt (Tools ▸ Repair Map…,
+              from the Repair plugin).
             </span>
-            <span><Button size="sm" onClick={rebuild}>Rebuild ISOM from tiles</Button></span>
           </div>
         )}
       </div>
@@ -436,12 +434,10 @@ export default function TerrainPalette() {
   const markedArea = useAtomValue(clipSelectionAtom);
   const pluginItems = useAtomValue(pluginContextItemsAtom);
   const tools = useTerrainTools();
-  const rebuild = useIsomRebuild();
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
     { label: mode === "tile" ? "Fill Map with This Tile" : "Fill Map with This Terrain", disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
-    { label: "Rebuild ISOM from Tiles", disabled: !scenario, onSelect: rebuild },
   ];
   const pluginRows = pluginContextRows(pluginItems, "terrainPalette", { surface: "terrainPalette", tile: null, point: null, layer, terrainMode: mode, terrain: activeTerrain, markedArea });
   if (pluginRows.length > 0) rows.push({ label: "", sep: true }, ...pluginRows);

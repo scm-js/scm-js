@@ -15,7 +15,7 @@ import type { LoadedTileset } from "../formats/tileset/load";
 import type { TerrainType, TileInfo } from "../formats/tileset/palette";
 import type { TilesetId } from "../data/tilesets";
 import type { Rect } from "../editor/terrain";
-import type { Diamond } from "../editor/isom";
+import type { Diamond, IsomReport } from "../editor/isom";
 import type { Bounds, LocationPatch } from "../editor/locations";
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
@@ -24,7 +24,7 @@ import type { SpriteGroup } from "../data/sprites";
 import type { EditorLayer, TerrainMode } from "../atoms/editorAtoms";
 import type { DialogId } from "../atoms/uiAtoms";
 import type { MapImageOptions } from "../services/mapImage";
-import type { SectionInfo, SectionKnowledge } from "../editor/sections";
+import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
 import type { CombineMode } from "../formats/chk/reader";
 import type { ActionRecord, ConditionRecord, TriggerRecord } from "../formats/chk/sections/triggers";
 import type { ActionDef, ArgDef, ArgKind, Choice, ConditionDef } from "../data/triggerDefs";
@@ -42,7 +42,7 @@ export type {
   Issue, IssueLevel, IssueTarget, MapStatistics, FindKind, FindOptions, FindResult, StringUsage, PlacementVerdict, PlacementProblem,
   UnitsDat, WeaponsDat, UpgradesDat, TechdataDat, SpritesDat, FlingyDat, ImagesDat, Race, ViewFlags,
 };
-export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode };
+export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode, RebuildResult, IsomReport };
 
 /**
  * The version a host provides; a manifest that asks for a newer one is refused. It stays
@@ -279,6 +279,44 @@ export interface SectionsApi {
   move(from: number, to: number): RawEditResult;
   /** Replace the whole CHK, the way File ▸ Open reads one. */
   replaceFile(bytes: Uint8Array): RawEditResult;
+  /**
+   * Bytes after the last chunk the reader could parse — what follows a chunk header with
+   * a negative length, say. Save writes them back as they are; a `replaceFile` without
+   * them drops them. Null when the file ends cleanly.
+   */
+  trailing(): Uint8Array | null;
+  /** The sections a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in place of `STR ` on a Remastered file). */
+  required(): string[];
+  /**
+   * The bytes File ▸ New would write for a section on a map of this size, tileset and
+   * revision — StarEdit's defaults for a settings table, the fixed VCOD, an empty list,
+   * null terrain. Null for a section the editor cannot produce: one it does not model,
+   * or an optional one a new map has no value for (CRGB, SWNM).
+   */
+  defaults(name: string): Uint8Array | null;
+  /**
+   * Re-encode sections from the editor's model, the way Save writes a dirty one, and
+   * install the result like any other raw edit. This is what turns a protected file back
+   * into a plain one: repeated occurrences collapse into one, a truncated or oversized
+   * section comes back at the size the model encodes to, a string table whose offsets
+   * point nowhere is rewritten with every string the editor could read. Names the editor
+   * does not model, and modelled ones whose model is absent (no ISOM, no settings table),
+   * are left as they are and missing from `rebuilt`; omit `names` for every modelled
+   * section the map has a model for.
+   */
+  rebuild(names?: string[]): RebuildResult;
+}
+
+/** What `tx.rebuildIsom` did. */
+export interface IsomRebuildResult {
+  /** The map had no usable ISOM, so one was created. */
+  created: boolean;
+  /** Lattice values that changed (every one of a created section). */
+  changed: number;
+  /** Diamonds the rebuild resolved from the tiles. */
+  diamonds: number;
+  /** Diamonds it had to guess — under doodads or off the edge. */
+  unresolved: number;
 }
 
 /** Cells for the bulk terrain operations: a tile rect, or cell indices (`y * width + x`). */
@@ -310,6 +348,14 @@ export interface EditTransaction {
    * the terrain could be painted there.
    */
   paintIsom(d: Diamond, terrainId: number, extent?: number): boolean;
+  /**
+   * Reconstruct the ISOM section from the tiles — for a map that arrived without one, or
+   * whose lattice no longer matches after Rect / Tile edits: exact for terrain that was
+   * laid down isometrically, a best guess under doodads and for hand-placed tiles. A
+   * missing or wrongly sized ISOM is created (undo removes it again); an existing one gets
+   * only the diamonds that differ. Needs the tileset graphics; null without them.
+   */
+  rebuildIsom(): IsomRebuildResult | null;
 
   /** A StarEdit-style unit record (fresh serial, valid/used masks) centred on map pixels. */
   makeUnit(unitId: number, owner: number, x: number, y: number): UnitRecord;
@@ -698,6 +744,13 @@ export interface TerrainApi {
   isomTypes(): number[];
   /** Whether the open map carries an ISOM section the isometric brush can work on. */
   hasIsom(): boolean;
+  /**
+   * How well the ISOM describes the tiles — `rects` measured, `mismatched` among them,
+   * and `stale` when the share is past what the palette warns at — or null when the map
+   * has no ISOM (`hasIsom`) or no map is open. Waits for the tileset graphics to load
+   * and rejects when they are missing.
+   */
+  checkIsom(): Promise<IsomReport | null>;
   tileInfo(id: number): TileInfo | null;
   /** The atlas average of a tile, packed `0xRRGGBB`, or null without graphics. */
   color(tileId: number): number | null;
@@ -1342,7 +1395,30 @@ export type PluginEvent =
   /** A palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog players. */
   | "palette";
 
+/** Why the document changed. */
+export type DocumentChangeReason =
+  /** File ▸ Open, drag-and-drop, `document.open`: a file the user chose. */
+  | "open"
+  /** File ▸ New (the startup map included). */
+  | "new"
+  /** File ▸ Close: `document.isOpen()` is now false. */
+  | "close"
+  /** The open map parsed again from edited bytes — a `document.sections` write, by any plugin. */
+  | "replace";
+
+export interface DocumentEvent {
+  reason: DocumentChangeReason;
+  fileName: string | null;
+}
+
+/**
+ * Listeners are notifications: they run after the change, in the order the plugins were
+ * activated, and cannot veto or reorder one another. A listener that rewrites the map in
+ * response (through `document.sections`) simply raises a fresh `"document"` event with
+ * reason `"replace"`, which every other listener sees in turn.
+ */
 export interface EventsApi {
+  on(event: "document", listener: (event: DocumentEvent) => void): Disposable;
   on(event: PluginEvent, listener: () => void): Disposable;
 }
 

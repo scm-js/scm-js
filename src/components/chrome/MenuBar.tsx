@@ -26,7 +26,6 @@ import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type Pl
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../dialogs/PluginDialogs";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
-import { useIsomRebuild } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { usedLocations } from "../../editor/locations";
@@ -138,7 +137,6 @@ function useMenus(): Menu[] {
   const setStatus = useSetAtom(statusMessageAtom);
   const store = useStore();
   const hasMap = useAtomValue(scenarioAtom) !== null;
-  const rebuildIsom = useIsomRebuild();
   const { fillMap } = useTerrainTools();
   const [recent, setRecent] = useAtom(recentFilesAtom);
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
@@ -365,7 +363,6 @@ function useMenus(): Menu[] {
         sep,
         { kind: "item", label: "Fill Terrain", disabled: !hasMap, onSelect: fillMap },
         stub("Replace Terrain…"),
-        { kind: "item", label: "Rebuild ISOM from Tiles", disabled: !hasMap, onSelect: rebuildIsom },
         stub("Auto-place Start Locations"),
         sep,
         dlg("Check Map…", "validateMap"),

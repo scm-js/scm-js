@@ -151,7 +151,19 @@ export interface LoadedDocument {
   scenario: Scenario;
   extras: Map<string, Uint8Array>;
   fileName: string | null;
+  /** How the document came to be installed; File ▸ Open when omitted. */
+  reason?: DocumentChangeReason;
 }
+
+/** Why `scenarioAtom` last changed: a file opened, a new map, the map closed, or the open one re-parsed (a raw section edit). */
+export type DocumentChangeReason = "open" | "new" | "close" | "replace";
+
+/**
+ * The reason behind the latest `scenarioAtom` change, with the object it applies to so a
+ * reader can tell a stale entry (a test setting `scenarioAtom` directly) from a current one.
+ * The plugin host turns it into the `"document"` event's payload.
+ */
+export const documentChangeAtom = atom<{ reason: DocumentChangeReason; scenario: Scenario | null }>({ reason: "close", scenario: null });
 
 /**
  * Install a freshly parsed scenario, mirroring the fields the existing UI atoms read.
@@ -160,6 +172,7 @@ export interface LoadedDocument {
  */
 export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   const { scenario } = doc;
+  set(documentChangeAtom, { reason: doc.reason ?? "open", scenario });
   set(scenarioAtom, scenario);
   set(archiveExtrasAtom, doc.extras);
   set(mapFilePathAtom, doc.fileName);
@@ -200,11 +213,12 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * of the document may have changed. The mirror atoms are refilled from the new object.
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
-  set(loadDocumentAtom, { scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom) });
+  set(loadDocumentAtom, { scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), reason: "replace" });
   set(mapModifiedAtom, true);
 });
 
 export const closeDocumentAtom = atom(null, (get, set) => {
+  set(documentChangeAtom, { reason: "close", scenario: null });
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());
   set(mapFilePathAtom, null);
@@ -250,6 +264,8 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (entry.units) set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+  // A rebuilt lattice is the one edit the ISOM status is re-measured after.
+  if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
 });
 
 /**

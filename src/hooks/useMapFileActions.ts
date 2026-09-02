@@ -109,6 +109,7 @@ export function useMapFileActions() {
       scenario: createScenario({ width, height, era, name, description, tiles, isom }),
       extras: new Map(),
       fileName: null,
+      reason: "new",
     });
     setStatus(`New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
   }, [load, setStatus, store]);

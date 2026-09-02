@@ -14,7 +14,8 @@
  * touches the store; `replaceScenarioAtom` installs the result.
  */
 import { combine, parseChk, serializeChk, type ChkFile, type ChkSection, type CombineMode } from "../formats/chk/reader";
-import { MODELLED_SECTIONS, parseScenario, serializeScenario, type Scenario } from "../formats/chk/scenario";
+import { createScenario, rawCreatedSections, requiredSections } from "../formats/chk/create";
+import { MODELLED_SECTIONS, parseScenario, scenarioName, serializeScenario, type Scenario } from "../formats/chk/scenario";
 import { SECTION_SPECS, sizeOf, specFor, type Dim } from "../formats/chk/sections/registry";
 
 /** What the registry knows about a section name, sized for one map. */
@@ -168,4 +169,52 @@ export function editRaw(scn: Scenario, mutate: (file: ChkFile) => void): Scenari
 /** Parse a whole CHK the way File ▸ Open does, for a plugin that rewrote the file itself. */
 export function parseRaw(bytes: Uint8Array): Scenario {
   return parseScenario(bytes.slice());
+}
+
+/**
+ * The bytes File ▸ New writes for a section, for a map of this one's size, tileset and
+ * revision: StarEdit's defaults for the settings tables, the fixed VCOD, empty lists,
+ * null terrain. Null for a name the editor cannot produce (one it does not model, or a
+ * modelled one that is optional and absent on a new map — CRGB, SWNM).
+ */
+export function defaultSectionBytes(scn: Scenario, name: string): Uint8Array | null {
+  const raw = rawCreatedSections().find((s) => s.name === name);
+  if (raw) return raw.data.slice();
+  if (!MODELLED_SECTIONS.has(name)) return null;
+  const fresh = createScenario({ width: scn.width, height: scn.height, era: scn.era, name: scenarioName(scn) ?? "Untitled Scenario" });
+  fresh.fileVersion = scn.fileVersion;
+  fresh.type = scn.type;
+  fresh.strings.extended = scn.strings.extended;
+  const file = parseChk(serializeScenario({ ...fresh, dirty: new Set([...fresh.dirty, name]) }));
+  return file.sections.find((s) => s.name === name)?.data.slice() ?? null;
+}
+
+/** What `rebuildSections` did: the parser's remarks and the sections actually re-encoded. */
+export interface RebuildResult {
+  warnings: string[];
+  rebuilt: string[];
+}
+
+/**
+ * Re-encode sections from the editor's model — the way Save writes a dirty section — and
+ * parse the result as a fresh scenario. Repeated occurrences collapse into one, a
+ * truncated or oversized section comes back at the size the model encodes to, and a string
+ * table with offsets pointing nowhere is rewritten with every string the editor could read.
+ * Names the editor does not model, and modelled ones whose model is absent (`isom` null,
+ * no settings table), are left as they are and missing from `rebuilt`; omit `names` to
+ * rebuild every modelled section the map has a model for.
+ */
+export function rebuildSections(scn: Scenario, names?: readonly string[]): { scenario: Scenario; result: RebuildResult } {
+  const wanted = (names ?? [...MODELLED_SECTIONS]).map(sectionName).filter((n) => MODELLED_SECTIONS.has(n));
+  const dirty = new Set([...scn.dirty, ...wanted]);
+  const bytes = serializeScenario({ ...scn, dirty });
+  const file = parseChk(bytes);
+  const present = new Set(file.sections.map((s) => s.name));
+  const scenario = parseScenario(bytes);
+  return { scenario, result: { warnings: [...scenario.warnings], rebuilt: wanted.filter((n) => present.has(n)) } };
+}
+
+/** The sections a file of this map's revision must carry to load, as Check Map tests them. */
+export function requiredSectionNames(scn: Scenario): string[] {
+  return requiredSections(scn.fileVersion).map((n) => (n === "STR " && scn.strings.extended ? "STRx" : n));
 }

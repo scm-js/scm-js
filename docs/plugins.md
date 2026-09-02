@@ -284,6 +284,22 @@ than four characters throws, and so does any write without a map. Indices shift 
 section is inserted or removed before them, so take a fresh `list()` after every edit.
 Section Explorer is the worked example.
 
+Around them, what a repair needs: `trailing()` is the bytes after the last chunk the
+reader could act on (what follows a header with a negative length, say — Save writes
+them back as they are; a `replaceFile` without them drops them), `required()` the names
+a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in
+place of `STR ` on a Remastered file), `defaults(name)` the bytes File ▸ New would write
+for a section on a map of this size, tileset and revision (StarEdit's defaults for a
+settings table, the fixed VCOD, an empty list, null terrain; null for a name the editor
+cannot produce), and `rebuild(names?)` re-encodes sections from the editor's model the
+way Save writes a dirty one and installs the result like any other raw edit — repeated
+occurrences collapse into one, a truncated or oversized section comes back at the size
+the model encodes to, a string table whose offsets point nowhere is rewritten with every
+string the editor could read. Names the editor does not model, and modelled ones whose
+model is absent (no ISOM, no settings table), are left alone and missing from the
+result's `rebuilt`; omit `names` for every modelled section the map has a model for.
+Repair is the worked example for these.
+
 ### `EditTransaction`
 
 `tx` applies each operation immediately, so a later operation sees the state the
@@ -299,6 +315,7 @@ repaints.
 | `setTiles(cells, id)` | Many; `cells` is a `Rect` or cell indices (`y * width + x`). |
 | `stampTerrain(cells, terrainId, variation?)` | The Rect brush: flat pairs by column parity, one random variation per pair. Needs the tileset graphics. Returns tiles changed. |
 | `fillFlat(rect, terrainId)` | Lay terrain the way a new map is laid, ISOM lattice included. |
+| `rebuildIsom()` | Reconstruct the ISOM from the tiles — for a map that arrived without one, or whose lattice no longer matches after Rect / Tile edits: exact for terrain laid down isometrically, a best guess under doodads and for hand-placed tiles. A missing or wrongly sized ISOM is created (undo removes it again); an existing one gets only the diamonds that differ. Needs the tileset graphics; null without them, else `{ created, changed, diamonds, unresolved }`. |
 | `paintIsom(diamond, terrainId, extent = 1)` | The isometric brush on one diamond: sets the ISOM and generates the cliff/shore tiles around it. Needs ISOM and the tileset. |
 
 | Objects | |
@@ -452,6 +469,10 @@ name, group, height, buildable), `isomTypes()` (ids the isometric brush can pain
 (0 low / 1 high / 2 higher, null for anything that is not a flat terrain), `diamondAt(px, py)`,
 `isDiamond(d)`, `diamondsIn(rect)` (every lattice diamond whose centre tile is in the
 rect), `active()` / `setActive(...)` for the palette's brush, terrain and tile.
+`checkIsom()` is asynchronous: it waits for the tileset graphics (rejecting when they are
+missing) and resolves with how well the ISOM describes the tiles — `rects` measured,
+`mismatched` among them, `stale` when the share is past what the palette warns at — or
+null when the map has no ISOM or no map is open.
 
 ### `api.tileset`
 
@@ -546,6 +567,20 @@ zoomed, or a View tick moved), `"tool"` (a map tool or pick started or stopped),
 `"modified"` (the unsaved-changes flag), and `"palette"` (a palette's pick changed:
 terrain brush, unit and owner, sprite, doodad, fog players).
 
+The `"document"` listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open,
+a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included),
+`"close"`, or `"replace"` (the open map parsed again from edited bytes — a
+`document.sections` write, by any plugin, yours included), and `fileName` is the file's
+name or null. A plugin that acts on maps as they open listens for `"open"` and lets the
+rest pass; the other events carry nothing.
+
+Listeners are notifications, not a pipeline: they run after the change, in the order the
+plugins were activated, and cannot veto, delay or reorder one another. There is no plugin
+ordering and none is planned — a listener that rewrites the map in response (Repair does,
+through `document.sections`) simply raises a fresh `"document"` event with reason
+`"replace"`, which every other listener sees in turn, so whatever a plugin computed from
+the earlier state is recomputed from the later one.
+
 ### `api.storage`
 
 `get(key, fallback)`, `set(key, value)`, `remove(key)`: JSON in localStorage under a
@@ -613,7 +648,25 @@ however it came; the atom also records the choice in `overlayVisibilityMemory`, 
 `EditTransaction` whose operations apply immediately and accumulate change lists in
 `applyEntry` order, then hands the entry to `commitTerrainAtom` (the stranded-doodad /
 stranded-unit pass that used to live only inside `useTerrainTools`) so a plugin edit
-behaves exactly like a stroke.
+behaves exactly like a stroke. `tx.rebuildIsom` is `rebuildIsomFromTiles` from
+`editor/isom.ts`: over an existing lattice of the right size it diffs into the entry's
+`isom` list, otherwise it sets `scenario.isom` and records the section as the entry's
+`createdIsom` (undo puts `null` back; `commitEditAtom` bumps `isomRevisionAtom` for it, so
+the palette re-measures). The editor has no rebuild button of its own any more — the
+Repair plugin is where the user reaches this.
+
+The `"document"` event's payload is `documentEvent` in `host.ts`, read off
+`documentChangeAtom` (`atoms/documentAtoms.ts`): `loadDocumentAtom` records the
+`reason` the caller passed (`"open"` by default, `"new"` from File ▸ New,
+`"replace"` from `replaceScenarioAtom`) together with the scenario object it applies to,
+and `closeDocumentAtom` records `"close"`; a scenario installed some other way (a test
+setting the atom directly) is reported as an open or a close by what is there. The
+sections calls Repair relies on live in `editor/sections.ts`: `defaultSectionBytes`
+(a fresh `createScenario` on the map's size, tileset and revision, one section marked
+dirty, encoded and picked out — the raw created sections for IVE2 / VCOD / UPRP / UPUS),
+`rebuildSections` (the given names added to a copy's dirty set, `serializeScenario`,
+`parseScenario`) and `requiredSectionNames` (`requiredSections` with `STRx` substituted
+on an extended-strings file).
 
 ## Terrain from Image
 
@@ -649,8 +702,8 @@ with `tx.paintIsom` — the diamond's terrain is the majority of the four cells 
 centre (`diamondTerrain`), and terrains are painted low ground first, rare ones last
 (`paintOrder`), so the brush's one-diamond bleed eats into common ground rather than thin
 features — and cliffs and shorelines are generated at every boundary; **Tiles** stamps flat
-pairs with `tx.stampTerrain` and leaves the ISOM alone (Rebuild ISOM from Tiles afterwards
-if you want the isometric brush back). One undo entry either way.
+pairs with `tx.stampTerrain` and leaves the ISOM alone (Tools ▸ Repair Map… afterwards
+rebuilds it, if you want the isometric brush back). One undo entry either way.
 
 ## Paint
 
@@ -798,3 +851,33 @@ symmetry (`api.query.startLocations()` against the images, within a tile) and la
 out otherwise. *Mirror selected units* maps `api.selection.units()` through the images,
 resolving each image's player by composing the maps, and *Check symmetry* selects what
 `symmetryGaps` reports through `api.selection.setUnits`.
+
+## Repair
+
+[scm-js/plugin-repair](https://github.com/scm-js/plugin-repair), a default that starts
+on, is the worked example for the `"document"` event's payload, `document.sections`'s
+`defaults` / `rebuild` / `trailing` / `required`, and `tx.rebuildIsom`. When a map opens
+it reads the file the way the game does and, when something is wrong, lists it in a
+dialog with a tick per finding; Tools ▸ Repair Map… runs the same check by hand, and
+*Check maps when they open* in the dialog's footer turns the automatic one off.
+
+`chk.ts` there is the container reader (the editor's own rules: a chunk whose length runs
+past the file keeps what is there and is marked truncated, a negative length stops the
+read and leaves the rest as trailing bytes), `analyze.ts` turns a chunk list plus what the
+editor knows (`sections.known()`, `sections.required()`, `sections.defaults("VCOD")`,
+`terrain.checkIsom()`) into findings — each with a level, a title, a note saying what the
+game does with the file as it is, a `Repair` and whether it is ticked by default — and
+`repair.ts` applies the byte-level repairs to a chunk list, resolving indices to chunk
+objects first so removals never shift a later one. All three are pure and tested. The
+findings cover the container (negative and truncated lengths, junk names, trailing bytes
+— which are recovered as sections when that is what they are — repeats, sizes off the
+registry's, stray record bytes), the sections a file of the revision must carry (a missing
+MTXM is restored from TILE and a missing TILE copied from MTXM, everything else on
+`defaults`), the header values (DIM, ERA's high bits, VER, TYPE, OWNR and SIDE), the
+string table's offsets, unit records the game cannot place, a VCOD that is not StarEdit's,
+the order of the sections, a blank TILE, and the ISOM (missing, wrongly sized or stale —
+`rebuild-isom`). `plugin.ts` gathers the inputs, shows the dialog, and applies a repair in
+three steps: the byte-level ones as one `replaceFile`, then `sections.rebuild` for the
+names that asked for it, then one `document.edit` with `tx.rebuildIsom`. The bytes as the
+map came in are kept in memory until the next map opens, and *Restore original* puts them
+back through `replaceFile`.

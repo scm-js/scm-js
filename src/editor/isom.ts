@@ -770,6 +770,22 @@ export interface IsomCheck {
   mismatched: number;
 }
 
+/** Above this share of rects disagreeing with their tiles, the ISOM is reported as stale. */
+export const STALE_ISOM_SHARE = 0.02;
+
+/** `checkIsom` with the verdict the palette and Check Map draw from it. */
+export interface IsomReport extends IsomCheck {
+  /** More than `STALE_ISOM_SHARE` of the rects disagree with their tiles. */
+  stale: boolean;
+}
+
+/** The ISOM's health against the tiles, or null when the map has no (usable) ISOM. */
+export function isomReport(scn: Scenario, tileset: Tileset): IsomReport | null {
+  if (!hasIsom(scn)) return null;
+  const check = checkIsom(scn, tileset);
+  return { ...check, stale: check.rects > 0 && check.mismatched / check.rects > STALE_ISOM_SHARE };
+}
+
 /** How well the ISOM section describes the tiles that are actually on the map. */
 export function checkIsom(scn: Scenario & { isom: Uint16Array }, tileset: Tileset): IsomCheck {
   const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), Math.random);

@@ -154,10 +154,10 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   }
 
   // ── Terrain ──
-  if (ctx.isom?.kind === "missing") add("warn", "The map has no ISOM section: the isometric brush needs one (Tools ▸ Rebuild ISOM from Tiles).", "Terrain");
+  if (ctx.isom?.kind === "missing") add("warn", "The map has no ISOM section: the isometric brush needs one (the Repair plugin rebuilds it: Tools ▸ Repair Map…).", "Terrain");
   if (ctx.isom?.kind === "ready" && ctx.isom.stale) {
     const pct = Math.round((ctx.isom.check.mismatched / Math.max(1, ctx.isom.check.rects)) * 100);
-    add("warn", `ISOM disagrees with the tiles on ${pct}% of the map (Tools ▸ Rebuild ISOM from Tiles).`, "Terrain");
+    add("warn", `ISOM disagrees with the tiles on ${pct}% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).`, "Terrain");
   }
 
   const order: Record<IssueLevel, number> = { error: 0, warn: 1, info: 2 };

@@ -10,7 +10,9 @@ import { loadTileset } from "../src/formats/tileset/decode";
 import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import { hasIsom } from "../src/editor/isom";
-import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
+import { closeDocumentAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
+import { defaultVcod } from "../src/formats/chk/sections/vcod";
+import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
 import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
@@ -736,10 +738,11 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com and Terrain from Image on, and Paint, Section Explorer, Walkability and Melee Wizard off, as remote defaults", () => {
+  it("ships scmscx.com, Terrain from Image and Repair on, and Paint, Section Explorer, Walkability and Melee Wizard off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-scm-scx", enabled: true },
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
+      { spec: "github:scm-js/plugin-repair", enabled: true },
       { spec: "github:scm-js/plugin-paint", enabled: false },
       { spec: "github:scm-js/plugin-section-explorer", enabled: false },
       { spec: "github:scm-js/plugin-walkability", enabled: false },
@@ -867,6 +870,125 @@ describe("plugin sections", () => {
     // A file the parser has to guess at reports it.
     expect(api.document.sections.replaceFile(new Uint8Array([0x54, 0x59, 0x50, 0x45, 4, 0, 0, 0, 0x52, 0x41])).warnings).toEqual(expect.arrayContaining([expect.stringContaining("TYPE declares 4 bytes")]));
     expect(() => createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.write(0, new Uint8Array())).toThrow(/No map/);
+  });
+});
+
+describe("plugin sections: defaults, rebuild, trailing, required", () => {
+  const apiOver = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("hands out the bytes a new map writes for a section, sized for the open map", () => {
+    const { store, scn } = blankStore(4, 2);
+    const api = apiOver(store);
+    const { sections } = api.document;
+    expect(sections.defaults("VCOD")).toEqual(defaultVcod());
+    expect(sections.defaults("MTXM")).toEqual(new Uint8Array(4 * 2 * 2));
+    expect(sections.defaults("DIM ")).toEqual(new Uint8Array([4, 0, 2, 0]));
+    expect(sections.defaults("DIM")).toEqual(new Uint8Array([4, 0, 2, 0]));
+    expect(sections.defaults("UNIT")).toEqual(new Uint8Array(0));
+    expect(sections.defaults("UNIx")!.length).toBe(4168);
+    expect(sections.defaults("MASK")).toEqual(new Uint8Array(8).fill(0xff));
+    // Follows the map's revision: an original-game file gets the original layouts and the extended-string form follows the table.
+    expect(sections.defaults("UNIS")!.length).toBe(4048);
+    expect(sections.defaults("STRx")).toBeNull();
+    scn.strings.extended = true;
+    expect(sections.defaults("STR ")).toBeNull();
+    expect(sections.defaults("STRx")).not.toBeNull();
+    // Unmodelled, optional-and-absent, and unknown names have no default.
+    expect(sections.defaults("IVER")).toBeNull();
+    expect(sections.defaults("CRGB")).toBeNull();
+    expect(sections.defaults("ZZZZ")).toBeNull();
+    expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.defaults("VCOD")).toBeNull();
+    // A copy: the caller cannot change the table it came from.
+    sections.defaults("VCOD")![0] = 0xaa;
+    expect(sections.defaults("VCOD")![0]).toBe(defaultVcod()[0]);
+  });
+
+  it("lists the required sections for the map's revision", () => {
+    const { store, scn } = blankStore(4, 2);
+    const api = apiOver(store);
+    expect(api.document.sections.required()).toEqual(expect.arrayContaining(["VER ", "VCOD", "MTXM", "STR ", "UNIx", "PTEx"]));
+    expect(api.document.sections.required()).not.toContain("UNIS");
+    scn.fileVersion = 59;
+    expect(api.document.sections.required()).toEqual(expect.arrayContaining(["UNIS", "UPGR"]));
+    expect(api.document.sections.required()).not.toContain("UNIx");
+    scn.fileVersion = 206;
+    scn.strings.extended = true;
+    expect(api.document.sections.required()).toContain("STRx");
+    expect(api.document.sections.required()).not.toContain("STR ");
+    expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.required()).toEqual([]);
+  });
+
+  it("rebuilds sections from the model, collapsing repeats and fixing sizes", () => {
+    const { store } = blankStore(4, 2);
+    const api = apiOver(store);
+    const { sections } = api.document;
+    // A protected-looking file: DIM twice (the second one a fragment), an oversized ERA, a stripped TILE, and junk after a negative header.
+    const file = parseChk(sections.file());
+    file.sections = file.sections.filter((s) => s.name !== "TILE");
+    const dim = file.sections.findIndex((s) => s.name === "DIM ");
+    file.sections.splice(dim + 1, 0, { name: "DIM ", offset: -1, declaredSize: 2, data: new Uint8Array([4, 0]) });
+    const era = file.sections.find((s) => s.name === "ERA ")!;
+    era.data = new Uint8Array([0, 0, 0xee, 0xee]);
+    era.declaredSize = 4;
+    const bytes = new Uint8Array(serializeChk(file).length + 12);
+    bytes.set(serializeChk(file));
+    bytes.set([0x4a, 0x55, 0x4e, 0x4b, 0xff, 0xff, 0xff, 0xff, 1, 2, 3, 4], serializeChk(file).length);
+    sections.replaceFile(bytes);
+    expect(sections.trailing()).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(sections.list().filter((s) => s.name === "DIM ")).toHaveLength(2);
+    expect(sections.list().some((s) => s.name === "TILE")).toBe(false);
+    expect(sections.list().find((s) => s.name === "ERA ")!.size).toBe(4);
+
+    let events = 0;
+    api.events.on("document", () => { events++; });
+    const r = sections.rebuild(["DIM ", "ERA", "TILE", "ISOM", "VCOD", "CRGB", "ZZZZ"]);
+    // Modelled names with a model come back; VCOD is raw, CRGB has no model on this map, ZZZZ is nothing.
+    expect(r).toEqual({ warnings: [], rebuilt: ["DIM ", "ERA ", "TILE", "ISOM"] });
+    expect(events).toBe(1);
+    const list = sections.list();
+    expect(list.filter((s) => s.name === "DIM ")).toHaveLength(1);
+    expect(list.find((s) => s.name === "ERA ")!.size).toBe(2);
+    // TILE came back from the editor's ground tiles, at the spot APPEND_ORDER puts a new section.
+    expect(list.some((s) => s.name === "TILE")).toBe(true);
+    expect(sections.combined("TILE")).toEqual(sections.combined("MTXM"));
+    // The junk chunk and the bytes after it are untouched by a rebuild: Save keeps what it does not model.
+    expect(list.some((s) => s.name === "JUNK")).toBe(true);
+    expect(sections.trailing()).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(store.get(undoStackAtom)).toEqual([]);
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    // Everything modelled, by omission; a second pass changes nothing.
+    const all = sections.rebuild();
+    expect(all.rebuilt).toEqual(expect.arrayContaining(["MTXM", "UNIT", "TRIG", "STR "]));
+    expect(all.rebuilt).not.toContain("STRx");
+    expect(sections.file()).toEqual(sections.file());
+    expect(() => createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.rebuild()).toThrow(/No map/);
+    expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.trailing()).toBeNull();
+  });
+});
+
+describe("plugin document events", () => {
+  it("says why the document changed and which file it is", () => {
+    const store = createStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const seen: unknown[] = [];
+    api.events.on("document", (e) => { seen.push(e); });
+    store.set(loadDocumentAtom, { scenario: createScenario({ width: 4, height: 2, era: 0, name: "a" }), extras: new Map(), fileName: "a.scx" });
+    store.set(loadDocumentAtom, { scenario: createScenario({ width: 4, height: 2, era: 0, name: "b" }), extras: new Map(), fileName: null, reason: "new" });
+    api.document.sections.write(api.document.sections.list().findIndex((s) => s.name === "DIM "), new Uint8Array([6, 0, 3, 0]));
+    store.set(closeDocumentAtom);
+    expect(seen).toEqual([
+      { reason: "open", fileName: "a.scx" },
+      { reason: "new", fileName: null },
+      { reason: "replace", fileName: null },
+      { reason: "close", fileName: null },
+    ]);
+    // A scenario installed behind the writers' backs is still an open, and the other events carry nothing.
+    let payload: unknown = "unset";
+    api.events.on("terrain", (...args: unknown[]) => { payload = args[0]; });
+    store.set(scenarioAtom, createScenario({ width: 4, height: 2, era: 0, name: "c" }));
+    expect(seen.at(-1)).toEqual({ reason: "open", fileName: null });
+    api.document.edit("t", (tx) => tx.setTile(0, 0, 5));
+    expect(payload).toMatchObject({ reason: "open" });
   });
 });
 
@@ -1552,6 +1674,45 @@ describe.skipIf(!haveJungle)("plugin transactions with the jungle tileset", () =
     expect(all.some((d) => d.x === 8)).toBe(true);
     expect(all.some((d) => d.y === 16)).toBe(true);
     expect(all.every((d) => (d.x + d.y) % 2 === 0)).toBe(true);
+  });
+
+  it("rebuilds the ISOM from the tiles and measures it", async () => {
+    const { store, scn } = jungleStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const good = await api.terrain.checkIsom();
+    expect(good).toMatchObject({ stale: false, mismatched: 0 });
+    expect(good!.rects).toBeGreaterThan(0);
+    // Matching already: nothing to change, no undo entry.
+    const same = api.document.edit("same", (tx) => { expect(tx.rebuildIsom()).toMatchObject({ created: false, changed: 0 }); });
+    expect(same.changed).toBe(false);
+    // A stripped ISOM comes back from the tiles as one entry that undo removes again.
+    const lattice = scn.isom!;
+    scn.isom = null;
+    expect(api.terrain.hasIsom()).toBe(false);
+    expect(await api.terrain.checkIsom()).toBeNull();
+    const created = api.document.edit("rebuild", (tx) => {
+      const r = tx.rebuildIsom()!;
+      expect(r.created).toBe(true);
+      expect(r.diamonds).toBeGreaterThan(0);
+      expect(r.changed).toBe(lattice.length);
+    });
+    expect(created).toMatchObject({ changed: true, isom: lattice.length });
+    expect(api.terrain.hasIsom()).toBe(true);
+    expect(scn.isom).toEqual(lattice);
+    expect(scn.dirty.has("ISOM")).toBe(true);
+    expect(store.get(undoStackAtom).at(-1)).toMatchObject({ label: "rebuild", createdIsom: lattice });
+    store.set(undoAtom);
+    expect(scn.isom).toBeNull();
+    store.set(redoAtom);
+    expect(scn.isom).toEqual(lattice);
+    // A lattice put out of step by a flat stamp is corrected diamond by diamond.
+    const other = api.terrain.types().find((t) => t.id !== 2 && api.terrain.isomTypes().includes(t.id))!;
+    api.document.edit("stamp", (tx) => { tx.stampTerrain({ x0: 4, y0: 4, x1: 12, y1: 12 }, other.id); });
+    const stale = await api.terrain.checkIsom();
+    expect(stale!.mismatched).toBeGreaterThan(0);
+    const fixed = api.document.edit("fix", (tx) => { expect(tx.rebuildIsom()).toMatchObject({ created: false }); });
+    expect(fixed.isom).toBeGreaterThan(0);
+    expect((await api.terrain.checkIsom())!.mismatched).toBeLessThan(stale!.mismatched);
   });
 
   it("stamps, fills flat and paints isometrically, all undoable", () => {

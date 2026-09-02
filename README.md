@@ -58,7 +58,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 
 | | Status |
 | --- | --- |
-| Isometric brush | Yes. Needs the map's `ISOM` section; Rebuild ISOM from Tiles recovers a stripped one. |
+| Isometric brush | Yes. Needs the map's `ISOM` section; the Repair plugin (on by default) rebuilds a stripped one. |
 | Rect, Tile and Blend brushes | Yes |
 | Flood fill, fill map, pick tile | Yes |
 | Elevation and buildability overlays | Yes |
@@ -117,6 +117,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Import and export strings | Yes |
 | Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
+| Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
 
 ## Working in the editor
@@ -149,7 +150,7 @@ brush gives flat high ground inside a cliff ring.
 
 It needs the `ISOM` section, which is the editor's own record rather than anything the
 game reads, and which protected maps often strip. Where a map has none, the tab says
-so and Rebuild ISOM from Tiles reconstructs it: exact for ground that was laid down
+so and the Repair plugin (Tools ▸ Repair Map…) reconstructs it: exact for ground that was laid down
 isometrically, a best guess under doodads and hand-placed tiles. The tab also warns
 when Rect or Tile edits have left the lattice out of step with the terrain.
 
@@ -406,8 +407,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. scmscx.com and Terrain from Image start on; Paint,
-Section Explorer, Walkability and Melee Wizard are listed but off until you tick them.
+working connection on the first load of a session. scmscx.com, Terrain from Image and Repair start on;
+Paint, Section Explorer, Walkability and Melee Wizard are listed but off until you tick them.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -429,6 +430,19 @@ undo step. *Isometric terrain* paints every lattice diamond with the isometric b
 ground first and rare features last, so cliffs and shorelines are generated at every
 boundary; *Flat tiles* stamps flat pairs and leaves the ISOM alone.
 
+**Repair** ([scm-js/plugin-repair](https://github.com/scm-js/plugin-repair)) starts on.
+When a map opens it reads the file the way the game does and, if anything is missing,
+damaged, repeated, the wrong size or otherwise odd — a stripped VCOD or TILE, a section
+declared longer than the file, a header with a negative length and the real sections
+hidden behind it, string offsets pointing nowhere, a blank or absent ISOM — a dialog
+lists each finding with what the game does about it and a tick for the repair; the
+recommended ones are ticked already. Repair rewrites the file (the undo history goes,
+as with Section Explorer and Resize) and *Restore original* puts the bytes back as they
+came in, until the next map opens. Tools ▸ Repair Map… runs the same check by hand, and
+the dialog's footer turns the automatic one off. It is also where Rebuild ISOM from
+Tiles went: a map with no `ISOM`, or one out of step after Rect and Tile edits, is one of
+its findings.
+
 **Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is in the list
 but off; tick it in Manage Plugins, then Tools ▸ Paint…, Ctrl+Shift+P, or right-click the
 map — *Paint…*. A panel floats
@@ -449,7 +463,7 @@ spray's radius; *Players* keeps the palette's player, cycles 1–8 along the sha
 one at random each; *Units* can skip the spots the Units palette's placement checks
 refuse. A count follows the pointer while you draw. Esc drops the shape in progress, and
 again (or a right-click) leaves the tool. Terrain is painted as flat tiles like the Rect
-brush, so Rebuild ISOM from Tiles afterwards if you want the isometric brush back there.
+brush, so run Tools ▸ Repair Map… afterwards if you want the isometric brush back there.
 Every stroke is one undo step.
 
 **scmscx.com** ([scm-js/plugin-scm-scx](https://github.com/scm-js/plugin-scm-scx)) is

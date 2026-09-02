@@ -129,7 +129,7 @@ describe("validateScenario", () => {
   it("reports ISOM health when given", () => {
     const scn = fresh();
     expect(texts(scn, { isom: { kind: "missing" } }).some((t) => t.includes("no ISOM section"))).toBe(true);
-    expect(texts(scn, { isom: { kind: "ready", stale: true, check: { rects: 100, mismatched: 25 } } })).toContain("warn: ISOM disagrees with the tiles on 25% of the map (Tools ▸ Rebuild ISOM from Tiles).");
+    expect(texts(scn, { isom: { kind: "ready", stale: true, check: { rects: 100, mismatched: 25 } } })).toContain("warn: ISOM disagrees with the tiles on 25% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).");
     expect(texts(scn, { isom: { kind: "ready", stale: false, check: { rects: 100, mismatched: 0 } } }).some((t) => t.includes("ISOM"))).toBe(false);
   });
 });

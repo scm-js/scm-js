@@ -15,8 +15,8 @@ import {
   spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, zoomAtom,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, replaceScenarioAtom, scenarioAtom,
-  settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
+  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom,
+  replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -57,8 +57,8 @@ import { unitRace } from "../formats/dat/dat";
 import { ANYWHERE_INDEX, isLocationUsed, type SpriteRecord } from "../formats/chk/sections/objects";
 import { START_LOCATION } from "../data/units";
 import {
-  combinedSection, currentChk, editRaw, insertSection, knownSections, moveSection, parseRaw, removeSection, renameSection, replaceSectionData, sectionInfos,
-  sectionKnowledge,
+  combinedSection, currentChk, defaultSectionBytes, editRaw, insertSection, knownSections, moveSection, parseRaw, rebuildSections, removeSection, renameSection,
+  replaceSectionData, requiredSectionNames, sectionInfos, sectionKnowledge,
 } from "../editor/sections";
 import { serializeChk, type ChkFile } from "../formats/chk/reader";
 import { spriteCatalogue } from "../data/sprites";
@@ -70,7 +70,9 @@ import { applyChanges, stampTerrain, stampTile, Stroke, type Rect, type TileChan
 import { createGraphicsApi } from "./graphics";
 import { alertDialog, confirmDialog, progressPanel, promptDialog } from "./prompts";
 import { createWidgets, el } from "./widgets";
-import { applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond } from "../editor/isom";
+import {
+  applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
+} from "../editor/isom";
 import { hasEdits } from "../editor/history";
 import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitAt, unitBox, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
 import {
@@ -81,7 +83,7 @@ import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, l
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
-  type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
+  type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
@@ -144,6 +146,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   const locations: LocationChange[] = [];
   const notes: string[] = [];
   let createdMask: Uint8Array | undefined;
+  let createdIsom: Uint16Array | undefined;
   let serial = nextSerial(scn);
 
   const cellsOf = (cells: Cells): number[] => {
@@ -208,6 +211,23 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       tiles.add(edit.tiles);
       isom.add(edit.isom);
       return true;
+    },
+    rebuildIsom: () => {
+      if (!loaded) { notes.push("rebuilding the ISOM needs the tileset graphics"); return null; }
+      const rebuilt = rebuildIsomFromTiles(scn, loaded.tileset);
+      const base = { diamonds: rebuilt.diamonds, unresolved: rebuilt.unresolved };
+      if (hasIsom(scn) && scn.isom.length === rebuilt.isom.length && !createdIsom) {
+        const changes: TileChange[] = [];
+        for (let i = 0; i < rebuilt.isom.length; i++) if (scn.isom[i] !== rebuilt.isom[i]) changes.push({ at: i, before: scn.isom[i], after: rebuilt.isom[i] });
+        applyIsomChanges(scn, changes);
+        isom.add(changes);
+        return { ...base, created: false, changed: changes.length };
+      }
+      // No usable lattice (or one this transaction already created): the whole section is the change.
+      scn.isom = rebuilt.isom;
+      markDirty(scn, "ISOM");
+      createdIsom = rebuilt.isom;
+      return { ...base, created: true, changed: rebuilt.isom.length };
     },
 
     makeUnit: (unitId, owner, x, y) => makeUnit(tables(), unitId, owner, x, y, serial++),
@@ -298,11 +318,12 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   if (locations.length > 0) entry.locations = locations;
   if (fogChanges.length > 0) entry.fog = fogChanges;
   if (createdMask) entry.createdMask = createdMask;
+  if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
 
   const result: EditResult = {
     changed: hasEdits(entry),
     tiles: entry.changes.length,
-    isom: isomChanges.length,
+    isom: createdIsom ? createdIsom.length : isomChanges.length,
     units: units.length,
     sprites: sprites.length,
     doodads: doodads.length,
@@ -489,6 +510,14 @@ export function sectionsApi(store: Store): SectionsApi {
       const next = parseRaw(bytes);
       store.set(replaceScenarioAtom, next);
       return { warnings: [...next.warnings] };
+    },
+    trailing: () => { const scn = store.get(scenarioAtom); return scn ? currentChk(scn).trailing?.slice() ?? null : null; },
+    required: () => { const scn = store.get(scenarioAtom); return scn ? requiredSectionNames(scn) : []; },
+    defaults: (name) => { const scn = store.get(scenarioAtom); return scn ? defaultSectionBytes(scn, name.padEnd(4, " ")) : null; },
+    rebuild: (names) => {
+      const { scenario, result } = rebuildSections(open(), names);
+      store.set(replaceScenarioAtom, scenario);
+      return result;
     },
   };
 }
@@ -873,6 +902,18 @@ const EVENT_ATOMS = {
   ],
 } as const;
 
+/**
+ * The `"document"` event's payload: the reason the writers recorded, unless the scenario
+ * was installed some other way (a test setting the atom directly), in which case it is an
+ * open or a close by what is there.
+ */
+export function documentEvent(store: Store): DocumentEvent {
+  const scenario = store.get(scenarioAtom);
+  const change = store.get(documentChangeAtom);
+  const reason = change.scenario === scenario ? change.reason : scenario ? "open" : "close";
+  return { reason, fileName: scenario ? store.get(mapFilePathAtom) : null };
+}
+
 function doodadInfoOf(def: DoodadDef): DoodadInfo {
   return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height };
 }
@@ -993,6 +1034,13 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return l && scn ? isomTerrains(isomTables(l.tileset, tilesetIndex(scn))) : [];
       },
       hasIsom: () => hasIsom(scenario()),
+      checkIsom: async () => {
+        const scn = scenario();
+        if (!scn) return null;
+        const l = loaded() ?? await ensureTileset(store.get(tilesetFileNameAtom));
+        const current = scenario();
+        return current ? isomReport(current, l.tileset) : null;
+      },
       tileInfo: (id) => { const l = loaded(); return l ? tileInfo(l.tileset, names(), id) : null; },
       color: (tileId) => {
         const l = loaded();
@@ -1213,10 +1261,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     },
 
     events: {
-      on: (event: PluginEvent, listener) => {
+      on: (event: PluginEvent, listener: (payload: DocumentEvent) => void) => {
         const atoms = EVENT_ATOMS[event];
         if (!atoms) throw new Error(`Unknown plugin event "${event}"`);
-        const safe = () => { try { listener(); } catch (err) { console.error(`[${info.name}] event listener failed`, err); } };
+        // Only "document" carries a payload; the other listeners are declared with none and ignore it.
+        const safe = () => { try { listener(documentEvent(store)); } catch (err) { console.error(`[${info.name}] event listener failed`, err); } };
         const unsubs = atoms.map((a) => store.sub(a, safe));
         return bag.add(() => { for (const u of unsubs) u(); }, "events");
       },

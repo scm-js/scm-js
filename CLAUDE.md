@@ -112,8 +112,10 @@ index a per-tileset *shape-link table* built from the CV5 at load time (`isomTab
 **not** a CV5 index — `isomValueOf(era, index)` maps between them). `paintIsom` mutates `scn.tiles`
 *and* `scn.isom` and returns `{ tiles, isom }` change lists; `HistoryEntry.isom` carries the second list
 through undo/redo (`applyIsomChanges`). `hasIsom(scn)` gates the brush: a map without `ISOM` gets a
-notice and **Rebuild ISOM from tiles** (`rebuildIsomFromTiles`, `useIsomRebuild`), which is also the
-`createdIsom` history case. `checkIsom` measures ISOM/tile agreement (`useIsomStatus`, computed on
+notice pointing at the Repair plugin; the rebuild itself (`rebuildIsomFromTiles`) is reached only through
+`tx.rebuildIsom` on the plugin API — there is no native button or menu item — and creating the section is
+the `createdIsom` history case (`commitEditAtom` bumps `isomRevisionAtom` for it). `isomReport` /
+`STALE_ISOM_SHARE` live in `editor/isom.ts`; `useIsomStatus` and `api.terrain.checkIsom` both read them. `checkIsom` measures ISOM/tile agreement (`useIsomStatus`, computed on
 load, not per stroke). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
 tests green when touching the CV5 decoder (`edges`, `stack`) or the tables.
 
@@ -301,7 +303,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations); scmscx.com and Terrain from Image (on), Paint, Section Explorer, Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations; the Repair plugin took over Rebuild ISOM from Tiles); scmscx.com, Terrain from Image and Repair (on), Paint, Section Explorer, Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -483,7 +485,7 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-scm-scx` and `github:scm-js/plugin-image-to-terrain` on,
+`github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-repair` on,
 `github:scm-js/plugin-paint`, `github:scm-js/plugin-section-explorer`, `github:scm-js/plugin-walkability` and
 `github:scm-js/plugin-melee-wizard` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
@@ -620,6 +622,14 @@ what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), `ap
 context, everything else already drew in map coordinates) and `api.commands`
 (`pluginCommandsAtom`; ids are namespaced under the plugin unless they carry a dot, and
 `menu.add` / `contextMenu.add` / `hotkeys.add` take `command` in place of `run`).
+The `"document"` event carries a `DocumentEvent { reason, fileName }` (`host.ts#documentEvent` over
+`documentChangeAtom`, which `loadDocumentAtom` — `reason` on `LoadedDocument`, `"open"` by default, `"new"`
+from File ▸ New, `"replace"` from `replaceScenarioAtom` — and `closeDocumentAtom` write); the other events
+carry nothing. Events are notifications in activation order and never intercept; a listener that rewrites
+the map raises a fresh `"replace"` for the rest — there is deliberately no plugin ordering.
+`api.document.sections` also has `trailing()`, `required()`, `defaults(name)` and `rebuild(names?)`
+(`editor/sections.ts#defaultSectionBytes` / `rebuildSections` / `requiredSectionNames`), and
+`EditTransaction` has `rebuildIsom()`; `api.terrain.checkIsom()` awaits the tileset.
 `api.ui` also has `confirm` / `alert` / `prompt` / `progress` (`plugins/prompts.ts`, built on the
 plugin dialog and panel — a promise settled from `mount`'s cleanup, since a dismissal presses no
 button) and `el` / `widgets` (`plugins/widgets.ts`: plain DOM in the editor's own classes, so a
@@ -677,6 +687,17 @@ tables of their own. In the plugin, `layout.ts` (schemas → lazily instantiated
 meanings of its fields, the string table read off its own offsets) are pure and tested there;
 `buffer.ts` is the edit buffer with its own undo; `hexview.ts` and `inspector.ts` are the panes.
 `tests/plugins.test.ts` covers the sections and names API against a new map.
+
+**Repair** (`github.com/scm-js/plugin-repair`, a default that starts on) is the unprotector that explains
+itself, and the worked example for the `"document"` payload, `sections.defaults` / `rebuild` / `trailing`
+/ `required` and `tx.rebuildIsom`: on every `"open"` it parses `sections.file()` with its own container
+reader (`chk.ts`), runs `analyze.ts` (pure: chunks + `known()` + `required()` + the default VCOD + the
+ISOM report → findings, each with a level, what the game does with the file as it is, a `Repair` and a
+recommended tick) and opens its dialog only when an error or warning came back; Tools ▸ Repair Map… is
+the manual run. `repair.ts` applies the byte-level repairs to the chunk list by object identity (one
+`replaceFile`), then the plugin runs `sections.rebuild` and one `document.edit` with `tx.rebuildIsom`.
+The bytes as the map came in stay in memory until the next open for *Restore original*. It moved
+Rebuild ISOM from Tiles out of the editor.
 
 **Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts off) is the read-only
 analysis drawn over the map and the worked example for `api.ui.overlay`: `analysis.ts` there builds a

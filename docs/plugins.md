@@ -9,7 +9,9 @@ worked examples for everything below, each in its own repository and installed b
 a dialog, a pick on the map and a terrain transaction; and **Paint**
 ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), listed but off until you
 tick it), a floating panel, a tool that owns the pointer and draws its own preview, and
-transactions on every layer. Both are
+transactions on every layer; **Walkability** and **Melee Wizard** (both listed but off)
+are the read-only analysis drawn over the map and the placement wizard, described at the
+end. All are
 fetched over the network and transpiled in the browser like anybody else's, which is the
 point: the plugins that ship with the editor are the proof the loading path works, not
 exceptions to it.
@@ -79,8 +81,8 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (scmscx.com and Terrain from Image do; Paint
-and Section Explorer wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
+removed; each says whether it starts on (scmscx.com and Terrain from Image do; Paint,
+Section Explorer, Walkability and Melee Wizard wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
 ### Adding one
@@ -722,3 +724,59 @@ with its own undo that merges a run of typing into one step — and Apply writes
 changed buffer through `sections.write`, which is what makes the editor parse the file
 again. Both pure modules have tests in that repository.
 
+## Walkability
+
+[scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability), listed by
+default and off until ticked, is the worked example for a read-only analysis drawn over
+the map: Tools ▸ Walkability… (`Ctrl+Shift+W`) reads every tile's sixteen VF4 words
+through `api.tileset.raw()` (`groups[id >> 4].megatiles[id & 15]` → `megatileFlags`),
+marks the ground under every building and resource (`api.data.units()` extents, or
+`api.palette.unitSize` without the tables) and hands the grid to `analysis.ts`, the pure
+part with that repository's tests: an exact Euclidean distance transform for clearance,
+4-connected components for islands, a BWEM-style watershed over the clearance map for
+areas and the chokes between them (where two areas first touch is the widest point of
+the narrowest passage; too small an area, or a meeting point nearly as wide as the area
+itself, means they were one), seams (open cells at different heights touching with no
+ramp), and per start-location pair the ground distance (Dial's algorithm, no corner
+cutting) and the widest route (a flood by descending bottleneck) whose narrowest point
+is measured with `passageWidth`. `api.query.startLocations()` and
+`api.query.placement(106, …)` (a Command Center's footprint) give the start rows and the
+"hall spot not buildable" problem.
+
+The result is drawn by an `api.ui.mapTool` whose `draw` blits one `ImageData` per view
+mode (areas, islands, clearance, height, walkable) scaled from minitiles to canvas
+pixels with smoothing off, then rings, labels and markers in canvas coordinates through
+`view.x` / `view.y`; `onMove` writes the cell under the pointer into the panel and
+`onDown` picks the area or island there. The panel (`api.ui.panel`) lists everything
+with `api.view.center` / `api.view.goTo` behind each row, re-runs on the `"terrain"`,
+`"units"`, `"doodads"` and `"document"` events (debounced), and offers a text report.
+The plugin never writes to the map.
+
+## Melee Wizard
+
+[scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard), listed by
+default and off until ticked, is the worked example for `placeUnit` / `canPlaceUnit` /
+`updateUnits` inside one `document.edit`, and for a map tool whose press-and-drag is
+previewed with `draw`: Tools ▸ Melee Wizard… (`Ctrl+Shift+M`). `layout.ts` there is the
+pure geometry with its tests: `ringPositions` enumerates the tile positions of a
+footprint at exactly the game's three-tile gap from the 4 × 3 hall (Chebyshev, the rule
+the game applies to resource depots), `layoutBase` grows the mineral line along that
+ring from the position nearest the pointed direction, wrapping round the hall's corner,
+and puts the geyser on its own ring past the end of the line; `symmetryImages` gives the
+point maps of the nine layouts (identity first, the across-the-map image second, so a
+2-of-4 game still faces players), `rectImages` maps a footprint and snaps it back, and
+`baseImages` lays a base out again for an image that swaps the axes (a rotation by 90°
+or a diagonal mirror), since a 2 × 1 patch cannot turn on its side. `symmetryGaps` and
+`summarizeBases` are the checks.
+
+`plugin.ts` runs three tools on `api.ui.mapTool`: start locations (hover shows the hall
+and its images with player labels, a click places them, replacing the players' old ones
+when the option says so), base (press for the hall spot — inside an existing start
+location's footprint snaps to it — drag for the direction, every footprint of every
+image previewed with `api.query.placement` colouring the refused ones red, release to
+place through `placeUnit` with `updateUnits` setting the amount), and the blocking
+patch. *Bases at every start location* mirrors one layout when the starts follow the
+symmetry (`api.query.startLocations()` against the images, within a tile) and lays each
+out otherwise. *Mirror selected units* maps `api.selection.units()` through the images,
+resolving each image's player by composing the maps, and *Check symmetry* selects what
+`symmetryGaps` reports through `api.selection.setUnits`.

@@ -79,7 +79,9 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Cut, copy and paste, including between maps | Yes |
 | Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
-| Auto-place Start Locations | Not yet |
+| Auto-place Start Locations | Yes, as a plugin (Melee Wizard: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Melee Wizard…). Click where Player 1 starts and the others land on its images under the symmetry you chose (mirror, 180°, 90°, both diagonals; 2, 4 or 8 players). The Tools menu's own entry is still a stub. |
+| Lay out a base's resources: the mineral line on the three-tile ring, the geyser past its end, for every player at once | Yes, as a plugin (Melee Wizard). Press on the hall spot and drag towards the minerals; presets for main, natural and third; amounts, end-patch amounts, mineral types; spots the map refuses are shown in red and left out. Also bases at every start location in one go, a blocking patch tool, mirroring the selected units, a symmetry check and a resource summary. |
+| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability: tick it, then Tools ▸ Walkability…). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map, listed in a panel that follows every edit; hover reads the ground under the pointer. |
 
 ### Triggers
 
@@ -404,8 +406,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. scmscx.com and Terrain from Image start on; Paint and
-Section Explorer are listed but off until you tick them.
+working connection on the first load of a session. scmscx.com and Terrain from Image start on; Paint,
+Section Explorer, Walkability and Melee Wizard are listed but off until you tick them.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -478,6 +480,34 @@ added, removed, renamed and reordered, and a section or the whole `scenario.chk`
 or imported. Nothing reaches the map until Apply, which makes the editor read the file
 again from scratch — every dialog and the map view follow, and the undo history goes, as
 with Resize.
+
+**Walkability** ([scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability))
+is in the list but off. Tick it, then Tools ▸ Walkability… (Ctrl+Shift+W) reads the ground
+the way a unit does — the sixteen minitiles under every tile, with buildings and
+resources as walls — and draws what it finds over the map: the islands (ground no path
+joins) and which start locations share one, pockets no start location reaches, the areas
+the map divides into and the chokes between them as rings with their width in tiles,
+seams where a unit can step between ground heights with no ramp, and for every pair of
+start locations the air distance, the ground distance and the narrowest point on the
+widest route. Hover the map to read the cell under the pointer; click to pick an area.
+*Unit size* closes the passages a Marine, a Dragoon or a Siege Tank does not fit
+through; the panel follows every edit while it is open, and Copy report puts a text
+summary on the clipboard. It only reads the map.
+
+**Melee Wizard** ([scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard))
+is in the list but off. Tick it, then Tools ▸ Melee Wizard… (Ctrl+Shift+M) opens a panel
+for the parts of a ladder-style map that are geometry: pick a symmetry (mirror, 180°,
+90°, both diagonals — 2, 4 or 8 players), press *Start locations* and click where Player
+1 starts, and the others land on its images; press *Add base*, press on the hall spot,
+drag towards the minerals and let go, and the mineral line is laid out on the ring three
+tiles from the hall (the closest the game allows and the distance it mines fastest from),
+wrapping round the hall's corner when you point at one, the geyser just past the end of
+the line, the same base for every player — spots the ground or another unit would
+refuse show in red while you drag and are left out. *Bases at every start location* does
+that for each start location the map has. Presets for main, natural and third; amounts,
+end-patch amounts and mineral types; a blocking patch tool; *Mirror selected units*,
+*Check symmetry* (selects every unit without a counterpart) and a per-player resource
+summary. Every placement is one undo step.
 
 ## Keyboard
 

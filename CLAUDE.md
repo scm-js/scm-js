@@ -301,7 +301,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; scmscx.com and Terrain from Image (on), Paint and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations); scmscx.com and Terrain from Image (on), Paint, Section Explorer, Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -484,7 +484,8 @@ runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
 `github:scm-js/plugin-scm-scx` and `github:scm-js/plugin-image-to-terrain` on,
-`github:scm-js/plugin-paint` and `github:scm-js/plugin-section-explorer` off — plus any built-in, each a
+`github:scm-js/plugin-paint`, `github:scm-js/plugin-section-explorer`, `github:scm-js/plugin-walkability` and
+`github:scm-js/plugin-melee-wizard` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -665,6 +666,25 @@ tables of their own. In the plugin, `layout.ts` (schemas → lazily instantiated
 meanings of its fields, the string table read off its own offsets) are pure and tested there;
 `buffer.ts` is the edit buffer with its own undo; `hexview.ts` and `inspector.ts` are the panes.
 `tests/plugins.test.ts` covers the sections and names API against a new map.
+
+**Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts off) is the read-only
+analysis drawn over the map: `analysis.ts` there builds a minitile grid from `api.tileset.raw()`'s VF4
+words plus the ground under buildings and resources, and computes an exact Euclidean clearance
+transform, 4-connected islands, a BWEM-style watershed into areas with the chokes between them
+(measured with `passageWidth`), height seams (open cells at different heights touching with no ramp),
+and per start pair the ground distance (Dial's) and the widest route's narrowest point; `plugin.ts`
+blits one `ImageData` per view mode through a map tool's `draw`, reads the cell under the pointer in
+`onMove`, and lists everything in a panel that re-runs on the terrain/units/doodads/document events.
+It uses no API beyond what existed; it never writes.
+
+**Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, a default that starts off) places symmetric
+start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile
+Chebyshev gap from the 4 × 3 hall, the mineral line grown along it from the pointed direction (wrapping
+round the hall's corner), the geyser past the line's end, the nine symmetries as point maps (an image that
+swaps the axes gets the base laid out again, since a 2 × 1 patch cannot turn), and the symmetry / summary
+checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.query.placement` colouring
+the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
+plus bases at every start location, mirroring the selection and the symmetry check.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

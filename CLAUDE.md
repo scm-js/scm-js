@@ -476,8 +476,44 @@ icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, 
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
 an ordinary spec fetched over the network on every start; the Manage Plugins row badges it `default`
-and hides its Remove button (`add` canonicalises what the user pastes through `parseSpec(...).display`,
+and hides its Remove button (what the user pastes is canonicalised through `canonicalSpec(parseSpec(...))`,
 so pasting the default's own github.com URL is recognised as it rather than duplicating it).
+Adding a plugin goes through a confirmation first: `PluginsDialog`'s Add canonicalises
+the spec (`loader.ts#canonicalSpec`), runs `host.ts#inspectPlugin` → `loader.ts#previewPlugin` —
+`resolveCommit` (GitHub's commits API, one request, no token) then
+`resolvePlugin(..., { entry: false })` on *that commit*, so one `plugin.json`, no entry
+probe and no `import()` — and opens `confirmPlugin` **only once that came back with a
+manifest**, handing the `PluginPreview` over in the payload (fetched once; the Update
+button on a pinned row does the same). An address with no plugin behind it is answered
+under the field instead (`NOT_FOUND` plus the fetch's own message), because a details
+screen with no details on it reads as a broken dialog rather than a wrong address.
+`ConfirmPluginDialog` shows the manifest (name, version, author, description,
+icon), the repository (`PluginSource.webUrl`, derived by `parseSpec` for a GitHub spec)
+and homepage links, the manifest / entry / base URLs of the version being installed
+(`addressesOf`, recomputed as the pin tick moves), and the not-sandboxed warning.
+`installPlugin` is the only writer past it: it seeds the manifest through
+`rememberManifest` (shared with `describePlugin`), then `setInstalled` + `activatePlugin`.
+Its three options are the dialog's ticks — *Enable it now* (on), *Pin to this version*
+(on whenever `PluginPreview.pin` resolved, storing `github:owner/repo@<sha>` instead of
+the moving spec; `isPinned` recognises one) and *Keep a copy in this browser* (off,
+`PluginInstall.local`, the same tick the Manage Plugins row carries under its buttons).
+A manifest that cannot be read (`PluginPreview.problem`) is a dead end on both screens —
+the dialog says so and Add is disabled — `pinProblem` says why there is no pin, and an
+unusable spec fails in `add` before any fetch.
+
+`local` is served by `loadDepsFor`: with no copy yet the load runs through
+`recordingDeps` and `storeSnapshot` writes every fetched file to `pluginCodeAtom`
+(`scmjs.plugin-code`, capped at `MAX_SNAPSHOT`); with a copy it runs through
+`storedDeps`, which has no network path at all and errors on a URL the snapshot lacks
+(`describePlugin` reads the copy too, so the address is never touched while the option
+is on). `PluginRuntime.loadedFrom` records which happened. `reloadPlugin` drops the copy
+and re-fetches — the way both a pinned and a stored plugin are moved forward — and
+`setInstalled` drops it whenever `local` goes false or the plugin is removed;
+`clearStoredDataAtom` `RESET`s the atom with the others. Reload re-fetches whatever the
+spec names, so a pinned plugin moves forward through the row's **Update** button instead:
+it previews `unpin(spec)` and, when the branch holds a different commit, reopens the
+confirmation with `replaces` set, which makes `installPlugin` deactivate, unlist and
+un-copy the old commit before installing the new one.
 `pluginRuntimesAtom` is status/manifest/error per
 spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Only
 `activatePlugin` used to write that atom, so a listed-but-off plugin was a bare spec in
@@ -542,8 +578,8 @@ plugin the editor ships is loaded by the ordinary path, and its internals are do
 in `docs/plugins.md`. Changing `src/plugins/api.ts` means re-running `npm run build:plugin-types`
 and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers the host side
 (loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
-list, map tools, panels, the palette API, placement, and the real-tileset suite via
-`primeTileset`).
+list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
+real-tileset suite via `primeTileset`).
 
 **Paint** (`github.com/scm-js/plugin-paint`, the second default, listed but not enabled) is the worked example for
 `ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and

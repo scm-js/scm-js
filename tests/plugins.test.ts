@@ -13,15 +13,18 @@ import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/do
 import { activeUnitAtom, clipSelectionAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom } from "../src/atoms/editorAtoms";
 import { dialogStackAtom } from "../src/atoms/uiAtoms";
 import {
-  cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
-  pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginCodeAtom,
+  pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
-import { bundleModule, candidateUrls, findImports, loadPlugin, parseSpec, PluginLoadError, resolveIcon, resolvePlugin, validateManifest, type LoaderDeps } from "../src/plugins/loader";
+import {
+  addressesOf, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, previewPlugin, resolveIcon,
+  resolvePlugin, unpin, validateManifest, type LoaderDeps,
+} from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
-  activatePlugin, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, isPluginActive, resolveActivate,
-  runTransaction, setInstalled,
+  activatePlugin, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
+  reloadPlugin, resolveActivate, runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
@@ -490,6 +493,181 @@ describe("plugin descriptions", () => {
     await describePlugin(store, "builtin:hello", deps);
     expect(store.get(pluginRuntimesAtom)["builtin:hello"]).toMatchObject({ status: "disabled", manifest: { name: "Hello" } });
     expect(store.get(pluginManifestCacheAtom)["builtin:hello"]).toBeUndefined();
+  });
+});
+
+/* ── Adding one: the confirmation ───────────────────────── */
+
+/** A GitHub plugin's two reads: the commit the ref points at, and the manifest at that commit. */
+function githubFiles(owner: string, repo: string, sha: string, manifest: object, ref = "HEAD") {
+  return {
+    [`https://api.github.com/repos/${owner}/${repo}/commits/${ref}`]: JSON.stringify({ sha, commit: { message: "x" } }),
+    [`https://raw.githubusercontent.com/${owner}/${repo}/${sha}/plugin.json`]: JSON.stringify(manifest),
+  };
+}
+
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+describe("plugin previews", () => {
+  it("reads one plugin.json at the commit the ref points at, and names every address", async () => {
+    const { deps, asked } = servedDeps(githubFiles("o", "preview", SHA, {
+      name: "Preview", version: "1.4", description: "Says what it does.", author: "Someone", homepage: "https://example.com/p", entry: "src/main.ts", icon: "\u{1f5fa}\u{fe0f}",
+    }));
+    const preview = await previewPlugin("https://github.com/o/preview", deps);
+    // The user pasted a github.com URL; what gets stored is the short form, or its pinned twin.
+    expect(preview.spec).toBe("github:o/preview");
+    expect(preview.pin).toMatchObject({ spec: `github:o/preview@${SHA}`, ref: SHA, short: "0123456" });
+    expect(preview).toMatchObject({ manifest: { name: "Preview", author: "Someone" }, icon: { kind: "text", text: "\u{1f5fa}\u{fe0f}" }, problem: null, pinProblem: null, ref: null });
+    // Two requests, and the manifest came from the pinned commit: what is shown is what a pin runs.
+    expect(asked).toEqual(["https://api.github.com/repos/o/preview/commits/HEAD", `https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`]);
+
+    expect(addressesOf(preview.pin!.source, preview.manifest)).toEqual({
+      manifestUrl: `https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`,
+      entryUrl: `https://raw.githubusercontent.com/o/preview/${SHA}/src/main.ts`,
+      base: `https://raw.githubusercontent.com/o/preview/${SHA}/`,
+      webUrl: `https://github.com/o/preview/tree/${SHA}`,
+    });
+    // Unticking the pin: the same picture against the moving ref.
+    expect(addressesOf(preview.source, preview.manifest)).toMatchObject({
+      entryUrl: "https://raw.githubusercontent.com/o/preview/HEAD/src/main.ts",
+      webUrl: "https://github.com/o/preview",
+    });
+    expect(isPinned(preview.pin!.spec)).toBe(true);
+    expect(isPinned(preview.spec)).toBe(false);
+  });
+
+  it("pins the ref the user gave rather than the branch tip", async () => {
+    const { deps } = servedDeps(githubFiles("o", "preview", SHA, { name: "Sub" }, "v2"));
+    // The manifest lives under the resolved commit, not under `v2`.
+    const preview = await previewPlugin("github:o/preview@v2", deps);
+    expect(preview).toMatchObject({ spec: "github:o/preview@v2", ref: "v2", pin: { spec: `github:o/preview@${SHA}` }, manifest: { name: "Sub" } });
+  });
+
+  it("leaves the entry unnamed rather than probing for it", async () => {
+    const url = "https://raw.githubusercontent.com/o/preview/v2/sub/plugin.json";
+    const { deps, asked } = servedDeps({ [url]: JSON.stringify({ name: "Sub" }) });
+    const preview = await previewPlugin("github:o/preview@v2/sub", deps);
+    // GitHub would not answer, so this is the unpinned spec against the ref the user gave.
+    expect(preview.pin).toBeNull();
+    expect(preview.pinProblem).toMatch(/Could not fetch|404/);
+    expect(addressesOf(preview.source, preview.manifest)).toMatchObject({
+      entryUrl: null,
+      base: "https://raw.githubusercontent.com/o/preview/v2/sub/",
+      webUrl: "https://github.com/o/preview/tree/v2/sub",
+    });
+    expect(asked).toContain(url);
+  });
+
+  it("reports a manifest it could not read without refusing the plugin, and an API it is too old for", async () => {
+    const { deps } = servedDeps({ "https://raw.githubusercontent.com/o/gone/HEAD/plugin.json": "{ nope" });
+    const gone = await previewPlugin("github:o/gone", deps);
+    expect(gone.manifest).toBeNull();
+    expect(gone.problem).toMatch(/not valid JSON/);
+
+    const url = "https://x/p/plugin.json";
+    const future = await previewPlugin("https://x/p/", servedDeps({ [url]: JSON.stringify({ name: "Future", api: 99 }) }).deps);
+    // Nothing outside GitHub has a commit to pin to, and the screen says so instead of offering it.
+    expect(future).toMatchObject({ spec: "https://x/p/", needsApi: 99, pin: null, pinProblem: "Only plugins on GitHub can be pinned to a version." });
+
+    // The spec itself being unusable is the one thing that throws — there is nothing to show.
+    await expect(previewPlugin("nonsense", deps)).rejects.toThrow(PluginLoadError);
+  });
+
+  it("previews a built-in without a fetch", async () => {
+    const deps = fakeDeps({ hello: { manifest: { name: "Hello", version: "0.1" }, load: async () => ({}) } });
+    expect(await previewPlugin("builtin:hello", deps)).toMatchObject({ spec: "builtin:hello", manifest: { name: "Hello" }, pin: null, problem: null });
+    expect(addressesOf(parseSpec("builtin:hello"), null)).toEqual({ manifestUrl: null, entryUrl: null, base: null, webUrl: null });
+    expect(canonicalSpec(parseSpec("builtin:hello"))).toBe("builtin:hello");
+  });
+
+  it("installs what was confirmed: the pinned spec by default, the moving one when unticked", async () => {
+    const { store } = blankStore();
+    const { deps: read } = servedDeps(githubFiles("o", "p", SHA, { name: "P" }));
+    const preview = await previewPlugin("github:o/p", read);
+    const deps = fakeDeps({});
+
+    await installPlugin(store, preview, { enabled: false, deps });
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: `github:o/p@${SHA}`, enabled: false }]);
+    // The row is named from the preview, so it never shows a bare spec while the code loads.
+    expect(store.get(pluginRuntimesAtom)[`github:o/p@${SHA}`]).toMatchObject({ manifest: { name: "P" } });
+    expect(store.get(pluginManifestCacheAtom)[`github:o/p@${SHA}`]).toMatchObject({ manifest: { name: "P" } });
+
+    setInstalled(store, `github:o/p@${SHA}`, { remove: true });
+    await installPlugin(store, preview, { enabled: false, pin: false, local: true, deps });
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:o/p", enabled: false, local: true }]);
+  });
+
+  it("swaps a pinned install for a newer commit, taking the old one's copy with it", async () => {
+    const { store } = blankStore();
+    const older = "1111111111111111111111111111111111111111";
+    const deps = fakeDeps({});
+    await installPlugin(store, await previewPlugin("github:o/p", servedDeps(githubFiles("o", "p", older, { name: "P" })).deps), { enabled: false, local: true, deps });
+    store.set(pluginCodeAtom, { [`github:o/p@${older}`]: { files: { a: "b" }, at: 0, size: 1 } });
+    expect(unpin(`github:o/p@${older}`)).toBe("github:o/p");
+    expect(unpin(`github:o/p@${older}/sub`)).toBe("github:o/p/sub");
+    expect(unpin("https://x/p/")).toBe("https://x/p/");
+
+    const next = await previewPlugin("github:o/p", servedDeps(githubFiles("o", "p", SHA, { name: "P", version: "2" })).deps);
+    await installPlugin(store, next, { enabled: false, local: true, replaces: `github:o/p@${older}`, deps });
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: `github:o/p@${SHA}`, enabled: false, local: true }]);
+    // The old commit's copy goes with its install; nothing of it is left to load.
+    expect(store.get(pluginCodeAtom)[`github:o/p@${older}`]).toBeUndefined();
+  });
+
+  it("runs a plugin marked local out of the copy it kept, and goes back to the address on Reload", async () => {
+    const { store } = blankStore();
+    const base = "https://x/local/";
+    const files = {
+      [`${base}plugin.json`]: JSON.stringify({ name: "Local", entry: "plugin.js" }),
+      [`${base}plugin.js`]: "export default () => {};",
+    };
+    let activated = 0;
+    const asked: string[] = [];
+    const deps: LoaderDeps = {
+      fetchText: async (url) => { asked.push(url); const t = files[url]; if (t === undefined) throw new Error(`404 ${url}`); return t; },
+      transpile: async (src) => src,
+      createModuleUrl: () => "mem:0",
+      importModule: async () => ({ default: () => { activated++; } }),
+      builtins: {},
+    };
+    setInstalled(store, base, { enabled: true, local: true });
+
+    await activatePlugin(store, base, deps);
+    expect(asked).toEqual([`${base}plugin.json`, `${base}plugin.js`]);
+    expect(store.get(pluginCodeAtom)[base].files).toEqual(files);
+    expect(store.get(pluginRuntimesAtom)[base]).toMatchObject({ status: "active", loadedFrom: "network" });
+
+    // The next start reads the copy and asks the network for nothing at all.
+    deactivatePlugin(store, base);
+    asked.length = 0;
+    await activatePlugin(store, base, deps);
+    expect(asked).toEqual([]);
+    expect(activated).toBe(2);
+    expect(store.get(pluginRuntimesAtom)[base]).toMatchObject({ status: "active", loadedFrom: "browser" });
+
+    // Reload is how a copy is refreshed, and turning the option off throws it away.
+    await reloadPlugin(store, base, deps);
+    expect(asked).toEqual([`${base}plugin.json`, `${base}plugin.js`]);
+    setInstalled(store, base, { local: false });
+    expect(store.get(pluginCodeAtom)[base]).toBeUndefined();
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: base, enabled: true }]);
+  });
+
+  it("fails a local plugin whose copy is missing a file rather than fetching it", async () => {
+    const { store } = blankStore();
+    const base = "https://x/torn/";
+    setInstalled(store, base, { enabled: true, local: true });
+    store.set(pluginCodeAtom, { [base]: { files: { [`${base}plugin.json`]: JSON.stringify({ name: "Torn", entry: "plugin.js" }) }, at: 0, size: 1 } });
+    const deps: LoaderDeps = {
+      fetchText: async () => { throw new Error("the network must not be used here"); },
+      transpile: async (src) => src,
+      createModuleUrl: () => "mem:0",
+      importModule: async () => ({}),
+      builtins: {},
+    };
+    await activatePlugin(store, base, deps);
+    expect(store.get(pluginRuntimesAtom)[base]).toMatchObject({ status: "error" });
+    expect(store.get(pluginRuntimesAtom)[base].error).toMatch(/not in the copy kept in this browser/);
   });
 });
 

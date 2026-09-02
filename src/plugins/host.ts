@@ -19,8 +19,8 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
-  pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginCodeAtom, pluginContextItemsAtom,
+  pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
   type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
@@ -51,9 +51,9 @@ import { markDirty } from "../formats/chk/scenario";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle, type MapToolSpec, type MapToolStopReason,
-  type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule,
+  type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule,
 } from "./api";
-import { loadPlugin, parseSpec, resolvePlugin, type LoaderDeps } from "./loader";
+import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
@@ -684,7 +684,9 @@ export function browserLoaderDeps(): LoaderDeps {
   return {
     fetchText: async (url) => {
       const res = await fetch(url, { cache: "no-cache" });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} fetching ${url}`);
+      // The callers all name the URL they asked for, so this does not: "Could not fetch
+      // <url>: 404 fetching <url>" is the same address twice in one line.
+      if (!res.ok) throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`);
       return res.text();
     },
     transpile: (source, fileName) => transpileInBackground(source, fileName),
@@ -694,6 +696,50 @@ export function browserLoaderDeps(): LoaderDeps {
     },
     builtins: BUILTIN_PLUGINS,
   };
+}
+
+/** What the installed list says about one spec (defaults merged in), or nothing. */
+function installOf(store: Store, spec: string): PluginInstall | undefined {
+  return effectiveInstalls(store.get(installedPluginsAtom)).find((p) => p.spec === spec);
+}
+
+/** A snapshot larger than this is not worth a `localStorage` slot; the copy is skipped and the plugin stays remote. */
+const MAX_SNAPSHOT = 2 * 1024 * 1024;
+
+/**
+ * The deps one activation should use.
+ *
+ * A plugin the user asked to keep a copy of (`PluginInstall.local`) loads out of
+ * `pluginCodeAtom` and touches nothing else; until there *is* a copy it loads normally
+ * with every fetch recorded, and the recording is stored on success. Everything else
+ * loads straight from `deps`, and `files` stays empty.
+ */
+function loadDepsFor(store: Store, spec: string, deps: LoaderDeps): { deps: LoaderDeps; files: Record<string, string> | null; from: "network" | "browser" } {
+  if (!installOf(store, spec)?.local) return { deps, files: null, from: "network" };
+  const snapshot = store.get(pluginCodeAtom)[spec];
+  if (snapshot && Object.keys(snapshot.files).length > 0) return { deps: storedDeps(deps, snapshot.files), files: null, from: "browser" };
+  const files: Record<string, string> = {};
+  return { deps: recordingDeps(deps, files), files, from: "network" };
+}
+
+/** Keep what a load fetched, so the next one does not have to. Too big to store is not an error, just no copy. */
+function storeSnapshot(store: Store, spec: string, files: Record<string, string>) {
+  const size = Object.entries(files).reduce((n, [url, text]) => n + url.length + text.length, 0);
+  if (size === 0) return;
+  if (size > MAX_SNAPSHOT) {
+    console.warn(`[plugins] ${spec}: ${size} characters is too much to keep in browser storage; it will load from its address.`);
+    return;
+  }
+  store.set(pluginCodeAtom, { ...store.get(pluginCodeAtom), [spec]: { files, at: Date.now(), size } });
+}
+
+/** Throw away the copy of one plugin's code (Reload, Remove, turning the option off). */
+export function forgetSnapshot(store: Store, spec: string) {
+  const all = store.get(pluginCodeAtom);
+  if (!(spec in all)) return;
+  const next = { ...all };
+  delete next[spec];
+  store.set(pluginCodeAtom, next);
 }
 
 /** Load and activate a plugin; a no-op when it is already active or loading. */
@@ -706,9 +752,11 @@ export async function activatePlugin(store: Store, spec: string, deps: LoaderDep
   map.set(spec, entry);
   setRuntime(store, spec, { status: "loading", error: null });
   const stillWanted = () => map.get(spec) === entry;
+  const local = loadDepsFor(store, spec, deps);
   try {
-    const { manifest, icon, module } = await loadPlugin(spec, deps);
+    const { manifest, icon, module } = await loadPlugin(spec, local.deps);
     if (!stillWanted()) return;
+    if (local.files) storeSnapshot(store, spec, local.files);
     if (manifest.api !== undefined && manifest.api > PLUGIN_API_VERSION) {
       throw new Error(`The plugin needs plugin API ${manifest.api}; this editor provides ${PLUGIN_API_VERSION}.`);
     }
@@ -718,7 +766,7 @@ export async function activatePlugin(store: Store, spec: string, deps: LoaderDep
     const result = await resolveActivate(module)(api);
     if (!stillWanted()) { runDeactivate(result); bag.dispose(); return; }
     entry.deactivate = result;
-    setRuntime(store, spec, { status: "active", error: null, contributions: { ...bag.counts } });
+    setRuntime(store, spec, { status: "active", error: null, loadedFrom: local.from, contributions: { ...bag.counts } });
   } catch (err) {
     bag.dispose();
     if (stillWanted()) map.delete(spec);
@@ -773,19 +821,37 @@ async function runDescribe(store: Store, spec: string, deps: Pick<LoaderDeps, "f
   setRuntime(store, spec, { describing: true });
   try {
     const source = parseSpec(spec);
-    const { manifest, icon } = await resolvePlugin(source, deps, { entry: false });
+    // A plugin the user keeps a copy of is described out of that copy: its address is
+    // not touched at all while the option is on and a copy exists.
+    const snapshot = installOf(store, spec)?.local ? store.get(pluginCodeAtom)[spec] : undefined;
+    const use = snapshot && source.kind === "remote" && source.manifestUrl && snapshot.files[source.manifestUrl] ? storedDeps(deps, snapshot.files) : deps;
+    const { manifest, icon } = await resolvePlugin(source, use, { entry: false });
     // An activation that started meanwhile has the last word: it ran the code, this did not.
-    if (!activeMap(store).has(spec)) setRuntime(store, spec, { manifest, icon: icon ?? null });
-    if (source.kind !== "builtin") {
-      const keep = icon && (icon.kind === "text" || icon.url.length <= MAX_CACHED_ICON) ? icon : null;
-      store.set(pluginManifestCacheAtom, { ...store.get(pluginManifestCacheAtom), [spec]: { manifest, icon: keep, at: Date.now() } });
-    }
+    rememberManifest(store, spec, manifest, icon ?? null, { runtime: !activeMap(store).has(spec), cache: source.kind !== "builtin" });
   } catch (err) {
     // Not an error state: the row keeps whatever it had (a cached manifest, or the spec).
     console.warn(`[plugins] could not describe ${spec}:`, err);
   } finally {
     setRuntime(store, spec, { describing: false });
   }
+}
+
+/**
+ * Keep what a `plugin.json` said: on the runtime (so the row is named at once) and in
+ * `pluginManifestCacheAtom` (so the next visit renders before the network answers).
+ * A built-in is never cached — there is nothing to fetch and its icon URL is build-hashed.
+ */
+export function rememberManifest(
+  store: Store,
+  spec: string,
+  manifest: PluginManifest,
+  icon: PluginIcon | null,
+  opts: { runtime?: boolean; cache?: boolean } = {},
+) {
+  if (opts.runtime !== false) setRuntime(store, spec, { manifest, icon });
+  if (opts.cache === false || spec.startsWith("builtin:")) return;
+  const keep = icon && (icon.kind === "text" || icon.url.length <= MAX_CACHED_ICON) ? icon : null;
+  store.set(pluginManifestCacheAtom, { ...store.get(pluginManifestCacheAtom), [spec]: { manifest, icon: keep, at: Date.now() } });
 }
 
 /** Ask for a plugin's manifest again on the next `describePlugin` (Reload, Remove). */
@@ -808,8 +874,10 @@ export function deactivatePlugin(store: Store, spec: string) {
   setRuntime(store, spec, { status: "disabled", error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } });
 }
 
+/** Fetch a plugin again from its address, replacing any copy kept in the browser. */
 export async function reloadPlugin(store: Store, spec: string, deps?: LoaderDeps) {
   forgetDescription(store, spec);
+  forgetSnapshot(store, spec);
   deactivatePlugin(store, spec);
   await activatePlugin(store, spec, deps);
 }
@@ -834,17 +902,59 @@ export const builtinSpec = (name: string) => `builtin:${name}`;
  * Remove button it does not get; see `defaults.ts`.
  */
 export function effectiveInstalls(stored: readonly PluginInstall[], defaults: readonly DefaultPlugin[] = defaultPlugins()): PluginInstall[] {
-  const out: PluginInstall[] = defaults.map((d) => ({ spec: d.spec, enabled: stored.find((p) => p.spec === d.spec)?.enabled ?? d.enabled }));
+  const out: PluginInstall[] = defaults.map((d) => {
+    const said = stored.find((p) => p.spec === d.spec);
+    return { spec: d.spec, enabled: said?.enabled ?? d.enabled, ...(said?.local ? { local: true } : {}) };
+  });
   for (const p of stored) if (!defaults.some((d) => d.spec === p.spec)) out.push(p);
   return out;
 }
 
-/** Add, remove or toggle a plugin in the persisted list. */
-export function setInstalled(store: Store, spec: string, patch: { enabled?: boolean; remove?: boolean }) {
+/**
+ * What the Add Plugin confirmation shows before anything of the plugin runs: its
+ * manifest and the addresses it will be fetched from, and nothing else (`previewPlugin`
+ * reads one `plugin.json`). It throws only when the *spec* is unusable — a manifest that
+ * cannot be fetched comes back as `preview.problem`, since the user may still add it.
+ */
+export function inspectPlugin(spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins"> = browserLoaderDeps()): Promise<PluginPreview> {
+  return previewPlugin(spec, deps);
+}
+
+/**
+ * Add a plugin the user has just confirmed. The manifest read for the confirmation is
+ * kept (`rememberManifest`), so the new row is named and described the instant it
+ * appears instead of after another fetch, and only then is the code fetched and run.
+ */
+export async function installPlugin(
+  store: Store,
+  preview: PluginPreview,
+  opts: { enabled?: boolean; pin?: boolean; local?: boolean; replaces?: string; deps?: LoaderDeps } = {},
+) {
+  const enabled = opts.enabled !== false;
+  // Pinning is what actually gets stored: `github:owner/repo@<sha>` instead of a ref that moves.
+  const pinned = opts.pin !== false && preview.pin !== null;
+  const spec = pinned ? preview.pin!.spec : preview.spec;
+  // Updating a pinned plugin: the old commit's install, copy and running instance all go,
+  // since the new spec is a different plugin as far as everything here is concerned.
+  if (opts.replaces && opts.replaces !== spec) {
+    deactivatePlugin(store, opts.replaces);
+    setInstalled(store, opts.replaces, { remove: true });
+  }
+  if (preview.manifest) rememberManifest(store, spec, preview.manifest, preview.icon);
+  setInstalled(store, spec, { enabled, local: opts.local === true });
+  if (enabled) await activatePlugin(store, spec, opts.deps ?? browserLoaderDeps());
+}
+
+/** Add, remove or toggle a plugin in the persisted list (Remove also drops its copy). */
+export function setInstalled(store: Store, spec: string, patch: { enabled?: boolean; local?: boolean; remove?: boolean }) {
   const stored = store.get(installedPluginsAtom);
   const others = stored.filter((p) => p.spec !== spec);
-  if (patch.remove) { store.set(installedPluginsAtom, others); return; }
+  if (patch.remove) { forgetSnapshot(store, spec); store.set(installedPluginsAtom, others); return; }
   const prev = stored.find((p) => p.spec === spec);
-  const next: PluginInstall = { spec, enabled: patch.enabled ?? prev?.enabled ?? true };
+  const local = patch.local ?? prev?.local ?? false;
+  // The copy only exists to serve `local`; dropping the option drops it, so turning the
+  // option back on fetches the plugin again rather than reviving something months old.
+  if (!local) forgetSnapshot(store, spec);
+  const next: PluginInstall = { spec, enabled: patch.enabled ?? prev?.enabled ?? true, ...(local ? { local: true } : {}) };
   store.set(installedPluginsAtom, prev ? stored.map((p) => (p.spec === spec ? next : p)) : [...stored, next]);
 }

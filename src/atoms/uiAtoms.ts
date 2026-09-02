@@ -42,6 +42,7 @@ export type DialogId =
   | "confirmClose"
   | "notImplemented"
   | "plugins"
+  | "confirmPlugin"
   | "pluginDialog";
 
 export interface DialogEntry {

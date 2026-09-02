@@ -357,13 +357,46 @@ and the ones a given scale cannot draw grey out.
 
 ### Plugins
 
-Plugins ▸ Manage Plugins… lists what is installed. Paste a location and press Add:
-`github:owner/repo` (optionally `@tag` and `/sub/dir`), a github.com URL, or any URL
-to a `plugin.json`, a `.ts`/`.js` file, or a folder holding `plugin.json`
-(`http://localhost:3000/` while you write one). A plugin is one TypeScript file with
-an `activate(api)` export; it runs with the editor's own privileges, so only add ones
-you trust. Tick boxes turn plugins off without removing them; Reload re-fetches one
-after a change. [docs/plugins.md](docs/plugins.md) has the API.
+Plugins ▸ Manage Plugins… lists what is installed. Paste a link and press Add. Any
+address the browser can read will do: a github.com repository (or a folder inside one,
+`https://github.com/owner/repo/tree/v1.2/plugins/my-plugin`), the short form
+`github:owner/repo@v1.2`, a link straight to a `plugin.json` on another host
+(`https://gitlab.com/owner/repo/-/raw/main/plugin.json`), a `.ts`/`.js` entry file, a
+folder holding `plugin.json`, or `http://localhost:3000/` while you write one. A plugin
+is one TypeScript file with an `activate(api)` export.
+
+Add does not install anything straight away. It reads the plugin's `plugin.json`, and
+for a plugin on GitHub it also asks which commit the address points at. Neither request
+fetches or runs any of the plugin's code. What comes back is shown on an **Add Plugin**
+screen: the name, version, author and description from the manifest, links to the
+repository and homepage, and the addresses the manifest and the code will be fetched
+from. The same screen says what you are agreeing to. There is no sandbox, so a plugin has
+the same access as the editor itself: it can change the map you have open and anything
+you save afterwards, add menu items and hotkeys, store data in your browser, and make
+network requests. Only add plugins you trust. Cancel leaves nothing behind.
+
+Three ticks on that screen decide how it is installed:
+
+- **Enable it now** runs the plugin once it is added. Untick it to add the plugin to the
+  list and start it later.
+- **Pin to this version** is on by default for a plugin on GitHub. It stores the exact
+  commit (`github:owner/repo@0123456…`) rather than a branch, so the editor loads the
+  same code every time and a new push by the author does not reach you. The **Update**
+  button on a pinned row looks for a newer commit and shows it on the same screen before
+  anything changes. Plugins from other addresses cannot be pinned, since there is no
+  version to name.
+- **Keep a copy in this browser** is off by default. With it on, the files from the first
+  load are kept in your browser and run from then on, and the plugin's address is not
+  contacted again until you press Reload. Use it if you would rather nothing was fetched
+  at startup.
+
+Both settings can be changed later from the list: every row carries a **Keep a copy**
+tick under its buttons, and a pinned row is badged *pinned* and carries the Update button.
+An address with no plugin behind it (a wrong link, or a dev server that is not up) is
+reported under the Add field and nothing is added, so the Add Plugin screen only ever
+opens with a manifest to show. The tick at the left of a row turns a plugin off without
+removing it; Reload fetches one again from its address and replaces any stored copy.
+[docs/plugins.md](docs/plugins.md) has the API.
 
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
@@ -432,9 +465,9 @@ F1 lists the lot. The ones worth knowing up front:
 Preferences (Ctrl+,) persist in the browser: the splash screen, whether to confirm
 before replacing a modified map, defaults for new maps, and whether water and units
 animate at startup. Its Browser storage box lists everything the editor keeps in this
-browser — the preferences, the grid settings, the installed plugin list and whatever the
-plugins store — and **Clear all data** throws the lot away, putting the defaults (and the
-default plugins) back. The map you have open is not kept in the browser and is not
+browser — the preferences, the grid settings, the installed plugin list, the copies of
+any plugins set to load from storage, and whatever the plugins store — and **Clear all
+data** throws the lot away, putting the defaults (and the default plugins) back. The map you have open is not kept in the browser and is not
 touched by it.
 
 ## Documentation

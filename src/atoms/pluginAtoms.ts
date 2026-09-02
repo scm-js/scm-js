@@ -19,6 +19,13 @@ export interface PluginInstall {
   /** `builtin:<name>`, `github:owner/repo[@ref][/dir]`, or a URL — see `plugins/loader.ts`. */
   spec: string;
   enabled: boolean;
+  /**
+   * Load the copy kept in `pluginCodeAtom` instead of fetching the plugin again. The
+   * copy is made on the first load that has to go to the network, so this only means
+   * "prefer the copy" until there is one; after that the plugin's address is never
+   * touched again unless Reload asks for it.
+   */
+  local?: boolean;
 }
 
 /** Remote plugins the user added; built-ins are merged in by `usePlugins` and only remember an `enabled: false`. */
@@ -43,6 +50,24 @@ export const pluginManifestCacheAtom = atomWithStorage<Record<string, CachedMani
   "scmjs.plugin-manifests", {}, createJSONStorage(browserStorage), { getOnInit: true },
 );
 
+/** Everything one load of a plugin fetched: the manifest and each module's source, by URL. */
+export interface PluginSnapshot {
+  files: Record<string, string>;
+  /** When the copy was made (ms). */
+  at: number;
+  /** Roughly what it costs in storage (characters). */
+  size: number;
+}
+
+/**
+ * The code of the plugins marked `local`, kept so they load without a network request.
+ * Written by `activatePlugin` after a load that went to the network, read by the next
+ * one. Nothing else expires it: a copy is replaced when the user presses Reload.
+ */
+export const pluginCodeAtom = atomWithStorage<Record<string, PluginSnapshot>>(
+  "scmjs.plugin-code", {}, createJSONStorage(browserStorage), { getOnInit: true },
+);
+
 /* ── Runtime ────────────────────────────────────────────── */
 
 export type PluginStatus = "loading" | "active" | "error" | "disabled";
@@ -57,6 +82,8 @@ export interface PluginRuntime {
   error: string | null;
   /** A `describePlugin` fetch is in flight (the manifest shown, if any, may be stale). */
   describing?: boolean;
+  /** Where the code that is running came from, for a plugin the user asked to keep a copy of. */
+  loadedFrom?: "network" | "browser";
   /** What the plugin added, for the Manage Plugins dialog. */
   contributions: { menu: number; contextMenu: number; hotkeys: number; events: number };
 }

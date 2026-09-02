@@ -8,6 +8,7 @@
  * be transpiled before it runs. Everything that touches the network or the platform
  * comes in through `LoaderDeps`, so `tests/plugins.test.ts` drives this in Node.
  */
+import { PLUGIN_API_VERSION } from "./api";
 import type { PluginIcon, PluginManifest } from "./api";
 
 export type PluginSource =
@@ -22,6 +23,10 @@ export type PluginSource =
       base: string;
       /** Short form for the UI. */
       display: string;
+      /** A page a person can read the source on, when the spec named one (a GitHub repository). */
+      webUrl?: string;
+      /** The parts of a GitHub spec, so a floating ref can be resolved to a commit (see `resolveCommit`). */
+      github?: { owner: string; repo: string; ref: string | null; dir: string };
     };
 
 export interface BuiltinPlugin {
@@ -89,10 +94,19 @@ export function parseSpec(spec: string): PluginSource {
   throw new PluginLoadError(`Unrecognised plugin location "${s}". Paste a GitHub repository link such as https://github.com/owner/repo, the short form github:owner/repo, or a URL to a plugin.json or plugin.ts.`);
 }
 
-function githubSource(owner: string, repo: string, ref: string | undefined, dir: string | undefined): PluginSource {
+export function githubSource(owner: string, repo: string, ref: string | undefined, dir: string | undefined): PluginSource {
   const sub = dir ? dir.replace(/^\/+|\/+$/g, "") : "";
   const base = `https://raw.githubusercontent.com/${owner}/${repo}/${ref ?? "HEAD"}/${sub ? `${sub}/` : ""}`;
-  return { kind: "remote", manifestUrl: `${base}plugin.json`, entryUrl: null, base, display: `github:${owner}/${repo}${ref ? `@${ref}` : ""}${sub ? `/${sub}` : ""}` };
+  const web = `https://github.com/${owner}/${repo}${ref || sub ? `/tree/${ref ?? "HEAD"}${sub ? `/${sub}` : ""}` : ""}`;
+  return {
+    kind: "remote",
+    manifestUrl: `${base}plugin.json`,
+    entryUrl: null,
+    base,
+    display: `github:${owner}/${repo}${ref ? `@${ref}` : ""}${sub ? `/${sub}` : ""}`,
+    webUrl: web,
+    github: { owner, repo, ref: ref ?? null, dir: sub },
+  };
 }
 
 /* ── Manifest ───────────────────────────────────────────── */
@@ -331,4 +345,182 @@ export async function loadPlugin(spec: string, deps: LoaderDeps): Promise<Loaded
     throw new PluginLoadError(`${manifest.name} failed to load: ${err instanceof Error ? err.message : String(err)}`);
   }
   return { source, manifest, icon, module };
+}
+
+/* ── Previewing (what the confirmation screen shows) ────── */
+
+/** Where a given source is fetched from, for the confirmation to show. */
+export interface PluginAddresses {
+  /** The `plugin.json`, when the spec names a folder or a repository. */
+  manifestUrl: string | null;
+  /** The file that will be imported, when it can be named without fetching any code. */
+  entryUrl: string | null;
+  /** Where the plugin's other files are fetched from (null for a built-in). */
+  base: string | null;
+  /** A page a person can read the source on. */
+  webUrl: string | null;
+}
+
+/**
+ * The addresses a source resolves to. The entry is only named when the manifest names
+ * it: probing for `plugin.ts` / `plugin.js` would fetch the code, which is exactly what
+ * has not been agreed to yet.
+ */
+export function addressesOf(source: PluginSource, manifest: PluginManifest | null): PluginAddresses {
+  if (source.kind === "builtin") return { manifestUrl: null, entryUrl: null, base: null, webUrl: null };
+  let entryUrl = source.entryUrl;
+  if (!entryUrl && manifest?.entry && source.manifestUrl) entryUrl = new URL(manifest.entry, source.manifestUrl).href;
+  return { manifestUrl: source.manifestUrl, entryUrl, base: source.base, webUrl: source.webUrl ?? null };
+}
+
+/** A pin: the exact commit a GitHub spec resolved to, and the spec that names it. */
+export interface PluginPin {
+  /** `github:owner/repo@<sha>[/dir]`. */
+  spec: string;
+  source: PluginSource;
+  /** The full commit hash. */
+  ref: string;
+  /** The hash as it is shown. */
+  short: string;
+}
+
+export interface PluginPreview {
+  /** The canonical spec for what the user typed, unpinned. */
+  spec: string;
+  source: PluginSource;
+  /** Null when the manifest could not be read; see `problem`. */
+  manifest: PluginManifest | null;
+  icon: PluginIcon | null;
+  /** The commit the spec's ref points at now, when GitHub could be asked. */
+  pin: PluginPin | null;
+  /** Why there is no pin (not a GitHub spec, or GitHub would not answer). */
+  pinProblem: string | null;
+  /** The ref the user asked for, when the spec carried one. */
+  ref: string | null;
+  /** Why the manifest could not be read. The plugin can still be added — the loader tries again. */
+  problem: string | null;
+  /** The plugin API version the manifest asks for, when this editor is too old for it. */
+  needsApi: number | null;
+}
+
+/** The spec as it is stored and shown: the short form for a repository, `builtin:name` for a built-in. */
+export function canonicalSpec(source: PluginSource): string {
+  return source.kind === "builtin" ? `builtin:${source.name}` : source.display;
+}
+
+/** True when a spec names an exact commit, so what it loads cannot change under it. */
+export const isPinned = (spec: string): boolean => /^github:[^/@\s]+\/[^/@\s]+@[0-9a-f]{40}(?:\/|$)/i.test(spec);
+
+/**
+ * A pinned spec with its commit taken off, so it can be previewed again and pinned to
+ * whatever the branch holds now. This is what the Update button on a pinned row asks
+ * about; anything else comes back unchanged.
+ */
+export function unpin(spec: string): string {
+  const m = /^github:([^/@\s]+)\/([^/@\s]+)@[0-9a-f]{40}(?:\/(.*))?$/i.exec(spec.trim());
+  return m ? `github:${m[1]}/${m[2]}${m[3] ? `/${m[3]}` : ""}` : spec;
+}
+
+/**
+ * The commit a GitHub ref points at right now, through the public commits API. One
+ * request, no token: it is rate limited per address (60 an hour), so a refusal is
+ * ordinary and the caller treats it as "cannot pin", never as a failure.
+ */
+export async function resolveCommit(
+  gh: { owner: string; repo: string; ref: string | null },
+  fetchText: LoaderDeps["fetchText"],
+): Promise<string> {
+  const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/commits/${gh.ref ?? "HEAD"}`;
+  let text: string;
+  try {
+    text = await fetchText(url);
+  } catch (err) {
+    throw new PluginLoadError(`Could not ask GitHub which commit ${gh.ref ?? "HEAD"} is: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let sha: unknown;
+  try { sha = (JSON.parse(text) as { sha?: unknown }).sha; } catch { throw new PluginLoadError(`${url} did not answer with JSON.`); }
+  if (typeof sha !== "string" || !/^[0-9a-f]{40}$/i.test(sha)) throw new PluginLoadError(`${url} named no commit.`);
+  return sha.toLowerCase();
+}
+
+/**
+ * Everything the Add Plugin confirmation shows, at the cost of **one `plugin.json`** and,
+ * for a GitHub plugin, one commit lookup: who wrote the plugin, what it says it does, the
+ * exact addresses the editor will fetch it from, and the commit those addresses point at.
+ * `resolvePlugin(..., { entry: false })` is the same no-code path `describePlugin` takes —
+ * nothing of the plugin is downloaded, transpiled or imported until the user says yes,
+ * which is the whole point of showing this first.
+ *
+ * The manifest is read from the *pinned* source when there is one, so what is shown is
+ * what a pinned install will run. A manifest that cannot be read is not fatal (`problem`
+ * is set and the addresses are still named): the plugin may be behind a dev server that
+ * is not up yet, and the user is allowed to add it anyway.
+ */
+export async function previewPlugin(spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins">): Promise<PluginPreview> {
+  const source = parseSpec(spec);
+  const gh = source.kind === "remote" ? source.github : undefined;
+  const preview: PluginPreview = {
+    spec: canonicalSpec(source),
+    source,
+    manifest: null,
+    icon: null,
+    pin: null,
+    pinProblem: gh ? null : "Only plugins on GitHub can be pinned to a version.",
+    ref: gh?.ref ?? null,
+    problem: null,
+    needsApi: null,
+  };
+  if (gh) {
+    try {
+      const ref = await resolveCommit(gh, deps.fetchText);
+      const pinnedSource = githubSource(gh.owner, gh.repo, ref, gh.dir);
+      preview.pin = { spec: canonicalSpec(pinnedSource), source: pinnedSource, ref, short: ref.slice(0, 7) };
+    } catch (err) {
+      preview.pinProblem = err instanceof Error ? err.message : String(err);
+    }
+  }
+  try {
+    const { manifest, icon } = await resolvePlugin(preview.pin?.source ?? source, deps, { entry: false });
+    preview.manifest = manifest;
+    preview.icon = icon ?? null;
+    if (manifest.api !== undefined && manifest.api > PLUGIN_API_VERSION) preview.needsApi = manifest.api;
+  } catch (err) {
+    preview.problem = err instanceof Error ? err.message : String(err);
+  }
+  return preview;
+}
+
+/* ── Loading from a copy in the browser ─────────────────── */
+
+/**
+ * `deps` with every fetched file written into `files`, so a successful load leaves behind
+ * everything it took to do it: the manifest and each module's source, keyed by URL. That
+ * snapshot is what "load from browser storage" replays.
+ */
+export function recordingDeps<D extends Pick<LoaderDeps, "fetchText">>(deps: D, files: Record<string, string>): D {
+  return {
+    ...deps,
+    fetchText: async (url: string) => {
+      const text = await deps.fetchText(url);
+      files[url] = text;
+      return text;
+    },
+  };
+}
+
+/**
+ * `deps` that answer out of a snapshot and never touch the network. A URL the snapshot
+ * does not hold is an error naming it rather than a quiet fetch: the point of this mode
+ * is that the plugin cannot pull in anything new, so a plugin that has grown a file since
+ * the copy was made must be reloaded deliberately.
+ */
+export function storedDeps<D extends Pick<LoaderDeps, "fetchText">>(deps: D, files: Record<string, string>): D {
+  return {
+    ...deps,
+    fetchText: async (url: string) => {
+      const text = files[url];
+      if (text === undefined) throw new PluginLoadError(`${url} is not in the copy kept in this browser. Press Reload to fetch the plugin again.`);
+      return text;
+    },
+  };
 }

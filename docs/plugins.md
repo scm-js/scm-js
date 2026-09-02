@@ -36,9 +36,9 @@ exceptions to it.
 
 - **No sandbox.** A plugin runs in the page with the page's privileges: it can read the
   open map, the archive extras and the editor's localStorage, and it can make network
-  requests. That is the same trust as a browser extension. The Manage Plugins dialog says
-  so before a plugin is enabled, pins remote plugins to the ref you gave, and never
-  auto-updates. An iframe sandbox is possible later; it would cost the UI contributions.
+  requests. That is the same trust as a browser extension. Adding one therefore goes
+  through a confirmation screen that says so (see *Adding one*, below), pins remote
+  plugins to the ref you gave, and never auto-updates. An iframe sandbox is possible later; it would cost the UI contributions.
 - **No React for plugins.** A plugin dialog gets a DOM element to fill (`mount(el)`).
   Sharing the host's React would need import maps and version coupling; a plugin that
   wants a framework can bundle its own into that element.
@@ -82,6 +82,72 @@ are merged over that list, so they are always shown and can be turned on or off 
 removed; each says whether it starts on (Terrain from Image does, Paint waits to be
 ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
+
+### Adding one
+
+Pressing **Add** in Manage Plugins does not install anything. `previewPlugin` canonicalises
+the spec, asks GitHub which commit the spec's ref points at (`resolveCommit`, the public
+commits API, one request and no token), and reads the `plugin.json` at that commit through
+steps 1–2 above and no further (`resolvePlugin(..., { entry: false })`). No entry file is
+fetched, nothing is transpiled and nothing is imported.
+
+The confirmation opens only if that found a manifest. An address that answers with no
+plugin behind it is reported under the Add field, and the preview travels to the dialog in
+its payload rather than being fetched again.
+
+`ConfirmPluginDialog` shows what came back: the manifest's name, version, author,
+description and icon, links to the repository (`PluginSource.webUrl`, which `parseSpec`
+derives for a GitHub spec) and homepage, the addresses for the version being installed
+(`addressesOf`), and the warning that a plugin has the editor's own access and no sandbox.
+The entry is named only when the manifest names one; probing for `plugin.ts` / `plugin.js`
+would mean fetching code, which has not been agreed to yet.
+
+Three ticks are read straight into `installPlugin`:
+
+| Tick | Default | Effect |
+| --- | --- | --- |
+| Enable it now | on | `activatePlugin` after the install; off just lists it. |
+| Pin to this version | on, when a commit resolved | Stores `github:owner/repo@<sha>` (`PluginPreview.pin`) instead of the moving spec. `isPinned` recognises one. |
+| Keep a copy in this browser | off | Stores `PluginInstall.local`; see below. |
+
+The addresses on screen follow the pin tick, since pinning changes which commit every one
+of them names. A spec that carries a ref already (`@v1.2`) is resolved the same way: the
+pin names the commit that tag points at today.
+
+Reload re-fetches whatever the spec names, so for a pinned plugin it re-fetches the same
+commit. Moving to a newer one is the **Update** button on the row: it previews
+`unpin(spec)`, and when the branch now holds a different commit it opens this same dialog
+with `replaces` set. The install goes through `installPlugin` again with the old spec named,
+which deactivates it, drops it from the list and drops its stored copy, because the two
+commits are different specs as far as everything else here is concerned. The ticks start
+from the old install's own settings.
+
+A manifest that could not be fetched or parsed (`PluginPreview.problem`) stops the add:
+the Manage Plugins field says so, with the address that refused underneath, and if the
+dialog is reached with one anyway it says the same and disables Add. An unusable *spec*
+fails earlier still, before anything is fetched. A manifest asking for a newer `api` than
+the host provides is flagged on the dialog (`needsApi`) rather than only failing on load,
+and `pinProblem` says why there is no pin (not a GitHub plugin, or GitHub did not answer).
+
+### Loading from a copy in the browser
+
+`PluginInstall.local` means "prefer the copy". `loadDepsFor` in `host.ts` decides what one
+activation uses:
+
+- no copy yet: the ordinary deps wrapped in `recordingDeps`, which keeps every fetched
+  file. `storeSnapshot` writes them to `pluginCodeAtom` (`scmjs.plugin-code`, keyed by
+  spec) when the load succeeds. A snapshot over `MAX_SNAPSHOT` is skipped with a console
+  warning and the plugin stays remote.
+- a copy: `storedDeps`, which answers out of the snapshot and has no network path at all.
+  A URL the snapshot does not hold is an error naming it, so a plugin that grew a file
+  since the copy was made says so instead of quietly fetching it. `describePlugin` uses the
+  copy too, so the plugin's address is never touched while the option is on.
+
+`PluginRuntime.loadedFrom` records which of the two happened, and the Manage Plugins row
+badges it. `reloadPlugin` drops the copy first, so Reload is how both a pinned plugin and a
+stored one are moved forward. Turning the option off (`setInstalled`, the row's disk
+button) drops the copy as well: turning it on again fetches the plugin rather than reviving
+something months old.
 
 A plugin that is listed but **not running** — a default that starts off, or one you
 turned off — is still described in Manage Plugins: `describePlugin` does step 1–2 only
@@ -291,14 +357,14 @@ plugin's name prefixed.
 | File | |
 | --- | --- |
 | `src/plugins/api.ts` | The public types. Changing them is an API change: bump `PLUGIN_API_VERSION` for anything not backward compatible. |
-| `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the Jotai store and a `Contributions` bag that `dispose()` empties; `activatePlugin` / `deactivatePlugin` drive the lifecycle and write `pluginRuntimesAtom`. |
-| `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
+| `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the Jotai store and a `Contributions` bag that `dispose()` empties; `activatePlugin` / `deactivatePlugin` drive the lifecycle and write `pluginRuntimesAtom`; `inspectPlugin` / `installPlugin` are the confirm-then-add pair, and `rememberManifest` is the manifest cache both it and `describePlugin` write. |
+| `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline, and `previewPlugin` (`canonicalSpec` + the manifest, no code) behind the Add Plugin confirmation. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
 | `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
 | `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
 | `src/plugins/defaults.ts` | The plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, each with whether it starts on, plus any built-in), merged over the stored list by `effectiveInstalls`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its two siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`) and `pluginPanelsAtom` (the open `ui.panel`s). |
+| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its two siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`) and `pluginPanelsAtom` (the open `ui.panel`s). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
-| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
+| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, `ConfirmPluginDialog` (the Add Plugin confirmation), and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
 | `src/components/panels/PluginPanels.tsx` | The floating frames `ui.panel` mounts into, rendered inside the viewport: a draggable title strip, a close button, positions remembered per plugin and title for the session. |
 
 Contribution points read the registries: `MenuBar` merges `pluginMenuItemsAtom` into

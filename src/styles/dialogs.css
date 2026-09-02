@@ -928,7 +928,17 @@
   flex-direction: column;
   gap: 6px;
 }
+/* The example addresses under the Add field: one per line, indented, no bullets. */
+.plugin-examples {
+  margin: 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .plugin-add .hint .mono,
+.plugin-examples .mono,
 .plugin-list .plugin-row .mono {
   overflow-wrap: anywhere;
 }
@@ -941,6 +951,7 @@
 }
 .plugin-manage > .plugin-add,
 .plugin-manage > .pane-label,
+.plugin-manage > .hint,
 .plugin-manage > p {
   flex: none;
 }
@@ -981,8 +992,29 @@
 .plugin-list .plugin-row .plugin-icon {
   margin: 1px 2px 0 4px;
 }
-.plugin-list .plugin-row > .row {
+/* The row's buttons, with the "keep a copy" tick under them. */
+.plugin-row-actions {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+.plugin-row-actions > .row {
+  flex: none;
+}
+.plugin-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}
+.plugin-copy > svg {
+  flex: none;
+}
+.plugin-copy .check {
+  gap: 4px;
 }
 .badge.teal {
   color: var(--teal);
@@ -997,6 +1029,94 @@
 }
 .badge.error-text {
   color: #ffb3b0;
+}
+/* ── Add Plugin (the confirmation before anything runs) ── */
+.plugin-confirm {
+  gap: 12px;
+}
+.plugin-confirm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.plugin-confirm-name {
+  font-size: var(--fs-lg, 14px);
+  overflow-wrap: anywhere;
+}
+/* The warning is the point of the screen, so it is not a `hint`: it keeps the shape of a
+   caution notice (the one the script editor uses) and sits above the addresses it is about. */
+.plugin-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-2));
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.plugin-warning > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn);
+}
+.plugin-warning strong {
+  color: var(--warn);
+}
+/* The three choices being made on the Add screen; each tick carries its own explanation,
+   because "pin to this version" and "keep a copy" mean nothing without one. */
+.plugin-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--bg-2);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+}
+.plugin-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plugin-option .hint {
+  padding-left: 22px;
+}
+.plugin-option .check.disabled,
+.plugin-option input:disabled + span {
+  opacity: 0.55;
+}
+.plugin-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--bg-2);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  font-size: 11.5px;
+}
+.plugin-fact {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.plugin-fact .k {
+  color: var(--text-dim);
+}
+.plugin-fact .v,
+.plugin-fact .v .mono {
+  overflow-wrap: anywhere;
+}
+.plugin-fact a {
+  display: inline;
+  color: var(--teal);
+}
+.plugin-fact a svg {
+  vertical-align: -1px;
 }
 .plugin-dialog-body {
   display: flex;

@@ -12,7 +12,7 @@ import { ScriptEditorDialog } from "./ScriptEditorDialog";
 import { ExportStringsDialog, ExportTriggersDialog, ImportStringsDialog, ImportTriggersDialog } from "./ExchangeDialogs";
 import { StatisticsDialog } from "./StatisticsDialog";
 import { AboutDialog, FindDialog, PreferencesDialog, ShortcutsDialog, ValidateMapDialog } from "./MiscDialogs";
-import { PluginDialog, PluginsDialog } from "./PluginDialogs";
+import { ConfirmPluginDialog, PluginDialog, PluginsDialog } from "./PluginDialogs";
 
 export interface DialogProps {
   entry: DialogEntry;
@@ -58,6 +58,7 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   find: FindDialog,
   about: AboutDialog,
   plugins: PluginsDialog,
+  confirmPlugin: ConfirmPluginDialog,
   pluginDialog: PluginDialog,
 };
 

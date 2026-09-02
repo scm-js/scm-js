@@ -688,8 +688,11 @@ conveniences the AI plugin asked for: `document.history()` peeks at both stacks'
 problem in words.
 
 **AI** (`github.com/scm-js/plugin-ai`, not a default) and its server (`github.com/scm-js/ai-server`, Fastify +
-Caddy, one image on GHCR) are the LLM tooling: the server holds the Anthropic key, the prompt recipes, the access
-rules (tokens, per-IP and per-token budgets, bring-your-own-key) and never any game data; the plugin gathers facts
+Caddy + Postgres, one image on GHCR) are the LLM tooling: the server holds the Anthropic key, the prompt recipes, the
+access rules (tokens, per-IP and per-token budgets, bring-your-own-key, and *accounts*: a free trial session per
+browser, Discord sign-in through a provider interface, roles with a weekly allowance or `unlimited`, purchased credit
+through Stripe Checkout, an account page, and `/v1/admin/*` for the site — the plugin's default access mode talks to
+`api.scmjs.dev` and needs no setup) and never any game data; the plugin gathers facts
 (terrain vocabulary, statistics, a `renderImage` PNG, `api.script.declarations()`) and applies what comes back
 through the ordinary API — a map plan is a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's
 base geometry (`layout.ts` vendored there), triggers come back as script and go through `api.script.compile` →

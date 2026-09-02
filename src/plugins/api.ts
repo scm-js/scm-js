@@ -39,11 +39,20 @@ import type { ViewFlags } from "../atoms/editorAtoms";
 import type { ScriptBlock, ScriptState } from "../editor/script";
 import type { CompileResult } from "../script/compiler";
 import type { SimulationEvent } from "../script/simulate";
+import type {
+  ForcePatch, ForceView, MapVersionView, PlayerPatch, PlayerSlotView, TechPatch, TechView, UnitTypePatch, UnitTypeView, UpgradePatch, UpgradeView, WeaponView,
+} from "../editor/settings";
+import type { MapVersion } from "../formats/chk/scenario";
+import type { ResizeResult } from "../editor/resize";
+import type { SoundRow } from "../editor/sounds";
 
 export type {
   TriggerRecord, ConditionRecord, ActionRecord, ConditionDef, ActionDef, ArgDef, ArgKind, Choice, TriggerNames, TextTrigger,
   Issue, IssueLevel, IssueTarget, MapStatistics, FindKind, FindOptions, FindResult, StringUsage, PlacementVerdict, PlacementProblem,
   UnitsDat, WeaponsDat, UpgradesDat, TechdataDat, SpritesDat, FlingyDat, ImagesDat, Race, ViewFlags,
+};
+export type {
+  PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, ResizeResult, SoundRow,
 };
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode, RebuildResult, IsomReport };
 
@@ -114,6 +123,8 @@ export interface PluginApi {
   readonly apiVersion: number;
   readonly plugin: PluginInfo;
   readonly document: DocumentApi;
+  /** The settings dialogs' tables, read-only; `document.update` writes them. */
+  readonly settings: SettingsApi;
   readonly triggers: TriggersApi;
   readonly script: ScriptApi;
   readonly terrain: TerrainApi;
@@ -198,6 +209,17 @@ export interface DocumentHistory {
 }
 
 /** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
+export interface ResizeDocumentOptions {
+  width: number;
+  height: number;
+  /** 3 × 3 grid, row-major: 0 top-left … 4 centre … 8 bottom-right. Default 4. */
+  anchor?: number;
+  /** Terrain id (a `TerrainType.id`) for the new area; the tileset's default when omitted. */
+  terrainId?: number;
+  /** Pull locations that hang past the new edge back inside; default true. */
+  clampLocations?: boolean;
+}
+
 export interface NewDocumentOptions {
   width: number;
   height: number;
@@ -263,6 +285,14 @@ export interface DocumentApi {
    * a map, null.
    */
   renderImage(options?: Partial<MapImageOptions>): Promise<Blob | null>;
+  /**
+   * Scenario ▸ Resize / Crop Map: a transaction outside the undo model that drops both
+   * history stacks (as the dialog does). Content keeps its place relative to `anchor`
+   * (a 3 × 3 grid, row-major, 4 = centre, the default); the new ground is `terrainId`
+   * (the tileset's default when omitted); objects outside the new bounds are dropped,
+   * locations clamped unless `clampLocations` is false. Null with no map.
+   */
+  resize(options: ResizeDocumentOptions): ResizeResult | null;
   readonly extras: ExtrasApi;
   readonly sections: SectionsApi;
 }
@@ -500,8 +530,90 @@ export interface UpdateTransaction {
   readonly switches: SwitchesUpdate;
   /** SPRP: the scenario's name and description (`""` restores the file-name default). */
   properties(patch: { name?: string; description?: string }): void;
+  /** OWNR / SIDE / COLR / CRGB / FORC: the Player Settings and Player Colors dialogs. */
+  readonly players: PlayersUpdate;
+  /** FORC: the Force Settings dialog. */
+  readonly forces: ForcesUpdate;
+  /** UNIS / UNIx and PUNI: the Unit Settings dialog. */
+  readonly unitTypes: UnitTypesUpdate;
+  /** UPGS / UPGx and UPGR / PUPx: the Upgrade Settings dialog. */
+  readonly upgrades: UpgradesUpdate;
+  /** TECS / TECx and PTEC / PTEx: the Technology Settings dialog. */
+  readonly techs: TechsUpdate;
+  /** WAV and the archive's sound files: the Sound Editor. */
+  readonly sounds: SoundsUpdate;
+  /** Scenario ▸ Map Revision: VER / TYPE and, moving to or from Remastered, the string table's width. */
+  setVersion(version: MapVersion, extendedStrings?: boolean): void;
   /** A line for the status bar, appended to the label. */
   note(text: string): void;
+}
+
+export interface PlayersUpdate {
+  /** All 12 slots, 0-based, with the effective colour and force. */
+  list(): PlayerSlotView[];
+  /** Patch one slot; colours and forces apply to the eight playable slots only. */
+  set(slot: number, patch: PlayerPatch): boolean;
+}
+
+export interface ForcesUpdate {
+  list(): ForceView[];
+  set(force: number, patch: ForcePatch): boolean;
+}
+
+export interface UnitTypesUpdate {
+  /** The effective row for a units.dat id — the dat's numbers where the type is on "use default". */
+  get(unitId: number): UnitTypeView;
+  /**
+   * Patch one type. Setting any number turns "use default" off for it (seeding the untouched
+   * columns from the dat, as the dialog does); `useDefault: true` puts it back. Hit points are
+   * whole points. `name` is the custom name (`""` restores the default); `available` edits PUNI.
+   */
+  set(unitId: number, patch: UnitTypePatch): boolean;
+}
+
+export interface UpgradesUpdate {
+  get(upgradeId: number): UpgradeView;
+  set(upgradeId: number, patch: UpgradePatch): boolean;
+}
+
+export interface TechsUpdate {
+  get(techId: number): TechView;
+  set(techId: number, patch: TechPatch): boolean;
+}
+
+export interface SoundsUpdate {
+  /** The 512 WAV slots in use, joined with the archive (`present` says whether the file is there). */
+  list(): SoundRow[];
+  /**
+   * Put `path` (`staredit\wav\name.wav`, or just `name.wav`) in the first free slot — the
+   * existing slot when it is already listed — and, with `bytes`, store the file in the archive.
+   * Returns the slot, or -1 when all 512 are taken.
+   */
+  add(path: string, bytes?: Uint8Array): number;
+  /** Clear a slot; with `deleteFile`, remove the archive member too. */
+  remove(slot: number, deleteFile?: boolean): boolean;
+}
+
+/* ── Settings (read) ────────────────────────────────────── */
+
+/**
+ * What the settings dialogs show, read without a transaction: the same views
+ * `document.update`'s `tx.players` … `tx.techs` hand out. Every list is empty and every
+ * single read null when no map is open.
+ */
+export interface SettingsApi {
+  players(): PlayerSlotView[];
+  player(slot: number): PlayerSlotView | null;
+  forces(): ForceView[];
+  unitType(unitId: number): UnitTypeView | null;
+  /** Every type with a name, in id order. */
+  unitTypes(): UnitTypeView[];
+  upgrade(upgradeId: number): UpgradeView | null;
+  upgrades(): UpgradeView[];
+  tech(techId: number): TechView | null;
+  techs(): TechView[];
+  sounds(): SoundRow[];
+  version(): MapVersionView | null;
 }
 
 /* ── Triggers ───────────────────────────────────────────── */

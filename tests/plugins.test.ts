@@ -539,6 +539,119 @@ describe("plugin updates", () => {
   });
 });
 
+describe("plugin settings", () => {
+  const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("reads and patches players and forces as one transaction", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    expect(api.settings.players()).toHaveLength(12);
+    expect(api.settings.player(0)?.force).toBe(0);
+    expect(api.settings.player(9)?.color).toBeNull();
+    const result = api.document.update("players", (tx) => {
+      expect(tx.players.set(0, { type: 5, race: 2, color: 3, force: 1 })).toBe(true);
+      expect(tx.players.set(0, { type: 5 })).toBe(false); // already that
+      expect(tx.players.set(1, { rgb: [10, 20, 30] })).toBe(true);
+      expect(tx.forces.set(1, { name: "Attackers", allied: true, sharedVision: true, players: [2] })).toBe(true);
+      expect(tx.forces.set(1, { allied: true })).toBe(false);
+      expect(tx.players.list()[2].force).toBe(1);
+    });
+    expect(result.changed).toBe(true);
+    expect(result.sections.sort()).toEqual(["COLR", "CRGB", "FORC", "IOWN", "OWNR", "SIDE", "STR "]);
+    const p0 = api.settings.player(0)!;
+    expect([p0.type, p0.race, p0.color, p0.force, p0.forceName]).toEqual([5, 2, 3, 1, "Attackers"]);
+    expect(api.settings.player(1)?.rgb).toEqual([10, 20, 30]);
+    const f1 = api.settings.forces()[1];
+    expect(f1.allied && f1.sharedVision && !f1.alliedVictory).toBe(true);
+    expect(f1.players.sort()).toEqual([0, 2]);
+    expect(scn.dirty.has("FORC")).toBe(true);
+    // Back to the palette colour on every slot drops CRGB again.
+    api.document.update("palette", (tx) => { tx.players.set(1, { rgb: null }); });
+    expect(scn.playerRgb).toBeNull();
+    expect(api.settings.player(1)?.rgb).toBeNull();
+  });
+
+  it("patches unit types, upgrades and technologies, seeding untouched rows and marking the revision's sections", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    const before = api.settings.unitType(0)!;
+    expect(before.useDefault).toBe(true);
+    expect(before.name).toBe("Terran Marine");
+    const result = api.document.update("marine", (tx) => {
+      expect(tx.unitTypes.set(0, { hitPoints: 55, name: "Grunt", available: [{ player: 0, value: false }, { player: "default", value: true }] })).toBe(true);
+      expect(tx.unitTypes.get(0).useDefault).toBe(false);
+      expect(tx.upgrades.set(0, { mineralCost: 150, levels: [{ player: 1, start: 1, max: 2 }, { player: "default", max: 3 }] })).toBe(true);
+      expect(tx.techs.set(0, { energyCost: 75, state: [{ player: 0, researched: true }] })).toBe(true);
+      expect(tx.techs.set(0, { energyCost: 75 })).toBe(false);
+    });
+    expect(result.changed).toBe(true);
+    // A new map is Brood War: the x layouts are what get written.
+    expect(result.sections.sort()).toEqual(["PTEx", "PUNI", "PUPx", "STR ", "TECx", "UNIx", "UPGx"]);
+    const marine = api.settings.unitType(0)!;
+    expect(marine.hitPoints).toBe(55);
+    expect(marine.name).toBe("Grunt");
+    expect(marine.customName).toBe("Grunt");
+    expect(marine.availability.players[0]).toBe(false);
+    expect(marine.availability.players[1]).toBe("default");
+    expect(scn.unitSettings!.hitPoints[0]).toBe(55 * 256);
+    const armor = api.settings.upgrade(0)!;
+    expect(armor.useDefault).toBe(false);
+    expect(armor.mineralCost).toBe(150);
+    expect(armor.levels.players[1]).toEqual({ start: 1, max: 2, usesDefault: false });
+    expect(armor.levels.players[0].usesDefault).toBe(true);
+    expect(armor.levels.defaultMax).toBe(3);
+    const stim = api.settings.tech(0)!;
+    expect(stim.energyCost).toBe(75);
+    expect(stim.state.players[0].researched).toBe(true);
+    expect(stim.state.players[1].usesDefault).toBe(true);
+    // Back on the defaults: the stored row stays, the flag flips.
+    api.document.update("default", (tx) => { expect(tx.unitTypes.set(0, { useDefault: true })).toBe(true); });
+    expect(api.settings.unitType(0)!.useDefault).toBe(true);
+    expect(api.settings.unitTypes().length).toBeGreaterThan(200);
+    expect(api.settings.upgrades().every((u) => u.name)).toBe(true);
+    expect(api.settings.techs().every((t) => t.name)).toBe(true);
+  });
+
+  it("adds and removes sounds with their archive members, and changes the map version", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    expect(api.settings.version()?.version).toBe("broodwar");
+    const result = api.document.update("sounds", (tx) => {
+      expect(tx.sounds.add("alarm.wav", new Uint8Array([1, 2, 3]))).toBe(0);
+      expect(tx.sounds.add("alarm.wav")).toBe(0); // already listed
+      expect(tx.sounds.add("staredit\\wav\\second.wav")).toBe(1);
+      tx.setVersion("remastered");
+    });
+    expect(result.sections.sort()).toEqual(["STR ", "STRx", "VER ", "WAV "]);
+    const sounds = api.settings.sounds();
+    expect(sounds.map((s) => s.path)).toEqual(["staredit\\wav\\alarm.wav", "staredit\\wav\\second.wav"]);
+    expect(sounds[0].present).toBe(true);
+    expect(sounds[1].present).toBe(false);
+    expect(api.document.extras.list()).toContain("staredit\\wav\\alarm.wav");
+    expect(api.settings.version()).toMatchObject({ version: "remastered", extendedStrings: true, fileVersion: 206 });
+    expect(scn.strings.extended).toBe(true);
+    api.document.update("drop", (tx) => { expect(tx.sounds.remove(0, true)).toBe(true); expect(tx.sounds.remove(0)).toBe(false); });
+    expect(api.settings.sounds().map((s) => s.slot)).toEqual([1]);
+    expect(api.document.extras.list()).not.toContain("staredit\\wav\\alarm.wav");
+    expect(api.document.update("same", (tx) => { tx.setVersion("remastered"); }).changed).toBe(false);
+  });
+
+  it("resizes the map as a transaction that drops the history", () => {
+    const { store, scn } = blankStore(8, 6);
+    const api = apiOf(store);
+    api.document.edit("unit", (tx) => { tx.addUnits([tx.makeUnit(0, 0, 7 * 32 + 16, 5 * 32 + 16)]); });
+    expect(api.document.history().undoDepth).toBe(1);
+    const r = api.document.resize({ width: 6, height: 6, anchor: 0 });
+    expect(r).toMatchObject({ dx: 0, dy: 0, unitsDropped: 1 });
+    expect(scn.width).toBe(6);
+    expect(api.document.info()?.width).toBe(6);
+    expect(api.document.history()).toEqual({ undo: null, redo: null, undoDepth: 0, redoDepth: 0 });
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.resize({ width: 4, height: 4 })).toBeNull();
+    expect(api.settings.version()).not.toBeNull();
+  });
+});
+
 describe("plugin triggers", () => {
   const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
 

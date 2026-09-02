@@ -638,7 +638,13 @@ them: `document.edit` (terrain and objects, one `HistoryEntry`), **`document.upd
 while a copy of the string table is held, from arising — and the commit runs *both*
 `commitTriggersAtom` and `commitSettingsAtom` and re-syncs `mapNameAtom` / `mapDescriptionAtom`;
 `UpdateResult.sections` is the sections actually touched, so `changed` is false on a no-op), and
-`document.sections` (raw bytes, re-parse, history dropped). Around them: `api.triggers`
+`document.sections` (raw bytes, re-parse, history dropped). `document.update` also carries the Scenario menu's
+dialogs — `tx.players` / `tx.forces` (OWNR+IOWN, SIDE, COLR, CRGB, FORC), `tx.unitTypes` (UNIS/UNIx + PUNI),
+`tx.upgrades`, `tx.techs`, `tx.sounds` (WAV + archive members), `tx.setVersion` — as *views* and *patches* in
+`editor/settings.ts` (`playerSlotViews` / `patchPlayer`, `unitTypeView` / `patchUnitType`, …: effective numbers with
+the dat defaults filled in, hit points in whole points, a patch answers with the sections it changed so `runUpdate`'s
+`tracked` can report them even on a fresh map where everything is already dirty), and `api.settings` reads the same
+views without a transaction; `document.resize` is `resizeDocumentAtom` (history dropped). Around them: `api.triggers`
 (read TRIG/MBRF plus `triggerDefs.ts`, the text printer/parser and the `newTrigger` /
 `isPreserved` helpers — everything a trigger editor needs that is not a write), `api.query`
 (hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,

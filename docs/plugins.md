@@ -294,7 +294,7 @@ differ in what they cost:
 | | what it covers | undo |
 | --- | --- | --- |
 | `document.edit(label, build)` | terrain and objects — tiles, ISOM, units, sprites, doodads, locations, fog | one history entry, like a brush stroke |
-| `document.update(label, build)` | the tables and settings — triggers, briefing, the string table, switch names, the scenario's name and description | none: a settings-dialog transaction, as in StarEdit |
+| `document.update(label, build)` | the tables and settings — triggers, briefing, the string table, switch names, the scenario's name and description, players, forces and colours, unit / upgrade / technology settings, sounds, the map revision | none: a settings-dialog transaction, as in StarEdit |
 | `document.sections.*` | the file's own bytes, any section, modelled or not | none, and the history is dropped (as Resize) |
 
 They are the editor's own three: a stroke, a dialog's OK, and a raw file edit. Both
@@ -309,13 +309,14 @@ ones' results, and both commit once at the end.
 | `info()` | `{ name, description, width, height, tileset, era, version, fileName, modified }`. |
 | `scenario()` | The live `Scenario` object, for **reading**. Mutating it directly bypasses undo and dirty tracking. |
 | `edit(label, build)` | Run `build(tx)` and record what it did as one undo entry named `label`. Returns an `EditResult` with counts per list. |
-| `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties. Not in the undo model. Returns an `UpdateResult`. |
+| `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties, and everything the Scenario menu's dialogs write (see `UpdateTransaction`). Not in the undo model. Returns an `UpdateResult`. |
 | `undo()` / `redo()` | The Edit menu's. |
 | `history()` | `{ undo, redo, undoDepth, redoDepth }`: the labels the Edit menu shows and how deep each stack is, without moving anything — so a plugin can tell whether its own edit is still the top entry before undoing it. |
 | `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
 | `create({ width, height, tileset, name?, description?, terrainId? })` | A blank map in place of the current one, the way File ▸ New makes one — flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every section a fresh map needs — through the same unsaved-changes gate as `open`. Resolves true once the new map is the open document, false when the user kept the current one. |
 | `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
 | `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
+| `resize({ width, height, anchor?, terrainId?, clampLocations? })` | Scenario ▸ Resize / Crop Map: content keeps its place relative to the anchor (a 3 × 3 grid, 4 = centre), the new ground is `terrainId` or the tileset's default, objects outside the new bounds are dropped and locations clamped. A transaction outside the undo model that **drops both history stacks**, as the dialog does. Returns the `ResizeResult` (what was dropped), null with no map. |
 | `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
 | `sections` | The scenario at the byte level — see the next section. |
 
@@ -409,6 +410,20 @@ so `changed` is false when every operation was a no-op.
 | `tx.properties({ name?, description? })` | SPRP. `""` restores the file-name default. |
 | `tx.note(text)` | A line for the status bar. |
 
+| Settings | |
+| --- | --- |
+| `tx.players` | `list()` — the 12 slots as `PlayerSlotView`s (0-based `slot`, `type` / `typeName`, `race` / `raceName`, and for the eight playable slots `color` (COLR index), `colorHex`, `rgb` (the CRGB custom colour in effect, else null), `force` (0-based) / `forceName`) — and `set(slot, { type?, race?, color?, rgb?, force? })`. `rgb: [r, g, b]` sets a Remastered custom colour, `rgb: null` puts the slot back on its palette colour; CRGB is dropped again when every slot is. OWNR is always written with IOWN. |
+| `tx.forces` | `list()` — four `ForceView`s (`name`, `flags` and the `allied` / `alliedVictory` / `sharedVision` / `randomStart` booleans, `players`: the 0-based slots in the force) — and `set(force, { name?, allied?, alliedVictory?, sharedVision?, randomStart?, flags?, players? })`; `players` moves those slots into the force. |
+| `tx.unitTypes` | `get(unitId)` — a `UnitTypeView` with the *effective* numbers (units.dat's where the type is on "use default"; hit points in whole points), the type's weapons with their effective damage, `defaults` (the dat's numbers, null without the game data) and `availability` (PUNI: `defaultAvailable` and per player `true` / `false` / `"default"`) — and `set(unitId, patch)`. Setting any number turns "use default" off for the type and seeds its untouched columns from the dat, as the dialog does; `useDefault: true` puts it back; `name` is the custom name (`""` restores the default, the string is interned); `weapons: [{ id, damage?, bonus? }]`; `available: [{ player: 0-based or "default", value: true / false / "default" }]`. Which of UNIS / UNIx is written follows the file's revision. |
+| `tx.upgrades` | `get(upgradeId)` — an `UpgradeView` (effective costs and factors, `defaults`, `levels`: the default start and cap and each player's effective `{ start, max, usesDefault }`) — and `set(upgradeId, { useDefault?, mineralCost?, mineralFactor?, gasCost?, gasFactor?, timeCost?, timeFactor?, levels? })` with `levels: [{ player: 0-based or "default", start?, max?, useDefault? }]`. |
+| `tx.techs` | `get(techId)` — a `TechView` (effective costs, `defaults`, `state`: the default column and each player's effective `{ available, researched, usesDefault }`) — and `set(techId, { useDefault?, mineralCost?, gasCost?, researchTime?, energyCost?, state? })` with `state: [{ player, available?, researched?, useDefault? }]`. |
+| `tx.sounds` | `list()` — the WAV slots in use as `SoundRow`s (`slot`, `path`, `present`, `size`, `usedBy`) — `add(path, bytes?)` (the first free slot, or the slot the path already has; with `bytes` the file goes into the archive under `staredit\wav\`) and `remove(slot, deleteFile?)`. |
+| `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"` — VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered. |
+
+Ids are the game's: units.dat ids for `unitTypes`, upgrades.dat / techdata.dat ids for
+the other two (`api.names.units()` / `upgrades()` / `techs()` list them with their
+names). Players are 0-based here, as in the records; the chrome shows `slot + 1`.
+
 ```js
 api.document.update("Add a countdown", (tx) => {
   const text = tx.strings.intern("30 seconds remaining");
@@ -423,6 +438,14 @@ api.document.update("Add a countdown", (tx) => {
 
 There is no undo entry, so a plugin that wants one keeps its own copy of what it replaced
 (`api.triggers.list()` before, `tx.triggers.set(...)` to put it back).
+
+### `api.settings`
+
+The same views without a transaction, for reading: `players()` / `player(slot)`,
+`forces()`, `unitType(id)` / `unitTypes()` (every type with a name), `upgrade(id)` /
+`upgrades()`, `tech(id)` / `techs()`, `sounds()`, `version()` (`{ version, label,
+fileVersion, type, extendedStrings, extension }`). Empty lists and nulls with no map.
+Writing goes through `document.update`.
 
 ### `api.triggers`
 

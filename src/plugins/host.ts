@@ -16,7 +16,7 @@ import {
 } from "../atoms/editorAtoms";
 import {
   archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, redoStackAtom,
-  replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
+  replaceScenarioAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -49,7 +49,12 @@ import {
 } from "../editor/triggers";
 import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
 import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
-import { internString } from "../editor/settings";
+import {
+  changeMapVersion, forceViews, internString, mapVersionView, patchForce, patchPlayer, patchTech, patchUnitType, patchUpgrade, playerSlotViews, techView, unitTypeView, upgradeView,
+} from "../editor/settings";
+import { addSound, applySounds, findMember, readWavs, removeSound, soundList, wavMemberName } from "../editor/sounds";
+import { TECHS_BW, UNIT_TYPES, UPGRADES_BW } from "../formats/chk/sections/settings";
+import { isUnusedTech, isUnusedUpgrade, UNIT_NAMES as UNIT_NAME_TABLE } from "../data/units";
 import { validateScenario } from "../editor/validate";
 import { mapStatistics } from "../editor/statistics";
 import { findInScenario } from "../editor/find";
@@ -86,7 +91,8 @@ import {
   type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
-  type ContextMenuContext, type NewDocumentOptions, type ScriptApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
+  type ContextMenuContext, type NewDocumentOptions, type ScriptApi, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
+  type UpdateTransaction, type ViewApi,
 } from "./api";
 import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
@@ -619,6 +625,14 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     };
   };
 
+  /** Run a patcher that answers with the sections it changed; record them. */
+  const tracked = (run: () => string[]): boolean => {
+    const changed = withStrings(run);
+    for (const name of changed) touch(name);
+    return changed.length > 0;
+  };
+  const assets = () => peekUnitAssets();
+
   const tx: UpdateTransaction = {
     scenario: scn,
     triggers: listUpdate(false),
@@ -652,6 +666,59 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
         if (patch.name !== undefined && patch.name !== (scenarioName(scn) ?? "")) { setScenarioName(scn, patch.name); touch("SPRP"); }
         if (patch.description !== undefined && patch.description !== (scenarioDescription(scn) ?? "")) { setScenarioDescription(scn, patch.description); touch("SPRP"); }
       });
+    },
+
+    players: {
+      list: () => playerSlotViews(scn),
+      set: (slot, patch) => tracked(() => patchPlayer(scn, slot, patch)),
+    },
+    forces: {
+      list: () => forceViews(scn),
+      set: (force, patch) => tracked(() => patchForce(scn, force, patch)),
+    },
+    unitTypes: {
+      get: (unitId) => unitTypeView(scn, unitId, assets()?.units ?? null, assets()?.weapons ?? null),
+      set: (unitId, patch) => tracked(() => patchUnitType(scn, unitId, patch, assets()?.units ?? null, assets()?.weapons ?? null)),
+    },
+    upgrades: {
+      get: (id) => upgradeView(scn, id, assets()?.upgrades ?? null),
+      set: (id, patch) => tracked(() => patchUpgrade(scn, id, patch, assets()?.upgrades ?? null)),
+    },
+    techs: {
+      get: (id) => techView(scn, id, assets()?.techs ?? null),
+      set: (id, patch) => tracked(() => patchTech(scn, id, patch, assets()?.techs ?? null)),
+    },
+    sounds: {
+      list: () => soundList(scn, store.get(archiveExtrasAtom)),
+      add: (path, bytes) => {
+        const member = path.includes("\\") || path.includes("/") ? path.replace(/\//g, "\\") : wavMemberName(path);
+        const wavs = readWavs(scn);
+        const slot = withStrings(() => addSound(scn, wavs, member));
+        if (slot < 0) { notes.push("all 512 sound slots are taken"); return -1; }
+        tracked(() => (applySounds(scn, wavs) ? ["WAV "] : []));
+        if (bytes) {
+          const extras = new Map(store.get(archiveExtrasAtom));
+          extras.set(findMember(extras, member) ?? member, bytes);
+          store.set(archiveExtrasAtom, extras);
+          touch("WAV ");
+        }
+        return slot;
+      },
+      remove: (slot, deleteFile = false) => {
+        const wavs = readWavs(scn);
+        if (slot < 0 || slot >= wavs.length || wavs[slot] === 0) return false;
+        const path = getString(scn.strings, wavs[slot]) ?? "";
+        const changed = tracked(() => (applySounds(scn, removeSound(wavs, slot)) ? ["WAV "] : []));
+        if (deleteFile && path) {
+          const extras = new Map(store.get(archiveExtrasAtom));
+          const member = findMember(extras, path);
+          if (member) { extras.delete(member); store.set(archiveExtrasAtom, extras); }
+        }
+        return changed;
+      },
+    },
+    setVersion: (version, extendedStrings) => {
+      tracked(() => changeMapVersion(scn, version, extendedStrings));
     },
 
     note: (text) => { notes.push(text); },
@@ -984,6 +1051,34 @@ export function documentEvent(store: Store): DocumentEvent {
   return { reason, fileName: scenario ? store.get(mapFilePathAtom) : null };
 }
 
+/** `api.settings`: the dialogs' tables without a transaction. */
+export function settingsApi(store: Store): SettingsApi {
+  const scenario = () => store.get(scenarioAtom);
+  const units = () => peekUnitAssets()?.units ?? null;
+  const weapons = () => peekUnitAssets()?.weapons ?? null;
+  const upgrades = () => peekUnitAssets()?.upgrades ?? null;
+  const techs = () => peekUnitAssets()?.techs ?? null;
+  return {
+    players: () => { const scn = scenario(); return scn ? playerSlotViews(scn) : []; },
+    player: (slot) => { const scn = scenario(); return scn ? playerSlotViews(scn)[slot] ?? null : null; },
+    forces: () => { const scn = scenario(); return scn ? forceViews(scn) : []; },
+    unitType: (id) => { const scn = scenario(); return scn && id >= 0 && id < UNIT_TYPES ? unitTypeView(scn, id, units(), weapons()) : null; },
+    unitTypes: () => {
+      const scn = scenario();
+      if (!scn) return [];
+      const out: UnitTypeView[] = [];
+      for (let id = 0; id < UNIT_TYPES; id++) if (UNIT_NAME_TABLE[id]) out.push(unitTypeView(scn, id, units(), weapons()));
+      return out;
+    },
+    upgrade: (id) => { const scn = scenario(); return scn && id >= 0 && id < UPGRADES_BW ? upgradeView(scn, id, upgrades()) : null; },
+    upgrades: () => { const scn = scenario(); return scn ? Array.from({ length: UPGRADES_BW }, (_, id) => id).filter((id) => !isUnusedUpgrade(id)).map((id) => upgradeView(scn, id, upgrades())) : []; },
+    tech: (id) => { const scn = scenario(); return scn && id >= 0 && id < TECHS_BW ? techView(scn, id, techs()) : null; },
+    techs: () => { const scn = scenario(); return scn ? Array.from({ length: TECHS_BW }, (_, id) => id).filter((id) => !isUnusedTech(id)).map((id) => techView(scn, id, techs())) : []; },
+    sounds: () => { const scn = scenario(); return scn ? soundList(scn, store.get(archiveExtrasAtom)) : []; },
+    version: () => { const scn = scenario(); return scn ? mapVersionView(scn) : null; },
+  };
+}
+
 function doodadInfoOf(def: DoodadDef): DoodadInfo {
   return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height };
 }
@@ -1000,6 +1095,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
   const api: PluginApi = {
     apiVersion: PLUGIN_API_VERSION,
     plugin: info,
+
+    settings: settingsApi(store),
 
     document: {
       isOpen: () => scenario() !== null,
@@ -1029,6 +1126,14 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       open: (source, fileName) => openDocument(store, source, fileName),
       create: (options) => createDocument(store, options),
+      resize: (options) => {
+        const scn = scenario();
+        if (!scn) return null;
+        const width = Math.max(1, Math.min(256, Math.round(options.width)));
+        const height = Math.max(1, Math.min(256, Math.round(options.height)));
+        const anchor = Math.max(0, Math.min(8, Math.round(options.anchor ?? 4)));
+        return store.set(resizeDocumentAtom, { width, height, anchor, terrainId: options.terrainId, clampLocations: options.clampLocations ?? true });
+      },
       export: async (options = {}) => {
         const scn = scenario();
         if (!scn) return null;

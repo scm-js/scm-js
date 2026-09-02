@@ -8,6 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type { ContextItemSpec, ContextSurface, MenuItemSpec, MenuPath, PluginIcon, PluginManifest } from "../plugins/api";
+import type { Rect } from "../editor/terrain";
 
 /* ── Installed (persisted) ──────────────────────────────── */
 
@@ -117,3 +118,32 @@ export function comboOfEvent(e: KeyboardEvent): string {
   parts.push(key);
   return parts.join("+");
 }
+
+/* ── Interactive picks on the map ───────────────────────── */
+
+export type MapPickKind = "area" | "tile";
+
+/**
+ * A plugin waiting for the user to drag a rectangle (or click a tile) on the map —
+ * `api.ui.pickArea` / `api.ui.pickTile`. While set, the viewport shows a crosshair,
+ * draws the marquee and takes the gesture ahead of every layer's own tools; Esc or a
+ * right-click cancels. `finish` is called exactly once (the host guards it) and clears
+ * the atom itself.
+ */
+export interface MapPickRequest {
+  key: number;
+  kind: MapPickKind;
+  /** What the HUD shows while picking. */
+  prompt: string;
+  pluginId: string;
+  finish: (result: Rect | { x: number; y: number } | null) => void;
+}
+
+export const mapPickAtom = atom<MapPickRequest | null>(null);
+
+/** Cancel the pick in progress, if any (Esc, right-click, a document change). */
+export const cancelMapPickAtom = atom(null, (get) => {
+  const pick = get(mapPickAtom);
+  if (pick) pick.finish(null);
+  return pick !== null;
+});

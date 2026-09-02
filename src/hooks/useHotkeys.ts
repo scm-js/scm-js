@@ -9,7 +9,7 @@ import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, undoAtom,
 } from "../atoms/documentAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
-import { comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
+import { cancelMapPickAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
@@ -45,6 +45,7 @@ export function useHotkeys() {
   const { save } = useMapFileActions();
   const clipTools = useClipboardTools();
   const pluginHotkeys = useAtomValue(pluginHotkeysAtom);
+  const cancelPick = useSetAtom(cancelMapPickAtom);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -129,6 +130,8 @@ export function useHotkeys() {
         return;
       }
       if (e.key === "Escape") {
+        // A plugin's pick on the map goes first: Escape cancels it and nothing else.
+        if (cancelPick()) { e.preventDefault(); return; }
         // First Escape leaves placement mode, the next clears the selection.
         if (activeLayer === "clipboard") {
           if (!clipTools.stopPasting()) clipTools.clearSelection();
@@ -167,5 +170,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick]);
 }

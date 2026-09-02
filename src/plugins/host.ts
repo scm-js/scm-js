@@ -18,8 +18,8 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  installedPluginsAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom,
-  type PluginInstall, type PluginRuntime,
+  installedPluginsAtom, mapPickAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom,
+  type MapPickKind, type PluginInstall, type PluginRuntime,
 } from "../atoms/pluginAtoms";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { scenarioDescription, scenarioName, tilesetIndex } from "../formats/chk/scenario";
@@ -38,9 +38,11 @@ import { applyDoodadChanges, placeDoodad, removeDoodads, type DoodadChange } fro
 import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import { markDirty } from "../formats/chk/scenario";
-import { pluginIdOf, PLUGIN_API_VERSION, type Cells, type Deactivate, type DialogHandle, type EditResult, type EditTransaction, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule } from "./api";
+import { pluginIdOf, PLUGIN_API_VERSION, type Cells, type Deactivate, type DialogHandle, type EditResult, type EditTransaction, type PickOptions, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule } from "./api";
 import { loadPlugin, type LoaderDeps } from "./loader";
+import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
+import { defaultPluginSpecs } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
 
 export type Store = ReturnType<typeof createStore>;
@@ -247,6 +249,40 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   return result;
 }
 
+/* ── Picking on the map ─────────────────────────────────── */
+
+const PICK_PROMPTS: Record<MapPickKind, string> = { area: "Drag a rectangle on the map", tile: "Click a tile on the map" };
+
+/**
+ * Put a `MapPickRequest` in front of the viewport and resolve when it (or Esc, a
+ * right-click, a document change, the plugin's deactivation, or a newer pick) finishes it.
+ * The request's `finish` clears the atom itself, so the viewport only ever calls it.
+ */
+export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, kind: MapPickKind, options: PickOptions = {}): Promise<Rect | { x: number; y: number } | null> {
+  return new Promise((resolve) => {
+    store.get(mapPickAtom)?.finish(null);
+    if (!store.get(scenarioAtom)) { resolve(null); return; }
+    const key = nextContributionKey();
+    const prompt = options.prompt?.trim() || PICK_PROMPTS[kind];
+    let done = false;
+    let unsubDoc = () => {};
+    let disposable = { dispose: () => {} };
+    const finish = (result: Rect | { x: number; y: number } | null) => {
+      if (done) return;
+      done = true;
+      unsubDoc();
+      disposable.dispose();
+      if (store.get(mapPickAtom)?.key === key) store.set(mapPickAtom, null);
+      store.set(statusMessageAtom, result ? `${prompt} — done` : `${prompt} — cancelled`);
+      resolve(result);
+    };
+    unsubDoc = store.sub(scenarioAtom, () => finish(null));
+    disposable = bag.add(() => finish(null));
+    store.set(mapPickAtom, { key, kind, prompt, pluginId: info.id, finish });
+    store.set(statusMessageAtom, `${prompt} — Esc or right-click to cancel`);
+  });
+}
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -335,6 +371,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return n === 0 ? null : (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n);
       },
+      heightOf: (terrainId) => terrainTypes(loaded()?.tileset ?? null, names()).find((t) => t.id === terrainId)?.height ?? null,
       diamondAt,
       isDiamond,
       diamondsIn: (rect) => {
@@ -389,11 +426,14 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       status: (text) => store.set(statusMessageAtom, text),
       dialog: (spec) => {
         let key = -1;
+        // The frame reads the title through this box, so `setTitle` reaches it without touching the spec.
+        const title = { value: spec.title, listeners: new Set<() => void>() };
         const handle: DialogHandle = {
           close: () => { if (key >= 0) store.set(closeDialogAtom, key); },
           isOpen: () => store.get(dialogStackAtom).some((d) => d.key === key),
+          setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
         };
-        key = store.set(openDialogAtom, "pluginDialog", { spec, handle, plugin: info });
+        key = store.set(openDialogAtom, "pluginDialog", { spec, handle, plugin: info, title });
         bag.add(() => { if (handle.isOpen()) handle.close(); });
         return handle;
       },
@@ -407,6 +447,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         input.addEventListener("cancel", () => resolve([]), { once: true });
         input.click();
       }),
+      pickArea: (options) => pickOnMap(store, bag, info, "area", options) as Promise<Rect | null>,
+      pickTile: (options) => pickOnMap(store, bag, info, "tile", options) as Promise<{ x: number; y: number } | null>,
+      loadImage,
+      readClipboardImage,
       open: (dialog, payload) => { store.set(openDialogAtom, dialog, payload); },
       repaint: () => store.set(terrainRevisionAtom, store.get(terrainRevisionAtom) + 1),
     },
@@ -590,15 +634,15 @@ export function activePluginSpecs(store: Store): string[] {
 export const builtinSpec = (name: string) => `builtin:${name}`;
 
 /**
- * The plugins to run: every built-in (unless the stored list says it is off), then the
- * remote ones the user added, in the order they were added.
+ * The plugins to run: every default (unless the stored list says it is off), then the
+ * ones the user added, in the order they were added. A default is a spec like any
+ * other — the remote ones are fetched over the network on every start — so the only
+ * thing being a default buys it is a place in the list and a Remove button it does not
+ * get; see `defaults.ts`.
  */
-export function effectiveInstalls(stored: readonly PluginInstall[], builtins: readonly string[] = Object.keys(BUILTIN_PLUGINS)): PluginInstall[] {
-  const out: PluginInstall[] = builtins.map((name) => {
-    const spec = builtinSpec(name);
-    return { spec, enabled: stored.find((p) => p.spec === spec)?.enabled ?? true };
-  });
-  for (const p of stored) if (!p.spec.startsWith("builtin:")) out.push(p);
+export function effectiveInstalls(stored: readonly PluginInstall[], defaults: readonly string[] = defaultPluginSpecs()): PluginInstall[] {
+  const out: PluginInstall[] = defaults.map((spec) => ({ spec, enabled: stored.find((p) => p.spec === spec)?.enabled ?? true }));
+  for (const p of stored) if (!defaults.includes(p.spec)) out.push(p);
   return out;
 }
 

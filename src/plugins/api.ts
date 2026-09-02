@@ -24,8 +24,14 @@ import type { DialogId } from "../atoms/uiAtoms";
 
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, EditorLayer, TerrainMode, DialogId };
 
-/** Bumped when the API changes incompatibly; a manifest may say which version it was written against. */
-export const PLUGIN_API_VERSION = 1;
+/**
+ * Bumped when the API changes incompatibly — or grows, since a manifest that says `"api": 2`
+ * is refused by a host that only provides 1, which is how a plugin can rely on a newer
+ * method. History: 1 — the first release; 2 — `ui.pickArea` / `ui.pickTile`,
+ * `ui.loadImage` / `ui.readClipboardImage`, `DialogSpec.onPaste` / `onDrop`,
+ * `DialogHandle.setTitle`, `terrain.heightOf`.
+ */
+export const PLUGIN_API_VERSION = 2;
 
 export interface Disposable {
   dispose(): void;
@@ -226,6 +232,8 @@ export interface TerrainApi {
   color(tileId: number): number | null;
   /** The mean colour of a terrain's common flat variations, packed `0xRRGGBB`. */
   terrainColor(terrainId: number): number | null;
+  /** A flat terrain's height level (0 low, 1 high, 2 higher), or null when it is not one. */
+  heightOf(terrainId: number): 0 | 1 | 2 | null;
   /** The lattice diamond under a map pixel. */
   diamondAt(px: number, py: number): Diamond;
   isDiamond(d: Diamond): boolean;
@@ -275,6 +283,12 @@ export interface DialogButton {
   closes?: boolean;
 }
 
+/** What a paste or a drop brought into a dialog. */
+export interface DialogTransfer {
+  files: File[];
+  text: string;
+}
+
 export interface DialogSpec {
   title: string;
   size?: DialogSize;
@@ -283,12 +297,27 @@ export interface DialogSpec {
   mount(body: HTMLElement, dialog: DialogHandle): void | (() => void);
   /** Footer buttons, left to right; a single Close when omitted. */
   buttons?: DialogButton[];
+  /**
+   * Ctrl+V anywhere in the dialog (while it is the topmost one). Files come from the
+   * clipboard's items — a screenshot pastes as one `image/png` file — and `text` is the
+   * plain-text part, so a copied image URL arrives here too.
+   */
+  onPaste?: (transfer: DialogTransfer, dialog: DialogHandle) => void;
+  /** Something dropped onto the dialog body. */
+  onDrop?: (transfer: DialogTransfer, dialog: DialogHandle) => void;
 }
 
 export interface DialogHandle {
   close(): void;
   /** Whether the dialog is still on screen. */
   isOpen(): boolean;
+  /** Change the title strip's text. */
+  setTitle(title: string): void;
+}
+
+export interface PickOptions {
+  /** Shown in the viewport's HUD while the user picks; also the status line. */
+  prompt?: string;
 }
 
 export interface PickFilesOptions {
@@ -302,6 +331,25 @@ export interface UiApi {
   dialog(spec: DialogSpec): DialogHandle;
   /** The browser's file picker; resolves with an empty list on cancel. */
   pickFiles(options?: PickFilesOptions): Promise<File[]>;
+  /**
+   * Let the user drag a rectangle on the map. The viewport switches to a crosshair, draws
+   * the marquee and takes the gesture ahead of the active layer's tools; resolves with
+   * the tile rect (exclusive `x1` / `y1`), or null when the user pressed Esc or
+   * right-clicked, no map is open, the map was replaced, or the plugin was disabled.
+   * Only one pick runs at a time — a new one cancels the previous. A modal dialog
+   * covers the map, so close yours first and reopen it with the result.
+   */
+  pickArea(options?: PickOptions): Promise<Rect | null>;
+  /** As `pickArea`, for a single click: the tile under it. */
+  pickTile(options?: PickOptions): Promise<{ x: number; y: number } | null>;
+  /**
+   * Decode a picture: a `File` / `Blob`, a `data:` URL, or an `http(s)` URL (fetched, and
+   * when the site refuses cross-origin reads, loaded through an `<img>` with
+   * `crossOrigin` — a site that allows neither rejects with a message saying so).
+   */
+  loadImage(source: Blob | string): Promise<ImageBitmap>;
+  /** The image on the system clipboard, if the browser lets the page read it (a permission prompt may appear); null otherwise. */
+  readClipboardImage(): Promise<Blob | null>;
   /** Open a built-in dialog. */
   open(dialog: DialogId, payload?: Record<string, unknown>): void;
   /** Ask the viewport to repaint (a transaction does this by itself). */

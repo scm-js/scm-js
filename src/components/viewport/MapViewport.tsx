@@ -50,7 +50,7 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, mapPickAtom, pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
 import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
 import { useUnitTools } from "../../hooks/useUnitTools";
@@ -141,6 +141,8 @@ export default function MapViewport() {
   const locationGestureRef = useRef<{ mode: "move" | "resize" | "create" | "click"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
   /** A Cut / Copy / Paste-layer drag marking an area, in tiles. */
   const clipGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  /** A plugin's `pickArea` / `pickTile` drag in progress (see `mapPickAtom`). */
+  const pickGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
@@ -199,6 +201,8 @@ export default function MapViewport() {
   const clipSelection = useAtomValue(clipSelectionAtom);
   const setClipSelection = useSetAtom(clipSelectionAtom);
   const pluginContextItems = useAtomValue(pluginContextItemsAtom);
+  const mapPick = useAtomValue(mapPickAtom);
+  const cancelPick = useSetAtom(cancelMapPickAtom);
   const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
@@ -227,6 +231,8 @@ export default function MapViewport() {
   const fogPainting = layer === "fog" && scenario !== null;
   const locationsEditing = layer === "locations" && scenario !== null;
   const clipEditing = layer === "clipboard" && scenario !== null;
+  /** A plugin is waiting for a rectangle or a tile; the gesture goes to it ahead of every layer. */
+  const picking = mapPick !== null && scenario !== null;
   /** The clip follows the pointer, a click stamps it. */
   const clipPasting = clipEditing && pastingClip && clip !== null;
   const showFog = scenario !== null && flags.fog;
@@ -714,6 +720,27 @@ export default function MapViewport() {
       }
     }
 
+    // A plugin's pick in progress: the rectangle being dragged, teal so it reads as "not the marked area".
+    const pg = pickGestureRef.current;
+    if (picking && pg && scenario) {
+      const r = tileRect(pg.from, pg.to);
+      const mx = r.x0 * tilePx - sx, my = r.y0 * tilePx - sy, mw = (r.x1 - r.x0) * tilePx, mh = (r.y1 - r.y0) * tilePx;
+      ctx.fillStyle = "rgba(79,209,197,0.12)";
+      ctx.fillRect(mx, my, mw, mh);
+      ctx.strokeStyle = "#4fd1c5";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 3]);
+      ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
+      ctx.setLineDash([]);
+      const label = mapPick?.kind === "tile" ? `${pg.to.x}, ${pg.to.y}` : `${r.x1 - r.x0} × ${r.y1 - r.y0} at ${r.x0}, ${r.y0}`;
+      ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = "rgba(10,12,16,0.8)";
+      ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
+      ctx.fillStyle = "#4fd1c5";
+      ctx.fillText(label, mx + mw + 8, my + mh + 15);
+    }
+
     // Cut / Copy / Paste layer: the marked area with its size, and the clip under the pointer while pasting
     if (clipEditing && scenario) {
       const g = clipGestureRef.current;
@@ -821,8 +848,8 @@ export default function MapViewport() {
       ctx.strokeRect(Math.round(blendAnchor.x * tilePx - sx) + 1, Math.round(blendAnchor.y * tilePx - sy) + 1, Math.round(tilePx) - 2, Math.round(tilePx) - 2);
     }
 
-    // hover brush, with a preview of what the terrain brush would leave behind
-    const hv = hoverRef.current;
+    // hover brush, with a preview of what the terrain brush would leave behind (not while a plugin's pick owns the pointer)
+    const hv = picking ? null : hoverRef.current;
     const hp = hoverPointRef.current;
     if (hv && hp && painting && terrainMode === "isom") {
       // The isometric brush works in diamonds — 4 tiles wide, 2 tall, centred on the
@@ -980,7 +1007,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
@@ -1092,6 +1119,13 @@ export default function MapViewport() {
     if (e.button !== 0) return;
     const t = tileAt(e);
     if (!inMap(t)) return;
+    if (picking) {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      pickGestureRef.current = { from: t, to: t };
+      draw();
+      return;
+    }
     if (doodadsEditing) {
       const p = pointAt(e);
       e.preventDefault();
@@ -1200,6 +1234,17 @@ export default function MapViewport() {
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
     const point = pointAt(e);
+    const pGesture = pickGestureRef.current;
+    if (pGesture) {
+      const c = clampToMap(t);
+      pGesture.to = c;
+      hoverRef.current = c;
+      hoverPointRef.current = clampPoint(point);
+      setCursor(c);
+      draw();
+      return;
+    }
+    if (picking) e.currentTarget.style.cursor = "crosshair";
     const cGesture = clipGestureRef.current;
     if (cGesture) {
       const c = clampToMap(t);
@@ -1296,6 +1341,15 @@ export default function MapViewport() {
   };
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pGesture = pickGestureRef.current;
+    if (pGesture) {
+      pickGestureRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      mapPick?.finish(mapPick.kind === "tile" ? pGesture.to : tileRect(pGesture.from, pGesture.to));
+      e.currentTarget.style.cursor = "";
+      draw();
+      return;
+    }
     const cGesture = clipGestureRef.current;
     if (cGesture) {
       clipGestureRef.current = null;
@@ -1374,6 +1428,8 @@ export default function MapViewport() {
 
   const onLeave = (e: React.PointerEvent<HTMLDivElement>) => { hoverRef.current = null; hoverPointRef.current = null; e.currentTarget.style.cursor = ""; draw(); };
   const onContextMenu = (e: React.MouseEvent) => {
+    // While a plugin waits for a pick, a right-click cancels it instead of opening the menu.
+    if (picking) { e.preventDefault(); pickGestureRef.current = null; cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; draw(); return; }
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
@@ -1549,6 +1605,7 @@ export default function MapViewport() {
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
         {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
+        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? "drag a rectangle" : "click a tile"} · Esc cancels</span>}
         {unitPlacing && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
         {spritePlacing && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
         {doodadPlacing && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}

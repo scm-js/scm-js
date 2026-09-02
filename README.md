@@ -65,7 +65,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Water and lava animation | Yes |
 | Symmetry | Partial. Rect, Tile and Fog strokes mirror; objects, the isometric brush and Blend do not. |
 | Replace Terrain | Not yet |
-| Terrain from Image | Yes, as the built-in plugin (File ▸ Import, or the terrain palette's right-click menu for the marked area). |
+| Terrain from Image | Yes, as a plugin installed by default (File ▸ Import, or right-click the terrain palette / map: *into Area…* lets you drag the target first). File, paste, drop or URL; colour adjustments; key colours per terrain with an eyedropper; despeckle and island removal. |
 
 ### Objects
 
@@ -364,14 +364,30 @@ an `activate(api)` export; it runs with the editor's own privileges, so only add
 you trust. Tick boxes turn plugins off without removing them; Reload re-fetches one
 after a change. [docs/plugins.md](docs/plugins.md) has the API.
 
-**Terrain from Image** ships built in: File ▸ Import ▸ Terrain from Image…, or
-right-click the terrain palette (with an area marked on the Cut / Copy / Paste layer
-it offers the marked area as the target). Pick a picture, choose which terrains it
-may become, match by nearest colour or by brightness bands (a heightmap: the ticked
-terrains in palette order run dark → light), and Apply. *Isometric terrain* paints
-every lattice diamond with the isometric brush, so cliffs and shorelines are
-generated at the boundaries; *Flat tiles* stamps pairs and leaves the ISOM alone.
-Either way it is one undo step.
+Plugins marked *default* are the ones the editor starts with. They are ordinary plugins
+loaded from their own repositories over the network — nothing about them is built in —
+so they can be switched off but not removed from the list, and they need a working
+connection on the first load of a session.
+
+**Terrain from Image**
+([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
+installed by default: File ▸ Import ▸ Terrain from Image…, or
+right-click the terrain palette or the map — *Terrain from Image…* takes the marked area
+when the Cut / Copy / Paste layer has one, and *Terrain from Image into Area…* first lets
+you drag the target rectangle on the map (Esc cancels) and then opens the dialog with it
+selected; *Pick on Map…* in the dialog does the same without losing your settings. Bring
+the picture in with Choose File, Ctrl+V / Paste (a screenshot), a drop onto the dialog, or
+a URL. Choose how it fits the area (stretch, fit inside, fill) and flips; tune brightness,
+contrast, saturation, hue and gamma with the *Source* preview following; tick the terrains
+it may become. Each terrain has a *key colour* — what in the picture it should match — set
+with its swatch or the eyedropper (arm it on a row, click the source), so "this blue is
+Water, that green is Jungle" is one click each. *Adaptive colour* fits the picture's range
+to the palette's on its own, *Exact key colours* is plain nearest-colour, *Brightness
+bands* runs the ticked terrains dark → light (a heightmap); *Weigh* leans the match towards
+lightness or hue, *blur* / *despeckle* / *min. region* clean the result up. Apply is one
+undo step. *Isometric terrain* paints every lattice diamond with the isometric brush, low
+ground first and rare features last, so cliffs and shorelines are generated at every
+boundary; *Flat tiles* stamps flat pairs and leaves the ISOM alone.
 
 ## Keyboard
 

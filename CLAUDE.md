@@ -295,7 +295,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image is the built-in plugin.
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image is a plugin installed by default (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -451,15 +451,26 @@ far edges so a whole-map rect covers the last lattice column and row.
 raw.githubusercontent serves `text/plain`, which `import()` refuses — transpile `.ts` in the compile
 worker via `compileClient#transpileInBackground` / `plugins/transpile.ts`, follow relative imports
 depth first, refuse bare package names and cycles, rewrite specifiers to `blob:` URLs) → `import()`.
-Built-ins come from `builtin.ts` (`import.meta.glob` over `plugins/*/plugin.{ts,json}`, bundled by
-Vite, type-checked because `tsconfig.app.json` includes `plugins`); they take the same `activate(api)`
-path, minus the fetch. A manifest `icon` — an emoji, a `data:`/`https:` image, or an image file beside
+`candidateUrls` is the resolver a `fetch` does not come with: an extensionless specifier is tried as
+`.ts`/`.tsx`/`.mts`/`.js`/`.mjs` and then `index.*`, and `./x.js` falls back to `./x.ts` — the
+bundled built-in never needed this because Vite resolved for it, and the first remote load of
+Terrain from Image 404ed on `./convert`.
+`builtin.ts` (`import.meta.glob` over `plugins/*/plugin.{ts,json}`) is the same `activate(api)` path
+minus the fetch, for a plugin bundled into the build — **nothing ships that way**: there is no
+`plugins/` directory, the globs are empty and the mechanism is kept only for a fork that wants one.
+A manifest `icon` — an emoji, a `data:`/`https:` image, or an image file beside
 the manifest — becomes a `PluginIcon` in `loader.ts#resolveIcon` (anything else, `javascript:` above
 all, resolves to null and the plugin keeps the default mark); a built-in's file URL comes from a second
 `import.meta.glob` in `builtin.ts` because Vite hashes (and here inlines) the asset. It rides on the
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
-icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }` (built-ins are merged in by
-`effectiveInstalls` and can only be turned off); `pluginRuntimesAtom` is status/manifest/error per
+icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
+`defaults.ts` holds the specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` — today just
+`github:scm-js/plugin-image-to-terrain` — plus any built-in), which `effectiveInstalls` merges over
+the stored list, so a default is always listed, can be turned off but not removed, and is otherwise
+an ordinary spec fetched over the network on every start; the Manage Plugins row badges it `default`
+and hides its Remove button (`add` canonicalises what the user pastes through `parseSpec(...).display`,
+so pasting the default's own github.com URL is recognised as it rather than duplicating it).
+`pluginRuntimesAtom` is status/manifest/error per
 spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Contribution registries
 `pluginMenuItemsAtom` / `pluginContextItemsAtom` / `pluginHotkeysAtom` are read by `MenuBar`
 (`withPluginItems`, path `"File/Import"` → that submenu after a separator; a `Plugins` menu holds
@@ -470,14 +481,27 @@ surfaces `viewport` / `terrainPalette`, the palette got a Radix ContextMenu of i
 in state, Radix portal timing). `npm run build:plugin-types` emits `plugin-api/` (gitignored) for
 external repos. There is no sandbox: a plugin runs with the page's privileges, and the dialog says so.
 
-`plugins/terrain-from-image/` is the first plugin and the worked example: `convert.ts` is pure
-(resample → optional box blur → `adaptiveMatcher`: chromaticity plus auto-levelled brightness, since
-every tileset average is a murky brown and a saturated blue must still reach Water; or brightness
-bands in list order for heightmaps), `plugin.ts` is the dialog (`h()` builder, its own scoped `<style>`)
-and the transaction — every `diamondsIn` diamond through `tx.paintIsom` (cliffs and shores generated),
-or `tx.stampTerrain` per terrain for flat tiles. `tests/plugins.test.ts` (loader, host, transactions,
-lifecycle, menu merge, context rows, and the real-tileset suite via `primeTileset`) and
-`tests/terrain-from-image.test.ts`.
+`api.ui.pickArea` / `pickTile` (`host.ts#pickOnMap`) put one `MapPickRequest` in `mapPickAtom`
+(`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal marquee, HUD chip
+with the prompt) and calls its `finish` on mouse-up; `finish` clears the atom and is guarded so the
+host's other exits (scenario change, `Contributions` dispose, a newer pick) and `cancelMapPickAtom`
+(Esc in `useHotkeys`, right-click in the viewport) all resolve the promise exactly once. A modal
+dialog covers the map, so a plugin closes its dialog, picks, and reopens. `images.ts` is
+`ui.loadImage` (Blob / `data:` / `http(s)` with a CORS `<img>` fallback), `ui.readClipboardImage`
+and `transferOf`, which `PluginDialog` feeds to `DialogSpec.onPaste` (document-level listener
+while the dialog is topmost; a paste into the plugin's own text field is left alone unless it
+carries files) and `onDrop`. `DialogHandle.setTitle` goes through a title box in the dialog payload.
+`PLUGIN_API_VERSION` is 2; a manifest's `api` is the version the plugin *needs*.
+
+**Terrain from Image** is the worked example and lives in its own repository,
+`github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
+`icon.svg`, a vendored `plugin-api/` so it type-checks alone, and `tests/convert.test.ts` under its
+own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
+plugin the editor ships is loaded by the ordinary path, and its internals are documented there and
+in `docs/plugins.md`. Changing `src/plugins/api.ts` means re-running `npm run build:plugin-types`
+and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers the host side
+(loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
+list, and the real-tileset suite via `primeTileset`).
 
 ### Tileset graphics (`src/formats/tileset/`)
 

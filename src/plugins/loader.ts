@@ -211,27 +211,70 @@ export const isRelative = (spec: string) => spec.startsWith("./") || spec.starts
 export const isAbsoluteUrl = (spec: string) => /^https?:\/\//i.test(spec);
 export const isTypeScript = (url: string) => /\.(?:ts|tsx|mts)(?:[?#].*)?$/i.test(url);
 
+/** Extensions tried for an import that names none, in order. */
+const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".js", ".mjs"];
+
+/**
+ * The URLs to try for one import specifier, best first.
+ *
+ * There is no resolver on the other end of a `fetch`: `import { x } from "./convert"` —
+ * how TypeScript is normally written — has to become a request for `convert.ts` here,
+ * or the plugin gets a 404 for a file it never named. So a specifier with a known
+ * extension is taken as it stands (with the `.js` → `.ts` sibling behind it, since a
+ * TypeScript project that writes `./convert.js` means the `.ts`), one with none is
+ * tried with each extension and then as a directory `index`, and the first that fetches
+ * wins. The common case hits on the first candidate; the rest only cost requests when
+ * the plugin is already broken.
+ */
+export function candidateUrls(specifier: string, from: string): string[] {
+  const url = new URL(specifier, from).href;
+  const out: string[] = [];
+  const push = (u: string) => { if (!out.includes(u)) out.push(u); };
+  if (ENTRY_EXT.test(new URL(url).pathname)) {
+    push(url);
+    // `./x.js` in a TypeScript project usually means `./x.ts`.
+    for (const [from_, to] of [[".js", ".ts"], [".js", ".tsx"], [".mjs", ".mts"]] as const) {
+      if (url.toLowerCase().endsWith(from_)) push(url.slice(0, -from_.length) + to);
+    }
+    return out;
+  }
+  for (const ext of RESOLVE_EXT) push(url + ext);
+  for (const ext of RESOLVE_EXT) push(`${url.replace(/\/$/, "")}/index${ext}`);
+  return out;
+}
+
+/** The first candidate that fetches, or an error naming everything that was tried. */
+async function fetchFirst(candidates: readonly string[], fetchText: LoaderDeps["fetchText"]): Promise<{ url: string; text: string }> {
+  const errors: string[] = [];
+  for (const url of candidates) {
+    try {
+      return { url, text: await fetchText(url) };
+    } catch (err) {
+      errors.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new PluginLoadError(errors.length === 1 ? `Could not fetch ${errors[0]}` : `Could not fetch any of ${errors.join("; ")}`);
+}
+
 /**
  * Fetch a module and everything it imports, transpile what is TypeScript, rewrite the
  * import specifiers to module URLs and return the entry's URL. Depth first, one fetch
- * per file; circular imports and bare package names are refused with the file named.
+ * per file (`candidateUrls` may cost a few more for an extensionless import); circular
+ * imports and bare package names are refused with the file named.
  */
 export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fetchText" | "transpile" | "createModuleUrl">): Promise<string> {
   const done = new Map<string, string>();
   const inProgress = new Set<string>();
 
-  const visit = async (url: string, stack: string[]): Promise<string> => {
-    const cached = done.get(url);
-    if (cached) return cached;
-    if (inProgress.has(url)) throw new PluginLoadError(`Circular import: ${[...stack, url].join(" → ")}`);
+  const visit = async (candidates: readonly string[], stack: string[]): Promise<string> => {
+    for (const candidate of candidates) {
+      const cached = done.get(candidate);
+      if (cached) return cached;
+      if (inProgress.has(candidate)) throw new PluginLoadError(`Circular import: ${[...stack, candidate].join(" → ")}`);
+    }
+    const { url, text } = await fetchFirst(candidates, deps.fetchText);
     inProgress.add(url);
     try {
-      let text: string;
-      try {
-        text = await deps.fetchText(url);
-      } catch (err) {
-        throw new PluginLoadError(`Could not fetch ${url}: ${err instanceof Error ? err.message : String(err)}`);
-      }
       let code = isTypeScript(url) ? await deps.transpile(text, url) : text;
       const refs = findImports(code);
       const resolved: string[] = [];
@@ -239,8 +282,7 @@ export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fet
         if (!isRelative(ref.specifier) && !isAbsoluteUrl(ref.specifier)) {
           throw new PluginLoadError(`${url} imports "${ref.specifier}", but plugins cannot import packages — use a relative path, or bundle the dependency into the plugin.`);
         }
-        const child = new URL(ref.specifier, url).href;
-        resolved.push(await visit(child, [...stack, url]));
+        resolved.push(await visit(candidateUrls(ref.specifier, url), [...stack, url]));
       }
       // Rewrite from the end so earlier offsets stay valid.
       for (let i = refs.length - 1; i >= 0; i--) code = code.slice(0, refs[i].start) + resolved[i] + code.slice(refs[i].end);
@@ -252,7 +294,7 @@ export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fet
     }
   };
 
-  return visit(entryUrl, []);
+  return visit([entryUrl], []);
 }
 
 /* ── The whole thing ────────────────────────────────────── */

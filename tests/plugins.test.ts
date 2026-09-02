@@ -12,13 +12,15 @@ import { hasIsom } from "../src/editor/isom";
 import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
 import { clipSelectionAtom, mapTilesetAtom, terrainModeAtom } from "../src/atoms/editorAtoms";
 import { dialogStackAtom } from "../src/atoms/uiAtoms";
-import { installedPluginsAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom } from "../src/atoms/pluginAtoms";
-import { bundleModule, findImports, loadPlugin, parseSpec, PluginLoadError, resolveIcon, resolvePlugin, validateManifest, type LoaderDeps } from "../src/plugins/loader";
+import { cancelMapPickAtom, installedPluginsAtom, mapPickAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom } from "../src/atoms/pluginAtoms";
+import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
+import { bundleModule, candidateUrls, findImports, loadPlugin, parseSpec, PluginLoadError, resolveIcon, resolvePlugin, validateManifest, type LoaderDeps } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
   activatePlugin, Contributions, createPluginApi, deactivatePlugin, effectiveInstalls, isPluginActive, resolveActivate, runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
+import { DEFAULT_REMOTE_PLUGINS, defaultPluginSpecs } from "../src/plugins/defaults";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
 import { pluginIdOf, type PluginApi } from "../src/plugins/api";
 
@@ -133,6 +135,25 @@ describe("plugin bundling", () => {
     });
     await bundleModule("https://x/a.js", deps);
     expect(modules.size).toBe(3);
+  });
+
+  it("resolves an import that names no extension", async () => {
+    // `import { greet } from "./greet"` is how TypeScript is normally written, and there
+    // is no resolver behind a fetch — this is what the bundled built-in never exercised.
+    const { deps, modules } = memoryDeps({
+      "https://x/p/plugin.ts": `import { greet } from "./greet";\nimport { v } from "./lib";\nexport default () => greet(v);`,
+      "https://x/p/greet.ts": `export const greet = (n: number): number => n;`,
+      "https://x/p/lib/index.ts": `export const v = 1;`,
+    });
+    await bundleModule("https://x/p/plugin.ts", deps);
+    expect(modules.size).toBe(3);
+    expect(candidateUrls("./greet", "https://x/p/plugin.ts").slice(0, 2))
+      .toEqual(["https://x/p/greet.ts", "https://x/p/greet.tsx"]);
+    // A TypeScript project that writes `./greet.js` means `./greet.ts`.
+    expect(candidateUrls("./greet.js", "https://x/p/plugin.ts"))
+      .toEqual(["https://x/p/greet.js", "https://x/p/greet.ts", "https://x/p/greet.tsx"]);
+    const missing = memoryDeps({ "https://x/p/plugin.ts": `import "./nope";` });
+    await expect(bundleModule("https://x/p/plugin.ts", missing.deps)).rejects.toThrow(/any of .*nope\.ts.*nope\/index\.mjs/s);
   });
 
   it("refuses bare package imports and circular imports with the file named", async () => {
@@ -361,16 +382,28 @@ describe("plugin lifecycle", () => {
     expect(store.get(pluginRuntimesAtom)["builtin:missing"].error).toMatch(/No built-in/);
   });
 
-  it("merges the persisted list over the built-ins", () => {
-    expect(effectiveInstalls([], ["a", "b"])).toEqual([{ spec: "builtin:a", enabled: true }, { spec: "builtin:b", enabled: true }]);
-    expect(effectiveInstalls([{ spec: "builtin:b", enabled: false }, { spec: "github:x/y", enabled: true }], ["a", "b"]))
-      .toEqual([{ spec: "builtin:a", enabled: true }, { spec: "builtin:b", enabled: false }, { spec: "github:x/y", enabled: true }]);
+  it("merges the persisted list over the defaults", () => {
+    const defaults = ["builtin:a", "github:d/p"];
+    expect(effectiveInstalls([], defaults)).toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: true }]);
+    // A default the user turned off keeps its place; anything else follows in the order it was added.
+    expect(effectiveInstalls([{ spec: "github:d/p", enabled: false }, { spec: "github:x/y", enabled: true }], defaults))
+      .toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: false }, { spec: "github:x/y", enabled: true }]);
     const store = createStore();
     setInstalled(store, "github:x/y", { enabled: true });
-    setInstalled(store, "builtin:a", { enabled: false });
-    expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:x/y", enabled: true }, { spec: "builtin:a", enabled: false }]);
+    setInstalled(store, "github:d/p", { enabled: false });
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:x/y", enabled: true }, { spec: "github:d/p", enabled: false }]);
     setInstalled(store, "github:x/y", { remove: true });
-    expect(store.get(installedPluginsAtom)).toEqual([{ spec: "builtin:a", enabled: false }]);
+    expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
+  });
+
+  it("ships the image-to-terrain plugin as a remote default", () => {
+    expect(DEFAULT_REMOTE_PLUGINS).toContain("github:scm-js/plugin-image-to-terrain");
+    // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0])).toMatchObject({
+      kind: "remote",
+      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json",
+    });
+    expect(defaultPluginSpecs()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
   });
 });
 
@@ -413,6 +446,85 @@ describe("plugin surfaces", () => {
   });
 });
 
+/* ── Picks on the map, images, dialog titles ────────────── */
+
+describe("plugin picks and images", () => {
+  it("runs a pick through the atom and resolves with what the viewport hands back", async () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const area = api.ui.pickArea({ prompt: "Drag it" });
+    const req = store.get(mapPickAtom)!;
+    expect(req).toMatchObject({ kind: "area", prompt: "Drag it", pluginId: "t" });
+    req.finish({ x0: 1, y0: 2, x1: 4, y1: 5 });
+    expect(await area).toEqual({ x0: 1, y0: 2, x1: 4, y1: 5 });
+    expect(store.get(mapPickAtom)).toBeNull();
+    const tile = api.ui.pickTile();
+    expect(store.get(mapPickAtom)).toMatchObject({ kind: "tile", prompt: "Click a tile on the map" });
+    store.get(mapPickAtom)!.finish({ x: 3, y: 4 });
+    expect(await tile).toEqual({ x: 3, y: 4 });
+    expect(bag.disposables).toHaveLength(0); // a finished pick leaves nothing behind
+  });
+
+  it("cancels on Esc, when a newer pick starts, when the document changes and on deactivation", async () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const a = api.ui.pickTile();
+    expect(store.set(cancelMapPickAtom)).toBe(true);
+    expect(await a).toBeNull();
+    expect(store.set(cancelMapPickAtom)).toBe(false);
+    const b = api.ui.pickArea();
+    const c = api.ui.pickArea();
+    expect(await b).toBeNull();
+    expect(store.get(mapPickAtom)).not.toBeNull();
+    store.set(scenarioAtom, null);
+    expect(await c).toBeNull();
+    expect(store.get(mapPickAtom)).toBeNull();
+    // No map: resolves at once.
+    expect(await api.ui.pickArea()).toBeNull();
+    const { store: store2 } = blankStore();
+    const bag2 = new Contributions();
+    const api2 = createPluginApi(store2, { id: "t", name: "T", source: "s" }, bag2);
+    const d = api2.ui.pickArea();
+    bag2.dispose();
+    expect(await d).toBeNull();
+    expect(store2.get(mapPickAtom)).toBeNull();
+  });
+
+  it("reads files and text out of a transfer and recognises image URLs", () => {
+    expect(transferOf(null)).toEqual({ files: [], text: "" });
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+    const dt = {
+      items: [{ kind: "file", getAsFile: () => file }, { kind: "string", getAsFile: () => null }],
+      files: [file],
+      getData: (type: string) => (type === "text/plain" ? "  https://x/a.png \n" : ""),
+    } as unknown as DataTransfer;
+    expect(transferOf(dt)).toEqual({ files: [file], text: "https://x/a.png" });
+    const uriOnly = { items: [], files: [], getData: (type: string) => (type === "text/uri-list" ? "# c\r\nhttps://y/b.jpg\r\n" : "") } as unknown as DataTransfer;
+    expect(transferOf(uriOnly).text).toBe("https://y/b.jpg");
+    expect(looksLikeImageUrl("https://a/b.png")).toBe(true);
+    expect(looksLikeImageUrl(" http://localhost:3000/x ")).toBe(true);
+    expect(looksLikeImageUrl("data:image/png;base64,AAAA")).toBe(true);
+    expect(looksLikeImageUrl("data:text/html,<b>")).toBe(false);
+    expect(looksLikeImageUrl("hello there")).toBe(false);
+    expect(looksLikeImageUrl("ftp://x/y.png")).toBe(false);
+  });
+
+  it("changes a dialog's title through the handle", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const handle = api.ui.dialog({ title: "A", mount: () => {} });
+    const box = store.get(dialogStackAtom)[0].payload?.title as { value: string; listeners: Set<() => void> };
+    expect(box.value).toBe("A");
+    let heard = 0;
+    box.listeners.add(() => heard++);
+    handle.setTitle("B");
+    expect(box.value).toBe("B");
+    expect(heard).toBe(1);
+  });
+});
+
 /* ── With the real tileset ──────────────────────────────── */
 
 const TILESET_DIR = join(__dirname, "..", "public", "tileset");
@@ -448,6 +560,8 @@ describe.skipIf(!haveJungle)("plugin transactions with the jungle tileset", () =
     expect(api.terrain.terrainColor(types[0].id)).toBe(0x336633);
     expect(api.terrain.tileInfo(0x20)?.group).toBe(2);
     expect(api.terrain.hasIsom()).toBe(true);
+    expect(api.terrain.heightOf(2)).toBe(0);
+    expect(api.terrain.heightOf(9999)).toBeNull();
     // Diamonds over the whole map include the last lattice column and row.
     const all = api.terrain.diamondsIn({ x0: 0, y0: 0, x1: 16, y1: 16 });
     expect(all.some((d) => d.x === 8)).toBe(true);

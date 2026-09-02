@@ -4,8 +4,11 @@ scmJS can load third-party code — a *plugin* — from a public Git repository 
 URL, and let it add menu items, context-menu entries, hotkeys and dialogs, read the
 open map and edit it through the same undo model the built-in tools use. This document
 is the plugin author's guide and the reference for the host side. The first plugin,
-**Terrain from Image**, ships in the repository under `plugins/terrain-from-image/` and
-is the worked example for everything below.
+**Terrain from Image**, is the worked example for everything below; it lives in its own
+repository, [scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain),
+and the editor installs it by default — fetched over the network and transpiled in the
+browser like anybody else's, which is the point: the plugin that ships with the editor
+is the proof the loading path works, not an exception to it.
 
 ## Design
 
@@ -18,8 +21,11 @@ is the worked example for everything below.
   same path a brush stroke takes.
 - Every contribution is a `Disposable`. Disabling or reloading a plugin removes
   everything it added, whether or not the plugin cleaned up after itself.
-- The API is versioned (`PLUGIN_API_VERSION`) and typed: `npm run build:plugin-types`
-  emits `plugin-api/` so a plugin repo can type-check against the exact surface.
+- The API is versioned (`PLUGIN_API_VERSION`, currently 2) and typed: `npm run build:plugin-types`
+  emits `plugin-api/` so a plugin repo can type-check against the exact surface. A manifest's
+  `"api": N` is the version the plugin needs; a host providing an older one refuses to load it,
+  so a plugin that uses a method added in version 2 (`ui.pickArea`, `ui.loadImage`, …) should
+  say `"api": 2`.
 
 ### Non-goals (version 1)
 
@@ -32,13 +38,16 @@ is the worked example for everything below.
   Sharing the host's React would need import maps and version coupling; a plugin that
   wants a framework can bundle its own into that element.
 - **No package imports.** `import x from "some-npm-package"` is refused at load time.
-  Relative imports between files in the plugin repo work (the loader fetches them). A
-  plugin that needs a library ships a prebuilt bundle and points `plugin.json` at it.
+  Relative imports between files in the plugin repo work, with or without a file
+  extension (the loader fetches them and resolves the extension itself). A plugin that
+  needs a library ships a prebuilt bundle and points `plugin.json` at it.
 
 ### How a plugin loads
 
 1. The *spec* the user typed is parsed (`loader.ts#parseSpec`):
    - `builtin:<name>` — a plugin compiled into the editor from `plugins/<name>/`.
+     Nothing ships that way today; the mechanism is there for a fork that wants one in
+     the bundle.
    - `github:owner/repo`, `github:owner/repo@ref`, `github:owner/repo@ref/sub/dir`,
      or a `https://github.com/owner/repo[/tree/ref[/sub/dir]]` URL — resolved to
      `https://raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`.
@@ -51,15 +60,22 @@ is the worked example for everything below.
    trigger script). Fetching as text matters: `raw.githubusercontent.com` serves
    `text/plain`, which a browser refuses to `import()` as a module.
 4. Relative imports are followed the same way, depth first, and each file becomes a
-   `blob:` module URL; the import specifiers are rewritten to those URLs. Circular
-   imports and bare package names are errors with a message that says which file.
+   `blob:` module URL; the import specifiers are rewritten to those URLs. There is no
+   resolver behind a `fetch`, so the loader supplies one (`candidateUrls`): a specifier
+   that names no extension — `"./convert"`, how TypeScript is normally written — is
+   tried as `.ts`, `.tsx`, `.mts`, `.js`, `.mjs` and then as that directory's `index.*`,
+   and a `"./convert.js"` falls back to `convert.ts` the way a TypeScript project means
+   it. Circular imports and bare package names are errors with a message that says which
+   file.
 5. The entry is `import()`ed. Its default export (or a named `activate`) is called with
    the `PluginApi`. Whatever it returns — nothing, a function, or a `Disposable` — is kept
    for deactivation.
 
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
-activated at startup by `usePlugins`. Built-in plugins are always listed and can be
-turned off but not removed.
+activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
+are merged over that list, so they are always shown and can be turned off but not
+removed; being a default buys a plugin nothing else — it is fetched and loaded by the
+steps above like any other.
 
 ## Writing a plugin
 
@@ -96,7 +112,7 @@ the editor's default plugin mark, as it does when it declares no icon at all or 
 image fails to load. Draw for a 30 px square (it is also shown at 14 px in a dialog
 title), on nothing: the editor draws no frame or plate behind it, and an icon that is
 itself a bordered square reads as a second control next to the row's tick box.
-`plugins/terrain-from-image/icon.svg` is the worked example.
+Terrain from Image's `icon.svg` is the worked example.
 
 `plugin.ts`:
 
@@ -114,9 +130,9 @@ export default function activate(api: PluginApi) {
 
 The `import type` line is erased at load time, so it only matters for editing: copy the
 `plugin-api/` folder that `npm run build:plugin-types` produces into your repo (or point
-`paths` in your `tsconfig.json` at it) and you get completion and checking. The built-in
-plugins import the types relatively (`../../src/plugins/api`) because they live in this
-repository.
+`paths` in your `tsconfig.json` at it) and you get completion and checking. Terrain from
+Image vendors it and imports `./plugin-api/plugins/api`, so that repository type-checks
+on its own with nothing installed but TypeScript.
 
 Everything `add`/`on` returns is a `Disposable`; keep the ones you need to drop early
 and forget the rest — deactivation disposes them all. Returning a function from
@@ -172,7 +188,8 @@ repaints.
 Read-only helpers over the current tileset: `types()` (paintable flat terrains with
 name, group, height, buildable), `isomTypes()` (ids the isometric brush can paint),
 `hasIsom()`, `tileInfo(id)`, `color(tileId)` (the atlas average, `0xRRGGBB`),
-`terrainColor(terrainId)` (mean of the pair's common variations), `diamondAt(px, py)`,
+`terrainColor(terrainId)` (mean of the pair's common variations), `heightOf(terrainId)`
+(0 low / 1 high / 2 higher, null for anything that is not a flat terrain), `diamondAt(px, py)`,
 `isDiamond(d)`, `diamondsIn(rect)` (every lattice diamond whose centre tile is in the
 rect), `active()` / `setActive(...)` for the palette's brush, terrain and tile.
 
@@ -192,8 +209,12 @@ rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()
 | | |
 | --- | --- |
 | `status(text)` | The status bar. |
-| `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. Returns a handle with `close()`. |
+| `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
+| `pickArea({ prompt })` | The user drags a rectangle on the map: the viewport shows a crosshair and a teal marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc / right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time — starting another cancels the first. A dialog is modal and covers the map, so close yours before picking and reopen it with the result (Terrain from Image does exactly this: *Pick on Map…*). |
+| `pickTile({ prompt })` | The same for a single click; resolves with `{ x, y }`. |
+| `loadImage(source)` | Decode a `File` / `Blob`, a `data:` URL or an `http(s)` URL into an `ImageBitmap`. A remote URL is fetched with CORS and, failing that, loaded through an `<img crossOrigin>`; a site that allows neither rejects with a message that says to save the picture and choose the file. |
+| `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use `onPaste` instead — it needs no permission. |
 | `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …). |
 | `repaint()` | Bump the terrain revision when you changed something the transaction did not cover. |
 
@@ -233,8 +254,10 @@ plugin's name prefixed.
 | `src/plugins/api.ts` | The public types. Changing them is an API change: bump `PLUGIN_API_VERSION` for anything not backward compatible. |
 | `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the Jotai store and a `Contributions` bag that `dispose()` empties; `activatePlugin` / `deactivatePlugin` drive the lifecycle and write `pluginRuntimesAtom`. |
 | `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
-| `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, and the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`. |
+| `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
+| `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
+| `src/plugins/defaults.ts` | The specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, plus any built-in), merged over the stored list by `effectiveInstalls`. |
+| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, and `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
 
@@ -244,6 +267,14 @@ matching `pluginContextItemsAtom` entries to their context menus, `useHotkeys` c
 `pluginHotkeysAtom` first. A `Plugins` menu (Manage Plugins… plus anything registered
 under `"Plugins"`) sits between Tools and Help.
 
+`api.ui.pickArea` / `pickTile` are `pickOnMap` in `host.ts`: one `MapPickRequest` at a
+time goes into `mapPickAtom`, and `MapViewport` serves it ahead of every layer — crosshair
+cursor, a teal marquee with its size, a HUD chip with the prompt — calling the request's
+`finish` on mouse-up; `finish` clears the atom itself and is guarded against running twice.
+The host also finishes it with `null` when the scenario atom changes, when the plugin's
+`Contributions` are disposed, or when a newer pick starts; `useHotkeys` (Esc) and the
+viewport's right-click write `cancelMapPickAtom`.
+
 `api.document.edit` is `runTransaction` in `host.ts`: it wraps the scenario in an
 `EditTransaction` whose operations apply immediately and accumulate change lists in
 `applyEntry` order, then hands the entry to `commitTerrainAtom` (the stranded-doodad /
@@ -252,13 +283,37 @@ behaves exactly like a stroke.
 
 ## Terrain from Image
 
-`plugins/terrain-from-image/` — File ▸ Import ▸ Terrain from Image…, and on the terrain
-palette's context menu *Terrain from Image into Marked Area…* when the Cut / Copy /
-Paste layer has an area marked. `convert.ts` is the pure part: resample the image to one
-sample per target cell, optionally smooth it, and match every cell to one of the chosen
-terrains by colour (nearest, red-mean weighted) or by brightness (the chosen terrains in
-palette order become bands from dark to light — a heightmap). `plugin.ts` is the dialog
-and the transaction: **Isometric** paints each lattice diamond in the target with
-`tx.paintIsom`, so cliffs and shorelines are generated at every boundary; **Tiles** stamps
-flat pairs with `tx.stampTerrain` and leaves the ISOM alone (Rebuild ISOM from Tiles
-afterwards if you want the isometric brush back). One undo entry either way.
+[scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain), installed
+by default — File ▸ Import ▸ Terrain from Image…, and on the terrain
+palette's and the map's context menus *Terrain from Image…* (into the marked area when the
+Cut / Copy / Paste layer has one) and *Terrain from Image into Area…*, which first has you
+drag the target rectangle on the map (`api.ui.pickArea`) and then opens the dialog with it
+selected. In the dialog, *Pick on Map…* does the same round trip — the dialog closes, you
+drag, it reopens with the picture and every setting kept (the state lives in a `Session`
+object outside the dialog for exactly this reason).
+
+The picture can come from a file, Ctrl+V or *Paste* (a screenshot on the clipboard), a
+drop onto the dialog, or a URL (`api.ui.loadImage`). *Fit* places it — stretched, fitted
+inside (uncovered cells are left alone) or covering the area — with flips and smooth or
+nearest sampling (one pixel per tile for pixel art). *Adjust* is brightness, contrast,
+saturation, hue, gamma, auto-levels and invert, applied before matching and shown in the
+*Source* preview. Every terrain in the list has a **key colour** — what in the picture it
+should match; by default its own tiles' average, changed with the swatch or the eyedropper
+(arm it on a row, click the source preview), remembered per tileset.
+
+`convert.ts` is the pure part and that repository's `tests/convert.test.ts` pins it: resample
+to one sample per target cell, `adjustSamples`, `boxBlur`, then match every cell in OKLab
+(`makeMatcher`) — *Adaptive* fits the picture's lightness and chroma ranges onto the
+palette's (gain capped so a flat picture is not stretched into noise) and rescales hue so
+the murky tile averages' hue spread counts as much as their lightness spread; *Exact* is
+plain distance to the key colours; *Brightness bands* makes the ticked terrains, in order,
+equal bands from the picture's darkest to its brightest cell (a heightmap). The *Weigh*
+slider moves between lightness and hue. Clean-up follows: `majorityFilter` (despeckle) and
+`removeSmallRegions` (islands below a size join their commonest neighbour). `plugin.ts`
+is the dialog and the transaction: **Isometric** paints each lattice diamond in the target
+with `tx.paintIsom` — the diamond's terrain is the majority of the four cells around its
+centre (`diamondTerrain`), and terrains are painted low ground first, rare ones last
+(`paintOrder`), so the brush's one-diamond bleed eats into common ground rather than thin
+features — and cliffs and shorelines are generated at every boundary; **Tiles** stamps flat
+pairs with `tx.stampTerrain` and leaves the ISOM alone (Rebuild ISOM from Tiles afterwards
+if you want the isometric brush back). One undo entry either way.

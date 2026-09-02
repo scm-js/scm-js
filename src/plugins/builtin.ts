@@ -1,9 +1,15 @@
 /**
- * The plugins that ship with the editor: every `plugins/<name>/` directory with a
+ * Plugins compiled into the editor: every `plugins/<name>/` directory with a
  * `plugin.json` and a `plugin.ts`. Vite bundles them like any other module (the
  * `import.meta.glob` below), so they cost nothing at startup until activated, and they
  * go through the same `activate(api)` contract as a plugin loaded from a repository —
- * which is the point: they are the proof the API can express a real feature.
+ * minus the fetch, which is exactly what makes them the *less* honest test of the API.
+ *
+ * **Nothing ships built in today**: there is no `plugins/` directory, the globs are
+ * empty and `BUILTIN_PLUGINS` is `{}`. Terrain from Image used to live here and now
+ * loads from its own repository like anybody else's (`defaults.ts`). The mechanism
+ * stays for a fork that wants a plugin in the bundle — drop a directory in and it is
+ * picked up — and because `builtin:<name>` is still a spec `parseSpec` understands.
  */
 import type { PluginManifest } from "./api";
 import type { BuiltinPlugin } from "./loader";

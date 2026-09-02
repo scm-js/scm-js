@@ -4,11 +4,16 @@ import { Blocks, Plus, RefreshCw, Trash2 } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
-import { closeDialogAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, dialogStackAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginRuntimesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { activatePlugin, deactivatePlugin, effectiveInstalls, reloadPlugin, setInstalled } from "../../plugins/host";
+import { defaultPluginSpecs } from "../../plugins/defaults";
 import { parseSpec, PluginLoadError } from "../../plugins/loader";
+import { transferOf } from "../../plugins/images";
 import type { DialogHandle, DialogSpec, PluginIcon, PluginInfo } from "../../plugins/api";
+
+/** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
+interface TitleBox { value: string; listeners: Set<() => void> }
 
 /* ── A plugin's icon ────────────────────────────────────── */
 
@@ -44,8 +49,38 @@ export function PluginDialog({ entry }: DialogProps) {
   const spec = entry.payload?.spec as DialogSpec;
   const handle = entry.payload?.handle as DialogHandle;
   const plugin = entry.payload?.plugin as PluginInfo | undefined;
+  const titleBox = entry.payload?.title as TitleBox | undefined;
+  const stack = useAtomValue(dialogStackAtom);
+  const topmost = stack[stack.length - 1]?.key === entry.key;
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState(titleBox?.value ?? spec.title);
+
+  useEffect(() => {
+    if (!titleBox) return;
+    const listen = () => setTitle(titleBox.value);
+    titleBox.listeners.add(listen);
+    listen();
+    return () => { titleBox.listeners.delete(listen); };
+  }, [titleBox]);
+
+  // Ctrl+V while this is the topmost dialog. A paste into one of the plugin's own text fields is left
+  // alone unless it carries files — a screenshot pasted "into" the URL box is still a picture.
+  useEffect(() => {
+    const onPaste = spec.onPaste;
+    if (!onPaste || !topmost) return;
+    const listener = (e: ClipboardEvent) => {
+      const transfer = transferOf(e.clipboardData);
+      const t = e.target as HTMLElement | null;
+      const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (inField && transfer.files.length === 0) return;
+      if (transfer.files.length === 0 && !transfer.text) return;
+      e.preventDefault();
+      try { onPaste(transfer, handle); } catch (err) { console.error(`[${plugin?.name ?? "plugin"}] onPaste failed`, err); }
+    };
+    document.addEventListener("paste", listener);
+    return () => document.removeEventListener("paste", listener);
+  }, [spec, handle, plugin, topmost]);
 
   useEffect(() => {
     if (!host) return;
@@ -75,7 +110,7 @@ export function PluginDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title={spec.title}
+      title={title}
       icon={<PluginIconView icon={plugin?.icon} size={14} />}
       size={spec.size ?? "md"}
       tall={spec.tall}
@@ -84,7 +119,17 @@ export function PluginDialog({ entry }: DialogProps) {
       ))}
       footerLeft={plugin ? <span className="hint">{plugin.name}</span> : undefined}
     >
-      <div ref={setHost} className="plugin-dialog-body" />
+      <div
+        ref={setHost}
+        className="plugin-dialog-body"
+        onDragOver={(e) => { if (spec.onDrop) { e.preventDefault(); e.stopPropagation(); } }}
+        onDrop={(e) => {
+          if (!spec.onDrop) return;
+          e.preventDefault();
+          e.stopPropagation();
+          try { spec.onDrop(transferOf(e.dataTransfer), handle); } catch (err) { console.error(`[${plugin?.name ?? "plugin"}] onDrop failed`, err); }
+        }}
+      />
     </DialogFrame>
   );
 }
@@ -118,14 +163,16 @@ export function PluginsDialog({ entry }: DialogProps) {
   const runtimes = useAtomValue(pluginRuntimesAtom);
   const [spec, setSpec] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
-  const list = effectiveInstalls(installed);
+  const defaults = defaultPluginSpecs();
+  const list = effectiveInstalls(installed, defaults);
 
   const add = useCallback(() => {
     const s = spec.trim();
     if (!s) return;
     try {
       const parsed = parseSpec(s);
-      const canonical = parsed.kind === "builtin" ? `builtin:${parsed.name}` : s;
+      // The short form for a repository, so pasting the default plugin's own URL is recognised as it.
+      const canonical = parsed.kind === "builtin" ? `builtin:${parsed.name}` : parsed.display;
       if (list.some((p) => p.spec === canonical)) { setProblem("That plugin is already in the list."); return; }
       setInstalled(store, canonical, { enabled: true });
       setSpec("");
@@ -184,8 +231,8 @@ export function PluginsDialog({ entry }: DialogProps) {
         <div className="listbox plugin-list" role="list">
           {list.map((p) => {
             const rt = runtimes[p.spec];
-            const builtin = p.spec.startsWith("builtin:");
-            const name = rt?.manifest?.name ?? (builtin ? p.spec.slice("builtin:".length) : p.spec);
+            const isDefault = defaults.includes(p.spec);
+            const name = rt?.manifest?.name ?? (p.spec.startsWith("builtin:") ? p.spec.slice("builtin:".length) : p.spec);
             const status = statusLabel(rt, p.enabled);
             return (
               <div key={p.spec} className="item plugin-row" role="listitem">
@@ -196,7 +243,7 @@ export function PluginsDialog({ entry }: DialogProps) {
                     <strong>{name}</strong>
                     {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
                     <span className={`badge ${status.className}`}>{status.text}</span>
-                    {builtin && <span className="badge dim">built-in</span>}
+                    {isDefault && <span className="badge dim">default</span>}
                   </div>
                   {rt?.manifest?.description && <span className="hint">{rt.manifest.description}</span>}
                   <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>
@@ -205,7 +252,7 @@ export function PluginsDialog({ entry }: DialogProps) {
                 </div>
                 <div className="row" style={{ gap: 4 }}>
                   <Button size="sm" title="Reload the plugin from its source" disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> Reload</Button>
-                  {!builtin && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
+                  {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
                 </div>
               </div>
             );

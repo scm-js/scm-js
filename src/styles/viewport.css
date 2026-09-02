@@ -71,6 +71,10 @@
   font-family: var(--font-mono);
   backdrop-filter: blur(4px);
 }
+.hud-chip.pick {
+  border-color: var(--teal-dim);
+  color: var(--teal);
+}
 .hud-chip b {
   color: var(--gold);
   font-weight: 600;

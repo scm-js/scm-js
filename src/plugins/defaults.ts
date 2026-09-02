@@ -14,11 +14,27 @@
  */
 import { BUILTIN_PLUGINS } from "./builtin";
 
-/** Plugins loaded from their own repositories, pinned to no ref so Reload takes the latest. */
-export const DEFAULT_REMOTE_PLUGINS: readonly string[] = ["github:scm-js/plugin-image-to-terrain", "github:scm-js/plugin-paint"];
+/** A default: its spec, and whether it runs before the user has said anything. */
+export interface DefaultPlugin {
+  spec: string;
+  enabled: boolean;
+}
 
-/** Every spec that is installed unless the user says otherwise: the built-ins, then the remotes. */
-export const defaultPluginSpecs = (): string[] => [
-  ...Object.keys(BUILTIN_PLUGINS).map((name) => `builtin:${name}`),
+/**
+ * Plugins loaded from their own repositories, pinned to no ref so Reload takes the latest.
+ * One that starts off is still listed (badged *default*, no Remove button); ticking it on
+ * is remembered like any other change.
+ */
+export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
+  { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
+  { spec: "github:scm-js/plugin-paint", enabled: false },
+];
+
+/** Every default: the built-ins (on), then the remotes. */
+export const defaultPlugins = (): DefaultPlugin[] => [
+  ...Object.keys(BUILTIN_PLUGINS).map((name) => ({ spec: `builtin:${name}`, enabled: true })),
   ...DEFAULT_REMOTE_PLUGINS,
 ];
+
+/** The defaults' specs, for telling a default row from one the user added. */
+export const defaultPluginSpecs = (): string[] => defaultPlugins().map((d) => d.spec);

@@ -55,7 +55,7 @@ import {
 import { loadPlugin, type LoaderDeps } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
-import { defaultPluginSpecs } from "./defaults";
+import { defaultPlugins, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
 
 export type Store = ReturnType<typeof createStore>;
@@ -768,15 +768,15 @@ export function activePluginSpecs(store: Store): string[] {
 export const builtinSpec = (name: string) => `builtin:${name}`;
 
 /**
- * The plugins to run: every default (unless the stored list says it is off), then the
- * ones the user added, in the order they were added. A default is a spec like any
- * other — the remote ones are fetched over the network on every start — so the only
- * thing being a default buys it is a place in the list and a Remove button it does not
- * get; see `defaults.ts`.
+ * The plugins to run: every default (on or off as the stored list says, else as the
+ * default itself says), then the ones the user added, in the order they were added. A
+ * default is a spec like any other — the remote ones are fetched over the network on
+ * every start — so the only thing being a default buys it is a place in the list and a
+ * Remove button it does not get; see `defaults.ts`.
  */
-export function effectiveInstalls(stored: readonly PluginInstall[], defaults: readonly string[] = defaultPluginSpecs()): PluginInstall[] {
-  const out: PluginInstall[] = defaults.map((spec) => ({ spec, enabled: stored.find((p) => p.spec === spec)?.enabled ?? true }));
-  for (const p of stored) if (!defaults.includes(p.spec)) out.push(p);
+export function effectiveInstalls(stored: readonly PluginInstall[], defaults: readonly DefaultPlugin[] = defaultPlugins()): PluginInstall[] {
+  const out: PluginInstall[] = defaults.map((d) => ({ spec: d.spec, enabled: stored.find((p) => p.spec === d.spec)?.enabled ?? d.enabled }));
+  for (const p of stored) if (!defaults.some((d) => d.spec === p.spec)) out.push(p);
   return out;
 }
 

@@ -295,7 +295,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image and Paint are plugins installed by default (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on) and Paint (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -464,9 +464,11 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 `import.meta.glob` in `builtin.ts` because Vite hashes (and here inlines) the asset. It rides on the
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
-`defaults.ts` holds the specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-paint` — plus any built-in), which `effectiveInstalls` merges over
-the stored list, so a default is always listed, can be turned off but not removed, and is otherwise
+`defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
+`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint` off — plus any built-in, each a
+`DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
+the stored list, so a default is always listed, starts as its entry says unless the stored list says
+otherwise, can be turned on or off but not removed, and is otherwise
 an ordinary spec fetched over the network on every start; the Manage Plugins row badges it `default`
 and hides its Remove button (`add` canonicalises what the user pastes through `parseSpec(...).display`,
 so pasting the default's own github.com URL is recognised as it rather than duplicating it).
@@ -526,7 +528,7 @@ and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers t
 list, map tools, panels, the palette API, placement, and the real-tileset suite via
 `primeTileset`).
 
-**Paint** (`github.com/scm-js/plugin-paint`, the second default) is the worked example for
+**Paint** (`github.com/scm-js/plugin-paint`, the second default, listed but not enabled) is the worked example for
 `ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and
 the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.test.ts`. Its brush
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's

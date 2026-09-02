@@ -77,7 +77,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Locations: create, resize, snap, rename, elevation flags | Yes |
 | Fog of war, per player | Yes |
 | Cut, copy and paste, including between maps | Yes |
-| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin installed by default (Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
+| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Auto-place Start Locations | Not yet |
 
 ### Triggers
@@ -365,10 +365,11 @@ an `activate(api)` export; it runs with the editor's own privileges, so only add
 you trust. Tick boxes turn plugins off without removing them; Reload re-fetches one
 after a change. [docs/plugins.md](docs/plugins.md) has the API.
 
-Plugins marked *default* are the ones the editor starts with. They are ordinary plugins
-loaded from their own repositories over the network — nothing about them is built in —
-so they can be switched off but not removed from the list, and they need a working
-connection on the first load of a session.
+Plugins marked *default* are the ones the editor lists from the start. They are ordinary
+plugins loaded from their own repositories over the network — nothing about them is built
+in — so they can be switched on and off but not removed from the list, and they need a
+working connection on the first load of a session. Terrain from Image starts on; Paint is
+listed but off until you tick it.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -390,8 +391,9 @@ undo step. *Isometric terrain* paints every lattice diamond with the isometric b
 ground first and rare features last, so cliffs and shorelines are generated at every
 boundary; *Flat tiles* stamps flat pairs and leaves the ISOM alone.
 
-**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is installed by
-default: Tools ▸ Paint…, Ctrl+Shift+P, or right-click the map — *Paint…*. A panel floats
+**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is in the list
+but off; tick it in Manage Plugins, then Tools ▸ Paint…, Ctrl+Shift+P, or right-click the
+map — *Paint…*. A panel floats
 over the map (drag it by its title; it blocks nothing). Pick a tool in it and draw: what
 gets laid down is whatever the active layer's palette has picked, so choose a unit and a
 player on the Units layer, a doodad on the Doodads layer, a terrain or a tile on the

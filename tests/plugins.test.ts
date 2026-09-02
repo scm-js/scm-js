@@ -23,7 +23,7 @@ import {
   activatePlugin, Contributions, createPluginApi, deactivatePlugin, effectiveInstalls, isPluginActive, resolveActivate, runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
-import { DEFAULT_REMOTE_PLUGINS, defaultPluginSpecs } from "../src/plugins/defaults";
+import { DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
 import { pluginIdOf, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
@@ -386,11 +386,11 @@ describe("plugin lifecycle", () => {
   });
 
   it("merges the persisted list over the defaults", () => {
-    const defaults = ["builtin:a", "github:d/p"];
-    expect(effectiveInstalls([], defaults)).toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: true }]);
-    // A default the user turned off keeps its place; anything else follows in the order it was added.
-    expect(effectiveInstalls([{ spec: "github:d/p", enabled: false }, { spec: "github:x/y", enabled: true }], defaults))
-      .toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: false }, { spec: "github:x/y", enabled: true }]);
+    const defaults = [{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: true }, { spec: "github:off/q", enabled: false }];
+    expect(effectiveInstalls([], defaults)).toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: true }, { spec: "github:off/q", enabled: false }]);
+    // A default the user turned off (or on) keeps its place; anything else follows in the order it was added.
+    expect(effectiveInstalls([{ spec: "github:d/p", enabled: false }, { spec: "github:x/y", enabled: true }, { spec: "github:off/q", enabled: true }], defaults))
+      .toEqual([{ spec: "builtin:a", enabled: true }, { spec: "github:d/p", enabled: false }, { spec: "github:off/q", enabled: true }, { spec: "github:x/y", enabled: true }]);
     const store = createStore();
     setInstalled(store, "github:x/y", { enabled: true });
     setInstalled(store, "github:d/p", { enabled: false });
@@ -399,15 +399,18 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image and Paint as remote defaults", () => {
-    expect(DEFAULT_REMOTE_PLUGINS).toEqual(["github:scm-js/plugin-image-to-terrain", "github:scm-js/plugin-paint"]);
+  it("ships Terrain from Image on and Paint off as remote defaults", () => {
+    expect(DEFAULT_REMOTE_PLUGINS).toEqual([{ spec: "github:scm-js/plugin-image-to-terrain", enabled: true }, { spec: "github:scm-js/plugin-paint", enabled: false }]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
-    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0])).toMatchObject({
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
       manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json",
     });
-    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1])).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
-    expect(defaultPluginSpecs()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
+    expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
+    expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
+    // A fresh editor lists Paint but does not run it until the user ticks it.
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
   });
 });
 

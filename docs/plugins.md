@@ -7,8 +7,9 @@ is the plugin author's guide and the reference for the host side. Two plugins ar
 worked examples for everything below, each in its own repository and installed by default:
 **Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)),
 a dialog, a pick on the map and a terrain transaction; and **Paint**
-([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)), a floating panel, a tool
-that owns the pointer and draws its own preview, and transactions on every layer. Both are
+([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), listed but off until you
+tick it), a floating panel, a tool that owns the pointer and draws its own preview, and
+transactions on every layer. Both are
 fetched over the network and transpiled in the browser like anybody else's, which is the
 point: the plugins that ship with the editor are the proof the loading path works, not
 exceptions to it.
@@ -77,8 +78,9 @@ exceptions to it.
 
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
-are merged over that list, so they are always shown and can be turned off but not
-removed; being a default buys a plugin nothing else — it is fetched and loaded by the
+are merged over that list, so they are always shown and can be turned on or off but not
+removed; each says whether it starts on (Terrain from Image does, Paint waits to be
+ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
 ## Writing a plugin
@@ -281,7 +283,7 @@ plugin's name prefixed.
 | `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
 | `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
 | `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
-| `src/plugins/defaults.ts` | The specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, plus any built-in), merged over the stored list by `effectiveInstalls`. |
+| `src/plugins/defaults.ts` | The plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, each with whether it starts on, plus any built-in), merged over the stored list by `effectiveInstalls`. |
 | `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its two siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`) and `pluginPanelsAtom` (the open `ui.panel`s). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
@@ -355,8 +357,9 @@ if you want the isometric brush back). One undo entry either way.
 
 ## Paint
 
-[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed by default — Tools ▸
-Paint…, `Ctrl+Shift+P`, or *Paint…* on the map's right-click menu opens a panel that floats
+[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), listed by default and
+enabled with its tick in Manage Plugins — Tools ▸ Paint…, `Ctrl+Shift+P`, or *Paint…* on
+the map's right-click menu then opens a panel that floats
 over the map (`api.ui.panel`). Pick a tool in it — freehand, line, rectangle, ellipse,
 polygon, star, spray, text, eraser — and draw on the map; the *brush* is whatever the
 active layer's palette has picked (`api.palette.active()` and `api.terrain.active()`,

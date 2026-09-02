@@ -7,7 +7,7 @@ import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginRuntimesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { activatePlugin, deactivatePlugin, effectiveInstalls, reloadPlugin, setInstalled } from "../../plugins/host";
-import { defaultPluginSpecs } from "../../plugins/defaults";
+import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
 import { parseSpec, PluginLoadError } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
 import type { DialogHandle, DialogSpec, PluginIcon, PluginInfo } from "../../plugins/api";
@@ -164,7 +164,7 @@ export function PluginsDialog({ entry }: DialogProps) {
   const [spec, setSpec] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const defaults = defaultPluginSpecs();
-  const list = effectiveInstalls(installed, defaults);
+  const list = effectiveInstalls(installed, defaultPlugins());
 
   const add = useCallback(() => {
     const s = spec.trim();

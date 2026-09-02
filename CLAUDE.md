@@ -303,7 +303,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations; the Repair plugin took over Rebuild ISOM from Tiles); scmscx.com, Terrain from Image and Repair (on), Paint, Section Explorer, Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations; the Repair plugin took over Rebuild ISOM from Tiles); scmscx.com, Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -486,8 +486,8 @@ runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
 `github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-repair` on,
-`github:scm-js/plugin-paint`, `github:scm-js/plugin-section-explorer`, `github:scm-js/plugin-walkability` and
-`github:scm-js/plugin-melee-wizard` off — plus any built-in, each a
+`github:scm-js/plugin-walkability` and `github:scm-js/plugin-melee-wizard` off; Paint and Section
+Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -671,7 +671,7 @@ and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers t
 list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
 real-tileset suite via `primeTileset`).
 
-**Paint** (`github.com/scm-js/plugin-paint`, the second default, listed but not enabled) is the worked example for
+**Paint** (`github.com/scm-js/plugin-paint`, not a default — installed from Browse Plugins) is the worked example for
 `ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and
 the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.test.ts`. Its brush
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's
@@ -692,7 +692,7 @@ second, and the dialog explains the block and links to the site when nothing ans
 runs no forwarder of its own and must not grow one for this — the user decided that; the fix belongs
 on the site (a `CorsLayer` on its GET routes).
 
-**Section Explorer** (`github.com/scm-js/plugin-section-explorer`, a default that starts off) is the
+**Section Explorer** (`github.com/scm-js/plugin-section-explorer`, not a default — installed from Browse Plugins) is the
 annotated hex editor and the worked example for `api.document.sections` and `api.names`. The host side
 is `src/editor/sections.ts`: `currentChk(scn)` is `parseChk(serializeScenario(scn))` — the file Save
 would write, dirty sections encoded, every occurrence with its offset — `sectionInfos` decorates it

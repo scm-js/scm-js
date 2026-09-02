@@ -421,7 +421,8 @@ Plugins marked *default* are the ones the editor lists from the start. They are 
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
 working connection on the first load of a session. scmscx.com, Terrain from Image and Repair start on;
-Paint, Section Explorer, Walkability and Melee Wizard are listed but off until you tick them.
+Walkability and Melee Wizard are listed but off until you tick them. Paint and Section
+Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like any other.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -456,9 +457,9 @@ the dialog's footer turns the automatic one off. It is also where Rebuild ISOM f
 Tiles went: a map with no `ISOM`, or one out of step after Rect and Tile edits, is one of
 its findings.
 
-**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is in the list
-but off; tick it in Manage Plugins, then Tools ▸ Paint…, Ctrl+Shift+P, or right-click the
-map — *Paint…*. A panel floats
+**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is not
+installed to start with; find it in Plugins ▸ Browse Plugins… and install it, then
+Tools ▸ Paint…, Ctrl+Shift+P, or right-click the map — *Paint…*. A panel floats
 over the map (drag it by its title; it blocks nothing). Pick a tool in it and draw: what
 gets laid down is whatever the active layer's palette has picked, so choose a unit and a
 player on the Units layer, a doodad on the Doodads layer, a terrain or a tile on the
@@ -493,7 +494,8 @@ the editor; the plugin tries the site first every time, so it works with no chan
 the site allows it. Settings holds an optional forwarder address for anyone who runs one.
 
 **Section Explorer** ([scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer))
-is in the list but off. Tick it, then Tools ▸ Section Explorer… (Ctrl+Shift+H) opens the
+is not installed to start with; install it from Plugins ▸ Browse Plugins…, and then
+Tools ▸ Section Explorer… (Ctrl+Shift+H) opens the
 map file as the game reads it: every section in file order on the left, with badges for
 the ones the editor keeps as raw bytes, has never heard of, holds unsaved changes for, or
 that repeat or have the wrong length; the bytes of the chosen section in the middle, each

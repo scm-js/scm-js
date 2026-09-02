@@ -29,8 +29,6 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-scm-scx", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
   { spec: "github:scm-js/plugin-repair", enabled: true },
-  { spec: "github:scm-js/plugin-paint", enabled: false },
-  { spec: "github:scm-js/plugin-section-explorer", enabled: false },
   { spec: "github:scm-js/plugin-walkability", enabled: false },
   { spec: "github:scm-js/plugin-melee-wizard", enabled: false },
 ];

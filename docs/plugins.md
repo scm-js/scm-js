@@ -4,14 +4,14 @@ scmJS can load third-party code — a *plugin* — from a public Git repository 
 URL, and let it add menu items, context-menu entries, hotkeys and dialogs, read the
 open map and edit it through the same undo model the built-in tools use. This document
 is the plugin author's guide and the reference for the host side. Two plugins are the
-worked examples for everything below, each in its own repository and installed by default:
-**Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)),
-a dialog, a pick on the map and a terrain transaction; and **Paint**
-([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), listed but off until you
-tick it), a floating panel, a tool that owns the pointer and draws its own preview, and
-transactions on every layer; **Walkability** and **Melee Wizard** (both listed but off)
-are the read-only analysis drawn over the map and the placement wizard, described at the
-end. All are
+worked examples for everything below, each in its own repository:
+**Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain),
+installed by default), a dialog, a pick on the map and a terrain transaction; and **Paint**
+([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed from Browse
+Plugins), a floating panel, a tool that owns the pointer and draws its own preview, and
+transactions on every layer; **Walkability** and **Melee Wizard** (both listed by default
+but off) are the read-only analysis drawn over the map and the placement wizard, described
+at the end. All are
 fetched over the network and transpiled in the browser like anybody else's, which is the
 point: the plugins that ship with the editor are the proof the loading path works, not
 exceptions to it.
@@ -764,8 +764,8 @@ rebuilds it, if you want the isometric brush back). One undo entry either way.
 
 ## Paint
 
-[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), listed by default and
-enabled with its tick in Manage Plugins — Tools ▸ Paint…, `Ctrl+Shift+P`, or *Paint…* on
+[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed from Plugins ▸
+Browse Plugins… — Tools ▸ Paint…, `Ctrl+Shift+P`, or *Paint…* on
 the map's right-click menu then opens a panel that floats
 over the map (`api.ui.panel`). Pick a tool in it — freehand, line, rectangle, ellipse,
 polygon, star, spray, text, eraser — and draw on the map; the *brush* is whatever the
@@ -818,8 +818,8 @@ editor. The minimaps still show either way. The editor itself runs no forwarder.
 
 ## Section Explorer
 
-[scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer), listed
-by default and off until ticked, is the worked example for `api.document.sections` and
+[scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer),
+installed from Plugins ▸ Browse Plugins…, is the worked example for `api.document.sections` and
 `api.names`: Tools ▸ Section Explorer… (`Ctrl+Shift+H`) is a hex editor that knows the map
 file. The left pane is `sections.list()` with badges for what the registry and the buffer
 say (raw, unknown, unsaved, edited, repeated, wrong size, cut short); the middle is a hex

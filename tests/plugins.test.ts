@@ -1796,6 +1796,28 @@ describe("plugin registries", () => {
     expect(() => parseRegistry({ plugins: "no" }, REGISTRY_URL)).toThrow(RegistryError);
   });
 
+  it("carries the reviewed mark through, and only as a string", () => {
+    const registry = parseRegistry(
+      {
+        plugins: [
+          { spec: "github:o/read", name: "Read", version: "1.0.0", reviewed: "1.0.0" },
+          // A registry drops a lapsed mark itself, so the editor never has to date one;
+          // anything that is not a string is simply not a mark.
+          { spec: "github:o/unread", name: "Unread", version: "2.0.0" },
+          { spec: "github:o/odd", name: "Odd", reviewed: true },
+          { spec: "github:o/blank", name: "Blank", reviewed: "  " },
+        ],
+      },
+      REGISTRY_URL,
+    );
+    expect(registry.plugins).toEqual([
+      { spec: "github:o/read", name: "Read", version: "1.0.0", reviewed: "1.0.0" },
+      { spec: "github:o/unread", name: "Unread", version: "2.0.0" },
+      { spec: "github:o/odd", name: "Odd" },
+      { spec: "github:o/blank", name: "Blank" },
+    ]);
+  });
+
   it("resolves an entry's icon against the plugin's own files", () => {
     expect(entryIcon({ spec: "github:o/p", name: "P", icon: "icon.svg" }))
       .toEqual({ kind: "image", url: "https://raw.githubusercontent.com/o/p/HEAD/icon.svg" });

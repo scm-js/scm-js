@@ -419,6 +419,14 @@ function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
           <strong>{entry.name}</strong>
           {entry.version && <span className="dim">v{entry.version}</span>}
           {entry.default && <span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
+          {entry.reviewed && (
+            <span
+              className="badge ok"
+              title={`Someone at the registry read this plugin's code at ${entry.reviewed}. It is not a safety guarantee: an installed plugin runs with the editor's own privileges.`}
+            >
+              reviewed
+            </span>
+          )}
           {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
         </div>
         {entry.description && <span className="hint">{entry.description}</span>}

@@ -37,6 +37,14 @@ export interface RegistryEntry {
   api?: number;
   tags?: string[];
   /**
+   * The release someone at the registry read the code of, when that is still the release
+   * being listed. A registry drops it again when the plugin moves past it, so an entry
+   * either carries a mark that describes `commit`, or carries none — it is never stale.
+   * It is a claim that a person read the plugin, not that the plugin is safe: there is no
+   * sandbox, and an installed plugin runs with the editor's own privileges.
+   */
+  reviewed?: string;
+  /**
    * The commit the index was built from. Shown, never installed from: what gets pinned is
    * whatever the confirmation resolves at install time, which may be newer than the index.
    */
@@ -81,7 +89,7 @@ function entryOf(raw: unknown): RegistryEntry | null {
   // would offer an Install that cannot work.
   try { source = parseSpec(spec); } catch { return null; }
   const out: RegistryEntry = { spec: canonicalSpec(source), name };
-  for (const k of ["version", "description", "author", "repo", "homepage", "icon", "commit", "updated"] as const) {
+  for (const k of ["version", "description", "author", "repo", "homepage", "icon", "reviewed", "commit", "updated"] as const) {
     const v = str(e[k]);
     if (v !== undefined) out[k] = v;
   }

@@ -92,10 +92,19 @@ open. What it lists comes from *registries*: one JSON file per registry, holding
 per plugin — the spec to install, and the fields that plugin's own `plugin.json` carries,
 so a whole list is shown from one request rather than one manifest fetch per row. The
 project's own is `github.com/scm-js/registry`, generated from the organisation itself —
-every repository wearing the `scmjs` and `plugin` topics, described by the `plugin.json`
-at its newest version tag (an untagged one falls back to its default branch) — hourly, and
-within about a minute of a plugin repository saying it changed; `DEFAULT_REGISTRIES` in
-`defaults.ts` names it and the user can add more under **Sources** (`userRegistriesAtom`).
+every repository named `plugin-…` or wearing the `scmjs` and `plugin` topics, described by
+the `plugin.json` at its newest version tag (an untagged one falls back to its default
+branch) — hourly, and within about a minute of a plugin repository saying it changed;
+`DEFAULT_REGISTRIES` in `defaults.ts` names it and the user can add more under **Sources**
+(`userRegistriesAtom`).
+
+Listing is therefore automatic, and says nothing about a plugin having been read. The one
+field that carries a judgement is `RegistryEntry.reviewed`: the release someone at that
+registry read the code of, which the *registry* drops again once the plugin moves past it,
+so the editor never has to date a mark — an entry either carries one describing its
+`commit` or carries none. The Browse row shows it as a `reviewed` badge beside `default`.
+It is not a safety claim: there is no sandbox, and an installed plugin runs with the
+editor's own privileges.
 
 `plugins/registry.ts` is the whole host side and is pure apart from the fetching:
 

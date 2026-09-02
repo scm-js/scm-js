@@ -556,6 +556,10 @@ input[type="range"] {
   background: rgba(79, 209, 197, 0.15);
   color: var(--teal);
 }
+.badge.ok {
+  background: rgba(92, 184, 92, 0.15);
+  color: var(--ok);
+}
 .badge.warn {
   background: rgba(224, 165, 69, 0.15);
   color: var(--warn);

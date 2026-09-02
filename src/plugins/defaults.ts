@@ -15,7 +15,7 @@
 import { BUILTIN_PLUGINS } from "./builtin";
 
 /** Plugins loaded from their own repositories, pinned to no ref so Reload takes the latest. */
-export const DEFAULT_REMOTE_PLUGINS: readonly string[] = ["github:scm-js/plugin-image-to-terrain"];
+export const DEFAULT_REMOTE_PLUGINS: readonly string[] = ["github:scm-js/plugin-image-to-terrain", "github:scm-js/plugin-paint"];
 
 /** Every spec that is installed unless the user says otherwise: the built-ins, then the remotes. */
 export const defaultPluginSpecs = (): string[] => [

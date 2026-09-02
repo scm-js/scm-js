@@ -23,7 +23,7 @@ interface TitleBox { value: string; listeners: Set<() => void> }
  * The loader has already decided which of the two it is (`resolveIcon`); nothing here
  * touches the manifest string, so a `javascript:` "icon" never reaches an attribute.
  */
-function PluginIconView({ icon, size = 30 }: { icon: PluginIcon | null | undefined; size?: number }) {
+export function PluginIconView({ icon, size = 30 }: { icon: PluginIcon | null | undefined; size?: number }) {
   const [broken, setBroken] = useState(false);
   const style = { width: size, height: size, fontSize: Math.round(size * 0.72) };
   if (icon?.kind === "image" && !broken) {

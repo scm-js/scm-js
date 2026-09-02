@@ -10,9 +10,12 @@ import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import { hasIsom } from "../src/editor/isom";
 import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
-import { clipSelectionAtom, mapTilesetAtom, terrainModeAtom } from "../src/atoms/editorAtoms";
+import { activeUnitAtom, clipSelectionAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom } from "../src/atoms/editorAtoms";
 import { dialogStackAtom } from "../src/atoms/uiAtoms";
-import { cancelMapPickAtom, installedPluginsAtom, mapPickAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom } from "../src/atoms/pluginAtoms";
+import {
+  cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
+  pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+} from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import { bundleModule, candidateUrls, findImports, loadPlugin, parseSpec, PluginLoadError, resolveIcon, resolvePlugin, validateManifest, type LoaderDeps } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
@@ -22,7 +25,7 @@ import {
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REMOTE_PLUGINS, defaultPluginSpecs } from "../src/plugins/defaults";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
-import { pluginIdOf, type PluginApi } from "../src/plugins/api";
+import { pluginIdOf, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
 /* ── Specs and manifests ────────────────────────────────── */
 
@@ -396,13 +399,14 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships the image-to-terrain plugin as a remote default", () => {
-    expect(DEFAULT_REMOTE_PLUGINS).toContain("github:scm-js/plugin-image-to-terrain");
+  it("ships Terrain from Image and Paint as remote defaults", () => {
+    expect(DEFAULT_REMOTE_PLUGINS).toEqual(["github:scm-js/plugin-image-to-terrain", "github:scm-js/plugin-paint"]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0])).toMatchObject({
       kind: "remote",
       manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json",
     });
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1])).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
     expect(defaultPluginSpecs()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
   });
 });
@@ -522,6 +526,136 @@ describe("plugin picks and images", () => {
     handle.setTitle("B");
     expect(box.value).toBe("B");
     expect(heard).toBe(1);
+  });
+});
+
+/* ── Map tools, panels, palettes ────────────────────────── */
+
+describe("plugin map tools", () => {
+  it("run through the atom, hear the pointer, redraw on request and stop once", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const heard: string[] = [];
+    const stops: MapToolStopReason[] = [];
+    const handle = api.ui.mapTool({
+      name: "Line",
+      hint: "drag",
+      onDown: (p) => heard.push(`down ${p.px},${p.py}`),
+      onMove: (p) => heard.push(`move ${p.tx},${p.ty}${p.down ? " held" : ""}`),
+      onUp: (p) => heard.push(`up ${p.inMap ? "in" : "out"}`),
+      onStop: (r) => stops.push(r),
+    });
+    const req = store.get(mapToolAtom)!;
+    expect(req).toMatchObject({ pluginId: "t" });
+    expect(req.spec.name).toBe("Line");
+    expect(handle.isActive()).toBe(true);
+    const pointer = { px: 40, py: 50, tx: 1, ty: 1, inMap: true, down: false, shift: false, ctrl: false, alt: false };
+    req.spec.onDown!({ ...pointer, down: true });
+    req.spec.onMove!({ ...pointer, tx: 2, down: true });
+    req.spec.onUp!(pointer);
+    expect(heard).toEqual(["down 40,50", "move 2,1 held", "up in"]);
+    const rev = store.get(mapToolRevisionAtom);
+    handle.redraw();
+    expect(store.get(mapToolRevisionAtom)).toBe(rev + 1);
+    handle.stop();
+    handle.stop();
+    expect(stops).toEqual(["stopped"]);
+    expect(handle.isActive()).toBe(false);
+    expect(store.get(mapToolAtom)).toBeNull();
+    expect(bag.disposables).toHaveLength(0);
+    handle.redraw(); // nothing to repaint for
+    expect(store.get(mapToolRevisionAtom)).toBe(rev + 2);
+  });
+
+  it("stop on Esc unless the tool keeps itself, on a newer tool, on a map change and on deactivation", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const stops: MapToolStopReason[] = [];
+    let keep = true;
+    const a = api.ui.mapTool({ name: "A", onCancel: () => keep, onStop: (r) => stops.push(`a:${r}` as MapToolStopReason) });
+    expect(store.set(cancelMapToolAtom)).toBe(true);
+    expect(a.isActive()).toBe(true); // it cancelled a gesture of its own and kept running
+    keep = false;
+    expect(store.set(cancelMapToolAtom)).toBe(true);
+    expect(a.isActive()).toBe(false);
+    expect(store.set(cancelMapToolAtom)).toBe(false);
+    const b = api.ui.mapTool({ name: "B", onStop: (r) => stops.push(`b:${r}` as MapToolStopReason) });
+    const c = api.ui.mapTool({ name: "C", onStop: (r) => stops.push(`c:${r}` as MapToolStopReason) });
+    expect(b.isActive()).toBe(false);
+    expect(store.get(mapToolAtom)!.spec.name).toBe("C");
+    store.set(scenarioAtom, null);
+    expect(c.isActive()).toBe(false);
+    expect(store.get(mapToolAtom)).toBeNull();
+    const { store: store2 } = blankStore();
+    const bag2 = new Contributions();
+    const d = createPluginApi(store2, { id: "t", name: "T", source: "s" }, bag2).ui.mapTool({ name: "D", onStop: (r) => stops.push(`d:${r}` as MapToolStopReason) });
+    bag2.dispose();
+    expect(d.isActive()).toBe(false);
+    expect(stops).toEqual(["a:cancelled", "b:replaced", "c:document", "d:disabled"]);
+  });
+});
+
+describe("plugin panels and palettes", () => {
+  it("open a panel in the registry and close it from the handle, the plugin or deactivation", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    let closed = 0;
+    const a = api.ui.panel({ title: "Paint", width: 300, mount: () => {}, onClose: () => closed++ });
+    const b = api.ui.panel({ title: "Other", mount: () => {} });
+    expect(store.get(pluginPanelsAtom).map((p) => p.spec.title)).toEqual(["Paint", "Other"]);
+    expect(store.get(pluginPanelsAtom)[0].plugin.id).toBe("t");
+    a.setTitle("Paint — Line");
+    expect(store.get(pluginPanelsAtom)[0].title.value).toBe("Paint — Line");
+    a.close();
+    a.close();
+    expect(closed).toBe(1);
+    expect(a.isOpen()).toBe(false);
+    expect(store.get(pluginPanelsAtom).map((p) => p.spec.title)).toEqual(["Other"]);
+    bag.dispose();
+    expect(b.isOpen()).toBe(false);
+    expect(store.get(pluginPanelsAtom)).toEqual([]);
+  });
+
+  it("read and set what the palettes picked, and answer names and sizes without the game data", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    store.set(activeUnitAtom, 7);
+    store.set(unitOwnerAtom, 3);
+    expect(api.palette.active()).toMatchObject({ unit: 7, owner: 3, spriteKind: "pure", doodad: -1, fogPlayers: 1, fogMode: "fog" });
+    let heard = 0;
+    api.events.on("palette", () => heard++);
+    api.palette.setActive({ unit: 0, owner: 0, spriteFlipped: true, fogMode: "clear" });
+    expect(api.palette.active()).toMatchObject({ unit: 0, owner: 0, spriteFlipped: true, spriteDisabled: false, fogMode: "clear" });
+    expect(heard).toBeGreaterThanOrEqual(3);
+    expect(api.palette.unitName(0)).toBe("Terran Marine");
+    expect(api.palette.unitGroups().flatMap((g) => g.units)).toHaveLength(228);
+    expect(api.palette.unitSize(106)).toEqual({ width: 32, height: 32, building: false, flyer: false }); // no units.dat here: the one-tile fallback
+    expect(api.palette.spriteName("unit", 0)).toBe("Terran Marine");
+    expect(api.palette.playerColor(0)).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(api.palette.doodadCategories()).toEqual([]);
+    expect(api.palette.doodadInfo(1)).toBeNull();
+  });
+
+  it("place units and sprites on the map in one call, and answer the placement checks", () => {
+    const { store, scn } = blankStore();
+    const result = runTransaction(store, "place", (tx) => {
+      expect(tx.placeUnit(0, 2, 40, 40)).toBe(0);
+      expect(tx.placeUnit(0, 2, 5000, -9)).toBe(1); // kept on the map
+      expect(tx.canPlaceUnit(0, 40, 40)).toBe(false); // the first one is in the way
+      expect(tx.canPlaceUnit(0, 120, 120)).toBe(true);
+      expect(tx.placeSprite("pure", 3, 1, 64, 64, { flipped: true })).toBe(0);
+    });
+    expect(result).toMatchObject({ units: 2, sprites: 1 });
+    expect(scn.units[0]).toMatchObject({ unitId: 0, owner: 2, x: 40, y: 40 });
+    expect(scn.units[1].x).toBeLessThan(scn.width * 32);
+    expect(scn.units[1].y).toBe(0);
+    expect(scn.sprites[0]).toMatchObject({ spriteId: 3, owner: 1, x: 64, y: 64 });
+    store.set(undoAtom);
+    expect(scn.units).toHaveLength(0);
+    expect(scn.sprites).toHaveLength(0);
   });
 });
 

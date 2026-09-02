@@ -77,6 +77,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Locations: create, resize, snap, rename, elevation flags | Yes |
 | Fog of war, per player | Yes |
 | Cut, copy and paste, including between maps | Yes |
+| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin installed by default (Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Auto-place Start Locations | Not yet |
 
 ### Triggers
@@ -111,7 +112,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Statistics | Yes |
 | Export the map as a PNG, from full art down to a minimap | Yes |
 | Import and export strings | Yes |
-| Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys and dialogs and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
+| Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
 
 ## Working in the editor
@@ -388,6 +389,28 @@ lightness or hue, *blur* / *despeckle* / *min. region* clean the result up. Appl
 undo step. *Isometric terrain* paints every lattice diamond with the isometric brush, low
 ground first and rare features last, so cliffs and shorelines are generated at every
 boundary; *Flat tiles* stamps flat pairs and leaves the ISOM alone.
+
+**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is installed by
+default: Tools ▸ Paint…, Ctrl+Shift+P, or right-click the map — *Paint…*. A panel floats
+over the map (drag it by its title; it blocks nothing). Pick a tool in it and draw: what
+gets laid down is whatever the active layer's palette has picked, so choose a unit and a
+player on the Units layer, a doodad on the Doodads layer, a terrain or a tile on the
+Terrain layer, fog players on the Fog of War layer, and switch layers to change the brush.
+Freehand and Line are drags (Shift snaps a line to 45°); Rectangle and Ellipse drag a box
+(Shift squares or rounds it, Alt draws from the centre); Polygon is one click per corner
+and a click on the first corner to finish; Star drags from the centre, and the drag turns
+it (points and inner radius in the panel, an inner radius of 100% is a regular polygon);
+Spray scatters while you drag; Text stamps the panel's text in a 5 × 7 dot font, one
+object or one tile per dot; Eraser removes the layer's units, sprites or doodads under the
+stroke. *Filled* fills a closed shape in a grid, a staggered grid or at random; *Spacing*
+is the distance between objects (auto = the object's own size); *Jitter* nudges them off
+their spots; *Width* is the brush width in tiles for terrain and fog and the eraser's and
+spray's radius; *Players* keeps the palette's player, cycles 1–8 along the shape, or picks
+one at random each; *Units* can skip the spots the Units palette's placement checks
+refuse. A count follows the pointer while you draw. Esc drops the shape in progress, and
+again (or a right-click) leaves the tool. Terrain is painted as flat tiles like the Rect
+brush, so Rebuild ISOM from Tiles afterwards if you want the isometric brush back there.
+Every stroke is one undo step.
 
 ## Keyboard
 

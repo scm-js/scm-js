@@ -50,7 +50,9 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, mapPickAtom, pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import type { MapPointer } from "../../plugins/api";
+import PluginPanels from "../panels/PluginPanels";
 import { pluginContextRows } from "../../plugins/contextMenu";
 import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
 import { useUnitTools } from "../../hooks/useUnitTools";
@@ -143,6 +145,8 @@ export default function MapViewport() {
   const clipGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   /** A plugin's `pickArea` / `pickTile` drag in progress (see `mapPickAtom`). */
   const pickGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  /** Whether a plugin's map tool holds the primary button (see `mapToolAtom`). */
+  const toolDownRef = useRef(false);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
@@ -203,6 +207,10 @@ export default function MapViewport() {
   const pluginContextItems = useAtomValue(pluginContextItemsAtom);
   const mapPick = useAtomValue(mapPickAtom);
   const cancelPick = useSetAtom(cancelMapPickAtom);
+  const mapTool = useAtomValue(mapToolAtom);
+  const cancelTool = useSetAtom(cancelMapToolAtom);
+  // Only read so the tool's overlay redraws when it asks (`MapToolHandle.redraw`).
+  const mapToolRevision = useAtomValue(mapToolRevisionAtom);
   const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
@@ -233,6 +241,8 @@ export default function MapViewport() {
   const clipEditing = layer === "clipboard" && scenario !== null;
   /** A plugin is waiting for a rectangle or a tile; the gesture goes to it ahead of every layer. */
   const picking = mapPick !== null && scenario !== null;
+  /** A plugin's tool owns the pointer (a pick in progress still goes first). */
+  const tooling = !picking && mapTool !== null && scenario !== null;
   /** The clip follows the pointer, a click stamps it. */
   const clipPasting = clipEditing && pastingClip && clip !== null;
   const showFog = scenario !== null && flags.fog;
@@ -848,8 +858,8 @@ export default function MapViewport() {
       ctx.strokeRect(Math.round(blendAnchor.x * tilePx - sx) + 1, Math.round(blendAnchor.y * tilePx - sy) + 1, Math.round(tilePx) - 2, Math.round(tilePx) - 2);
     }
 
-    // hover brush, with a preview of what the terrain brush would leave behind (not while a plugin's pick owns the pointer)
-    const hv = picking ? null : hoverRef.current;
+    // hover brush, with a preview of what the terrain brush would leave behind (not while a plugin's pick or tool owns the pointer)
+    const hv = picking || tooling ? null : hoverRef.current;
     const hp = hoverPointRef.current;
     if (hv && hp && painting && terrainMode === "isom") {
       // The isometric brush works in diamonds — 4 tiles wide, 2 tall, centred on the
@@ -952,6 +962,20 @@ export default function MapViewport() {
       ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(tilePx * b) - 1, Math.round(tilePx * b) - 1);
     }
 
+    // A plugin's map tool draws last, over everything, in canvas pixels through the view it is given.
+    if (tooling && mapTool) {
+      const view = {
+        zoom,
+        tilePx,
+        x: (px: number) => px * zoom - sx,
+        y: (py: number) => py * zoom - sy,
+        visible: { x0, y0, x1, y1 },
+      };
+      ctx.save();
+      try { mapTool.spec.draw?.(ctx, view); } catch (err) { console.error("[plugins] map tool draw failed", err); }
+      ctx.restore();
+    }
+
     // rulers
     const labelEvery = [1, 2, 4, 8, 16, 32].find((n) => n * tilePx >= 40) ?? 32;
     const tick = tilePx >= 8 ? 1 : labelEvery / 2;
@@ -1007,7 +1031,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
@@ -1115,10 +1139,32 @@ export default function MapViewport() {
   const inMap = (t: { x: number; y: number }) => t.x >= 0 && t.y >= 0 && t.x < mapW && t.y < mapH;
   const clampToMap = (t: { x: number; y: number }) => ({ x: Math.min(mapW - 1, Math.max(0, t.x)), y: Math.min(mapH - 1, Math.max(0, t.y)) });
 
+  /** What a plugin's map tool sees: the pointer in map pixels and tiles, kept on the map while it drags. */
+  const toolPointer = (e: React.PointerEvent<HTMLDivElement>, down: boolean, inside = true): MapPointer => {
+    const raw = pointAt(e);
+    const p = down || !inside ? clampPoint(raw) : raw;
+    const t = clampToMap(tileAt(e));
+    return { px: p.px, py: p.py, tx: t.x, ty: t.y, inMap: inside && inMap(tileAt(e)), down, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
+  };
+  const callTool = (name: "onDown" | "onMove" | "onUp", p: MapPointer) => {
+    try { mapTool?.spec[name]?.(p); } catch (err) { console.error(`[plugins] map tool ${name} failed`, err); }
+  };
+
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const t = tileAt(e);
     if (!inMap(t)) return;
+    if (tooling) {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      toolDownRef.current = true;
+      hoverRef.current = t;
+      hoverPointRef.current = pointAt(e);
+      setCursor(t);
+      callTool("onDown", toolPointer(e, true));
+      draw();
+      return;
+    }
     if (picking) {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -1234,6 +1280,15 @@ export default function MapViewport() {
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
     const point = pointAt(e);
+    if (tooling || toolDownRef.current) {
+      const c = clampToMap(t);
+      hoverRef.current = inMap(t) || toolDownRef.current ? c : null;
+      hoverPointRef.current = clampPoint(point);
+      setCursor(c);
+      callTool("onMove", toolPointer(e, toolDownRef.current));
+      draw();
+      return;
+    }
     const pGesture = pickGestureRef.current;
     if (pGesture) {
       const c = clampToMap(t);
@@ -1341,6 +1396,13 @@ export default function MapViewport() {
   };
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (toolDownRef.current) {
+      toolDownRef.current = false;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      callTool("onUp", toolPointer(e, false));
+      draw();
+      return;
+    }
     const pGesture = pickGestureRef.current;
     if (pGesture) {
       pickGestureRef.current = null;
@@ -1426,10 +1488,18 @@ export default function MapViewport() {
     draw();
   };
 
-  const onLeave = (e: React.PointerEvent<HTMLDivElement>) => { hoverRef.current = null; hoverPointRef.current = null; e.currentTarget.style.cursor = ""; draw(); };
+  const onLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (tooling && !toolDownRef.current) callTool("onMove", toolPointer(e, false, false));
+    hoverRef.current = null;
+    hoverPointRef.current = null;
+    e.currentTarget.style.cursor = "";
+    draw();
+  };
   const onContextMenu = (e: React.MouseEvent) => {
     // While a plugin waits for a pick, a right-click cancels it instead of opening the menu.
     if (picking) { e.preventDefault(); pickGestureRef.current = null; cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; draw(); return; }
+    // A plugin's tool: the right-click is its cancel (the tool may keep running and only drop a gesture).
+    if (tooling) { e.preventDefault(); toolDownRef.current = false; cancelTool(); draw(); return; }
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
@@ -1555,7 +1625,7 @@ export default function MapViewport() {
             <div
               ref={surfaceRef}
               className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing || clipPasting ? "placing" : ""}`}
-              style={{ width: worldW, height: worldH }}
+              style={{ width: worldW, height: worldH, cursor: tooling ? mapTool?.spec.cursor ?? "crosshair" : undefined }}
               onPointerDown={onDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
@@ -1600,22 +1670,24 @@ export default function MapViewport() {
           StarCraft install to fill <code>public/tileset/</code>; terrain is drawn as flat colour until then.
         </div>
       )}
+      <PluginPanels />
       <div className="map-hud">
         <span className="hud-chip"><b>{tileset.name}</b></span>
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
         {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
         {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? "drag a rectangle" : "click a tile"} · Esc cancels</span>}
-        {unitPlacing && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
-        {spritePlacing && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
-        {doodadPlacing && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
+        {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} · Esc / right-click to stop</span>}
+        {unitPlacing && !tooling && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
+        {spritePlacing && !tooling && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
+        {doodadPlacing && !tooling && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
         {locationsEditing && <span className="hud-chip">locations · drag empty ground to create · snap <b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
         {clipEditing && !clipPasting && (
           <span className="hud-chip">
             cut / copy / paste · drag to mark an area{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} · Ctrl+C copies{clip && " · Ctrl+V pastes"}
           </span>
         )}
-        {clipPasting && clip && <span className="hud-chip">pasting <b>{clipSummary(clip)}</b> · click to stamp · Esc / right-click to stop</span>}
+        {clipPasting && clip && !tooling && <span className="hud-chip">pasting <b>{clipSummary(clip)}</b> · click to stamp · Esc / right-click to stop</span>}
         {showFog && <span className="hud-chip">fog of war <b>P{fogViewPlayer + 1}</b>{fogPainting && <> · {fogMode === "fog" ? "painting" : "clearing"} · Shift inverts</>}</span>}
       </div>
     </div>

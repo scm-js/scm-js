@@ -9,8 +9,9 @@
  */
 import type { createStore } from "jotai";
 import {
-  activeLayerAtom, activeTerrainAtom, activeTileAtom, brushSizeAtom, clipSelectionAtom, mapFilePathAtom, mapModifiedAtom, mapTilesetAtom,
-  selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, terrainModeAtom,
+  activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
+  clipSelectionAtom, fogModeAtom, fogPlayersAtom, mapFilePathAtom, mapModifiedAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom,
+  selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom,
 } from "../atoms/editorAtoms";
 import {
   commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
@@ -18,8 +19,9 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  installedPluginsAtom, mapPickAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom,
-  type MapPickKind, type PluginInstall, type PluginRuntime,
+  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginContextItemsAtom, pluginHotkeysAtom,
+  pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { scenarioDescription, scenarioName, tilesetIndex } from "../formats/chk/scenario";
@@ -29,16 +31,27 @@ import { NO_DOODADS } from "../formats/tileset/doodads";
 import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { peekUnitAssets } from "../formats/units/load";
+import { displayColorHex } from "../data/players";
+import { UNIT_GROUPS, unitName } from "../data/units";
+import { spriteCatalogue } from "../data/sprites";
+import { spriteName } from "../hooks/useSpriteTools";
+import { doodadLabel } from "../hooks/useDoodadTools";
+import { checkPlacement } from "../editor/placement";
+import type { DoodadDef } from "../formats/tileset/doodads";
 import { applyChanges, stampTerrain, stampTile, Stroke, type Rect, type TileChange } from "../editor/terrain";
 import { applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond } from "../editor/isom";
 import { hasEdits } from "../editor/history";
-import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, updateUnits, type UnitChange } from "../editor/units";
-import { addSprites, applySpriteChanges, makeSprite, removeSprites, type SpriteChange } from "../editor/sprites";
+import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
+import { addSprites, applySpriteChanges, clampSprite, makeSprite, removeSprites, type SpriteChange } from "../editor/sprites";
 import { applyDoodadChanges, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
 import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import { markDirty } from "../formats/chk/scenario";
-import { pluginIdOf, PLUGIN_API_VERSION, type Cells, type Deactivate, type DialogHandle, type EditResult, type EditTransaction, type PickOptions, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule } from "./api";
+import {
+  pluginIdOf, PLUGIN_API_VERSION,
+  type Cells, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle, type MapToolSpec, type MapToolStopReason,
+  type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginInfo, type PluginModule,
+} from "./api";
 import { loadPlugin, type LoaderDeps } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
@@ -112,6 +125,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     return type;
   };
   const applyTiles = (changes: TileChange[]) => { applyChanges(scn, changes); tiles.add(changes); return changes.length; };
+  const tables = () => peekUnitAssets()?.units ?? null;
 
   const tx: EditTransaction = {
     scenario: scn,
@@ -159,14 +173,29 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       return true;
     },
 
-    makeUnit: (unitId, owner, x, y) => makeUnit(peekUnitAssets()?.units ?? null, unitId, owner, x, y, serial++),
+    makeUnit: (unitId, owner, x, y) => makeUnit(tables(), unitId, owner, x, y, serial++),
     addUnits: (records) => { const ch = addUnits(scn, records); applyUnitChanges(scn, ch); units.push(...ch); return ch.map((c) => c.index); },
     removeUnits: (indices) => { const ch = removeUnits(scn, indices); applyUnitChanges(scn, ch); units.push(...ch); return ch.length; },
     updateUnits: (indices, patch) => { const ch = updateUnits(scn, indices, patch); applyUnitChanges(scn, ch); units.push(...ch); return ch.length; },
+    placeUnit: (unitId, owner, x, y) => {
+      const at = snapPlacement(unitGeometry(tables(), unitId), x, y, w, h, store.get(placementOptionsAtom).snapToGrid);
+      const ch = addUnits(scn, [makeUnit(tables(), unitId, owner, at.x, at.y, serial++)]);
+      applyUnitChanges(scn, ch);
+      units.push(...ch);
+      return ch[0].index;
+    },
+    canPlaceUnit: (unitId, x, y) => checkPlacement(scn, loaded?.tileset ?? null, tables(), store.get(placementOptionsAtom), unitId, x, y).problem === null,
 
     makeSprite: (kind, id, owner, x, y, opts) => makeSprite(kind, id, owner, x, y, opts),
     addSprites: (records) => { const ch = addSprites(scn, records); applySpriteChanges(scn, ch); sprites.push(...ch); return ch.map((c) => c.index); },
     removeSprites: (indices) => { const ch = removeSprites(scn, indices); applySpriteChanges(scn, ch); sprites.push(...ch); return ch.length; },
+    placeSprite: (kind, id, owner, x, y, opts) => {
+      const at = clampSprite(x, y, w, h);
+      const ch = addSprites(scn, [makeSprite(kind, id, owner, at.x, at.y, opts)]);
+      applySpriteChanges(scn, ch);
+      sprites.push(...ch);
+      return ch[0].index;
+    },
 
     placeDoodad: (doodadId, tx0, ty0, owner = 0) => {
       const def = loaded?.doodads.byId.get(doodadId);
@@ -283,6 +312,41 @@ export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, ki
   });
 }
 
+/* ── Tools on the map ───────────────────────────────────── */
+
+/**
+ * Put a `MapToolRequest` in front of the viewport. It runs until its handle's `stop`,
+ * Esc / right-click (`cancelMapToolAtom`, unless the spec keeps it), a scenario change,
+ * the plugin's deactivation, or a newer tool; `finish` clears the atom itself and
+ * tells the spec once. A pick in progress is left alone — the viewport serves it first.
+ */
+export function startMapTool(store: Store, bag: Contributions, info: PluginInfo, spec: MapToolSpec): MapToolHandle {
+  store.get(mapToolAtom)?.finish("replaced");
+  const key = nextContributionKey();
+  let done = false;
+  let unsubDoc = () => {};
+  let disposable = { dispose: () => {} };
+  const finish = (reason: MapToolStopReason) => {
+    if (done) return;
+    done = true;
+    unsubDoc();
+    disposable.dispose();
+    if (store.get(mapToolAtom)?.key === key) store.set(mapToolAtom, null);
+    store.set(statusMessageAtom, `${spec.name} — ${reason === "stopped" ? "done" : reason === "cancelled" ? "cancelled" : "stopped"}`);
+    try { spec.onStop?.(reason); } catch (err) { console.error(`[${info.name}] map tool onStop failed`, err); }
+    store.set(mapToolRevisionAtom, store.get(mapToolRevisionAtom) + 1);
+  };
+  unsubDoc = store.sub(scenarioAtom, () => finish("document"));
+  disposable = bag.add(() => finish("disabled"));
+  store.set(mapToolAtom, { key, pluginId: info.id, spec, finish });
+  store.set(statusMessageAtom, `${spec.name}${spec.hint ? ` — ${spec.hint}` : ""} — Esc or right-click to stop`);
+  return {
+    stop: () => finish("stopped"),
+    isActive: () => !done,
+    redraw: () => { if (!done) store.set(mapToolRevisionAtom, store.get(mapToolRevisionAtom) + 1); },
+  };
+}
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -295,7 +359,15 @@ const EVENT_ATOMS = {
   triggers: [triggersRevisionAtom],
   layer: [activeLayerAtom],
   selection: [selectedUnitsAtom, selectedSpritesAtom, selectedDoodadsAtom, selectedLocationsAtom, clipSelectionAtom],
+  palette: [
+    terrainModeAtom, activeTerrainAtom, activeTileAtom, rectVariationAtom, brushSizeAtom, activeUnitAtom, unitOwnerAtom, activeSpriteKindAtom, activeSpriteAtom,
+    activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom,
+  ],
 } as const;
+
+function doodadInfoOf(def: DoodadDef): DoodadInfo {
+  return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height };
+}
 
 function pluginStorage(): Storage | null {
   try {
@@ -422,12 +494,55 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       setLayer: (layer) => store.set(activeLayerAtom, layer),
     },
 
+    palette: {
+      active: () => {
+        const sprite = store.get(spritePlaceOptionsAtom);
+        return {
+          unit: store.get(activeUnitAtom),
+          owner: store.get(unitOwnerAtom),
+          spriteKind: store.get(activeSpriteKindAtom),
+          sprite: store.get(activeSpriteAtom),
+          unitSprite: store.get(activeUnitSpriteAtom),
+          spriteFlipped: sprite.flipped,
+          spriteDisabled: sprite.disabled,
+          doodad: store.get(activeDoodadAtom),
+          fogPlayers: store.get(fogPlayersAtom),
+          fogMode: store.get(fogModeAtom),
+        };
+      },
+      setActive: (c) => {
+        if (c.unit !== undefined) store.set(activeUnitAtom, c.unit);
+        if (c.owner !== undefined) store.set(unitOwnerAtom, c.owner);
+        if (c.spriteKind !== undefined) store.set(activeSpriteKindAtom, c.spriteKind);
+        if (c.sprite !== undefined) store.set(activeSpriteAtom, c.sprite);
+        if (c.unitSprite !== undefined) store.set(activeUnitSpriteAtom, c.unitSprite);
+        if (c.spriteFlipped !== undefined || c.spriteDisabled !== undefined) {
+          const prev = store.get(spritePlaceOptionsAtom);
+          store.set(spritePlaceOptionsAtom, { flipped: c.spriteFlipped ?? prev.flipped, disabled: c.spriteDisabled ?? prev.disabled });
+        }
+        if (c.doodad !== undefined) store.set(activeDoodadAtom, c.doodad);
+        if (c.fogPlayers !== undefined) store.set(fogPlayersAtom, c.fogPlayers);
+        if (c.fogMode !== undefined) store.set(fogModeAtom, c.fogMode);
+      },
+      playerColor: (owner) => { const scn = scenario(); return displayColorHex(scn?.playerColors, scn?.playerRgb, owner); },
+      unitGroups: () => UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+      unitName,
+      unitSize: (unitId) => {
+        const g = unitGeometry(peekUnitAssets()?.units ?? null, unitId);
+        return { width: g.placeW, height: g.placeH, building: g.building, flyer: g.flyer };
+      },
+      spriteGroups: () => { const a = peekUnitAssets(); return a ? spriteCatalogue(a).groups.map((g) => ({ ...g, ids: [...g.ids] })) : []; },
+      spriteName: (kind, id) => spriteName(peekUnitAssets(), kind, id),
+      doodadCategories: () => (loaded()?.doodads.categories ?? []).map((c) => ({ name: c.name, doodads: c.doodads.map(doodadInfoOf) })),
+      doodadInfo: (id) => { const def = loaded()?.doodads.byId.get(id); return def ? doodadInfoOf(def) : null; },
+    },
+
     ui: {
       status: (text) => store.set(statusMessageAtom, text),
       dialog: (spec) => {
         let key = -1;
         // The frame reads the title through this box, so `setTitle` reaches it without touching the spec.
-        const title = { value: spec.title, listeners: new Set<() => void>() };
+        const title: TitleBox = { value: spec.title, listeners: new Set<() => void>() };
         const handle: DialogHandle = {
           close: () => { if (key >= 0) store.set(closeDialogAtom, key); },
           isOpen: () => store.get(dialogStackAtom).some((d) => d.key === key),
@@ -437,6 +552,25 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         bag.add(() => { if (handle.isOpen()) handle.close(); });
         return handle;
       },
+      panel: (spec) => {
+        const key = nextContributionKey();
+        const title: TitleBox = { value: spec.title, listeners: new Set<() => void>() };
+        let closed = false;
+        const handle: PanelHandle = {
+          close: () => {
+            if (closed) return;
+            closed = true;
+            store.set(pluginPanelsAtom, store.get(pluginPanelsAtom).filter((p) => p.key !== key));
+            try { spec.onClose?.(); } catch (err) { console.error(`[${info.name}] panel onClose failed`, err); }
+          },
+          isOpen: () => !closed,
+          setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
+        };
+        store.set(pluginPanelsAtom, [...store.get(pluginPanelsAtom), { key, plugin: info, spec, handle, title }]);
+        bag.add(() => handle.close());
+        return handle;
+      },
+      mapTool: (spec) => startMapTool(store, bag, info, spec),
       pickFiles: (options = {}) => new Promise<File[]>((resolve) => {
         if (typeof document === "undefined") { resolve([]); return; }
         const input = document.createElement("input");

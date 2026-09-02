@@ -771,3 +771,33 @@
 .palette-footer.sub.warn {
   color: var(--warn, #e6b95c);
 }
+
+/* ── Plugin panels (api.ui.panel): float over the map, block nothing ── */
+
+.plugin-panel {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 40px);
+  background: var(--bg-1);
+  border: 1px solid var(--bg-0);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 var(--line-hi);
+  overflow: hidden;
+}
+.plugin-panel-title {
+  cursor: grab;
+  user-select: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.plugin-panel-title:active {
+  cursor: grabbing;
+}
+.plugin-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  font-size: var(--fs-sm);
+}

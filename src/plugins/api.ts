@@ -19,19 +19,19 @@ import type { Diamond } from "../editor/isom";
 import type { Bounds, LocationPatch } from "../editor/locations";
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
+import type { UnitGroup } from "../data/units";
+import type { SpriteGroup } from "../data/sprites";
 import type { EditorLayer, TerrainMode } from "../atoms/editorAtoms";
 import type { DialogId } from "../atoms/uiAtoms";
 
-export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, EditorLayer, TerrainMode, DialogId };
+export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId };
 
 /**
- * Bumped when the API changes incompatibly — or grows, since a manifest that says `"api": 2`
- * is refused by a host that only provides 1, which is how a plugin can rely on a newer
- * method. History: 1 — the first release; 2 — `ui.pickArea` / `ui.pickTile`,
- * `ui.loadImage` / `ui.readClipboardImage`, `DialogSpec.onPaste` / `onDrop`,
- * `DialogHandle.setTitle`, `terrain.heightOf`.
+ * The version a host provides; a manifest that asks for a newer one is refused. It stays
+ * at 1 while the API is only used by the plugins in the scm-js organisation and grows
+ * with them — the first incompatible change after outside plugins exist bumps it.
  */
-export const PLUGIN_API_VERSION = 2;
+export const PLUGIN_API_VERSION = 1;
 
 export interface Disposable {
   dispose(): void;
@@ -96,6 +96,7 @@ export interface PluginApi {
   readonly terrain: TerrainApi;
   readonly tileset: TilesetApi;
   readonly selection: SelectionApi;
+  readonly palette: PaletteApi;
   readonly ui: UiApi;
   readonly menu: MenuApi;
   readonly contextMenu: ContextMenuApi;
@@ -188,10 +189,21 @@ export interface EditTransaction {
   addUnits(records: UnitRecord[]): number[];
   removeUnits(indices: number[]): number;
   updateUnits(indices: number[], patch: (u: UnitRecord) => Partial<UnitRecord>): number;
+  /**
+   * A unit the way the Units palette places one: a building snaps its placement box to
+   * the tile grid (when the palette's *Snap to grid* is on), anything else lands where
+   * you say, and nothing leaves the map. No placement checks — ask `canPlaceUnit` first
+   * if you want them. Returns the record's index.
+   */
+  placeUnit(unitId: number, owner: number, x: number, y: number): number;
+  /** Whether the Units palette's placement checks, with its current options, allow a unit of this type centred there. */
+  canPlaceUnit(unitId: number, x: number, y: number): boolean;
 
   makeSprite(kind: SpriteKind, id: number, owner: number, x: number, y: number, opts?: { flipped?: boolean; disabled?: boolean }): SpriteRecord;
   addSprites(records: SpriteRecord[]): number[];
   removeSprites(indices: number[]): number;
+  /** `makeSprite` + `addSprites` in one, kept on the map; returns the record's index. */
+  placeSprite(kind: SpriteKind, id: number, owner: number, x: number, y: number, opts?: { flipped?: boolean; disabled?: boolean }): number;
 
   /** Stamp a doodad (a `dddata.bin` id) at a tile; returns its record index, or -1 when unknown or off the map. */
   placeDoodad(doodadId: number, tx: number, ty: number, owner?: number): number;
@@ -270,6 +282,72 @@ export interface SelectionApi {
   setLayer(layer: EditorLayer): void;
 }
 
+/* ── Palettes ───────────────────────────────────────────── */
+
+/**
+ * What the Units, Sprites, Doodads and Fog of War palettes have picked — the thing a
+ * click on the map would place or paint. (The Terrain palette's pick is
+ * `terrain.active()`.) Players are 0-based: `owner` 0 is Player 1.
+ */
+export interface PaletteChoice {
+  /** units.dat id the Units palette places. */
+  unit: number;
+  /** The player it places for, 0–11. */
+  owner: number;
+  spriteKind: SpriteKind;
+  /** sprites.dat id, placed when `spriteKind` is `"pure"`. */
+  sprite: number;
+  /** units.dat id, placed when `spriteKind` is `"unit"` (doors and traps). */
+  unitSprite: number;
+  spriteFlipped: boolean;
+  spriteDisabled: boolean;
+  /** The Doodads palette's doodad id, or -1 before one was picked. */
+  doodad: number;
+  /** Bit mask of the players the fog brush paints for (bit n = player n + 1). */
+  fogPlayers: number;
+  fogMode: FogMode;
+}
+
+/** A unit type's footprint, from units.dat; a one-tile box without the tables. */
+export interface UnitSize {
+  /** The placement box, in pixels. */
+  width: number;
+  height: number;
+  building: boolean;
+  flyer: boolean;
+}
+
+export interface DoodadInfo {
+  id: number;
+  /** "Trees #12" — the palette category and the id, which is the only name a doodad has. */
+  name: string;
+  category: string;
+  /** Footprint in tiles. */
+  width: number;
+  height: number;
+}
+
+export interface PaletteApi {
+  active(): PaletteChoice;
+  setActive(choice: Partial<PaletteChoice>): void;
+  /** The colour a player's units are shown in, `#rrggbb`. */
+  playerColor(owner: number): string;
+
+  /** Every unit type, grouped the way the Units palette lists them. */
+  unitGroups(): UnitGroup[];
+  unitName(unitId: number): string;
+  unitSize(unitId: number): UnitSize;
+
+  /** What the Sprites palette lists, by group; empty until the unit tables are loaded. */
+  spriteGroups(): SpriteGroup[];
+  /** "Terran Marine" for a unit sprite, the unit or GRP the pure sprite draws otherwise. */
+  spriteName(kind: SpriteKind, id: number): string;
+
+  /** The open map's doodads by palette category; empty without the tileset graphics. */
+  doodadCategories(): { name: string; doodads: DoodadInfo[] }[];
+  doodadInfo(doodadId: number): DoodadInfo | null;
+}
+
 /* ── UI ─────────────────────────────────────────────────── */
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
@@ -315,6 +393,100 @@ export interface DialogHandle {
   setTitle(title: string): void;
 }
 
+/**
+ * A panel floats over the map and does not block it: the user keeps drawing, scrolling
+ * and using hotkeys while it is open (except while typing in one of its fields). It
+ * is dragged by its title bar and closed with the × or `close()`.
+ */
+export interface PanelSpec {
+  title: string;
+  /** In CSS pixels; 260 by default. The panel is as tall as its content, up to the map's height. */
+  width?: number;
+  /** Fill `body` (an empty `<div>` inside the panel); return a cleanup if you need one. */
+  mount(body: HTMLElement, panel: PanelHandle): void | (() => void);
+  /** The panel closed, whichever way. */
+  onClose?: () => void;
+}
+
+export interface PanelHandle {
+  close(): void;
+  isOpen(): boolean;
+  setTitle(title: string): void;
+}
+
+/** The pointer over the map, in the map's own units. A tile is 32 × 32 pixels. */
+export interface MapPointer {
+  /** Map pixels. Kept inside the map while a button is held, as the built-in brushes do. */
+  px: number;
+  py: number;
+  /** The tile under the pointer. */
+  tx: number;
+  ty: number;
+  /** False once the pointer has left the map with no button held. */
+  inMap: boolean;
+  /** Whether the primary button is held. */
+  down: boolean;
+  shift: boolean;
+  ctrl: boolean;
+  alt: boolean;
+}
+
+/** Map pixels to canvas pixels, for a tool's `draw`. */
+export interface MapView {
+  zoom: number;
+  /** Canvas pixels per tile. */
+  tilePx: number;
+  /** A map pixel's x on the canvas. */
+  x(px: number): number;
+  y(py: number): number;
+  /** The tiles on screen. */
+  visible: Rect;
+}
+
+export type MapToolStopReason =
+  /** `handle.stop()`. */
+  | "stopped"
+  /** Esc or a right-click, and `onCancel` did not keep the tool. */
+  | "cancelled"
+  /** The map was closed or replaced. */
+  | "document"
+  /** Another tool started. */
+  | "replaced"
+  /** The plugin was disabled. */
+  | "disabled";
+
+/**
+ * A tool owns the pointer over the map: the viewport hands it every press, move and
+ * release ahead of the active layer's own tools, hides the layer's brush ghost, and
+ * lets it draw an overlay. The map stays visible and scrollable, and a panel can stay
+ * open beside it — which is how a plugin gets a drawing mode of its own.
+ */
+export interface MapToolSpec {
+  /** Shown in the viewport's HUD and the status bar while the tool runs. */
+  name: string;
+  /** After the name: `"drag to draw a line"`. */
+  hint?: string;
+  /** CSS cursor over the map; `"crosshair"` by default. */
+  cursor?: string;
+  onDown?(p: MapPointer): void;
+  /** Every pointer move over the map, button held or not, and once with `inMap: false` when it leaves. */
+  onMove?(p: MapPointer): void;
+  onUp?(p: MapPointer): void;
+  /** Esc or a right-click. Return `true` to keep the tool running (you cancelled a gesture of your own); otherwise it stops. */
+  onCancel?(): boolean | void;
+  /** Draw over the map, after everything else, each time the viewport repaints. */
+  draw?(ctx: CanvasRenderingContext2D, view: MapView): void;
+  /** The tool is no longer running, for whatever reason (once). */
+  onStop?(reason: MapToolStopReason): void;
+}
+
+export interface MapToolHandle {
+  stop(): void;
+  isActive(): boolean;
+  /** Repaint the viewport — and so call `draw` — now. Cheap; call it from `onMove`. */
+  redraw(): void;
+}
+
 export interface PickOptions {
   /** Shown in the viewport's HUD while the user picks; also the status line. */
   prompt?: string;
@@ -329,6 +501,14 @@ export interface PickFilesOptions {
 export interface UiApi {
   status(text: string): void;
   dialog(spec: DialogSpec): DialogHandle;
+  /** Open a floating panel over the map. As many as you like; each closes with the plugin. */
+  panel(spec: PanelSpec): PanelHandle;
+  /**
+   * Take over the pointer on the map until `stop()`, Esc, a right-click, a map change
+   * or another tool. One tool runs at a time — starting one stops the previous — and a
+   * `pickArea` / `pickTile` in progress is served first.
+   */
+  mapTool(spec: MapToolSpec): MapToolHandle;
   /** The browser's file picker; resolves with an empty list on cancel. */
   pickFiles(options?: PickFilesOptions): Promise<File[]>;
   /**
@@ -418,7 +598,9 @@ export type PluginEvent =
   | "settings"
   | "triggers"
   | "layer"
-  | "selection";
+  | "selection"
+  /** A palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog players. */
+  | "palette";
 
 export interface EventsApi {
   on(event: PluginEvent, listener: () => void): Disposable;

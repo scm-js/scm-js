@@ -3,12 +3,15 @@
 scmJS can load third-party code — a *plugin* — from a public Git repository or any
 URL, and let it add menu items, context-menu entries, hotkeys and dialogs, read the
 open map and edit it through the same undo model the built-in tools use. This document
-is the plugin author's guide and the reference for the host side. The first plugin,
-**Terrain from Image**, is the worked example for everything below; it lives in its own
-repository, [scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain),
-and the editor installs it by default — fetched over the network and transpiled in the
-browser like anybody else's, which is the point: the plugin that ships with the editor
-is the proof the loading path works, not an exception to it.
+is the plugin author's guide and the reference for the host side. Two plugins are the
+worked examples for everything below, each in its own repository and installed by default:
+**Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)),
+a dialog, a pick on the map and a terrain transaction; and **Paint**
+([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)), a floating panel, a tool
+that owns the pointer and draws its own preview, and transactions on every layer. Both are
+fetched over the network and transpiled in the browser like anybody else's, which is the
+point: the plugins that ship with the editor are the proof the loading path works, not
+exceptions to it.
 
 ## Design
 
@@ -21,11 +24,12 @@ is the proof the loading path works, not an exception to it.
   same path a brush stroke takes.
 - Every contribution is a `Disposable`. Disabling or reloading a plugin removes
   everything it added, whether or not the plugin cleaned up after itself.
-- The API is versioned (`PLUGIN_API_VERSION`, currently 2) and typed: `npm run build:plugin-types`
+- The API is versioned (`PLUGIN_API_VERSION`) and typed: `npm run build:plugin-types`
   emits `plugin-api/` so a plugin repo can type-check against the exact surface. A manifest's
-  `"api": N` is the version the plugin needs; a host providing an older one refuses to load it,
-  so a plugin that uses a method added in version 2 (`ui.pickArea`, `ui.loadImage`, …) should
-  say `"api": 2`.
+  `"api": N` is the version the plugin needs; a host providing an older one refuses to load it.
+  The version is 1 and stays there while the only plugins are the ones in the scm-js
+  organisation, which move with the editor; the first change that would break a plugin
+  written by somebody else bumps it.
 
 ### Non-goals (version 1)
 
@@ -177,7 +181,9 @@ repaints.
 | --- | --- |
 | `makeUnit(unitId, owner, x, y)` | A StarEdit-style record (serial, masks) at map pixels. |
 | `addUnits(records)` / `removeUnits(indices)` / `updateUnits(indices, patch)` | |
-| `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` | |
+| `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: a building snaps its placement box to the tile grid (when the palette's *Snap to grid* is on), nothing leaves the map. Returns the index. No checks — |
+| `canPlaceUnit(unitId, x, y)` | — ask this first if you want them: the palette's collision and terrain checks with its current options. |
+| `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map; returns the index. |
 | `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` | Doodads stamp MTXM and may carry an overlay sprite; both are handled. |
 | `addLocation(bounds, name?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) is refused. |
 | `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask; creates MASK on first use. |
@@ -204,12 +210,29 @@ extracted — that is a normal state, degrade), `raw()` for the decoded `LoadedT
 rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()`,
 `locations()` (indices) with matching setters; `layer()` / `setLayer()`.
 
+### `api.palette`
+
+What the Units, Sprites, Doodads and Fog of War palettes have picked, and what they list —
+so a plugin can paint "whatever the user chose" without a picker of its own (Paint does
+exactly this: switch layers and its brush follows). The Terrain palette's pick is
+`terrain.active()`.
+
+| | |
+| --- | --- |
+| `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1) and `fogMode`. |
+| `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb` — Remastered custom colours included. |
+| `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
+| `spriteGroups()` / `spriteName(kind, id)` | The Sprites palette's groups (empty until the unit tables are loaded) and names. |
+| `doodadCategories()` / `doodadInfo(id)` | The open map's doodads by category, each with its footprint in tiles (empty without the tileset graphics). |
+
 ### `api.ui`
 
 | | |
 | --- | --- |
 | `status(text)` | The status bar. |
 | `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
+| `panel(spec)` | A panel that floats over the map and blocks nothing: the user keeps drawing, scrolling and using hotkeys while it is open (except while typing in one of its fields). `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS pixels (260 by default) and the panel is as tall as its content; `onClose` fires however it closes. The user drags it by its title bar and closes it with the ×; it opens at the top-right of the map and remembers where it was left for the session. The handle has `close()`, `isOpen()`, `setTitle()`. Open as many as you like; they all close with the plugin. |
+| `mapTool(spec)` | Take over the pointer on the map. The viewport hands the tool every press, move and release ahead of the active layer's own tools (`onDown` / `onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and the modifier keys — kept inside the map while a button is held, as the built-in brushes do), hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls `draw(ctx, view)` last on every repaint so the tool can preview what it will do (`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`, `view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a right-click calls `onCancel` — return `true` to keep running (you dropped a gesture of your own), otherwise the tool stops — and `onStop(reason)` is told once whichever way it ends: `"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed), `"replaced"` (another tool started; one runs at a time), `"disabled"`. A `pickArea` / `pickTile` in progress is served first. Paint is the worked example. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
 | `pickArea({ prompt })` | The user drags a rectangle on the map: the viewport shows a crosshair and a teal marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc / right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time — starting another cancels the first. A dialog is modal and covers the map, so close yours before picking and reopen it with the result (Terrain from Image does exactly this: *Pick on Map…*). |
 | `pickTile({ prompt })` | The same for a single click; resolves with `{ x, y }`. |
@@ -235,7 +258,9 @@ rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()
 ### `api.events`
 
 `on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"`, `"units"`,
-`"doodads"`, `"locations"`, `"settings"`, `"triggers"`, `"layer"`, `"selection"`.
+`"doodads"`, `"locations"`, `"settings"`, `"triggers"`, `"layer"`, `"selection"`, and
+`"palette"` (a palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog
+players).
 
 ### `api.storage`
 
@@ -257,9 +282,10 @@ plugin's name prefixed.
 | `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
 | `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
 | `src/plugins/defaults.ts` | The specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, plus any built-in), merged over the stored list by `effectiveInstalls`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, and `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write). |
+| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its two siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`) and `pluginPanelsAtom` (the open `ui.panel`s). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
+| `src/components/panels/PluginPanels.tsx` | The floating frames `ui.panel` mounts into, rendered inside the viewport: a draggable title strip, a close button, positions remembered per plugin and title for the session. |
 
 Contribution points read the registries: `MenuBar` merges `pluginMenuItemsAtom` into
 its menu model (`withPluginItems`), `MapViewport` and `TerrainPalette` append the
@@ -274,6 +300,15 @@ cursor, a teal marquee with its size, a HUD chip with the prompt — calling the
 The host also finishes it with `null` when the scenario atom changes, when the plugin's
 `Contributions` are disposed, or when a newer pick starts; `useHotkeys` (Esc) and the
 viewport's right-click write `cancelMapPickAtom`.
+
+`api.ui.mapTool` is `startMapTool` there: one `MapToolRequest` in `mapToolAtom`, which
+`MapViewport` serves after a pick and ahead of every layer — its `onDown` captures the
+pointer and forwards the gesture as `MapPointer`s, `onLeave` sends one `inMap: false`
+move, the layer's hover ghost and "placing" chips stay hidden, the surface takes the
+tool's cursor, and the tool's `draw` runs at the end of the paint pass with a `MapView`
+built from the current scroll and zoom. `finish(reason)` is guarded like a pick's and
+clears the atom; `cancelMapToolAtom` (Esc, right-click) asks the spec's `onCancel` first
+and only finishes when it does not keep the tool.
 
 `api.document.edit` is `runTransaction` in `host.ts`: it wraps the scenario in an
 `EditTransaction` whose operations apply immediately and accumulate change lists in
@@ -317,3 +352,33 @@ centre (`diamondTerrain`), and terrains are painted low ground first, rare ones 
 features — and cliffs and shorelines are generated at every boundary; **Tiles** stamps flat
 pairs with `tx.stampTerrain` and leaves the ISOM alone (Rebuild ISOM from Tiles afterwards
 if you want the isometric brush back). One undo entry either way.
+
+## Paint
+
+[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed by default — Tools ▸
+Paint…, `Ctrl+Shift+P`, or *Paint…* on the map's right-click menu opens a panel that floats
+over the map (`api.ui.panel`). Pick a tool in it — freehand, line, rectangle, ellipse,
+polygon, star, spray, text, eraser — and draw on the map; the *brush* is whatever the
+active layer's palette has picked (`api.palette.active()` and `api.terrain.active()`,
+refreshed on the `"palette"` and `"layer"` events): flat terrain or a tile, a doodad, a
+unit for a player, a sprite, or fog for some players. Closed shapes can be filled (grid,
+staggered grid, random), objects are spaced along the outline (auto = their own size) and
+can be jittered, units and sprites can cycle through players 1–8 or take random ones, and
+units can skip the spots the Units palette's placement checks refuse (`tx.canPlaceUnit`).
+Every stroke is one `api.document.edit`.
+
+`shapes.ts` is the pure part and that repository's `tests/shapes.test.ts` pins it: a tool's
+drag becomes an outline `Path` (`linePath`, `rectPath`, `ellipsePath`, `starPath`, with
+`constrainSquare` / `constrainAngle` for Shift and `boxFromCenter` for Alt); objects come
+from `samplePath` (arc length, so corners are not doubled) plus `fillPoints` inside a
+closed shape, then `jitterPoints` and `dedupePoints`; tiles and fog cells come from
+`strokeCells` (a Bresenham walk dilated by a round brush of the panel's width) plus
+`fillCells` (cells whose centre is inside); `textCells` lays a 5 × 7 dot font (`font.ts`)
+out as cells, which become one object per dot or `width × width` tiles per dot. A
+deterministic generator seeded on mouse-down makes the preview and the commit scatter the
+same way. `plugin.ts` is the panel, the running `api.ui.mapTool` (the gesture per tool,
+`onCancel` returning `true` to drop a shape and keep painting, `draw` for the dashed
+outline, the per-point boxes in player colour, the eraser's crosses and the count), and
+the transaction: `stampTerrain` / `setTiles` / `setFog` for cells, `placeUnit` /
+`placeSprite` / `placeDoodad` for points, `removeUnits` / `removeSprites` / `removeDoodads`
+for the eraser.

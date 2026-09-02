@@ -52,7 +52,7 @@ src/
   services/     Map open/save pickers, PNG export, startup preload
   components/
     chrome/     MenuBar (Radix Menubar), ToolBar, StatusBar
-    panels/     Left dock (layer rail + palettes), right dock (Minimap, Layers, Properties)
+    panels/     Left dock (layer rail + palettes), right dock (Minimap, Layers, Properties), plugin panels
     viewport/   Canvas map view with rulers, hover brush, context menu
     dialogs/    All scenario dialogs + DialogHost registry
     splash/     Splash card that fades over the editor

@@ -295,7 +295,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image is a plugin installed by default (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image and Paint are plugins installed by default (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -464,8 +464,8 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 `import.meta.glob` in `builtin.ts` because Vite hashes (and here inlines) the asset. It rides on the
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
-`defaults.ts` holds the specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` — today just
-`github:scm-js/plugin-image-to-terrain` — plus any built-in), which `effectiveInstalls` merges over
+`defaults.ts` holds the specs a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
+`github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-paint` — plus any built-in), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, can be turned off but not removed, and is otherwise
 an ordinary spec fetched over the network on every start; the Manage Plugins row badges it `default`
 and hides its Remove button (`add` canonicalises what the user pastes through `parseSpec(...).display`,
@@ -491,9 +491,31 @@ dialog covers the map, so a plugin closes its dialog, picks, and reopens. `image
 and `transferOf`, which `PluginDialog` feeds to `DialogSpec.onPaste` (document-level listener
 while the dialog is topmost; a paste into the plugin's own text field is left alone unless it
 carries files) and `onDrop`. `DialogHandle.setTitle` goes through a title box in the dialog payload.
-`PLUGIN_API_VERSION` is 2; a manifest's `api` is the version the plugin *needs*.
+`PLUGIN_API_VERSION` is 1 and stays there while the only plugins are the scm-js organisation's own
+(they move with the editor); a manifest's `api` is the version the plugin *needs*. Do not bump it
+for additions.
 
-**Terrain from Image** is the worked example and lives in its own repository,
+`api.ui.mapTool` (`host.ts#startMapTool`) is the pointer-owning mode a plugin with a drawing tool
+needs: one `MapToolRequest` in `mapToolAtom`, served by `MapViewport` after a pick and ahead of
+every layer — `onDown` captures and forwards `MapPointer`s (map px, tile, `inMap`, `down`,
+modifiers; clamped to the map while held), `onLeave` sends one `inMap: false` move, the layer's
+hover ghost and "placing" HUD chips are hidden while `tooling`, the surface takes the spec's
+cursor, and the spec's `draw(ctx, view)` runs at the end of the paint pass (`MapView`: `x(px)` /
+`y(py)` to canvas pixels, `tilePx`, `zoom`, `visible`); `mapToolRevisionAtom` is `redraw()`.
+`cancelMapToolAtom` (Esc in `useHotkeys`, right-click in the viewport) asks the spec's `onCancel`
+first and finishes only when it does not keep the tool; `finish(reason)` is guarded like a pick's,
+clears the atom and tells `onStop` once (`stopped` / `cancelled` / `document` / `replaced` /
+`disabled`). `api.ui.panel` is a floating, non-modal frame over the map (`pluginPanelsAtom`,
+`components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
+positions kept per plugin + title for the session, opens top-right) — hotkeys keep working since
+it is not in the dialog stack. `api.palette` reads and sets the object palettes' picks
+(`activeUnitAtom`, `unitOwnerAtom`, the sprite and doodad atoms, `fogPlayersAtom` / `fogModeAtom`)
+and answers names, groups, `unitSize` (placement box) and `doodadInfo`; the `"palette"` event
+covers those atoms plus the terrain brush. `tx.placeUnit` snaps through `snapPlacement` with the
+palette's snap option, `tx.canPlaceUnit` is `checkPlacement` with `placementOptionsAtom`,
+`tx.placeSprite` is make + add + `clampSprite`.
+
+**Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
 `icon.svg`, a vendored `plugin-api/` so it type-checks alone, and `tests/convert.test.ts` under its
 own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
@@ -501,7 +523,15 @@ plugin the editor ships is loaded by the ordinary path, and its internals are do
 in `docs/plugins.md`. Changing `src/plugins/api.ts` means re-running `npm run build:plugin-types`
 and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers the host side
 (loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
-list, and the real-tileset suite via `primeTileset`).
+list, map tools, panels, the palette API, placement, and the real-tileset suite via
+`primeTileset`).
+
+**Paint** (`github.com/scm-js/plugin-paint`, the second default) is the worked example for
+`ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and
+the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.test.ts`. Its brush
+is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's
+tile), Doodads, Units, Sprites and Fog of War layers alike. `docs/plugins.md` ends with a tour of
+both plugins.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

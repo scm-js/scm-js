@@ -7,7 +7,9 @@
  */
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import type { ContextItemSpec, ContextSurface, MenuItemSpec, MenuPath, PluginIcon, PluginManifest } from "../plugins/api";
+import type {
+  ContextItemSpec, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
+} from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 
 /* ── Installed (persisted) ──────────────────────────────── */
@@ -147,3 +149,55 @@ export const cancelMapPickAtom = atom(null, (get) => {
   if (pick) pick.finish(null);
   return pick !== null;
 });
+
+/* ── Tools on the map ───────────────────────────────────── */
+
+/**
+ * A plugin's `api.ui.mapTool` in progress: the viewport hands it the pointer ahead of
+ * every layer, hides the layer's brush ghost and calls its `draw` last. Like a pick,
+ * `finish` runs once (the host guards it) and clears the atom itself; unlike a pick it
+ * stays until something finishes it.
+ */
+export interface MapToolRequest {
+  key: number;
+  pluginId: string;
+  spec: MapToolSpec;
+  finish: (reason: MapToolStopReason) => void;
+}
+
+export const mapToolAtom = atom<MapToolRequest | null>(null);
+
+/** Bumped by `MapToolHandle.redraw`; the viewport repaints when it changes. */
+export const mapToolRevisionAtom = atom(0);
+
+/**
+ * Esc or a right-click while a tool runs: the tool's `onCancel` may keep it (it was
+ * cancelling a gesture of its own); otherwise it stops. True when a tool was running.
+ */
+export const cancelMapToolAtom = atom(null, (get) => {
+  const tool = get(mapToolAtom);
+  if (!tool) return false;
+  let keep = false;
+  try { keep = tool.spec.onCancel?.() === true; } catch (err) { console.error("[plugins] map tool onCancel failed", err); }
+  if (!keep) tool.finish("cancelled");
+  return true;
+});
+
+/* ── Floating panels ────────────────────────────────────── */
+
+/** The title of a plugin dialog or panel, changeable through its handle without touching the spec. */
+export interface TitleBox {
+  value: string;
+  listeners: Set<() => void>;
+}
+
+/** One `api.ui.panel`, rendered by `PluginPanels` over the map. */
+export interface PluginPanelEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: PanelSpec;
+  handle: PanelHandle;
+  title: TitleBox;
+}
+
+export const pluginPanelsAtom = atom<PluginPanelEntry[]>([]);

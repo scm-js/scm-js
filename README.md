@@ -78,6 +78,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Fog of war, per player | Yes |
 | Cut, copy and paste, including between maps | Yes |
 | Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
+| Find a map by what it is (RPG, zone control, cat and mouse, …) and open it; publish a map with revisions | Yes, as a plugin (scm-server: tick it in Plugins ▸ Manage Plugins… and set the server address in its settings). File ▸ Find Map…, File ▸ Export ▸ Publish to scm-server…. Falls back to scmscx.com's database. |
 | Auto-place Start Locations | Not yet |
 
 ### Triggers
@@ -402,8 +403,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. Terrain from Image starts on; Paint is
-listed but off until you tick it.
+working connection on the first load of a session. Terrain from Image starts on; Paint and
+scm-server are listed but off until you tick them.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -447,6 +448,21 @@ refuse. A count follows the pointer while you draw. Esc drops the shape in progr
 again (or a right-click) leaves the tool. Terrain is painted as flat tiles like the Rect
 brush, so Rebuild ISOM from Tiles afterwards if you want the isometric brush back there.
 Every stroke is one undo step.
+
+**scm-server** ([scm-js/plugin-scm-server](https://github.com/scm-js/plugin-scm-server)) is
+in the list but off. It is the editor's network side, and everything it adds carries its
+own icon so you can tell what leaves the browser: File ▸ Find Map… searches a map
+database ([scm-js/scm-server](https://github.com/scm-js/scm-server)) by name, type (melee
+or use map settings), genre (RPG, zone control, cat and mouse, tower defense, bound, …),
+tileset, size and players, shows what the server worked out about each map, and opens the
+one you pick; when the database has nothing, the same dialog searches scmscx.com and
+fetches the map from there. File ▸ Export ▸ Publish to scm-server… uploads the open map
+with a thumbnail; the server reads the file and fills in its genre, tags and a short
+summary. A map you published is recognised when you open it again, so publishing it a
+second time makes a new revision instead of a new entry. Plugins ▸ scm-server Settings…
+holds the server address and your author key (created on first publish, kept in the
+browser, and not recoverable if lost). Which server is yours to choose: the
+plugin talks to any address that runs scm-server.
 
 ## Keyboard
 

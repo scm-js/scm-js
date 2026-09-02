@@ -222,14 +222,63 @@ export interface ImportRef {
 
 const IMPORT_RE = /\b(?:import|export)\s*(?:[^'"`;]*?\sfrom\s*)?(['"])([^'"\n]+)\1|\bimport\s*\(\s*(['"])([^'"\n]+)\3\s*\)/g;
 
+/**
+ * The source with the insides of every string, template, regex literal and comment
+ * replaced by spaces — same length, so positions still line up — leaving the quotes
+ * themselves. `IMPORT_RE` runs over this, so an `import "…"` inside a comment, or a
+ * route string ending in `/import"`, is not taken for a module to fetch.
+ */
+export function blankLiterals(code: string): string {
+  const out = code.split("");
+  const n = code.length;
+  const blank = (from: number, to: number) => { for (let k = from; k < to; k++) if (out[k] !== "\n") out[k] = " "; };
+  const prevCode = (i: number) => { let k = i - 1; while (k >= 0 && /\s/.test(out[k])) k--; return k < 0 ? "" : out[k]; };
+  let i = 0;
+  while (i < n) {
+    const c = code[i], d = code[i + 1];
+    if (c === "/" && d === "/") {
+      let j = i + 2;
+      while (j < n && code[j] !== "\n") j++;
+      blank(i, j); i = j; continue;
+    }
+    if (c === "/" && d === "*") {
+      let j = code.indexOf("*/", i + 2);
+      j = j < 0 ? n : j + 2;
+      blank(i, j); i = j; continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1;
+      while (j < n && code[j] !== c) {
+        if (code[j] === "\\") j++;
+        else if (c !== "`" && code[j] === "\n") break;
+        j++;
+      }
+      blank(i + 1, j); i = j + 1; continue;
+    }
+    // A `/` after an operator, a bracket or nothing starts a regex literal, not a division.
+    if (c === "/" && /^[(,=:[!&|?{};+\-*%<>~^]?$/.test(prevCode(i))) {
+      let j = i + 1, inClass = false;
+      while (j < n && code[j] !== "\n" && (inClass || code[j] !== "/")) {
+        if (code[j] === "\\") j++;
+        else if (code[j] === "[") inClass = true;
+        else if (code[j] === "]") inClass = false;
+        j++;
+      }
+      blank(i + 1, j); i = j + 1; continue;
+    }
+    i++;
+  }
+  return out.join("");
+}
+
 /** Every static and dynamic import specifier in an ES module's source, in order. */
 export function findImports(code: string): ImportRef[] {
   const out: ImportRef[] = [];
-  for (const m of code.matchAll(IMPORT_RE)) {
+  for (const m of blankLiterals(code).matchAll(IMPORT_RE)) {
     const quote = m[1] ?? m[3];
-    const specifier = m[2] ?? m[4];
-    const at = m.index + m[0].indexOf(quote + specifier + quote) + 1;
-    out.push({ specifier, start: at, end: at + specifier.length });
+    const blanked = m[2] ?? m[4];
+    const at = m.index + m[0].indexOf(quote + blanked + quote) + 1;
+    out.push({ specifier: code.slice(at, at + blanked.length), start: at, end: at + blanked.length });
   }
   return out;
 }

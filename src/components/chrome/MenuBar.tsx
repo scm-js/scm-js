@@ -23,6 +23,8 @@ import {
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { pluginMenuItemsAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
+import type { PluginIcon } from "../../plugins/api";
+import { PluginIconView } from "../dialogs/PluginDialogs";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useIsomRebuild } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
@@ -35,7 +37,7 @@ const REPO_URL = "https://github.com/jeany55/scm-js";
 /* ── Menu model ─────────────────────────────────────────── */
 
 type Item =
-  | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
+  | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; icon?: PluginIcon; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
   | { kind: "check"; label: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
   | { kind: "radio-group"; value: string; onChange: (v: string) => void; items: { value: string; label: string; shortcut?: string }[] }
   | { kind: "sub"; label: string; items: Item[] }
@@ -51,8 +53,9 @@ export interface Menu {
 
 /**
  * Merge what plugins registered into the menu model: each item goes to the end of the
- * top-level menu or submenu its path names (`"File/Import"`), after one separator; a
- * path that names nothing falls back to the Plugins menu. Pure, so it is testable.
+ * top-level menu or submenu its path names (`"File/Import"`), after one separator — or,
+ * when `after` names an item or submenu in that menu, directly under it; a path that
+ * names nothing falls back to the Plugins menu. Pure, so it is testable.
  */
 export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]): Menu[] {
   if (plugin.length === 0) return menus;
@@ -68,6 +71,7 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
   };
   const separated = new Set<Item[]>();
   const copied = new Set<Item>();
+  const placed = new Set<Item>();
   for (const p of plugin) {
     const [top, ...rest] = p.path.split("/");
     let target: Item[] | null = null;
@@ -87,14 +91,25 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
       if (!target) target = menu.items;
     }
     if (!target) continue;
-    if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
-    target.push({
+    const item: Item = {
       kind: "item",
       label: p.label,
       shortcut: p.shortcut,
+      icon: p.icon,
       disabled: p.enabled ? !safely(p.enabled, true) : false,
       onSelect: () => { safely(p.run, undefined); },
-    });
+    };
+    // `after`: under the named built-in (or an earlier plugin item that landed there), no separator.
+    const anchor = p.after ? target.findIndex((it) => (it.kind === "item" || it.kind === "sub") && it.label === p.after) : -1;
+    if (anchor >= 0) {
+      let at = anchor + 1;
+      while (at < target.length && placed.has(target[at])) at++;
+      target.splice(at, 0, item);
+      placed.add(item);
+      continue;
+    }
+    if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
+    target.push(item);
   }
   return out;
 }
@@ -388,6 +403,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
       case "item":
         return (
           <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog, it.payload) : it.onSelect?.())}>
+            {it.icon && <span className="indicator menu-icon"><PluginIconView icon={it.icon} size={14} /></span>}
             {it.label}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.Item>

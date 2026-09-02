@@ -96,10 +96,12 @@ let contributionSeq = 0;
 /** A unique key per registered contribution, so React lists and removals have something to hold. */
 export const nextContributionKey = () => ++contributionSeq;
 
-export interface PluginMenuItem extends MenuItemSpec {
+/** A registered menu item: the spec with `icon: "plugin"` already resolved to the plugin's icon. */
+export interface PluginMenuItem extends Omit<MenuItemSpec, "icon"> {
   key: number;
   pluginId: string;
   path: MenuPath;
+  icon?: PluginIcon;
 }
 
 export interface PluginContextItem extends ContextItemSpec {

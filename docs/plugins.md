@@ -79,8 +79,8 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (Terrain from Image does, Paint waits to be
-ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
+removed; each says whether it starts on (Terrain from Image does, Paint and scm-server
+wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
 ### Adding one
@@ -236,6 +236,10 @@ reads the map returns `null` / `[]` / `false` when no map is open rather than th
 | `scenario()` | The live `Scenario` object, for **reading**. Mutating it directly bypasses undo and dirty tracking. |
 | `edit(label, build)` | Run `build(tx)` and record what it did as one undo entry named `label`. Returns an `EditResult` with counts per list. |
 | `undo()` / `redo()` | The Edit menu's. |
+| `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
+| `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
+| `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
+| `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`scm-server\map.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
 
 ### `EditTransaction`
 
@@ -323,7 +327,12 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 - `menu.add(path, item)`: `path` is a top-level menu (`"File"`, `"Edit"`, `"View"`,
   `"Layer"`, `"Scenario"`, `"Triggers"`, `"Tools"`, `"Plugins"`, `"Help"`) or a submenu
   by label (`"File/Import"`). Plugin items appear after a separator at the end of that
-  menu. `item` is `{ label, shortcut?, enabled?(), run() }`.
+  menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
+  which case the item sits directly under it. `item` is
+  `{ label, shortcut?, icon?, after?, enabled?(), run() }`. `icon` puts a mark in front
+  of the label: `"plugin"` for the plugin's own icon (the manifest's), or any
+  `PluginIcon` — use it for items that do something no built-in does, such as reaching
+  a server, so the user can tell at a glance which entries are the plugin's.
 - `contextMenu.add(surface, item)`: surfaces are `"viewport"` (the map) and
   `"terrainPalette"`. `run(ctx)`, `enabled?(ctx)` and `visible?(ctx)` get a
   `ContextMenuContext`: the tile and pixel under the pointer (viewport), the active
@@ -463,3 +472,17 @@ outline, the per-point boxes in player colour, the eraser's crosses and the coun
 the transaction: `stampTerrain` / `setTiles` / `setFog` for cells, `placeUnit` /
 `placeSprite` / `placeDoodad` for points, `removeUnits` / `removeSprites` / `removeDoodads`
 for the eraser.
+
+## scm-server
+
+[scm-js/plugin-scm-server](https://github.com/scm-js/plugin-scm-server), the third default,
+listed but off, is the worked example for the document calls that cross the network:
+`document.open` (a downloaded file into the editor, through the unsaved-changes check),
+`document.export` (the open map as a `File` for a `FormData` upload), `document.renderImage`
+(the thumbnail it publishes) and `document.extras` (a `scm-server\map.json` member that
+remembers which server and map the file came from, so a second publish is a revision). Its
+menu items use `icon: "plugin"` and `after: "Open Recent"` — the mark in front of *Find
+Map…* is the manifest's icon, and it is what tells the user that the item leaves the
+browser. `client.ts` there is a plain typed client for the server's contract
+([scm-js/scm-server](https://github.com/scm-js/scm-server), `docs/api.md`), with `fetch`
+injected so it tests without a server.

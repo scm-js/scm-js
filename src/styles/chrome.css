@@ -312,3 +312,10 @@
   border: 2px dashed var(--gold);
   background: color-mix(in srgb, var(--gold) 6%, transparent);
 }
+/* A plugin item's mark, in the slot a tick or radio dot would use. */
+.menu-item .menu-icon .plugin-icon {
+  color: var(--teal);
+}
+.menu-item .menu-icon img.plugin-icon {
+  border-radius: 3px;
+}

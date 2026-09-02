@@ -14,7 +14,7 @@ import {
   selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom,
 } from "../atoms/editorAtoms";
 import {
-  commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
+  archiveExtrasAtom, commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
   tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
@@ -58,6 +58,9 @@ import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
+import { needsCloseConfirm, openFileInto, type PendingAction } from "../hooks/useMapFileActions";
+import { writeMapBytes } from "../services/mapIo";
+import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
 export type Store = ReturnType<typeof createStore>;
 
@@ -348,6 +351,31 @@ export function startMapTool(store: Store, bag: Contributions, info: PluginInfo,
   };
 }
 
+/**
+ * `document.open` for a plugin: the bytes become a `File`, and the open goes through the
+ * same unsaved-changes gate as File ▸ Open — the Close Scenario dialog when the map is
+ * modified and Preferences say to ask. The dialog's `done` callback answers once the file
+ * was opened (or failed to read); a dismissal — Cancel, Escape, the × — is seen from the
+ * dialog stack: the entry leaves it without `taken` set. (An unmount effect in the dialog
+ * would be simpler, but React's development double-mount runs it once at mount.)
+ */
+function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?: string): Promise<boolean> {
+  const name = fileName ?? (source instanceof File ? source.name : "map.scx");
+  const file = source instanceof File && !fileName
+    ? source
+    : new File([source as unknown as BlobPart], name, { type: "application/octet-stream" });
+  if (!needsCloseConfirm(store)) return openFileInto(store, file);
+  return new Promise((resolve) => {
+    const pending: PendingAction = { action: "open", file, done: resolve };
+    store.set(openDialogAtom, "confirmClose", { pending });
+    const unsub = store.sub(dialogStackAtom, () => {
+      if (store.get(dialogStackAtom).some((d) => d.payload?.pending === pending)) return;
+      unsub();
+      if (!pending.taken) resolve(false);
+    });
+  });
+}
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -403,6 +431,44 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       edit: (label, build) => runTransaction(store, label, build),
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
+      open: (source, fileName) => openDocument(store, source, fileName),
+      export: async (options = {}) => {
+        const scn = scenario();
+        if (!scn) return null;
+        const format = options.format ?? "scx";
+        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom) });
+        const name = options.fileName ?? store.get(mapFilePathAtom) ?? `${scenarioName(scn) || "Untitled Scenario"}.${format}`;
+        return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
+      },
+      renderImage: async (options = {}) => {
+        const scn = scenario();
+        if (!scn || typeof document === "undefined") return null;
+        try {
+          await ensureTileset(store.get(tilesetFileNameAtom));
+        } catch {
+          return null;
+        }
+        return exportMapImage(scn, { ...DEFAULT_IMAGE_OPTIONS, ...options });
+      },
+      extras: {
+        list: () => (scenario() ? [...store.get(archiveExtrasAtom).keys()] : []),
+        get: (name) => (scenario() ? store.get(archiveExtrasAtom).get(name) ?? null : null),
+        set: (name, bytes) => {
+          if (!scenario()) return;
+          const next = new Map(store.get(archiveExtrasAtom));
+          next.set(name, bytes);
+          store.set(archiveExtrasAtom, next);
+          store.set(mapModifiedAtom, true);
+        },
+        remove: (name) => {
+          if (!scenario() || !store.get(archiveExtrasAtom).has(name)) return false;
+          const next = new Map(store.get(archiveExtrasAtom));
+          next.delete(name);
+          store.set(archiveExtrasAtom, next);
+          store.set(mapModifiedAtom, true);
+          return true;
+        },
+      },
     },
 
     terrain: {
@@ -584,7 +650,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     menu: {
       add: (path, item) => {
         const key = nextContributionKey();
-        store.set(pluginMenuItemsAtom, [...store.get(pluginMenuItemsAtom), { ...item, key, pluginId: info.id, path }]);
+        const icon = item.icon === "plugin" ? info.icon ?? { kind: "text", text: "⌘" } : item.icon;
+        store.set(pluginMenuItemsAtom, [...store.get(pluginMenuItemsAtom), { ...item, icon, key, pluginId: info.id, path }]);
         return bag.add(() => store.set(pluginMenuItemsAtom, store.get(pluginMenuItemsAtom).filter((i) => i.key !== key)), "menu");
       },
     },

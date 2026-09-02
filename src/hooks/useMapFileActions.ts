@@ -36,8 +36,44 @@ export const DEFAULT_NEW_MAP: NewMapOptions = {
  */
 export type PendingAction =
   | { action: "new"; options: NewMapOptions }
-  | { action: "open"; file: File }
+  /**
+   * `done` hears how it went: true once the file is open, false when the file was unreadable.
+   * The Close Scenario dialog sets `taken` the moment the user chooses to go on, so whoever
+   * watches the dialog stack can tell a dismissal (Cancel, Escape, the ×) from an open in progress.
+   */
+  | { action: "open"; file: File; done?: (opened: boolean) => void; taken?: boolean }
   | { action: "close" };
+
+type Store = ReturnType<typeof useStore>;
+
+/**
+ * Read a map file and install it as the open document, reporting on the status bar.
+ * The store-level half of `openFile`, so the plugin host can open a map without React.
+ */
+export async function openFileInto(store: Store, file: File): Promise<boolean> {
+  store.set(statusMessageAtom, `Opening ${file.name}…`);
+  try {
+    const doc = await openMapFile(file);
+    store.set(loadDocumentAtom, doc);
+    store.set(screenAtom, "editor");
+    const warnings = doc.scenario.warnings.length;
+    store.set(
+      statusMessageAtom,
+      `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}, ` +
+      `${doc.scenario.units.length} units` +
+      (warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""),
+    );
+    return true;
+  } catch (err) {
+    store.set(statusMessageAtom, `Could not open ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+}
+
+/** Whether replacing the document should go through the Close Scenario dialog first. */
+export function needsCloseConfirm(store: Store): boolean {
+  return store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
+}
 
 /** New, open and save actions shared by the menu, hotkeys, splash and drag-and-drop. */
 export function useMapFileActions() {
@@ -49,7 +85,6 @@ export function useMapFileActions() {
   const setStatus = useSetAtom(statusMessageAtom);
   const setModified = useSetAtom(mapModifiedAtom);
   const setPath = useSetAtom(mapFilePathAtom);
-  const setScreen = useSetAtom(screenAtom);
   const openDialog = useSetAtom(openDialogAtom);
 
   /**
@@ -78,24 +113,7 @@ export function useMapFileActions() {
     setStatus(`New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
   }, [load, setStatus, store]);
 
-  const openFile = useCallback(async (file: File) => {
-    setStatus(`Opening ${file.name}…`);
-    try {
-      const doc = await openMapFile(file);
-      load(doc);
-      setScreen("editor");
-      const warnings = doc.scenario.warnings.length;
-      setStatus(
-        `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}, ` +
-        `${doc.scenario.units.length} units` +
-        (warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""),
-      );
-      return true;
-    } catch (err) {
-      setStatus(`Could not open ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
-      return false;
-    }
-  }, [load, setScreen, setStatus]);
+  const openFile = useCallback((file: File) => openFileInto(store, file), [store]);
 
   /** Ctrl+S: write straight back to the current file name, or fall back to Save As. */
   const save = useCallback(async () => {
@@ -123,7 +141,7 @@ export function useMapFileActions() {
 
   const runPending = useCallback(async (p: PendingAction) => {
     if (p.action === "new") await newMap(p.options);
-    else if (p.action === "open") await openFile(p.file);
+    else if (p.action === "open") p.done?.(await openFile(p.file));
     else closeMap();
   }, [newMap, openFile, closeMap]);
 
@@ -132,8 +150,7 @@ export function useMapFileActions() {
    * map has unsaved changes and Preferences say to ask. True when the dialog took over.
    */
   const guard = useCallback((p: PendingAction): boolean => {
-    const ask = store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
-    if (!ask) { void runPending(p); return false; }
+    if (!needsCloseConfirm(store)) { void runPending(p); return false; }
     openDialog("confirmClose", { pending: p });
     return true;
   }, [store, openDialog, runPending]);

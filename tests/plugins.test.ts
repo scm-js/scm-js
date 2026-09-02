@@ -10,15 +10,17 @@ import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import { hasIsom } from "../src/editor/isom";
 import { scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
-import { activeUnitAtom, clipSelectionAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom } from "../src/atoms/editorAtoms";
-import { dialogStackAtom } from "../src/atoms/uiAtoms";
+import { activeUnitAtom, clipSelectionAtom, mapModifiedAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom } from "../src/atoms/editorAtoms";
+import { preferencesAtom } from "../src/atoms/preferencesAtoms";
+import type { PendingAction } from "../src/hooks/useMapFileActions";
+import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
 import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginCodeAtom,
   pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
-  addressesOf, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, previewPlugin, resolveIcon,
+  addressesOf, blankLiterals, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, previewPlugin, resolveIcon,
   resolvePlugin, unpin, validateManifest, type LoaderDeps,
 } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
@@ -120,6 +122,23 @@ describe("plugin bundling", () => {
     };
     return { deps, modules };
   }
+
+  it("ignores the word import inside strings, templates, regexes and comments", () => {
+    const src = [
+      `// import "commented-out"`,
+      `/* import x from "also-commented" */`,
+      `import { a } from "./a";`,
+      `const route = "/scmscx/import";`,
+      `const t = \`import "\${route}"\`;`,
+      `const re = /["']import"/g; const half = 6 / 2;`,
+      `const s = 'it\\'s import "quoted"';`,
+      `export * from "./b";`,
+      `const m = await import("./c");`,
+    ].join("\n");
+    expect(findImports(src).map((i) => i.specifier)).toEqual(["./a", "./b", "./c"]);
+    expect(blankLiterals(src)).toHaveLength(src.length);
+    expect(blankLiterals(`a("x")\nimport "./y"`)).toBe(`a(" ")\nimport "   "`);
+  });
 
   it("transpiles TypeScript, follows relative imports and rewrites them to module URLs", async () => {
     const { deps, modules } = memoryDeps({
@@ -258,6 +277,65 @@ describe("plugin api", () => {
     api.ui.dialog({ title: "Again", mount: () => {} });
     bag.dispose(); // deactivation closes what the plugin left open
     expect(store.get(dialogStackAtom)).toEqual([]);
+  });
+
+  it("exports the map as a file, keeps archive extras, and opens a file in its place", async () => {
+    const { store, scn } = blankStore();
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: false });
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.document.extras.list()).toEqual([]);
+    api.document.extras.set("scm-server\\map.json", new TextEncoder().encode(`{"mapId":"m_1"}`));
+    expect(api.document.extras.list()).toEqual(["scm-server\\map.json"]);
+    expect(new TextDecoder().decode(api.document.extras.get("scm-server\\map.json")!)).toBe(`{"mapId":"m_1"}`);
+    expect(store.get(mapModifiedAtom)).toBe(true);
+
+    const file = await api.document.export();
+    expect(file).toBeInstanceOf(File);
+    expect(file!.name).toBe("p.scx");
+    const chk = await api.document.export({ format: "chk", fileName: "raw.chk" });
+    expect(chk!.name).toBe("raw.chk");
+    expect(chk!.size).toBeLessThan(file!.size);
+
+    // Open the export in place of the map: the extras come back with it, the scenario is a new object.
+    store.set(mapModifiedAtom, false);
+    api.document.edit("tile", (tx) => { tx.setTile(0, 0, 0x321); });
+    expect(await api.document.open(file!)).toBe(true);
+    expect(store.get(scenarioAtom)).not.toBe(scn);
+    expect(api.document.info()).toMatchObject({ name: "p", fileName: "p.scx", modified: false });
+    expect(api.document.extras.list()).toEqual(["scm-server\\map.json"]);
+    expect(api.document.extras.remove("scm-server\\map.json")).toBe(true);
+    expect(api.document.extras.remove("scm-server\\map.json")).toBe(false);
+
+    // Bytes with a name, and something that is not a map.
+    expect(await api.document.open(new Uint8Array(await chk!.arrayBuffer()), "again.chk")).toBe(true);
+    expect(api.document.info()!.fileName).toBe("again.chk");
+  });
+
+  it("asks before replacing a modified map, and answers false when the user keeps it", async () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const file = (await api.document.export())!;
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
+    api.document.edit("tile", (tx) => { tx.setTile(0, 0, 0x321); });
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    const opening = api.document.open(file);
+    const entry = store.get(dialogStackAtom).find((d) => d.id === "confirmClose");
+    expect(entry).toBeDefined();
+    const pending = entry!.payload!.pending as PendingAction & { action: "open" };
+    expect(pending.file).toBe(file);
+    store.set(closeDialogAtom, entry!.key); // Cancel / Escape / the ×: the entry leaves the stack untaken
+    expect(await opening).toBe(false);
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    // Going on: the dialog marks the action taken before it closes, and `done` carries the result.
+    const again = api.document.open(file);
+    const entry2 = store.get(dialogStackAtom).find((d) => d.id === "confirmClose")!;
+    const pending2 = entry2.payload!.pending as PendingAction & { action: "open" };
+    pending2.taken = true;
+    store.set(closeDialogAtom, entry2.key);
+    pending2.done!(true);
+    expect(await again).toBe(true);
+    // Renders nothing without a browser canvas, rather than throwing.
+    expect(await api.document.renderImage({ pixelsPerTile: 1 })).toBeNull();
   });
 
   it("keeps per-plugin storage without localStorage", () => {
@@ -403,8 +481,12 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image on and Paint off as remote defaults", () => {
-    expect(DEFAULT_REMOTE_PLUGINS).toEqual([{ spec: "github:scm-js/plugin-image-to-terrain", enabled: true }, { spec: "github:scm-js/plugin-paint", enabled: false }]);
+  it("ships Terrain from Image on, and Paint and scm-server off, as remote defaults", () => {
+    expect(DEFAULT_REMOTE_PLUGINS).toEqual([
+      { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
+      { spec: "github:scm-js/plugin-paint", enabled: false },
+      { spec: "github:scm-js/plugin-scm-server", enabled: false },
+    ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
@@ -413,8 +495,9 @@ describe("plugin lifecycle", () => {
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
     expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
-    // A fresh editor lists Paint but does not run it until the user ticks it.
+    // A fresh editor lists Paint and scm-server but does not run them until the user ticks them.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-server", enabled: false });
   });
 });
 
@@ -692,6 +775,32 @@ describe("plugin surfaces", () => {
     // The caller's model is untouched.
     expect(menus[0].items).toHaveLength(2);
     expect((menus[0].items[1] as { items: unknown[] }).items).toHaveLength(1);
+  });
+
+  it("place an item under the built-in `after` names, with its icon, and fall back to the end", () => {
+    const menus: Menu[] = [
+      { label: "File", items: [{ kind: "item", label: "Open…" }, { kind: "sub", label: "Open Recent", items: [] }, { kind: "sep" }, { kind: "item", label: "Save" }] },
+    ];
+    const icon = { kind: "text" as const, text: "☁" };
+    const merged = withPluginItems(menus, [
+      { key: 1, pluginId: "p", path: "File", label: "Find Map…", after: "Open Recent", icon, run: () => {} },
+      { key: 2, pluginId: "p", path: "File", label: "Second", after: "Open Recent", run: () => {} },
+      { key: 3, pluginId: "p", path: "File", label: "Nowhere", after: "Nope", run: () => {} },
+    ]);
+    expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Open…", "sub", "Find Map…", "Second", "sep", "Save", "sep", "Nowhere"]);
+    expect((merged[0].items[2] as { icon?: unknown }).icon).toBe(icon);
+    expect(menus[0].items).toHaveLength(4);
+  });
+
+  it("resolves `icon: \"plugin\"` to the plugin's own icon when it registers", () => {
+    const { store } = blankStore();
+    const icon = { kind: "image" as const, url: "https://x/icon.svg" };
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s", icon }, new Contributions());
+    api.menu.add("File", { label: "A", icon: "plugin", after: "Open Recent", run: () => {} });
+    api.menu.add("File", { label: "B", icon: { kind: "text", text: "☁" }, run: () => {} });
+    api.menu.add("File", { label: "C", run: () => {} });
+    expect(store.get(pluginMenuItemsAtom).map((i) => i.icon)).toEqual([icon, { kind: "text", text: "☁" }, undefined]);
+    expect(store.get(pluginMenuItemsAtom)[0].after).toBe("Open Recent");
   });
 
   it("build context-menu rows for one surface, honouring visible/enabled and dynamic labels", () => {

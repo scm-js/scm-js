@@ -301,7 +301,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on) and Paint (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on), Paint and scm-server (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -450,6 +450,18 @@ to `commitTerrainAtom` — the stranded-doodad / stranded-unit pass pulled out o
 Anything that needs the graphics (`stampTerrain`, `fillFlat`, `paintIsom`, `placeDoodad`) degrades
 to a `notes` entry and `0` without them, never throws. `terrain.diamondsIn(rect)` is inclusive of the
 far edges so a whole-map rect covers the last lattice column and row.
+`api.document.open(file)` is File ▸ Open without React: `host.ts#openDocument` builds a `File` and
+runs `useMapFileActions.ts#openFileInto` (the store-level half of the hook's `openFile`), or, when
+`needsCloseConfirm(store)` says the map is modified and Preferences ask, parks an "open"
+`PendingAction` in the Close Scenario dialog: `runPending` answers through its `done` callback, and a
+dismissal (Cancel, Escape, the ×) is seen from `dialogStackAtom` — the entry leaves without `taken`,
+which `proceed` sets before closing (an unmount effect ran once at mount under React's dev double-mount). `document.export()` is `writeMapBytes` with the archive extras as a `File`,
+`document.renderImage()` is `exportMapImage` (null without the tileset or a canvas), and
+`document.extras` reads and writes `archiveExtrasAtom` (setting marks the map modified) so a plugin
+can keep a file of its own in the archive. `MenuItemSpec.icon` (`"plugin"` resolves to the manifest
+icon at `menu.add`, so `PluginMenuItem.icon` is always a `PluginIcon`) draws through `PluginIconView`
+in the item's indicator slot, and `after` makes `withPluginItems` splice the item under the named
+built-in instead of appending after a separator.
 
 `loader.ts` is pure apart from `LoaderDeps` (fetch, transpile, module URL, import, built-ins):
 `parseSpec` (`builtin:`, `github:owner/repo[@ref][/dir]`, github.com URLs, any URL to a `plugin.json`
@@ -471,7 +483,8 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint` off — plus any built-in, each a
+`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint` and
+`github:scm-js/plugin-scm-server` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise

@@ -119,6 +119,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
+| Generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes, as a plugin (AI: install it from Plugins ▸ Browse Plugins…, then Tools ▸ AI). It needs a server that holds an Anthropic key — [scm-js/ai-server](https://github.com/scm-js/ai-server) is one to deploy — or your own key typed into its settings. Every change it makes is one undo step. |
 
 ## Working in the editor
 
@@ -550,6 +551,25 @@ that for each start location the map has. Presets for main, natural and third; a
 end-patch amounts and mineral types; a blocking patch tool; *Mirror selected units*,
 *Check symmetry* (selects every unit without a counterpart) and a per-player resource
 summary. Every placement is one undo step.
+
+**AI** ([scm-js/plugin-ai](https://github.com/scm-js/plugin-ai)) is not in the list;
+install it from Plugins ▸ Browse Plugins…. It puts an AI submenu under Tools and needs a
+server to talk to: [scm-js/ai-server](https://github.com/scm-js/ai-server) is a small
+one you deploy yourself (it holds the Anthropic key, hands out access tokens with daily
+budgets, and knows nothing about maps), or type your own Anthropic key into Tools ▸ AI ▸
+Settings… and the server forwards it without keeping it. *Generate Map…* takes a
+description, a size, a tileset and a player count and lays the map out — terrain painted
+with the isometric brush from a coarse plan, bases with the Melee Wizard's geometry, a
+name and a description — then offers to refine it from a picture of the result or to
+review it. *Redo Area…* does the same for the marked area. *Write Triggers…* answers in
+the trigger script language, compiles it here, fixes what the compiler complains about
+and builds it; *Explain Triggers…* walks through the map's triggers in plain language.
+*Name and Describe…*, *Write Briefing…*, *Review Map…* (the map's picture and statistics
+go up, a critique with places to look at comes back) and *Rewrite Strings…* (translate,
+fix spelling, retone, with a before/after table to tick) round it out, and *Assistant*
+(Ctrl+Shift+A) is a panel where you ask for changes in words: it looks at the map through
+its tools, takes screenshots, and makes one undoable edit at a time. Nothing leaves the
+browser until you press the button, and every dialog shows what a request cost.
 
 ## Keyboard
 

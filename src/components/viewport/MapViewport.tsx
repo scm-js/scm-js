@@ -50,8 +50,8 @@ import { openDialogAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom } from "../../atoms/pluginAtoms";
-import type { MapPointer } from "../../plugins/api";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import type { MapPointer, MapView, OverlayAbove } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
 import { pluginContextRows } from "../../plugins/contextMenu";
 import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
@@ -211,6 +211,9 @@ export default function MapViewport() {
   const cancelTool = useSetAtom(cancelMapToolAtom);
   // Only read so the tool's overlay redraws when it asks (`MapToolHandle.redraw`).
   const mapToolRevision = useAtomValue(mapToolRevisionAtom);
+  // Plugin overlays (`api.ui.overlay`): drawn at their slot while visible, told the pointer, never given it.
+  const overlays = useAtomValue(pluginOverlaysAtom);
+  const overlayRevision = useAtomValue(pluginOverlayRevisionAtom);
   const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
@@ -273,6 +276,25 @@ export default function MapViewport() {
     const y0 = Math.max(0, Math.floor(sy / tilePx));
     const x1 = Math.min(mapW, Math.ceil((sx + size.w) / tilePx));
     const y1 = Math.min(mapH, Math.ceil((sy + size.h) / tilePx));
+
+    /** Map pixels to canvas pixels, for plugin overlays and a plugin's map tool. */
+    const view: MapView = {
+      zoom,
+      tilePx,
+      x: (px: number) => px * zoom - sx,
+      y: (py: number) => py * zoom - sy,
+      visible: { x0, y0, x1, y1 },
+    };
+    /** The visible plugin overlays registered for `above`, in registration order, each in a clean context. */
+    const drawOverlays = (above: OverlayAbove) => {
+      if (!scenario) return;
+      for (const o of overlays) {
+        if (!o.visible || (o.spec.above ?? "terrain") !== above) continue;
+        ctx.save();
+        try { o.spec.draw(ctx, view); } catch (err) { console.error(`[${o.plugin.name}] overlay draw failed`, err); }
+        ctx.restore();
+      }
+    };
 
     // terrain
     const tiles = scenario?.tiles;
@@ -372,6 +394,7 @@ export default function MapViewport() {
       }
     }
 
+    drawOverlays("terrain");
 
     // placed units: GRP sprites in the game's painter's order (ground by y, then flyers),
     // team-coloured through tunit.pcx and the tileset palette. Types whose graphic is
@@ -699,6 +722,8 @@ export default function MapViewport() {
       }
     }
 
+    drawOverlays("objects");
+
     // fog of war: over units, locations and markers alike, since in game it hides all of them
     if (showFog && scenario) drawFogOverlay(ctx, scenario, tilesetIndex(scenario), fogViewPlayer, { x0, y0, x1, y1, tilePx, sx, sy });
 
@@ -962,15 +987,10 @@ export default function MapViewport() {
       ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(tilePx * b) - 1, Math.round(tilePx * b) - 1);
     }
 
+    drawOverlays("everything");
+
     // A plugin's map tool draws last, over everything, in canvas pixels through the view it is given.
     if (tooling && mapTool) {
-      const view = {
-        zoom,
-        tilePx,
-        x: (px: number) => px * zoom - sx,
-        y: (py: number) => py * zoom - sy,
-        visible: { x0, y0, x1, y1 },
-      };
       ctx.save();
       try { mapTool.spec.draw?.(ctx, view); } catch (err) { console.error("[plugins] map tool draw failed", err); }
       ctx.restore();
@@ -1031,7 +1051,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
@@ -1148,6 +1168,14 @@ export default function MapViewport() {
   };
   const callTool = (name: "onDown" | "onMove" | "onUp", p: MapPointer) => {
     try { mapTool?.spec[name]?.(p); } catch (err) { console.error(`[plugins] map tool ${name} failed`, err); }
+  };
+  /** Tell every visible overlay with an `onHover` where the pointer is (null: it left the map). */
+  const hoverOverlays = (p: MapPointer | null) => {
+    if (!scenario) return;
+    for (const o of overlays as readonly PluginOverlayEntry[]) {
+      if (!o.visible || !o.spec.onHover) continue;
+      try { o.spec.onHover(p); } catch (err) { console.error(`[${o.plugin.name}] overlay onHover failed`, err); }
+    }
   };
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1280,6 +1308,7 @@ export default function MapViewport() {
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
     const point = pointAt(e);
+    if (overlays.length) hoverOverlays(toolPointer(e, (e.buttons & 1) !== 0));
     if (tooling || toolDownRef.current) {
       const c = clampToMap(t);
       hoverRef.current = inMap(t) || toolDownRef.current ? c : null;
@@ -1490,6 +1519,7 @@ export default function MapViewport() {
 
   const onLeave = (e: React.PointerEvent<HTMLDivElement>) => {
     if (tooling && !toolDownRef.current) callTool("onMove", toolPointer(e, false, false));
+    if (overlays.length) hoverOverlays(null);
     hoverRef.current = null;
     hoverPointRef.current = null;
     e.currentTarget.style.cursor = "";

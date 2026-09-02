@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
+  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
 } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import { browserStorage } from "./storage";
@@ -231,6 +231,49 @@ export const cancelMapToolAtom = atom(null, (get) => {
   let keep = false;
   try { keep = tool.spec.onCancel?.() === true; } catch (err) { console.error("[plugins] map tool onCancel failed", err); }
   if (!keep) tool.finish("cancelled");
+  return true;
+});
+
+/* ── Overlays ───────────────────────────────────────────── */
+
+/**
+ * One `api.ui.overlay`: a picture the viewport draws at the spec's slot while `visible`,
+ * listed under View ▸ Overlays and in the Layers panel. The list is in registration
+ * order; `visible` is the one field the chrome writes (through `setOverlayVisibleAtom`).
+ */
+export interface PluginOverlayEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: OverlaySpec;
+  visible: boolean;
+}
+
+export const pluginOverlaysAtom = atom<PluginOverlayEntry[]>([]);
+
+/** Bumped by `OverlayHandle.redraw`; the viewport repaints when it changes. */
+export const pluginOverlayRevisionAtom = atom(0);
+
+/**
+ * What the user last set each overlay to, by plugin and name, for the session — so a
+ * plugin reloaded or re-enabled comes back the way it was left, like a panel's position.
+ */
+export const overlayVisibilityMemory = new Map<string, boolean>();
+
+export const overlayMemoryKey = (pluginId: string, name: string) => `${pluginId}\u0000${name}`;
+
+/**
+ * Show or hide one overlay. Every writer goes through here — the View menu, the Layers
+ * panel and the plugin's own handle — so the spec's `onToggle` fires once per change
+ * whichever way it came, and the session memory is kept.
+ */
+export const setOverlayVisibleAtom = atom(null, (get, set, key: number, visible: boolean) => {
+  const list = get(pluginOverlaysAtom);
+  const entry = list.find((o) => o.key === key);
+  if (!entry || entry.visible === visible) return false;
+  set(pluginOverlaysAtom, list.map((o) => (o === entry ? { ...o, visible } : o)));
+  overlayVisibilityMemory.set(overlayMemoryKey(entry.plugin.id, entry.spec.name), visible);
+  try { entry.spec.onToggle?.(visible); } catch (err) { console.error(`[${entry.plugin.name}] overlay onToggle failed`, err); }
+  set(pluginOverlayRevisionAtom, get(pluginOverlayRevisionAtom) + 1);
   return true;
 });
 

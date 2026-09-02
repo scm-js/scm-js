@@ -501,6 +501,7 @@ without the tileset graphics.
 | `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
 | `panel(spec)` | A panel that floats over the map and blocks nothing: the user keeps drawing, scrolling and using hotkeys while it is open (except while typing in one of its fields). `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS pixels (260 by default) and the panel is as tall as its content; `onClose` fires however it closes. The user drags it by its title bar and closes it with the ×; it opens at the top-right of the map and remembers where it was left for the session. The handle has `close()`, `isOpen()`, `setTitle()`. Open as many as you like; they all close with the plugin. |
 | `mapTool(spec)` | Take over the pointer on the map. The viewport hands the tool every press, move and release ahead of the active layer's own tools (`onDown` / `onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and the modifier keys — kept inside the map while a button is held, as the built-in brushes do), hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls `draw(ctx, view)` last on every repaint so the tool can preview what it will do (`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`, `view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a right-click calls `onCancel` — return `true` to keep running (you dropped a gesture of your own), otherwise the tool stops — and `onStop(reason)` is told once whichever way it ends: `"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed), `"replaced"` (another tool started; one runs at a time), `"disabled"`. A `pickArea` / `pickTile` in progress is served first. Paint is the worked example. |
+| `overlay(spec)` | A picture over the map the user can switch on and off, and that stays while they work on any layer: it is listed under View (after the built-in overlays) and in the Layers panel with an eye of its own. `draw(ctx, view)` runs at every repaint while visible, at the slot `above` names — `"terrain"` (under doodad footprints, units, sprites and locations; the default), `"objects"` (under fog of war) or `"everything"` (under a running map tool's drawing only) — with the same `MapView` a map tool gets. `onHover(p)` hears the pointer on every layer, and while a map tool runs, with `null` once when it leaves the map; the overlay never takes the pointer, so clicks go to the active layer's tools. `onToggle(visible)` fires whichever way it was switched. The handle has `show()`, `hide()`, `toggle()`, `isVisible()`, `redraw()` and `remove()`. `visible` is the starting state (true by default); what the user last set an overlay of that name to wins for the session, so a reloaded plugin comes back as it was left. Register at activation and keep the handle; the overlay leaves with the plugin. Walkability is the worked example. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
 | `pickArea({ prompt })` | The user drags a rectangle on the map: the viewport shows a crosshair and a teal marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc / right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time — starting another cancels the first. A dialog is modal and covers the map, so close yours before picking and reopen it with the result (Terrain from Image does exactly this: *Pick on Map…*). |
 | `pickTile({ prompt })` | The same for a single click; resolves with `{ x, y }`. |
@@ -568,7 +569,7 @@ plugin's name prefixed.
 | `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
 | `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
 | `src/plugins/defaults.ts` | The plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, each with whether it starts on, plus any built-in), merged over the stored list by `effectiveInstalls`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its two siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`) and `pluginPanelsAtom` (the open `ui.panel`s). |
+| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`), `pluginOverlaysAtom` (the registered `ui.overlay`s with their visibility — `setOverlayVisibleAtom` is the one writer, `pluginOverlayRevisionAtom` their `redraw`, `overlayVisibilityMemory` what the user last chose per plugin and name) and `pluginPanelsAtom` (the open `ui.panel`s). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, `ConfirmPluginDialog` (the Add Plugin confirmation), and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
 | `src/components/panels/PluginPanels.tsx` | The floating frames `ui.panel` mounts into, rendered inside the viewport: a draggable title strip, a close button, positions remembered per plugin and title for the session. |
@@ -595,6 +596,18 @@ tool's cursor, and the tool's `draw` runs at the end of the paint pass with a `M
 built from the current scroll and zoom. `finish(reason)` is guarded like a pick's and
 clears the atom; `cancelMapToolAtom` (Esc, right-click) asks the spec's `onCancel` first
 and only finishes when it does not keep the tool.
+
+`api.ui.overlay` is `registerOverlay` there: one `PluginOverlayEntry` in
+`pluginOverlaysAtom`. `MapViewport` runs each visible entry's `draw` at its slot — after
+the grid, after the locations and start locations, or after the hover ghost and before a
+map tool's own drawing — inside a `save` / `restore`, and its `onMove` / `onLeave` forward
+a `MapPointer` (or `null`) to every visible entry with an `onHover` before doing anything
+else, so overlays hear the pointer on every layer and during a tool. The View menu and the
+Layers panel list the entries and write `setOverlayVisibleAtom`, which the handle's
+`show` / `hide` / `toggle` also go through, so the spec's `onToggle` fires once per change
+however it came; the atom also records the choice in `overlayVisibilityMemory`, which
+`registerOverlay` consults before the spec's `visible`. `remove()` (and the plugin's
+`Contributions` disposal) takes the entry out of the list.
 
 `api.document.edit` is `runTransaction` in `host.ts`: it wraps the scenario in an
 `EditTransaction` whose operations apply immediately and accumulate change lists in
@@ -743,14 +756,19 @@ is measured with `passageWidth`. `api.query.startLocations()` and
 `api.query.placement(106, …)` (a Command Center's footprint) give the start rows and the
 "hall spot not buildable" problem.
 
-The result is drawn by an `api.ui.mapTool` whose `draw` blits one `ImageData` per view
-mode (areas, islands, clearance, height, walkable) scaled from minitiles to canvas
-pixels with smoothing off, then rings, labels and markers in canvas coordinates through
-`view.x` / `view.y`; `onMove` writes the cell under the pointer into the panel and
-`onDown` picks the area or island there. The panel (`api.ui.panel`) lists everything
-with `api.view.center` / `api.view.goTo` behind each row, re-runs on the `"terrain"`,
-`"units"`, `"doodads"` and `"document"` events (debounced), and offers a text report.
-The plugin never writes to the map.
+The result is an `api.ui.overlay` registered at activation (`above: "objects"`, off
+until switched on) — View ▸ Walkability, the Layers panel, `Ctrl+Shift+W` or the panel's
+tick — whose `draw` blits one `ImageData` per view mode (areas, islands, clearance,
+height, walkable) scaled from minitiles to canvas pixels with smoothing off, then rings,
+labels and markers in canvas coordinates through `view.x` / `view.y`; `onHover` writes
+the cell under the pointer into the panel. Because an overlay never takes the pointer,
+the picture stays up while units and doodads are placed on it, and the analysis follows
+every edit (the `"terrain"`, `"units"`, `"doodads"`, `"settings"` and `"document"`
+events, debounced) while it is showing or the panel is open. Picking an area is a
+`pickTile`. The panel (`api.ui.panel`) holds the settings, the readout and the problems;
+*Details…* opens a second panel with every start location, pair, island, area and choke,
+with `api.view.center` / `api.view.goTo` behind each row; *Copy report* is the text
+summary. The plugin never writes to the map.
 
 ## Melee Wizard
 

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
 import { activeLayerAtom, viewFlagsAtom, type EditorLayer, type ViewFlags } from "../../atoms/editorAtoms";
+import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAtoms";
+import { PluginIconView } from "../dialogs/PluginDialogs";
 import { RAIL_ICON } from "./PalettePanel";
 
 const ROWS: { id: EditorLayer; label: string; flag?: keyof ViewFlags }[] = [
@@ -17,6 +19,9 @@ export default function LayersPanel() {
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [locked, setLocked] = useState<Record<string, boolean>>({});
+  // Plugin overlays (`api.ui.overlay`): a picture over the map with an eye of its own, not a layer to edit on.
+  const overlays = useAtomValue(pluginOverlaysAtom);
+  const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
 
   return (
     <div style={{ padding: 4 }}>
@@ -42,6 +47,16 @@ export default function LayersPanel() {
           </div>
         );
       })}
+      {overlays.length > 0 && <div className="layer-group">Overlays</div>}
+      {overlays.map((o) => (
+        <div key={o.key} className="layer-row is-overlay" title={`${o.spec.name} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
+          <button className={`eye ${o.visible ? "" : "off"}`} title={o.visible ? "Hide overlay" : "Show overlay"} onClick={(e) => { e.stopPropagation(); setOverlayVisible(o.key, !o.visible); }}>
+            {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+          <span className="ico"><PluginIconView icon={o.plugin.icon} size={13} /></span>
+          <span>{o.spec.name}</span>
+        </div>
+      ))}
     </div>
   );
 }

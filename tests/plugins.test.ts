@@ -21,7 +21,8 @@ import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import type { PendingAction } from "../src/hooks/useMapFileActions";
 import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
 import {
-  cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, pluginCodeAtom,
+  cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
+  pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
@@ -1374,6 +1375,76 @@ describe("plugin map tools", () => {
     bag2.dispose();
     expect(d.isActive()).toBe(false);
     expect(stops).toEqual(["a:cancelled", "b:replaced", "c:document", "d:disabled"]);
+  });
+});
+
+describe("plugin overlays", () => {
+  it("list in the registry, toggle through the handle and the chrome alike, redraw on request and leave with the plugin", () => {
+    overlayVisibilityMemory.clear();
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const toggles: string[] = [];
+    const a = api.ui.overlay({ name: "Walkability", draw: () => {}, onToggle: (v) => toggles.push(`a:${v}`) });
+    const b = api.ui.overlay({ name: "Heat", visible: false, above: "objects", draw: () => {}, onToggle: (v) => toggles.push(`b:${v}`) });
+    expect(store.get(pluginOverlaysAtom).map((o) => [o.spec.name, o.visible, o.plugin.id])).toEqual([["Walkability", true, "t"], ["Heat", false, "t"]]);
+    expect(a.isVisible()).toBe(true);
+    expect(b.isVisible()).toBe(false);
+    // The chrome writes the same atom the handle does; onToggle fires once per real change.
+    const key = store.get(pluginOverlaysAtom)[0].key;
+    expect(store.set(setOverlayVisibleAtom, key, false)).toBe(true);
+    expect(store.set(setOverlayVisibleAtom, key, false)).toBe(false);
+    a.show();
+    a.show();
+    b.toggle();
+    b.hide();
+    expect(toggles).toEqual(["a:false", "a:true", "b:true", "b:false"]);
+    expect(store.get(pluginOverlaysAtom).map((o) => o.visible)).toEqual([true, false]);
+    const rev = store.get(pluginOverlayRevisionAtom);
+    a.redraw();
+    expect(store.get(pluginOverlayRevisionAtom)).toBe(rev + 1);
+    // Removed: gone from the list, its handle inert, its slot in the bag released.
+    a.remove();
+    a.remove();
+    a.show();
+    expect(a.isVisible()).toBe(false);
+    expect(store.get(pluginOverlaysAtom).map((o) => o.spec.name)).toEqual(["Heat"]);
+    expect(toggles).toHaveLength(4);
+    bag.dispose();
+    expect(store.get(pluginOverlaysAtom)).toEqual([]);
+    expect(b.isVisible()).toBe(false);
+  });
+
+  it("come back the way the user left them for the session, per plugin and name", () => {
+    overlayVisibilityMemory.clear();
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    api.ui.overlay({ name: "Walkability", draw: () => {} }).hide();
+    bag.dispose();
+    // A reload registers again: the user's choice wins over the spec's default …
+    const again = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions()).ui.overlay({ name: "Walkability", draw: () => {} });
+    expect(again.isVisible()).toBe(false);
+    // … but not for another plugin's overlay of the same name, and a `visible` default is only that.
+    const other = createPluginApi(store, { id: "u", name: "U", source: "s" }, new Contributions()).ui.overlay({ name: "Walkability", visible: false, draw: () => {} });
+    expect(other.isVisible()).toBe(false);
+    other.show();
+    expect(store.get(pluginOverlaysAtom).map((o) => [o.plugin.id, o.visible])).toEqual([["t", false], ["u", true]]);
+    overlayVisibilityMemory.clear();
+  });
+
+  it("raise the view event when one is shown or hidden", () => {
+    overlayVisibilityMemory.clear();
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    let views = 0;
+    api.events.on("view", () => views++);
+    const o = api.ui.overlay({ name: "X", draw: () => {} });
+    const before = views;
+    o.hide();
+    expect(views).toBe(before + 1);
+    bag.dispose();
   });
 });
 

@@ -653,6 +653,17 @@
   font-size: var(--fs-sm);
   border-radius: var(--radius);
 }
+.layer-group {
+  padding: 8px 6px 2px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.layer-row.is-overlay .ico {
+  display: grid;
+  place-items: center;
+}
 .layer-row:hover {
   background: var(--bg-3);
 }

@@ -81,7 +81,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
 | Auto-place Start Locations | Yes, as a plugin (Melee Wizard: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Melee Wizard…). Click where Player 1 starts and the others land on its images under the symmetry you chose (mirror, 180°, 90°, both diagonals; 2, 4 or 8 players). The Tools menu's own entry is still a stub. |
 | Lay out a base's resources: the mineral line on the three-tile ring, the geyser past its end, for every player at once | Yes, as a plugin (Melee Wizard). Press on the hall spot and drag towards the minerals; presets for main, natural and third; amounts, end-patch amounts, mineral types; spots the map refuses are shown in red and left out. Also bases at every start location in one go, a blocking patch tool, mirroring the selected units, a symmetry check and a resource summary. |
-| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability: tick it, then Tools ▸ Walkability…). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map, listed in a panel that follows every edit; hover reads the ground under the pointer. |
+| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability: tick it, then View ▸ Walkability or Ctrl+Shift+W). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map as an overlay that stays on while you place units and follows every edit; hover reads the ground under the pointer; Tools ▸ Walkability… is the settings and the lists. |
 
 ### Triggers
 
@@ -482,14 +482,18 @@ again from scratch — every dialog and the map view follow, and the undo histor
 with Resize.
 
 **Walkability** ([scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability))
-is in the list but off. Tick it, then Tools ▸ Walkability… (Ctrl+Shift+W) reads the ground
-the way a unit does — the sixteen minitiles under every tile, with buildings and
-resources as walls — and draws what it finds over the map: the islands (ground no path
-joins) and which start locations share one, pockets no start location reaches, the areas
-the map divides into and the chokes between them as rings with their width in tiles,
-seams where a unit can step between ground heights with no ramp, and for every pair of
-start locations the air distance, the ground distance and the narrowest point on the
-widest route. Hover the map to read the cell under the pointer; click to pick an area.
+is in the list but off. Tick it, and View ▸ Walkability (Ctrl+Shift+W, or the eye in the
+Layers panel) reads the ground the way a unit does — the sixteen minitiles under every
+tile, with buildings and resources as walls — and draws what it finds over the map: the
+islands (ground no path joins) and which start locations share one, pockets no start
+location reaches, the areas the map divides into and the chokes between them as rings
+with their width in tiles, seams where a unit can step between ground heights with no
+ramp, and for every pair of start locations the air distance, the ground distance and
+the narrowest point on the widest route. The overlay is a view, not a tool: it stays on
+while you place units and doodads and redraws after every edit. Tools ▸ Walkability…
+opens the settings (what to draw, the unit size, opacity) with the readout of the cell
+under the pointer and the problems; *Details…* lists every start location, pair, island,
+area and choke, each a click from the spot.
 *Unit size* closes the passages a Marine, a Dragoon or a Siege Tank does not fit
 through; the panel follows every edit while it is open, and Copy report puts a text
 summary on the clipboard. It only reads the map.

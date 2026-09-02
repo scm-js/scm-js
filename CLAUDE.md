@@ -578,7 +578,18 @@ cursor, and the spec's `draw(ctx, view)` runs at the end of the paint pass (`Map
 `cancelMapToolAtom` (Esc in `useHotkeys`, right-click in the viewport) asks the spec's `onCancel`
 first and finishes only when it does not keep the tool; `finish(reason)` is guarded like a pick's,
 clears the atom and tells `onStop` once (`stopped` / `cancelled` / `document` / `replaced` /
-`disabled`). `api.ui.panel` is a floating, non-modal frame over the map (`pluginPanelsAtom`,
+`disabled`). `api.ui.overlay` (`host.ts#registerOverlay`) is the passive counterpart: a `PluginOverlayEntry` in
+`pluginOverlaysAtom` that `MapViewport` draws at the spec's slot (`above`: after the grid, after the
+objects, or after the hover ghost but before a map tool's drawing) while `visible`, and whose
+`onHover` its `onMove` / `onLeave` feed a `MapPointer` (or null) on every layer and during a tool —
+it never owns the pointer. The View menu (after the built-in overlay flags) and the Layers panel
+(an *Overlays* group with eyes) list the entries; every visibility write, theirs and the handle's,
+goes through `setOverlayVisibleAtom` so `onToggle` fires once per change and
+`overlayVisibilityMemory` remembers the user's choice per plugin and name for the session
+(`registerOverlay` reads it before the spec's `visible`). `pluginOverlayRevisionAtom` is `redraw()`;
+`remove()` and the `Contributions` sweep drop the entry; `pluginOverlaysAtom` is part of the
+`"view"` event.
+`api.ui.panel` is a floating, non-modal frame over the map (`pluginPanelsAtom`,
 `components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
 positions kept per plugin + title for the session, opens top-right) — hotkeys keep working since
 it is not in the dialog stack. `api.palette` reads and sets the object palettes' picks
@@ -668,14 +679,17 @@ meanings of its fields, the string table read off its own offsets) are pure and 
 `tests/plugins.test.ts` covers the sections and names API against a new map.
 
 **Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts off) is the read-only
-analysis drawn over the map: `analysis.ts` there builds a minitile grid from `api.tileset.raw()`'s VF4
-words plus the ground under buildings and resources, and computes an exact Euclidean clearance
-transform, 4-connected islands, a BWEM-style watershed into areas with the chokes between them
-(measured with `passageWidth`), height seams (open cells at different heights touching with no ramp),
-and per start pair the ground distance (Dial's) and the widest route's narrowest point; `plugin.ts`
-blits one `ImageData` per view mode through a map tool's `draw`, reads the cell under the pointer in
-`onMove`, and lists everything in a panel that re-runs on the terrain/units/doodads/document events.
-It uses no API beyond what existed; it never writes.
+analysis drawn over the map and the worked example for `api.ui.overlay`: `analysis.ts` there builds a
+minitile grid from `api.tileset.raw()`'s VF4 words plus the ground under buildings and resources, and
+computes an exact Euclidean clearance transform, 4-connected islands, a BWEM-style watershed into areas
+with the chokes between them (measured with `passageWidth`), height seams (open cells at different
+heights touching with no ramp), and per start pair the ground distance (Dial's) and the widest route's
+narrowest point; `plugin.ts` registers one overlay at activation (`above: "objects"`, off until
+switched on from View, the Layers panel, `Ctrl+Shift+W` or the panel), blits one `ImageData` per view
+mode in its `draw`, reads the cell under the pointer in `onHover`, picks an area through `pickTile`,
+and re-runs on the terrain/units/doodads/settings/document events while the overlay shows or the panel
+is open, so the picture follows the units being placed on it. The settings panel holds the readout and
+the problems; a *Details…* panel lists the rest. It never writes.
 
 **Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, a default that starts off) places symmetric
 start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile

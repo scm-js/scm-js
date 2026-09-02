@@ -998,6 +998,53 @@ export interface MapToolHandle {
   redraw(): void;
 }
 
+/** Where in the viewport's paint pass an overlay draws. */
+export type OverlayAbove =
+  /** Over the terrain and grid, under doodad footprints, units, sprites and locations (the default). */
+  | "terrain"
+  /** Over units, sprites and locations, under fog of war. */
+  | "objects"
+  /** Over everything but a running map tool's own drawing. */
+  | "everything";
+
+/**
+ * An overlay is a picture drawn over the map that the user can turn on and off: it
+ * is listed under View ▸ Overlays and in the Layers panel, stays while the user works
+ * on any layer, and never takes the pointer — clicks go to the active layer's tools
+ * as usual. It hears the pointer through `onHover`, which is how a readout follows the
+ * mouse while the user places units. Register one at activation and keep the handle;
+ * it goes away with the plugin.
+ */
+export interface OverlaySpec {
+  /** Shown in View ▸ Overlays and the Layers panel. Unique per plugin. */
+  name: string;
+  /** Start visible; true by default. What the user last set for this name wins for the session. */
+  visible?: boolean;
+  /** Where the picture goes in the paint pass; `"terrain"` by default. */
+  above?: OverlayAbove;
+  /** Draw in canvas pixels through `view`, each time the viewport repaints while visible. */
+  draw(ctx: CanvasRenderingContext2D, view: MapView): void;
+  /**
+   * The pointer over the map while the overlay is visible, on every layer and while a
+   * map tool runs; `null` once when it leaves. Call `handle.redraw()` here to move a
+   * hover mark. A press sets `down` but is never captured for you.
+   */
+  onHover?(p: MapPointer | null): void;
+  /** The overlay was shown or hidden, by the user in the chrome or by your handle. */
+  onToggle?(visible: boolean): void;
+}
+
+export interface OverlayHandle {
+  show(): void;
+  hide(): void;
+  toggle(): void;
+  isVisible(): boolean;
+  /** Repaint the viewport — and so call `draw` — now. */
+  redraw(): void;
+  /** Take the overlay out of the chrome for good; `isVisible` is false from then on. */
+  remove(): void;
+}
+
 export interface PickOptions {
   /** Shown in the viewport's HUD while the user picks; also the status line. */
   prompt?: string;
@@ -1020,6 +1067,12 @@ export interface UiApi {
    * `pickArea` / `pickTile` in progress is served first.
    */
   mapTool(spec: MapToolSpec): MapToolHandle;
+  /**
+   * A picture over the map the user can switch on and off (View ▸ Overlays, the Layers
+   * panel) and that stays while they work on any layer. It draws at every repaint and
+   * hears the pointer, but never takes it. As many as you like; they go with the plugin.
+   */
+  overlay(spec: OverlaySpec): OverlayHandle;
   /** The browser's file picker; resolves with an empty list on cancel. */
   pickFiles(options?: PickFilesOptions): Promise<File[]>;
   /**

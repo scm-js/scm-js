@@ -22,7 +22,7 @@ import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, undoAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
-import { pluginMenuItemsAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
+import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../dialogs/PluginDialogs";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
@@ -133,6 +133,8 @@ export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 function useMenus(): Menu[] {
   const open = useSetAtom(openDialogAtom);
   const pluginItems = useAtomValue(pluginMenuItemsAtom);
+  const overlays = useAtomValue(pluginOverlaysAtom);
+  const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const store = useStore();
   const hasMap = useAtomValue(scenarioAtom) !== null;
@@ -304,6 +306,8 @@ function useMenus(): Menu[] {
         sep,
         flag("elevation", "Elevation Overlay"),
         flag("buildability", "Buildability Overlay"),
+        // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
+        ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
         { kind: "sub", label: "Panels", items: [panel("palette", "Palette"), panel("minimap", "Minimap"), panel("layers", "Layers"), panel("properties", "Properties"), sep, panel("toolbar", "Toolbar"), panel("statusbar", "Status Bar")] },
         sep,

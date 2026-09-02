@@ -20,8 +20,9 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, pluginCodeAtom, pluginCommandsAtom, pluginContextItemsAtom,
-  pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
+  pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom,
+  pluginRuntimesAtom, setOverlayVisibleAtom,
   type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
@@ -81,7 +82,7 @@ import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
-  type MapToolSpec, type MapToolStopReason, type NamedValue, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
+  type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
 } from "./api";
@@ -380,6 +381,42 @@ export function startMapTool(store: Store, bag: Contributions, info: PluginInfo,
     stop: () => finish("stopped"),
     isActive: () => !done,
     redraw: () => { if (!done) store.set(mapToolRevisionAtom, store.get(mapToolRevisionAtom) + 1); },
+  };
+}
+
+/**
+ * `api.ui.overlay`: one `PluginOverlayEntry` in `pluginOverlaysAtom`, which `MapViewport`
+ * draws at its slot while visible and forwards the pointer to, and which the View menu
+ * and the Layers panel list with a tick. Visibility changes all go through
+ * `setOverlayVisibleAtom`, so `onToggle` fires the same way for the handle and the
+ * chrome. Nothing about a document is held: the overlay stays registered across maps
+ * (its `draw` is simply not called while none is open) and leaves with the plugin.
+ */
+export function registerOverlay(store: Store, bag: Contributions, info: PluginInfo, spec: OverlaySpec): OverlayHandle {
+  const key = nextContributionKey();
+  const remembered = overlayVisibilityMemory.get(overlayMemoryKey(info.id, spec.name));
+  const visible = remembered ?? spec.visible ?? true;
+  let removed = false;
+  const entry = () => store.get(pluginOverlaysAtom).find((o) => o.key === key);
+  const bump = () => store.set(pluginOverlayRevisionAtom, store.get(pluginOverlayRevisionAtom) + 1);
+  const remove = () => {
+    if (removed) return;
+    removed = true;
+    disposable.dispose();
+    store.set(pluginOverlaysAtom, store.get(pluginOverlaysAtom).filter((o) => o.key !== key));
+    bump();
+  };
+  const disposable = bag.add(remove);
+  store.set(pluginOverlaysAtom, [...store.get(pluginOverlaysAtom), { key, plugin: info, spec, visible }]);
+  bump();
+  const set = (v: boolean) => { if (!removed) store.set(setOverlayVisibleAtom, key, v); };
+  return {
+    show: () => set(true),
+    hide: () => set(false),
+    toggle: () => set(!(entry()?.visible ?? false)),
+    isVisible: () => entry()?.visible ?? false,
+    redraw: () => { if (!removed) bump(); },
+    remove,
   };
 }
 
@@ -827,7 +864,7 @@ const EVENT_ATOMS = {
   sprites: [doodadsRevisionAtom],
   selection: [selectedUnitsAtom, selectedSpritesAtom, selectedDoodadsAtom, selectedLocationsAtom, clipSelectionAtom],
   clipboard: [clipboardAtom, clipSelectionAtom],
-  view: [viewportRectAtom, zoomAtom, viewFlagsAtom, gridSizeAtom],
+  view: [viewportRectAtom, zoomAtom, viewFlagsAtom, gridSizeAtom, pluginOverlaysAtom],
   tool: [mapToolAtom, mapPickAtom],
   modified: [mapModifiedAtom],
   palette: [
@@ -1107,6 +1144,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return handle;
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
+      overlay: (spec) => registerOverlay(store, bag, info, spec),
       pickFiles: (options = {}) => new Promise<File[]>((resolve) => {
         if (typeof document === "undefined") { resolve([]); return; }
         const input = document.createElement("input");

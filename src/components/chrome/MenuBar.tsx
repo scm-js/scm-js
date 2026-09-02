@@ -86,6 +86,8 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
           if (label !== rest[rest.length - 1]) { target = null; break; }
           sub = { kind: "sub", label, items: [] };
           copied.add(sub);
+          // Its items are all the plugin's: no separator before the first, only the ones it asks for.
+          separated.add(sub.items);
           if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
           target.push(sub);
           target = sub.items;
@@ -119,6 +121,7 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
       continue;
     }
     if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
+    else if (p.separator && target.length > 0 && target[target.length - 1].kind !== "sep") target.push(sep);
     target.push(item);
   }
   return out;

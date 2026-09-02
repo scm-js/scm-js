@@ -407,6 +407,35 @@ export function diamondAt(px: number, py: number): Diamond {
   };
 }
 
+/**
+ * The terrain the lattice says a tile belongs to — the value of the diamond under the
+ * tile's centre, as a CV5 terrain index. Null off the lattice or for a value the table
+ * does not have. Under a cliff or a shore the diamond's row is an edge set, not a terrain,
+ * so the answer is one of the two terrains it joins (the first its links name).
+ */
+export function isomTerrainAt(scn: Scenario & { isom: Uint16Array }, tileset: Tileset, tx: number, ty: number): number | null {
+  const d = diamondAt(tx * 32 + 16, ty * 32 + 16);
+  const w = isomWidth(scn), h = isomHeight(scn);
+  if (d.x < 0 || d.y < 0 || d.x >= w || d.y >= h) return null;
+  const tables = isomTables(tileset, tilesetIndex(scn));
+  const value = scn.isom[(d.y * w + d.x) * 4 + S_LEFT] >> 4;
+  const row = tables.links[value];
+  if (!row || row.terrainType === 0) return null;
+  // The table's first half is the solid terrains, the second the edge sets (`buildLinks`).
+  const half = Math.floor(tables.terrainTypes.length / 2);
+  const solid = tables.terrainTypes.findIndex((t, i) => i <= half && t.index === row.terrainType && t.isomValue === value);
+  if (solid >= 0) return tables.terrainTypes[solid].index;
+  // A cliff or shore row: its quadrants' soft links name the terrains it joins.
+  for (const q of row.quads) {
+    for (const link of [q.left, q.top, q.right, q.bottom]) {
+      if (link <= 0 || link > SOFT_LINKS) continue;
+      const t = tables.terrainTypes.findIndex((tt, i) => i <= half && tt.linkId === link && tt.isomValue !== 0);
+      if (t >= 0) return tables.terrainTypes[t].index;
+    }
+  }
+  return null;
+}
+
 /** Brush offsets StarEdit uses: an N-extent brush is N×N diamonds along the lattice axes. */
 function brushRange(extent: number): { min: number; max: number } {
   let min = Math.trunc(extent / -2);

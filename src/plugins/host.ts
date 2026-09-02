@@ -15,8 +15,8 @@ import {
   spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, zoomAtom,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom,
-  replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
+  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, redoStackAtom,
+  replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -71,7 +71,7 @@ import { createGraphicsApi } from "./graphics";
 import { alertDialog, confirmDialog, progressPanel, promptDialog } from "./prompts";
 import { createWidgets, el } from "./widgets";
 import {
-  applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
+  applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
 import { hasEdits } from "../editor/history";
 import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitAt, unitBox, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
@@ -1023,6 +1023,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       update: (label, build) => runUpdate(store, label, build),
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
+      history: () => {
+        const u = store.get(undoStackAtom), r = store.get(redoStackAtom);
+        return { undo: u.at(-1)?.label ?? null, redo: r.at(-1)?.label ?? null, undoDepth: u.length, redoDepth: r.length };
+      },
       open: (source, fileName) => openDocument(store, source, fileName),
       create: (options) => createDocument(store, options),
       export: async (options = {}) => {
@@ -1114,6 +1118,13 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return current ? isomReport(current, l.tileset) : null;
       },
       tileInfo: (id) => { const l = loaded(); return l ? tileInfo(l.tileset, names(), id) : null; },
+      terrainAt: (tx, ty) => {
+        const scn = scenario(), l = loaded();
+        if (!scn || !l || tx < 0 || ty < 0 || tx >= scn.width || ty >= scn.height) return null;
+        const info = tileInfo(l.tileset, names(), scn.tiles[ty * scn.width + tx]);
+        if (info.kind === "terrain") return l.tileset.groups[info.group]?.index ?? null;
+        return hasIsom(scn) ? isomTerrainAt(scn, l.tileset, tx, ty) : null;
+      },
       color: (tileId) => {
         const l = loaded();
         if (!l) return null;

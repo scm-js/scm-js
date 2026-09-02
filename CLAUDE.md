@@ -673,8 +673,13 @@ its check), `build()` (the dialog's Build sequence: `buildScript`, write `archiv
 `useMapFileActions.ts#newMapInto` (the store-level half of the hook's `newMap`, which now calls it) behind the same
 `guardedReplace` gate as `open` — a "new" `PendingAction` carries `done` / `taken` like an "open" one, and the Close
 Scenario dialog's `proceed` sets `taken` for both. A menu path whose last segment names no submenu makes one for the
-plugin (`withPluginItems`: `"Tools/AI"` → an AI submenu at the end of Tools, after a separator); a missing *top*
-menu still falls back to Plugins.
+plugin (`withPluginItems`: `"Tools/AI"` → an AI submenu at the end of Tools, after a separator; `separator: true`
+on an item draws one above it, never doubled); a missing *top* menu still falls back to Plugins. Smaller
+conveniences the AI plugin asked for: `document.history()` peeks at both stacks' labels and depths,
+`terrain.terrainAt(tx, ty)` answers a terrain id for any tile (flat group, else the ISOM diamond via
+`isom.ts#isomTerrainAt`, which resolves a cliff row to a joined terrain through its soft links), and
+`PlacementVerdict.reason` (`placement.ts#placementReason`, shared with the Units layer's status line) says the
+problem in words.
 
 **AI** (`github.com/scm-js/plugin-ai`, not a default) and its server (`github.com/scm-js/ai-server`, Fastify +
 Caddy, one image on GHCR) are the LLM tooling: the server holds the Anthropic key, the prompt recipes, the access

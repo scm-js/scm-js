@@ -188,6 +188,15 @@ export interface ExtrasApi {
   remove(name: string): boolean;
 }
 
+/** What `document.history()` answers. */
+export interface DocumentHistory {
+  /** Label of the entry Undo would take back; null with nothing to undo. */
+  undo: string | null;
+  redo: string | null;
+  undoDepth: number;
+  redoDepth: number;
+}
+
 /** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
 export interface NewDocumentOptions {
   width: number;
@@ -224,6 +233,8 @@ export interface DocumentApi {
   update(label: string, build: (tx: UpdateTransaction) => void): UpdateResult;
   undo(): string | null;
   redo(): string | null;
+  /** The undo and redo stacks' tops — the labels the Edit menu shows — and their depths, without moving anything. */
+  history(): DocumentHistory;
   /**
    * Open a map file (`.scx` / `.scm` / `.chk`) in place of the current one, the way
    * File ▸ Open does: when the open map has unsaved changes and Preferences say to ask,
@@ -832,6 +843,13 @@ export interface TerrainApi {
    */
   checkIsom(): Promise<IsomReport | null>;
   tileInfo(id: number): TileInfo | null;
+  /**
+   * The terrain a tile belongs to, as the id `types()` lists (a flat pair's CV5 index):
+   * the tile's own group when it is flat ground, else — under a cliff, a shore or a
+   * doodad — what the ISOM lattice says the diamond there is. Null off the map, without
+   * the tileset graphics, or when neither tells.
+   */
+  terrainAt(tx: number, ty: number): number | null;
   /** The atlas average of a tile, packed `0xRRGGBB`, or null without graphics. */
   color(tileId: number): number | null;
   /** The mean colour of a terrain's common flat variations, packed `0xRRGGBB`. */
@@ -1408,6 +1426,8 @@ export interface MenuItemSpec {
    * end of the menu after a separator.
    */
   after?: string;
+  /** A separator line above this item — for grouping the items of a submenu of your own. */
+  separator?: boolean;
   enabled?: () => boolean;
   /** What the item does. Give this or `command`. */
   run?: () => void;

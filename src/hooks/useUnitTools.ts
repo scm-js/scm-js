@@ -7,7 +7,7 @@ import {
   addUnits, applyUnitChanges, makeUnit, nextSerial, snapPlacement, unitAt, unitGeometry, unitsInBox, updateUnits,
   type PixelBox, type UnitChange, type UnitGeometry,
 } from "../editor/units";
-import { checkPlacement, type PlacementProblem } from "../editor/placement";
+import { checkPlacement, placementReason, type PlacementProblem } from "../editor/placement";
 import type { UnitRecord } from "../formats/chk/sections/objects";
 import type { UnitsDat } from "../formats/dat/dat";
 import { peekTileset } from "../formats/tileset/load";
@@ -28,12 +28,8 @@ export interface UnitGhost {
 }
 
 function describeProblem(tables: UnitsDat | null, unitId: number, verdict: { problem: PlacementProblem | null; blocker: number }, scn: { units: UnitRecord[] }): string {
-  const name = unitName(unitId);
-  if (verdict.problem === "terrain") {
-    return `Can't place ${name} here: the ground is ${unitGeometry(tables, unitId).building ? "unbuildable" : "unwalkable"} (Placement ▸ Check terrain)`;
-  }
-  const other = scn.units[verdict.blocker];
-  return `Can't place ${name} here: it overlaps ${other ? unitName(other.unitId) : "another unit"} (Placement ▸ Check collision)`;
+  const reason = placementReason(tables, unitId, verdict.problem, verdict.blocker, scn.units);
+  return `Can't place ${unitName(unitId)} here: ${reason} (Placement ▸ Check ${verdict.problem === "terrain" ? "terrain" : "collision"})`;
 }
 
 /**

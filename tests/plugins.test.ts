@@ -1994,3 +1994,76 @@ describe("plugin script api", () => {
     expect(api.document.info()?.name).toBe("Frost");
   });
 });
+
+/* ── Conveniences the AI plugin asked for ──────────────── */
+
+describe("plugin api conveniences", () => {
+  it("peeks at the history without moving it", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.document.history()).toEqual({ undo: null, redo: null, undoDepth: 0, redoDepth: 0 });
+    api.document.edit("AI: first", (tx) => { tx.setTile(0, 0, 7); });
+    api.document.edit("AI: second", (tx) => { tx.setTile(1, 0, 7); });
+    expect(api.document.history()).toEqual({ undo: "AI: second", redo: null, undoDepth: 2, redoDepth: 0 });
+    api.document.undo();
+    expect(api.document.history()).toEqual({ undo: "AI: first", redo: "AI: second", undoDepth: 1, redoDepth: 1 });
+  });
+
+  it("puts a separator above a plugin item that asks for one, but never two in a row", () => {
+    const menus: Menu[] = [{ label: "Tools", items: [{ kind: "item", label: "Statistics…" }] }];
+    const merged = withPluginItems(menus, [
+      { key: 5, pluginId: "p", path: "Tools", label: "Top", separator: true, run: () => {} },
+      { key: 1, pluginId: "p", path: "Tools/AI", label: "Generate…", run: () => {} },
+      { key: 2, pluginId: "p", path: "Tools/AI", label: "Review…", run: () => {} },
+      { key: 3, pluginId: "p", path: "Tools/AI", label: "Assistant", separator: true, run: () => {} },
+      { key: 4, pluginId: "p", path: "Tools/AI", label: "Settings…", separator: true, run: () => {} },
+    ]);
+    const sub = merged[0].items[3] as Extract<Menu["items"][number], { kind: "sub" }>;
+    expect(sub.items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Generate…", "Review…", "sep", "Assistant", "sep", "Settings…"]);
+    // The first plugin item in a built-in menu already gets one separator; `separator` does not add a second.
+    expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Statistics…", "sep", "Top", "sub"]);
+  });
+
+  it("tells a placement verdict's reason in words", () => {
+    const { store } = blankStore(16, 16);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    api.document.edit("marine", (tx) => { tx.addUnits([tx.makeUnit(0, 0, 100, 100)]); });
+    const verdict = api.query.placement(0, 104, 100);
+    expect(verdict).toMatchObject({ problem: "collision", blocker: 0, reason: "it overlaps Terran Marine" });
+    expect(api.query.placement(0, 400, 400).reason).toBeNull();
+  });
+});
+
+describe.skipIf(!haveJungle)("terrainAt against the real tileset", () => {
+  it("names the flat ground under a tile and the lattice's terrain under a cliff", async () => {
+    const part = (ext: string) => new Uint8Array(readFileSync(join(TILESET_DIR, `jungle.${ext}`)));
+    const tileset = loadTileset({ cv5: part("cv5"), vf4: part("vf4"), vr4: part("vr4"), vx4: part("vx4"), wpe: part("wpe") });
+    primeTileset({
+      name: "jungle",
+      tileset,
+      atlas: { image: {} as CanvasImageSource, columns: 1, tileSize: 32, count: tileset.megatileCount, averages: new Uint32Array(tileset.megatileCount), animation: null },
+      doodads: NO_DOODADS,
+    });
+    const { store } = blankStore(32, 32);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(await api.document.create({ width: 32, height: 32, tileset: "jungle" })).toBe(true);
+    const types = api.terrain.types();
+    const ground = api.terrain.terrainAt(1, 1);
+    expect(types.some((t) => t.id === ground)).toBe(true);
+    const high = types.find((t) => t.height > 0 && api.terrain.isomTypes().includes(t.id))!;
+    api.document.edit("hill", (tx) => { tx.paintIsom({ x: 8, y: 16 }, high.id, 3); });
+    const scn = api.document.scenario()!;
+    // Somewhere the hill's cliff was drawn, the tile is not flat ground — and terrainAt still answers a terrain id.
+    let cliff: { x: number; y: number } | null = null;
+    for (let y = 0; y < 32 && !cliff; y++) for (let x = 0; x < 32; x++) {
+      const info = api.terrain.tileInfo(scn.tiles[y * 32 + x])!;
+      if (info.kind === "edge") { cliff = { x, y }; break; }
+    }
+    expect(cliff).not.toBeNull();
+    const at = api.terrain.terrainAt(cliff!.x, cliff!.y);
+    expect(at).not.toBeNull();
+    expect(types.some((t) => t.id === at)).toBe(true);
+    expect(api.terrain.terrainAt(16, 16)).toBe(high.id);
+    expect(api.terrain.terrainAt(-1, 0)).toBeNull();
+  });
+});

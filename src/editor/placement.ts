@@ -13,6 +13,7 @@ import type { Scenario } from "../formats/chk/scenario";
 import type { UnitsDat } from "../formats/dat/dat";
 import { groupBuildable, megatileForTile, TileFlag, type Tileset } from "../formats/tileset/decode";
 import { placementBox, TILE_PX, unitBox, unitGeometry, type PixelBox, type UnitGeometry } from "./units";
+import { unitName } from "../data/units";
 
 export interface PlacementOptions {
   /** Refuse to put a unit on top of another (ground units and buildings only). */
@@ -97,6 +98,16 @@ export interface PlacementVerdict {
   problem: PlacementProblem | null;
   /** The unit in the way, for collision problems. */
   blocker: number;
+  /** The problem as a sentence fragment — "the ground is unwalkable", "it overlaps Terran Marine" — null when it fits. */
+  reason: string | null;
+}
+
+/** The words for a verdict's problem, given the record list the blocker indexes. */
+export function placementReason(tables: UnitsDat | null, unitId: number, problem: PlacementProblem | null, blocker: number, units: readonly { unitId: number }[]): string | null {
+  if (problem === null) return null;
+  if (problem === "terrain") return `the ground is ${unitGeometry(tables, unitId).building ? "unbuildable" : "unwalkable"}`;
+  const other = units[blocker];
+  return `it overlaps ${other ? unitName(other.unitId) : "another unit"}`;
 }
 
 /** Apply the enabled checks to a unit of type `unitId` at (x, y); `ignore` are indices that do not count as blockers (the units being moved). */
@@ -104,12 +115,12 @@ export function checkPlacement(
   scn: Scenario, tileset: Tileset | null, tables: UnitsDat | null, opts: PlacementOptions, unitId: number, x: number, y: number, ignore?: ReadonlySet<number>,
 ): PlacementVerdict {
   const g = unitGeometry(tables, unitId);
-  if (opts.checkTerrain && !terrainFits(scn, tileset, g, unitId, x, y)) return { problem: "terrain", blocker: -1 };
+  if (opts.checkTerrain && !terrainFits(scn, tileset, g, unitId, x, y)) return { problem: "terrain", blocker: -1, reason: placementReason(tables, unitId, "terrain", -1, scn.units) };
   if (opts.checkCollision) {
     const blocker = collidesWith(scn, tables, g, unitId, x, y, ignore);
-    if (blocker >= 0) return { problem: "collision", blocker };
+    if (blocker >= 0) return { problem: "collision", blocker, reason: placementReason(tables, unitId, "collision", blocker, scn.units) };
   }
-  return { problem: null, blocker: -1 };
+  return { problem: null, blocker: -1, reason: null };
 }
 
 /**

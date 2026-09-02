@@ -62,7 +62,7 @@ describe.skipIf(!units || !haveTileset)("terrain checks against the real tileset
   });
 
   it("reports the failing check, honouring the options", () => {
-    expect(checkPlacement(scn, ts, units, DEFAULT_PLACEMENT, marine, 12 * 32, 64)).toEqual({ problem: "terrain", blocker: -1 });
+    expect(checkPlacement(scn, ts, units, DEFAULT_PLACEMENT, marine, 12 * 32, 64)).toEqual({ problem: "terrain", blocker: -1, reason: "the ground is unwalkable" });
     expect(checkPlacement(scn, ts, units, { ...DEFAULT_PLACEMENT, checkTerrain: false }, marine, 12 * 32, 64).problem).toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe.skipIf(!units)("collision checks", () => {
   });
 
   it("is reported with the blocker, and can be switched off", () => {
-    expect(checkPlacement(scn, null, units, DEFAULT_PLACEMENT, 0, 104, 100)).toEqual({ problem: "collision", blocker: 0 });
+    expect(checkPlacement(scn, null, units, DEFAULT_PLACEMENT, 0, 104, 100)).toEqual({ problem: "collision", blocker: 0, reason: "it overlaps Terran Marine" });
     expect(checkPlacement(scn, null, units, { ...DEFAULT_PLACEMENT, checkCollision: false }, 0, 104, 100).problem).toBeNull();
   });
 });

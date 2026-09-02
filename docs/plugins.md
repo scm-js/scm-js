@@ -311,6 +311,7 @@ ones' results, and both commit once at the end.
 | `edit(label, build)` | Run `build(tx)` and record what it did as one undo entry named `label`. Returns an `EditResult` with counts per list. |
 | `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties. Not in the undo model. Returns an `UpdateResult`. |
 | `undo()` / `redo()` | The Edit menu's. |
+| `history()` | `{ undo, redo, undoDepth, redoDepth }`: the labels the Edit menu shows and how deep each stack is, without moving anything — so a plugin can tell whether its own edit is still the top entry before undoing it. |
 | `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
 | `create({ width, height, tileset, name?, description?, terrainId? })` | A blank map in place of the current one, the way File ▸ New makes one — flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every section a fresh map needs — through the same unsaved-changes gate as `open`. Resolves true once the new map is the open document, false when the user kept the current one. |
 | `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
@@ -467,7 +468,7 @@ here writes, and everything answers empty without a map.
 | `unitsIn(rect)` / `spritesIn(rect)` / `locationsIn(rect)` | Units and sprites whose centre is in a tile rect; locations wholly inside it. |
 | `unitsOf(owner)` | Every unit a player owns (0-based). |
 | `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
-| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker }`. |
+| `placement(unitId, x, y)` (a `PlacementVerdict` whose `reason` is the problem in words: "the ground is unwalkable", "it overlaps Terran Marine") | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker }`. |
 | `validate()` | Check Map's `Issue[]` — `{ level, text, where, target? }`, and `target` is what `view.goTo` takes. |
 | `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts. |
 | `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "strings" \| "triggers", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |
@@ -537,7 +538,7 @@ is taken as it is, so a plugin can publish a stable name for others to call.
 
 Read-only helpers over the current tileset: `types()` (paintable flat terrains with
 name, group, height, buildable), `isomTypes()` (ids the isometric brush can paint),
-`hasIsom()`, `tileInfo(id)`, `color(tileId)` (the atlas average, `0xRRGGBB`),
+`hasIsom()`, `tileInfo(id)`; `terrainAt(tx, ty)` — the terrain id (as `types()` lists them) a tile belongs to: its own group when it is flat ground, else what the ISOM lattice says there (under a cliff, one of the two terrains it joins), null when neither tells, `color(tileId)` (the atlas average, `0xRRGGBB`),
 `terrainColor(terrainId)` (mean of the pair's common variations), `heightOf(terrainId)`
 (0 low / 1 high / 2 higher, null for anything that is not a flat terrain), `diamondAt(px, py)`,
 `isDiamond(d)`, `diamondsIn(rect)` (every lattice diamond whose centre tile is in the
@@ -616,7 +617,8 @@ without the tileset graphics.
   menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
   which case the item sits directly under it. A last segment that names no submenu gets
   one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
-  items can keep them together. `item` is
+  items can keep them together; `separator: true` on an item draws a line above it (never
+  two in a row). `item` is
   `{ label, shortcut?, icon?, after?, enabled?(), run() }`. `icon` puts a mark in front
   of the label: `"plugin"` for the plugin's own icon (the manifest's), or any
   `PluginIcon` — use it for items that do something no built-in does, such as reaching

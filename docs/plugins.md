@@ -79,7 +79,7 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (Terrain from Image and scmscx.com do; Paint
+removed; each says whether it starts on (scmscx.com and Terrain from Image do; Paint
 and Section Explorer wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 

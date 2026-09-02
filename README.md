@@ -404,7 +404,7 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. Terrain from Image and scmscx.com start on; Paint and
+working connection on the first load of a session. scmscx.com and Terrain from Image start on; Paint and
 Section Explorer are listed but off until you tick them.
 
 **Terrain from Image**

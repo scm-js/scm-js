@@ -482,19 +482,19 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image and scmscx.com on, and Paint and Section Explorer off, as remote defaults", () => {
+  it("ships scmscx.com and Terrain from Image on, and Paint and Section Explorer off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
+      { spec: "github:scm-js/plugin-scm-scx", enabled: true },
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-paint", enabled: false },
       { spec: "github:scm-js/plugin-section-explorer", enabled: false },
-      { spec: "github:scm-js/plugin-scm-scx", enabled: true },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
-      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json",
+      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/HEAD/plugin.json",
     });
-    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json" });
     expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
     // A fresh editor lists Paint and Section Explorer but does not run them until the user ticks them.

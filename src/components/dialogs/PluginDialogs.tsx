@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { ArrowUp, Blocks, CircleCheck, CircleSlash, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowUp, Blocks, CircleCheck, CircleSlash, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
@@ -191,6 +191,10 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
   // already fetched to find out there was a newer commit (no need to ask twice).
   const replaces = entry.payload?.replaces as string | undefined;
   const given = entry.payload?.preview as PluginPreview | undefined;
+  // What the registry said, when the plugin was reached from a Browse row: the release
+  // someone read, and the commit that release was.
+  const reviewed = entry.payload?.reviewed as string | undefined;
+  const reviewedCommit = entry.payload?.reviewedCommit as string | undefined;
   const [preview, setPreview] = useState<PluginPreview | null>(given ?? null);
   const [failed, setFailed] = useState<string | null>(null);
   const installed = useAtomValue(installedPluginsAtom);
@@ -235,6 +239,11 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
   // The addresses follow the choice: pinning changes which commit every one of them names.
   const chosen = pinning ? preview.pin!.source : preview?.source;
   const where = chosen ? addressesOf(chosen, manifest ?? null) : null;
+  // A review is of one commit. Pinning names the commit being added, so the two can be
+  // compared; following a branch means what loads later is not decided here at all. The
+  // mark is only repeated when it demonstrably covers the code going in.
+  const addingSha = pinning ? preview?.pin?.ref ?? null : null;
+  const reviewCovers = reviewed != null && reviewedCommit != null && addingSha === reviewedCommit;
 
   return (
     <DialogFrame
@@ -281,6 +290,24 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 is newer code, so give it the same look over you would give a plugin you are adding for the first time.
               </p>
             )}
+
+            {reviewed && (reviewCovers ? (
+              <div className="plugin-reviewed">
+                <ShieldCheck size={15} />
+                <div>
+                  <strong>Reviewed.</strong> Someone at the registry read this plugin's code at {reviewed} — the commit
+                  being added here. That is a person having read it, not a promise that it is safe.
+                </div>
+              </div>
+            ) : (
+              <p className="hint">
+                The registry reviewed {reviewed}
+                {reviewedCommit && <> (<span className="mono">{reviewedCommit.slice(0, 7)}</span>)</>}.{" "}
+                {addingSha
+                  ? <>This adds <span className="mono">{addingSha.slice(0, 7)}</span>, which nobody has read.</>
+                  : <>This follows the branch, so the code that loads is not the code that was read.</>}
+              </p>
+            ))}
 
             <div className="plugin-warning">
               <ShieldAlert size={15} />
@@ -605,7 +632,9 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
     try {
       const preview = await inspectPlugin(entry.spec);
       if (!preview.manifest) { setProblem(`${NOT_FOUND} ${preview.problem ?? ""}`.trim()); return; }
-      store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, preview });
+      // The mark travels with the commit it describes: the confirmation resolves the pin
+      // itself and may land on newer code, which nobody has read.
+      store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, preview, reviewed: entry.reviewed, reviewedCommit: entry.commit });
     } catch (err) {
       setProblem(err instanceof Error ? err.message : String(err));
     } finally {

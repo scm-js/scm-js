@@ -102,9 +102,13 @@ Listing is therefore automatic, and says nothing about a plugin having been read
 field that carries a judgement is `RegistryEntry.reviewed`: the release someone at that
 registry read the code of, which the *registry* drops again once the plugin moves past it,
 so the editor never has to date a mark — an entry either carries one describing its
-`commit` or carries none. The Browse row shows it as a `reviewed` badge beside `default`.
-It is not a safety claim: there is no sandbox, and an installed plugin runs with the
-editor's own privileges.
+`commit` or carries none. The Browse row shows it as a `reviewed` badge beside `default`,
+and Install carries the mark *and the commit it describes* into `ConfirmPluginDialog`'s
+payload, which repeats it only when the commit being added is that one: pinning names the
+commit, so the two can be compared, while following a branch means what loads is not
+decided on that screen at all and the claim drops to a line saying so. It is not a safety
+claim either way: there is no sandbox, and an installed plugin runs with the editor's own
+privileges.
 
 `plugins/registry.ts` is the whole host side and is pure apart from the fetching:
 

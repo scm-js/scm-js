@@ -9,7 +9,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage, RESET } from "jotai/utils";
 import type { TilesetId } from "../data/tilesets";
-import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom } from "./pluginAtoms";
+import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, clearStoredData, storedKeys } from "./storage";
 
 export interface Preferences {
@@ -64,8 +64,8 @@ export const gridLookAtom = atomWithStorage<GridLook>("scmjs.grid", DEFAULT_GRID
 
 /**
  * Forget everything the editor keeps in the browser: the preferences, the grid look, the
- * installed plugin list, the copies of plugin code kept for the plugins marked *local*, and
- * whatever the plugins themselves stored. The atoms are
+ * installed plugin list, the copies of plugin code kept for the plugins marked *local*, the
+ * registries browsed and their cached lists, and whatever the plugins themselves stored. The atoms are
  * `RESET` (which removes their keys and puts the defaults back live, so the plugin host
  * reloads the default set), then any remaining `scmjs.` key is swept. Returns how many
  * entries went, for the dialog to report. Nothing about the open map is touched — it was
@@ -78,6 +78,8 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   set(installedPluginsAtom, RESET);
   set(pluginManifestCacheAtom, RESET);
   set(pluginCodeAtom, RESET);
+  set(userRegistriesAtom, RESET);
+  set(registryCacheAtom, RESET);
   clearStoredData();
   return before;
 });

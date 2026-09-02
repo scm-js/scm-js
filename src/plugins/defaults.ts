@@ -35,6 +35,17 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-melee-wizard", enabled: false },
 ];
 
+/**
+ * The plugin registries the editor browses (Plugins ▸ Browse). One JSON file listing the
+ * plugins the project publishes — see `plugins/registry.ts` and `github.com/scm-js/registry`.
+ * It is fetched from the same host the plugins themselves come from, on the same terms:
+ * being listed there is being *offered*, not being trusted, and installing still goes
+ * through the confirmation. The user can add more; a default cannot be removed.
+ */
+export const DEFAULT_REGISTRIES: readonly string[] = [
+  "https://raw.githubusercontent.com/scm-js/registry/main/index.json",
+];
+
 /** Every default: the built-ins (on), then the remotes. */
 export const defaultPlugins = (): DefaultPlugin[] => [
   ...Object.keys(BUILTIN_PLUGINS).map((name) => ({ spec: `builtin:${name}`, enabled: true })),

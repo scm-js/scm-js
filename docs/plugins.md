@@ -85,6 +85,38 @@ removed; each says whether it starts on (scmscx.com and Terrain from Image do; P
 Section Explorer, Walkability and Melee Wizard wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
+### Browsing a registry
+
+Plugins ▸ **Browse Plugins…** is the same dialog as Manage Plugins with the Browse tab
+open. What it lists comes from *registries*: one JSON file per registry, holding an entry
+per plugin — the spec to install, and the fields that plugin's own `plugin.json` carries,
+so a whole list is shown from one request rather than one manifest fetch per row. The
+project's own is `github.com/scm-js/registry`, generated hourly from a list of
+repositories by walking each one's `plugin.json`; `DEFAULT_REGISTRIES` in `defaults.ts`
+names it and the user can add more under **Sources** (`userRegistriesAtom`).
+
+`plugins/registry.ts` is the whole host side and is pure apart from the fetching:
+
+| | |
+| --- | --- |
+| `parseRegistry(raw, url)` | Checks the file's shape, canonicalises each entry's spec (`canonicalSpec(parseSpec(...))`, so rows match the installed list), drops entries it cannot use and counts them in `skipped`. One bad row never empties a list. |
+| `entryIcon(entry)` | `resolveIcon` against the *plugin's* base, so a manifest's `icon: "icon.svg"` can be copied into the index verbatim. |
+| `searchRegistry(entries, query)` | Every word has to match something; name beats tag beats description beats author beats spec. |
+| `mergeRegistries(list)` | Entries of every registry, the first to list a spec winning. |
+| `loadRegistry(store, url, opts)` | Fetch into `registryCacheAtom` unless the cached copy is younger than `REGISTRY_MAX_AGE` (an hour) or `force` was asked for. A failure records `registryStateAtom` and **keeps** the cached list — the browser shows the last list it had rather than emptying itself because the network blinked. |
+| `addRegistry` / `removeRegistry` | The user's list; a default cannot be removed. |
+
+An entry is not a way in. Install hands the entry's `spec` to the same
+`inspectPlugin` → `ConfirmPluginDialog` → `installPlugin` path a pasted address takes, so
+the manifest is read from the plugin itself, the commit is resolved and pinned at install
+time (not taken from the index), and the same warning is shown. A registry decides what is
+*listed*, never what is trusted — there is no sandbox either way.
+
+Getting a plugin listed is a pull request against `plugins.json` in that repository; the
+index's `README.md` has the shape of an entry. Nothing about it is privileged: any URL
+serving a file of that shape is a registry, which is how a fork points the editor at its
+own plugins without changing any code.
+
 ### Adding one
 
 Pressing **Add** in Manage Plugins does not install anything. `previewPlugin` canonicalises

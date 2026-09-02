@@ -556,6 +556,19 @@ surfaces `viewport` / `terrainPalette`, the palette got a Radix ContextMenu of i
 in state, Radix portal timing). `npm run build:plugin-types` emits `plugin-api/` (gitignored) for
 external repos. There is no sandbox: a plugin runs with the page's privileges, and the dialog says so.
 
+`plugins/registry.ts` is Plugins ▸ **Browse Plugins…** (the same dialog, `payload.tab`):
+`DEFAULT_REGISTRIES` (`defaults.ts`) plus `userRegistriesAtom` name JSON indexes —
+`github.com/scm-js/registry`, generated hourly by an Action from a list of repositories and
+each plugin's own `plugin.json` — which `parseRegistry` reads into `RegistryEntry`s (spec
+canonicalised through `canonicalSpec(parseSpec(...))` so rows match the installed list,
+unusable entries dropped and counted), `searchRegistry` ranks and `loadRegistry` caches in
+`registryCacheAtom` (`REGISTRY_MAX_AGE` an hour, `registryStateAtom` per-URL status; a failed
+refresh keeps the cached list rather than emptying the browser). An entry is only a *spec*:
+Install goes through the ordinary `inspectPlugin` → `ConfirmPluginDialog` → `installPlugin`
+path, so the manifest is read from the plugin and the pin resolved at install time — a
+registry decides what is listed, never what is trusted. `clearStoredDataAtom` resets both
+atoms; `.listbox .plugin-row` is shared by the Installed, Browse and Sources lists.
+
 `api.ui.pickArea` / `pickTile` (`host.ts#pickOnMap`) put one `MapPickRequest` in `mapPickAtom`
 (`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal marquee, HUD chip
 with the prompt) and calls its `finish` on mouse-up; `finish` clears the atom and is guarded so the

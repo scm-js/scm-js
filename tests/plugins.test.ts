@@ -38,7 +38,12 @@ import {
   reloadPlugin, resolveActivate, runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
-import { DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
+import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
+import {
+  addRegistry, cachedRegistries, entryIcon, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
+  RegistryError, removeRegistry, searchRegistry, type RegistryEntry,
+} from "../src/plugins/registry";
+import { registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
 import { pluginIdOf, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
@@ -1744,5 +1749,137 @@ describe.skipIf(!haveJungle)("plugin transactions with the jungle tileset", () =
     expect(scn.tiles).toEqual(before);
     expect(scn.isom).toEqual(isomBefore);
     expect(store.get(clipSelectionAtom)).toBeNull();
+  });
+});
+
+/* ── Registries ─────────────────────────────────────────── */
+
+const REGISTRY_URL = DEFAULT_REGISTRIES[0];
+
+const indexOf = (...plugins: unknown[]) => JSON.stringify({ format: 1, name: "Test registry", plugins });
+
+/** A `fetchText` serving fixed bodies, counting the calls per URL. */
+function servedText(files: Record<string, string>) {
+  const asked: string[] = [];
+  const fetchText = async (url: string) => {
+    asked.push(url);
+    const body = files[url];
+    if (body === undefined) throw new Error(`404 ${url}`);
+    return body;
+  };
+  return { fetchText, asked };
+}
+
+describe("plugin registries", () => {
+  it("reads an index, canonicalises specs and drops what it cannot use", () => {
+    const registry = parseRegistry(
+      {
+        name: "Test registry",
+        generated: "2026-09-02T00:00:00Z",
+        plugins: [
+          { spec: "https://github.com/o/one", name: "One", version: "1.0", tags: ["terrain", 7], api: 1 },
+          // The same plugin under its other spelling: one row, the first one.
+          { spec: "github:o/one", name: "One again" },
+          { name: "No spec" },
+          { spec: "not a location", name: "Unusable" },
+          { spec: "github:o/two", name: "  Two  ", description: " ", unknown: "ignored" },
+        ],
+      },
+      REGISTRY_URL,
+    );
+    expect(registry.name).toBe("Test registry");
+    expect(registry.skipped).toBe(3);
+    expect(registry.plugins).toEqual([
+      { spec: "github:o/one", name: "One", version: "1.0", tags: ["terrain"], api: 1 },
+      { spec: "github:o/two", name: "Two" },
+    ]);
+    expect(() => parseRegistry({ plugins: "no" }, REGISTRY_URL)).toThrow(RegistryError);
+  });
+
+  it("resolves an entry's icon against the plugin's own files", () => {
+    expect(entryIcon({ spec: "github:o/p", name: "P", icon: "icon.svg" }))
+      .toEqual({ kind: "image", url: "https://raw.githubusercontent.com/o/p/HEAD/icon.svg" });
+    expect(entryIcon({ spec: "github:o/p", name: "P", icon: "\u{1f3a8}" })).toEqual({ kind: "text", text: "\u{1f3a8}" });
+    expect(entryIcon({ spec: "github:o/p", name: "P", icon: "javascript:alert(1)" })).toBeNull();
+    expect(entryIcon({ spec: "github:o/p", name: "P" })).toBeNull();
+  });
+
+  it("searches name, tags, description and author, best match first", () => {
+    const entries: RegistryEntry[] = [
+      { spec: "github:o/a", name: "Walkability", description: "Shows where units can walk.", tags: ["analysis"] },
+      { spec: "github:o/b", name: "Paint", description: "Drawing tools for terrain.", author: "Jeany" },
+      { spec: "github:o/c", name: "Terrain from Image", description: "Turns a picture into terrain." },
+    ];
+    expect(searchRegistry(entries, "").length).toBe(3);
+    // A name beats a description: "Terrain from Image" before "Paint", which only mentions terrain.
+    expect(searchRegistry(entries, "terrain").map((e) => e.name)).toEqual(["Terrain from Image", "Paint"]);
+    expect(searchRegistry(entries, "analysis").map((e) => e.name)).toEqual(["Walkability"]);
+    expect(searchRegistry(entries, "jeany").map((e) => e.name)).toEqual(["Paint"]);
+    // Every word has to match something.
+    expect(searchRegistry(entries, "terrain picture").map((e) => e.name)).toEqual(["Terrain from Image"]);
+    expect(searchRegistry(entries, "terrain nothing")).toEqual([]);
+  });
+
+  it("merges registries, the first to list a spec winning", () => {
+    const first = parseRegistry({ plugins: [{ spec: "github:o/a", name: "A" }] }, "https://one/index.json");
+    const second = parseRegistry({ plugins: [{ spec: "github:o/a", name: "A elsewhere" }, { spec: "github:o/b", name: "B" }] }, "https://two/index.json");
+    expect(mergeRegistries([first, second]).map((e) => e.name)).toEqual(["A", "B"]);
+  });
+
+  it("caches an index, refetches only when asked, and keeps the list when a refetch fails", async () => {
+    const store = createStore();
+    const { fetchText, asked } = servedText({ [REGISTRY_URL]: indexOf({ spec: "github:o/a", name: "A" }) });
+    const first = await loadRegistry(store, REGISTRY_URL, { fetchText });
+    expect(first?.plugins.map((e) => e.name)).toEqual(["A"]);
+    expect(store.get(registryStateAtom)[REGISTRY_URL]).toEqual({ status: "ok", error: null });
+    expect(store.get(registryCacheAtom)[REGISTRY_URL].registry.plugins).toHaveLength(1);
+
+    // Recent enough: no second request.
+    await loadRegistry(store, REGISTRY_URL, { fetchText });
+    expect(asked).toHaveLength(1);
+    // Old enough, or forced: asked again.
+    await loadRegistry(store, REGISTRY_URL, { fetchText, maxAge: 0 });
+    expect(asked).toHaveLength(2);
+
+    // A failure is reported but does not empty the browser: the cached list is still there.
+    const offline = { fetchText: async () => { throw new Error("offline"); } };
+    const kept = await loadRegistry(store, REGISTRY_URL, { ...offline, force: true });
+    expect(kept?.plugins.map((e) => e.name)).toEqual(["A"]);
+    expect(store.get(registryStateAtom)[REGISTRY_URL]).toMatchObject({ status: "error", error: "offline" });
+    expect(store.get(registryCacheAtom)[REGISTRY_URL].registry.plugins).toHaveLength(1);
+
+    // So is a body that is not a registry at all.
+    await loadRegistry(store, REGISTRY_URL, { force: true, fetchText: async () => "<html>nope</html>" });
+    expect(store.get(registryStateAtom)[REGISTRY_URL].status).toBe("error");
+    expect(store.get(registryCacheAtom)[REGISTRY_URL].registry.plugins).toHaveLength(1);
+  });
+
+  it("browses the default registry plus the ones the user added, and cannot drop a default", async () => {
+    const store = createStore();
+    expect(registryUrls(store)).toEqual([...DEFAULT_REGISTRIES]);
+    expect(isDefaultRegistry(REGISTRY_URL)).toBe(true);
+
+    const mine = addRegistry(store, "https://example.com/plugins/index.json");
+    expect(registryUrls(store)).toEqual([...DEFAULT_REGISTRIES, mine]);
+    expect(() => addRegistry(store, mine)).toThrow(RegistryError);
+    expect(() => addRegistry(store, REGISTRY_URL)).toThrow(RegistryError);
+    expect(() => addRegistry(store, "github:o/p")).toThrow(RegistryError);
+
+    const { fetchText } = servedText({
+      [REGISTRY_URL]: indexOf({ spec: "github:o/a", name: "A" }),
+      [mine]: indexOf({ spec: "github:o/b", name: "B" }),
+    });
+    // maxAge 0: `atomWithStorage` shares one browser storage across the stores in this file,
+    // so a list another test cached would otherwise be recent enough to answer from.
+    const all = await loadRegistries(store, { fetchText, maxAge: 0 });
+    expect(mergeRegistries(all).map((e) => e.name)).toEqual(["A", "B"]);
+    expect(cachedRegistries(store)).toHaveLength(2);
+
+    removeRegistry(store, REGISTRY_URL);
+    expect(registryUrls(store)).toContain(REGISTRY_URL);
+    removeRegistry(store, mine);
+    expect(registryUrls(store)).toEqual([...DEFAULT_REGISTRIES]);
+    expect(store.get(registryCacheAtom)[mine]).toBeUndefined();
+    expect(store.get(registryStateAtom)[mine]).toBeUndefined();
   });
 });

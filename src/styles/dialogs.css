@@ -939,8 +939,15 @@
 }
 .plugin-add .hint .mono,
 .plugin-examples .mono,
-.plugin-list .plugin-row .mono {
+.plugin-row .mono {
   overflow-wrap: anywhere;
+}
+
+/* Browse and Installed are tabs in a `tall` dialog: the panel has to be a column for
+   the pane inside it to take the slack the way it does on its own. */
+.plugin-tabs > .tab-panel {
+  display: flex;
+  flex-direction: column;
 }
 
 /* The dialog is `tall`, so the list takes the slack: the stack fills the body and
@@ -963,7 +970,7 @@
   min-height: 120px;
   max-height: none;
 }
-.plugin-list .plugin-row {
+.listbox .plugin-row {
   height: auto;
   align-items: flex-start;
   gap: 10px;
@@ -971,10 +978,10 @@
   white-space: normal;
   cursor: default;
 }
-.plugin-list .plugin-row + .plugin-row {
+.listbox .plugin-row + .plugin-row {
   border-top: 1px solid var(--bg-2);
 }
-.plugin-list .plugin-row .check {
+.listbox .plugin-row .check {
   margin-top: 1px;
 }
 /* A plugin's manifest icon: an image, an emoji, or the fallback plugin mark. Nothing
@@ -989,7 +996,7 @@
   color: var(--text-dim);
   line-height: 1;
 }
-.plugin-list .plugin-row .plugin-icon {
+.listbox .plugin-row .plugin-icon {
   margin: 1px 2px 0 4px;
 }
 /* The row's buttons, with the "keep a copy" tick under them. */

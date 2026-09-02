@@ -11,6 +11,7 @@ import type {
   ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
 } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
+import type { Registry } from "../plugins/registry";
 import { browserStorage } from "./storage";
 
 /* ── Installed (persisted) ──────────────────────────────── */
@@ -67,6 +68,38 @@ export interface PluginSnapshot {
 export const pluginCodeAtom = atomWithStorage<Record<string, PluginSnapshot>>(
   "scmjs.plugin-code", {}, createJSONStorage(browserStorage), { getOnInit: true },
 );
+
+/* ── Registries (persisted) ─────────────────────────────── */
+
+/**
+ * Registries the user added, on top of `DEFAULT_REGISTRIES` — the lists Plugins ▸ Browse
+ * offers to install from (`plugins/registry.ts`). A fork with plugins of its own points
+ * the editor at them by adding one here rather than by changing any code.
+ */
+export const userRegistriesAtom = atomWithStorage<string[]>("scmjs.plugin-registries", [], createJSONStorage(browserStorage), { getOnInit: true });
+
+/** The last index read from a registry, with when it was read. */
+export interface CachedRegistry {
+  registry: Registry;
+  /** When it was fetched (ms). `REGISTRY_MAX_AGE` decides when to ask again. */
+  at: number;
+}
+
+/**
+ * The last list each registry gave, so Browse paints from storage while the refresh runs
+ * and still has something to show when the network does not answer.
+ */
+export const registryCacheAtom = atomWithStorage<Record<string, CachedRegistry>>(
+  "scmjs.plugin-registry", {}, createJSONStorage(browserStorage), { getOnInit: true },
+);
+
+/** How the last fetch of one registry went — the spinner and the error line under Browse. */
+export interface RegistryState {
+  status: "idle" | "loading" | "ok" | "error";
+  error?: string | null;
+}
+
+export const registryStateAtom = atom<Record<string, RegistryState>>({});
 
 /* ── Runtime ────────────────────────────────────────────── */
 

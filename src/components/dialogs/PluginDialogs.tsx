@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { ArrowUp, Blocks, ExternalLink, HardDrive, LoaderCircle, Plus, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowUp, Blocks, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, ShieldAlert, Trash2 } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
-import { Button, Check, TextInput } from "../ui";
+import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
+import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
 import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
+import {
+  addRegistry, entryIcon, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry,
+  type Registry, type RegistryEntry,
+} from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
-import type { DialogHandle, DialogSpec, PluginIcon, PluginInfo } from "../../plugins/api";
+import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
@@ -383,7 +387,254 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
   return parts.length > 0 ? parts.join(", ") : "no contributions";
 }
 
-export function PluginsDialog({ entry }: DialogProps) {
+/* ── Browsing a registry ────────────────────────────────── */
+
+/**
+ * One plugin as a registry lists it. Install does not install: it reads the plugin's own
+ * `plugin.json` (`inspectPlugin`) and opens the same confirmation a pasted address does,
+ * so what the registry said is never what gets trusted — it only decided that the row is
+ * here at all.
+ */
+function BrowseRow({ entry, state, busy, onInstall, onEnable }: {
+  entry: RegistryEntry;
+  state: "new" | "installed" | "disabled";
+  busy: boolean;
+  onInstall: () => void;
+  onEnable: () => void;
+}) {
+  const tooNew = entry.api !== undefined && entry.api > PLUGIN_API_VERSION;
+  return (
+    <div className="item plugin-row" role="listitem">
+      <PluginIconView icon={entryIcon(entry)} />
+      <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <strong>{entry.name}</strong>
+          {entry.version && <span className="dim">v{entry.version}</span>}
+          {state === "installed" && <span className="badge teal">installed</span>}
+          {state === "disabled" && <span className="badge dim">installed, off</span>}
+          {entry.default && <span className="badge dim">default</span>}
+          {tooNew && <span className="badge dim" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
+        </div>
+        {entry.description && <span className="hint">{entry.description}</span>}
+        <span className="hint mono" style={{ opacity: 0.7 }}>{entry.spec}</span>
+        <span className="hint">
+          {[entry.author && `by ${entry.author}`, entry.tags?.join(", "), entry.updated && `updated ${entry.updated.slice(0, 10)}`]
+            .filter(Boolean).join(" · ")}
+        </span>
+      </div>
+      <div className="plugin-row-actions">
+        <div className="row" style={{ gap: 4 }}>
+          {entry.repo && (
+            <Button size="sm" title="Read the source" onClick={() => window.open(entry.repo, "_blank", "noopener,noreferrer")}>
+              <ExternalLink size={11} /> Source
+            </Button>
+          )}
+          {state === "new" && (
+            <Button size="sm" variant="primary" disabled={busy || tooNew} onClick={onInstall}>
+              {busy ? <LoaderCircle size={11} className="spin" /> : <Download size={11} />} Install
+            </Button>
+          )}
+          {state === "disabled" && <Button size="sm" onClick={onEnable}>Enable</Button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The registries in use, what each last said, and the field for adding another. */
+function RegistrySources() {
+  const store = useStore();
+  useAtomValue(userRegistriesAtom);
+  const cache = useAtomValue(registryCacheAtom);
+  const states = useAtomValue(registryStateAtom);
+  const [url, setUrl] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const add = () => {
+    try {
+      const added = addRegistry(store, url);
+      setUrl("");
+      setProblem(null);
+      void loadRegistry(store, added, { force: true });
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <span className="pane-label">Registries</span>
+      <p className="hint">
+        A registry is one file listing plugins. The project's own is fetched from
+        its repository; add another to browse someone else's list. Being listed is not a
+        promise about the plugin — installing one still shows you where it comes from first.
+      </p>
+      <div className="listbox" role="list">
+        {registryUrls(store).map((u) => {
+          const st = states[u];
+          const held = cache[u];
+          return (
+            <div key={u} className="item plugin-row" role="listitem">
+              <Globe size={14} className="dim" />
+              <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <strong>{held?.registry.name ?? hostOf(u)}</strong>
+                  {st?.status === "loading" && <span className="badge dim"><LoaderCircle size={9} className="spin" />reading…</span>}
+                  {isDefaultRegistry(u) && <span className="badge dim">default</span>}
+                </div>
+                <span className="hint mono" style={{ opacity: 0.7 }}>{u}</span>
+                {held && (
+                  <span className="hint">
+                    {held.registry.plugins.length} plugin{held.registry.plugins.length === 1 ? "" : "s"}
+                    {held.registry.skipped > 0 && `, ${held.registry.skipped} entr${held.registry.skipped === 1 ? "y" : "ies"} skipped`}
+                    {` · read ${new Date(held.at).toLocaleString()}`}
+                  </span>
+                )}
+                {st?.status === "error" && st.error && <span className="error-text">{st.error}</span>}
+              </div>
+              {!isDefaultRegistry(u) && (
+                <Button size="sm" title="Remove this registry" onClick={() => removeRegistry(store, u)}><Trash2 size={11} /></Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <TextInput
+          className="mono grow"
+          placeholder="https://example.com/plugins/index.json"
+          value={url}
+          onChange={(e) => { setUrl(e.target.value); setProblem(null); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          aria-label="Registry address"
+        />
+        <Button onClick={add} disabled={url.trim() === ""}><Plus size={12} /> Add</Button>
+      </div>
+      {problem && <span className="error-text">{problem}</span>}
+    </div>
+  );
+}
+
+/**
+ * Browse: search the registries and install from them. The list is whatever was last read
+ * (`registryCacheAtom`), so it paints before the network answers and still shows something
+ * when the network does not answer at all; the refresh runs behind it.
+ */
+function BrowsePane() {
+  const store = useStore();
+  const installed = useAtomValue(installedPluginsAtom);
+  const cache = useAtomValue(registryCacheAtom);
+  const states = useAtomValue(registryStateAtom);
+  useAtomValue(userRegistriesAtom);
+  const [query, setQuery] = useState("");
+  const [busySpec, setBusySpec] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [sources, setSources] = useState(false);
+
+  const urls = registryUrls(store);
+  const loading = urls.some((u) => states[u]?.status === "loading");
+  const failures = urls.map((u) => states[u]).filter((s) => s?.status === "error");
+  const registries = urls.map((u) => cache[u]?.registry).filter((r): r is Registry => r !== undefined);
+  const entries = mergeRegistries(registries);
+  const results = searchRegistry(entries, query);
+
+  // One pass on open: recent enough lists are left alone (`REGISTRY_MAX_AGE`), so this is
+  // usually free and the pane is painted from storage.
+  useEffect(() => { void loadRegistries(store); }, [store]);
+
+  // A pinned install carries a commit the registry's spec does not, so both forms are
+  // matched unpinned — otherwise updating a plugin would make it look uninstalled.
+  const state = (spec: string): "new" | "installed" | "disabled" => {
+    const found = effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+    return !found ? "new" : found.enabled ? "installed" : "disabled";
+  };
+
+  const install = async (entry: RegistryEntry) => {
+    if (busySpec) return;
+    setBusySpec(entry.spec);
+    setProblem(null);
+    try {
+      const preview = await inspectPlugin(entry.spec);
+      if (!preview.manifest) { setProblem(`${NOT_FOUND} ${preview.problem ?? ""}`.trim()); return; }
+      store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, preview });
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusySpec(null);
+    }
+  };
+
+  const enable = (spec: string) => {
+    const found = effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+    if (!found) return;
+    setInstalled(store, found.spec, { enabled: true });
+    void activatePlugin(store, found.spec);
+  };
+
+  return (
+    <div className="stack plugin-manage">
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <TextInput
+          className="grow"
+          placeholder="Search plugins"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search plugins"
+        />
+        <Button title="Read every registry again" disabled={loading} onClick={() => { void loadRegistries(store, { force: true }); }}>
+          {loading ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />} Refresh
+        </Button>
+        <Button active={sources} onClick={() => setSources((s) => !s)} title="The lists being searched">
+          <Globe size={12} /> Sources
+        </Button>
+      </div>
+      {problem && <span className="error-text">{problem}</span>}
+      {sources
+        ? <RegistrySources />
+        : (
+          <>
+            <span className="pane-label">
+              {query.trim() === ""
+                ? `${entries.length} plugin${entries.length === 1 ? "" : "s"}`
+                : `${results.length} of ${entries.length}`}
+            </span>
+            <div className="listbox plugin-list" role="list">
+              {results.map((e) => (
+                <BrowseRow
+                  key={e.spec}
+                  entry={e}
+                  state={state(e.spec)}
+                  busy={busySpec === e.spec}
+                  onInstall={() => { void install(e); }}
+                  onEnable={() => enable(e.spec)}
+                />
+              ))}
+              {results.length === 0 && (
+                <div className="item" role="listitem">
+                  <span className="hint">
+                    {loading && entries.length === 0
+                      ? "Reading the registry…"
+                      : entries.length === 0
+                        ? "No plugin list could be read. Check the Sources, or paste a plugin's address under Installed."
+                        : `Nothing matches “${query.trim()}”.`}
+                  </span>
+                </div>
+              )}
+            </div>
+            {failures.length > 0 && (
+              <span className="hint error-text">
+                {failures.length === 1 ? "A registry could not be read" : `${failures.length} registries could not be read`} — see Sources.
+              </span>
+            )}
+          </>
+        )}
+    </div>
+  );
+}
+
+/* ── Managing what is installed ─────────────────────────── */
+
+function InstalledPane() {
   const store = useStore();
   const installed = useAtomValue(installedPluginsAtom);
   const runtimes = useAtomValue(pluginRuntimesAtom);
@@ -481,6 +732,137 @@ export function PluginsDialog({ entry }: DialogProps) {
   };
 
   return (
+    <div className="stack plugin-manage">
+      <div className="plugin-add">
+        <span className="pane-label">Add a plugin</span>
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <TextInput
+            className="mono grow"
+            placeholder="https://github.com/owner/repo"
+            value={spec}
+            onChange={(e) => { setSpec(e.target.value); setProblem(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void add(); } }}
+            aria-label="Plugin location"
+          />
+          <Button variant="primary" onClick={() => { void add(); }} disabled={spec.trim() === "" || looking}>
+            {looking ? <LoaderCircle size={12} className="spin" /> : <Plus size={12} />} Add
+          </Button>
+        </div>
+        {problem
+          ? (
+            <>
+              <span className="error-text">{problem}</span>
+              {detail && <span className="hint mono">{detail}</span>}
+            </>
+          )
+          : (
+            <>
+              <p className="hint">
+                Paste a link to the plugin. Any address the browser can read will do: a git repository, a folder
+                inside one, or the <span className="mono">plugin.json</span> itself. The ones the project
+                publishes are under <strong>Browse</strong>.
+              </p>
+              <ul className="hint plugin-examples">
+                <li><span className="mono">https://github.com/owner/repo</span></li>
+                <li><span className="mono">https://github.com/owner/repo/tree/v1.2/plugins/my-plugin</span></li>
+                <li><span className="mono">https://gitlab.com/owner/repo/-/raw/main/plugin.json</span></li>
+                <li><span className="mono">https://example.com/my-plugin/plugin.json</span></li>
+              </ul>
+              <p className="hint">
+                Repositories on GitHub can also be written <span className="mono">github:owner/repo@v1.2</span>, and are the
+                ones that can be pinned to a version.
+              </p>
+            </>
+          )}
+      </div>
+      <span className="pane-label">Installed</span>
+      {notice && <span className="hint">{notice}</span>}
+      <div className="listbox plugin-list" role="list">
+        {list.map((p) => {
+          const rt = runtimes[p.spec];
+          const isDefault = defaults.includes(p.spec);
+          const pinnedSpec = isPinned(p.spec);
+          const copy = snapshots[p.spec];
+          const builtinPlugin = p.spec.startsWith("builtin:");
+          const name = rt?.manifest?.name ?? (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
+          // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
+          const named = rt?.manifest != null || builtinPlugin;
+          const status = statusLabel(rt, p.enabled);
+          return (
+            <div key={p.spec} className="item plugin-row" role="listitem">
+              <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={`Enable ${name}`} />
+              <PluginIconView icon={rt?.icon} />
+              <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <strong>{name}</strong>
+                  {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
+                  <span className={`badge ${status.className}`}>{status.busy && <LoaderCircle size={9} className="spin" />}{status.text}</span>
+                  {isDefault && <span className="badge dim">default</span>}
+                  {pinnedSpec && <span className="badge dim" title="Loads one fixed commit">pinned</span>}
+                </div>
+                {rt?.manifest?.description && <span className="hint">{rt.manifest.description}</span>}
+                {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
+                {rt?.status === "error" && rt.error && <span className="error-text">{rt.error}</span>}
+                {rt?.status === "active" && <span className="hint">{contributionSummary(rt)}</span>}
+              </div>
+              <div className="plugin-row-actions">
+                <div className="row" style={{ gap: 4 }}>
+                  {pinnedSpec && (
+                    <Button size="sm" title="Look for a newer commit and show it before switching to it" disabled={checking === p.spec} onClick={() => { void update(p.spec); }}>
+                      {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Update
+                    </Button>
+                  )}
+                  <Button size="sm" title="Fetch the plugin again from its address (and replace any copy kept here)" disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> Reload</Button>
+                  {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
+                </div>
+                {/* The copy used to be an icon button next to Reload, which said nothing about what
+                    it did or whether it was on. It is a labelled tick under the buttons instead.
+                    The label and the tooltip say the same thing whether it is on or off — a
+                    description that rewrites itself as you tick it reads as two different options —
+                    so the only thing that follows the state is the size of the copy, which is
+                    status rather than explanation, and is shown rather than hidden in a tooltip. */}
+                <span
+                  className="plugin-copy"
+                  title={builtinPlugin
+                    ? "This plugin is part of the build; there is nothing to fetch."
+                    : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."}
+                >
+                  <HardDrive size={11} />
+                  <Check
+                    label="Load from a copy saved here"
+                    checked={p.local === true}
+                    disabled={builtinPlugin}
+                    onChange={(e) => toggleLocal(p.spec, e.target.checked)}
+                    aria-label={`Load ${name} from a copy saved in this browser`}
+                  />
+                  {p.local === true && !builtinPlugin && (
+                    <span className="dim">{copy ? `· ${Math.max(1, Math.round(copy.size / 1024))} KB` : "· not saved yet"}</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="hint">
+        To write one, put a <span className="mono">plugin.json</span> next to
+        a <span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> anywhere the browser can read
+        it. The API is in <span className="mono">docs/plugins.md</span>.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The two halves of the same subject: the list of plugins there are (Browse, from the
+ * registries) and the list of plugins this editor has (Installed). The payload's `tab`
+ * picks which opens — Plugins ▸ Browse Plugins… and Plugins ▸ Manage Plugins… are the
+ * same dialog.
+ */
+export function PluginsDialog({ entry }: DialogProps) {
+  const store = useStore();
+  const [tab, setTab] = useState((entry.payload?.tab as string) ?? "installed");
+  return (
     <DialogFrame
       dialogKey={entry.key}
       title="Plugins"
@@ -490,123 +872,15 @@ export function PluginsDialog({ entry }: DialogProps) {
       footer={<Button variant="primary" onClick={() => store.set(closeDialogAtom, entry.key)}>Close</Button>}
       description="Plugins add extra tools and features to the editor. A plugin can read and change the map you have open, so only add ones you trust."
     >
-      <div className="stack plugin-manage">
-        <div className="plugin-add">
-          <span className="pane-label">Add a plugin</span>
-          <div className="row" style={{ alignItems: "flex-start" }}>
-            <TextInput
-              className="mono grow"
-              placeholder="https://github.com/owner/repo"
-              value={spec}
-              onChange={(e) => { setSpec(e.target.value); setProblem(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void add(); } }}
-              aria-label="Plugin location"
-            />
-            <Button variant="primary" onClick={() => { void add(); }} disabled={spec.trim() === "" || looking}>
-              {looking ? <LoaderCircle size={12} className="spin" /> : <Plus size={12} />} Add
-            </Button>
-          </div>
-          {problem
-            ? (
-              <>
-                <span className="error-text">{problem}</span>
-                {detail && <span className="hint mono">{detail}</span>}
-              </>
-            )
-            : (
-              <>
-                <p className="hint">
-                  Paste a link to the plugin. Any address the browser can read will do: a git repository, a folder
-                  inside one, or the <span className="mono">plugin.json</span> itself.
-                </p>
-                <ul className="hint plugin-examples">
-                  <li><span className="mono">https://github.com/owner/repo</span></li>
-                  <li><span className="mono">https://github.com/owner/repo/tree/v1.2/plugins/my-plugin</span></li>
-                  <li><span className="mono">https://gitlab.com/owner/repo/-/raw/main/plugin.json</span></li>
-                  <li><span className="mono">https://example.com/my-plugin/plugin.json</span></li>
-                </ul>
-                <p className="hint">
-                  Repositories on GitHub can also be written <span className="mono">github:owner/repo@v1.2</span>, and are the
-                  ones that can be pinned to a version.
-                </p>
-              </>
-            )}
-        </div>
-        <span className="pane-label">Installed</span>
-        {notice && <span className="hint">{notice}</span>}
-        <div className="listbox plugin-list" role="list">
-          {list.map((p) => {
-            const rt = runtimes[p.spec];
-            const isDefault = defaults.includes(p.spec);
-            const pinnedSpec = isPinned(p.spec);
-            const copy = snapshots[p.spec];
-            const builtinPlugin = p.spec.startsWith("builtin:");
-            const name = rt?.manifest?.name ?? (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
-            // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
-            const named = rt?.manifest != null || builtinPlugin;
-            const status = statusLabel(rt, p.enabled);
-            return (
-              <div key={p.spec} className="item plugin-row" role="listitem">
-                <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={`Enable ${name}`} />
-                <PluginIconView icon={rt?.icon} />
-                <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
-                  <div className="row" style={{ gap: 8 }}>
-                    <strong>{name}</strong>
-                    {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
-                    <span className={`badge ${status.className}`}>{status.busy && <LoaderCircle size={9} className="spin" />}{status.text}</span>
-                    {isDefault && <span className="badge dim">default</span>}
-                    {pinnedSpec && <span className="badge dim" title="Loads one fixed commit">pinned</span>}
-                  </div>
-                  {rt?.manifest?.description && <span className="hint">{rt.manifest.description}</span>}
-                  {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
-                  {rt?.status === "error" && rt.error && <span className="error-text">{rt.error}</span>}
-                  {rt?.status === "active" && <span className="hint">{contributionSummary(rt)}</span>}
-                </div>
-                <div className="plugin-row-actions">
-                  <div className="row" style={{ gap: 4 }}>
-                    {pinnedSpec && (
-                      <Button size="sm" title="Look for a newer commit and show it before switching to it" disabled={checking === p.spec} onClick={() => { void update(p.spec); }}>
-                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Update
-                      </Button>
-                    )}
-                    <Button size="sm" title="Fetch the plugin again from its address (and replace any copy kept here)" disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> Reload</Button>
-                    {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
-                  </div>
-                  {/* The copy used to be an icon button next to Reload, which said nothing about what
-                      it did or whether it was on. It is a labelled tick under the buttons instead.
-                      The label and the tooltip say the same thing whether it is on or off — a
-                      description that rewrites itself as you tick it reads as two different options —
-                      so the only thing that follows the state is the size of the copy, which is
-                      status rather than explanation, and is shown rather than hidden in a tooltip. */}
-                  <span
-                    className="plugin-copy"
-                    title={builtinPlugin
-                      ? "This plugin is part of the build; there is nothing to fetch."
-                      : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."}
-                  >
-                    <HardDrive size={11} />
-                    <Check
-                      label="Load from a copy saved here"
-                      checked={p.local === true}
-                      disabled={builtinPlugin}
-                      onChange={(e) => toggleLocal(p.spec, e.target.checked)}
-                      aria-label={`Load ${name} from a copy saved in this browser`}
-                    />
-                    {p.local === true && !builtinPlugin && (
-                      <span className="dim">{copy ? `· ${Math.max(1, Math.round(copy.size / 1024))} KB` : "· not saved yet"}</span>
-                    )}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="hint">
-          To write one, put a <span className="mono">plugin.json</span> next to
-          a <span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> anywhere the browser can read
-          it. The API is in <span className="mono">docs/plugins.md</span>.
-        </p>
-      </div>
+      <Tabs
+        className="grow plugin-tabs"
+        value={tab}
+        onValueChange={setTab}
+        tabs={[
+          { value: "browse", label: "Browse", icon: <Search size={12} />, content: <BrowsePane /> },
+          { value: "installed", label: "Installed", icon: <Blocks size={12} />, content: <InstalledPane /> },
+        ]}
+      />
     </DialogFrame>
   );
 }

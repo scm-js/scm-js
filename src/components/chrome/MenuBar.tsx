@@ -374,6 +374,7 @@ function useMenus(): Menu[] {
     {
       label: "Plugins",
       items: [
+        dlgWith("Browse Plugins…", "plugins", { tab: "browse" }),
         dlg("Manage Plugins…", "plugins"),
       ],
     },

@@ -115,7 +115,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Statistics | Yes |
 | Export the map as a PNG, from full art down to a minimap | Yes |
 | Import and export strings | Yes |
-| Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
+| Plugins (Plugins ▸ Browse Plugins… / Manage Plugins…) | Yes. Search the project's published plugins and install one, or load a `plugin.ts` from any public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
@@ -361,6 +361,13 @@ map does on screen at that zoom. Units, locations, fog and the grid are each a t
 and the ones a given scale cannot draw grey out.
 
 ### Plugins
+
+Plugins ▸ Browse Plugins… searches the plugins this project publishes and installs the
+one you pick. The list comes from a file the project keeps
+([scm-js/registry](https://github.com/scm-js/registry)); being on it means the editor
+offers the plugin, not that it has been vetted — installing one still shows you where the
+code comes from first, and there is no sandbox. Under **Sources** you can add someone
+else's list, and every registry says when it was last read.
 
 Plugins ▸ Manage Plugins… lists what is installed. Paste a link and press Add. Any
 address the browser can read will do: a github.com repository (or a folder inside one,

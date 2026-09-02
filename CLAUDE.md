@@ -301,7 +301,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on), Paint, scm-server and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image and scmscx.com (on), Paint, scm-server and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -483,8 +483,9 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint`,
-`github:scm-js/plugin-scm-server` and `github:scm-js/plugin-section-explorer` off — plus any built-in, each a
+`github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-scm-scx` on,
+`github:scm-js/plugin-paint`, `github:scm-js/plugin-scm-server` and
+`github:scm-js/plugin-section-explorer` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -604,6 +605,20 @@ the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.te
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's
 tile), Doodads, Units, Sprites and Fog of War layers alike. `docs/plugins.md` ends with a tour of
 both plugins.
+
+**scmscx.com** (`github.com/scm-js/plugin-scm-scx`, a default that starts on) searches scmscx.com,
+the StarCraft map archive, and opens the picked map through `document.open`. There is no documented
+API: `client.ts` there mirrors the routes the site's own front end uses (`/api/uiv2/search[/{words}]`
+with every default parameter left out as the site does, `/api/uiv2/random`, `/api/uiv2/map_info`,
+`/api/uiv2/filenames2`, `/api/maps/{mpq_hash}` for the file, `/api/uiv2/minimap` as an `<img>`),
+reverse-engineered from its bundle and confirmed against the site's source
+(`github.com/scmscx/scmscx.com`, `crates/bwmapserver`). The site sends **no CORS headers** and has
+no CORS layer, so a page served from anywhere but scmscx.com cannot read those routes: the client
+takes a list of bases (`connect()` probes each with the newest-uploads search and takes the first
+that answers JSON), the plugin passes the site first and an optional forwarder from its Settings
+second, and the dialog explains the block and links to the site when nothing answers. The editor
+runs no forwarder of its own and must not grow one for this — the user decided that; the fix belongs
+on the site (a `CorsLayer` on its GET routes).
 
 **Section Explorer** (`github.com/scm-js/plugin-section-explorer`, a default that starts off) is the
 annotated hex editor and the worked example for `api.document.sections` and `api.names`. The host side

@@ -79,7 +79,7 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (Terrain from Image does; Paint,
+removed; each says whether it starts on (Terrain from Image and scmscx.com do; Paint,
 scm-server and Section Explorer wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
@@ -525,6 +525,29 @@ Map…* is the manifest's icon, and it is what tells the user that the item leav
 browser. `client.ts` there is a plain typed client for the server's contract
 ([scm-js/scm-server](https://github.com/scm-js/scm-server), `docs/api.md`), with `fetch`
 injected so it tests without a server.
+
+## scmscx.com
+
+[scm-js/plugin-scm-scx](https://github.com/scm-js/plugin-scm-scx), a default that starts
+on, is the smallest of the network plugins: File ▸ Find on scmscx.com… searches the
+StarCraft map archive at scmscx.com and opens the map you pick through `document.open`,
+and Plugins ▸ scmscx.com Settings… holds an optional forwarder address. It shows the
+other side of `document.open`: the bytes come from a third party's server, under the
+file name that server knows the map by, and the editor's own Close Scenario question
+still comes first. scmscx.com has no documented API — its About page says the routes
+its front end uses are open and may change — so `client.ts` there mirrors those routes
+(`/api/uiv2/search`, `/api/uiv2/map_info`, `/api/maps/{mpq_hash}`) and leaves every
+default parameter out of the query string exactly as the site does, so the URLs match
+the ones the site makes for itself.
+
+The site sends no CORS headers, which is a constraint worth knowing about before writing
+a plugin against any third-party API: a browser lets a page read a cross-origin answer
+only when the server says so, and an `<img>` is the one thing exempt from that. The
+plugin therefore tries the site first (`ScmscxClient.connect()` probes each base with
+the newest-uploads search and takes the first that answers JSON), then a forwarder if
+one is set, and when nothing answers the dialog says why, links to the site's search
+page for the query, and reminds the user that a downloaded map can be dropped onto the
+editor. The minimaps still show either way. The editor itself runs no forwarder.
 
 ## Section Explorer
 

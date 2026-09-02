@@ -482,12 +482,13 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image on, and Paint, scm-server and Section Explorer off, as remote defaults", () => {
+  it("ships Terrain from Image and scmscx.com on, and Paint, scm-server and Section Explorer off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-paint", enabled: false },
       { spec: "github:scm-js/plugin-scm-server", enabled: false },
       { spec: "github:scm-js/plugin-section-explorer", enabled: false },
+      { spec: "github:scm-js/plugin-scm-scx", enabled: true },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
@@ -501,6 +502,9 @@ describe("plugin lifecycle", () => {
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-server", enabled: false });
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-section-explorer", enabled: false });
+    // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-scx", enabled: true });
+    expect(parseSpec("github:scm-js/plugin-scm-scx")).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/HEAD/plugin.json" });
   });
 });
 

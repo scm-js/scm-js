@@ -30,6 +30,7 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-paint", enabled: false },
   { spec: "github:scm-js/plugin-scm-server", enabled: false },
   { spec: "github:scm-js/plugin-section-explorer", enabled: false },
+  { spec: "github:scm-js/plugin-scm-scx", enabled: true },
 ];
 
 /** Every default: the built-ins (on), then the remotes. */

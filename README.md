@@ -404,7 +404,7 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. Terrain from Image starts on; Paint,
+working connection on the first load of a session. Terrain from Image and scmscx.com start on; Paint,
 scm-server and Section Explorer are listed but off until you tick them.
 
 **Terrain from Image**
@@ -464,6 +464,19 @@ second time makes a new revision instead of a new entry. Plugins ▸ scm-server 
 holds the server address and your author key (created on first publish, kept in the
 browser, and not recoverable if lost). Which server is yours to choose: the
 plugin talks to any address that runs scm-server.
+
+**scmscx.com** ([scm-js/plugin-scm-scx](https://github.com/scm-js/plugin-scm-scx)) is
+on from the start. File ▸ Find on scmscx.com… searches the map archive at
+[scmscx.com](https://scmscx.com) the way its own search page does (scenario names, file
+names, descriptions, unit and force names; sorted by match, upload or modification
+time, or name), filters by tileset, players and size, shows each map's minimap and
+details, and opens the one you pick. Random picks a map among the matches, and a map
+address pasted from the site opens that map. One thing to know: scmscx.com does not
+send the CORS header a browser needs to let a page on another site read its answers, so
+from an editor served anywhere but scmscx.com the search cannot connect today. The
+dialog says so and links to the site, where you can download the map and drop it onto
+the editor; the plugin tries the site first every time, so it works with no change once
+the site allows it. Settings holds an optional forwarder address for anyone who runs one.
 
 **Section Explorer** ([scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer))
 is in the list but off. Tick it, then Tools ▸ Section Explorer… (Ctrl+Shift+H) opens the

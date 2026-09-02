@@ -152,6 +152,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: assets
+          # The web zip and the installers only — not the Pages artifact the web job also uploads.
+          pattern: "{web-zip,desktop-*}"
           merge-multiple: true
       - run: ls -la assets
       - name: Publish

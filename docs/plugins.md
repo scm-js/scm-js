@@ -108,7 +108,7 @@ Three ticks are read straight into `installPlugin`:
 | --- | --- | --- |
 | Enable it now | on | `activatePlugin` after the install; off just lists it. |
 | Pin to this version | on, when a commit resolved | Stores `github:owner/repo@<sha>` (`PluginPreview.pin`) instead of the moving spec. `isPinned` recognises one. |
-| Keep a copy in this browser | off | Stores `PluginInstall.local`; see below. |
+| Load from a copy saved here | off | Stores `PluginInstall.local`; see below. |
 
 The addresses on screen follow the pin tick, since pinning changes which commit every one
 of them names. A spec that carries a ref already (`@v1.2`) is resolved the same way: the

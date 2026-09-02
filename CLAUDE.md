@@ -495,8 +495,12 @@ and homepage links, the manifest / entry / base URLs of the version being instal
 `rememberManifest` (shared with `describePlugin`), then `setInstalled` + `activatePlugin`.
 Its three options are the dialog's ticks — *Enable it now* (on), *Pin to this version*
 (on whenever `PluginPreview.pin` resolved, storing `github:owner/repo@<sha>` instead of
-the moving spec; `isPinned` recognises one) and *Keep a copy in this browser* (off,
+the moving spec; `isPinned` recognises one) and *Load from a copy saved here* (off,
 `PluginInstall.local`, the same tick the Manage Plugins row carries under its buttons).
+The label and the explanation under it read the same whether that tick is on or off — one
+that swapped between describing the copy and describing the fetch read as two different
+options — so the only state-dependent part is the size of the copy, shown next to the row's
+tick.
 A manifest that cannot be read (`PluginPreview.problem`) is a dead end on both screens —
 the dialog says so and Add is disabled — `pinProblem` says why there is no pin, and an
 unusable spec fails in `add` before any fetch.

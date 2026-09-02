@@ -308,13 +308,11 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 onChange={setPin}
               />
               <Option
-                label="Keep a copy in this browser"
+                label="Load from a copy saved here"
                 hint={
                   builtin
                     ? "This plugin is part of the build; there is nothing to fetch."
-                    : local
-                      ? "Saves the plugin's files after the first load and runs that copy from then on. Its address is not contacted again until you press Reload."
-                      : "Fetches the plugin from its address every time the editor starts."
+                    : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."
                 }
                 checked={local && !builtin}
                 disabled={builtin}
@@ -416,7 +414,8 @@ export function PluginsDialog({ entry }: DialogProps) {
   // The preview travels with the dialog, so it is fetched once.
   const add = useCallback(async () => {
     const s = spec.trim();
-    if (!s) return;
+    // The button is off while a look-up runs; Enter in the field would otherwise start a second one.
+    if (!s || looking) return;
     let canonical: string;
     try {
       // The short form for a repository, so pasting the default plugin's own URL is recognised as it.
@@ -440,7 +439,7 @@ export function PluginsDialog({ entry }: DialogProps) {
     } finally {
       setLooking(false);
     }
-  }, [spec, list, store]);
+  }, [spec, looking, list, store]);
 
   const toggle = (s: string, enabled: boolean) => {
     setInstalled(store, s, { enabled });
@@ -500,7 +499,7 @@ export function PluginsDialog({ entry }: DialogProps) {
               placeholder="https://github.com/owner/repo"
               value={spec}
               onChange={(e) => { setSpec(e.target.value); setProblem(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void add(); } }}
               aria-label="Plugin location"
             />
             <Button variant="primary" onClick={() => { void add(); }} disabled={spec.trim() === "" || looking}>
@@ -524,7 +523,7 @@ export function PluginsDialog({ entry }: DialogProps) {
                   <li><span className="mono">https://github.com/owner/repo</span></li>
                   <li><span className="mono">https://github.com/owner/repo/tree/v1.2/plugins/my-plugin</span></li>
                   <li><span className="mono">https://gitlab.com/owner/repo/-/raw/main/plugin.json</span></li>
-                  <li><span className="mono">http://localhost:3000/</span> (a dev server, while you write one)</li>
+                  <li><span className="mono">https://example.com/my-plugin/plugin.json</span></li>
                 </ul>
                 <p className="hint">
                   Repositories on GitHub can also be written <span className="mono">github:owner/repo@v1.2</span>, and are the
@@ -541,9 +540,10 @@ export function PluginsDialog({ entry }: DialogProps) {
             const isDefault = defaults.includes(p.spec);
             const pinnedSpec = isPinned(p.spec);
             const copy = snapshots[p.spec];
-            const name = rt?.manifest?.name ?? (p.spec.startsWith("builtin:") ? p.spec.slice("builtin:".length) : p.spec);
+            const builtinPlugin = p.spec.startsWith("builtin:");
+            const name = rt?.manifest?.name ?? (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
             // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
-            const named = rt?.manifest != null || p.spec.startsWith("builtin:");
+            const named = rt?.manifest != null || builtinPlugin;
             const status = statusLabel(rt, p.enabled);
             return (
               <div key={p.spec} className="item plugin-row" role="listitem">
@@ -573,25 +573,28 @@ export function PluginsDialog({ entry }: DialogProps) {
                     {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
                   </div>
                   {/* The copy used to be an icon button next to Reload, which said nothing about what
-                      it did or whether it was on. It is a labelled tick under the buttons instead. */}
+                      it did or whether it was on. It is a labelled tick under the buttons instead.
+                      The label and the tooltip say the same thing whether it is on or off — a
+                      description that rewrites itself as you tick it reads as two different options —
+                      so the only thing that follows the state is the size of the copy, which is
+                      status rather than explanation, and is shown rather than hidden in a tooltip. */}
                   <span
                     className="plugin-copy"
-                    title={p.spec.startsWith("builtin:")
+                    title={builtinPlugin
                       ? "This plugin is part of the build; there is nothing to fetch."
-                      : p.local
-                        ? copy
-                          ? `${Math.round(copy.size / 1024)} KB kept in this browser. Reload fetches the plugin again and replaces it.`
-                          : "No copy yet; the next load makes one."
-                        : "Save the plugin's files here after the next load and run that copy from then on, instead of fetching it each time the editor starts."}
+                      : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."}
                   >
                     <HardDrive size={11} />
                     <Check
-                      label="Keep a copy"
+                      label="Load from a copy saved here"
                       checked={p.local === true}
-                      disabled={p.spec.startsWith("builtin:")}
+                      disabled={builtinPlugin}
                       onChange={(e) => toggleLocal(p.spec, e.target.checked)}
-                      aria-label={`Keep a copy of ${name} in this browser`}
+                      aria-label={`Load ${name} from a copy saved in this browser`}
                     />
+                    {p.local === true && !builtinPlugin && (
+                      <span className="dim">{copy ? `· ${Math.max(1, Math.round(copy.size / 1024))} KB` : "· not saved yet"}</span>
+                    )}
                   </span>
                 </div>
               </div>

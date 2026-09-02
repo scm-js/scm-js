@@ -385,13 +385,14 @@ Three ticks on that screen decide how it is installed:
   button on a pinned row looks for a newer commit and shows it on the same screen before
   anything changes. Plugins from other addresses cannot be pinned, since there is no
   version to name.
-- **Keep a copy in this browser** is off by default. With it on, the files from the first
-  load are kept in your browser and run from then on, and the plugin's address is not
+- **Load from a copy saved here** is off by default. With it on, the files from the first
+  load are saved in your browser and run from then on, and the plugin's address is not
   contacted again until you press Reload. Use it if you would rather nothing was fetched
   at startup.
 
-Both settings can be changed later from the list: every row carries a **Keep a copy**
-tick under its buttons, and a pinned row is badged *pinned* and carries the Update button.
+Both settings can be changed later from the list: every row carries a **Load from a copy
+saved here** tick under its buttons, with the size of the copy beside it, and a pinned row
+is badged *pinned* and carries the Update button.
 An address with no plugin behind it (a wrong link, or a dev server that is not up) is
 reported under the Add field and nothing is added, so the Add Plugin screen only ever
 opens with a manifest to show. The tick at the left of a row turns a plugin off without

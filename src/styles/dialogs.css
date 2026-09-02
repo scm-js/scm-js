@@ -928,14 +928,14 @@
   flex-direction: column;
   gap: 6px;
 }
-/* The example addresses under the Add field: one per line, indented, no bullets. */
+/* The example addresses under the Add field: one bulleted line each. */
 .plugin-examples {
   margin: 0;
-  padding: 0 0 0 2px;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  padding: 0 0 0 16px;
+  list-style: disc;
+}
+.plugin-examples li {
+  margin-bottom: 2px;
 }
 .plugin-add .hint .mono,
 .plugin-examples .mono,

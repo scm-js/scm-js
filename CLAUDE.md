@@ -31,6 +31,9 @@ node scripts/extract-units.mjs            # just the unit data
 Tests live in `tests/*.test.ts` (and `src/**/*.test.ts` is also picked up). Tests that need
 `fixtures/maps/*.scx` or `public/tileset/*.cv5` use `describe.skipIf(...)` and skip silently when the
 files are absent — so a green run does not necessarily mean the real-map / real-tileset suites ran.
+vitest still *runs* a skipped describe's body to collect it, so a suite that reads the files in the body
+(not inside `it` / `beforeAll`) must be guarded with `if (have) describe(...)` instead, or CI — which has
+no game data — crashes on the read.
 `fixtures/` is gitignored (Blizzard data, not redistributable), and so are the generated
 `public/{tileset,arr,game,scripts,unit}/` — a clone has no game data until `npm run extract` runs, and
 nothing in those trees may be committed. `scripts/extract-assets.mjs` is the front end (archive

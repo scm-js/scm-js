@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat } from "../src/formats/dat/dat";
 import { decodeIscript } from "../src/formats/dat/iscript";
 import { decodePcx } from "../src/formats/dat/pcx";
@@ -28,7 +28,10 @@ function loadAssets(): UnitAssets {
 }
 
 describe.skipIf(!have)("unit animator on the real scripts", () => {
-  const assets = loadAssets();
+  // Read in beforeAll, not the body: vitest runs a skipped describe's body to collect it, and this file
+  // has no other suite, so an `if` around the describe would leave it with none.
+  let assets: UnitAssets;
+  beforeAll(() => { assets = loadAssets(); });
   const JUNGLE = 4;
 
   it("gives a Hatchery its shadow underlay and pulses it from the Built animation", () => {

@@ -127,7 +127,8 @@ describe("THG2 round trip", () => {
 const ARR = join(import.meta.dirname, "..", "public", "arr");
 const haveTables = ["units.dat", "flingy.dat", "sprites.dat", "images.dat", "images.tbl"].every((f) => existsSync(join(ARR, f)));
 
-describe.skipIf(!haveTables)("sprite names from the real tables", () => {
+// `if`, not `skipIf`: vitest runs a skipped describe's body to collect it, and this one reads the files.
+if (haveTables) describe("sprite names from the real tables", () => {
   const read = (f: string) => new Uint8Array(readFileSync(join(ARR, f)));
   const assets = {
     units: decodeUnitsDat(read("units.dat")),

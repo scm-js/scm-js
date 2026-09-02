@@ -92,7 +92,8 @@ describe(".lo overlay files", () => {
   });
 });
 
-describe.skipIf(!existsSync(ISCRIPT) || !existsSync(IMAGES))("the real iscript.bin", () => {
+// `if`, not `skipIf`: vitest runs a skipped describe's body to collect it, and this one reads the files.
+if (existsSync(ISCRIPT) && existsSync(IMAGES)) describe("the real iscript.bin", () => {
   const bin = decodeIscript(new Uint8Array(readFileSync(ISCRIPT)));
   const images = decodeImagesDat(new Uint8Array(readFileSync(IMAGES)));
 

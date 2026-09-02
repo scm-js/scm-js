@@ -39,7 +39,8 @@ function findTiles(ts: Tileset): { ground: number; water: number } {
   return { ground, water };
 }
 
-describe.skipIf(!units || !haveTileset)("terrain checks against the real tileset", () => {
+// `if`, not `skipIf`: vitest runs a skipped describe's body to collect it, and this one reads the files.
+if (units && haveTileset) describe("terrain checks against the real tileset", () => {
   const ts = loadBadlands();
   const { ground, water } = findTiles(ts);
   const scn = createScenario({ name: "t", description: "", width: 16, height: 16, tileset: 0 });

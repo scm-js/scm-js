@@ -114,6 +114,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Export the map as a PNG, from full art down to a minimap | Yes |
 | Import and export strings | Yes |
 | Plugins (Plugins ▸ Manage Plugins…) | Yes. Load a `plugin.ts` from a public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
+| Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
 
 ## Working in the editor
@@ -403,8 +404,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. Terrain from Image starts on; Paint and
-scm-server are listed but off until you tick them.
+working connection on the first load of a session. Terrain from Image starts on; Paint,
+scm-server and Section Explorer are listed but off until you tick them.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -463,6 +464,22 @@ second time makes a new revision instead of a new entry. Plugins ▸ scm-server 
 holds the server address and your author key (created on first publish, kept in the
 browser, and not recoverable if lost). Which server is yours to choose: the
 plugin talks to any address that runs scm-server.
+
+**Section Explorer** ([scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer))
+is in the list but off. Tick it, then Tools ▸ Section Explorer… (Ctrl+Shift+H) opens the
+map file as the game reads it: every section in file order on the left, with badges for
+the ones the editor keeps as raw bytes, has never heard of, holds unsaved changes for, or
+that repeat or have the wrong length; the bytes of the chosen section in the middle, each
+field in its own colour, with the usual hex-editor keys (type hex or text, Tab between
+columns, Insert mode, Delete, Ctrl+Z, Ctrl+C / Ctrl+V as hex, Ctrl+F, Ctrl+G); and on the
+right what the byte under the cursor is — *Triggers › trigger 3 › actions › action 0 ›
+unitId = 0 (Terran Marine)* — with a control to change it (a number, a drop-down of
+names, a tick per flag bit, text), the raw readings in every width, and a tree of the
+whole section that follows the cursor. Records can be inserted and removed, sections
+added, removed, renamed and reordered, and a section or the whole `scenario.chk` exported
+or imported. Nothing reaches the map until Apply, which makes the editor read the file
+again from scratch — every dialog and the map view follow, and the undo history goes, as
+with Resize.
 
 ## Keyboard
 

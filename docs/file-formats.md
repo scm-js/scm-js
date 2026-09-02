@@ -120,3 +120,15 @@ no such section, and `encodeSection` then omits them rather than writing a zeroe
 one. This matters: a map with no `MASK` behaves as fully fogged, and a map with no
 `ISOM` cannot be edited with the isometric brush until the lattice is rebuilt from
 the tiles.
+
+## Looking at the bytes
+
+A plugin can read and rewrite the file at the section level through
+`api.document.sections` (`src/editor/sections.ts`): `currentChk` serialises the open
+scenario — dirty sections encoded, everything else byte for byte — and parses the result
+back so every occurrence has its offset, and a raw edit mutates that `ChkFile` and
+parses a fresh `Scenario` from it, which `replaceScenarioAtom` installs in place of the
+open one. The Section Explorer plugin (listed by default, off until ticked) is the
+annotated hex editor built on that: every section with what the registry knows about
+it, its bytes coloured by field, and the meaning of each value.
+

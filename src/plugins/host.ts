@@ -14,7 +14,7 @@ import {
   selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
+  archiveExtrasAtom, commitTerrainAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom,
   tilesetFileNameAtom, triggersRevisionAtom, undoAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
@@ -32,8 +32,18 @@ import { NO_DOODADS } from "../formats/tileset/doodads";
 import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { peekUnitAssets } from "../formats/units/load";
-import { displayColorHex } from "../data/players";
-import { UNIT_GROUPS, unitName } from "../data/units";
+import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
+import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
+import { WEAPON_NAMES, weaponName } from "../data/weapons";
+import { ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CONDITION_DEFS, conditionDef, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES } from "../data/triggerDefs";
+import { getString } from "../formats/chk/sections/strings";
+import { locationName } from "../editor/locations";
+import { readSwitchNames } from "../editor/switches";
+import {
+  combinedSection, currentChk, editRaw, insertSection, knownSections, moveSection, parseRaw, removeSection, renameSection, replaceSectionData, sectionInfos,
+  sectionKnowledge,
+} from "../editor/sections";
+import { serializeChk, type ChkFile } from "../formats/chk/reader";
 import { spriteCatalogue } from "../data/sprites";
 import { spriteName } from "../hooks/useSpriteTools";
 import { doodadLabel } from "../hooks/useDoodadTools";
@@ -51,7 +61,8 @@ import { markDirty } from "../formats/chk/scenario";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type Deactivate, type DialogHandle, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle, type MapToolSpec, type MapToolStopReason,
-  type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule,
+  type NamedValue, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule,
+  type RawEditResult, type SectionsApi,
 } from "./api";
 import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
@@ -376,6 +387,56 @@ function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?:
   });
 }
 
+/* ── Raw section edits ──────────────────────────────────── */
+
+/**
+ * `api.document.sections`: the file Save would write, and edits to its bytes. Every
+ * edit parses the result again and installs it through `replaceScenarioAtom`, so the
+ * typed model, the mirror atoms and every revision follow — and the history goes, as
+ * with Resize. Reads serialise the open scenario each time; that is a few milliseconds
+ * for the largest map, and a plugin that lists often can cache on the `"document"` and
+ * per-layer events.
+ */
+export function sectionsApi(store: Store): SectionsApi {
+  const open = () => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) throw new Error("No map is open.");
+    return scn;
+  };
+  const dim = () => { const scn = store.get(scenarioAtom); return { width: scn?.width ?? 0, height: scn?.height ?? 0 }; };
+  const edit = (mutate: (file: ChkFile) => void): RawEditResult => {
+    const next = editRaw(open(), mutate);
+    store.set(replaceScenarioAtom, next);
+    return { warnings: [...next.warnings] };
+  };
+  return {
+    list: () => { const scn = store.get(scenarioAtom); return scn ? sectionInfos(scn) : []; },
+    bytes: (index) => {
+      const file = currentChk(open());
+      const s = file.sections[index];
+      if (!s) throw new RangeError(`No section at index ${index} (the file has ${file.sections.length}).`);
+      return s.data.slice();
+    },
+    combined: (name) => { const scn = store.get(scenarioAtom); return scn ? combinedSection(scn, name)?.slice() ?? null : null; },
+    file: () => serializeChk(currentChk(open())),
+    spec: (name) => sectionKnowledge(name, dim()),
+    known: () => knownSections(dim()),
+    write: (index, bytes) => edit((file) => replaceSectionData(file, index, bytes)),
+    rename: (index, name) => edit((file) => renameSection(file, index, name)),
+    insert: (index, name, bytes) => edit((file) => insertSection(file, index, name, bytes)),
+    remove: (index) => edit((file) => removeSection(file, index)),
+    move: (from, to) => edit((file) => moveSection(file, from, to)),
+    replaceFile: (bytes) => {
+      open();
+      const next = parseRaw(bytes);
+      store.set(replaceScenarioAtom, next);
+      return { warnings: [...next.warnings] };
+    },
+  };
+}
+
+const named = (labels: readonly string[]): NamedValue[] => labels.map((label, value) => ({ value, label }));
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -469,6 +530,34 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           return true;
         },
       },
+      sections: sectionsApi(store),
+    },
+
+    names: {
+      unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? unitName(id),
+      units: () => [...named(UNIT_NAMES), ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
+      upgrade: upgradeName,
+      upgrades: () => named(UPGRADE_NAMES),
+      tech: techName,
+      techs: () => named(TECH_NAMES),
+      weapon: weaponName,
+      weapons: () => named(WEAPON_NAMES),
+      playerType: playerTypeLabel,
+      playerTypes: () => PLAYER_TYPES.map((t) => ({ value: t.value, label: t.label })),
+      race: playerRaceLabel,
+      races: () => PLAYER_RACES.map((r) => ({ value: r.value, label: r.label })),
+      playerGroup: (value) => PLAYER_GROUP_CHOICES.find((c) => c.value === value)?.label ?? `Group ${value}`,
+      playerGroups: () => PLAYER_GROUP_CHOICES.map((c) => ({ value: c.value, label: c.label })),
+      condition: (type) => (type === 0 ? "None" : conditionDef(type)?.name ?? `Condition ${type}`),
+      conditions: () => [{ value: 0, label: "None" }, ...CONDITION_DEFS.map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
+      action: (type, briefing = false) => (type === 0 ? "None" : actionDef(type, briefing)?.name ?? `Action ${type}`),
+      actions: (briefing = false) => [{ value: 0, label: "None" }, ...(briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS).map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
+      aiScript: aiScriptName,
+      string: (index) => { const scn = scenario(); return scn ? getString(scn.strings, index) : null; },
+      location: (index) => { const scn = scenario(); return scn ? locationName(scn, index) : `Location ${index}`; },
+      switch: (index) => { const scn = scenario(); return (scn && readSwitchNames(scn)[index]) || `Switch ${index + 1}`; },
+      player: (slot) => `Player ${slot + 1}`,
+      tile: (id) => { const l = loaded(); return l ? tileInfo(l.tileset, names(), id).label : null; },
     },
 
     terrain: {

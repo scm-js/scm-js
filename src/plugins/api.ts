@@ -24,8 +24,10 @@ import type { SpriteGroup } from "../data/sprites";
 import type { EditorLayer, TerrainMode } from "../atoms/editorAtoms";
 import type { DialogId } from "../atoms/uiAtoms";
 import type { MapImageOptions } from "../services/mapImage";
+import type { SectionInfo, SectionKnowledge } from "../editor/sections";
+import type { CombineMode } from "../formats/chk/reader";
 
-export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions };
+export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode };
 
 /**
  * The version a host provides; a manifest that asks for a newer one is refused. It stays
@@ -98,6 +100,7 @@ export interface PluginApi {
   readonly tileset: TilesetApi;
   readonly selection: SelectionApi;
   readonly palette: PaletteApi;
+  readonly names: NamesApi;
   readonly ui: UiApi;
   readonly menu: MenuApi;
   readonly contextMenu: ContextMenuApi;
@@ -197,6 +200,56 @@ export interface DocumentApi {
    */
   renderImage(options?: Partial<MapImageOptions>): Promise<Blob | null>;
   readonly extras: ExtrasApi;
+  readonly sections: SectionsApi;
+}
+
+/** What a raw section edit reported: the parser's remarks about the file it produced. */
+export interface RawEditResult {
+  /** Warnings from parsing the edited file (a truncated section, no usable DIM, …); empty when it read cleanly. */
+  warnings: string[];
+}
+
+/**
+ * The scenario file at the byte level: every section occurrence in the order Save would
+ * write them, with the bytes it would write — unsaved edits already encoded — and raw
+ * edits to any of them.
+ *
+ * A raw edit is a different kind of transaction from `document.edit`: the edited file is
+ * parsed again from scratch and installed as the open document, so the change reaches
+ * every part of the editor whether or not it models the section — and, as with Resize,
+ * the undo history is dropped and every selection cleared. The map is marked modified
+ * and the `"document"` event fires. Keep your own undo if you need one.
+ *
+ * Indices are positions in `list()` and shift when a section is inserted or removed
+ * before them; take a fresh `list()` after every edit.
+ */
+export interface SectionsApi {
+  /** Every occurrence in file order; empty without a map. */
+  list(): SectionInfo[];
+  /** A copy of one occurrence's payload. */
+  bytes(index: number): Uint8Array;
+  /**
+   * The bytes the game acts on for a name — repeated occurrences combined the way the
+   * game combines them (`SectionKnowledge.mode`) — or null when the file has none.
+   */
+  combined(name: string): Uint8Array | null;
+  /** The whole CHK as Save would write it (the archive extras are `document.extras`). */
+  file(): Uint8Array;
+  /** What the editor knows about a section name, sized for the open map; null for an unknown name. */
+  spec(name: string): SectionKnowledge | null;
+  /** Every section the editor knows, sized for the open map. */
+  known(): SectionKnowledge[];
+  /** Replace one occurrence's payload. */
+  write(index: number, bytes: Uint8Array): RawEditResult;
+  /** Rename one occurrence (four characters; shorter names are padded with spaces). */
+  rename(index: number, name: string): RawEditResult;
+  /** Insert a section before `index` (`list().length` appends). */
+  insert(index: number, name: string, bytes: Uint8Array): RawEditResult;
+  remove(index: number): RawEditResult;
+  /** Move the occurrence at `from` so that it sits at `to`. */
+  move(from: number, to: number): RawEditResult;
+  /** Replace the whole CHK, the way File ▸ Open reads one. */
+  replaceFile(bytes: Uint8Array): RawEditResult;
 }
 
 /** Cells for the bulk terrain operations: a tile rect, or cell indices (`y * width + x`). */
@@ -391,6 +444,58 @@ export interface PaletteApi {
   /** The open map's doodads by palette category; empty without the tileset graphics. */
   doodadCategories(): { name: string; doodads: DoodadInfo[] }[];
   doodadInfo(doodadId: number): DoodadInfo | null;
+}
+
+/* ── Names ──────────────────────────────────────────────── */
+
+export interface NamedValue {
+  value: number;
+  label: string;
+}
+
+/**
+ * The names behind the numbers a map stores, so a plugin that shows raw values need not
+ * carry the game's tables itself. The per-map ones (`string`, `location`, `switch`,
+ * `player`) read the open scenario and answer a placeholder without one; the rest are
+ * the editor's own tables — the same names StarEdit shows.
+ */
+export interface NamesApi {
+  /** StarEdit's name for a units.dat id; `Any unit` / `Men` / `Buildings` / `Factories` for the trigger classes 228–231. */
+  unit(id: number): string;
+  units(): NamedValue[];
+  upgrade(id: number): string;
+  upgrades(): NamedValue[];
+  tech(id: number): string;
+  techs(): NamedValue[];
+  weapon(id: number): string;
+  weapons(): NamedValue[];
+  /** An OWNR / IOWN controller byte: `Human`, `Computer`, `Neutral`, … */
+  playerType(value: number): string;
+  playerTypes(): NamedValue[];
+  /** A SIDE race byte. */
+  race(value: number): string;
+  races(): NamedValue[];
+  /** One of the 27 trigger player groups (`Player 1` … `Non Allied Victory Players`). */
+  playerGroup(value: number): string;
+  playerGroups(): NamedValue[];
+  /** A TRIG condition type. */
+  condition(type: number): string;
+  conditions(): NamedValue[];
+  /** A TRIG action type, or an MBRF one with `briefing`. */
+  action(type: number, briefing?: boolean): string;
+  actions(briefing?: boolean): NamedValue[];
+  /** The script behind a Run AI Script code (the four characters as a little-endian u32); the code itself when unknown. */
+  aiScript(code: number): string;
+  /** The open map's string at an index; null for 0, out of range, or no map. */
+  string(index: number): string | null;
+  /** A location slot's name (0-based; 63 is Anywhere), or StarEdit's default for it. */
+  location(index: number): string;
+  /** A switch's name (0-based), or `Switch N`. */
+  switch(index: number): string;
+  /** `Player N` for a slot (0-based). */
+  player(slot: number): string;
+  /** The terrain a MTXM / TILE id belongs to (`Dirt`, `High Dirt`, a cliff, …), or null without the tileset graphics. */
+  tile(id: number): string | null;
 }
 
 /* ── UI ─────────────────────────────────────────────────── */

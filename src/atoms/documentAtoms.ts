@@ -193,6 +193,17 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   }
 });
 
+/**
+ * Install a scenario parsed again from edited bytes — a plugin's raw section edit — in
+ * place of the open one: the same file name and archive extras, the map marked modified,
+ * and, as with Resize, the history dropped and every selection cleared, since any part
+ * of the document may have changed. The mirror atoms are refilled from the new object.
+ */
+export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
+  set(loadDocumentAtom, { scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom) });
+  set(mapModifiedAtom, true);
+});
+
 export const closeDocumentAtom = atom(null, (get, set) => {
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());

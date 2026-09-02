@@ -301,7 +301,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on), Paint and scm-server (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image (on), Paint, scm-server and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -483,8 +483,8 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint` and
-`github:scm-js/plugin-scm-server` off — plus any built-in, each a
+`github:scm-js/plugin-image-to-terrain` on, `github:scm-js/plugin-paint`,
+`github:scm-js/plugin-scm-server` and `github:scm-js/plugin-section-explorer` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -604,6 +604,25 @@ the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.te
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's
 tile), Doodads, Units, Sprites and Fog of War layers alike. `docs/plugins.md` ends with a tour of
 both plugins.
+
+**Section Explorer** (`github.com/scm-js/plugin-section-explorer`, a default that starts off) is the
+annotated hex editor and the worked example for `api.document.sections` and `api.names`. The host side
+is `src/editor/sections.ts`: `currentChk(scn)` is `parseChk(serializeScenario(scn))` — the file Save
+would write, dirty sections encoded, every occurrence with its offset — `sectionInfos` decorates it
+with the registry (`SectionKnowledge`: mode, the fixed size for this map, stride, `modelled` from
+`MODELLED_SECTIONS` in `scenario.ts`, which is the list `encodeSection` handles), and the writes
+(`replaceSectionData`, `renameSection`, `insertSection`, `removeSection`, `moveSection`, `editRaw`,
+`parseRaw`) mutate that `ChkFile` and parse a fresh `Scenario` from it. `host.ts#sectionsApi` installs
+the result through `documentAtoms.ts#replaceScenarioAtom` — `loadDocumentAtom` with the same file
+name and extras, then modified — so a raw edit to any section, modelled or not, reaches the whole
+editor, at the cost of the history (as Resize). `api.names` is the editor's own tables (`UNIT_NAMES`,
+`UPGRADE_NAMES`, `TECH_NAMES`, `WEAPON_NAMES`, `PLAYER_TYPES`, `PLAYER_RACES`, the trigger defs and AI
+scripts) plus the open map's strings, locations and switches, so plugins showing raw values carry no
+tables of their own. In the plugin, `layout.ts` (schemas → lazily instantiated `Node` trees with
+`pathAt` / `leavesIn` and per-leaf `Semantic`s) and `layouts.ts` (every section's shape and the
+meanings of its fields, the string table read off its own offsets) are pure and tested there;
+`buffer.ts` is the edit buffer with its own undo; `hexview.ts` and `inspector.ts` are the panes.
+`tests/plugins.test.ts` covers the sections and names API against a new map.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

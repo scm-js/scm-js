@@ -4,6 +4,7 @@ import { join } from "node:path";
 import ts from "typescript";
 import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
+import { serializeScenario } from "../src/formats/chk/scenario";
 import { flatTerrain } from "../src/formats/tileset/terrain";
 import { loadTileset } from "../src/formats/tileset/decode";
 import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
@@ -481,11 +482,12 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image on, and Paint and scm-server off, as remote defaults", () => {
+  it("ships Terrain from Image on, and Paint, scm-server and Section Explorer off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-paint", enabled: false },
       { spec: "github:scm-js/plugin-scm-server", enabled: false },
+      { spec: "github:scm-js/plugin-section-explorer", enabled: false },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
@@ -498,6 +500,156 @@ describe("plugin lifecycle", () => {
     // A fresh editor lists Paint and scm-server but does not run them until the user ticks them.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-server", enabled: false });
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-section-explorer", enabled: false });
+  });
+});
+
+/* ── Sections and names ─────────────────────────────────── */
+
+describe("plugin sections", () => {
+  const apiOver = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("lists the file Save would write, dirty sections encoded", () => {
+    const { store, scn } = blankStore(4, 2);
+    const api = apiOver(store);
+    const list = api.document.sections.list();
+    // A new map carries its raw sections first and everything else is dirty, appended in APPEND_ORDER.
+    expect(list.map((s) => s.name).slice(0, 6)).toEqual(["IVE2", "VCOD", "UPRP", "UPUS", "TYPE", "VER "]);
+    expect(list[0]).toMatchObject({ index: 0, offset: 0, size: 2, declaredSize: 2, truncated: false, occurrence: 0, occurrences: 1, dirty: false });
+    expect(list[4]).toMatchObject({ name: "TYPE", size: 4, dirty: true });
+    expect(list[4].spec).toMatchObject({ name: "TYPE", mode: "last", size: 4, stride: null, modelled: true, what: "Map type (RAWS/RAWB/RAWU)" });
+    const mtxm = list.find((s) => s.name === "MTXM")!;
+    expect(mtxm).toMatchObject({ size: 16, spec: { size: 16, mode: "overlay" } });
+    expect(list.find((s) => s.name === "VCOD")!.spec).toMatchObject({ modelled: false, size: 1040 });
+    expect(list.find((s) => s.name === "UNIT")!.spec).toMatchObject({ mode: "append", stride: 36, size: null });
+    // The bytes are the encoder's, and the whole file is the serialisation.
+    expect(api.document.sections.bytes(list.indexOf(mtxm))).toEqual(new Uint8Array(scn.tiles.buffer.slice(0)));
+    expect(api.document.sections.file()).toEqual(serializeScenario(scn));
+    expect(api.document.sections.combined("DIM ")).toEqual(new Uint8Array([4, 0, 2, 0]));
+    expect(api.document.sections.combined("NOPE")).toBeNull();
+    expect(api.document.sections.spec("MRGN")).toMatchObject({ what: "Locations", stride: 20 });
+    expect(api.document.sections.spec("ZZZZ")).toBeNull();
+    expect(api.document.sections.known().map((k) => k.name)).toContain("STRx");
+    // A copy: writing into what came back changes nothing.
+    api.document.sections.bytes(4)[0] = 0;
+    expect(api.document.sections.bytes(4)).toEqual(new Uint8Array([0x52, 0x41, 0x57, 0x42]));
+    expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.list()).toEqual([]);
+  });
+
+  it("writes bytes through a fresh parse, dropping the history and firing document", () => {
+    const { store, scn } = blankStore(4, 2);
+    const api = apiOver(store);
+    let events = 0;
+    api.events.on("document", () => { events++; });
+    // Something in the history first, so we can see it go.
+    api.document.edit("tile", (tx) => tx.setTile(0, 0, 0x0123));
+    expect(store.get(undoStackAtom)).toHaveLength(1);
+    const before = api.document.sections.list();
+    const dim = before.findIndex((s) => s.name === "DIM ");
+    const result = api.document.sections.write(dim, new Uint8Array([6, 0, 3, 0]));
+    expect(result).toEqual({ warnings: [] });
+    const next = store.get(scenarioAtom)!;
+    expect(next).not.toBe(scn);
+    expect(next.width).toBe(6);
+    expect(next.height).toBe(3);
+    expect(next.dirty.size).toBe(0);
+    // The typed model was rebuilt from the bytes: the earlier tile edit is in the file, and the MTXM is read for the new size.
+    expect(next.tiles[0]).toBe(0x0123);
+    expect(next.tiles).toHaveLength(18);
+    expect(store.get(undoStackAtom)).toEqual([]);
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    expect(events).toBe(1);
+    // A section the editor never models is edited the same way and survives the round trip.
+    const after = api.document.sections.list();
+    const vcod = after.findIndex((s) => s.name === "VCOD");
+    const bytes = api.document.sections.bytes(vcod);
+    bytes[0] = 0xaa;
+    api.document.sections.write(vcod, bytes);
+    expect(api.document.sections.bytes(vcod)[0]).toBe(0xaa);
+    expect(store.get(scenarioAtom)!.chk.sections.find((s) => s.name === "VCOD")!.data[0]).toBe(0xaa);
+    expect(serializeScenario(store.get(scenarioAtom)!)).toEqual(api.document.sections.file());
+  });
+
+  it("inserts, renames, moves and removes occurrences, and replaces the whole file", () => {
+    const { store } = blankStore(4, 2);
+    const api = apiOver(store);
+    const n = api.document.sections.list().length;
+    api.document.sections.insert(n, "MYSC", new Uint8Array([1, 2, 3]));
+    let list = api.document.sections.list();
+    expect(list[n]).toMatchObject({ name: "MYSC", size: 3, spec: null, dirty: false });
+    expect(store.get(scenarioAtom)!.chk.sections[n].data).toEqual(new Uint8Array([1, 2, 3]));
+    api.document.sections.rename(n, "AB");
+    expect(api.document.sections.list()[n].name).toBe("AB  ");
+    api.document.sections.move(n, 0);
+    list = api.document.sections.list();
+    expect(list[0]).toMatchObject({ name: "AB  ", offset: 0 });
+    expect(list[1]).toMatchObject({ name: "IVE2", offset: 11 });
+    // A second DIM: the game (and the parser) read the last one.
+    const dim = list.findIndex((s) => s.name === "DIM ");
+    api.document.sections.insert(dim + 1, "DIM ", new Uint8Array([8, 0, 2, 0]));
+    list = api.document.sections.list();
+    expect(list.filter((s) => s.name === "DIM ").map((s) => [s.occurrence, s.occurrences])).toEqual([[0, 2], [1, 2]]);
+    expect(store.get(scenarioAtom)!.width).toBe(8);
+    expect(api.document.sections.combined("DIM ")).toEqual(new Uint8Array([8, 0, 2, 0]));
+    api.document.sections.remove(dim + 1);
+    expect(store.get(scenarioAtom)!.width).toBe(4);
+    api.document.sections.remove(0);
+    expect(api.document.sections.list().map((s) => s.name)).not.toContain("AB  ");
+    expect(() => api.document.sections.bytes(99)).toThrow(RangeError);
+    expect(() => api.document.sections.write(-1, new Uint8Array())).toThrow(RangeError);
+    expect(() => api.document.sections.rename(0, "TOOLONG")).toThrow(RangeError);
+    // The whole file, as File ▸ Open would read it — here a 2×2 map with nothing else.
+    const tiny = serializeScenario(createScenario({ width: 2, height: 2, era: 3, name: "tiny" }));
+    const r = api.document.sections.replaceFile(tiny);
+    expect(r.warnings).toEqual([]);
+    expect(store.get(scenarioAtom)).toMatchObject({ width: 2, height: 2, era: 3 });
+    expect(api.document.info()).toMatchObject({ name: "tiny", tileset: "ashworld", modified: true });
+    // A file the parser has to guess at reports it.
+    expect(api.document.sections.replaceFile(new Uint8Array([0x54, 0x59, 0x50, 0x45, 4, 0, 0, 0, 0x52, 0x41])).warnings).toEqual(expect.arrayContaining([expect.stringContaining("TYPE declares 4 bytes")]));
+    expect(() => createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.write(0, new Uint8Array())).toThrow(/No map/);
+  });
+});
+
+describe("plugin names", () => {
+  it("answers from the editor's tables and the open map", () => {
+    const { store, scn } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.names.unit(0)).toBe("Terran Marine");
+    expect(api.names.unit(228)).toBe("Any unit");
+    expect(api.names.units().length).toBe(232);
+    expect(api.names.units()[231]).toEqual({ value: 231, label: "Factories" });
+    expect(api.names.upgrade(16)).toBe("U-238 Shells");
+    expect(api.names.upgrades()).toHaveLength(61);
+    expect(api.names.tech(0)).toBe("Stim Packs");
+    expect(api.names.techs()).toHaveLength(44);
+    expect(api.names.weapon(0)).toBe("Gauss Rifle");
+    expect(api.names.weapons()).toHaveLength(130);
+    expect(api.names.playerType(6)).toBe("Human");
+    expect(api.names.playerTypes()).toContainEqual({ value: 5, label: "Computer" });
+    expect(api.names.race(1)).toBe("Terran");
+    expect(api.names.races()[0]).toEqual({ value: 0, label: "Zerg" });
+    expect(api.names.playerGroup(17)).toBe("All Players");
+    expect(api.names.playerGroups()).toHaveLength(27);
+    expect(api.names.condition(3)).toBe("Bring");
+    expect(api.names.condition(0)).toBe("None");
+    expect(api.names.conditions()[0]).toEqual({ value: 0, label: "None" });
+    expect(api.names.conditions().map((c) => c.value)).toEqual(Array.from({ length: 24 }, (_, i) => i));
+    expect(api.names.action(44)).toBe("Create Unit");
+    expect(api.names.action(3, true)).toBe("Text Message");
+    expect(api.names.actions()).toHaveLength(60);
+    expect(api.names.actions(true)).toHaveLength(10);
+    expect(api.names.aiScript(0x75434d54)).toBe("Terran Custom Level");
+    expect(api.names.aiScript(0x41424344)).toBe("DCBA");
+    expect(api.names.string(1)).toBe("p");
+    expect(api.names.string(0)).toBeNull();
+    expect(api.names.location(63)).toBe("Anywhere");
+    expect(api.names.location(5)).toBe("Location 5");
+    expect(api.names.switch(3)).toBe("Switch 4");
+    expect(api.names.player(0)).toBe("Player 1");
+    expect(api.names.tile(scn.tiles[0])).toBeNull();
+    const none = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(none.names.string(1)).toBeNull();
+    expect(none.names.location(2)).toBe("Location 2");
   });
 });
 

@@ -29,6 +29,7 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
   { spec: "github:scm-js/plugin-paint", enabled: false },
   { spec: "github:scm-js/plugin-scm-server", enabled: false },
+  { spec: "github:scm-js/plugin-section-explorer", enabled: false },
 ];
 
 /** Every default: the built-ins (on), then the remotes. */

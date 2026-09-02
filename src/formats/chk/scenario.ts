@@ -425,6 +425,17 @@ const APPEND_ORDER = [
   "UNIS", "UPGS", "TECS", "SWNM", "COLR", "PUPx", "PTEx", "UNIx", "UPGx", "TECx", "CRGB",
 ];
 
+/**
+ * The sections `encodeSection` produces from the model. Everything else in a file is
+ * carried as bytes and written back unchanged; a raw edit to one of these is only seen
+ * by the editor once the file is parsed again (`editor/sections.ts`).
+ */
+export const MODELLED_SECTIONS: ReadonlySet<string> = new Set([
+  "TYPE", "VER ", "DIM ", "ERA ", "SPRP", "STR ", "STRx", "OWNR", "IOWN", "SIDE", "COLR", "CRGB", "FORC",
+  "UNIS", "UNIx", "PUNI", "UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV ",
+  "MTXM", "TILE", "ISOM", "MASK", "UNIT", "THG2", "DD2 ", "MRGN", "TRIG", "MBRF", "SWNM",
+]);
+
 export function serializeScenario(scn: Scenario): Uint8Array {
   if (scn.dirty.size === 0) return serializeChk(scn.chk);
 

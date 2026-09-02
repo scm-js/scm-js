@@ -79,8 +79,8 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (Terrain from Image does, Paint and scm-server
-wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
+removed; each says whether it starts on (Terrain from Image does; Paint,
+scm-server and Section Explorer wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
 steps above like any other.
 
 ### Adding one
@@ -240,6 +240,31 @@ reads the map returns `null` / `[]` / `false` when no map is open rather than th
 | `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
 | `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
 | `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`scm-server\map.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
+| `sections` | The scenario at the byte level — see the next section. |
+
+### `api.document.sections`
+
+The CHK as a list of sections, the way the game reads it and Save writes it, with unsaved
+edits already encoded: `list()` gives every occurrence in file order as a `SectionInfo`
+(`index`, the four-character `name`, `offset`, `size`, `declaredSize` / `truncated` for a
+file that ended early, `occurrence` / `occurrences` for a repeated name, `dirty` when the
+editor holds changes it will encode there, and `spec` — what the registry knows: `what`,
+the combine `mode` on repeat, the fixed `size` the game reads for this map or null, the
+record `stride` of a list, and `modelled`, whether the editor decodes it). `bytes(index)`
+is a copy of one occurrence's payload, `combined(name)` the bytes the game acts on with
+repeats folded the way the registry says, `file()` the whole CHK, `spec(name)` / `known()`
+the registry.
+
+The writes — `write(index, bytes)`, `rename(index, name)`, `insert(index, name, bytes)`,
+`remove(index)`, `move(from, to)` and `replaceFile(bytes)` — are a different kind of
+transaction from `edit`: the edited file is parsed again from scratch and installed as
+the open document (`replaceScenarioAtom`), so the change reaches every part of the editor
+whether or not it models the section, and, as with Resize, the undo history is dropped
+and every selection cleared. The map is marked modified and `"document"` fires. Each
+returns `{ warnings }`, what the parser said of the result; a bad index or a name longer
+than four characters throws, and so does any write without a map. Indices shift when a
+section is inserted or removed before them, so take a fresh `list()` after every edit.
+Section Explorer is the worked example.
 
 ### `EditTransaction`
 
@@ -305,6 +330,20 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
 | `spriteGroups()` / `spriteName(kind, id)` | The Sprites palette's groups (empty until the unit tables are loaded) and names. |
 | `doodadCategories()` / `doodadInfo(id)` | The open map's doodads by category, each with its footprint in tiles (empty without the tileset graphics). |
+
+### `api.names`
+
+The names behind the numbers a map stores, so a plugin that shows raw values need not
+carry the game's tables: `unit(id)` / `units()` (StarEdit's names, plus *Any unit*, *Men*,
+*Buildings*, *Factories* for the trigger classes 228–231), `upgrade` / `upgrades`, `tech`
+/ `techs`, `weapon` / `weapons`, `playerType` / `playerTypes` (OWNR controllers), `race` /
+`races` (SIDE), `playerGroup` / `playerGroups` (the 27 trigger groups), `condition` /
+`conditions` and `action(type, briefing?)` / `actions(briefing?)` (trigger and briefing
+types), `aiScript(code)`. The list forms return `{ value, label }[]` for a drop-down. The
+per-map ones read the open scenario and answer a placeholder without one: `string(index)`
+(null for 0 or out of range), `location(index)` (0-based slot; 63 is Anywhere),
+`switch(index)`, `player(slot)`, and `tile(id)` — the terrain a MTXM id belongs to, null
+without the tileset graphics.
 
 ### `api.ui`
 
@@ -486,3 +525,35 @@ Map…* is the manifest's icon, and it is what tells the user that the item leav
 browser. `client.ts` there is a plain typed client for the server's contract
 ([scm-js/scm-server](https://github.com/scm-js/scm-server), `docs/api.md`), with `fetch`
 injected so it tests without a server.
+
+## Section Explorer
+
+[scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer), listed
+by default and off until ticked, is the worked example for `api.document.sections` and
+`api.names`: Tools ▸ Section Explorer… (`Ctrl+Shift+H`) is a hex editor that knows the map
+file. The left pane is `sections.list()` with badges for what the registry and the buffer
+say (raw, unknown, unsaved, edited, repeated, wrong size, cut short); the middle is a hex
+view of `sections.bytes(index)` drawn only for the rows on screen, coloured by the field
+each byte belongs to; the right is the inspector — the section's description, find and
+go-to, the field under the cursor with its path, value, meaning and an editing control,
+the raw readings in every width, and a structure tree that pages long arrays and follows
+the cursor.
+
+`layout.ts` there is the node model: a *schema* (a struct of fields, an array of records,
+a primitive) is instantiated at an offset into a `Node` tree whose children are built on
+demand, so a terrain section of 32,768 tiles costs nothing until a row of it is looked
+at; `pathAt` / `leafAt` descend by arithmetic through fixed-stride arrays, `leavesIn`
+walks a byte range for the hex view's colours, and a leaf's `Semantic` says how its value
+is shown (`describe`, with the record's sibling values, so an action's `target` reads as
+a location, an amount or an AI script depending on the type byte) and edited (a number,
+a drop-down from `api.names`, flag ticks, text). `layouts.ts` is every section: the
+record shapes of UNIT / THG2 / DD2 / MRGN / TRIG / MBRF with one-line summaries, the
+fixed tables (VCOD, the settings and restriction tables per revision, PUNI, FORC, CRGB,
+…), the per-cell terrain and fog sections, and the string table, whose layout is read
+off its own offsets (one leaf per distinct blob, however many indices share it). A
+section longer than its layout gets a trailing-bytes leaf; a name with no layout is
+shown as plain bytes. `buffer.ts` is the edit buffer — overwrite, insert, remove, resize,
+with its own undo that merges a run of typing into one step — and Apply writes every
+changed buffer through `sections.write`, which is what makes the editor parse the file
+again. Both pure modules have tests in that repository.
+

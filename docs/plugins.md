@@ -91,9 +91,11 @@ Plugins ▸ **Browse Plugins…** is the same dialog as Manage Plugins with the 
 open. What it lists comes from *registries*: one JSON file per registry, holding an entry
 per plugin — the spec to install, and the fields that plugin's own `plugin.json` carries,
 so a whole list is shown from one request rather than one manifest fetch per row. The
-project's own is `github.com/scm-js/registry`, generated hourly from a list of
-repositories by walking each one's `plugin.json`; `DEFAULT_REGISTRIES` in `defaults.ts`
-names it and the user can add more under **Sources** (`userRegistriesAtom`).
+project's own is `github.com/scm-js/registry`, generated from the organisation itself —
+every repository wearing the `scmjs` and `plugin` topics, described by the `plugin.json`
+at its newest version tag (an untagged one falls back to its default branch) — hourly, and
+within about a minute of a plugin repository saying it changed; `DEFAULT_REGISTRIES` in
+`defaults.ts` names it and the user can add more under **Sources** (`userRegistriesAtom`).
 
 `plugins/registry.ts` is the whole host side and is pure apart from the fetching:
 

@@ -301,7 +301,7 @@ items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `va
 the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image and scmscx.com (on), Paint, scm-server and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
+and Test Map are still `stub()` entries in `MenuBar.tsx`; Terrain from Image and scmscx.com (on), Paint and Section Explorer (off until ticked) are default plugins (`src/plugins/defaults.ts`).
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -484,8 +484,7 @@ runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
 `github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-scm-scx` on,
-`github:scm-js/plugin-paint`, `github:scm-js/plugin-scm-server` and
-`github:scm-js/plugin-section-explorer` off — plus any built-in, each a
+`github:scm-js/plugin-paint` and `github:scm-js/plugin-section-explorer` off — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise

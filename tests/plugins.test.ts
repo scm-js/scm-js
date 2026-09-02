@@ -482,11 +482,10 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships Terrain from Image and scmscx.com on, and Paint, scm-server and Section Explorer off, as remote defaults", () => {
+  it("ships Terrain from Image and scmscx.com on, and Paint and Section Explorer off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-paint", enabled: false },
-      { spec: "github:scm-js/plugin-scm-server", enabled: false },
       { spec: "github:scm-js/plugin-section-explorer", enabled: false },
       { spec: "github:scm-js/plugin-scm-scx", enabled: true },
     ]);
@@ -498,9 +497,8 @@ describe("plugin lifecycle", () => {
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json" });
     expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
-    // A fresh editor lists Paint and scm-server but does not run them until the user ticks them.
+    // A fresh editor lists Paint and Section Explorer but does not run them until the user ticks them.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: false });
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-server", enabled: false });
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-section-explorer", enabled: false });
     // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-scx", enabled: true });

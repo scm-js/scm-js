@@ -369,6 +369,12 @@ offers the plugin, not that it has been vetted — installing one still shows yo
 code comes from first, and there is no sandbox. Under **Sources** you can add someone
 else's list, and every registry says when it was last read.
 
+Most of what is listed is already in the editor, so the list is split: what you do not
+have yet comes first, then what you do, and the buttons above the list (All, Not
+installed, Installed) show how many of each there are. Every row says where it stands —
+**Install** for one you do not have, **Turn on** for one that is installed but switched
+off, and **Manage** to see it under Installed.
+
 Plugins ▸ Manage Plugins… lists what is installed. Paste a link and press Add. Any
 address the browser can read will do: a github.com repository (or a folder inside one,
 `https://github.com/owner/repo/tree/v1.2/plugins/my-plugin`), the short form

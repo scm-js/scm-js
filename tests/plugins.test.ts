@@ -40,8 +40,8 @@ import {
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
 import {
-  addRegistry, cachedRegistries, entryIcon, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
-  RegistryError, removeRegistry, searchRegistry, type RegistryEntry,
+  addRegistry, cachedRegistries, entryIcon, groupByInstall, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
+  RegistryError, removeRegistry, searchRegistry, type InstallState, type RegistryEntry,
 } from "../src/plugins/registry";
 import { registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
@@ -1818,6 +1818,21 @@ describe("plugin registries", () => {
     // Every word has to match something.
     expect(searchRegistry(entries, "terrain picture").map((e) => e.name)).toEqual(["Terrain from Image"]);
     expect(searchRegistry(entries, "terrain nothing")).toEqual([]);
+  });
+
+  it("splits the browse list by what is installed already, keeping each group's order", () => {
+    const entries: RegistryEntry[] = [
+      { spec: "github:o/a", name: "A" },
+      { spec: "github:o/b", name: "B" },
+      { spec: "github:o/c", name: "C" },
+      { spec: "github:o/d", name: "D" },
+    ];
+    const here: Record<string, InstallState> = { "github:o/b": "installed", "github:o/d": "disabled" };
+    const groups = groupByInstall(entries, (e) => here[e.spec] ?? "new");
+    // Turned off still counts as installed — the row's action is Turn on, never Install.
+    expect(groups.available.map((e) => e.name)).toEqual(["A", "C"]);
+    expect(groups.installed.map((e) => e.name)).toEqual(["B", "D"]);
+    expect(groupByInstall([], () => "new")).toEqual({ available: [], installed: [] });
   });
 
   it("merges registries, the first to list a spec winning", () => {

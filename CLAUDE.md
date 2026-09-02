@@ -563,7 +563,13 @@ each plugin's own `plugin.json` — which `parseRegistry` reads into `RegistryEn
 canonicalised through `canonicalSpec(parseSpec(...))` so rows match the installed list,
 unusable entries dropped and counted), `searchRegistry` ranks and `loadRegistry` caches in
 `registryCacheAtom` (`REGISTRY_MAX_AGE` an hour, `registryStateAtom` per-URL status; a failed
-refresh keeps the cached list rather than emptying the browser). An entry is only a *spec*:
+refresh keeps the cached list rather than emptying the browser). Nearly every listed plugin is
+one the editor already has — the defaults are published from the same repositories — so the pane
+splits the results with `groupByInstall` (available first, under headings) behind an All / Not
+installed / Installed filter carrying each count, and a row shows its state three ways: the
+`.browse-row.is-*` left accent, the one action that fits it (Install / Turn on / Manage, which
+switches to the Installed tab and flashes the row through `InstalledPane`'s `focus`) and a
+`.plugin-here` line. An entry is only a *spec*:
 Install goes through the ordinary `inspectPlugin` → `ConfirmPluginDialog` → `installPlugin`
 path, so the manifest is read from the plugin and the pin resolved at install time — a
 registry decides what is listed, never what is trusted. `clearStoredDataAtom` resets both

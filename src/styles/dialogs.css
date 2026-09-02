@@ -1026,6 +1026,51 @@
 .badge.teal {
   color: var(--teal);
 }
+
+/* ── Browse: what is already installed, at a glance ────── */
+/* Nearly every row a registry lists is a plugin the editor already has (the defaults are
+   published from the same repositories), so the state is an accent down the row's left
+   edge and a line in the actions column, not a badge among the badges. */
+.browse-row.is-installed {
+  box-shadow: inset 3px 0 0 var(--teal);
+}
+.browse-row.is-disabled {
+  box-shadow: inset 3px 0 0 var(--text-faint);
+}
+.browse-row.is-disabled strong {
+  color: var(--text-dim);
+}
+.plugin-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.plugin-here.on {
+  color: var(--teal);
+}
+.plugin-here > svg {
+  flex: none;
+}
+/* All / Not installed / Installed, each with how many rows it holds. */
+.browse-filters {
+  flex: none;
+  gap: 6px;
+  align-items: center;
+}
+.browse-filters .btn .dim {
+  margin-left: 5px;
+}
+/* The row Browse's Manage button jumped to, so the eye finds it in the Installed list. */
+@keyframes plugin-flash {
+  0%, 45% { background: rgba(79, 209, 197, 0.22); }
+  100% { background: transparent; }
+}
+.listbox .plugin-row.flash {
+  animation: plugin-flash 1.5s ease-out;
+}
 /* A badge waiting on the network turns instead of sitting there (`statusLabel`): loading a
    plugin and reading a listed one's manifest are both fetches, and a row that rewrites
    itself out of nowhere reads as a glitch. */

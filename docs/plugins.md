@@ -102,9 +102,19 @@ names it and the user can add more under **Sources** (`userRegistriesAtom`).
 | `parseRegistry(raw, url)` | Checks the file's shape, canonicalises each entry's spec (`canonicalSpec(parseSpec(...))`, so rows match the installed list), drops entries it cannot use and counts them in `skipped`. One bad row never empties a list. |
 | `entryIcon(entry)` | `resolveIcon` against the *plugin's* base, so a manifest's `icon: "icon.svg"` can be copied into the index verbatim. |
 | `searchRegistry(entries, query)` | Every word has to match something; name beats tag beats description beats author beats spec. |
+| `groupByInstall(entries, stateOf)` | Splits the results into what the editor does not have and what it already lists (turned off counts as installed), each group keeping its order — the Browse pane's grouping and its filter counts. |
 | `mergeRegistries(list)` | Entries of every registry, the first to list a spec winning. |
 | `loadRegistry(store, url, opts)` | Fetch into `registryCacheAtom` unless the cached copy is younger than `REGISTRY_MAX_AGE` (an hour) or `force` was asked for. A failure records `registryStateAtom` and **keeps** the cached list — the browser shows the last list it had rather than emptying itself because the network blinked. |
 | `addRegistry` / `removeRegistry` | The user's list; a default cannot be removed. |
+
+Almost everything a registry lists is a plugin the editor already has — the defaults are
+published from the same repositories — so a flat list of rows reads as a copy of the
+Installed tab. The pane splits it instead: `groupByInstall` over the search results, the
+group that can be installed first under its own heading, and a filter (All / Not installed
+/ Installed) carrying the count of each. A row says which it is by an accent down its left
+edge, by the one action that fits it (**Install**, **Turn on**, or **Manage**, which
+switches to the Installed tab and flashes the row) and by a line naming the state in
+words.
 
 An entry is not a way in. Install hands the entry's `spec` to the same
 `inspectPlugin` → `ConfirmPluginDialog` → `installPlugin` path a pasted address takes, so

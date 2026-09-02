@@ -195,6 +195,36 @@ export function mergeRegistries(registries: readonly Registry[]): RegistryEntry[
   return out;
 }
 
+/* ── Telling what is installed from what is not ─────────── */
+
+/** Where a listed plugin already stands with this editor. */
+export type InstallState = "new" | "installed" | "disabled";
+
+/** The browse list split by that, each group keeping the order it came in. */
+export interface BrowseGroups {
+  /** Not in the installed list at all — the rows Install applies to. */
+  available: RegistryEntry[];
+  /** Already listed, whether it is running or turned off. */
+  installed: RegistryEntry[];
+}
+
+/**
+ * Split entries by whether the editor already has the plugin. Browse and Installed
+ * overlap almost completely once the defaults are counted — every plugin the project
+ * publishes is listed in both — so a flat list whose rows mostly carry an "installed"
+ * badge answers the wrong question. The pane lists the two groups apart and filters on
+ * them; this is the part of that worth testing on its own.
+ */
+export function groupByInstall(
+  entries: readonly RegistryEntry[],
+  stateOf: (entry: RegistryEntry) => InstallState,
+): BrowseGroups {
+  const available: RegistryEntry[] = [];
+  const installed: RegistryEntry[] = [];
+  for (const entry of entries) (stateOf(entry) === "new" ? available : installed).push(entry);
+  return { available, installed };
+}
+
 /* ── Fetching, and the cache ────────────────────────────── */
 
 /** The registries in use: the project's own, then whatever the user added. */

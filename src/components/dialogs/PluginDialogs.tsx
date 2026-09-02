@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { ArrowUp, Blocks, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowUp, Blocks, CircleCheck, CircleSlash, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, Trash2 } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
@@ -9,8 +9,8 @@ import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCache
 import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
 import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
 import {
-  addRegistry, entryIcon, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry,
-  type Registry, type RegistryEntry,
+  addRegistry, entryIcon, groupByInstall, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry,
+  type InstallState, type Registry, type RegistryEntry,
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
@@ -394,33 +394,36 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
  * `plugin.json` (`inspectPlugin`) and opens the same confirmation a pasted address does,
  * so what the registry said is never what gets trusted — it only decided that the row is
  * here at all.
+ *
+ * Most rows are of plugins the editor already lists, so the row says which it is three
+ * times over in three registers: an accent down its left edge, the one action that makes
+ * sense for it, and a line naming the state in words. A badge among the other badges —
+ * which is all this used to be — is the one place the eye does not look.
  */
-function BrowseRow({ entry, state, busy, onInstall, onEnable }: {
+function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
   entry: RegistryEntry;
-  state: "new" | "installed" | "disabled";
+  state: InstallState;
   busy: boolean;
   onInstall: () => void;
   onEnable: () => void;
+  onManage: () => void;
 }) {
   const tooNew = entry.api !== undefined && entry.api > PLUGIN_API_VERSION;
+  const meta = [entry.author && `by ${entry.author}`, entry.tags?.join(", "), entry.updated && `updated ${entry.updated.slice(0, 10)}`]
+    .filter(Boolean).join(" · ");
   return (
-    <div className="item plugin-row" role="listitem">
+    <div className={`item plugin-row browse-row is-${state}`} role="listitem">
       <PluginIconView icon={entryIcon(entry)} />
       <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
           <strong>{entry.name}</strong>
           {entry.version && <span className="dim">v{entry.version}</span>}
-          {state === "installed" && <span className="badge teal">installed</span>}
-          {state === "disabled" && <span className="badge dim">installed, off</span>}
-          {entry.default && <span className="badge dim">default</span>}
-          {tooNew && <span className="badge dim" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
+          {entry.default && <span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
+          {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
         </div>
         {entry.description && <span className="hint">{entry.description}</span>}
+        {meta && <span className="hint">{meta}</span>}
         <span className="hint mono" style={{ opacity: 0.7 }}>{entry.spec}</span>
-        <span className="hint">
-          {[entry.author && `by ${entry.author}`, entry.tags?.join(", "), entry.updated && `updated ${entry.updated.slice(0, 10)}`]
-            .filter(Boolean).join(" · ")}
-        </span>
       </div>
       <div className="plugin-row-actions">
         <div className="row" style={{ gap: 4 }}>
@@ -434,8 +437,15 @@ function BrowseRow({ entry, state, busy, onInstall, onEnable }: {
               {busy ? <LoaderCircle size={11} className="spin" /> : <Download size={11} />} Install
             </Button>
           )}
-          {state === "disabled" && <Button size="sm" onClick={onEnable}>Enable</Button>}
+          {state === "disabled" && <Button size="sm" title="Turn it on" onClick={onEnable}>Turn on</Button>}
+          {state !== "new" && (
+            <Button size="sm" title="Show this plugin under Installed" onClick={onManage}>
+              <Settings2 size={11} /> Manage
+            </Button>
+          )}
         </div>
+        {state === "installed" && <span className="plugin-here on"><CircleCheck size={11} /> Installed</span>}
+        {state === "disabled" && <span className="plugin-here"><CircleSlash size={11} /> Installed, turned off</span>}
       </div>
     </div>
   );
@@ -515,18 +525,34 @@ function RegistrySources() {
   );
 }
 
+/** The three ways of looking at the browse list, and what each is called above it. */
+const BROWSE_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "available", label: "Not installed" },
+  { value: "installed", label: "Installed" },
+] as const;
+type BrowseFilter = (typeof BROWSE_FILTERS)[number]["value"];
+
 /**
  * Browse: search the registries and install from them. The list is whatever was last read
  * (`registryCacheAtom`), so it paints before the network answers and still shows something
  * when the network does not answer at all; the refresh runs behind it.
+ *
+ * The pane used to be one flat list in registry order, which read as a near-copy of the
+ * Installed tab: every plugin the project publishes is a default, so almost every row was
+ * one the editor already had, and the only thing saying so was a badge sat among the
+ * others. It is split instead — `groupByInstall` over the search results, headed groups
+ * with what can be installed first, and a filter on the same split with the counts on it,
+ * so "what is there that I do not have" is one click and usually the top of the list.
  */
-function BrowsePane() {
+function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const store = useStore();
   const installed = useAtomValue(installedPluginsAtom);
   const cache = useAtomValue(registryCacheAtom);
   const states = useAtomValue(registryStateAtom);
   useAtomValue(userRegistriesAtom);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<BrowseFilter>("all");
   const [busySpec, setBusySpec] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [sources, setSources] = useState(false);
@@ -544,10 +570,25 @@ function BrowsePane() {
 
   // A pinned install carries a commit the registry's spec does not, so both forms are
   // matched unpinned — otherwise updating a plugin would make it look uninstalled.
-  const state = (spec: string): "new" | "installed" | "disabled" => {
-    const found = effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+  const installOf = (spec: string) => effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+  const state = (spec: string): InstallState => {
+    const found = installOf(spec);
     return !found ? "new" : found.enabled ? "installed" : "disabled";
   };
+
+  const groups = groupByInstall(results, (e) => state(e.spec));
+  const counts: Record<BrowseFilter, number> = {
+    all: results.length,
+    available: groups.available.length,
+    installed: groups.installed.length,
+  };
+  // Headed groups are only worth their lines when both are on screen at once.
+  const sections: { key: BrowseFilter; label: string; rows: RegistryEntry[] }[] = [
+    { key: "available", label: "Not installed", rows: filter === "installed" ? [] : groups.available },
+    { key: "installed", label: "Already installed", rows: filter === "available" ? [] : groups.installed },
+  ];
+  const headed = sections.filter((g) => g.rows.length > 0).length > 1;
+  const shown = sections.reduce((n, g) => n + g.rows.length, 0);
 
   const install = async (entry: RegistryEntry) => {
     if (busySpec) return;
@@ -565,11 +606,24 @@ function BrowsePane() {
   };
 
   const enable = (spec: string) => {
-    const found = effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+    const found = installOf(spec);
     if (!found) return;
     setInstalled(store, found.spec, { enabled: true });
     void activatePlugin(store, found.spec);
   };
+
+  // The Installed tab holds the pinned spec, which is not the one the registry lists.
+  const manage = (spec: string) => onManage(installOf(spec)?.spec ?? spec);
+
+  const nothing = query.trim() !== ""
+    ? `Nothing matches “${query.trim()}”${filter === "all" ? "" : " under this filter"}.`
+    : filter === "available"
+      ? "Everything on the list is already installed."
+      : filter === "installed"
+        ? "None of the listed plugins is installed yet."
+        : loading && entries.length === 0
+          ? "Reading the registry…"
+          : "No plugin list could be read. Check the Sources, or paste a plugin's address under Installed.";
 
   return (
     <div className="stack plugin-manage">
@@ -593,31 +647,35 @@ function BrowsePane() {
         ? <RegistrySources />
         : (
           <>
-            <span className="pane-label">
-              {query.trim() === ""
-                ? `${entries.length} plugin${entries.length === 1 ? "" : "s"}`
-                : `${results.length} of ${entries.length}`}
-            </span>
-            <div className="listbox plugin-list" role="list">
-              {results.map((e) => (
-                <BrowseRow
-                  key={e.spec}
-                  entry={e}
-                  state={state(e.spec)}
-                  busy={busySpec === e.spec}
-                  onInstall={() => { void install(e); }}
-                  onEnable={() => enable(e.spec)}
-                />
+            <div className="row browse-filters">
+              {BROWSE_FILTERS.map((f) => (
+                <Button key={f.value} size="sm" active={filter === f.value} onClick={() => setFilter(f.value)}>
+                  {f.label} <span className="dim">{counts[f.value]}</span>
+                </Button>
               ))}
-              {results.length === 0 && (
-                <div className="item" role="listitem">
-                  <span className="hint">
-                    {loading && entries.length === 0
-                      ? "Reading the registry…"
-                      : entries.length === 0
-                        ? "No plugin list could be read. Check the Sources, or paste a plugin's address under Installed."
-                        : `Nothing matches “${query.trim()}”.`}
-                  </span>
+              <span className="grow" />
+              {query.trim() !== "" && <span className="hint">{results.length} of {entries.length} match</span>}
+            </div>
+            <div className="listbox plugin-list">
+              {sections.map((g) => g.rows.length === 0 ? null : (
+                <div key={g.key} role="list" aria-label={g.label} className="browse-group">
+                  {headed && <div className="header">{g.label}</div>}
+                  {g.rows.map((e) => (
+                    <BrowseRow
+                      key={e.spec}
+                      entry={e}
+                      state={state(e.spec)}
+                      busy={busySpec === e.spec}
+                      onInstall={() => { void install(e); }}
+                      onEnable={() => enable(e.spec)}
+                      onManage={() => manage(e.spec)}
+                    />
+                  ))}
+                </div>
+              ))}
+              {shown === 0 && (
+                <div className="item">
+                  <span className="hint">{nothing}</span>
                 </div>
               )}
             </div>
@@ -634,7 +692,14 @@ function BrowsePane() {
 
 /* ── Managing what is installed ─────────────────────────── */
 
-function InstalledPane() {
+/**
+ * The list of plugins this editor has, and the field for adding one.
+ *
+ * `focus` is a spec Browse asked to be shown (its Manage button): the row is scrolled to
+ * and flashed once rather than merely being somewhere in the list, since the whole point
+ * of the jump is that the user could not find it.
+ */
+function InstalledPane({ focus }: { focus?: string | null }) {
   const store = useStore();
   const installed = useAtomValue(installedPluginsAtom);
   const runtimes = useAtomValue(pluginRuntimesAtom);
@@ -647,6 +712,17 @@ function InstalledPane() {
   const [looking, setLooking] = useState(false);
   const defaults = defaultPluginSpecs();
   const list = effectiveInstalls(installed, defaultPlugins());
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!focus) return;
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-spec="${CSS.escape(focus)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest" });
+    row.classList.add("flash");
+    const timer = window.setTimeout(() => row.classList.remove("flash"), 1500);
+    return () => window.clearTimeout(timer);
+  }, [focus]);
 
   // A listed plugin the editor is not running still has a manifest to show; reading it is
   // one `plugin.json` fetch and no code (`describePlugin`). One attempt per spec — the host
@@ -777,7 +853,7 @@ function InstalledPane() {
       </div>
       <span className="pane-label">Installed</span>
       {notice && <span className="hint">{notice}</span>}
-      <div className="listbox plugin-list" role="list">
+      <div className="listbox plugin-list" role="list" ref={listRef}>
         {list.map((p) => {
           const rt = runtimes[p.spec];
           const isDefault = defaults.includes(p.spec);
@@ -789,7 +865,7 @@ function InstalledPane() {
           const named = rt?.manifest != null || builtinPlugin;
           const status = statusLabel(rt, p.enabled);
           return (
-            <div key={p.spec} className="item plugin-row" role="listitem">
+            <div key={p.spec} className="item plugin-row" role="listitem" data-spec={p.spec}>
               <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={`Enable ${name}`} />
               <PluginIconView icon={rt?.icon} />
               <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
@@ -862,6 +938,9 @@ function InstalledPane() {
 export function PluginsDialog({ entry }: DialogProps) {
   const store = useStore();
   const [tab, setTab] = useState((entry.payload?.tab as string) ?? "installed");
+  // A row Browse asked the Installed tab to show; cleared again on leaving it, so coming
+  // back later does not flash a row nobody asked about.
+  const [focus, setFocus] = useState<string | null>(null);
   return (
     <DialogFrame
       dialogKey={entry.key}
@@ -875,10 +954,15 @@ export function PluginsDialog({ entry }: DialogProps) {
       <Tabs
         className="grow plugin-tabs"
         value={tab}
-        onValueChange={setTab}
+        onValueChange={(v) => { setTab(v); if (v !== "installed") setFocus(null); }}
         tabs={[
-          { value: "browse", label: "Browse", icon: <Search size={12} />, content: <BrowsePane /> },
-          { value: "installed", label: "Installed", icon: <Blocks size={12} />, content: <InstalledPane /> },
+          {
+            value: "browse",
+            label: "Browse",
+            icon: <Search size={12} />,
+            content: <BrowsePane onManage={(spec) => { setFocus(spec); setTab("installed"); }} />,
+          },
+          { value: "installed", label: "Installed", icon: <Blocks size={12} />, content: <InstalledPane focus={focus} /> },
         ]}
       />
     </DialogFrame>

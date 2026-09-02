@@ -19,15 +19,20 @@ export interface SectionSpec {
   /** Record stride for list sections. */
   stride?: number;
   what: string;
+  /**
+   * Read by StarEdit and other editors only — the game skips it. Leaving one out of a
+   * saved file changes nothing in play, only what an editor can do with the file later.
+   */
+  editorOnly?: true;
 }
 
 const SPECS: SectionSpec[] = [
   { name: "TYPE", mode: "last", size: 4, what: "Map type (RAWS/RAWB/RAWU)" },
   { name: "VER ", mode: "last", size: 2, what: "File format version" },
-  { name: "IVER", mode: "last", size: 2, what: "StarEdit version (obsolete)" },
-  { name: "IVE2", mode: "last", size: 2, what: "StarEdit version" },
+  { name: "IVER", mode: "last", size: 2, what: "StarEdit version (obsolete)", editorOnly: true },
+  { name: "IVE2", mode: "last", size: 2, what: "StarEdit version", editorOnly: true },
   { name: "VCOD", mode: "last", size: 1040, what: "Verification hash table" },
-  { name: "IOWN", mode: "last", size: 12, what: "StarEdit player types" },
+  { name: "IOWN", mode: "last", size: 12, what: "StarEdit player types", editorOnly: true },
   { name: "OWNR", mode: "last", size: 12, what: "Player types" },
   { name: "ERA ", mode: "last", size: 2, what: "Tileset" },
   { name: "DIM ", mode: "last", size: 4, what: "Map dimensions" },
@@ -37,24 +42,24 @@ const SPECS: SectionSpec[] = [
   { name: "UPGR", mode: "last", size: 1748, what: "Upgrade levels (original)" },
   { name: "PTEC", mode: "last", size: 912, what: "Tech availability (original)" },
   { name: "UNIT", mode: "append", stride: 36, what: "Placed units" },
-  { name: "ISOM", mode: "overlay", size: (d) => (Math.floor(d.width / 2) + 1) * (d.height + 1) * 8, what: "Isometric terrain" },
-  { name: "TILE", mode: "overlay", size: (d) => d.width * d.height * 2, what: "Terrain (StarEdit tiles)" },
-  { name: "DD2 ", mode: "append", stride: 8, what: "Isometric doodads" },
+  { name: "ISOM", mode: "overlay", size: (d) => (Math.floor(d.width / 2) + 1) * (d.height + 1) * 8, what: "Isometric terrain", editorOnly: true },
+  { name: "TILE", mode: "overlay", size: (d) => d.width * d.height * 2, what: "Terrain (StarEdit tiles)", editorOnly: true },
+  { name: "DD2 ", mode: "append", stride: 8, what: "Isometric doodads", editorOnly: true },
   { name: "THG2", mode: "append", stride: 10, what: "Sprites" },
   { name: "MASK", mode: "overlay", size: (d) => d.width * d.height, what: "Fog of war" },
   { name: "STR ", mode: "last", what: "String table" },
   { name: "UPRP", mode: "last", size: 1280, what: "CUWP slots" },
-  { name: "UPUS", mode: "last", size: 64, what: "CUWP slots used" },
+  { name: "UPUS", mode: "last", size: 64, what: "CUWP slots used", editorOnly: true },
   { name: "MRGN", mode: "overlay", stride: 20, what: "Locations" },
   { name: "TRIG", mode: "append", stride: 2400, what: "Triggers" },
   { name: "MBRF", mode: "append", stride: 2400, what: "Mission briefing" },
   { name: "SPRP", mode: "last", size: 4, what: "Scenario name and description" },
   { name: "FORC", mode: "last", size: 20, what: "Forces" },
-  { name: "WAV ", mode: "last", size: 2048, what: "WAV string indices" },
+  { name: "WAV ", mode: "last", size: 2048, what: "WAV string indices", editorOnly: true },
   { name: "UNIS", mode: "last", size: 4048, what: "Unit settings (original)" },
   { name: "UPGS", mode: "last", size: 598, what: "Upgrade settings (original)" },
   { name: "TECS", mode: "last", size: 216, what: "Tech settings (original)" },
-  { name: "SWNM", mode: "last", size: 1024, what: "Switch names" },
+  { name: "SWNM", mode: "last", size: 1024, what: "Switch names", editorOnly: true },
   { name: "COLR", mode: "last", size: 8, what: "Player colours" },
   { name: "PUPx", mode: "last", size: 2318, what: "Upgrade restrictions (BW)" },
   { name: "PTEx", mode: "last", size: 1672, what: "Tech restrictions (BW)" },

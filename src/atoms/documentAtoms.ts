@@ -1,3 +1,5 @@
+import type { MapFileHandle } from "../services/mapIo";
+import type { MemberInfo } from "../formats/mpq/scm";
 import { atom, type Getter, type Setter } from "jotai";
 import {
   mapVersionOf, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
@@ -6,7 +8,7 @@ import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
-  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
+  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom,
 } from "./editorAtoms";
@@ -151,6 +153,10 @@ export interface LoadedDocument {
   scenario: Scenario;
   extras: Map<string, Uint8Array>;
   fileName: string | null;
+  /** A handle Save can write straight back to, when the browser gave one. */
+  handle?: MapFileHandle | null;
+  /** How the scenario was stored in the archive it came from. */
+  origin?: MemberInfo | null;
   /** How the document came to be installed; File ▸ Open when omitted. */
   reason?: DocumentChangeReason;
 }
@@ -176,6 +182,10 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(scenarioAtom, scenario);
   set(archiveExtrasAtom, doc.extras);
   set(mapFilePathAtom, doc.fileName);
+  set(mapFileHandleAtom, doc.handle ?? null);
+  set(mapOriginAtom, doc.origin ?? null);
+  // A re-parse keeps the options the user confirmed; a new document starts from the defaults.
+  if (doc.reason !== "replace") set(saveOptionsAtom, null);
 
   set(mapNameAtom, scenarioName(scenario) ?? doc.fileName ?? "Untitled Scenario");
   set(mapDescriptionAtom, scenarioDescription(scenario) ?? "");
@@ -213,7 +223,9 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * of the document may have changed. The mirror atoms are refilled from the new object.
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
-  set(loadDocumentAtom, { scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), reason: "replace" });
+  set(loadDocumentAtom, {
+    scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
+  });
   set(mapModifiedAtom, true);
 });
 
@@ -222,6 +234,9 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());
   set(mapFilePathAtom, null);
+  set(mapFileHandleAtom, null);
+  set(mapOriginAtom, null);
+  set(saveOptionsAtom, null);
   set(mapModifiedAtom, false);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);

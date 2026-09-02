@@ -11,10 +11,12 @@ import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useCloseGuard } from "./hooks/useCloseGuard";
+import { droppedHandle } from "./services/mapIo";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
 import ToolBar from "./components/chrome/ToolBar";
 import StatusBar from "./components/chrome/StatusBar";
+import Toasts from "./components/chrome/Toasts";
 import { LeftDock, RightDock } from "./components/panels/Docks";
 import MapViewport from "./components/viewport/MapViewport";
 import DialogHost from "./components/dialogs/DialogHost";
@@ -43,7 +45,8 @@ export default function App() {
     if (!file) return;
     e.preventDefault();
     setDropTarget(false);
-    guard({ action: "open", file });
+    // The handle request has to start inside the event; the answer can come later.
+    void droppedHandle(e.dataTransfer).then((handle) => guard({ action: "open", file, handle }));
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;
@@ -68,6 +71,7 @@ export default function App() {
           {rightVisible && <RightDock />}
         </div>
         {panels.statusbar && <StatusBar />}
+        <Toasts />
       </div>
       <DialogHost />
       {screen === "splash" && <SplashScreen />}

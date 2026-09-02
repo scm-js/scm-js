@@ -88,9 +88,14 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   what Check Map tests a file against.
   `scenario.isom` is `null` only when the *file* had no `ISOM`; `encodeSection` then omits the section
   rather than writing a zeroed one; the same holds for `mask`, `wavs` and the settings tables.
-- `mpq/scm.ts` wraps `mopaq`: `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
+- `mpq/scm.ts` wraps `mopaq` (≥ 1.3.0, the user's own library at `github.com/jeany55/mopaq`, published
+  to npm from a `v*` tag): `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
   Non-scenario archive members are kept in `archiveExtrasAtom` and written back on save so custom
-  sounds/graphics survive. `scenario.chk` is written uncompressed on purpose.
+  sounds/graphics survive. `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
+  StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
+  `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
+  game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib
+  needs 1.16.1+.
 
 ### Terrain editing (`src/editor/terrain.ts`, `src/hooks/useTerrainTools.ts`)
 
@@ -307,6 +312,35 @@ the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole
 the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
 over file contents, not handles. Replace Terrain, Auto-place Start Locations
 and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations; the Repair plugin took over Rebuild ISOM from Tiles); scmscx.com, Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
+
+### Saving (`src/editor/save.ts`, `src/services/mapIo.ts`, `useMapFileActions.ts#saveDocument`, `SaveMapDialog`)
+
+`editor/save.ts` is pure: `SaveOptions` (format, compression, encrypt, `omitExtras`, the strip ticks,
+`mergeRepeats`, `dropTrailing`), `planSave(scn, extras, options)` → a `SavePlan` (every `currentChk`
+section with a fate — kept / dropped / merged — and reason, every extra with `kept`, sizes, counts for
+the ticks, warnings in words), `buildChk` / `buildMapFile` (the `.chk` alone or `saveMap` around it;
+zlib gets 64 KB sectors, the rest StarEdit's 4 KB). The strip groups are `TERRAIN_EDITING_SECTIONS`
+(ISOM, TILE, DD2) and `BOOKKEEPING_SECTIONS` (IVER, IVE2, IOWN, UPUS, SWNM, WAV) — the registry's
+`editorOnly` flag, and `tests/save.test.ts` keeps the two in step; nothing the game requires can be
+stripped. Merging uses `combine` with the registry's mode, at the first occurrence. `defaultSaveOptions`
+is the file's own extension and *the way it was opened* (`mapOriginAtom`), else StarEdit's layout;
+`SAVE_PRESETS.everything` / `.smallest` are the dialog's two buttons. Nothing here mutates the scenario.
+
+`mapIo.ts` keeps the File System Access handle (`MapFileHandle`, typed locally — the DOM lib lacks the
+permission methods) from `pickMapFile`, `droppedHandle` (must be *called* inside the drop event) and
+the save picker; `saveBytes(bytes, name, handle)` answers a `SaveOutcome { route: "file" | "picker" |
+"download", fileName, handle }` or null for a dismissed picker — a handle write asks
+`queryPermission` / `requestPermission` first and falls back to the picker on refusal.
+`mapFileHandleAtom` / `mapOriginAtom` / `saveOptionsAtom` (`editorAtoms.ts`) ride on `LoadedDocument`
+and are cleared by close; a `"replace"` load keeps the options. `saveDocument(store, req, write?)` is
+the one writer: builds (or takes the dialog's) bytes, calls the writer, and on success — unless
+`req.copy` — sets path, handle, options, modified=false, recents, then a status line and a toast
+(`pushToastAtom` / `toastsAtom`, `Toasts.tsx` bottom-right) worded "Saved" or "Downloaded … in the
+browser's downloads folder", since a download is the only route Firefox and Safari have. `save(mode)`
+in the hook: `"save"` with a path writes with the remembered options; otherwise `askDialog(store,
+"saveAs", { copy })` opens `SaveMapDialog` and resolves when it calls `payload.done(true)` (after
+`taken`) or leaves the stack — so Close Scenario's Save waits for the whole thing. Save Copy As is the
+same dialog with `{ copy: true }`. `tests/save-flow.test.ts` covers the store half with a fake writer.
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 

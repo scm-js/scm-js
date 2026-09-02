@@ -1,4 +1,7 @@
 import { atom } from "jotai";
+import type { MapFileHandle } from "../services/mapIo";
+import type { MemberInfo } from "../formats/mpq/scm";
+import type { SaveOptions } from "../editor/save";
 import type { TilesetId } from "../data/tilesets";
 import type { MapVersion } from "../formats/chk/scenario";
 import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
@@ -127,6 +130,16 @@ export const mapWidthAtom = atom<number>(128);
 export const mapHeightAtom = atom<number>(128);
 export const mapModifiedAtom = atom<boolean>(false);
 export const mapFilePathAtom = atom<string | null>(null);
+/**
+ * The file the open map can be written straight back to — a File System Access handle from
+ * the open picker, a drop or the save picker — or null when the browser handed over bytes
+ * only, in which case Save has to ask where (or download).
+ */
+export const mapFileHandleAtom = atom<MapFileHandle | null>(null);
+/** How the scenario was stored in the archive it was opened from; null for a new map or a bare .chk. */
+export const mapOriginAtom = atom<MemberInfo | null>(null);
+/** The Save options last confirmed for this document (Save As); null until then, so Save uses the defaults. */
+export const saveOptionsAtom = atom<SaveOptions | null>(null);
 export const mapVersionAtom = atom<MapVersion>("broodwar");
 
 /* ── Viewport ───────────────────────────────────────────── */

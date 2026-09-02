@@ -14,8 +14,17 @@ files open directly.
 directions. Reading needs PKWARE DCL decompression, because that is what StarCraft
 compresses nearly every file in its own archives with. Non-scenario members are held
 in `archiveExtrasAtom` and written back on save, so a map's custom content survives a
-round trip through the editor. `scenario.chk` is written uncompressed, which older
-StarCraft builds need.
+round trip through the editor. The Save dialog decides how the archive is written
+(`src/editor/save.ts`, `saveMap`'s options): PKWARE DCL compression with encryption and
+4 KB sectors is Blizzard's own layout — every fixture map's `scenario.chk` is stored that
+way, flags `0x80010200` — and what every StarCraft build reads; zlib is smaller but needs
+1.16.1 or Remastered; uncompressed is readable by anything. A map is written back the way
+it was opened unless the dialog says otherwise (`loadMap` reports it as `scenarioInfo`), and
+a new map gets StarEdit's layout. mopaq 1.3.0 carries the PKWARE encoder. The same dialog
+can leave out the sections the game never reads — ISOM, TILE, DD2, IVER, IVE2, IOWN, UPUS,
+SWNM, WAV (`editorOnly` in the section registry) — sections the registry does not know,
+bytes after the last section, and can merge repeated sections through `combine`, the same
+resolution the reader uses. None of that touches the scenario in memory.
 
 ## The fidelity model
 

@@ -242,7 +242,7 @@ function useMenus(): Menu[] {
         sep,
         { kind: "item", label: "Save", shortcut: "Ctrl+S", onSelect: () => { void save(); } },
         dlg("Save As…", "saveAs", "Ctrl+Shift+S"),
-        dlg("Save Copy As…", "saveAs"),
+        dlgWith("Save Copy As…", "saveAs", { copy: true }),
         sep,
         {
           kind: "sub",

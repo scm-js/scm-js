@@ -54,13 +54,45 @@ tileset colours for terrain and coloured markers for units. See
 
 Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 
+### Saving
+
+Ctrl+S writes the map back where it came from. In Chrome, Edge and the desktop app the
+editor keeps a handle to the file it opened (from the Open dialog, a drop or the Save
+dialog), so Save writes in place after the browser has asked once for permission. Firefox
+and Safari hand over a file's contents but no way back to it, so there every save is a
+download and the notice that appears bottom-right says so; look in the downloads folder.
+Save As (Ctrl+Shift+S) and Save Copy As open the Save dialog — a copy is written without
+the open map changing its name or file — and a map that has no file yet goes through it on
+its first Ctrl+S. When a save is done, a notice appears bottom-right with the name and size,
+the status bar says the same, and the dot next to the map's name in the menubar stops glowing.
+
+The Save dialog is where the file's shape is decided, with everything it will write listed
+on the right before it is:
+
+- **Format**: `.scx`, `.scm`, or a bare `.chk` (the scenario alone, no archive).
+- **Compression**: PKWARE is what StarEdit writes and what Blizzard's own maps are stored
+  as, so every StarCraft build reads it; zlib is smaller and needs 1.16.1 or Remastered;
+  none is the largest and readable by anything. A map keeps the compression it was opened
+  with by default; a new map gets StarEdit's. StarEdit's encryption is a tick beside it.
+- **Other files in the archive**: the sounds and the trigger script members, each with a
+  tick, so a copy for release can leave the source out.
+- **Sections**: the game reads none of ISOM, TILE, DD2 (the terrain-editing data), IVER,
+  IVE2, IOWN, UPUS, SWNM or WAV (editor bookkeeping); each group can be left out, as can
+  sections the format reference does not know, and repeated sections can be merged into
+  the one the game would act on. The dialog says what each costs an editor later (no
+  isometric brush without ISOM, for instance); the map in the editor is not changed.
+  *Everything* and *Smallest that plays* set the ticks in one go.
+- **Check Map** runs alongside, with its counts and a button to the full list.
+
+The options confirmed in the dialog are what Ctrl+S reuses for that map from then on.
+
 ## What works, and what does not
 
 ### Map files
 
 | | Status |
 | --- | --- |
-| Open and save `.scm`, `.scx`, `.chk` | Yes |
+| Open and save `.scm`, `.scx`, `.chk` | Yes. Save writes in place where the browser allows it (Chrome, Edge, the desktop app) and downloads elsewhere; the Save dialog chooses compression (PKWARE as StarEdit, zlib, none), encryption, which archive files ride along and which editor-only sections are left out, and shows what it will write first. |
 | Preserve unmodelled sections, repeated sections and custom archive files | Yes |
 | New map, with the full section set StarEdit writes | Yes |
 | Resize and crop, with a 3×3 anchor | Yes |

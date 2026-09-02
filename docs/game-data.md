@@ -9,6 +9,38 @@ Attribution is not permission: see
 [ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data) before publishing a
 fork or a hosted build.
 
+## Where the editor gets it
+
+Every game-data file is fetched through one resolver (`src/gamedata/source.ts`), which
+settles the session's source once, in this order:
+
+1. **Bundled**: the build's own `public/` (a clone that ran `npm run extract`, or the
+   desktop app's copy, which its protocol serves under the same base). The probe is
+   `tileset/manifest.json` or `unit/manifest.json` answering JSON.
+2. **Stored**: a copy an earlier upload or download left in the browser's private file
+   storage (`src/gamedata/store.ts`, the Origin Private File System, about 27 MB; a
+   browser without it holds the files for the session).
+3. **Desktop**: the desktop app searches the disk (next to the app, its data folder,
+   `$SCM_DATA_DIR`, the usual install locations) and extracts from the first folder
+   with the archives; the result is then step 1.
+4. **Configured address**: Preferences ▸ Game data, else the build's
+   `VITE_GAME_DATA_URL`. The address serves either the extracted tree (this directory's
+   layout, `tileset/manifest.json` at the top — fetched file by file) or `StarDat.mpq`
+   and `BrooDat.mpq` (downloaded once, extracted in the browser, kept as step 2). The
+   server must send `Access-Control-Allow-Origin`.
+5. **None**: flat colours and markers, and Help ▸ Game Data… opens.
+
+The hosted build sets `VITE_GAME_DATA_URL` from the `GAME_DATA_URL` repository
+variable at build time; the desktop build never has one (`--mode desktop` blanks it),
+so it searches the disk and otherwise asks. Help ▸ Game Data… is the same chain by
+hand: pick the two archives or the StarCraft folder, search the computer (desktop),
+or enter an address; it also shows the current source and removes a copy.
+
+Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
+`ReadMember` over the archives in, a map of paths to bytes out), `scripts/extract-*.mjs`
+wrap it for Node, `src/gamedata/extract.worker.ts` runs it in a browser worker, and
+`desktop/main.ts` runs it in the desktop app's main process.
+
 ## Extracting
 
 ```sh

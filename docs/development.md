@@ -17,6 +17,35 @@ npm test          # vitest run, node environment, ~2s
 `verbatimModuleSyntax` (so `import type`) and `erasableSyntaxOnly` (so no enums and no
 parameter properties).
 
+## Desktop build
+
+`desktop/` is an Electron shell around the same web bundle: `main.ts` serves `dist/`
+under `app://scmjs/` and answers the game-data IPC (search the disk, extract, pick a
+folder), `preload.ts` exposes it as `window.scmjsDesktop` (typed in
+`src/gamedata/desktop.ts`). Extracted files go to the user data directory and are served
+under the same base, so the renderer finds them as bundled.
+
+```sh
+npm run build:desktop   # web build in desktop mode + main bundle + electron-builder for this OS
+npm run desktop         # bundle the main process and run Electron against dist/
+```
+
+`electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
+(everything is bundled by Vite) and never the game data a developer's `public/` holds.
+Builds are unsigned for now. `SCMJS_DEV_URL=http://localhost:5173 npm run desktop`
+points the window at the dev server.
+
+## Releases
+
+`.github/workflows/build.yml` has two channels: every push to `main` deploys the web
+bundle to GitHub Pages and recreates the rolling `latest` prerelease (installers for
+Windows, macOS x64/arm64, Linux AppImage/deb, and a zip of the web bundle); a pushed
+`vX.Y.Z` tag makes a numbered release with the same assets and generated notes. The
+version comes from the tag, or `<last tag>-latest.<date>.<sha>` on `main`. Repository
+variables: `GAME_DATA_URL` (the hosted build's game-data address) and `PAGES_BASE`
+(`/` for a custom domain; default is the repository name). CI has no game data, so the
+real-data test suites skip there.
+
 ## Tests
 
 Tests live in `tests/*.test.ts`, and `src/**/*.test.ts` is picked up too.

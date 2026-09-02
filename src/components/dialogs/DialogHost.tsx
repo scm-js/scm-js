@@ -13,6 +13,7 @@ import { ExportStringsDialog, ExportTriggersDialog, ImportStringsDialog, ImportT
 import { StatisticsDialog } from "./StatisticsDialog";
 import { AboutDialog, FindDialog, PreferencesDialog, ShortcutsDialog, ValidateMapDialog } from "./MiscDialogs";
 import { ConfirmPluginDialog, PluginDialog, PluginsDialog } from "./PluginDialogs";
+import { GameDataDialog } from "./GameDataDialog";
 
 export interface DialogProps {
   entry: DialogEntry;
@@ -60,6 +61,7 @@ const REGISTRY: Record<DialogId, ComponentType<DialogProps>> = {
   plugins: PluginsDialog,
   confirmPlugin: ConfirmPluginDialog,
   pluginDialog: PluginDialog,
+  gameData: GameDataDialog,
 };
 
 /** Renders every open dialog (stacked in order). */

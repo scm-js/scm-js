@@ -784,6 +784,46 @@ checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.
 the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
 plus bases at every start location, mirroring the selection and the symmetry check.
 
+### Game data sources, extraction, desktop, releases (`src/gamedata/`, `desktop/`, `.github/workflows/build.yml`)
+
+Both loaders fetch every file through `gamedata/source.ts#fetchAsset`, which resolves the session's
+`AssetSource` once (`resolveAssetSource`, shared promise; `resetAssetSource` / `setAssetSource` after
+Help ▸ Game Data… changes it) by running `locateGameData(deps)` — a pure chain over injected probes
+(`tests/gamedata.test.ts` pins the order): **bundled** (`BASE_URL` + `tileset/manifest.json` or
+`unit/manifest.json` answers JSON — a dev server answers index.html with 200, hence the parse), **stored**
+(`store.ts`: the OPFS copy under `gamedata/` with a `stamp.json` written last; a memory `Map` when there is
+no OPFS), **desktop** (`window.scmjsDesktop.gameData.locate()`, then it is bundled again — the source carries
+`desktop: true`), **remote** (Preferences `gameDataUrl`, read straight from storage by `storedPreference`
+because a viewport effect can ask before the app's effects run, else `VITE_GAME_DATA_URL`: the extracted
+tree if `tileset/manifest.json` answers, else `StarDat.mpq` downloaded + extracted into the stored copy),
+**none**. The preload's first task is the resolution (progress on the splash for a download / desktop
+extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData` dialog with
+`{ auto: true }` when it ends at none. After an install the dialog calls `retryFailedParts` (drops the
+`LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
+`useUnitAssets` depend on — that is how a map already open picks the graphics up. `GameDataDialog.tsx`
+is the three routes: files / folder (`install.ts#installFromFiles` → `extract.worker.ts`, which writes the
+OPFS copy with sync access handles — the one write path every browser has, worker-only — or posts the files
+back for `keepInMemory`), the desktop's search / folder picker, and an address (`adoptGameDataUrl`, saved to
+Preferences). The desktop's Remove resolves again with `{ search: false }` so it does not extract the same
+files straight back.
+
+`extract.ts` is the extraction itself, pure and dependency-free apart from `iscript.ts` (`.ts` import
+specifiers on purpose: Node's type stripping runs it), producing the exact bytes and manifests the old
+scripts wrote — `scripts/extract-*.mjs` are thin wrappers now, `archives.ts` is the mopaq side. Never
+redistribute what it produces; the hosted build's `GAME_DATA_URL` bucket is the maintainer's call.
+
+`desktop/main.ts` (Electron, bundled by `desktop/vite.config.ts` into `desktop/dist/*.cjs`, `ssr: true` +
+`noExternal` so mopaq and the shared extraction ride along, `publicDir: false`) serves `dist/` under
+`app://scmjs/` and the game-data prefixes from `userData/gamedata` first, so the renderer's bundled probe
+finds an extraction; the search order is portable dir / AppImage dir / next to the executable / userData /
+env / the platform's install paths (so two archives dropped beside the app are found). `preload.ts` is
+the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it. `electron-builder.yml`
+packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
+unsigned. `npm run build:desktop` is `build --mode desktop` (the mode blanks `VITE_GAME_DATA_URL`) + the
+main bundle + electron-builder. The workflow has exactly two channels — `latest` (every push to main:
+Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `GAME_DATA_URL` and
+`PAGES_BASE` as repository variables; there is deliberately no nightly.
+
 ### Tileset graphics (`src/formats/tileset/`)
 
 `load.ts` fetches `public/tileset/<name>.{cv5,vx4,vf4,vr4,wpe}` on demand and caches per tileset

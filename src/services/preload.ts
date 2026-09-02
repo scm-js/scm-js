@@ -6,6 +6,7 @@ import {
 import {
   awaitGrps, getUnitAssets, imageGrpPath, peekUnitAssets, unitImageId,
 } from "../formats/units/load";
+import { fetchAsset, resolveAssetSource } from "../gamedata/source";
 
 /**
  * Startup asset preloading.
@@ -77,6 +78,16 @@ async function warmUnitGrps(): Promise<void> {
 function tasks(startup: TilesetFileName): PreloadTask[] {
   const era = startup[0].toUpperCase() + startup.slice(1);
   return [
+    {
+      // Where the files come from: bundled, a stored copy, the desktop's disk search
+      // (which may extract, slowly) or the configured address (which may download).
+      // The loaders below all wait on this same resolution, so it is the natural first step.
+      label: "Locating game data",
+      run: async (report) => {
+        const source = await resolveAssetSource((f) => report(f));
+        if (source.kind === "none") throw new Error(source.tried[source.tried.length - 1] ?? "none found");
+      },
+    },
     {
       label: `Loading tileset · ${era}`,
       // A couple of megabytes of tileset against a few hundred KB for everything else.
@@ -164,13 +175,13 @@ export function warmRemainingTilesets(startupTileset: TilesetId): void {
 
   const idle = window.requestIdleCallback?.bind(window) ?? ((cb: () => void) => setTimeout(cb, 500));
   idle(() => void (async () => {
-    const base = `${import.meta.env.BASE_URL}tileset/`;
     for (const name of rest) {
       for (const ext of ["cv5", "vf4", "vr4", "vx4ex", "vx4", "wpe", "dddata.bin"]) {
         try {
           // The body has to be drained for the response to land in the cache; it is
-          // dropped immediately, so at most one file is held at a time.
-          await (await fetch(`${base}${name}.${ext}`, { cache: "force-cache", priority: "low" } as RequestInit)).arrayBuffer();
+          // dropped immediately, so at most one file is held at a time. (A stored copy
+          // answers from disk, which costs a read and warms nothing; harmless.)
+          await (await fetchAsset(`tileset/${name}.${ext}`, { cache: "force-cache", priority: "low" } as RequestInit)).arrayBuffer();
         } catch {
           // Missing game data, or the tab went away. Either way there is nothing to warm.
         }

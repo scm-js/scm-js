@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { CircleX, Database, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { CircleX, Database, HardDrive, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { activeLayerAtom, centerViewOnAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import {
   archiveExtrasAtom, doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom,
 } from "../../atoms/documentAtoms";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { clearStoredDataAtom, DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
+import { BUILD_GAME_DATA_URL } from "../../gamedata/source";
 import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize } from "../../atoms/storage";
 import { unitName } from "../../data/units";
 import { spriteCatalogue } from "../../data/sprites";
@@ -123,6 +125,29 @@ function StorageSection({ onCleared }: { onCleared: () => void }) {
   );
 }
 
+/** Preferences ▸ Game data: the address the resolver falls back to, and the way to the dialog. */
+function GameDataSection({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const open = useSetAtom(openDialogAtom);
+  const source = useAtomValue(gameDataSourceAtom);
+  return (
+    <Group title="Game data">
+      <div className="row" style={{ alignItems: "baseline", marginBottom: 6 }}>
+        <span className="grow dim">{source?.label ?? "Locating…"}</span>
+        <Button size="sm" onClick={() => open("gameData")}><HardDrive size={11} /> Game Data…</Button>
+      </div>
+      <div className="form wide">
+        <Field label="Web address">
+          <TextInput className="mono" value={value} placeholder={BUILD_GAME_DATA_URL || "https://…"} spellCheck={false} onChange={(e) => onChange(e.target.value)} />
+        </Field>
+      </div>
+      <p className="hint" style={{ marginTop: 4 }}>
+        Used when this build carries no game data and the browser keeps no copy: the extracted files or the two archives under one address.
+        {BUILD_GAME_DATA_URL ? " Blank means this build's default." : " Blank means none, and the editor asks."}
+      </p>
+    </Group>
+  );
+}
+
 /* ── Preferences ────────────────────────────────────────── */
 
 const HOTKEYS: [string, string][] = [
@@ -202,6 +227,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>Also the map the editor opens on.</p>
                 </Group>
+                <GameDataSection value={local.gameDataUrl} onChange={(gameDataUrl) => patch({ gameDataUrl })} />
                 <StorageSection onCleared={() => setLocal(DEFAULT_PREFERENCES)} />
               </div>
             ),

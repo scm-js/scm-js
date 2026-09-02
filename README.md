@@ -13,9 +13,25 @@ you deliberately change.
 
 ## Getting started
 
-The editor needs graphics out of your own StarCraft installation. Blizzard's data is
-not redistributable and none of it is in this repository, so the first run extracts it
-from archives you already own. Brood War's `BrooDat.mpq` is required.
+Three ways to run it:
+
+- **In the browser.** Every push to `main` deploys the editor to GitHub Pages, and the
+  hosted build knows where to fetch the game data from, so it just opens.
+- **As a desktop app.** The [releases](../../releases) page has installers for Windows,
+  macOS and Linux (`latest` follows `main`; the numbered releases are the tagged
+  versions). On first start the app looks for a StarCraft installation and extracts
+  what it needs; two archives dropped next to the app are found too.
+- **From source**, below.
+
+The editor draws terrain and units with graphics out of StarCraft's own archives.
+Blizzard's data is not redistributable and none of it is in this repository, so the
+editor gets it from one of: files bundled with the build, a copy it kept in the browser
+earlier, the desktop app's search of the disk, or a web address serving either the
+extracted files or the two archives. When none of those answers it opens **Help ▸ Game
+Data…**, where you can pick `StarDat.mpq` and `BrooDat.mpq` (or the StarCraft folder)
+or enter an address; the extraction then runs in the browser and the result is kept
+for next time. Brood War's `BrooDat.mpq` is required. Remastered installations do not
+carry the two archives; they come from a classic (1.16) install.
 
 ```sh
 npm install
@@ -24,18 +40,17 @@ npm run dev       # http://localhost:5173
 ```
 
 Node 22.18 or newer, because the extraction script relies on Node's built-in type
-stripping.
-
-Extraction takes a few seconds and only has to happen once per patch. If it cannot
-find your install, point it at one:
+stripping. If the script cannot find your install, point it at one:
 
 ```sh
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"
 ```
 
-Without the data the editor still runs: terrain falls back to flat tileset colours and
-units to coloured markers, with a note in the palette saying so. See
-[docs/game-data.md](docs/game-data.md) for the full story.
+`npm run extract` is optional: a clone without it behaves like the hosted build and
+asks through Help ▸ Game Data…. Without any data the editor still runs, with flat
+tileset colours for terrain and coloured markers for units. See
+[docs/game-data.md](docs/game-data.md) for the full story and
+[docs/development.md](docs/development.md) for the desktop and release builds.
 
 Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 

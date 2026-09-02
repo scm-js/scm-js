@@ -3,6 +3,7 @@ import { cycleBands } from "./cycle";
 import { loadTileset, type Tileset } from "./decode";
 import { buildDoodadCatalogue, DDDATA_SIZE, type DoodadCatalogue } from "./doodads";
 import { decodeTbl } from "../dat/tbl";
+import { fetchAsset } from "../../gamedata/source";
 
 /** ERA index order, which is also the on-disk file basename in `tileset/`. */
 export const TILESET_FILENAMES = [
@@ -18,8 +19,8 @@ export const TILESET_FILENAMES = [
 
 export type TilesetFileName = (typeof TILESET_FILENAMES)[number];
 
-/** Where the extracted tileset files are served from. See scripts/extract-tilesets.mjs. */
-const BASE = `${import.meta.env.BASE_URL}tileset/`;
+/** The files live under `tileset/` wherever the session's game data comes from (`gamedata/source.ts`). */
+const BASE = "tileset/";
 
 export interface LoadedTileset {
   name: TilesetFileName;
@@ -36,7 +37,7 @@ export class TilesetMissingError extends Error {
 
   constructor(tileset: TilesetFileName, cause?: unknown) {
     super(
-      `Tileset "${tileset}" is not available. Run scripts/extract-tilesets.mjs against a StarCraft install to populate public/tileset/.`,
+      `Tileset "${tileset}" is not available. Help ▸ Game Data… installs the graphics from a StarCraft installation.`,
       { cause },
     );
     this.name = "TilesetMissingError";
@@ -93,7 +94,7 @@ function report(tally: Tally | null, force = false) {
  * they land; `arrayBuffer()` would only tell us the size once it was already all here.
  */
 async function fetchPart(name: string, check: (data: Uint8Array) => boolean, tally: Tally | null = null): Promise<Uint8Array> {
-  const res = await fetch(BASE + name);
+  const res = await fetchAsset(BASE + name);
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
   const data = tally && res.body ? await readCounted(res, tally) : new Uint8Array(await res.arrayBuffer());
   if (!check(data)) throw new Error(`${name}: not a tileset file (${data.length} bytes)`);
@@ -192,6 +193,11 @@ export async function ensureTileset(name: TilesetFileName): Promise<LoadedTilese
   const loaded = await getTileset(name);
   ready.set(name, loaded);
   return loaded;
+}
+
+/** After the game data source changes: the shared names file may now be there, so ask again next time. */
+export function retryTilesetParts(): void {
+  statTxt = null;
 }
 
 /** Install an already-decoded tileset as if it had been fetched (tests, or a loader that read the files itself). */

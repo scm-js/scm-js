@@ -43,7 +43,8 @@ export type DialogId =
   | "notImplemented"
   | "plugins"
   | "confirmPlugin"
-  | "pluginDialog";
+  | "pluginDialog"
+  | "gameData";
 
 export interface DialogEntry {
   id: DialogId;

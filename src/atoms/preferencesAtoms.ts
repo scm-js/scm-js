@@ -22,6 +22,12 @@ export interface Preferences {
   /** Initial View ▸ Animate Water / Animate Units. */
   animateWater: boolean;
   animateUnits: boolean;
+  /**
+   * Where to fetch the game data from when this build has none and the browser keeps no
+   * copy: the extracted tree, or the two archives, under one address. "" means the
+   * build's own default (`VITE_GAME_DATA_URL`), which a desktop build leaves empty.
+   */
+  gameDataUrl: string;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -30,7 +36,24 @@ export const DEFAULT_PREFERENCES: Preferences = {
   newMap: { tileset: "badlands", width: 128, height: 128 },
   animateWater: true,
   animateUnits: true,
+  gameDataUrl: "",
 };
+
+/**
+ * One preference straight from storage, for code that runs before (or outside) the
+ * Jotai store — the game-data resolver can be asked by a viewport effect before the
+ * app's own effects have run. The same JSON `atomWithStorage` reads.
+ */
+export function storedPreference<K extends keyof Preferences>(key: K, fallback: Preferences[K]): Preferences[K] {
+  try {
+    const raw = browserStorage().getItem("scmjs.prefs");
+    if (!raw) return fallback;
+    const stored = JSON.parse(raw) as Partial<Preferences>;
+    return stored[key] ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export type GridStyle = "lines" | "dots" | "crosses";
 

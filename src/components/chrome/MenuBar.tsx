@@ -396,6 +396,7 @@ function useMenus(): Menu[] {
       label: "Help",
       items: [
         dlg("Keyboard Shortcuts…", "shortcuts", "F1"),
+        dlg("Game Data…", "gameData"),
         link("Documentation", `${REPO_URL}#readme`),
         link("Report an Issue…", `${REPO_URL}/issues/new`),
         sep,

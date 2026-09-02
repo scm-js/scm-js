@@ -1,0 +1,45 @@
+# Packaging for the desktop build (`npm run build:desktop`). The web bundle in dist/ and the
+# bundled main process in desktop/dist/ are all that ships: no node_modules, and never the
+# game data a developer's public/ may hold — the app extracts that on the user's machine.
+appId: dev.scmjs.editor
+productName: scmJS
+copyright: MIT
+directories:
+  output: release
+  buildResources: desktop/build
+files:
+  - "!node_modules/**"
+  - dist/**/*
+  - "!dist/tileset/**"
+  - "!dist/arr/**"
+  - "!dist/unit/**"
+  - "!dist/game/**"
+  - "!dist/scripts/**"
+  - desktop/dist/**/*
+  - package.json
+asar: true
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-setup.${ext}
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  # Unsigned until there is an Apple Developer identity; CI sets CSC_IDENTITY_AUTO_DISCOVERY=false.
+  identity: null
+  hardenedRuntime: false
+linux:
+  category: Development
+  maintainer: scm-js
+  target:
+    - AppImage
+    - deb

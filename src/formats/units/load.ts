@@ -9,12 +9,13 @@ import { decodeLo, type LoFile } from "../dat/lo";
 import { decodePcx } from "../dat/pcx";
 import { decodeTbl } from "../dat/tbl";
 import { TEAM_COLOR_ROWS, TEAM_SLOT_COUNT } from "./teamColor";
+import { fetchAsset } from "../../gamedata/source";
 
 /**
- * The unit data tables, fetched once from `public/arr` + `public/game` (mirroring the MPQ
- * tree; see scripts/extract-units.mjs). GRPs, overlay `.lo` files and the tileset remap
- * tables are fetched lazily as the viewport first needs them, so opening a melee map only
- * pulls minerals, geysers and start locations.
+ * The unit data tables, fetched once from `arr/` + `game/` (mirroring the MPQ tree; see
+ * `gamedata/extract.ts`) wherever the session's game data comes from (`gamedata/source.ts`).
+ * GRPs, overlay `.lo` files and the tileset remap tables are fetched lazily as the viewport
+ * first needs them, so opening a melee map only pulls minerals, geysers and start locations.
  */
 export interface UnitAssets {
   units: UnitsDat;
@@ -25,7 +26,7 @@ export interface UnitAssets {
   imagePaths: string[];
   /** tunit.pcx pixels: 16 rows × 8 palette indices. */
   teamColors: Uint8Array;
-  /** The animation bytecode, or null when `public/scripts/iscript.bin` is not installed (units then stay still). */
+  /** The animation bytecode, or null when `scripts/iscript.bin` is not installed (units then stay still). */
   iscript: IscriptBin | null;
   /** weapons.dat, or null when an older extraction did not ship it (Unit Settings then shows no weapon defaults). */
   weapons: WeaponsDat | null;
@@ -34,18 +35,16 @@ export interface UnitAssets {
   techs: TechdataDat | null;
 }
 
-const BASE = import.meta.env.BASE_URL;
-
 export class UnitAssetsMissingError extends Error {
   constructor(cause?: unknown) {
-    super("Unit data is not available. Run scripts/extract-units.mjs against a StarCraft install to populate public/arr, public/game and public/unit.", { cause });
+    super("Unit data is not available. Help ▸ Game Data… installs it from a StarCraft installation.", { cause });
     this.name = "UnitAssetsMissingError";
   }
 }
 
 /** Like the tileset loader: a dev server answers a missing file with index.html and 200. */
 async function fetchPart(path: string, check: (data: Uint8Array) => boolean): Promise<Uint8Array> {
-  const res = await fetch(BASE + path);
+  const res = await fetchAsset(path);
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   const data = new Uint8Array(await res.arrayBuffer());
   if (!check(data)) throw new Error(`${path}: unexpected content (${data.length} bytes)`);
@@ -76,11 +75,11 @@ export function getUnitAssets(): Promise<UnitAssets> {
           return null;
         }),
         fetchPart("arr/upgrades.dat", (d) => d.length === UPGRADES_DAT_SIZE).catch((err: unknown) => {
-          console.warn("arr/upgrades.dat is not installed; Upgrade Settings will show no defaults — re-run npm run extract", err);
+          console.warn("arr/upgrades.dat is not installed; Upgrade Settings will show no defaults", err);
           return null;
         }),
         fetchPart("arr/techdata.dat", (d) => d.length === TECHDATA_DAT_SIZE).catch((err: unknown) => {
-          console.warn("arr/techdata.dat is not installed; Technology Settings will show no defaults — re-run npm run extract", err);
+          console.warn("arr/techdata.dat is not installed; Technology Settings will show no defaults", err);
           return null;
         }),
       ]);
@@ -159,6 +158,11 @@ class LazyFiles<T> {
     this.check = check;
   }
 
+  /** Drop the entries that failed, so the next `get` fetches again (the game data was just installed). */
+  forgetFailed(): void {
+    for (const [path, value] of this.ready) if (value === null) this.ready.delete(path);
+  }
+
   get(path: string): T | null | undefined {
     if (this.ready.has(path)) return this.ready.get(path);
     if (!this.pending.has(path)) {
@@ -182,6 +186,18 @@ class LazyFiles<T> {
 const grps = new LazyFiles<Grp>(decodeGrp, (d) => d.length >= 6 && (d[0] | (d[1] << 8)) > 0);
 const los = new LazyFiles<LoFile>(decodeLo, (d) => d.length >= 8 && d[0] + (d[1] << 8) > 0);
 const remaps = new LazyFiles<Uint8Array>((d) => decodePcx(d).pixels, (d) => d.length > 128 && d[0] === 0x0a);
+
+/**
+ * After the game data source changes (Help ▸ Game Data… installed a copy): forget every
+ * part that failed so it is fetched again, and tell the canvases. The tables retry on
+ * their own — `getUnitAssets` drops its promise when it fails.
+ */
+export function retryFailedParts(): void {
+  grps.forgetFailed();
+  los.forgetFailed();
+  remaps.forgetFailed();
+  for (const l of listeners) l();
+}
 
 /** The decoded GRP for a path under `public/unit/`, per the LazyFiles contract. */
 export function requestGrp(path: string): Grp | null | undefined {

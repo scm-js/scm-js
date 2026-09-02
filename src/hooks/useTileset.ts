@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAtomValue } from "jotai";
 import { tilesetFileNameAtom } from "../atoms/documentAtoms";
+import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
 import {
   ensureTileset,
   peekTileset,
@@ -35,9 +36,12 @@ function initial(name: TilesetFileName): Internal {
  */
 export function useTileset(): TilesetState {
   const name = useAtomValue(tilesetFileNameAtom);
+  // Bumped when Help ▸ Game Data… installs a source, so a tileset that failed is asked for again.
+  const revision = useAtomValue(gameDataRevisionAtom);
   const [state, setState] = useState<Internal>(() => initial(name));
 
   useEffect(() => {
+    void revision;
     const cached = peekTileset(name);
     if (cached) {
       setState({ name, loaded: cached, loading: false, error: null });
@@ -51,7 +55,7 @@ export function useTileset(): TilesetState {
       (error: Error) => { if (!cancelled) setState({ name, loaded: null, loading: false, error }); },
     );
     return () => { cancelled = true; };
-  }, [name]);
+  }, [name, revision]);
 
   // The effect has not run yet on the render where `name` changed, so derive that first
   // frame from the cache rather than showing the previous tileset's assets.

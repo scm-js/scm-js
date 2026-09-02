@@ -5,7 +5,7 @@ import type { PreloadStep } from "../services/preload";
 export const preloadStepAtom = atom<PreloadStep>({
   progress: 0,
   completed: 0,
-  total: 4,
+  total: 5,
   label: "Initializing renderer",
   done: false,
 });

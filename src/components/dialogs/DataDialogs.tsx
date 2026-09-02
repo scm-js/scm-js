@@ -275,7 +275,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
                 </tbody>
               </table>
             )}
-            {weaponRows.length > 0 && <p className="hint" style={{ marginTop: 6 }}>Damage is stored per weapon: every type that fires this weapon shares the row.{weapons ? "" : " weapons.dat is not installed, so defaults show as 0 — re-run npm run extract."}</p>}
+            {weaponRows.length > 0 && <p className="hint" style={{ marginTop: 6 }}>Damage is stored per weapon: every type that fires this weapon shares the row.{weapons ? "" : " weapons.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…)."}</p>}
           </Group>
           <Group title="Availability" flush>
             <div className="row" style={{ padding: "6px 8px 2px" }}>
@@ -415,7 +415,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
                 ))}
               </tbody>
             </table>
-            <p className="hint" style={{ marginTop: 6 }}>Each level costs the base plus the factor for every level already researched. {FRAMES_HINT}{dat ? "" : " upgrades.dat is not installed, so defaults show as 0 — re-run npm run extract."}</p>
+            <p className="hint" style={{ marginTop: 6 }}>Each level costs the base plus the factor for every level already researched. {FRAMES_HINT}{dat ? "" : " upgrades.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…)."}</p>
           </Group>
           <Group title="Levels per player" flush>
             <div className="listbox" style={{ border: "none", boxShadow: "none", maxHeight: 300 }}>

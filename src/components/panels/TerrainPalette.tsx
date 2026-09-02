@@ -94,7 +94,7 @@ function IsomTab() {
         {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>Loading tileset…</div>}
         {status.kind === "no-tileset" && (
           <div className="hint" style={{ padding: "8px 10px" }}>
-            The isometric brush needs the tileset graphics — run <span className="mono">scripts/extract-tilesets.mjs</span>.
+            The isometric brush needs the tileset graphics — Help ▸ Game Data…
           </div>
         )}
         {status.kind === "missing" && (

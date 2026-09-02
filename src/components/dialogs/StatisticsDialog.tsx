@@ -106,7 +106,7 @@ export function StatisticsDialog({ entry }: DialogProps) {
                   {s.terrain.length > 10 && <tr><td className="num">{s.terrain.slice(10).reduce((n, t) => n + t.tiles, 0)}</td><td className="faint">{s.terrain.length - 10} other types</td></tr>}
                 </tbody>
               </table>
-            ) : <p className="hint" style={{ padding: 8 }}>Terrain by type needs the tileset graphics (run npm run extract).</p>}
+            ) : <p className="hint" style={{ padding: 8 }}>Terrain by type needs the tileset graphics (Help ▸ Game Data…).</p>}
           </Group>
         </div>
       </div>

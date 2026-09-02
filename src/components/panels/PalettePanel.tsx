@@ -191,12 +191,12 @@ function DoodadPalette() {
       <div className="palette-scroll">
         {!loaded && (
           <div className="hint" style={{ padding: 8 }}>
-            Doodads come from the tileset graphics. Run <code>node scripts/extract-tilesets.mjs</code> against a StarCraft install to fill <code>public/tileset/</code>.
+            Doodads come from the tileset graphics. Help ▸ Game Data… installs them from a StarCraft installation.
           </div>
         )}
         {loaded && !catalogue.hasPlacementData && (
           <div className="hint" style={{ padding: "8px 8px 0" }}>
-            No <code>{loaded.name}.dddata.bin</code> — re-run <code>scripts/extract-tilesets.mjs</code> to get StarEdit's placement rules; until then nothing is refused for its ground.
+            No <code>{loaded.name}.dddata.bin</code> — install the game data again (Help ▸ Game Data…) to get StarEdit's placement rules; until then nothing is refused for its ground.
           </div>
         )}
         {loaded && q && shown.length === 0 && (

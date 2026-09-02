@@ -109,7 +109,7 @@ export function useTerrainTools() {
     if (mode === "rect") {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Rect painting needs the tileset graphics — run scripts/extract-tilesets.mjs.");
+        setStatus("Rect painting needs the tileset graphics — Help ▸ Game Data…");
         return null;
       }
       return stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y));
@@ -198,7 +198,7 @@ export function useTerrainTools() {
     if (mode === "rect") {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Fill needs the tileset graphics — run scripts/extract-tilesets.mjs.");
+        setStatus("Fill needs the tileset graphics — Help ▸ Game Data…");
         return;
       }
       const groups = loaded.tileset.groups;
@@ -239,7 +239,7 @@ export function useTerrainTools() {
     } else {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Fill Terrain needs the tileset graphics — run scripts/extract-tilesets.mjs.");
+        setStatus("Fill Terrain needs the tileset graphics — Help ▸ Game Data…");
         return;
       }
       const flat = flatTerrain(scn.width, scn.height, { id: terrain.id, group: terrain.group }, loaded.tileset, Math.random, tilesetIndex(scn));

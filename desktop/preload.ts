@@ -11,6 +11,15 @@ const version = process.argv.find((a) => a.startsWith("--scmjs-version="))?.slic
 const bridge: DesktopBridge = {
   platform: process.platform,
   version,
+  window: {
+    setDirty: (dirty) => ipcRenderer.send("window:dirty", dirty),
+    onCloseRequest: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("window:close-request", handler);
+      return () => { ipcRenderer.off("window:close-request", handler); };
+    },
+    respondClose: (close) => ipcRenderer.send("window:close-response", close),
+  },
   gameData: {
     status: () => ipcRenderer.invoke("gamedata:status"),
     locate: () => ipcRenderer.invoke("gamedata:locate"),

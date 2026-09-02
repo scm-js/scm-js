@@ -20,6 +20,9 @@ files:
 asar: true
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 win:
+  # One 1024² PNG for every platform — the app mark in public/, which the web build also
+  # serves as its icon; electron-builder makes the .ico / .icns from it.
+  icon: public/icon.png
   target:
     - nsis
     - portable
@@ -30,6 +33,7 @@ nsis:
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
 mac:
+  icon: public/icon.png
   category: public.app-category.developer-tools
   target:
     - target: dmg
@@ -38,6 +42,7 @@ mac:
   identity: null
   hardenedRuntime: false
 linux:
+  icon: public/icon.png
   category: Development
   maintainer: scm-js
   target:

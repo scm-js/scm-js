@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { archiveExtrasAtom, closeDocumentAtom, loadDocumentAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapModifiedAtom, screenAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
@@ -43,6 +43,12 @@ export type PendingAction =
    * watches the dialog stack can tell a dismissal (Cancel, Escape, the ×) from an open in progress.
    */
   | { action: "open"; file: File; done?: (opened: boolean) => void; taken?: boolean }
+  /**
+   * The window or the tab is going away (`useCloseGuard`): nothing here replaces the document,
+   * the answer *is* the point — `done` is what tells the desktop's main process whether to go
+   * on closing, and a dismissal reaches it as false through `taken`, as for "open".
+   */
+  | { action: "quit"; done?: (quit: boolean) => void; taken?: boolean }
   | { action: "close" };
 
 type Store = ReturnType<typeof useStore>;
@@ -105,6 +111,32 @@ export function needsCloseConfirm(store: Store): boolean {
   return store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
 }
 
+/**
+ * Run an action that would lose unsaved work, or park it in the Close Scenario dialog when
+ * `needsCloseConfirm` says to ask first; `pending` builds the dialog's payload around the
+ * promise's `done`. A dismissal — Cancel, Escape, the × — is seen from the dialog stack: the
+ * entry leaves it without `taken`, which the dialog sets the moment the user chooses to go on.
+ * (An unmount effect in the dialog would be simpler, but React's development double-mount runs
+ * it once at mount.) The store-level gate behind the plugin host's `document.open` / `create`
+ * and behind `useCloseGuard`.
+ */
+export function guardedAction(
+  store: Store,
+  run: () => Promise<boolean>,
+  pending: (done: (ok: boolean) => void) => PendingAction & { taken?: boolean },
+): Promise<boolean> {
+  if (!needsCloseConfirm(store)) return run();
+  return new Promise((resolve) => {
+    const p = pending(resolve);
+    store.set(openDialogAtom, "confirmClose", { pending: p });
+    const unsub = store.sub(dialogStackAtom, () => {
+      if (store.get(dialogStackAtom).some((d) => d.payload?.pending === p)) return;
+      unsub();
+      if (!p.taken) resolve(false);
+    });
+  });
+}
+
 /** New, open and save actions shared by the menu, hotkeys, splash and drag-and-drop. */
 export function useMapFileActions() {
   const store = useStore();
@@ -150,6 +182,7 @@ export function useMapFileActions() {
   const runPending = useCallback(async (p: PendingAction) => {
     if (p.action === "new") p.done?.(await newMapInto(store, p.options));
     else if (p.action === "open") p.done?.(await openFile(p.file));
+    else if (p.action === "quit") p.done?.(true);
     else closeMap();
   }, [store, openFile, closeMap]);
 

@@ -1,21 +1,24 @@
-/** Pink wireframe-sphere app logo, used in the brand bar and About dialog. */
+/**
+ * The app mark: the same wireframe globe the splash screen and the About dialog turn
+ * (`components/splash/starfield.ts`), projected once at a fixed angle and flattened to paths —
+ * edges grouped by depth so the far half still reads as behind. `public/favicon.svg` and
+ * `public/icon.png` (the desktop app's icon) are the same drawing over a dark rounded square.
+ */
 export default function AppLogo({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      {/* Outer ring */}
-      <circle cx="16" cy="16" r="13" stroke="#ff5fa2" strokeWidth="1.2" opacity="0.5" />
-      {/* Equator */}
-      <ellipse cx="16" cy="16" rx="13" ry="4.5" stroke="#ff5fa2" strokeWidth="1" opacity="0.45" />
-      {/* Meridian */}
-      <ellipse cx="16" cy="16" rx="4.5" ry="13" stroke="#ff5fa2" strokeWidth="1" opacity="0.45" />
-      {/* Inner glow */}
-      <circle cx="16" cy="16" r="3" fill="#ff5fa2" opacity="0.7" />
-      <circle cx="16" cy="16" r="6" fill="url(#logo-glow)" />
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="32" cy="32" r="26" fill="url(#logo-halo)"/>
+      <circle cx="32" cy="32" r="25.81" stroke="#a06cf0" strokeWidth="0.7" opacity="0.5"/>
+      <path d="M32 53.27L38.02 46.1M32 53.27L32.98 45.21M32 53.27L27.75 45.62M41.88 48.22L38.02 46.1M38.02 46.1L32.98 45.21M38.02 46.1L42.04 36.72M32.98 45.21L27.75 45.62M32.98 45.21L33.61 35.55M27.75 45.62L23.34 47.31M27.75 45.62L24.97 36.09M23.34 47.31L17.29 38.34M49.02 39.59L42.04 36.72M42.04 36.72L33.61 35.55M42.04 36.72L43.77 26.5M33.61 35.55L24.97 36.09M33.61 35.55L33.87 25.54M24.97 36.09L17.29 38.34M24.97 36.09L23.78 25.98M17.29 38.34L14.61 27.86M43.77 26.5L42.88 16.72M33.87 25.54L33.74 16.18M23.78 25.98L24.39 16.43M42.88 16.72L33.74 16.18M33.74 16.18L24.39 16.43" stroke="#a06cf0" strokeWidth="0.40" opacity="0.3"/>
+      <path d="M32 53.27L42.02 54.49M32 53.27L43.5 51.24M32 53.27L41.88 48.22M32 53.27L23.34 47.31M32 53.27L20.77 50.06M32 53.27L21.04 53.32M32 53.27L24.62 56.2M32 53.27L30.75 57.62M32 53.27L37.34 56.94M42.02 54.49L43.5 51.24M43.5 51.24L41.88 48.22M43.5 51.24L52.79 44.04M41.88 48.22L49.02 39.59M23.34 47.31L20.77 50.06M20.77 50.06L21.04 53.32M20.77 50.06L12.09 42.24M52.79 44.04L49.02 39.59M49.02 39.59L52.23 28.93M17.29 38.34L12.09 42.24M12.09 42.24L11.5 47.37M12.09 42.24L8.02 31.23M52.23 28.93L50.57 18.07M14.61 27.86L15.99 17.48M8.02 31.23L10.13 19.34M50.57 18.07L42.88 16.72M50.57 18.07L43.56 9.5M42.88 16.72L38.99 9.08M33.74 16.18L33.13 8.91M24.39 16.43L15.99 17.48M24.39 16.43L27.08 8.99M15.99 17.48L10.13 19.34M15.99 17.48L21.9 9.32M43.56 9.5L38.99 9.08M38.99 9.08L33.13 8.91M33.13 8.91L27.08 8.99M27.08 8.99L21.9 9.32" stroke="#a06cf0" strokeWidth="0.45" opacity="0.45"/>
+      <path d="M42.02 54.49L51.12 49.34M21.04 53.32L24.62 56.2M21.04 53.32L11.5 47.37M24.62 56.2L30.75 57.62M24.62 56.2L17.48 52.38M30.75 57.62L37.34 56.94M30.75 57.62L29.47 55.04M37.34 56.94L42.02 54.49M37.34 56.94L42.63 53.76M51.12 49.34L52.79 44.04M51.12 49.34L55.88 37.69M52.79 44.04L57.27 32.81M11.5 47.37L17.48 52.38M11.5 47.37L6.65 35.85M42.63 53.76L51.12 49.34M57.27 32.81L54.93 20.2M6.65 35.85L9.2 21.83M53.37 22.8L54.93 20.2M54.93 20.2L50.57 18.07M54.93 20.2L45.61 10.11M10.13 19.34L9.2 21.83M10.13 19.34L18.77 9.87M9.2 21.83L18.93 10.53M44 10.78L45.61 10.11M44 10.78L32 6.22M45.61 10.11L43.56 9.5M45.61 10.11L32 6.22M43.56 9.5L32 6.22M38.99 9.08L32 6.22M33.13 8.91L32 6.22M27.08 8.99L32 6.22M21.9 9.32L18.77 9.87M21.9 9.32L32 6.22M18.77 9.87L18.93 10.53M18.77 9.87L32 6.22M18.93 10.53L32 6.22" stroke="#a06cf0" strokeWidth="0.50" opacity="0.68"/>
+      <path d="M17.48 52.38L29.47 55.04M17.48 52.38L13.57 40.61M29.47 55.04L42.63 53.76M29.47 55.04L28.74 43.24M42.63 53.76L45.6 41.96M55.88 37.69L53.37 22.8M13.57 40.61L15.65 24.32M28.74 43.24L29.13 25.67M45.6 41.96L44.01 25.02M53.37 22.8L44 10.78M9.2 21.83L15.65 24.32M15.65 24.32L29.13 25.67M15.65 24.32L23.1 11.13M29.13 25.67L44.01 25.02M29.13 25.67L30.48 11.44M44.01 25.02L53.37 22.8M44.01 25.02L38.45 11.29M18.93 10.53L23.1 11.13M23.1 11.13L30.48 11.44M23.1 11.13L32 6.22M30.48 11.44L38.45 11.29M30.48 11.44L32 6.22M38.45 11.29L44 10.78M38.45 11.29L32 6.22" stroke="#a06cf0" strokeWidth="0.55" opacity="0.95"/>
+      <path d="M55.88 37.69L57.27 32.81L52.23 28.93L43.77 26.5L33.87 25.54L23.78 25.98L14.61 27.86L8.02 31.23L6.65 35.85L13.57 40.61L28.74 43.24L45.6 41.96L55.88 37.69" stroke="#d9b8ff" strokeWidth="0.9" opacity="0.5"/>
+      <circle cx="32" cy="32" r="2" fill="#d9b8ff" opacity="0.85"/>
+      <circle cx="32" cy="32" r="7" fill="url(#logo-core)"/>
       <defs>
-        <radialGradient id="logo-glow">
-          <stop offset="0%" stopColor="#ff5fa2" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#ff5fa2" stopOpacity="0" />
-        </radialGradient>
+        <radialGradient id="logo-halo"><stop offset="0%" stopColor="#a06cf0" stopOpacity="0.3"/><stop offset="55%" stopColor="#6a3bb5" stopOpacity="0.12"/><stop offset="100%" stopColor="#a06cf0" stopOpacity="0"/></radialGradient>
+        <radialGradient id="logo-core"><stop offset="0%" stopColor="#d9b8ff" stopOpacity="0.5"/><stop offset="100%" stopColor="#d9b8ff" stopOpacity="0"/></radialGradient>
       </defs>
     </svg>
   );

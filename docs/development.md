@@ -32,7 +32,17 @@ npm run desktop         # bundle the main process and run Electron against dist/
 
 `electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
 (everything is bundled by Vite) and never the game data a developer's `public/` holds.
-Builds are unsigned for now. `SCMJS_DEV_URL=http://localhost:5173 npm run desktop`
+Builds are unsigned for now. The first run opens maximized (1400 × 900 is what restoring it
+down gives back); after that the window comes back the size, position and maximized state it
+was left at, kept in `window.json` in the user data directory and saved half a second after
+the last move or resize as well as on close, so a session that ends in a crash or a kill still
+remembers. A position that no longer lands on any attached screen is dropped and the platform
+places the window. Closing the window (or quitting) while the open map has unsaved changes is
+held back in the main process and handed to the editor, which asks with its own Close Scenario
+dialog — Save goes through the ordinary File ▸ Save path; in a browser tab the same preference
+arms `beforeunload`, where all the page can do is make the browser ask its own generic question
+(`src/hooks/useCloseGuard.ts`). The icon comes from `public/icon.png`, the same file electron-builder
+turns into the `.ico` / `.icns`. `SCMJS_DEV_URL=http://localhost:5173 npm run desktop`
 points the window at the dev server.
 
 ## Releases

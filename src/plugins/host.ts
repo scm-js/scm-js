@@ -99,7 +99,7 @@ import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
-import { needsCloseConfirm, newMapInto, openFileInto, type PendingAction } from "../hooks/useMapFileActions";
+import { guardedAction, newMapInto, openFileInto } from "../hooks/useMapFileActions";
 import { buildScript, reservedStorage, scriptState } from "../editor/script";
 import { compileInBackground } from "../script/compileClient";
 import { generateDeclarations } from "../script/declarations";
@@ -466,31 +466,13 @@ function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?:
   const file = source instanceof File && !fileName
     ? source
     : new File([source as unknown as BlobPart], name, { type: "application/octet-stream" });
-  return guardedReplace(store, () => openFileInto(store, file), (done) => ({ action: "open", file, done }));
+  return guardedAction(store, () => openFileInto(store, file), (done) => ({ action: "open", file, done }));
 }
 
 /** `document.create`: File ▸ New through the same gate. */
 function createDocument(store: Store, options: NewDocumentOptions): Promise<boolean> {
   const full = { name: "Untitled Scenario", description: "", ...options };
-  return guardedReplace(store, () => newMapInto(store, full), (done) => ({ action: "new", options: full, done }));
-}
-
-/**
- * Run a document-replacing action at once, or park it in the Close Scenario dialog when
- * `needsCloseConfirm` says so; `pending` builds the dialog's payload around the promise's
- * `done`, and a dismissal is seen from the dialog stack as an entry leaving without `taken`.
- */
-function guardedReplace(store: Store, run: () => Promise<boolean>, pending: (done: (ok: boolean) => void) => PendingAction & { taken?: boolean }): Promise<boolean> {
-  if (!needsCloseConfirm(store)) return run();
-  return new Promise((resolve) => {
-    const p = pending(resolve);
-    store.set(openDialogAtom, "confirmClose", { pending: p });
-    const unsub = store.sub(dialogStackAtom, () => {
-      if (store.get(dialogStackAtom).some((d) => d.payload?.pending === p)) return;
-      unsub();
-      if (!p.taken) resolve(false);
-    });
-  });
+  return guardedAction(store, () => newMapInto(store, full), (done) => ({ action: "new", options: full, done }));
 }
 
 /* ── Raw section edits ──────────────────────────────────── */

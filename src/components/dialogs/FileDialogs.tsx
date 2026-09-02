@@ -274,7 +274,10 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
   const { save, runPending } = useMapFileActions();
   const [busy, setBusy] = useState(false);
   const pending = (entry.payload?.pending as PendingAction | undefined) ?? { action: "close" };
-  const what = pending.action === "new" ? "creating a new scenario" : pending.action === "open" ? `opening ${pending.file.name}` : "closing";
+  const what = pending.action === "new" ? "creating a new scenario"
+    : pending.action === "open" ? `opening ${pending.file.name}`
+    : pending.action === "quit" ? "leaving" : "closing";
+  const title = pending.action === "quit" ? "Quit scmJS" : "Close Scenario";
 
   // `taken` before the close: an open waiting on this answer (a plugin's `document.open`) watches
   // the dialog stack, and this is how it tells "going on" from a dismissal.
@@ -296,7 +299,7 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Close Scenario"
+      title={title}
       icon={<TriangleAlert size={14} />}
       size="sm"
       footer={
@@ -308,7 +311,7 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
           </>
         ) : (
           <>
-            <Button variant="primary" onClick={() => { void proceed(); }}>{pending.action === "close" ? "Close" : "Continue"}</Button>
+            <Button variant="primary" onClick={() => { void proceed(); }}>{pending.action === "close" ? "Close" : pending.action === "quit" ? "Quit" : "Continue"}</Button>
             <Button onClick={() => close(entry.key)}>Cancel</Button>
           </>
         )
@@ -317,7 +320,9 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
       <p>
         {modified ? <>Save changes to <strong>{name}</strong> before {what}?</> : <><strong>{name}</strong> has no unsaved changes. Continue {what}?</>}
       </p>
-      {modified && pending.action !== "close" && <p className="hint">Don't Save discards the changes and goes on with {what}.</p>}
+      {modified && pending.action !== "close" && (
+        <p className="hint">Don't Save discards the changes{pending.action === "quit" ? " and closes the editor." : ` and goes on with ${what}.`}</p>
+      )}
     </DialogFrame>
   );
 }

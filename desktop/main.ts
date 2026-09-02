@@ -1,8 +1,9 @@
 /**
  * The desktop app's main process. The renderer is the web build, unchanged; this side
- * serves it under `app://scmjs/` and adds the one thing a browser cannot do — look for a
- * StarCraft installation on disk and extract the game data from it (`src/gamedata/extract.ts`,
- * the same code the browser runs in its worker). The extracted files go to the user data
+ * serves it under `app://scmjs/` and adds what a browser cannot do — look for a StarCraft
+ * installation on disk and extract the game data from it (`src/gamedata/extract.ts`, the same
+ * code the browser runs in its worker), and hold the window's close back while the editor asks
+ * about unsaved changes (`src/hooks/useCloseGuard.ts`). The extracted files go to the user data
  * directory and are served under the same base as the bundle, so the renderer's ordinary
  * "bundled" probe finds them (`src/gamedata/source.ts`); the IPC here is what the preload
  * exposes as `window.scmjsDesktop` (`src/gamedata/desktop.ts`).
@@ -10,7 +11,7 @@
  * `npm run build:desktop` bundles this with Vite (`desktop/vite.config.ts`) and packages it
  * with electron-builder (`electron-builder.yml`).
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from "electron";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -156,16 +157,142 @@ function handleRequest(req: Request): Promise<Response> | Response {
   return path.includes(".") ? new Response("Not found", { status: 404 }) : serveFile(join(distDir, "index.html"));
 }
 
+/* ── Remembering the window ─────────────────────────────── */
+
+interface WindowState { x?: number; y?: number; width: number; height: number; maximized: boolean }
+
+/**
+ * What the *first* run gets: maximized, because the editor is a chrome-heavy tool and its
+ * panels only fit comfortably at full screen. The size is what "restore down" gives back.
+ * Every run after that reopens the window the user left, as Windows apps are expected to.
+ */
+const FIRST_RUN_WINDOW: WindowState = { width: 1400, height: 900, maximized: true };
+const MIN_WIDTH = 900;
+const MIN_HEIGHT = 600;
+/** How much of a saved rectangle must still land on a screen for its position to be reused. */
+const MUST_BE_VISIBLE = 100;
+
+const windowStateFile = () => join(app.getPath("userData"), "window.json");
+
+/** Whether enough of a saved rectangle lands on a display that is still attached. */
+function onScreen(x: number, y: number, width: number, height: number): boolean {
+  return screen.getAllDisplays().some(({ workArea: a }) =>
+    Math.min(x + width, a.x + a.width) - Math.max(x, a.x) >= MUST_BE_VISIBLE &&
+    Math.min(y + height, a.y + a.height) - Math.max(y, a.y) >= MUST_BE_VISIBLE);
+}
+
+/**
+ * The size, position and maximized state of the last run. A missing or unreadable file is the
+ * first run; a position that no longer lands on any screen (the laptop left its dock) is
+ * dropped on its own, keeping the size and letting the platform place the window.
+ */
+function readWindowState(): WindowState {
+  let saved: Partial<WindowState>;
+  try {
+    saved = JSON.parse(readFileSync(windowStateFile(), "utf8")) as Partial<WindowState>;
+  } catch {
+    return FIRST_RUN_WINDOW;
+  }
+  const width = Math.max(MIN_WIDTH, Math.round(saved.width ?? FIRST_RUN_WINDOW.width));
+  const height = Math.max(MIN_HEIGHT, Math.round(saved.height ?? FIRST_RUN_WINDOW.height));
+  const state: WindowState = { width, height, maximized: saved.maximized === true };
+  const { x, y } = saved;
+  if (typeof x === "number" && typeof y === "number" && onScreen(x, y, width, height)) {
+    state.x = Math.round(x);
+    state.y = Math.round(y);
+  }
+  return state;
+}
+
+/**
+ * Saved on a timer rather than only on close, so a session that ends without a clean quit —
+ * a kill from Task Manager, a crash, a shutdown — still remembers where the window was.
+ */
+function watchWindowState(win: BrowserWindow) {
+  let timer: NodeJS.Timeout | undefined;
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (!win.isDestroyed()) saveWindowState(win); }, 500);
+  };
+  win.on("resize", later);
+  win.on("move", later);
+  win.on("maximize", later);
+  win.on("unmaximize", later);
+  win.on("close", () => { clearTimeout(timer); saveWindowState(win); });
+}
+
+function saveWindowState(win: BrowserWindow) {
+  // getNormalBounds is the *un*-maximized rectangle: what "restore down" should give back next
+  // time. getBounds would save the maximized size as the restored one, so unmaximizing after a
+  // restart would do nothing visible.
+  const { x, y, width, height } = win.getNormalBounds();
+  const state: WindowState = { x, y, width, height, maximized: win.isMaximized() };
+  try {
+    writeFileSync(windowStateFile(), JSON.stringify(state));
+  } catch {
+    // Nothing the user needs to hear about: the next run just opens at the first-run size.
+  }
+}
+
+/* ── Closing with unsaved changes ───────────────────────── */
+
+/**
+ * A window whose renderer says the open map has unsaved changes is not allowed to close on
+ * its own: the close is held, the renderer is asked (it shows the editor's own Close Scenario
+ * dialog, so Save goes through the same path as File ▸ Save), and it answers with
+ * `window:close-response`. `cleared` is that answer — the one close that is let through.
+ *
+ * The renderer is the only source of both facts; a reload that leaves `dirty` stale heals
+ * itself, since the fresh renderer answers the next close request at once.
+ */
+const dirty = new WeakSet<BrowserWindow>();
+const cleared = new WeakSet<BrowserWindow>();
+/** Set while the app is quitting (macOS Cmd+Q, a session logout), so a cleared close quits rather than closing one window. */
+let quitting = false;
+
+function guardClose(win: BrowserWindow) {
+  win.on("close", (e) => {
+    if (cleared.has(win) || !dirty.has(win)) return;
+    e.preventDefault();
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    win.webContents.send("window:close-request");
+  });
+}
+
+function closeIpc() {
+  ipcMain.on("window:dirty", (e, value: boolean) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win) return;
+    if (value) dirty.add(win);
+    else dirty.delete(win);
+  });
+  ipcMain.on("window:close-response", (e, close: boolean) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win) return;
+    // A "stay open" also cancels the quit the close came from; the next Cmd+Q asks again.
+    if (!close) { quitting = false; return; }
+    cleared.add(win);
+    if (quitting) app.quit();
+    else win.close();
+  });
+}
+
 /* ── The window ─────────────────────────────────────────── */
 
 function createWindow() {
+  const icon = join(distDir, "icon.png");
+  const state = readWindowState();
   const win = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    ...(state.x !== undefined ? { x: state.x, y: state.y } : {}),
+    width: state.width,
+    height: state.height,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+    show: false,
     backgroundColor: "#0b0c10",
     title: "scmJS",
+    ...(existsSync(icon) ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -173,6 +300,10 @@ function createWindow() {
       additionalArguments: [`--scmjs-version=${app.getVersion()}`],
     },
   });
+  if (state.maximized) win.maximize();
+  win.once("ready-to-show", () => win.show());
+  watchWindowState(win);
+  guardClose(win);
   progressTarget = win;
   win.on("closed", () => { if (progressTarget === win) progressTarget = null; });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -192,6 +323,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   protocol.handle(SCHEME, handleRequest);
+  closeIpc();
 
   ipcMain.handle("gamedata:status", () => status());
   ipcMain.handle("gamedata:locate", () => locate());
@@ -212,4 +344,5 @@ app.whenReady().then(() => {
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+app.on("before-quit", () => { quitting = true; });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

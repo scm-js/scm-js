@@ -818,11 +818,22 @@ redistribute what it produces; the hosted build's `GAME_DATA_URL` bucket is the 
 `desktop/main.ts` (Electron, bundled by `desktop/vite.config.ts` into `desktop/dist/*.cjs`, `ssr: true` +
 `noExternal` so mopaq and the shared extraction ride along, `publicDir: false`) serves `dist/` under
 `app://scmjs/` and the game-data prefixes from `userData/gamedata` first, so the renderer's bundled probe
-finds an extraction; the search order is portable dir / AppImage dir / next to the executable / userData /
-env / the platform's install paths (so two archives dropped beside the app are found). `preload.ts` is
+finds an extraction; the window's size, position and maximized state are remembered in
+`userData/window.json` (`readWindowState` / `watchWindowState`, saved 500 ms after the last move or
+resize and again on close; an off-screen position is dropped, and a first run with no file opens
+maximized) and it is shown on `ready-to-show`, so nothing flashes at the unmaximized size, with
+`dist/icon.png` as its icon; a close while the renderer says the map has unsaved changes is held
+back and handed to the editor (`guardClose` / `closeIpc`, `src/hooks/useCloseGuard.ts`), with
+`before-quit` remembering that the close came from a quit so the answer quits rather than closing
+one window; the search order is portable dir / AppImage dir /
+next to the executable / userData / env / the platform's install paths (so two archives dropped beside
+the app are found). `preload.ts` is
 the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it. `electron-builder.yml`
 packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
-unsigned. `npm run build:desktop` is `build --mode desktop` (the mode blanks `VITE_GAME_DATA_URL`) + the
+unsigned, with `public/icon.png` as every platform's icon — that file, `public/favicon.svg` and
+`components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
+once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
+pink. `npm run build:desktop` is `build --mode desktop` (the mode blanks `VITE_GAME_DATA_URL`) + the
 main bundle + electron-builder. The workflow has exactly two channels — `latest` (every push to main:
 Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `GAME_DATA_URL` and
 `PAGES_BASE` as repository variables; there is deliberately no nightly.
@@ -950,6 +961,22 @@ again, measure `longtask` entries before blaming the loading code.
   `src/components/dialogs/DialogHost.tsx`. Adding a dialog means touching both.
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
+- `src/hooks/useWindowTitle.ts` keeps `document.title` on the open map — the file name when there is
+  one, else the scenario name, with a leading `*` while it is modified, and the plain
+  `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page
+  title into the window title, so the desktop build's title bar and taskbar entry follow it too.
+- `src/hooks/useCloseGuard.ts` is leaving the editor altogether with unsaved changes, gated on
+  the same `confirmClose` preference and the same three facts as `needsCloseConfirm`. A browser
+  gets `beforeunload` (added and removed with the unsaved state, so a clean document keeps the
+  page's back/forward cache) and prints its own generic question — the page cannot word it, show
+  a dialog or save first. The desktop build does the real thing: `desktop/main.ts#guardClose`
+  holds the window's close back while `window.scmjsDesktop.window` says the map is dirty, asks
+  the renderer, and the hook opens the ordinary Close Scenario dialog with a `"quit"`
+  `PendingAction` — so Save writes through the same path as File ▸ Save — then answers with
+  `respondClose`. A dismissal reaches it as false through `guardedAction`
+  (`useMapFileActions.ts`, the gate `document.open` / `document.create` share). Electron fires
+  `beforeunload` on a window close too but a value returned there cancels it *silently*, which
+  is why the browser half is skipped whenever the bridge is there.
 - Hotkeys are centralised in `src/hooks/useHotkeys.ts`; file actions (open/save/new, drag-drop) in
   `src/hooks/useMapFileActions.ts` and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).

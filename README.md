@@ -602,8 +602,9 @@ F1 lists the lot. The ones worth knowing up front:
 | Ctrl+G | grid |
 
 Preferences (Ctrl+,) persist in the browser: the splash screen, whether to confirm
-before replacing a modified map, defaults for new maps, and whether water and units
-animate at startup. Its Browser storage box lists everything the editor keeps in this
+before replacing a modified map — the same tick decides whether closing the tab or
+quitting the desktop app asks about unsaved changes — defaults for new maps, and whether
+water and units animate at startup. Its Browser storage box lists everything the editor keeps in this
 browser — the preferences, the grid settings, the installed plugin list, the copies of
 any plugins set to load from storage, and whatever the plugins store — and **Clear all
 data** throws the lot away, putting the defaults (and the default plugins) back. The map you have open is not kept in the browser and is not

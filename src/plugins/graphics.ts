@@ -25,6 +25,11 @@ import type { GraphicsApi, PluginImage, SpriteKind } from "./api";
 
 type Store = ReturnType<typeof createStore>;
 
+/** `Contributions` from `host.ts`, structurally — importing it there would be a cycle. */
+interface Bag {
+  add(dispose: () => void): { dispose(): void };
+}
+
 const TILE = 32;
 
 /** Composed pictures (a tile, a doodad) by tileset and id; the upstream caches cover the rest. */
@@ -69,7 +74,7 @@ function buildDoodad(loaded: LoadedTileset, doodadId: number): PluginImage | nul
   return { image: made.canvas, width: def.width * TILE, height: def.height * TILE };
 }
 
-export function createGraphicsApi(store: Store): GraphicsApi {
+export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
   const scenario = () => store.get(scenarioAtom);
   const loaded = (): LoadedTileset | null => peekTileset(store.get(tilesetFileNameAtom));
   const teamOf = (owner: number) => {
@@ -145,7 +150,7 @@ export function createGraphicsApi(store: Store): GraphicsApi {
 
     onImageLoaded: (listener) => {
       const off = onGrpLoaded(() => { try { listener(); } catch (err) { console.error("[plugins] onImageLoaded listener failed", err); } });
-      return { dispose: off };
+      return bag.add(off);
     },
 
     /**

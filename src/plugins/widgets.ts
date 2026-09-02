@@ -31,6 +31,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   for (const [key, value] of Object.entries(props)) {
     if (value === undefined || value === null) continue;
     if (key === "style" && typeof value === "object") Object.assign(node.style, value as Partial<CSSStyleDeclaration>);
+    else if (key === "style") node.setAttribute("style", String(value));
     else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
     else if (ATTRS.has(key) || key.includes("-")) node.setAttribute(key, String(value));
     else (node as unknown as Record<string, unknown>)[key] = value;

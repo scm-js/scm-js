@@ -920,7 +920,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     query: queryApi(store),
     view: viewApi(store),
     data: dataApi(),
-    graphics: createGraphicsApi(store),
+    graphics: createGraphicsApi(store, bag),
 
     names: {
       unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? unitName(id),

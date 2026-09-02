@@ -35,7 +35,8 @@ export const DEFAULT_NEW_MAP: NewMapOptions = {
  * user chooses Save / Don't Save (`runPending`), else it runs at once.
  */
 export type PendingAction =
-  | { action: "new"; options: NewMapOptions }
+  /** `done` and `taken` as for "open": a plugin's `document.create` waits on them. */
+  | { action: "new"; options: NewMapOptions; done?: (created: boolean) => void; taken?: boolean }
   /**
    * `done` hears how it went: true once the file is open, false when the file was unreadable.
    * The Close Scenario dialog sets `taken` the moment the user chooses to go on, so whoever
@@ -70,6 +71,35 @@ export async function openFileInto(store: Store, file: File): Promise<boolean> {
   }
 }
 
+/**
+ * Build a blank scenario and install it as the open document. The tileset graphics
+ * decide which tiles the fill uses, so they are fetched first; without them the map
+ * is still made of dirt ids and the viewport falls back to flat colour. The store-level
+ * half of `newMap`, so the plugin host can make a map without React.
+ *
+ * `onlyWhenEmpty` is for the startup map: a file opened while the tileset was still
+ * loading wins over it. Returns whether a map was installed.
+ */
+export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_NEW_MAP, onlyWhenEmpty = false): Promise<boolean> {
+  const { width, height, name, description } = options;
+  const info = TILESET_BY_ID[options.tileset];
+  const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
+  const loaded = peekTileset(TILESET_FILENAMES[era]) ?? await ensureTileset(TILESET_FILENAMES[era]).catch(() => null);
+  if (onlyWhenEmpty && store.get(scenarioAtom)) return false;
+
+  const terrain = baseTerrain(loaded?.tileset ?? null, options.terrainId ?? info.defaultIsom);
+  const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null, Math.random, era);
+
+  store.set(loadDocumentAtom, {
+    scenario: createScenario({ width, height, era, name, description, tiles, isom }),
+    extras: new Map(),
+    fileName: null,
+    reason: "new",
+  });
+  store.set(statusMessageAtom, `New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
+  return true;
+}
+
 /** Whether replacing the document should go through the Close Scenario dialog first. */
 export function needsCloseConfirm(store: Store): boolean {
   return store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
@@ -81,38 +111,15 @@ export function useMapFileActions() {
   const scenario = useAtomValue(scenarioAtom);
   const extras = useAtomValue(archiveExtrasAtom);
   const path = useAtomValue(mapFilePathAtom);
-  const load = useSetAtom(loadDocumentAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const setModified = useSetAtom(mapModifiedAtom);
   const setPath = useSetAtom(mapFilePathAtom);
   const openDialog = useSetAtom(openDialogAtom);
 
-  /**
-   * Build a blank scenario and install it as the open document. The tileset graphics
-   * decide which tiles the fill uses, so they are fetched first; without them the map
-   * is still made of dirt ids and the viewport falls back to flat colour.
-   *
-   * `onlyWhenEmpty` is for the startup map: a file opened while the tileset was still
-   * loading wins over it.
-   */
+  /** File ▸ New: `newMapInto` over this store. */
   const newMap = useCallback(async (options: NewMapOptions = DEFAULT_NEW_MAP, onlyWhenEmpty = false) => {
-    const { width, height, name, description } = options;
-    const info = TILESET_BY_ID[options.tileset];
-    const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
-    const loaded = peekTileset(TILESET_FILENAMES[era]) ?? await ensureTileset(TILESET_FILENAMES[era]).catch(() => null);
-    if (onlyWhenEmpty && store.get(scenarioAtom)) return;
-
-    const terrain = baseTerrain(loaded?.tileset ?? null, options.terrainId ?? info.defaultIsom);
-    const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null, Math.random, era);
-
-    load({
-      scenario: createScenario({ width, height, era, name, description, tiles, isom }),
-      extras: new Map(),
-      fileName: null,
-      reason: "new",
-    });
-    setStatus(`New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
-  }, [load, setStatus, store]);
+    await newMapInto(store, options, onlyWhenEmpty);
+  }, [store]);
 
   const openFile = useCallback((file: File) => openFileInto(store, file), [store]);
 
@@ -141,10 +148,10 @@ export function useMapFileActions() {
   }, [store, setStatus]);
 
   const runPending = useCallback(async (p: PendingAction) => {
-    if (p.action === "new") await newMap(p.options);
+    if (p.action === "new") p.done?.(await newMapInto(store, p.options));
     else if (p.action === "open") p.done?.(await openFile(p.file));
     else closeMap();
-  }, [newMap, openFile, closeMap]);
+  }, [store, openFile, closeMap]);
 
   /**
    * Run a document-replacing action, or park it behind the Close Scenario dialog when the

@@ -1308,7 +1308,9 @@ describe("plugin surfaces", () => {
     ]);
     const sub = merged[0].items[1] as Extract<Menu["items"][number], { kind: "sub" }>;
     expect(sub.items.map((i) => (i.kind === "sep" ? "—" : i.kind === "item" ? `${i.label}${i.disabled ? "!" : ""}` : "?"))).toEqual(["Strings", "—", "Terrain from Image…", "Second!"]);
-    expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["New", "sub", "sep", "Deep"]);
+    // A submenu that does not exist is made for the plugin, at the end after a separator.
+    expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind === "sub" ? `sub:${i.label}` : i.kind))).toEqual(["New", "sub:Import", "sep", "sub:Nope"]);
+    expect((merged[0].items[3] as Extract<Menu["items"][number], { kind: "sub" }>).items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Deep"]);
     expect(merged[1].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Manage Plugins…", "sep", "Lost"]);
     // The caller's model is untouched.
     expect(menus[0].items).toHaveLength(2);
@@ -1917,5 +1919,78 @@ describe("plugin registries", () => {
     expect(registryUrls(store)).toEqual([...DEFAULT_REGISTRIES]);
     expect(store.get(registryCacheAtom)[mine]).toBeUndefined();
     expect(store.get(registryStateAtom)[mine]).toBeUndefined();
+  });
+});
+
+/* ── Script and create ──────────────────────────────────── */
+
+describe("plugin script api", () => {
+  it("declares, compiles, builds and prints a script through api.script", async () => {
+    const { store, scn } = blankStore(16, 16);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.script.state()).toMatchObject({ source: null, block: null, stale: false, unbuilt: false });
+    const decls = api.script.declarations();
+    expect(decls).toContain("declare function");
+    expect(decls).toContain("Anywhere");
+
+    const bad = await api.script.compile("trigger([Players.Player1], [NoSuchCondition()], []);");
+    expect(bad.ok).toBe(false);
+    expect(bad.diagnostics[0]).toMatchObject({ line: 1 });
+    const failed = await api.script.build("trigger([Players.Player1], [NoSuchCondition()], []);");
+    expect(failed.block).toBeNull();
+    expect(scn.triggers).toHaveLength(0);
+
+    const source = `trigger([P1], [Always()], [DisplayText("Always Display", "hello")]);`;
+    const built = await api.script.build(source);
+    expect(built.compiled.ok).toBe(true);
+    expect(built.block).toEqual({ start: 0, count: 1, lines: [1] });
+    expect(scn.triggers).toHaveLength(1);
+    expect(scn.triggers[0].actions[0].type).toBe(ActionType.DisplayText);
+    expect(scn.strings.strings).toContain("hello");
+    expect(store.get(mapModifiedAtom)).toBe(true);
+    const state = api.script.state();
+    expect(state?.source).toBe(source);
+    expect(state?.block).toEqual({ start: 0, count: 1, lines: [1] });
+    expect(state?.unbuilt).toBe(false);
+
+    const printed = api.script.print(scn.triggers);
+    expect(printed).toContain("DisplayText(");
+    expect(printed).toContain('"hello"');
+    // A rebuild from the printed form gives the same records back.
+    const again = await api.script.compile(printed);
+    expect(again.ok).toBe(true);
+    expect(again.triggers).toHaveLength(1);
+
+    const sim = api.script.simulate(scn.triggers, 3, { player: 0 });
+    expect(sim.cycles).toBe(3);
+    expect(sim.events.map((e) => e.text)).toEqual(["hello"]);
+    expect(sim.switches).toEqual([]);
+
+    // Building again replaces the block rather than stacking a second one.
+    const second = await api.script.build(`${source}\ntrigger([P2], [Always()], [SetSwitch(Switches.Switch1, "set")]);`);
+    expect(second.block).toEqual({ start: 0, count: 2, lines: [1, 2] });
+    expect(scn.triggers).toHaveLength(2);
+    expect(api.script.simulate(scn.triggers, 1, { player: 1 }).switches).toEqual([0]);
+  });
+
+  it("creates a blank map through document.create and honours the close gate", async () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const events: string[] = [];
+    api.events.on("document", (e) => events.push(e.reason));
+    expect(await api.document.create({ width: 64, height: 32, tileset: "ice", name: "Frost" })).toBe(true);
+    expect(api.document.info()).toMatchObject({ name: "Frost", width: 64, height: 32, tileset: "ice", fileName: null, modified: false });
+    expect(events).toEqual(["new"]);
+    expect(store.get(scenarioAtom)?.tiles.length).toBe(64 * 32);
+
+    // Modified map + the preference: the Close Scenario dialog holds the create; cancelling keeps the map.
+    store.set(mapModifiedAtom, true);
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
+    const held = api.document.create({ width: 96, height: 96, tileset: "jungle" });
+    const entry = store.get(dialogStackAtom).find((d) => d.id === "confirmClose");
+    expect(entry?.payload?.pending).toMatchObject({ action: "new", options: { width: 96, name: "Untitled Scenario" } });
+    store.set(closeDialogAtom, entry!.key);
+    expect(await held).toBe(false);
+    expect(api.document.info()?.name).toBe("Frost");
   });
 });

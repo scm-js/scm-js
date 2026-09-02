@@ -278,7 +278,7 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
 
   // `taken` before the close: an open waiting on this answer (a plugin's `document.open`) watches
   // the dialog stack, and this is how it tells "going on" from a dismissal.
-  const proceed = async () => { if (pending.action === "open") pending.taken = true; close(entry.key); await runPending(pending); };
+  const proceed = async () => { if (pending.action !== "close") pending.taken = true; close(entry.key); await runPending(pending); };
   const saveFirst = async () => {
     setBusy(true);
     try {

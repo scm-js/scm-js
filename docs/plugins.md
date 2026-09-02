@@ -312,6 +312,7 @@ ones' results, and both commit once at the end.
 | `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties. Not in the undo model. Returns an `UpdateResult`. |
 | `undo()` / `redo()` | The Edit menu's. |
 | `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
+| `create({ width, height, tileset, name?, description?, terrainId? })` | A blank map in place of the current one, the way File ▸ New makes one — flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every section a fresh map needs — through the same unsaved-changes gate as `open`. Resolves true once the new map is the open document, false when the user kept the current one. |
 | `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
 | `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
 | `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
@@ -439,6 +440,21 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 | `summarize(t, briefing?)` | The three lines the trigger list shows: players, conditions, actions. |
 | `comment(t)` | A trigger's `Comment` action text, if it has one. |
 | `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
+
+### `api.script`
+
+The trigger script — the TypeScript-subset language the Script Editor compiles into a
+block of the map's triggers (`docs/trigger-script.md`) — without the editor. The source
+and its build manifest are archive members, so they save with the `.scx`.
+
+| | |
+| --- | --- |
+| `state()` | `{ source, manifest, block, stale, unbuilt }`: the map's script, where its built block sits in the trigger list (null when the records were edited by hand — `stale`), and whether the source differs from what was last built. Null with no map. |
+| `declarations()` | The generated `.d.ts` the script type-checks against: this map's units, locations, switches, players and AI scripts by name, every condition and action as a function. Hand it to whatever writes a script — it is the whole vocabulary. |
+| `compile(source)` | Compile without building: a `CompileResult` with `ok`, `diagnostics` (1-based lines, `source: "typescript"` or `"compiler"`), the records and the variable allocation. Runs in the compile worker; a newer compile supersedes an unfinished one, which rejects with `CompileSuperseded`. |
+| `build(source, { takeOver? })` | The Script Editor's Build: compile and, when clean, replace the block (or append when the old one was edited) and store the source and manifest with the map — `{ compiled, block }`, `block` null when there were errors. `takeOver` replaces the whole trigger list with the script's. Not in the undo model; marks the map modified. |
+| `print(triggers)` | Records as raw `trigger()` calls in the script language — what Import map triggers writes. |
+| `simulate(triggers, cycles, { player? })` | The trigger-cycle interpreter: Deaths, Switch, Always and Never modelled, other conditions false, other actions logged — `{ cycles, events, switches }`. What the Script Editor's Simulate button runs. |
 
 ### `api.query`
 
@@ -598,7 +614,9 @@ without the tileset graphics.
   `"Layer"`, `"Scenario"`, `"Triggers"`, `"Tools"`, `"Plugins"`, `"Help"`) or a submenu
   by label (`"File/Import"`). Plugin items appear after a separator at the end of that
   menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
-  which case the item sits directly under it. `item` is
+  which case the item sits directly under it. A last segment that names no submenu gets
+  one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
+  items can keep them together. `item` is
   `{ label, shortcut?, icon?, after?, enabled?(), run() }`. `icon` puts a mark in front
   of the label: `"plugin"` for the plugin's own icon (the manifest's), or any
   `PluginIcon` — use it for items that do something no built-in does, such as reaching
@@ -938,3 +956,25 @@ three steps: the byte-level ones as one `replaceFile`, then `sections.rebuild` f
 names that asked for it, then one `document.edit` with `tx.rebuildIsom`. The bytes as the
 map came in are kept in memory until the next map opens, and *Restore original* puts them
 back through `replaceFile`.
+
+## AI
+
+[scm-js/plugin-ai](https://github.com/scm-js/plugin-ai), not a default, is the worked
+example for `api.script`, `api.document.create` and a plugin's own submenu, and the
+first plugin that needs a server: [scm-js/ai-server](https://github.com/scm-js/ai-server)
+holds the Anthropic key, the prompt recipes, the access rules and the budgets, and
+never any game data. The split is deliberate — the editor already has everything that
+makes a map a map, so the model never emits tiles. Each recipe takes the facts the
+plugin gathered (the tileset's terrain vocabulary, statistics, a rendered picture, the
+script's declarations) and answers with a *plan* or *text* the plugin applies through
+the ordinary API: a map plan is a coarse grid of legend characters the plugin turns into
+isometric brush strokes (so cliffs and shores draw themselves), bases laid with the
+Melee Wizard's geometry, doodads scattered by category; a trigger request answers in the
+script language, is compiled through `api.script.compile`, repaired against the
+diagnostics, and built with `api.script.build`; a review sends `document.renderImage`;
+the assistant panel is a tool-use loop whose tools — reads, screenshots, and one
+undoable write each — are defined and run in the plugin, with the server only adding
+the system prompt. `protocol.ts`, kept identical in both repositories, is the contract.
+Tools ▸ AI holds the whole of it; Settings there takes the server's address, an access
+token the operator issued, or your own Anthropic key, which is forwarded and never
+stored on the server.

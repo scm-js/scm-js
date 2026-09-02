@@ -53,8 +53,10 @@ export interface Menu {
 /**
  * Merge what plugins registered into the menu model: each item goes to the end of the
  * top-level menu or submenu its path names (`"File/Import"`), after one separator — or,
- * when `after` names an item or submenu in that menu, directly under it; a path that
- * names nothing falls back to the Plugins menu. Pure, so it is testable.
+ * when `after` names an item or submenu in that menu, directly under it. A path whose
+ * last segment names no submenu gets one made for it (`"Tools/AI"` — a submenu of the
+ * plugin's own, at the end of Tools); a top-level menu that does not exist falls back to
+ * the Plugins menu. Pure, so it is testable.
  */
 export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]): Menu[] {
   if (plugin.length === 0) return menus;
@@ -78,8 +80,17 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
     if (menu) {
       target = menu.items;
       for (const label of rest) {
-        const sub = findSub(target, label);
-        if (!sub) { target = null; break; }
+        let sub = findSub(target, label);
+        if (!sub) {
+          // A submenu of the plugin's own: created at the end of the menu, after a separator, on first use.
+          if (label !== rest[rest.length - 1]) { target = null; break; }
+          sub = { kind: "sub", label, items: [] };
+          copied.add(sub);
+          if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
+          target.push(sub);
+          target = sub.items;
+          continue;
+        }
         if (copied.has(sub)) { target = sub.items; continue; }
         // Copy the submenu once so the caller's model is untouched.
         const copy = { ...sub, items: [...sub.items] };

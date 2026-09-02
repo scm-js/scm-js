@@ -36,6 +36,9 @@ import type { StringUsage } from "../editor/strings";
 import type { PlacementProblem, PlacementVerdict } from "../editor/placement";
 import type { FlingyDat, ImagesDat, Race, SpritesDat, TechdataDat, UnitsDat, UpgradesDat, WeaponsDat } from "../formats/dat/dat";
 import type { ViewFlags } from "../atoms/editorAtoms";
+import type { ScriptBlock, ScriptState } from "../editor/script";
+import type { CompileResult } from "../script/compiler";
+import type { SimulationEvent } from "../script/simulate";
 
 export type {
   TriggerRecord, ConditionRecord, ActionRecord, ConditionDef, ActionDef, ArgDef, ArgKind, Choice, TriggerNames, TextTrigger,
@@ -112,6 +115,7 @@ export interface PluginApi {
   readonly plugin: PluginInfo;
   readonly document: DocumentApi;
   readonly triggers: TriggersApi;
+  readonly script: ScriptApi;
   readonly terrain: TerrainApi;
   readonly tileset: TilesetApi;
   readonly selection: SelectionApi;
@@ -184,6 +188,18 @@ export interface ExtrasApi {
   remove(name: string): boolean;
 }
 
+/** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
+export interface NewDocumentOptions {
+  width: number;
+  height: number;
+  tileset: TilesetId;
+  /** `Untitled Scenario` when omitted. */
+  name?: string;
+  description?: string;
+  /** ISOM id of the terrain to fill with; the tileset's default ground when omitted. */
+  terrainId?: number;
+}
+
 export interface DocumentApi {
   isOpen(): boolean;
   info(): DocumentInfo | null;
@@ -216,6 +232,14 @@ export interface DocumentApi {
    * file could not be read (the status bar says why).
    */
   open(file: File | Blob | Uint8Array, fileName?: string): Promise<boolean>;
+  /**
+   * A blank map in place of the current one, the way File ▸ New makes one: flat ground
+   * of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every
+   * section a fresh map needs. Goes through the same unsaved-changes gate as `open`.
+   * Resolves true once the new map is the open document, false when the user kept the
+   * current one.
+   */
+  create(options: NewDocumentOptions): Promise<boolean>;
   /**
    * The open map as a file, exactly as Save would write it — archive extras included.
    * Null when no map is open.
@@ -531,6 +555,62 @@ export interface TriggersApi {
   summarize(trigger: TriggerRecord, briefing?: boolean): { players: string; conditions: string; actions: string };
   /** A trigger's `Comment` action text, when it has one. */
   comment(trigger: TriggerRecord): string | null;
+}
+
+/* ── Trigger script ─────────────────────────────────────── */
+
+/** What `script.build` did. */
+export interface ScriptBuildResult {
+  compiled: CompileResult;
+  /** Where the block landed; null when the compile had errors and nothing was built. */
+  block: ScriptBlock | null;
+}
+
+export interface ScriptSimulation {
+  /** Cycles run. */
+  cycles: number;
+  /** Actions the interpreter did not model, in the order they fired. */
+  events: SimulationEvent[];
+  /** Indices of the switches that are set at the end. */
+  switches: number[];
+}
+
+/**
+ * The trigger script — the TypeScript-subset language the Script Editor compiles into
+ * a block of the map's triggers (`docs/trigger-script.md`). The source and its build
+ * manifest are archive members, so they save with the `.scx`; `build` is the Script
+ * Editor's Build button without the editor. Nothing here is in the undo model.
+ */
+export interface ScriptApi {
+  /** The map's script source, its manifest, and whether the built block is still intact. Null with no map. */
+  state(): ScriptState | null;
+  /**
+   * The generated `.d.ts` the script type-checks against: this map's units, locations,
+   * switches, players and AI scripts by name, every condition and action as a function.
+   * Empty with no map.
+   */
+  declarations(): string;
+  /**
+   * Compile without building. Diagnostics carry 1-based lines. Runs in the compile
+   * worker when the browser has one; a newer compile supersedes an unfinished one,
+   * which rejects with `CompileSuperseded`.
+   */
+  compile(source: string): Promise<CompileResult>;
+  /**
+   * Compile and, when there are no errors, install the block — replacing the previous
+   * one, or appending when the previous was edited by hand — and store the source with
+   * the map. `takeOver` replaces the *whole* trigger list with the script's. Marks the
+   * map modified.
+   */
+  build(source: string, options?: { takeOver?: boolean }): Promise<ScriptBuildResult>;
+  /** Records as raw `trigger()` calls in the script language — what Import map triggers writes. */
+  print(triggers: TriggerRecord[]): string;
+  /**
+   * Run the trigger-cycle interpreter over records: Deaths, Switch, Always and Never
+   * are modelled, other conditions count as false, other actions are logged as events.
+   * `player` is the slot the triggers run as (0-based; the first owner when omitted).
+   */
+  simulate(triggers: TriggerRecord[], cycles: number, options?: { player?: number }): ScriptSimulation;
 }
 
 /* ── Query ──────────────────────────────────────────────── */
@@ -1306,7 +1386,10 @@ export interface WidgetsApi {
 
 export type TopMenu = "File" | "Edit" | "View" | "Layer" | "Scenario" | "Triggers" | "Tools" | "Plugins" | "Help";
 
-/** A top-level menu, or a submenu by label: `"File/Import"`. */
+/**
+ * A top-level menu, or a submenu by label: `"File/Import"`. A last segment that names no
+ * submenu gets one of the plugin's own, at the end of the menu (`"Tools/AI"`).
+ */
 export type MenuPath = TopMenu | `${TopMenu}/${string}`;
 
 export interface MenuItemSpec {

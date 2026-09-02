@@ -665,6 +665,27 @@ plugin's dialog looks like a built-in one). All of it is additive — `PLUGIN_AP
 and the vendored `plugin-api/` in each plugin repository needs refreshing after
 `npm run build:plugin-types`.
 
+`api.script` (`host.ts#scriptApi`) is the Script Editor without the editor: `state()` (`scriptState` over the
+extras), `declarations()` (`generateDeclarations(scriptNames(scn))`), `compile()` (`compileInBackground` with
+`reservedStorage` — the worker's supersede rule applies, so a plugin compiling while the dialog is open supersedes
+its check), `build()` (the dialog's Build sequence: `buildScript`, write `archiveExtrasAtom`, `commitTriggersAtom`),
+`print()` (`printScript`) and `simulate()`. `api.document.create(options)` is File ▸ New without React:
+`useMapFileActions.ts#newMapInto` (the store-level half of the hook's `newMap`, which now calls it) behind the same
+`guardedReplace` gate as `open` — a "new" `PendingAction` carries `done` / `taken` like an "open" one, and the Close
+Scenario dialog's `proceed` sets `taken` for both. A menu path whose last segment names no submenu makes one for the
+plugin (`withPluginItems`: `"Tools/AI"` → an AI submenu at the end of Tools, after a separator); a missing *top*
+menu still falls back to Plugins.
+
+**AI** (`github.com/scm-js/plugin-ai`, not a default) and its server (`github.com/scm-js/ai-server`, Fastify +
+Caddy, one image on GHCR) are the LLM tooling: the server holds the Anthropic key, the prompt recipes, the access
+rules (tokens, per-IP and per-token budgets, bring-your-own-key) and never any game data; the plugin gathers facts
+(terrain vocabulary, statistics, a `renderImage` PNG, `api.script.declarations()`) and applies what comes back
+through the ordinary API — a map plan is a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's
+base geometry (`layout.ts` vendored there), triggers come back as script and go through `api.script.compile` →
+repair rounds → `build`, the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
+wire contract, kept identical in both repositories. The editor knows nothing of it beyond the three host additions
+above.
+
 **Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
 `icon.svg`, a vendored `plugin-api/` so it type-checks alone, and `tests/convert.test.ts` under its

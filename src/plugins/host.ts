@@ -27,7 +27,7 @@ import {
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
-import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
+import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { megatileForTile } from "../formats/tileset/decode";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -86,14 +86,20 @@ import {
   type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
-  type ContextMenuContext, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
+  type ContextMenuContext, type NewDocumentOptions, type ScriptApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UpdateResult, type UpdateTransaction, type ViewApi,
 } from "./api";
 import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
-import { needsCloseConfirm, openFileInto, type PendingAction } from "../hooks/useMapFileActions";
+import { needsCloseConfirm, newMapInto, openFileInto, type PendingAction } from "../hooks/useMapFileActions";
+import { buildScript, reservedStorage, scriptState } from "../editor/script";
+import { compileInBackground } from "../script/compileClient";
+import { generateDeclarations } from "../script/declarations";
+import { defaultScriptNames, scriptNames } from "../script/names";
+import { printScript } from "../script/print";
+import { simulate } from "../script/simulate";
 import { writeMapBytes } from "../services/mapIo";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
@@ -454,14 +460,29 @@ function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?:
   const file = source instanceof File && !fileName
     ? source
     : new File([source as unknown as BlobPart], name, { type: "application/octet-stream" });
-  if (!needsCloseConfirm(store)) return openFileInto(store, file);
+  return guardedReplace(store, () => openFileInto(store, file), (done) => ({ action: "open", file, done }));
+}
+
+/** `document.create`: File ▸ New through the same gate. */
+function createDocument(store: Store, options: NewDocumentOptions): Promise<boolean> {
+  const full = { name: "Untitled Scenario", description: "", ...options };
+  return guardedReplace(store, () => newMapInto(store, full), (done) => ({ action: "new", options: full, done }));
+}
+
+/**
+ * Run a document-replacing action at once, or park it in the Close Scenario dialog when
+ * `needsCloseConfirm` says so; `pending` builds the dialog's payload around the promise's
+ * `done`, and a dismissal is seen from the dialog stack as an entry leaving without `taken`.
+ */
+function guardedReplace(store: Store, run: () => Promise<boolean>, pending: (done: (ok: boolean) => void) => PendingAction & { taken?: boolean }): Promise<boolean> {
+  if (!needsCloseConfirm(store)) return run();
   return new Promise((resolve) => {
-    const pending: PendingAction = { action: "open", file, done: resolve };
-    store.set(openDialogAtom, "confirmClose", { pending });
+    const p = pending(resolve);
+    store.set(openDialogAtom, "confirmClose", { pending: p });
     const unsub = store.sub(dialogStackAtom, () => {
-      if (store.get(dialogStackAtom).some((d) => d.payload?.pending === pending)) return;
+      if (store.get(dialogStackAtom).some((d) => d.payload?.pending === p)) return;
       unsub();
-      if (!pending.taken) resolve(false);
+      if (!p.taken) resolve(false);
     });
   });
 }
@@ -688,6 +709,55 @@ export function triggersApi(store: Store): TriggersApi {
     triggersFor,
     summarize: (trigger, briefing = false) => summarizeTrigger(trigger, names(), briefing),
     comment: (trigger) => triggerComment(trigger, names()),
+  };
+}
+
+/* ── Trigger script ─────────────────────────────────────── */
+
+/**
+ * `api.script`: the Script Editor's compile and Build without the editor. `build` is
+ * the dialog's sequence — compile in the worker, `buildScript` over the current extras,
+ * write them back, `commitTriggersAtom` — so a plugin-written script lands exactly as
+ * a typed one does: block replaced or appended, manifest and source stored with the map.
+ */
+export function scriptApi(store: Store): ScriptApi {
+  const scenario = () => store.get(scenarioAtom);
+  const setup = (scn: Scenario) => {
+    const state = scriptState(scn, store.get(archiveExtrasAtom));
+    return { state, decls: generateDeclarations(scriptNames(scn)), options: reservedStorage(scn, state.block) };
+  };
+  const compile = (source: string) => {
+    const scn = scenario();
+    if (!scn) return Promise.reject(new Error("No map is open."));
+    const { decls, options } = setup(scn);
+    return compileInBackground(source, decls, options);
+  };
+  return {
+    state: () => { const scn = scenario(); return scn ? scriptState(scn, store.get(archiveExtrasAtom)) : null; },
+    declarations: () => { const scn = scenario(); return scn ? generateDeclarations(scriptNames(scn)) : ""; },
+    compile,
+    build: async (source, options = {}) => {
+      const compiled = await compile(source);
+      const scn = scenario();
+      if (!compiled.ok || !scn) return { compiled, block: null };
+      const out = buildScript(scn, store.get(archiveExtrasAtom), source, compiled, { takeOver: options.takeOver });
+      store.set(archiveExtrasAtom, out.extras);
+      store.set(commitTriggersAtom);
+      store.set(statusMessageAtom, out.block.count === 0 ? "Built: the script defines no triggers." : `Built ${out.block.count} trigger${out.block.count === 1 ? "" : "s"} → #${out.block.start + 1}–#${out.block.start + out.block.count}.`);
+      return { compiled, block: out.block };
+    },
+    print: (triggers) => {
+      const scn = scenario();
+      const names = scn ? scriptNames(scn) : defaultScriptNames();
+      return printScript(triggers, { names, string: (i) => (scn ? getString(scn.strings, i) : null) });
+    },
+    simulate: (triggers, cycles, options = {}) => {
+      const scn = scenario();
+      const sim = simulate(triggers, cycles, { player: options.player, strings: (i) => (scn ? getString(scn.strings, i) : null) });
+      const switches: number[] = [];
+      sim.switches.forEach((v, i) => { if (v) switches.push(i); });
+      return { cycles: sim.cycle, events: sim.events, switches };
+    },
   };
 }
 
@@ -954,6 +1024,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
       open: (source, fileName) => openDocument(store, source, fileName),
+      create: (options) => createDocument(store, options),
       export: async (options = {}) => {
         const scn = scenario();
         if (!scn) return null;
@@ -995,6 +1066,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     },
 
     triggers: triggersApi(store),
+    script: scriptApi(store),
     query: queryApi(store),
     view: viewApi(store),
     data: dataApi(),

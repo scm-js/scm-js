@@ -1688,18 +1688,20 @@ export default function MapViewport() {
           <span>Loading {tileset.name} terrain…</span>
         </div>
       )}
+      <div className="viewport-notices">
       {unitError && (layer === "units" || layer === "sprites") && scenario && (
         <div className="viewport-notice" role="status">
-          <strong>No unit graphics.</strong> Run <code>node scripts/extract-units.mjs</code> against a StarCraft
-          install to fill <code>public/arr</code> and <code>public/unit</code>; units are drawn as player-coloured markers until then.
+          <span><strong>No unit graphics.</strong> Units are drawn as player-coloured markers until the editor has the game's unit files.</span>
+          <button type="button" className="btn sm" onClick={() => open("gameData")}>Set up game data…</button>
         </div>
       )}
       {tilesetError && (
         <div className="viewport-notice" role="status">
-          <strong>No tileset graphics.</strong> Run <code>node scripts/extract-tilesets.mjs</code> against a
-          StarCraft install to fill <code>public/tileset/</code>; terrain is drawn as flat colour until then.
+          <span><strong>No tileset graphics.</strong> Terrain is drawn as flat colour until the editor has the game's tileset files.</span>
+          <button type="button" className="btn sm" onClick={() => open("gameData")}>Set up game data…</button>
         </div>
       )}
+      </div>
       <PluginPanels />
       <div className="map-hud">
         <span className="hud-chip"><b>{tileset.name}</b></span>

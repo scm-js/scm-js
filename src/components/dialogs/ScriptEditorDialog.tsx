@@ -17,7 +17,7 @@ import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { getString } from "../../formats/chk/sections/strings";
 import { buildScript, reservedStorage, withScript, type ScriptBlock } from "../../editor/script";
 import { actionDef } from "../../data/triggerDefs";
-import { compileInBackground, CompileSuperseded } from "../../script/compileClient";
+import { compileInBackground, CompileSuperseded, retainCompileWorker } from "../../script/compileClient";
 import type { CompileOptions, CompileResult, ScriptDiagnostic } from "../../script/compiler";
 import { generateDeclarations } from "../../script/declarations";
 import { scriptNames } from "../../script/names";
@@ -126,6 +126,8 @@ export function ScriptEditorDialog({ entry }: DialogProps) {
   useEffect(() => {
     if (!host || !scenario) return;
     let cancelled = false;
+    // Checks run on every keystroke (debounced), so the compile worker stays up while the editor is open.
+    const releaseWorker = retainCompileWorker();
     import("../../script/monaco").then((m) => {
       if (cancelled) return;
       monacoRef.current = m;
@@ -151,6 +153,8 @@ export function ScriptEditorDialog({ entry }: DialogProps) {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       editorRef.current?.dispose();
       editorRef.current = null;
+      monacoRef.current?.releaseScriptEditor();
+      releaseWorker();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host, scenario]);

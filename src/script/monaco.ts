@@ -101,6 +101,19 @@ export interface ScriptEditor {
   dispose(): void;
 }
 
+/**
+ * The Script Editor closed: drop the model and stop Monaco's TypeScript worker. Monaco 0.56
+ * never idles that worker out on its own, and it is a second TypeScript instance next to
+ * the compile worker; re-setting the compiler options is the one public way to make its
+ * `WorkerManager` stop it (`onDidChange` → `_stopWorker`) — it starts again on the next
+ * `createScriptEditor`. The source itself lives in the archive extras, so only the undo
+ * history of the closed session goes with the model.
+ */
+export function releaseScriptEditor(): void {
+  monaco.editor.getModel(SCRIPT_URI)?.dispose();
+  typescriptDefaults.setCompilerOptions(typescriptDefaults.getCompilerOptions());
+}
+
 export function createScriptEditor(host: HTMLElement, source: string, onChange: (text: string) => void): ScriptEditor {
   const model = monaco.editor.getModel(SCRIPT_URI) ?? monaco.editor.createModel(source, "typescript", SCRIPT_URI);
   if (model.getValue() !== source) model.setValue(source);

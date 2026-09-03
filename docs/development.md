@@ -64,7 +64,16 @@ it is the ordinary one measured above.
 
 `electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
 (everything is bundled by Vite) and never the game data a developer's `public/` holds.
-Builds are unsigned for now. The first run opens maximized (1400 × 900 is what restoring it
+Builds are unsigned for now.
+
+What the download weighs is almost all Electron. The Windows zip is about 158 MB, of which the
+Electron executable is 103 MB compressed and the app's own asar 5 MB (20 MB unpacked, 14 MB of it
+TypeScript shipped three times: Monaco's language worker, the compile worker and the main-thread
+fallback). `electronLanguages: [en-US]` drops Chromium's other 54 UI locales, which were 50 MB
+unpacked and 12 MB of the zip; the editor has no translations, so nothing is lost. The DirectX and
+Vulkan DLLs (`dxcompiler.dll`, `dxil.dll`, `vk_swiftshader.dll`; 38 MB unpacked, 15 MB zipped)
+are Chromium's WebGPU and software-Vulkan back ends, which a canvas-2D editor never reaches — they
+could go in an `afterPack` hook, but that needs a run on real Windows first and has not been done. The first run opens maximized (1400 × 900 is what restoring it
 down gives back); after that the window comes back the size, position and maximized state it
 was left at, kept in `window.json` in the user data directory and saved half a second after
 the last move or resize as well as on close, so a session that ends in a crash or a kill still

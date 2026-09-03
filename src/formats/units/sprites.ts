@@ -2,6 +2,7 @@ import { DrawFunction, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
 import { drawGrpFrame, facingFrame } from "../dat/grp";
 import { imageGrpPath, requestGrp, requestRemap, unitImageId, type UnitAssets } from "./load";
 import { teamColorKey, teamColorLut, teamColorPalette, tunitRamp, type TeamColorSpec } from "./teamColor";
+import { LruCache } from "../../lib/lru";
 
 /**
  * One frame of one image rendered for one team colour and palette, as a canvas the size
@@ -18,7 +19,24 @@ export interface ImageFrame {
 /** Kept for callers that only need the unit's default picture. */
 export type UnitSprite = ImageFrame;
 
-const cache = new Map<string, ImageFrame>();
+/**
+ * Rendered frames, bounded by pixel memory rather than count: unit animation asks for a
+ * new frame every game tick and a map with eight players multiplies every frame by colour,
+ * so an unbounded map grew for as long as the map stayed open. 64 MB of RGBA is on the
+ * order of four thousand unit frames; the oldest go first and are simply drawn again.
+ */
+export const FRAME_CACHE_BUDGET = 64 * 1024 * 1024;
+const cache = new LruCache<string, ImageFrame>(FRAME_CACHE_BUDGET, (f) => f.width * f.height * 4, (f) => {
+  // Let the browser release the bitmap now rather than when the GC gets round to the canvas.
+  f.image.width = 0;
+  f.image.height = 0;
+});
+
+/** How much the frame cache holds, for the About dialog's memory line and tests. */
+export function frameCacheUsage(): { frames: number; bytes: number; budget: number } {
+  return { frames: cache.size, bytes: cache.used, budget: cache.budget };
+}
+
 const luts = new Map<string, Uint8Array>();
 const teamPalettes = new Map<string, Uint8Array>();
 const remapPalettes = new Map<string, Uint8Array>();

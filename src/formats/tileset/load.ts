@@ -195,6 +195,22 @@ export async function ensureTileset(name: TilesetFileName): Promise<LoadedTilese
   return loaded;
 }
 
+/**
+ * Forget a decoded tileset. Every reader asks for the *document's* tileset
+ * (`tilesetFileNameAtom`), so once a map changes era the one it left is only memory — the
+ * raw files plus a ~20 MB atlas canvas — and `useTileset` releases it on the transition.
+ * A load still in flight is left alone (it belongs to whoever asked); a released tileset
+ * is simply fetched and rasterised again the next time a map needs it. Returns whether
+ * there was anything to drop.
+ */
+export function releaseTileset(name: TilesetFileName): boolean {
+  const loaded = ready.get(name);
+  if (!loaded) return false;
+  ready.delete(name);
+  cache.delete(name);
+  return true;
+}
+
 /** After the game data source changes: the shared names file may now be there, so ask again next time. */
 export function retryTilesetParts(): void {
   statTxt = null;

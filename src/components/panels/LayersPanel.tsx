@@ -2,7 +2,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
 import { activeLayerAtom, lockedLayersAtom, viewFlagsAtom, type EditorLayer, type ViewFlags } from "../../atoms/editorAtoms";
 import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAtoms";
-import { PluginIconView } from "../dialogs/PluginDialogs";
+import { PluginIconView } from "../ui/PluginIconView";
 import { RAIL_ICON } from "./PalettePanel";
 
 /** The editor's layers, each with the View flag its eye toggles; Terrain and the clipboard are always drawn. */

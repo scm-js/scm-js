@@ -18,6 +18,10 @@ files:
   - desktop/dist/**/*
   - package.json
 asar: true
+# Chromium ships 55 UI locales (50 MB unpacked, 12 MB of the zip); the editor has no translations
+# and the few strings Chromium itself shows (context menus, file pickers) read fine in English.
+electronLanguages:
+  - en-US
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 win:
   # One 1024² PNG for every platform — the app mark in public/, which the web build also

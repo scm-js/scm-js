@@ -5,6 +5,7 @@ import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { openDialogAtom } from "../atoms/uiAtoms";
+import { desktopBridge } from "../gamedata/desktop";
 import { currentAssetSource, onAssetSource } from "../gamedata/source";
 import { runPreload, warmRemainingTilesets, type PreloadTask } from "../services/preload";
 import type { getDefaultStore } from "jotai";
@@ -59,8 +60,11 @@ export function usePreload() {
       setStep(step);
       if (step.justFinished) setLog((log) => [...log, step.justFinished!]);
     }, [documentReady(store)]).then(() => {
-      warmRemainingTilesets(tileset);
-      if (currentAssetSource()?.kind === "none") store.set(openDialogAtom, "gameData", { auto: true });
+      // The warm-up pulls the other tilesets' bytes into the HTTP cache ahead of a map that
+      // needs them; the desktop serves them from its own folder, where that is only disk I/O.
+      const source = currentAssetSource();
+      if (!(desktopBridge() && source?.kind !== "remote")) warmRemainingTilesets(tileset);
+      if (source?.kind === "none") store.set(openDialogAtom, "gameData", { auto: true });
     });
   }, [setLog, setSource, setStep, store]);
 }

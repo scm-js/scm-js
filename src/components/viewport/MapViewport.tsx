@@ -114,6 +114,26 @@ function useAutoShow(active: boolean, key: keyof ViewFlags, setFlags: (fn: (f: V
 
 const fmtTiles = (px: number) => (Number.isInteger(px / TILE) ? String(px / TILE) : (px / TILE).toFixed(2));
 
+/** The cached terrain picture and what it was drawn for. */
+interface TerrainLayer {
+  canvas: HTMLCanvasElement;
+  scenario: unknown;
+  tiles: ArrayLike<number>;
+  assets: unknown;
+  sx: number;
+  sy: number;
+  w: number;
+  h: number;
+  dpr: number;
+  tilePx: number;
+  terrainRevision: number;
+  doodadsRevision: number;
+  /** The water-cycle step the layer's cycling tiles show. */
+  step: number;
+  /** Whether any visible tile cycles — what decides if a step repaints. */
+  animated: boolean;
+}
+
 export default function MapViewport() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -152,6 +172,8 @@ export default function MapViewport() {
   const toolDownRef = useRef(false);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
+  /** The terrain blits, cached between paints; see the terrain block in `draw`. */
+  const terrainLayerRef = useRef<TerrainLayer | null>(null);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
   const unitsInViewRef = useRef(false);
   const lastViewportRect = useRef({ x: -1, y: -1, w: -1, h: -1 });
@@ -308,32 +330,66 @@ export default function MapViewport() {
     let animatedInView = false;
     if (tiles && tilesetAssets) {
       const { atlas, tileset: ts } = tilesetAssets;
-      // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
-      // precomputed mean colour instead.
-      const flat = tilePx < 4;
-      ctx.imageSmoothingEnabled = tilePx < TILE;
-      for (let ty = y0; ty < y1; ty++) {
-        const row = ty * mapW;
-        for (let tx = x0; tx < x1; tx++) {
-          const megatile = megatileForTile(ts, tiles[row + tx]);
-          const px = tx * tilePx - sx;
-          const py = ty * tilePx - sy;
-          if (megatile < 0) {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
-            continue;
-          }
-          if (flat) {
-            const rgb = atlas.averages[megatile];
-            ctx.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
-            ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
-            continue;
-          }
-          const src = atlasSource(atlas, megatile);
-          if (src.animated) animatedInView = true;
-          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
+      // The terrain is blitted into a layer of its own and the layer is copied here, so a
+      // paint that changes nothing under the ground — a unit animation frame, a hover ghost,
+      // a selection — costs one drawImage instead of a thousand. The layer is redrawn whole
+      // when the view or the tiles change, and only its cycling tiles when the water steps.
+      const step = atlas.animation?.step ?? 0;
+      let layer = terrainLayerRef.current;
+      const same = layer !== null && layer.scenario === scenario && layer.tiles === tiles && layer.assets === tilesetAssets &&
+        layer.sx === sx && layer.sy === sy && layer.w === size.w && layer.h === size.h && layer.dpr === dpr && layer.tilePx === tilePx &&
+        layer.terrainRevision === terrainRevision && layer.doodadsRevision === doodadsRevision;
+      if (!same) {
+        const canvas = layer?.canvas ?? document.createElement("canvas");
+        if (canvas.width !== size.w * dpr || canvas.height !== size.h * dpr) {
+          canvas.width = size.w * dpr;
+          canvas.height = size.h * dpr;
         }
+        layer = { canvas, scenario, tiles, assets: tilesetAssets, sx, sy, w: size.w, h: size.h, dpr, tilePx, terrainRevision, doodadsRevision, step, animated: false };
+        terrainLayerRef.current = layer;
       }
+      if (!same || layer!.step !== step) {
+        const lc = layer!.canvas.getContext("2d")!;
+        lc.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // A step change redraws only the tiles that cycle; everything else is still right.
+        const onlyAnimated = same;
+        if (!onlyAnimated) lc.clearRect(0, 0, size.w, size.h);
+        // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
+        // precomputed mean colour instead.
+        const flat = tilePx < 4;
+        lc.imageSmoothingEnabled = tilePx < TILE;
+        let animated = false;
+        for (let ty = y0; ty < y1; ty++) {
+          const row = ty * mapW;
+          for (let tx = x0; tx < x1; tx++) {
+            const megatile = megatileForTile(ts, tiles[row + tx]);
+            const px = tx * tilePx - sx;
+            const py = ty * tilePx - sy;
+            if (megatile < 0) {
+              if (onlyAnimated) continue;
+              lc.fillStyle = "#000";
+              lc.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+              continue;
+            }
+            if (flat) {
+              if (onlyAnimated) continue;
+              const rgb = atlas.averages[megatile];
+              lc.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
+              lc.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+              continue;
+            }
+            const src = atlasSource(atlas, megatile);
+            if (src.animated) animated = true;
+            else if (onlyAnimated) continue;
+            lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
+          }
+        }
+        layer!.step = step;
+        if (!onlyAnimated) layer!.animated = animated;
+      }
+      animatedInView = layer!.animated;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(layer!.canvas, 0, 0, size.w, size.h);
       ctx.imageSmoothingEnabled = true;
     } else if (tiles && tilesetLoading) {
       // Map open, graphics still coming: a calm plate under the loading overlay. Anything

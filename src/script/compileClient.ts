@@ -14,8 +14,55 @@ let seq = 0;
 const pending = new Map<number, { resolve: (r: CompileResult) => void; reject: (e: Error) => void }>();
 const pendingTranspile = new Map<number, { resolve: (code: string) => void; reject: (e: Error) => void }>();
 
+/**
+ * The worker is a whole TypeScript instance (tens of MB of heap) and it is only busy while a
+ * plugin bundle is being transpiled or the Script Editor is checking as you type. It goes
+ * away this long after its last answer — unless a `retainCompileWorker` lease is held, which
+ * the open Script Editor does — and is started again on the next request.
+ */
+export const WORKER_IDLE_MS = 30_000;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let leases = 0;
+
+function busy() {
+  if (idleTimer === null) return;
+  clearTimeout(idleTimer);
+  idleTimer = null;
+}
+
+/** Called after every answer: nothing left to do, nobody holding it — arm the idle shutdown. */
+function settle() {
+  if (!worker || leases > 0 || pending.size > 0 || pendingTranspile.size > 0) return;
+  busy();
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (!worker || leases > 0 || pending.size > 0 || pendingTranspile.size > 0) return;
+    worker.terminate();
+    worker = null;
+  }, WORKER_IDLE_MS);
+}
+
+/** Keep the worker alive until the returned function is called (idempotent). */
+export function retainCompileWorker(): () => void {
+  leases++;
+  busy();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    leases--;
+    settle();
+  };
+}
+
+/** Whether a compile worker exists right now (tests and the About dialog). */
+export function compileWorkerAlive(): boolean {
+  return worker !== null;
+}
+
 function getWorker(): Worker | null {
   if (workerBroken) return null;
+  busy();
   if (worker) return worker;
   try {
     worker = new Worker(new URL("./compile.worker.ts", import.meta.url), { type: "module" });
@@ -30,6 +77,7 @@ function getWorker(): Worker | null {
       pendingTranspile.delete(e.data.id);
       if (e.data.code !== undefined) t.resolve(e.data.code);
       else t.reject(new Error(e.data.error ?? "Transpile failed."));
+      settle();
       return;
     }
     const data = e.data as CompileResponse;
@@ -38,6 +86,7 @@ function getWorker(): Worker | null {
     pending.delete(data.id);
     if (data.result) p.resolve(data.result);
     else p.reject(new Error(data.error ?? "Compile failed."));
+    settle();
   };
   worker.onerror = () => {
     // The worker script itself failed: fall back for every outstanding request and from now on.

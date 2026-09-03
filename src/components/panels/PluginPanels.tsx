@@ -13,7 +13,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
-import { PluginIconView } from "../dialogs/PluginDialogs";
+import { PluginIconView } from "../ui/PluginIconView";
 
 const DEFAULT_WIDTH = 260;
 /** Where a panel first opens: the top-right corner of the map, clear of the palette and the area most work starts in; each further one is stepped in and down. */

@@ -481,6 +481,8 @@ function createWindow() {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       sandbox: true,
+      // No prose is typed in the editor worth checking, and the dictionaries cost memory and a download.
+      spellcheck: false,
       additionalArguments: [`--scmjs-version=${app.getVersion()}`],
     },
   });

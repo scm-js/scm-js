@@ -14,31 +14,11 @@ import {
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
-import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
+import { PluginIconView } from "../ui/PluginIconView";
+import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginInfo } from "../../plugins/api";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
-
-/* ── A plugin's icon ────────────────────────────────────── */
-
-/**
- * The face a plugin declared in its manifest (`icon`): an image, or a glyph, or —
- * when it declared none, or the image will not load — the editor's own plugin mark.
- * The loader has already decided which of the two it is (`resolveIcon`); nothing here
- * touches the manifest string, so a `javascript:` "icon" never reaches an attribute.
- */
-export function PluginIconView({ icon, size = 30 }: { icon: PluginIcon | null | undefined; size?: number }) {
-  const [broken, setBroken] = useState(false);
-  const style = { width: size, height: size, fontSize: Math.round(size * 0.72) };
-  if (icon?.kind === "image" && !broken) {
-    return <img className="plugin-icon" style={style} src={icon.url} alt="" onError={() => setBroken(true)} />;
-  }
-  return (
-    <span className="plugin-icon" style={style} aria-hidden>
-      {icon?.kind === "text" ? icon.text : <Blocks size={Math.round(size * 0.6)} />}
-    </span>
-  );
-}
 
 /* ── A plugin's own dialog ──────────────────────────────── */
 

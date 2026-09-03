@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import { tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
 import {
   ensureTileset,
   peekTileset,
+  releaseTileset,
   type LoadedTileset,
   type TilesetFileName,
 } from "../formats/tileset/load";
@@ -39,6 +40,17 @@ export function useTileset(): TilesetState {
   // Bumped when Help ▸ Game Data… installs a source, so a tileset that failed is asked for again.
   const revision = useAtomValue(gameDataRevisionAtom);
   const [state, setState] = useState<Internal>(() => initial(name));
+  const previous = useRef(name);
+
+  // The map moved to another tileset: the one it left would otherwise stay decoded for the
+  // session. Released here, on the transition, rather than by sweeping everything but the
+  // current one, so a tileset a dialog is loading ahead of a change is never taken away.
+  useEffect(() => {
+    if (previous.current !== name) {
+      releaseTileset(previous.current);
+      previous.current = name;
+    }
+  }, [name]);
 
   useEffect(() => {
     void revision;

@@ -27,7 +27,7 @@ import {
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
-import { PluginIconView } from "../dialogs/PluginDialogs";
+import { PluginIconView } from "../ui/PluginIconView";
 import { clearRecents, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";

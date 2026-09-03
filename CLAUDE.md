@@ -529,7 +529,13 @@ game and their addresses unknowable at save time).
   workers via Vite `?worker`, `typescriptDefaults` set `noLib` with the generated file as the one extra
   lib, and a theme from `tokens.css`. `compileClient.ts` talks to `compile.worker.ts` (latest request
   wins, `CompileSuperseded` for the rest; falls back to the main thread if the worker cannot start;
-  `CompileOptions` ride along). `typescript` is therefore a runtime dependency (bundled into the worker,
+  `CompileOptions` ride along). The worker is a whole TypeScript instance, so it is terminated
+  `WORKER_IDLE_MS` (30 s) after its last answer unless a `retainCompileWorker()` lease is held — the
+  open Script Editor holds one — and started again by the next request (plugins transpile through it
+  at startup, then it goes). Monaco 0.56 never idles its own TypeScript worker out, so the dialog's
+  unmount calls `monaco.ts#releaseScriptEditor`: dispose the model and re-set the compiler options,
+  which is the one public route to `WorkerManager._stopWorker` (the source lives in the archive
+  extras; only the closed session's undo history goes). `typescript` is therefore a runtime dependency (bundled into the worker,
   ~3.5 MB; Monaco's own TS worker is another copy — running the compiler inside Monaco's worker via
   `customWorkerPath` needs a classic script, which Vite's dev server cannot serve, so two copies it is).
   The dialog writes the source into the extras on every change (debounced check, 350 ms) and holds the
@@ -929,7 +935,8 @@ redistribute what it produces; the hosted build's `GAME_DATA_URL` bucket is the 
 `desktop/main.ts` (Electron, bundled by `desktop/vite.config.ts` into `desktop/dist/*.cjs`, `ssr: true` +
 `noExternal` so mopaq and the shared extraction ride along, `publicDir: false`) serves `dist/` under
 `app://scmjs/` and the game-data prefixes from `userData/gamedata` first, so the renderer's bundled probe
-finds an extraction; the window's size, position and maximized state are remembered in
+finds an extraction (which is also why `usePreload` skips `warmRemainingTilesets` on the desktop —
+the bytes are on local disk already); the window's size, position and maximized state are remembered in
 `userData/window.json` (`readWindowState` / `watchWindowState`, saved 500 ms after the last move or
 resize and again on close; an off-screen position is dropped, and a first run with no file opens
 maximized) and it is shown on `ready-to-show`, so nothing flashes at the unmaximized size, with
@@ -941,7 +948,9 @@ next to the executable / userData / env / the platform's install paths (so two a
 the app are found). `preload.ts` is
 the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it. `electron-builder.yml`
 packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
-unsigned, with `public/icon.png` as every platform's icon; Windows gets an NSIS installer and a **zip**,
+unsigned, with `public/icon.png` as every platform's icon, `electronLanguages: [en-US]` (the 55
+Chromium locales were 50 MB unpacked and 12 MB of the zip; the editor has no translations) and
+`spellcheck: false` in the window's `webPreferences`; Windows gets an NSIS installer and a **zip**,
 never electron-builder's `portable` target, whose SFX re-extracts the whole app into `%TEMP%` on every
 launch and can only cover the wait with a static `.bmp` painted over the desktop (`docs/development.md`) — that file, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
@@ -972,7 +981,10 @@ per tileset in ERA order), so the atlas keeps a second small canvas of just the 
 never index `atlas.image` directly. `MapViewport` drives the step from the wall clock in a rAF loop
 gated on `viewFlags.animateWater`. Averages (minimap, far zoom) stay at step 0. `src/hooks/useTileset.ts` exposes `{ loaded, loading, error }`;
 when files are missing (`TilesetMissingError`) the viewport falls back to flat per-tileset colours
-and says so.
+and says so. A decoded tileset is the raw files plus a ~20 MB atlas canvas, and every reader asks
+for the *document's* tileset, so `useTileset` calls `releaseTileset` on the one the map just left
+(on the transition, not a sweep — a tileset a dialog is loading ahead of a change is never taken
+away); a released tileset is fetched again if a later map needs it. `tests/tileset-cache.test.ts`.
 
 ### Units (`src/formats/dat/`, `src/formats/units/`, `src/editor/units.ts`, `src/hooks/useUnitTools.ts`)
 
@@ -980,7 +992,10 @@ and says so.
 arrays; placement box / add-on offset / extents are arrays of structs — the layout is pinned by
 `tests/dat.test.ts` against the real file). `units/load.ts` fetches the tables once (`getUnitAssets` /
 `peekUnitAssets`) and GRPs lazily (`requestGrp`, `onGrpLoaded` fires so canvases repaint);
-`units/sprites.ts` caches one canvas per (image, frame, colour row, tileset palette). Team colour =
+`units/sprites.ts` caches one canvas per (image, frame, colour row, tileset palette) in an
+`LruCache` (`src/lib/lru.ts`, budgeted in pixel bytes — `FRAME_CACHE_BUDGET`, 64 MB — since
+frames range from 8² to 256²; evicted canvases are zero-sized so the bitmap goes at once;
+`frameCacheUsage()` reads it; `tests/lru.test.ts`). Team colour =
 `tunit.pcx` row `playerColorIndex(scn.playerColors, owner)` (COLR-aware) remapping palette indices
 8–15, painted through the *tileset* palette — so sprites need the tileset loaded too. `unitName(id)` and
 `UNIT_GROUPS` (ids, not names) live in `src/data/units.ts`; `activeUnitAtom` is a units.dat id.
@@ -1113,10 +1128,20 @@ again, measure `longtask` entries before blaming the loading code.
 
 - All state is Jotai; there is no context/provider layering beyond the default store.
 - Dialogs: `DialogId` union in `src/atoms/uiAtoms.ts`, a stack (`openDialogAtom`/`closeDialogAtom`),
-  and a `REGISTRY: Record<DialogId, ComponentType<DialogProps>>` in
-  `src/components/dialogs/DialogHost.tsx`. Adding a dialog means touching both.
+  and a `REGISTRY` of `React.lazy` components in `src/components/dialogs/DialogHost.tsx`, one
+  `import()` per dialog module (dialogs sharing a file share a chunk, each entry rendered in its own
+  `Suspense`). Adding a dialog means touching both. The dialog modules must not be imported
+  statically from anything on the startup path or Vite folds them back into the main chunk (Vite
+  says so: `INEFFECTIVE_DYNAMIC_IMPORT`) — which is why `PluginIconView` lives in `components/ui/`,
+  not in `PluginDialogs.tsx`. Splitting them took the main chunk from 1140 KB to 537 KB.
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
+  The terrain blits go into a cached layer canvas (`TerrainLayer`, `terrainLayerRef`) that `draw`
+  copies with one `drawImage`: it is redrawn whole when the scroll, size, zoom, tiles, revisions,
+  tileset or document change, and only its cycling tiles when the water step moves, so a unit
+  animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
+  what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
+  replace the scenario), which is the same contract the repaint itself relies on.
 - `src/hooks/useWindowTitle.ts` keeps `document.title` on the open map — the file name when there is
   one, else the scenario name, with a leading `*` while it is modified, and the plain
   `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page

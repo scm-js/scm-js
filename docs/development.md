@@ -30,6 +30,28 @@ npm run build:desktop   # web build in desktop mode + main bundle + electron-bui
 npm run desktop         # bundle the main process and run Electron against dist/
 ```
 
+`scripts/build-desktop.mjs` is those three steps, and its arguments say what the packaging
+step builds — with none it is this OS and the targets `electron-builder.yml` lists for it,
+which is what CI runs:
+
+```sh
+npm run build:desktop -- win                 # Windows: nsis + portable
+npm run build:desktop -- win portable        # just the portable .exe
+npm run build:desktop -- linux AppImage x64 arm64
+npm run build:desktop -- mac dmg arm64
+npm run build:desktop -- --dir               # unpacked app, no installer — the fast check
+npm run build:desktop -- win --skip-web      # repackage the dist/ already on disk
+```
+
+Platforms are `win` / `mac` / `linux`, architectures `x64` / `ia32` / `arm64` / `armv7l` /
+`universal`, and any electron-builder target name (`nsis`, `portable`, `dmg`, `zip`,
+`AppImage`, `deb`, …) applies to every platform named; `--publish <mode>` and anything after
+a bare `--` go to electron-builder as they are. `--skip-web` and `--skip-main` reuse the
+bundles on disk when only the packaging is being changed. Cross-building is electron-builder's
+business: the script warns about the combinations that need tooling the machine may not have
+(a macOS installer anywhere but on a Mac, an NSIS one without wine) and runs them anyway —
+`--dir` and `zip` cross-build with nothing installed.
+
 `electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
 (everything is bundled by Vite) and never the game data a developer's `public/` holds.
 Builds are unsigned for now. The first run opens maximized (1400 × 900 is what restoring it

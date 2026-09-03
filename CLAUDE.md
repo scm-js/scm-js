@@ -944,8 +944,12 @@ packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tile
 unsigned, with `public/icon.png` as every platform's icon — that file, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
 once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
-pink. `npm run build:desktop` is `build --mode desktop` (the mode blanks `VITE_GAME_DATA_URL`) + the
-main bundle + electron-builder. The workflow has exactly two channels — `latest` (every push to main:
+pink. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode blanks
+`VITE_GAME_DATA_URL`) + the main bundle + electron-builder, where its arguments pick the packaging
+step's platform, architecture and targets (`-- win portable`, `-- linux AppImage arm64`, `-- --dir`
+for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
+electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
+is what CI runs. The workflow has exactly two channels — `latest` (every push to main:
 Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `GAME_DATA_URL` and
 `PAGES_BASE` as repository variables; there is deliberately no nightly. The version is
 `package.json`'s and nothing hardcodes it: `vite.config.ts` defines `__APP_VERSION__`,

@@ -23,15 +23,18 @@ win:
   # One 1024² PNG for every platform — the app mark in public/, which the web build also
   # serves as its icon; electron-builder makes the .ico / .icns from it.
   icon: public/icon.png
+  # A zip rather than electron-builder's `portable` target: that one is a 7-Zip SFX whose
+  # NSIS template does `RMDir /r $INSTDIR` and re-extracts the whole app into `%TEMP%` on
+  # *every* launch (there is no cache, `unpackDirName` or not), and the only thing it offers
+  # to cover the wait is a static .bmp painted over the whole desktop by the BgImage plugin.
+  # A zip is unpacked once by the user and every launch after it is the ordinary one.
   target:
     - nsis
-    - portable
+    - zip
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   artifactName: ${productName}-${version}-setup.${ext}
-portable:
-  artifactName: ${productName}-${version}-portable.${ext}
 mac:
   icon: public/icon.png
   category: public.app-category.developer-tools

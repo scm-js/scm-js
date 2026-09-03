@@ -18,8 +18,8 @@ Three ways to run it:
 - **In the browser.** Every push to `main` deploys the editor to GitHub Pages, and the
   hosted build knows where to fetch the game data from, so it just opens.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
-  macOS and Linux (`latest` follows `main`; the numbered releases are the tagged
-  versions). On first start the app looks for a StarCraft installation and extracts
+  macOS and Linux, and a Windows zip to unpack and run without installing (`latest`
+  follows `main`; the numbered releases are the tagged versions). On first start the app looks for a StarCraft installation and extracts
   what it needs; two archives dropped next to the app are found too.
 - **From source**, below.
 

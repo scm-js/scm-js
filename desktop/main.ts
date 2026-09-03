@@ -38,11 +38,11 @@ const dataDir = () => join(app.getPath("userData"), "gamedata");
  * The last launch's milestones, always written to `<userData>/startup.log` (and to stdout
  * with `SCMJS_TRACE=1`, which a Windows GUI build does not have — hence the file). It exists
  * because "it hung for a few seconds and then opened" has several possible causes on the same
- * machine — the exe unpacking itself, a virus scanner reading it, the main bundle, the
- * renderer's first paint — and they are told apart only by where the time went. The clock
- * starts at the *process* creation, so the gap before the first line is everything that
- * happened before this script ran: on Windows, a portable build extracting itself into
- * `%TEMP%` and whatever is reading those files as it does.
+ * machine — a virus scanner reading 380 MB of binaries, the main bundle, the renderer's
+ * first paint — and they are told apart only by where the time went. The clock starts at
+ * the *process* creation, so the gap before the first line is everything that happened
+ * before this script ran: on Windows, whatever is reading those files as Chromium loads
+ * them.
  *
  * The file holds one launch, not a history: it is truncated by the first line of each.
  */
@@ -72,14 +72,13 @@ interface Stamp { from: string; at: string; files: number; bytes: number; summar
 /* ── Finding the archives ───────────────────────────────── */
 
 /**
- * Where the archives are looked for, in order: next to the app (a portable exe's folder,
- * the AppImage's folder, the install directory — so two files dropped beside the app are
+ * Where the archives are looked for, in order: next to the app (the AppImage's folder, else
+ * the install directory or the unzipped folder — so two files dropped beside the app are
  * found), the app's own data folder, the environment, then the usual install locations.
  */
 function searchDirs(): string[] {
   const dirs: string[] = [];
   const env = process.env;
-  if (env.PORTABLE_EXECUTABLE_DIR) dirs.push(env.PORTABLE_EXECUTABLE_DIR);
   if (env.APPIMAGE) dirs.push(dirname(env.APPIMAGE));
   dirs.push(dirname(process.execPath));
   if (process.platform === "darwin") dirs.push(resolve(process.execPath, "..", "..", "..", ".."));

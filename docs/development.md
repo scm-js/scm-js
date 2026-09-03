@@ -35,8 +35,8 @@ step builds — with none it is this OS and the targets `electron-builder.yml` l
 which is what CI runs:
 
 ```sh
-npm run build:desktop -- win                 # Windows: nsis + portable
-npm run build:desktop -- win portable        # just the portable .exe
+npm run build:desktop -- win                 # Windows: nsis + zip
+npm run build:desktop -- win nsis            # just the installer
 npm run build:desktop -- linux AppImage x64 arm64
 npm run build:desktop -- mac dmg arm64
 npm run build:desktop -- --dir               # unpacked app, no installer — the fast check
@@ -44,13 +44,23 @@ npm run build:desktop -- win --skip-web      # repackage the dist/ already on di
 ```
 
 Platforms are `win` / `mac` / `linux`, architectures `x64` / `ia32` / `arm64` / `armv7l` /
-`universal`, and any electron-builder target name (`nsis`, `portable`, `dmg`, `zip`,
+`universal`, and any electron-builder target name (`nsis`, `dmg`, `zip`,
 `AppImage`, `deb`, …) applies to every platform named; `--publish <mode>` and anything after
 a bare `--` go to electron-builder as they are. `--skip-web` and `--skip-main` reuse the
 bundles on disk when only the packaging is being changed. Cross-building is electron-builder's
 business: the script warns about the combinations that need tooling the machine may not have
 (a macOS installer anywhere but on a Mac, an NSIS one without wine) and runs them anyway —
 `--dir` and `zip` cross-build with nothing installed.
+
+Windows gets an NSIS installer and a **zip**, not electron-builder's `portable` target.
+That target is a 7-Zip SFX, and its NSIS template (`app-builder-lib/templates/nsis/portable.nsi`)
+does `RMDir /r $INSTDIR` and then re-extracts the whole app into `%TEMP%` on *every* launch —
+there is no cache, whether or not `unpackDirName` is pinned — so it pays a multi-hundred-megabyte
+unpack each time, before any of our code exists to say so. The one thing it offers to cover that
+wait is `portable.splashImage`, a single `.bmp` handed to the NSIS BgImage plugin, which paints a
+backdrop over the whole desktop; it cannot animate, and the boot splash in `index.html` cannot
+help because Electron has not started. A zip is unpacked once by the user and every launch after
+it is the ordinary one measured above.
 
 `electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
 (everything is bundled by Vite) and never the game data a developer's `public/` holds.
@@ -264,8 +274,8 @@ electron-builder's `productName` — which from WSL is
 `SCMJS_TRACE=1` writes the launch's milestones — process creation, main script, app ready,
 window created, `dom-ready`, `did-finish-load`, and which signal showed the window — to
 `<userData>/startup.log` (always — the file holds the last launch). "It hung for a few seconds and then opened" has several possible
-causes on one machine (the exe unpacking itself, a virus scanner reading it, the main
-bundle, the first paint) and only the timings tell them apart.
+causes on one machine (a virus scanner reading 380 MB of binaries, the main bundle, the
+first paint) and only the timings tell them apart.
 
 `src/devReactTracks.ts` disables React 19's dev-only Components performance track,
 which serialises props for every render and turned mounting the chrome into about

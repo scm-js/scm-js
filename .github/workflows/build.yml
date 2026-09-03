@@ -146,6 +146,7 @@ jobs:
           name: desktop-${{ matrix.os }}
           path: |
             release/*.exe
+            release/*.zip
             release/*.dmg
             release/*.AppImage
             release/*.deb

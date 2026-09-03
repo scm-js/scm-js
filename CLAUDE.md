@@ -936,17 +936,19 @@ maximized) and it is shown on `ready-to-show`, so nothing flashes at the unmaxim
 `dist/icon.png` as its icon; a close while the renderer says the map has unsaved changes is held
 back and handed to the editor (`guardClose` / `closeIpc`, `src/hooks/useCloseGuard.ts`), with
 `before-quit` remembering that the close came from a quit so the answer quits rather than closing
-one window; the search order is portable dir / AppImage dir /
+one window; the search order is AppImage dir /
 next to the executable / userData / env / the platform's install paths (so two archives dropped beside
 the app are found). `preload.ts` is
 the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it. `electron-builder.yml`
 packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
-unsigned, with `public/icon.png` as every platform's icon — that file, `public/favicon.svg` and
+unsigned, with `public/icon.png` as every platform's icon; Windows gets an NSIS installer and a **zip**,
+never electron-builder's `portable` target, whose SFX re-extracts the whole app into `%TEMP%` on every
+launch and can only cover the wait with a static `.bmp` painted over the desktop (`docs/development.md`) — that file, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
 once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
 pink. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode blanks
 `VITE_GAME_DATA_URL`) + the main bundle + electron-builder, where its arguments pick the packaging
-step's platform, architecture and targets (`-- win portable`, `-- linux AppImage arm64`, `-- --dir`
+step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
 electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
 is what CI runs. The workflow has exactly two channels — `latest` (every push to main:

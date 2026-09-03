@@ -8,8 +8,8 @@
  * With no arguments it is what it always was: this OS, the targets `electron-builder.yml`
  * lists for it, `--publish never`.
  *
- *   npm run build:desktop -- win                 # Windows, its two targets (nsis, portable)
- *   npm run build:desktop -- win portable        # just the portable .exe
+ *   npm run build:desktop -- win                 # Windows, its two targets (nsis, zip)
+ *   npm run build:desktop -- win nsis            # just the installer
  *   npm run build:desktop -- linux appimage x64 arm64
  *   npm run build:desktop -- mac dmg arm64
  *   npm run build:desktop -- --dir               # unpacked, no installer — the fast check
@@ -33,7 +33,7 @@ const ARCHES = new Set(["x64", "ia32", "arm64", "armv7l", "universal"]);
 // Canonical spelling per target, because electron-builder's names are case-sensitive.
 const TARGETS = {};
 for (const name of [
-  "nsis", "nsis-web", "portable", "msi", "appx", "squirrel",
+  "nsis", "nsis-web", "msi", "appx", "squirrel",
   "dmg", "pkg", "mas",
   "AppImage", "deb", "rpm", "snap", "pacman", "freebsd", "apk",
   "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",

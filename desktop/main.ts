@@ -261,6 +261,13 @@ interface WindowState { x?: number; y?: number; width: number; height: number; m
 const FIRST_RUN_WINDOW: WindowState = { width: 1400, height: 900, maximized: true };
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
+/**
+ * The window is held back until the renderer's first paint, so nothing is ever shown
+ * half-drawn — but a renderer that never gets there (a missing asset, a stylesheet that
+ * cannot be served) would then leave the user with no window at all and no way to tell
+ * the app from a failed launch. After this it is shown regardless.
+ */
+const SHOW_LATEST_MS = 4000;
 /** How much of a saved rectangle must still land on a screen for its position to be reused. */
 const MUST_BE_VISIBLE = 100;
 
@@ -394,6 +401,9 @@ function createWindow() {
   });
   if (state.maximized) win.maximize();
   win.once("ready-to-show", () => win.show());
+  const showLatest = setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) win.show(); }, SHOW_LATEST_MS);
+  win.once("show", () => clearTimeout(showLatest));
+  win.once("closed", () => clearTimeout(showLatest));
   watchWindowState(win);
   guardClose(win);
   progressTarget = win;

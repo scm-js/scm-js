@@ -17,6 +17,14 @@
   backdrop-filter: blur(4px) saturate(0.7);
   transition: opacity 0.55s ease;
 }
+/* While the editor's chrome has not mounted yet there is nothing behind the veil to see
+   through — App defers that commit so the splash paints first. The blur is pure cost with
+   nothing under it, and it matches the boot splash in index.html, which is also opaque. */
+.splash-veil.solid {
+  background: rgb(6, 4, 14);
+  backdrop-filter: none;
+  transition: opacity 0.55s ease, background-color 0.35s ease;
+}
 .splash-veil.fade-out {
   opacity: 0;
   pointer-events: none;

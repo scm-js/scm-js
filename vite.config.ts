@@ -9,7 +9,17 @@ const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.ur
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // `index.html` carries the boot splash (the markup that paints before the bundle
+    // evaluates), and its version line has to say the same thing `src/version.ts` does.
+    // Vite substitutes `%FOO%` in HTML only for env vars, so this does that one token.
+    {
+      name: 'scmjs-html-version',
+      transformIndexHtml: (html: string) =>
+        html.replace(/%APP_VERSION_SHORT%/g, version.split('-')[0]),
+    },
+  ],
   // Where the site is served from: GitHub Pages under a repository path needs `/scm-js/`,
   // a custom domain and the desktop app want `/`. The build workflow sets it.
   base: process.env.SCMJS_BASE || '/',

@@ -1057,6 +1057,25 @@ The splash canvas draws the wireframe sphere, the orbiting rings and the progres
 shared projection, so the rings genuinely pass behind and in front of the sphere. It is deliberately
 off-theme (pink, scoped to `--sp-*` in `splash.css`); `tokens.css` stays the editor's gold + teal.
 
+What paints *first* is a separate problem, and a desktop one: `desktop/main.ts` creates the window with
+`show: false` and shows it on `ready-to-show`, which is the renderer's first paint — so until something
+paints there is no window at all, and the whole launch reads as a hang followed by the editor appearing
+at once. Two things move that frame earlier. `index.html` carries the **boot splash**: the splash card as
+plain markup with its own inline styles, scoped to `#boot-splash` and owing nothing to `splash.css`
+(which in `npm run dev` does not exist until the bundle runs, and would leave the markup as unstyled
+text), so it paints on the HTML alone — the version line's `%APP_VERSION_SHORT%` is filled in by the
+`scmjs-html-version` plugin in `vite.config.ts`, since Vite substitutes `%…%` in HTML only for env vars. It is that card in its initial state — same geometry, same "Initializing renderer" line, the
+canvas simply unpainted — so the handover is invisible; change it and `splash.css` together.
+`SplashScreen` removes it in a **layout** effect (`splash/bootSplash.ts`, before the frame that would
+show both) and `App` removes it on the `?nosplash` path, where the real splash never mounts. And `App`
+**mounts the chrome two frames late** (`chrome` state): MenuBar, ToolBar, the docks, `MapViewport` and
+`DialogHost` in the first commit is well over a thousand renders, which held the first paint behind it —
+now the splash paints alone and that commit lands while it is already animating. The veil carries
+`.splash-veil.solid` until the chrome is there (nothing behind it to blur yet). Measured on Linux, the
+window went from ~420 ms after launch to ~200 ms, and the frame it shows is the splash rather than an
+empty rectangle. `SHOW_LATEST_MS` in `desktop/main.ts` shows the window regardless after 4 s, so a
+renderer that never paints cannot leave the user with nothing.
+
 `src/devReactTracks.ts` (imported first by `main.tsx`, and only there) exists because React 19's
 dev-only "Components" performance track made startup unusable: it logs every component render to the
 performance timeline and serialises its props, and mounting the chrome is ~1700 renders in one commit —

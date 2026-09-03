@@ -173,6 +173,26 @@ bar reaching the end is the promise that the editor is ready.
 Every task is best-effort. A failure is logged as "unavailable" and stepped over,
 since missing game data is a normal state everywhere else.
 
+### The first frame
+
+The desktop shell keeps its window hidden until the renderer's first paint
+(`desktop/main.ts`), so whatever paints first is how soon the app appears at all.
+Two things keep that early:
+
+- `index.html` carries a **boot splash** — the splash card as plain markup with its
+  own inline styles, painting before the stylesheet arrives and long before the
+  bundle evaluates. It is a copy of `styles/splash.css` in its initial state, so
+  change both together; `SplashScreen` drops it in a layout effect once it has
+  mounted (`splash/bootSplash.ts`), and `App` drops it on the `?nosplash` path.
+- `App` **defers the chrome by two frames**. Mounting the menu bar, toolbar, docks,
+  viewport and dialog host is one commit of well over a thousand renders, and doing
+  it in the first commit blocked the first paint behind it. The splash paints alone,
+  the chrome follows. The veil is opaque (`.splash-veil.solid`) until it is there,
+  since there is nothing behind it to see through yet.
+
+`SHOW_LATEST_MS` in `desktop/main.ts` is the backstop: a renderer that never paints
+must not leave the user with no window at all.
+
 `src/devReactTracks.ts` disables React 19's dev-only Components performance track,
 which serialises props for every render and turned mounting the chrome into about
 seven seconds of blocked main thread. Set `VITE_REACT_TRACKS=1` to keep it when you

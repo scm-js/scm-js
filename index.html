@@ -7,9 +7,152 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>scmJS — StarCraft Scenario Editor</title>
+    <!--
+      The splash before the splash. This paints as soon as the HTML is parsed — before the
+      stylesheet arrives, before the ~1 MB module bundle evaluates, before React mounts — and
+      that is what decides how soon the desktop window appears at all: `desktop/main.ts` keeps
+      it hidden until the renderer's first paint, so without this the whole launch is a blank
+      screen until React's first commit.
+
+      It is deliberately self-contained: its own class names and every value inline, so it
+      owes nothing to `styles/splash.css` (which in `npm run dev` does not exist until the
+      bundle runs, and would leave this as unstyled text). The values are copied from there —
+      it is the splash card in its initial state, before the canvas has drawn a frame — so
+      change both together or the handover stops being invisible. `SplashScreen` drops this
+      node in a layout effect the moment it has mounted (`splash/bootSplash.ts`).
+    -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #12151b; }
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 300;
+        display: grid;
+        place-items: center;
+        background: rgb(6, 4, 14);
+      }
+      #boot-splash .card {
+        position: relative;
+        width: min(520px, 90vmin);
+        aspect-ratio: 4 / 5;
+        display: flex;
+        flex-direction: column;
+        background:
+          radial-gradient(ellipse at 50% 25%, rgba(255, 95, 162, 0.06), transparent 60%),
+          radial-gradient(ellipse at 80% 90%, rgba(160, 100, 240, 0.04), transparent 55%),
+          linear-gradient(180deg, #120818, #08040e);
+        border: 1px solid rgba(255, 95, 162, 0.15);
+        border-radius: 8px;
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.9),
+          inset 0 0 0 1px rgba(255, 95, 162, 0.08),
+          0 30px 100px rgba(0, 0, 0, 0.85),
+          0 0 80px rgba(255, 95, 162, 0.06);
+        overflow: hidden;
+      }
+      #boot-splash .center {
+        position: relative;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        padding-bottom: 16px;
+        text-align: center;
+      }
+      #boot-splash h1 {
+        margin: 0;
+        font-size: clamp(40px, 10vmin, 56px);
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        padding-left: 0.18em;
+        line-height: 1;
+        color: #ff5fa2;
+        text-shadow:
+          0 0 30px rgba(255, 95, 162, 0.5),
+          0 0 80px rgba(255, 95, 162, 0.15),
+          0 2px 0 rgba(0, 0, 0, 0.7);
+      }
+      #boot-splash h1 span { color: #dde2ea; }
+      #boot-splash .sub {
+        margin-top: 10px;
+        font-size: 11px;
+        letter-spacing: 0.35em;
+        padding-left: 0.35em;
+        text-transform: uppercase;
+        color: #a064f0;
+        text-shadow: 0 0 20px rgba(160, 100, 240, 0.4);
+      }
+      #boot-splash .bottom {
+        position: relative;
+        padding: 0 28px 22px;
+        background: linear-gradient(180deg, transparent, rgba(8, 4, 14, 0.85) 20%, rgba(8, 4, 14, 0.95));
+        font-family: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace;
+        font-size: 10.5px;
+        color: #99a2b3;
+      }
+      #boot-splash .log {
+        height: 64px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        overflow: hidden;
+      }
+      #boot-splash .log div {
+        line-height: 1.45;
+        font-size: 10px;
+        color: #ffbedc;
+      }
+      #boot-splash .log div::after {
+        content: "▍";
+        color: #ff5fa2;
+        animation: boot-blink 1s steps(2) infinite;
+      }
+      @keyframes boot-blink { to { visibility: hidden; } }
+      #boot-splash .bar {
+        margin-top: 10px;
+        height: 2px;
+        background: rgba(255, 95, 162, 0.1);
+        border-radius: 1px;
+      }
+      #boot-splash .foot {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 10px;
+      }
+      #boot-splash .foot .version { letter-spacing: 0.12em; color: #b43c6e; }
+      #boot-splash .foot .author { letter-spacing: 0.08em; color: #5d6675; }
+      #boot-splash .skip {
+        margin-top: 6px;
+        text-align: center;
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        color: #5d6675;
+        opacity: 0.6;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-splash" role="presentation">
+      <div class="card">
+        <div class="center">
+          <h1>scm<span>JS</span></h1>
+          <div class="sub">StarCraft · Brood War</div>
+        </div>
+        <div class="bottom">
+          <div class="log"><div>Initializing renderer</div></div>
+          <div class="bar"></div>
+          <div class="foot">
+            <span class="version">v%APP_VERSION_SHORT%</span>
+            <span class="author">by Jeany</span>
+          </div>
+          <div class="skip">click to skip</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

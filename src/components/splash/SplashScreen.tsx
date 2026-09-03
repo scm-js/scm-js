@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { screenAtom } from "../../atoms/editorAtoms";
 import { preloadLogAtom, preloadStepAtom } from "../../atoms/preloadAtoms";
 import { APP_VERSION_SHORT } from "../../version";
+import { removeBootSplash } from "./bootSplash";
 import { PINK, PINK_HI, buildSphere, drawNebula, drawSphereGlow, drawSphereWire, drawStars, generateStars, projectSphere } from "./starfield";
 
 /* ── Timing ─────────────────────────────────────────────── */
@@ -13,7 +14,7 @@ const MIN_MS = 1400;
 const MAX_MS = 15000;
 const FADE = 550;
 
-export default function SplashScreen() {
+export default function SplashScreen({ solid = false }: { solid?: boolean }) {
   const setScreen = useSetAtom(screenAtom);
   const step = useAtomValue(preloadStepAtom);
   const log = useAtomValue(preloadLogAtom);
@@ -25,6 +26,11 @@ export default function SplashScreen() {
   progressRef.current = progress;
 
   const dismiss = () => setFading(true);
+
+  // Hand over from the boot splash in `index.html`: this commit draws the same card, so the
+  // static one goes before the frame that would show both. A layout effect, not an effect —
+  // it has to happen before the paint, and `?nosplash` never gets here (App does it instead).
+  useLayoutEffect(removeBootSplash, []);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -107,7 +113,7 @@ export default function SplashScreen() {
   const lines = log.slice(-3);
 
   return (
-    <div className={`splash-veil ${fading ? "fade-out" : ""}`} onClick={dismiss} role="presentation">
+    <div className={`splash-veil${solid ? " solid" : ""}${fading ? " fade-out" : ""}`} onClick={dismiss} role="presentation">
       <div className="splash-card" onClick={(e) => { e.stopPropagation(); dismiss(); }}>
         <canvas ref={canvasRef} className="splash-canvas" />
         <div className="splash-center">

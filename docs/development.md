@@ -212,8 +212,60 @@ Two things keep that early:
   the chrome follows. The veil is opaque (`.splash-veil.solid`) until it is there,
   since there is nothing behind it to see through yet.
 
-`SHOW_LATEST_MS` in `desktop/main.ts` is the backstop: a renderer that never paints
-must not leave the user with no window at all.
+The saved **maximized state is applied when the window is shown, not when it is created**.
+On Windows `maximize()` is a `ShowWindow` call: maximizing a `show: false` window shows it.
+Doing it up front defeated the whole arrangement — the window appeared black at 140 ms and
+stayed that way until the renderer painted, and every signal below found it visible already
+and did nothing.
+
+`ready-to-show` is the frame the shell wants, but it is not a promise: a window that is
+not on screen is not guaranteed to be composited, and on Windows one that never announced
+a paint meant seconds of no window at all, followed by an editor whose splash had already
+run, animated and dismissed itself where nobody could see it. So `showWhenReady` in
+`desktop/main.ts` takes three signals — the paint, then `dom-ready` plus
+`SHOW_AFTER_DOM_MS` (the boot splash is made of that markup, and the window's own
+`backgroundColor` is its backdrop, so the worst case is a frame or two of flat dark), then
+`SHOW_LATEST_MS` regardless.
+
+The renderer no longer depends on any of that being quick. `SplashScreen` counts both its
+minimum and maximum dwell **from the moment the page is visible**, not from mount — a page
+in a hidden window neither animates (the card is a `requestAnimationFrame` loop, and those
+do not run in one) nor is seen — so a launch that takes a while to put the window up still
+shows the splash instead of skipping it. `App`'s two-frame chrome deferral has a timer
+behind it for the same reason.
+
+### Running the Windows build from WSL
+
+The desktop build cross-builds from WSL, and where the packaged app is *run from* changes
+the launch more than anything in the code: `\\wsl.localhost\…` is a 9p share, and Chromium
+loading 380 MB of binaries and then every asset through it is minutes, not milliseconds. A
+measured comparison of the same build, from the WSL filesystem and from `C:`:
+
+| milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
+| --- | --- | --- |
+| main script evaluated | 47 ms | 628 ms |
+| window created | 142 ms | 963 ms |
+| `dom-ready` | 215 ms | not within 25 s |
+
+So copy it over first, and launch it from there:
+
+```sh
+npm run build:desktop -- win --dir          # release/win-unpacked
+cp -r release/win-unpacked /mnt/c/Users/<you>/scmjs-test
+SCMJS_TRACE=1 WSLENV=SCMJS_TRACE /mnt/c/Users/<you>/scmjs-test/scmJS.exe
+```
+
+`WSLENV` is what forwards an environment variable into a Windows process; `SCMJS_TRACE=1`
+then echoes the trace to the terminal as well as the file. Note that the app's user data is
+`%APPDATA%\scm-js` — Electron takes the folder from `package.json`'s `name`, not from
+electron-builder's `productName` — which from WSL is
+`/mnt/c/Users/<you>/AppData/Roaming/scm-js`.
+
+`SCMJS_TRACE=1` writes the launch's milestones — process creation, main script, app ready,
+window created, `dom-ready`, `did-finish-load`, and which signal showed the window — to
+`<userData>/startup.log` (always — the file holds the last launch). "It hung for a few seconds and then opened" has several possible
+causes on one machine (the exe unpacking itself, a virus scanner reading it, the main
+bundle, the first paint) and only the timings tell them apart.
 
 `src/devReactTracks.ts` disables React 19's dev-only Components performance track,
 which serialises props for every render and turned mounting the chrome into about

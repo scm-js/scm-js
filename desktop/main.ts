@@ -13,7 +13,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from "electron";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -31,6 +31,41 @@ const order = (n: string) => (/^stardat/i.test(n) ? 0 : /^broodat/i.test(n) ? 1 
 
 const distDir = resolve(__dirname, "..", "..", "dist");
 const dataDir = () => join(app.getPath("userData"), "gamedata");
+
+/* ── Startup trace ──────────────────────────────────────── */
+
+/**
+ * The last launch's milestones, always written to `<userData>/startup.log` (and to stdout
+ * with `SCMJS_TRACE=1`, which a Windows GUI build does not have — hence the file). It exists
+ * because "it hung for a few seconds and then opened" has several possible causes on the same
+ * machine — the exe unpacking itself, a virus scanner reading it, the main bundle, the
+ * renderer's first paint — and they are told apart only by where the time went. The clock
+ * starts at the *process* creation, so the gap before the first line is everything that
+ * happened before this script ran: on Windows, a portable build extracting itself into
+ * `%TEMP%` and whatever is reading those files as it does.
+ *
+ * The file holds one launch, not a history: it is truncated by the first line of each.
+ */
+const traceEcho = process.env.SCMJS_TRACE === "1";
+const traceStart = (process as NodeJS.Process & { getCreationTime?: () => number | null }).getCreationTime?.() ?? Date.now();
+let traceOpen = false;
+function trace(label: string) {
+  const line = `+${String(Date.now() - traceStart).padStart(6)} ms  ${label}`;
+  if (traceEcho) console.log(`[scmjs] ${line}`);
+  try {
+    const file = join(app.getPath("userData"), "startup.log");
+    if (traceOpen) appendFileSync(file, `${line}\n`);
+    else {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, `${new Date().toISOString()} — scmJS ${app.getVersion()}, ${process.platform}\n${line}\n`);
+      traceOpen = true;
+    }
+  } catch {
+    // A trace that cannot be written is not worth failing a launch over.
+  }
+}
+
+trace("main script evaluated");
 
 interface Stamp { from: string; at: string; files: number; bytes: number; summary: string }
 
@@ -238,6 +273,7 @@ function handleRequest(req: Request): Promise<Response> | Response {
   const url = new URL(req.url);
   let path = decodeURIComponent(url.pathname).replace(/^\/+/, "");
   if (path === "") path = "index.html";
+  if (path === "index.html") trace("serving index.html");
   if (GAME_DATA_PREFIXES.some((p) => path.startsWith(p))) {
     const file = join(dataDir(), path);
     return existsSync(file) ? serveFile(file) : new Response("Not found", { status: 404 });
@@ -263,11 +299,14 @@ const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 /**
  * The window is held back until the renderer's first paint, so nothing is ever shown
- * half-drawn — but a renderer that never gets there (a missing asset, a stylesheet that
- * cannot be served) would then leave the user with no window at all and no way to tell
- * the app from a failed launch. After this it is shown regardless.
+ * half-drawn — but a renderer that never announces one (a hidden window the platform never
+ * composites, a missing asset, a stylesheet that cannot be served) would leave the user with
+ * no window at all and no way to tell the app from a failed launch. `showWhenReady` shows it
+ * this long after the document is ready whatever the compositor says, and this long after the
+ * load regardless.
  */
-const SHOW_LATEST_MS = 4000;
+const SHOW_AFTER_DOM_MS = 300;
+const SHOW_LATEST_MS = 2000;
 /** How much of a saved rectangle must still land on a screen for its position to be reused. */
 const MUST_BE_VISIBLE = 100;
 
@@ -377,6 +416,53 @@ function closeIpc() {
   });
 }
 
+/* ── Showing the window ───────────────────── */
+
+/**
+ * `ready-to-show` is the frame we want: the renderer's first paint, which thanks to the boot
+ * splash in `index.html` is the splash card itself. But it is not a promise. A window that is
+ * not on screen is not guaranteed to be composited at all — Windows, whose occlusion detection
+ * treats a hidden window as nothing to draw, is where this bites — and then the only thing that
+ * ever showed the window was the backstop timer. That is the launch this is here to prevent:
+ * seconds of no window at all, followed by an editor that had already run its splash, animated
+ * it and dismissed it while there was nothing on screen to run it on.
+ *
+ * So the paint is the *preferred* signal, not the only one. `dom-ready` says the markup the
+ * boot splash is made of exists; a moment after that the window is worth showing whether or not
+ * a frame has been announced, and since the window's own `backgroundColor` is the splash's
+ * backdrop, the worst case is a frame or two of flat dark before the card. The plain timer stays
+ * as the last resort for a renderer that never even parses.
+ *
+ * The renderer does not depend on this being quick any more (`SplashScreen` runs its minimum
+ * dwell from the moment the page is *visible*), but a window that appears late still reads as a
+ * hang, so it should not be late.
+ */
+function showWhenReady(win: BrowserWindow, maximized: boolean) {
+  const timers: NodeJS.Timeout[] = [];
+  const stop = () => { for (const t of timers) clearTimeout(t); timers.length = 0; };
+  const show = (why: string) => {
+    stop();
+    if (win.isDestroyed() || win.isVisible()) return;
+    trace(`show (${why})`);
+    // The saved maximized state is applied *here*, not at creation: on Windows `maximize()`
+    // is a `ShowWindow` call, so a hidden window that is maximized is no longer hidden. Doing
+    // it up front defeated `show: false` altogether — the window appeared black at 140 ms and
+    // stayed that way until the renderer painted at 430 ms, and every signal below then found
+    // it visible already and did nothing. A window that is up but empty is exactly the launch
+    // this whole path exists to avoid.
+    if (maximized) win.maximize();
+    if (!win.isVisible()) win.show();
+  };
+  win.once("ready-to-show", () => show("ready-to-show"));
+  win.webContents.once("dom-ready", () => {
+    trace("dom-ready");
+    if (!win.isDestroyed() && !win.isVisible()) timers.push(setTimeout(() => show("dom-ready"), SHOW_AFTER_DOM_MS));
+  });
+  win.webContents.once("did-finish-load", () => trace("did-finish-load"));
+  timers.push(setTimeout(() => show("backstop"), SHOW_LATEST_MS));
+  win.once("closed", stop);
+}
+
 /* ── The window ─────────────────────────────────────────── */
 
 function createWindow() {
@@ -399,11 +485,7 @@ function createWindow() {
       additionalArguments: [`--scmjs-version=${app.getVersion()}`],
     },
   });
-  if (state.maximized) win.maximize();
-  win.once("ready-to-show", () => win.show());
-  const showLatest = setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) win.show(); }, SHOW_LATEST_MS);
-  win.once("show", () => clearTimeout(showLatest));
-  win.once("closed", () => clearTimeout(showLatest));
+  showWhenReady(win, state.maximized);
   watchWindowState(win);
   guardClose(win);
   progressTarget = win;
@@ -424,6 +506,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  trace("app ready");
   protocol.handle(SCHEME, handleRequest);
   closeIpc();
 
@@ -458,6 +541,7 @@ app.whenReady().then(() => {
   ipcMain.handle("game:test", (_e, bytes: Uint8Array, fileName: string, options: { dir?: string; launch: boolean }) => testMap(new Uint8Array(bytes), fileName, options));
 
   createWindow();
+  trace("window created");
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

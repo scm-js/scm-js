@@ -1077,8 +1077,24 @@ show both) and `App` removes it on the `?nosplash` path, where the real splash n
 now the splash paints alone and that commit lands while it is already animating. The veil carries
 `.splash-veil.solid` until the chrome is there (nothing behind it to blur yet). Measured on Linux, the
 window went from ~420 ms after launch to ~200 ms, and the frame it shows is the splash rather than an
-empty rectangle. `SHOW_LATEST_MS` in `desktop/main.ts` shows the window regardless after 4 s, so a
-renderer that never paints cannot leave the user with nothing.
+empty rectangle. `showWhenReady` in `desktop/main.ts` is what shows it. The saved maximized state is applied
+**there**, not at creation: on Windows `maximize()` is a `ShowWindow` call, so maximizing a
+`show: false` window shows it — which used to put a black window on screen at 140 ms and
+leave every signal below with nothing to do. It also does not trust `ready-to-show` alone — a hidden window is not guaranteed to be composited at all (Windows),
+and waiting only for that paint meant seconds of no window and then an editor whose splash
+had already run behind nothing. The signals are, in order: the paint, `dom-ready` +
+`SHOW_AFTER_DOM_MS` (the boot splash is that markup, and the window's `backgroundColor` is
+its backdrop), and `SHOW_LATEST_MS` regardless. The renderer stopped depending on any of it:
+`SplashScreen` runs its MIN/MAX dwell from the moment the page is **visible**
+(`document.visibilityState`), not from mount, since a page in a hidden window neither
+animates — rAF does not run in one, which is also why `App`'s two-frame chrome deferral has
+a timer behind it — nor is seen. The last launch's milestones are always written to
+`<userData>/startup.log` (`%APPDATA%\scm-js` on Windows — Electron takes the folder from
+`package.json`'s `name`, not electron-builder's `productName`; `SCMJS_TRACE=1` echoes them to
+stdout too), which is how "it hung and then opened" is told apart from a slow exe unpack, a
+virus scanner, or the launch path: a Windows build run from `\\wsl.localhost\…` takes 628 ms
+to evaluate its main script and never reaches `dom-ready`, so copy `release/win-unpacked` to
+`/mnt/c/…` before running it (`docs/development.md`).
 
 `src/devReactTracks.ts` (imported first by `main.tsx`, and only there) exists because React 19's
 dev-only "Components" performance track made startup unusable: it logs every component render to the

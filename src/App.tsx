@@ -52,7 +52,11 @@ export default function App() {
     // commit that blocks the main thread.
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setChrome(true)); });
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+    // A page that is not visible gets no frames at all (a hidden desktop window before it is
+    // shown, a background tab), and the chrome would wait for ever. It costs nothing to mount
+    // it on a timer instead, since nobody is looking at what that commit blocks.
+    const late = setTimeout(() => setChrome(true), 500);
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); clearTimeout(late); };
   }, [chrome]);
 
   // `?nosplash` (and anything else that skips straight to the editor) never mounts

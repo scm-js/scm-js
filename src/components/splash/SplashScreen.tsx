@@ -27,6 +27,15 @@ export default function SplashScreen({ solid = false }: { solid?: boolean }) {
 
   const dismiss = () => setFading(true);
 
+  // When the page first became visible (`performance.now()`), or 0 while it is not.
+  const [visibleAt, setVisibleAt] = useState(() => (document.visibilityState === "visible" ? performance.now() : 0));
+  useEffect(() => {
+    if (visibleAt) return;
+    const onChange = () => { if (document.visibilityState === "visible") setVisibleAt(performance.now()); };
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, [visibleAt]);
+
   // Hand over from the boot splash in `index.html`: this commit draws the same card, so the
   // static one goes before the frame that would show both. A layout effect, not an effect —
   // it has to happen before the paint, and `?nosplash` never gets here (App does it instead).
@@ -96,13 +105,20 @@ export default function SplashScreen({ solid = false }: { solid?: boolean }) {
 
   // Leave when the assets are actually ready — but not before MIN_MS, and never after
   // MAX_MS, so a stalled fetch cannot lock the editor behind the splash.
+  //
+  // Both are counted from the moment the page is *visible*, not from mount. The desktop
+  // window is hidden until the renderer paints, and a hidden page neither animates (the
+  // canvas is a rAF loop, and rAF does not run in one) nor is seen: counting from mount
+  // meant a launch that took a while to put the window on screen spent the splash's whole
+  // life behind nothing, and the user got a hang followed by the bare editor. A browser tab
+  // opened in the background is the same situation and gets the same treatment.
   useEffect(() => {
-    const mounted = performance.now();
-    const cap = setTimeout(() => setFading(true), MAX_MS);
+    if (!visibleAt) return;
+    const cap = setTimeout(() => setFading(true), Math.max(0, MAX_MS - (performance.now() - visibleAt)));
     let hold = 0;
-    if (step.done) hold = setTimeout(() => setFading(true), Math.max(0, MIN_MS - (performance.now() - mounted)));
+    if (step.done) hold = setTimeout(() => setFading(true), Math.max(0, MIN_MS - (performance.now() - visibleAt)));
     return () => { clearTimeout(cap); clearTimeout(hold); };
-  }, [step.done]);
+  }, [step.done, visibleAt]);
 
   useEffect(() => {
     if (!fading) return;

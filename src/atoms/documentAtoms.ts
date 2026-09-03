@@ -2,6 +2,7 @@ import type { MapFileHandle } from "../services/mapIo";
 import type { MemberInfo } from "../formats/mpq/scm";
 import { atom, type Getter, type Setter } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { blankFillAtom } from "./gameDataAtoms";
 import { browserStorage } from "./storage";
 import { storeHandle } from "../services/handleStore";
 import {
@@ -245,6 +246,9 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(mapTilesetAtom, (TILESETS[tilesetIndex(scenario)]?.id ?? "jungle") as TilesetId);
   set(mapVersionAtom, mapVersionOf(scenario.fileVersion));
   set(mapModifiedAtom, false);
+  // A fill laid without the graphics belongs to the map that is going away; `newMapInto`
+  // sets it again for the one arriving when it had none either.
+  set(blankFillAtom, null);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
@@ -289,6 +293,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(mapOriginAtom, null);
   set(saveOptionsAtom, null);
   set(mapModifiedAtom, false);
+  set(blankFillAtom, null);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);

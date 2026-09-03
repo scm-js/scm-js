@@ -32,8 +32,7 @@ name; when the chain runs out, the editor asks.
 
 ## Getting the files
 
-Help ▸ Game Data… shows the current source, and when there is none, the two ways to get
-one:
+Help ▸ Game Data… shows the current source, and when there is none, the ways to get one:
 
 - **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
   free download, and it carries both archives. The two are the trimmed StarEdit
@@ -60,6 +59,15 @@ one:
 
 Either way the extraction runs here and the result is kept, so it happens once. The dialog
 also removes a copy, which puts the chain back to where it was.
+
+One thing follows an install. The blank map the editor opens on was laid out before there
+was a tileset, and `flatTerrain` needs the CV5 to choose between a terrain's variations —
+with none it takes variation 0 for every pair, which is invisible under flat colours and
+becomes one megatile repeated across the whole map the moment the graphics arrive.
+`relayBlankTerrain` (`src/hooks/useMapFileActions.ts`) lays that map again with the real
+variations, and only that map: it does nothing once the map has been edited or came from a
+file (`src/atoms/gameDataAtoms.ts#blankFillAtom` remembers which fill needs it,
+`tests/blank-fill.test.ts`).
 
 Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
 `ReadMember` over the archives in, a map of paths to bytes out), `scripts/extract-*.mjs`

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Download, FolderOpen, HardDrive, Search, Trash2 } from "lucide-react";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
@@ -11,6 +11,7 @@ import {
 } from "../../gamedata/install";
 import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../../gamedata/source";
 import { clearStoredCopy } from "../../gamedata/store";
+import { relayBlankTerrain } from "../../hooks/useMapFileActions";
 import { Button, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -43,11 +44,12 @@ function explain(source: AssetSource | null): string {
   switch (source.kind) {
     case "bundled": return source.desktop ? "Extracted into the app's data folder from your StarCraft installation." : "The graphics ship with this build.";
     case "stored": return "Terrain and units draw from this copy, and it is here next time.";
-    case "none": return "The editor is running without graphics: flat terrain colours and marker units.";
+    case "none": return "The editor is running without Blizzard’s assets — terrain is flat colours and units are markers.";
   }
 }
 
 export function GameDataDialog({ entry }: DialogProps) {
+  const store = useStore();
   const close = useSetAtom(closeDialogAtom);
   const toast = useSetAtom(pushToastAtom);
   const [source, setSource] = useAtom(gameDataSourceAtom);
@@ -80,6 +82,9 @@ export function GameDataDialog({ entry }: DialogProps) {
     retryTilesetParts();
     setSource(next);
     bump((n) => n + 1);
+    // A blank map made before the graphics were here is one megatile repeated; now that
+    // there is a CV5 to pick variations from, lay it again.
+    void relayBlankTerrain(store);
     setMessage({ text });
     toast({ kind: "ok", title: "Game data ready", detail: text });
     // The dialog that opened itself because there was nothing has nothing left to say once
@@ -203,9 +208,7 @@ export function GameDataDialog({ entry }: DialogProps) {
         {!have && (
           <>
             <p className="hint">
-              {auto
-                ? "The editor works without StarCraft's graphics, but terrain shows as flat colours and units as markers. There are two ways to give it them."
-                : "The editor draws terrain and units with graphics from StarCraft's own archives. Blizzard's data cannot ship with it, so it comes from one of these."}
+              The editor draws terrain and units with graphics from StarCraft&rsquo;s own archives, which cannot ship with it.
             </p>
 
             <Group title="Download from Blizzard">
@@ -215,7 +218,7 @@ export function GameDataDialog({ entry }: DialogProps) {
               </div>
               <p className="hint" style={{ marginTop: 4 }}>
                 Blizzard offers the StarCraft map editor as a free download, and it carries the two archives the graphics come from.
-                Nothing is asked of you and no account is needed. The files are extracted here and kept in this browser, so this happens once.
+                The files are extracted here and kept in this browser, so this happens once.
               </p>
             </Group>
 

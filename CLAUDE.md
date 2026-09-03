@@ -846,7 +846,13 @@ than four ways of not being asked. The preload's first task is the resolution (p
 desktop extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData`
 dialog with `{ auto: true }` when it ends at none. After an install the dialog calls `retryFailedParts`
 (drops the `LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
-`useUnitAssets` depend on — that is how a map already open picks the graphics up.
+`useUnitAssets` depend on — that is how a map already open picks the graphics up. It also calls
+`useMapFileActions.ts#relayBlankTerrain`: the startup map was laid by `flatTerrain` with no CV5 to pick
+variations from, so every pair took variation 0 — invisible under flat colours, and one megatile repeated
+across the map the moment the graphics land. `newMapInto` records that fill in `blankFillAtom`
+(`gameDataAtoms.ts`, cleared by `loadDocumentAtom` / `closeDocumentAtom`) and the relay lays the tiles and
+ISOM again in place, leaving the map unmodified; it refuses once the map has been edited or has a path, so
+a file's own terrain is never touched. `tests/blank-fill.test.ts`.
 
 `GameDataDialog.tsx` shows one thing at a time: with data it is a status line and Remove copy, without it
 the two routes. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads

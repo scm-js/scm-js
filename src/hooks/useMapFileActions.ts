@@ -1,11 +1,13 @@
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { archiveExtrasAtom, closeDocumentAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, type RecentEntry } from "../atoms/documentAtoms";
+import { archiveExtrasAtom, closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, terrainRevisionAtom, type RecentEntry } from "../atoms/documentAtoms";
+import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
 import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
+import { markDirty, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
 import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/tilesets";
@@ -105,7 +107,45 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
     fileName: null,
     reason: "new",
   });
+  // Without the CV5 every pair took variation 0, which draws as one megatile repeated once
+  // the graphics arrive; remember to lay it again if they do (`relayBlankTerrain`).
+  if (!loaded) store.set(blankFillAtom, { terrainId: terrain.id });
   store.set(statusMessageAtom, `New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
+  return true;
+}
+
+/**
+ * Lay a blank map's terrain again now that the graphics are here. A map made while the
+ * editor had none is filled with variation 0 everywhere — `flatTerrain` had no CV5 to pick
+ * from — so once an install lands it draws as a single megatile tiled across the whole map,
+ * a grid of seams rather than ground. Only the untouched map that made itself qualifies:
+ * anything opened from a file carries its own tiles, and anything the user has edited is
+ * theirs. Returns whether the map was re-laid.
+ */
+export async function relayBlankTerrain(store: Store): Promise<boolean> {
+  const pristine = () =>
+    store.get(blankFillAtom) !== null && !store.get(mapModifiedAtom) && store.get(mapFilePathAtom) === null;
+  if (!pristine()) return false;
+  const scenario = store.get(scenarioAtom);
+  if (!scenario) return false;
+
+  const era = tilesetIndex(scenario);
+  const name = TILESET_FILENAMES[era];
+  if (!name) return false;
+  const loaded = peekTileset(name) ?? await ensureTileset(name).catch(() => null);
+  // The fetch is a moment long: the map may have been replaced or edited meanwhile.
+  if (!loaded || store.get(scenarioAtom) !== scenario || !pristine()) return false;
+
+  const fill = store.get(blankFillAtom)!;
+  const terrain = baseTerrain(loaded.tileset, fill.terrainId);
+  const { tiles, isom } = flatTerrain(scenario.width, scenario.height, terrain, loaded.tileset, Math.random, era);
+  scenario.tiles.set(tiles);
+  if (scenario.isom && scenario.isom.length === isom.length) scenario.isom.set(isom);
+  markDirty(scenario, "MTXM", "TILE", "ISOM");
+  store.set(blankFillAtom, null);
+  // The map is still the one the editor made for itself, so it stays unmodified.
+  store.set(terrainRevisionAtom, store.get(terrainRevisionAtom) + 1);
+  store.set(isomRevisionAtom, store.get(isomRevisionAtom) + 1);
   return true;
 }
 

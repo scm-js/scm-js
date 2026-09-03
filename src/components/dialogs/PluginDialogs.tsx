@@ -98,6 +98,7 @@ export function PluginDialog({ entry }: DialogProps) {
       icon={<PluginIconView icon={plugin?.icon} size={14} />}
       size={spec.size ?? "md"}
       tall={spec.tall}
+      onEscapeKeyDown={(e) => { if (spec.keepOpenOnEscape) { let keep = false; try { keep = spec.keepOpenOnEscape(e.target); } catch (err) { console.error(`[${plugin?.name ?? "plugin"}] keepOpenOnEscape failed`, err); } if (keep) e.preventDefault(); } }}
       footer={buttons.map((b, i) => (
         <Button key={i} variant={b.primary ? "primary" : undefined} disabled={busy} onClick={() => { void press(b); }}>{b.label}</Button>
       ))}

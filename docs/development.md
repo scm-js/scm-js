@@ -68,8 +68,8 @@ Builds are unsigned for now.
 
 What the download weighs is almost all Electron. The Windows zip is about 158 MB, of which the
 Electron executable is 103 MB compressed and the app's own asar 5 MB (20 MB unpacked, 14 MB of it
-TypeScript shipped three times: Monaco's language worker, the compile worker and the main-thread
-fallback). `electronLanguages: [en-US]` drops Chromium's other 54 UI locales, which were 50 MB
+TypeScript shipped twice: the transpile worker the plugin loader runs `.ts` plugins through,
+and its main-thread fallback). `electronLanguages: [en-US]` drops Chromium's other 54 UI locales, which were 50 MB
 unpacked and 12 MB of the zip; the editor has no translations, so nothing is lost. The DirectX and
 Vulkan DLLs (`dxcompiler.dll`, `dxil.dll`, `vk_swiftshader.dll`; 38 MB unpacked, 15 MB zipped)
 are Chromium's WebGPU and software-Vulkan back ends, which a canvas-2D editor never reaches — they
@@ -158,7 +158,6 @@ src/
     dat/        units/flingy/sprites/images.dat, .tbl, GRP, PCX, .lo and iscript.bin decoders
     units/      Unit data, lazy GRP/.lo/remap loading, frame cache, the iscript animator
     triggers/   TrigEdit-syntax printer and parser
-  script/       The TypeScript-subset trigger compiler and its simulator
   plugins/      Plugin API (the contract), host, loader, built-in registry
   services/     Map open/save pickers, PNG export, startup preload
   components/
@@ -298,7 +297,7 @@ want to profile renders. Production builds never had the problem.
 | What the editor does, for map makers | [../README.md](../README.md) |
 | CHK and MPQ handling, section coverage | [file-formats.md](file-formats.md) |
 | Extracting and using Blizzard data | [game-data.md](game-data.md) |
-| The trigger scripting language | [trigger-script.md](trigger-script.md) |
+| The trigger scripting language | the [Trigger Script plugin](https://github.com/scm-js/plugin-trigger-script)'s README |
 | Writing and installing plugins, the plugin API | [plugins.md](plugins.md) |
 | Per-subsystem implementation notes | [../CLAUDE.md](../CLAUDE.md) |
 | Provenance of adapted code and data | [../ATTRIBUTION.md](../ATTRIBUTION.md) |

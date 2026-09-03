@@ -13,12 +13,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowUp, Braces, Code2, Copy, MessageSquare, Plus, Trash2, Zap } from "lucide-react";
-import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, scriptStateAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { pluginTriggerClaimsAtom, type PluginTriggerClaim } from "../../atoms/pluginAtoms";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { findBlock, type ScriptBlock, type ScriptManifest } from "../../editor/script";
-import { DEATHS_TABLE_ADDRESS } from "../../script/compiler";
+import { claimAt, claimBadge, claimDescription, locateClaims, type ClaimedRange } from "../../plugins/claims";
 import {
-  ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, PLAYER_GROUP_CHOICES,
+  ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
 } from "../../data/triggerDefs";
 import { UNIT_NAMES } from "../../data/units";
@@ -303,21 +303,20 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
 
 /* ── Trigger list editor ────────────────────────────────── */
 
-function TriggerListEditor({ list, setList, briefing, names, scenario, manifest, initial }: {
+function TriggerListEditor({ list, setList, briefing, names, scenario, claims, initial }: {
   list: TriggerRecord[];
   setList: (next: TriggerRecord[]) => void;
   briefing: boolean;
   names: TriggerNames;
   scenario: Scenario;
-  /** The trigger script's build manifest: its block is shown locked (found by content, so it follows local edits). */
-  manifest?: ScriptManifest | null;
+  /** Runs of triggers plugins generate (`api.triggers.claim`): shown locked, found by content so they follow local edits. */
+  claims?: readonly PluginTriggerClaim[];
   /** The row to open on — Check Map's and Find's go-to. */
   initial?: number;
 }) {
-  const openDialog = useSetAtom(openDialogAtom);
   const groups = useMemo(() => visibleGroups(list), [list]);
-  const block: ScriptBlock | null = useMemo(() => (manifest ? findBlock(list, manifest) : null), [list, manifest]);
-  const isGenerated = (i: number) => !!block && i >= block.start && i < block.start + block.count;
+  const ranges: ClaimedRange[] = useMemo(() => (claims?.length ? locateClaims(claims, list) : []), [list, claims]);
+  const rangeAt = (i: number) => claimAt(ranges, i);
   const [filter, setFilter] = useState<Set<number> | null>(null); // null = every group
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number | null>(initial !== undefined && initial >= 0 && initial < list.length ? initial : list.length ? 0 : null);
@@ -337,13 +336,14 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest,
   }, [list, filter, q, names, briefing]);
 
   const cur = sel !== null ? list[sel] : undefined;
-  const locked = sel !== null && isGenerated(sel);
+  const lockedRange = sel !== null ? rangeAt(sel) : null;
+  const locked = lockedRange !== null;
   const replace = (t: TriggerRecord) => { if (sel !== null && !locked) setList(list.map((x, i) => (i === sel ? t : x))); };
   const create = () => {
     const t = newTrigger(briefing ? [PlayerGroup.Player1] : undefined);
     if (briefing) t.conditions.push(newCondition(ConditionType.Briefing));
-    // Never inside the generated block: a new trigger after a generated one goes after the block.
-    const at = sel === null ? list.length : locked && block ? block.start + block.count : sel + 1;
+    // Never inside a generated run: a new trigger after a generated one goes after the run.
+    const at = sel === null ? list.length : lockedRange ? lockedRange.start + lockedRange.count : sel + 1;
     setList(insertTrigger(list, at, t));
     setSel(at);
   };
@@ -367,7 +367,6 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest,
   };
 
   const label = briefing ? "briefing" : "trigger";
-  const sourceLine = (i: number) => (block ? block.lines[i - block.start] : undefined);
 
   return (
     <div className="split" style={{ ["--split" as string]: "180px", flex: 1, minHeight: 0 }}>
@@ -411,7 +410,7 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest,
               const comment = triggerComment(t, names);
               return (
                 <div className="body">
-                  <span className="who">{i + 1}. {s.players || <span className="faint">no players</span>}{comment ? <span className="faint"> — {comment}</span> : null}{isGenerated(i) && <span className="badge teal" title="Generated by the trigger script">script</span>}</span>
+                  <span className="who">{i + 1}. {s.players || <span className="faint">no players</span>}{comment ? <span className="faint"> — {comment}</span> : null}{(() => { const r = rangeAt(i); return r ? <span className="badge teal" title={`Generated by ${r.claim.spec.label}`}>{claimBadge(r)}</span> : null; })()}</span>
                   {!briefing && <span className="summary">if {s.conditions || "—"}</span>}
                   <span className="summary">{briefing ? "" : "then "}{s.actions || "—"}</span>
                 </div>
@@ -429,11 +428,15 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest,
         </div>
 
         <div className="col" style={{ gap: 8, minHeight: 0 }}>
-          {cur && sel !== null && locked ? (
+          {cur && sel !== null && lockedRange ? (
             <div className="trig-generated">
-              <div className="row"><span className="badge gold">Trigger {sel + 1}</span><span className="badge teal">script</span></div>
-              <span>This trigger is generated by the map's trigger script{sourceLine(sel) ? ` (line ${sourceLine(sel)})` : ""}. Edit the source instead; a Build replaces the whole block.</span>
-              <Button size="sm" onClick={() => openDialog("scriptEditor", { line: sourceLine(sel) })}><Code2 size={11} /> Open Script Editor</Button>
+              <div className="row"><span className="badge gold">Trigger {sel + 1}</span><span className="badge teal">{claimBadge(lockedRange)}</span></div>
+              <span>{claimDescription(lockedRange, sel, list)}</span>
+              {lockedRange.claim.spec.open && (
+                <Button size="sm" onClick={() => { try { lockedRange.claim.spec.open!(sel, list); } catch (err) { console.error(`[${lockedRange.claim.pluginName}] trigger claim open failed`, err); } }}>
+                  <Code2 size={11} /> {lockedRange.claim.spec.openLabel ?? `Open ${lockedRange.claim.pluginName}`}
+                </Button>
+              )}
             </div>
           ) : cur && sel !== null ? (
             <>
@@ -501,7 +504,7 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest,
 export function TriggerEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(triggersRevisionAtom);
-  const script = useAtomValue(scriptStateAtom);
+  const claims = useAtomValue(pluginTriggerClaimsAtom);
   const commit = useSetAtom(commitTriggersAtom);
   const names = useNames(scenario);
   const [local, setLocal] = useScenarioForm(scenario, readTriggers);
@@ -519,7 +522,7 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       showApply
       footerLeft={<span>{local.length} trigger{local.length === 1 ? "" : "s"}</span>}
     >
-      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} manifest={script.block ? script.manifest : null} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
+      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} claims={claims} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
     </DialogFrame>
   );
 }
@@ -553,18 +556,22 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
 
 /* ── Text Trigger Editor (TrigEdit) ─────────────────────── */
 
-/** The map's triggers as text, with the script's generated block fenced in comments (parsed back as plain triggers). */
-function textOf(scn: Scenario, block: ScriptBlock | null): string {
+/** The map's triggers as text, with every plugin-generated run fenced in comments (parsed back as plain triggers). */
+function textOf(scn: Scenario, ranges: ClaimedRange[]): string {
   const names = triggerNames(scn);
-  if (!block || block.count === 0) return formatTriggers(scn.triggers, names);
-  const { start, count } = block;
-  const parts = [
-    formatTriggers(scn.triggers.slice(0, start), names),
-    `//== Generated by the trigger script: ${count} trigger${count === 1 ? "" : "s"}. Edit the script instead — changes here make the block stale. ==//\n\n`,
-    formatTriggers(scn.triggers.slice(start, start + count), names),
-    "//== End of the generated block ==//\n",
-    formatTriggers(scn.triggers.slice(start + count), names),
-  ];
+  const runs = ranges.filter((r) => r.count > 0);
+  if (runs.length === 0) return formatTriggers(scn.triggers, names);
+  const parts: string[] = [];
+  let at = 0;
+  for (const { claim, start, count } of runs) {
+    if (start < at) continue; // overlapping claims: the first wins
+    parts.push(formatTriggers(scn.triggers.slice(at, start), names));
+    parts.push(`//== Generated by ${claim.spec.label}: ${count} trigger${count === 1 ? "" : "s"}. Edit them there instead — changes here take them out of its hands. ==//\n\n`);
+    parts.push(formatTriggers(scn.triggers.slice(start, start + count), names));
+    parts.push("//== End of the generated run ==//\n");
+    at = start + count;
+  }
+  parts.push(formatTriggers(scn.triggers.slice(at), names));
   return parts.filter((p) => p !== "").join("\n");
 }
 
@@ -576,12 +583,12 @@ function textOf(scn: Scenario, block: ScriptBlock | null): string {
 export function TextTriggerEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(triggersRevisionAtom);
-  const script = useAtomValue(scriptStateAtom);
+  const claims = useAtomValue(pluginTriggerClaimsAtom);
   const commit = useSetAtom(commitTriggersAtom);
   const close = useSetAtom(closeDialogAtom);
   const names = useNames(scenario);
   const [briefing, setBriefing] = useState(entry.payload?.briefing === true);
-  const sourceOf = (scn: Scenario, brief: boolean) => (brief ? formatTriggers(scn.briefing, triggerNames(scn), true) : textOf(scn, script.block));
+  const sourceOf = (scn: Scenario, brief: boolean) => (brief ? formatTriggers(scn.briefing, triggerNames(scn), true) : textOf(scn, locateClaims(claims, scn.triggers)));
   const [form, setForm] = useScenarioForm(scenario, (scn) => ({ text: sourceOf(scn, briefing), error: null as TriggerTextError | null, status: "" }));
   const [wrap, setWrap] = useState(false);
   if (!scenario || !form || !names) return <NoMap entry={entry} title="Text Trigger Editor" icon={<Braces size={14} />} />;

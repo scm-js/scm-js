@@ -26,7 +26,6 @@ import { applyEntry, hasEdits, touchesDoodads, type HistoryEntry } from "../edit
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
-import { relocateScriptBlock, scriptState, type ScriptState } from "../editor/script";
 import { resizeScenario, type ResizeResult } from "../editor/resize";
 import { changeTileset, type ChangeTilesetResult } from "../editor/tileset";
 import { baseTerrain } from "../formats/tileset/terrain";
@@ -97,19 +96,6 @@ export const triggersRevisionAtom = atom(0);
 export const commitTriggersAtom = atom(null, (get, set) => {
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
-  // A hand trigger inserted before the script's block moved it: keep the manifest pointing at it.
-  const scn = get(scenarioAtom);
-  const moved = scn ? relocateScriptBlock(scn, get(archiveExtrasAtom)) : null;
-  if (moved) set(archiveExtrasAtom, moved);
-});
-
-/**
- * The trigger script's source, manifest and generated block (editor/script.ts), re-read
- * whenever the triggers or the archive extras change.
- */
-export const scriptStateAtom = atom<ScriptState>((get) => {
-  get(triggersRevisionAtom);
-  return scriptState(get(scenarioAtom), get(archiveExtrasAtom));
 });
 
 /**

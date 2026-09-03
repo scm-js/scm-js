@@ -14,7 +14,7 @@ import { closeDocumentAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, 
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
-import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
+import { ActionType, ConditionType, PlayerGroup } from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
 import {
   activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom,
@@ -43,7 +43,8 @@ import {
   addRegistry, cachedRegistries, entryIcon, groupByInstall, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
   RegistryError, removeRegistry, searchRegistry, type InstallState, type RegistryEntry,
 } from "../src/plugins/registry";
-import { registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
+import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
+import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
 import { pluginIdOf, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
@@ -859,13 +860,14 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Terrain from Image and Repair on, and Walkability and Melee Wizard off, as remote defaults", () => {
+  it("ships scmscx.com, Terrain from Image and Repair on, and Walkability, Melee Wizard and Trigger Script off, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-scm-scx", enabled: true },
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-repair", enabled: true },
       { spec: "github:scm-js/plugin-walkability", enabled: false },
       { spec: "github:scm-js/plugin-melee-wizard", enabled: false },
+      { spec: "github:scm-js/plugin-trigger-script", enabled: false },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
@@ -2040,53 +2042,74 @@ describe("plugin registries", () => {
 
 /* ── Script and create ──────────────────────────────────── */
 
-describe("plugin script api", () => {
-  it("declares, compiles, builds and prints a script through api.script", async () => {
-    const { store, scn } = blankStore(16, 16);
-    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
-    expect(api.script.state()).toMatchObject({ source: null, block: null, stale: false, unbuilt: false });
-    const decls = api.script.declarations();
-    expect(decls).toContain("declare function");
-    expect(decls).toContain("Anywhere");
+describe("plugin trigger claims and commands", () => {
+  it("claims a run of triggers by content, describes it, refreshes and removes it", () => {
+    const { store, scn } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "gen", name: "Generator", source: "s" }, bag);
+    const hand = api.triggers.newTrigger([PlayerGroup.Player1]);
+    const made = api.triggers.newTrigger([PlayerGroup.Player2]);
+    made.actions.push(api.triggers.newAction(ActionType.Victory));
+    const list = [hand, made, api.triggers.newTrigger([PlayerGroup.Player3])];
+    api.document.update("seed", (tx) => tx.triggers.set(list));
 
-    const bad = await api.script.compile("trigger([Players.Player1], [NoSuchCondition()], []);");
-    expect(bad.ok).toBe(false);
-    expect(bad.diagnostics[0]).toMatchObject({ line: 1 });
-    const failed = await api.script.build("trigger([Players.Player1], [NoSuchCondition()], []);");
-    expect(failed.block).toBeNull();
-    expect(scn.triggers).toHaveLength(0);
+    let located = 0;
+    const claim = api.triggers.claim({
+      label: "the generator",
+      badge: "gen",
+      locate: (l) => { located++; const at = l.findIndex((t) => t.actions.some((a) => a.type === ActionType.Victory)); return at < 0 ? null : { start: at, count: 1 }; },
+      describe: (i) => `Made by the generator at #${i + 1}.`,
+      open: () => {},
+      openLabel: "Open Generator",
+    });
+    const claims = store.get(pluginTriggerClaimsAtom);
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ pluginId: "gen", pluginName: "Generator", revision: 0 });
 
-    const source = `trigger([P1], [Always()], [DisplayText("Always Display", "hello")]);`;
-    const built = await api.script.build(source);
-    expect(built.compiled.ok).toBe(true);
-    expect(built.block).toEqual({ start: 0, count: 1, lines: [1] });
-    expect(scn.triggers).toHaveLength(1);
-    expect(scn.triggers[0].actions[0].type).toBe(ActionType.DisplayText);
-    expect(scn.strings.strings).toContain("hello");
-    expect(store.get(mapModifiedAtom)).toBe(true);
-    const state = api.script.state();
-    expect(state?.source).toBe(source);
-    expect(state?.block).toEqual({ start: 0, count: 1, lines: [1] });
-    expect(state?.unbuilt).toBe(false);
+    // Found by content wherever the run is, in whatever list an editor holds.
+    const ranges = locateClaims(claims, scn.triggers);
+    expect(ranges).toEqual([{ claim: claims[0], start: 1, count: 1 }]);
+    expect(claimAt(ranges, 1)?.claim.pluginId).toBe("gen");
+    expect(claimAt(ranges, 0)).toBeNull();
+    expect(claimBadge(ranges[0])).toBe("gen");
+    expect(claimDescription(ranges[0], 1, scn.triggers)).toBe("Made by the generator at #2.");
+    const shifted = [api.triggers.newTrigger(), ...scn.triggers];
+    expect(locateClaims(claims, shifted)[0]).toMatchObject({ start: 2, count: 1 });
+    expect(locateClaims(claims, [hand])).toEqual([]);
+    // Out-of-range answers are clamped rather than trusted.
+    const wild = locateClaims([{ ...claims[0], spec: { label: "x", locate: () => ({ start: 2, count: 50 }) } }], scn.triggers);
+    expect(wild[0]).toMatchObject({ start: 2, count: 1 });
+    // A locate that throws is a skipped claim, not a broken dialog.
+    expect(locateClaims([{ ...claims[0], spec: { label: "x", locate: () => { throw new Error("no"); } } }], scn.triggers)).toEqual([]);
+    expect(claimDescription({ ...ranges[0], claim: { ...claims[0], spec: { label: "the generator", locate: () => null } } }, 1, scn.triggers)).toMatch(/generated by the generator/);
+    expect(located).toBeGreaterThan(0);
 
-    const printed = api.script.print(scn.triggers);
-    expect(printed).toContain("DisplayText(");
-    expect(printed).toContain('"hello"');
-    // A rebuild from the printed form gives the same records back.
-    const again = await api.script.compile(printed);
-    expect(again.ok).toBe(true);
-    expect(again.triggers).toHaveLength(1);
+    claim.refresh();
+    expect(store.get(pluginTriggerClaimsAtom)[0].revision).toBe(1);
+    claim.remove();
+    expect(store.get(pluginTriggerClaimsAtom)).toEqual([]);
 
-    const sim = api.script.simulate(scn.triggers, 3, { player: 0 });
-    expect(sim.cycles).toBe(3);
-    expect(sim.events.map((e) => e.text)).toEqual(["hello"]);
-    expect(sim.switches).toEqual([]);
+    // The plugin's disposal sweeps a claim it never removed.
+    api.triggers.claim({ label: "again", locate: () => null });
+    expect(store.get(pluginTriggerClaimsAtom)).toHaveLength(1);
+    bag.dispose();
+    expect(store.get(pluginTriggerClaimsAtom)).toEqual([]);
+  });
 
-    // Building again replaces the block rather than stacking a second one.
-    const second = await api.script.build(`${source}\ntrigger([P2], [Always()], [SetSwitch(Switches.Switch1, "set")]);`);
-    expect(second.block).toEqual({ start: 0, count: 2, lines: [1, 2] });
-    expect(scn.triggers).toHaveLength(2);
-    expect(api.script.simulate(scn.triggers, 1, { player: 1 }).switches).toEqual([0]);
+  it("tells a plugin when another registers a command it calls by id", () => {
+    const { store } = blankStore();
+    const consumer = createPluginApi(store, { id: "ai", name: "AI", source: "s" }, new Contributions());
+    const providerBag = new Contributions();
+    const provider = createPluginApi(store, { id: "trigger-script", name: "Trigger Script", source: "s" }, providerBag);
+    const seen: boolean[] = [];
+    consumer.events.on("commands", () => seen.push(consumer.commands.has("trigger-script.compile")));
+    expect(consumer.commands.has("trigger-script.compile")).toBe(false);
+    provider.commands.register({ id: "compile", title: "Compile", run: (src: unknown) => `compiled ${String(src)}` });
+    expect(seen).toEqual([true]);
+    expect(consumer.commands.run("trigger-script.compile", "x")).toBe("compiled x");
+    providerBag.dispose();
+    expect(seen).toEqual([true, false]);
+    expect(consumer.commands.run("trigger-script.compile", "x")).toBeUndefined();
   });
 
   it("creates a blank map through document.create and honours the close gate", async () => {
@@ -2339,7 +2362,6 @@ describe("plugin api: editing additions", () => {
     api.terrain.setActive({ variation: 3 });
     expect(api.terrain.active().variation).toBe(3);
     expect(api.settings.unitAvailable(0, 0)).toBe(true);
-    expect(api.script.triggerAtLine(1)).toBeNull();
     expect(api.query.strings()).toHaveLength(store.get(scenarioAtom)!.strings.strings.length);
     const empty = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
     expect(empty.query.placement(0, 0, 0)).toBeNull();

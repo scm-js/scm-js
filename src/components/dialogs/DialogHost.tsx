@@ -57,7 +57,6 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   spriteProperties: from(object, (m) => m.SpritePropertiesDialog),
   triggerEditor: from(trigger, (m) => m.TriggerEditorDialog),
   textTriggerEditor: from(trigger, (m) => m.TextTriggerEditorDialog),
-  scriptEditor: from(() => import("./ScriptEditorDialog"), (m) => m.ScriptEditorDialog),
   missionBriefing: from(trigger, (m) => m.MissionBriefingDialog),
   cuwpEditor: from(() => import("./CuwpDialog"), (m) => m.CuwpDialog),
   replaceTerrain: from(terrain, (m) => m.ReplaceTerrainDialog),

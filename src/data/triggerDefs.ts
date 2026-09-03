@@ -295,6 +295,13 @@ export function choiceValue(kind: ArgKind, text: string): number | undefined {
 /* ── AI scripts ──────────────────────────────────────────── */
 
 /** Encode a four-character script code the way the action stores it (little-endian u32). */
+/**
+ * Where the deaths table starts in StarCraft 1.16.1's memory: `EPD(address)` is the player
+ * value that reaches `address` through a Deaths condition or Set Deaths action (the
+ * Classic editor's EPD box, and the trigger script's `Memory` / `SetMemory`).
+ */
+export const DEATHS_TABLE_ADDRESS = 0x58a364;
+
 export function aiScriptCode(id: string): number {
   if (id.length !== 4) throw new Error(`AI script codes are four characters: "${id}"`);
   return (id.charCodeAt(0) | (id.charCodeAt(1) << 8) | (id.charCodeAt(2) << 16) | (id.charCodeAt(3) << 24)) >>> 0;

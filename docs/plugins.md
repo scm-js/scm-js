@@ -63,8 +63,8 @@ exceptions to it.
      holding `plugin.json`. `http://localhost:…` works, which is how you develop one.
 2. The manifest is fetched and validated (`PluginManifest`; only `name` is required).
 3. The entry file is fetched **as text** and, if it is TypeScript, transpiled in the
-   compile worker (`ts.transpileModule`; the editor already ships TypeScript for the
-   trigger script). Fetching as text matters: `raw.githubusercontent.com` serves
+   transpile worker (`ts.transpileModule`; TypeScript is in the editor's bundle for this
+   alone). Fetching as text matters: `raw.githubusercontent.com` serves
    `text/plain`, which a browser refuses to `import()` as a module.
 4. Relative imports are followed the same way, depth first, and each file becomes a
    `blob:` module URL; the import specifiers are rewritten to those URLs. There is no
@@ -479,22 +479,7 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 | `summarize(t, briefing?)` | The three lines the trigger list shows: players, conditions, actions. |
 | `comment(t)` | A trigger's `Comment` action text, if it has one. |
 | `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
-
-### `api.script`
-
-The trigger script — the TypeScript-subset language the Script Editor compiles into a
-block of the map's triggers (`docs/trigger-script.md`) — without the editor. The source
-and its build manifest are archive members, so they save with the `.scx`.
-
-| | |
-| --- | --- |
-| `state()` | `{ source, manifest, block, stale, unbuilt }`: the map's script, where its built block sits in the trigger list (null when the records were edited by hand — `stale`), and whether the source differs from what was last built. Null with no map. |
-| `declarations()` | The generated `.d.ts` the script type-checks against: this map's units, locations, switches, players and AI scripts by name, every condition and action as a function. Hand it to whatever writes a script — it is the whole vocabulary. |
-| `compile(source)` | Compile without building: a `CompileResult` with `ok`, `diagnostics` (1-based lines, `source: "typescript"` or `"compiler"`), the records and the variable allocation. Runs in the compile worker; a newer compile supersedes an unfinished one, which rejects with `CompileSuperseded`. |
-| `build(source, { takeOver? })` | The Script Editor's Build: compile and, when clean, replace the block (or append when the old one was edited) and store the source and manifest with the map — `{ compiled, block }`, `block` null when there were errors. `takeOver` replaces the whole trigger list with the script's. Not in the undo model; marks the map modified. |
-| `print(triggers)` | Records as raw `trigger()` calls in the script language — what Import map triggers writes. |
-| `triggerAtLine(line)` | Which trigger (index in the map's list) a 1-based source line generated, per the build manifest; null when none did or the block is stale. |
-| `simulate(triggers, cycles, { player? })` | The trigger-cycle interpreter: Deaths, Switch, Always and Never modelled, other conditions false, other actions logged — `{ cycles, events, switches }`. What the Script Editor's Simulate button runs. |
+| `claim(spec)` | Tell the editor that a run of the trigger list is *generated* by this plugin. The Trigger Editor badges those rows (`spec.badge`, the plugin's id by default), locks them and shows `spec.describe(index, list)` with a button that calls `spec.open(index, list)` (`spec.openLabel`, `Open <plugin name>` by default) in place of the form; the Text Trigger Editor fences them in comments; Import Triggers says what a replace would remove. The run is found by content: `spec.locate(list)` is asked with whatever list an editor holds — the map's, or a working copy with local inserts in it — and answers `{ start, count }` or null when the records are not there (edited by hand, or gone), so keep a hash of what you generated and look for it, as the Trigger Script plugin does. `spec.label` is the words a sentence uses (`"the trigger script"`). The handle has `refresh()` (after a rebuild, so editors ask `locate` again) and `remove()`; the claim leaves with the plugin. |
 
 ### `api.query`
 
@@ -669,7 +654,7 @@ without the tileset graphics.
 | `status(text)` / `statusText()` | The status bar. |
 | `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself — how Save reports (`"ok"`, `"info"`, `"warn"`, `"error"`; `ttl` 0 keeps it until dismissed). |
 | `saveFile(data, fileName)` | Write bytes or a `Blob` to disk the way the editor's own exports do: through the browser's save dialog where it has one, else as a download. Resolves `{ route, fileName }`, or null when dismissed. |
-| `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
+| `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog unless `spec.keepOpenOnEscape(target)` answers true for the element the key landed on — for something inside that handles Escape itself, such as a code editor dismissing its own popups. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
 | `panel(spec)` | A panel that floats over the map and blocks nothing: the user keeps drawing, scrolling and using hotkeys while it is open (except while typing in one of its fields). `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS pixels (260 by default) and the panel is as tall as its content; `onClose` fires however it closes. The user drags it by its title bar and closes it with the ×; it opens at the top-right of the map and remembers where it was left for the session. The handle has `close()`, `isOpen()`, `setTitle()`. Open as many as you like; they all close with the plugin. |
 | `mapTool(spec)` | Take over the pointer on the map. The viewport hands the tool every press, move and release ahead of the active layer's own tools (`onDown` / `onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and the modifier keys — kept inside the map while a button is held, as the built-in brushes do), hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls `draw(ctx, view)` last on every repaint so the tool can preview what it will do (`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`, `view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a right-click calls `onCancel` — return `true` to keep running (you dropped a gesture of your own), otherwise the tool stops — and `onStop(reason)` is told once whichever way it ends: `"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed), `"replaced"` (another tool started; one runs at a time), `"disabled"`. A `pickArea` / `pickTile` in progress is served first. Paint is the worked example. |
 | `overlay(spec)` | A picture over the map the user can switch on and off, and that stays while they work on any layer: it is listed under View (after the built-in overlays) and in the Layers panel with an eye of its own. `draw(ctx, view)` runs at every repaint while visible, at the slot `above` names — `"terrain"` (under doodad footprints, units, sprites and locations; the default), `"objects"` (under fog of war) or `"everything"` (under a running map tool's drawing only) — with the same `MapView` a map tool gets. `onHover(p)` hears the pointer on every layer, and while a map tool runs, with `null` once when it leaves the map; the overlay never takes the pointer, so clicks go to the active layer's tools. `onToggle(visible)` fires whichever way it was switched. The handle has `show()`, `hide()`, `toggle()`, `isVisible()`, `redraw()` and `remove()`. `visible` is the starting state (true by default); what the user last set an overlay of that name to wins for the session, so a reloaded plugin comes back as it was left. Register at activation and keep the handle; the overlay leaves with the plugin. Walkability is the worked example. |
@@ -723,9 +708,11 @@ moved, or an overlay registered or toggled), `"tool"` (a map tool or pick starte
 stopped), `"modified"` (the unsaved-changes flag), `"palette"` (a palette's pick
 changed: terrain brush, unit and owner, sprite, doodad, fog players), `"options"` (an
 editing option moved: symmetry, placement and doodad rules, location snap, the fog view
-player, clip parts and paste mode, locked layers, the grid look, Preferences) and
-`"file"` (the document's name or handle after a Save, its save options, the archive
-extras, the recent list).
+player, clip parts and paste mode, locked layers, the grid look, Preferences), `"file"`
+(the document's name or handle after a Save, its save options, the archive extras, the
+recent list) and `"commands"` (a plugin registered or removed a command — how a plugin
+that calls another's by id learns it has arrived, since plugins activate in no fixed
+order; check `commands.has` in the listener).
 
 The `"document"` listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open,
 a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included),
@@ -761,10 +748,11 @@ plugin's name prefixed.
 | `src/plugins/api.ts` | The public types. Changing them is an API change: bump `PLUGIN_API_VERSION` for anything not backward compatible. |
 | `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the Jotai store and a `Contributions` bag that `dispose()` empties; `activatePlugin` / `deactivatePlugin` drive the lifecycle and write `pluginRuntimesAtom`; `inspectPlugin` / `installPlugin` are the confirm-then-add pair, and `rememberManifest` is the manifest cache both it and `describePlugin` write. |
 | `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline, and `previewPlugin` (`canonicalSpec` + the manifest, no code) behind the Add Plugin confirmation. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
+| `src/plugins/claims.ts` | `locateClaims(claims, list)` asks every `api.triggers.claim` where its run is in a given list (a `locate` that throws is a skipped claim, answers are clamped), plus `claimAt`, `claimBadge` and `claimDescription` — what the Trigger Editor, the Text Trigger Editor and Import Triggers read. |
 | `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
 | `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
 | `src/plugins/defaults.ts` | The plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, each with whether it starts on, plus any built-in), merged over the stored list by `effectiveInstalls`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`), `pluginOverlaysAtom` (the registered `ui.overlay`s with their visibility — `setOverlayVisibleAtom` is the one writer, `pluginOverlayRevisionAtom` their `redraw`, `overlayVisibilityMemory` what the user last chose per plugin and name) and `pluginPanelsAtom` (the open `ui.panel`s). |
+| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`), `pluginOverlaysAtom` (the registered `ui.overlay`s with their visibility — `setOverlayVisibleAtom` is the one writer, `pluginOverlayRevisionAtom` their `redraw`, `overlayVisibilityMemory` what the user last chose per plugin and name) `pluginPanelsAtom` (the open `ui.panel`s) and `pluginTriggerClaimsAtom` (the live `api.triggers.claim`s, each with a revision the handle's `refresh` bumps). |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, `ConfirmPluginDialog` (the Add Plugin confirmation), and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
 | `src/components/panels/PluginPanels.tsx` | The floating frames `ui.panel` mounts into, rendered inside the viewport: a draggable title strip, a close button, positions remembered per plugin and title for the session. |
@@ -1042,10 +1030,31 @@ names that asked for it, then one `document.edit` with `tx.rebuildIsom`. The byt
 map came in are kept in memory until the next map opens, and *Restore original* puts them
 back through `replaceFile`.
 
+## Trigger Script
+
+[scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script), a default
+that starts off, is the Script Editor: a TypeScript-subset language kept as a file inside
+the map (`scmjs\triggers.ts`, with a build manifest in `scmjs\triggers.json`) and compiled
+into a block of the trigger list. It used to be part of the editor and was moved out so
+the editor no longer carries Monaco and a second TypeScript; the plugin fetches both from
+a CDN when the dialog first opens (Monaco as jsDelivr's bundled ESM build, TypeScript into
+a blob worker with a main-thread fallback). It is the worked example for
+`api.triggers.claim` — the manifest holds a hash of the generated records, `locate` looks
+for them at the recorded start and then anywhere in the list, so the Trigger Editor badges
+and locks the block wherever local edits moved it, and a hand edit *inside* it makes the
+block stale (ordinary triggers again; the next Build appends a fresh one) — and for a
+plugin publishing commands for other plugins: `trigger-script.state`, `.declarations`,
+`.compile`, `.build`, `.print`, `.simulate`, `.triggerAtLine` and `.open`, which the AI
+plugin calls through `api.commands.run` after checking `commands.has`, listening to the
+`"commands"` event since plugins activate in no fixed order. Its source keeps the
+compiler out of the browser-specific parts (`compiler/` is pure, tested under vitest with
+the real `typescript` package, and vendors the trigger tables it reads), which is what
+lets the same modules run in the worker.
+
 ## AI
 
 [scm-js/plugin-ai](https://github.com/scm-js/plugin-ai), not a default, is the worked
-example for `api.script`, `api.document.create` and a plugin's own submenu, and the
+example for calling another plugin's commands, `api.document.create` and a plugin's own submenu, and the
 first plugin that needs a server: [scm-js/ai-server](https://github.com/scm-js/ai-server)
 holds the Anthropic key, the prompt recipes, the access rules and the budgets, and
 never any game data. The split is deliberate — the editor already has everything that
@@ -1055,8 +1064,9 @@ script's declarations) and answers with a *plan* or *text* the plugin applies th
 the ordinary API: a map plan is a coarse grid of legend characters the plugin turns into
 isometric brush strokes (so cliffs and shores draw themselves), bases laid with the
 Melee Wizard's geometry, doodads scattered by category; a trigger request answers in the
-script language, is compiled through `api.script.compile`, repaired against the
-diagnostics, and built with `api.script.build`; a review sends `document.renderImage`;
+Trigger Script plugin's language, is compiled through that plugin's `trigger-script.compile`
+command, repaired against the diagnostics, and built with `trigger-script.build` (so it
+needs that plugin on, and says so when it is not); a review sends `document.renderImage`;
 the assistant panel is a tool-use loop whose tools — reads, screenshots, and one
 undoable write (or one settings transaction) each — are defined and run in the plugin,
 with the server adding the system prompt and the caching. The assistant is the reason

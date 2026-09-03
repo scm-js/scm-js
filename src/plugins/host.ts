@@ -24,13 +24,13 @@ import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, status
 import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom,
+  pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom,
   type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
-import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex, type Scenario } from "../formats/chk/scenario";
+import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { megatileForTile } from "../formats/tileset/decode";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -97,14 +97,14 @@ import {
   type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
-  type ContextMenuContext, type NewDocumentOptions, type ScriptApi, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
+  type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
 } from "./api";
 import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
-import { transpileInBackground } from "../script/compileClient";
+import { transpileInBackground } from "./transpileClient";
 import { askDialog, closeMapIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { defaultSaveOptions } from "../editor/save";
 import { saveBlob } from "../services/mapIo";
@@ -122,13 +122,6 @@ import { DEFAULT_START_PLACEMENT, placeStartLocations } from "../editor/startLoc
 import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseStringTable } from "../editor/exchange";
 import { clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
-import { triggerAtLine } from "../editor/script";
-import { buildScript, reservedStorage, scriptState } from "../editor/script";
-import { compileInBackground } from "../script/compileClient";
-import { generateDeclarations } from "../script/declarations";
-import { defaultScriptNames, scriptNames } from "../script/names";
-import { printScript } from "../script/print";
-import { simulate } from "../script/simulate";
 import { writeMapBytes } from "../services/mapIo";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
@@ -872,7 +865,7 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
 /* ── Triggers ───────────────────────────────────────────── */
 
 /** `api.triggers`: reading TRIG and MBRF, and the tables that make a record presentable. */
-export function triggersApi(store: Store): TriggersApi {
+export function triggersApi(store: Store): Omit<TriggersApi, "claim"> {
   const scenario = () => store.get(scenarioAtom);
   const names = () => {
     const scn = scenario();
@@ -907,61 +900,6 @@ export function triggersApi(store: Store): TriggersApi {
     triggersFor,
     summarize: (trigger, briefing = false) => summarizeTrigger(trigger, names(), briefing),
     comment: (trigger) => triggerComment(trigger, names()),
-  };
-}
-
-/* ── Trigger script ─────────────────────────────────────── */
-
-/**
- * `api.script`: the Script Editor's compile and Build without the editor. `build` is
- * the dialog's sequence — compile in the worker, `buildScript` over the current extras,
- * write them back, `commitTriggersAtom` — so a plugin-written script lands exactly as
- * a typed one does: block replaced or appended, manifest and source stored with the map.
- */
-export function scriptApi(store: Store): ScriptApi {
-  const scenario = () => store.get(scenarioAtom);
-  const setup = (scn: Scenario) => {
-    const state = scriptState(scn, store.get(archiveExtrasAtom));
-    return { state, decls: generateDeclarations(scriptNames(scn)), options: reservedStorage(scn, state.block) };
-  };
-  const compile = (source: string) => {
-    const scn = scenario();
-    if (!scn) return Promise.reject(new Error("No map is open."));
-    const { decls, options } = setup(scn);
-    return compileInBackground(source, decls, options);
-  };
-  return {
-    state: () => { const scn = scenario(); return scn ? scriptState(scn, store.get(archiveExtrasAtom)) : null; },
-    declarations: () => { const scn = scenario(); return scn ? generateDeclarations(scriptNames(scn)) : ""; },
-    compile,
-    build: async (source, options = {}) => {
-      const compiled = await compile(source);
-      const scn = scenario();
-      if (!compiled.ok || !scn) return { compiled, block: null };
-      const out = buildScript(scn, store.get(archiveExtrasAtom), source, compiled, { takeOver: options.takeOver });
-      store.set(archiveExtrasAtom, out.extras);
-      store.set(commitTriggersAtom);
-      store.set(statusMessageAtom, out.block.count === 0 ? "Built: the script defines no triggers." : `Built ${out.block.count} trigger${out.block.count === 1 ? "" : "s"} → #${out.block.start + 1}–#${out.block.start + out.block.count}.`);
-      return { compiled, block: out.block };
-    },
-    triggerAtLine: (line) => {
-      const scn = scenario();
-      if (!scn) return null;
-      const state = scriptState(scn, store.get(archiveExtrasAtom));
-      return state.block && !state.stale ? triggerAtLine(state.block, line) : null;
-    },
-    print: (triggers) => {
-      const scn = scenario();
-      const names = scn ? scriptNames(scn) : defaultScriptNames();
-      return printScript(triggers, { names, string: (i) => (scn ? getString(scn.strings, i) : null) });
-    },
-    simulate: (triggers, cycles, options = {}) => {
-      const scn = scenario();
-      const sim = simulate(triggers, cycles, { player: options.player, strings: (i) => (scn ? getString(scn.strings, i) : null) });
-      const switches: number[] = [];
-      sim.switches.forEach((v, i) => { if (v) switches.push(i); });
-      return { cycles: sim.cycle, events: sim.events, switches };
-    },
   };
 }
 
@@ -1253,6 +1191,7 @@ const EVENT_ATOMS = {
   ],
   options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
+  commands: [pluginCommandsAtom],
 } as const;
 
 /**
@@ -1416,8 +1355,20 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       sections: sectionsApi(store),
     },
 
-    triggers: triggersApi(store),
-    script: scriptApi(store),
+    triggers: {
+      ...triggersApi(store),
+      claim: (spec) => {
+        const key = nextContributionKey();
+        const entry = (revision: number): PluginTriggerClaim => ({ key, pluginId: info.id, pluginName: info.name, spec, revision });
+        store.set(pluginTriggerClaimsAtom, [...store.get(pluginTriggerClaimsAtom), entry(0)]);
+        const remove = bag.add(() => store.set(pluginTriggerClaimsAtom, store.get(pluginTriggerClaimsAtom).filter((c) => c.key !== key)));
+        return {
+          dispose: () => remove.dispose(),
+          remove: () => remove.dispose(),
+          refresh: () => store.set(pluginTriggerClaimsAtom, store.get(pluginTriggerClaimsAtom).map((c) => (c.key === key ? entry(c.revision + 1) : c))),
+        };
+      },
+    },
     query: queryApi(store),
     view: viewApi(store),
     data: dataApi(),

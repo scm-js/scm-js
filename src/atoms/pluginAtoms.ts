@@ -8,8 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest,
-} from "../plugins/api";
+  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import { browserStorage } from "./storage";
@@ -328,3 +327,18 @@ export interface PluginPanelEntry {
 }
 
 export const pluginPanelsAtom = atom<PluginPanelEntry[]>([]);
+
+/* ── Trigger claims ─────────────────────────────────────── */
+
+/** A run of triggers a plugin generates and owns (`api.triggers.claim`), as the trigger editors see it. */
+export interface PluginTriggerClaim {
+  key: number;
+  pluginId: string;
+  pluginName: string;
+  spec: TriggerClaimSpec;
+  /** Bumped by the handle's `refresh`, so editors that memoised `locate` ask again. */
+  revision: number;
+}
+
+/** Every live claim; `plugins/claims.ts#locateClaims` is how a list is read against them. */
+export const pluginTriggerClaimsAtom = atom<PluginTriggerClaim[]>([]);

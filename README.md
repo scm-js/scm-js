@@ -74,8 +74,8 @@ on the right before it is:
   as, so every StarCraft build reads it; zlib is smaller and needs 1.16.1 or Remastered;
   none is the largest and readable by anything. A map keeps the compression it was opened
   with by default; a new map gets StarEdit's. StarEdit's encryption is a tick beside it.
-- **Other files in the archive**: the sounds and the trigger script members, each with a
-  tick, so a copy for release can leave the source out.
+- **Other files in the archive**: the sounds and the files plugins keep there (the Trigger
+  Script plugin's source, say), each with a tick, so a copy for release can leave them out.
 - **Sections**: the game reads none of ISOM, TILE, DD2 (the terrain-editing data), IVER,
   IVE2, IOWN, UPUS, SWNM or WAV (editor bookkeeping); each group can be left out, as can
   sections the format reference does not know, and repeated sections can be merged into
@@ -139,7 +139,7 @@ The options confirmed in the dialog are what Ctrl+S reuses for that map from the
 | --- | --- |
 | Classic editor: every condition and action, per-item disable | Yes |
 | Text editor in SCMDraft's TrigEdit syntax | Yes |
-| Script editor: a TypeScript subset that generates triggers | Yes |
+| Script editor: a TypeScript subset that generates triggers | Yes, as a plugin (Trigger Script: tick it in Plugins ▸ Manage Plugins…, then Triggers ▸ Script Editor…). |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |
 | Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |
@@ -366,15 +366,19 @@ The **Text Trigger Editor** (Ctrl+Shift+T) is SCMDraft 2's TrigEdit syntax, so i
 text pastes in and back out. A leading `;` disables a line, and a `Flags:` block
 carries the trigger flags SCMDraft has no syntax for.
 
-The **Script Editor** is a TypeScript file per map that generates triggers, at two
-levels: one `trigger()` call per trigger, and structured code with variables, `if`,
-loops and functions. The structured level compiles down to a state machine built out
-of death counters, with no EUD anywhere in it, so what comes out runs on any version
-of the game. A built-in simulator runs thirty cycles of the result and tells you what
-happened. Full reference in [docs/trigger-script.md](docs/trigger-script.md).
+The **Script Editor** is a plugin, Trigger Script
+([scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script)): a
+TypeScript file per map that generates triggers, at two levels — one `trigger()` call
+per trigger, and structured code with variables, `if`, loops and functions, which
+compiles down to a state machine built out of death counters, with no EUD anywhere in
+it, so what comes out runs on any version of the game. A built-in simulator runs thirty
+cycles of the result and tells you what happened. It is in the plugin list from the
+start but off; tick it and Triggers ▸ Script Editor… appears. The language is described
+in that repository's README.
 
-Generated triggers show up in the classic editor with a `script` badge, and hand-made
-triggers around the generated block are left alone.
+Triggers a plugin generates show up in the classic editor with a badge and are locked
+there, with a button to the plugin's own editor; the text editor fences them in
+comments; hand-made triggers around them are left alone.
 
 Mission briefings get their own editor over the same record layout with the briefing
 action set, and the Text Trigger Editor has a Briefing mode in the same syntax. The
@@ -523,8 +527,9 @@ Plugins marked *default* are the ones the editor lists from the start. They are 
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
 working connection on the first load of a session. scmscx.com, Terrain from Image and Repair start on;
-Walkability and Melee Wizard are listed but off until you tick them. Paint and Section
-Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like any other.
+Walkability, Melee Wizard and Trigger Script are listed but off until you tick them. Paint
+and Section Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like
+any other.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
@@ -644,6 +649,17 @@ end-patch amounts and mineral types; a blocking patch tool; *Mirror selected uni
 *Check symmetry* (selects every unit without a counterpart) and a per-player resource
 summary. Every placement is one undo step.
 
+**Trigger Script** ([scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script))
+is in the list but off. Tick it, and Triggers ▸ Script Editor… opens a TypeScript file
+kept inside the map, checked as you type against the map's own names and compiled into
+a block of the trigger list on Build: raw `trigger()` calls one to one, and structured
+code — variables, `if`, loops, functions — lowered to a death-counter state machine.
+Simulate runs the result for thirty cycles and lists what happened. The editor (Monaco)
+and the TypeScript compiler are fetched from a CDN the first time the dialog opens, so
+that first open needs a connection; the browser keeps them afterwards. The language is
+in the plugin's README. The AI plugin's *Write Triggers…* uses it, so that needs this
+one on.
+
 **AI** ([scm-js/plugin-ai](https://github.com/scm-js/plugin-ai)) is not in the list;
 install it from Plugins ▸ Browse Plugins…. It puts an AI submenu under Tools and needs a
 server to talk to: [scm-js/ai-server](https://github.com/scm-js/ai-server) is a small
@@ -654,8 +670,9 @@ description, a size, a tileset and a player count and lays the map out — terra
 with the isometric brush from a coarse plan, bases with the Melee Wizard's geometry, a
 name and a description — then offers to refine it from a picture of the result or to
 review it. *Redo Area…* does the same for the marked area. *Write Triggers…* answers in
-the trigger script language, compiles it here, fixes what the compiler complains about
-and builds it; *Explain Triggers…* walks through the map's triggers in plain language.
+the Trigger Script plugin's language, compiles it there, fixes what the compiler complains
+about and builds it (so it needs that plugin on); *Explain Triggers…* walks through the
+map's triggers in plain language.
 *Name and Describe…*, *Write Briefing…*, *Review Map…* (the map's picture and statistics
 go up, a critique with places to look at comes back) and *Rewrite Strings…* (translate,
 fix spelling, retone, with a before/after table to tick) round it out, and *Assistant*
@@ -697,7 +714,6 @@ map you have open is not kept in the browser and is not touched by it.
 | --- | --- |
 | [docs/game-data.md](docs/game-data.md) | Extracting Blizzard data, and how the graphics get drawn |
 | [docs/file-formats.md](docs/file-formats.md) | CHK and MPQ handling, which sections are modelled |
-| [docs/trigger-script.md](docs/trigger-script.md) | The scripting language, in full |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
 | [docs/development.md](docs/development.md) | Building, testing, repository layout |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |

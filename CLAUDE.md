@@ -8,7 +8,7 @@ A browser-based StarCraft 1 / Brood War map editor (React 19 + Vite + TypeScript
 StarEdit / SCMDraft 2. It opens real `.scm`/`.scx` maps (MPQ archives via `mopaq`), renders terrain from
 the game's own tileset graphics, and writes playable archives back. `README.md` is the map-maker's
 guide (what each layer does, and the table of what is and is not implemented) — read it first; the
-technical companions are `docs/file-formats.md`, `docs/game-data.md`, `docs/trigger-script.md` and
+technical companions are `docs/file-formats.md`, `docs/game-data.md`, `docs/plugins.md` and
 `docs/development.md`. Keep all five current when behaviour changes.
 
 ## Commands
@@ -440,108 +440,37 @@ transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (mar
 real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
 `newCondition` / `newAction` seed StarEdit-like defaults.
 
-### Trigger script (`src/script/`, `src/editor/script.ts`, `dialogs/ScriptEditorDialog.tsx`)
+### Trigger claims, and the Trigger Script plugin
 
-A TypeScript-subset language that *generates* a block of `scenario.triggers`, at two levels: raw
-`trigger(players, conditions, actions, flags?)` calls (1:1 with records) and *structured* code —
-every other top-level statement — lowered to a death-counter state machine (no EUD, runs on every
-game version; the EUD-address route was dropped because trigger nodes are heap-allocated by the
-game and their addresses unknowable at save time).
+The Script Editor — the TypeScript-subset language that generates a block of `scenario.triggers`,
+its compiler, simulator and Monaco dialog — is the **Trigger Script** plugin
+(`github.com/scm-js/plugin-trigger-script`, a default that starts off), not the editor: it was moved
+out so the editor no longer bundles Monaco and a second TypeScript (the desktop download lost ~14 MB
+of the 18 MB those chunks weighed). Its README documents the language and its internals. What stays
+here is generic:
 
-- `names.ts` turns the scenario into five `NameTable`s (players, units, locations, switches, AI
-  scripts); each entry's keys are an identifier derived from the display name first (`identifier()`:
-  `Terran Marine` → `TerranMarine`), the display name itself second (`Units["Terran Marine"]`), then
-  custom names — unique per table by construction. `declarations.ts` generates the `.d.ts` from them
-  plus a fixed runtime; it is **`noLib`** (the runtime declares the dozen global types TS insists on and
-  nothing else — no `Math`, no `Array.prototype`), values are *branded literal types*
-  (`UnitId<0> = 0 & Brand<"unit">`; plain numbers still pass, a `LocationId` where a `UnitId` belongs
-  does not), enumerated kinds are string unions of the `CHOICES` labels and aliases, and every
-  condition/action is a `declare function` whose identifier is its `ConditionType`/`ActionType` key
-  (`api.ts`; parameter names come from the def labels, reserved words get a trailing underscore).
-  `program(options)`, `random()`, `Memory` / `SetMemory` (Deaths at player `EPD(addr)`,
-  `DEATHS_TABLE_ADDRESS`) are declared there too.
-- `compiler.ts` builds a real `ts.createProgram` (declarations + script, in-memory host) and walks
-  the script's AST; it takes the `typescript` namespace as an argument so `tests/script.test.ts`
-  (Node) and `compile.worker.ts` (bundled) share it. Every argument is evaluated by asking the checker
-  for the expression's literal type (`literalOf`, intersections included), else folding arithmetic /
-  template strings, else following a `const` initialiser — `value()`. `value()` consults the
-  structured `Scope` first (a `let` is never a constant, whatever the checker narrowed it to; a
-  function parameter bound to a constant is one) and `initializer()` follows **const** declarations
-  only. Arrays flatten spreads and follow consts (`list()`); `disabled(x)` sets the Disabled flag;
-  `Condition(type, …)` / `Action(type, …)` are the raw escape hatch. Diagnostics from the *whole*
-  program are reported; the compiler's own carry `source: "compiler"`. Strings are **not** interned
-  in the compiler: text/wav fields hold local ids into `CompileResult.strings` and
-  `editor/script.ts#resolveStrings` interns them at build time. `CompileOptions.reservedDeaths` /
-  `reservedSwitches` (from `editor/script.ts#reservedStorage`: what the hand triggers outside the block
-  and the switch names use) keep variables off storage the map already uses. `CompileResult.variables`
-  and `.program` describe the allocation for the UI.
-- `run()` sorts top-level statements: `const` / `trigger()` / `program()` / function declarations /
-  everything else (the program, in order). Raw triggers come first in the output, then the program's,
-  then hyper triggers (`lower.ts#hyperTriggers`, three preserved triggers of 63 `Wait(0)`).
-- `lower.ts` is the machine and knows no TypeScript. Read its header: a basic block is a run of
-  preserved triggers testing `pc == S` in list order (so straight-line code runs within one cycle and a
-  back edge costs one); `[S, C] → THEN` followed by `[S] → ELSE` is negation by ordering. `Allocator`
-  hands out death counters player-major over `VARIABLE_UNITS` (the "(Unused)" units, Cantina first) and
-  switches from 255 down. `Machine` queues actions (`action`), writes steps (`step` / `raw`, always
-  prefixed with the pc condition and a `Comment` label when `comments` is on), ends states (`jump`,
-  `next`, `loopHeader` — which reuses an empty current state), and does arithmetic: `addConst` is one
-  action, `addVar` the 32+32-step binary decomposition through a temp (`move` is the destructive
-  32-step half), `assign` handles `c + Σ±v` (constants first, adds before subtracts so saturation only
-  bites when the true result is negative, via a temp when `x` appears in its own RHS other than as the
-  leading `+x`), `compareVars` builds saturating differences into temps that the caller releases after
-  the branch (`tempsHeld` / `releaseTo`). `Bool` trees go through `toDnf` (negation to the leaves,
-  `negateCondition` flips comparisons around their amount; a leaf the game cannot negate becomes a
-  *negative literal*) and `branch` emits one trigger per product, skip steps for negative literals,
-  and a fallthrough to ELSE; it asserts a branch never targets the state it is tested in (which is why
-  `do … while` gets a check state of its own). State 0 is the entry (every counter is 0 at game start),
-  `halt` is 0xFFFFFFFF.
-- `structured.ts` walks the statements: `let` → `dc` (number-like type) or `switch` (boolean-like),
-  bound in a `Scope` keyed by declaration node (so shadowing and inlining resolve as the checker does);
-  `linear()` reduces numeric expressions to `c + Σ±v`; `bool()` builds `Bool` trees (comparisons with a
-  constant are one Deaths condition; between variables they cancel common terms then go through
-  `compareVars`; `random()` randomizes a scratch switch first); functions are inlined per call with
-  parameters bound to constants or by-reference variables, `return` jumping to a lazily created end
-  state; `dead` tracks unreachable code after `break` / `continue` / `return` / an endless loop so
-  the final `halt` jump is only emitted when the program can reach it. TypeScript's literal narrowing
-  on `let` booleans (`f = true; if (f == g)` → "no overlap") is a real type error, not a compiler bug.
-- `simulate.ts` is the trigger-cycle interpreter (Deaths / Switch / Always / Never built in, other
-  conditions via callback, non-modelled actions logged as events, preserve semantics, add wraps and
-  subtract saturates like the game). `tests/script-structured.test.ts` compiles programs and asserts
-  the simulation; the dialog's **Simulate** button runs the same thing for 30 cycles.
-- `print.ts` is the inverse (eject) for raw records; a generated program prints as raw
-  `trigger()` calls (structured source cannot be recovered). `tests/script.test.ts` pins
-  print → compile → identical records on the fixture maps (hint bits masked, compared through the text
-  format so duplicate string-table entries do not matter).
-- `editor/script.ts`: the source and a manifest are archive members (`SCRIPT_MEMBER`,
-  `MANIFEST_MEMBER` in `archiveExtrasAtom`, so they save with the `.scx`). The manifest records
-  `start`, `count`, a hash of the encoded block (`hashTriggers`) and per-trigger source lines;
-  `findBlock` looks at `start` first and then anywhere in the list, so a hand trigger inserted before
-  the block moves it (`commitTriggersAtom` calls `relocateScriptBlock`), while an edit *inside* it makes
-  the block stale (`scriptState().stale`) and `buildScript` appends a fresh one. `sourceHash` gives
-  `unbuilt`. `buildScript(..., { takeOver })` replaces the whole list — the "Import map triggers"
-  path, after `printScript` of the hand triggers around the block. `scriptStateAtom` derives all of
-  this; the Classic editor takes the manifest and re-finds the block in its *working copy* (indices
-  drift under local inserts), badges those rows `script`, locks their editing and offers
-  "Open Script Editor" with `payload.line`. Generated program triggers show their `Comment` (`L18:
-  cycles++`) as the row title.
-- `monaco.ts` is only ever `import()`ed (by the dialog): Monaco 0.56's tree-shaken entry points
-  (`monaco-editor/editor/editor.api`, `features/register.all`, only the TypeScript language), the two
-  workers via Vite `?worker`, `typescriptDefaults` set `noLib` with the generated file as the one extra
-  lib, and a theme from `tokens.css`. `compileClient.ts` talks to `compile.worker.ts` (latest request
-  wins, `CompileSuperseded` for the rest; falls back to the main thread if the worker cannot start;
-  `CompileOptions` ride along). The worker is a whole TypeScript instance, so it is terminated
-  `WORKER_IDLE_MS` (30 s) after its last answer unless a `retainCompileWorker()` lease is held — the
-  open Script Editor holds one — and started again by the next request (plugins transpile through it
-  at startup, then it goes). Monaco 0.56 never idles its own TypeScript worker out, so the dialog's
-  unmount calls `monaco.ts#releaseScriptEditor`: dispose the model and re-set the compiler options,
-  which is the one public route to `WorkerManager._stopWorker` (the source lives in the archive
-  extras; only the closed session's undo history goes). `typescript` is therefore a runtime dependency (bundled into the worker,
-  ~3.5 MB; Monaco's own TS worker is another copy — running the compiler inside Monaco's worker via
-  `customWorkerPath` needs a classic script, which Vite's dev server cannot serve, so two copies it is).
-  The dialog writes the source into the extras on every change (debounced check, 350 ms) and holds the
-  Monaco host in `useState`, not a ref (Radix portal timing, as in `ExportImageDialog`);
-  `DialogFrame.onEscapeKeyDown` exists so Escape inside the editor dismisses Monaco's popups instead of
-  closing the dialog.
+- `api.triggers.claim(spec)` (`host.ts`, `pluginTriggerClaimsAtom`, `plugins/claims.ts`): a plugin
+  names a run of the trigger list it generates, found by *content* — `spec.locate(list)` is asked
+  with whatever list an editor holds, since the Classic editor works on a working copy with local
+  inserts — and `TriggerListEditor` badges and locks those rows (`claimBadge`, `claimDescription`,
+  `spec.open` as the button), inserts after the run rather than into it, `textOf` in the Text
+  Trigger Editor fences every located run in comments, and Import Triggers' replace hint lists
+  them. `commitTriggersAtom` no longer relocates anything: the plugin listens to `"triggers"` and
+  rewrites its manifest itself. `tests/plugins.test.ts` covers locate/clamp/throw/refresh/dispose.
+- The `"commands"` event (`EVENT_ATOMS.commands` = `pluginCommandsAtom`) is how a plugin that calls
+  another's commands by id (the AI plugin → `trigger-script.compile` / `.build` / `.declarations` /
+  `.state` / `.print` / `.simulate` / `.triggerAtLine` / `.open`) learns they arrived — there is
+  deliberately no plugin ordering, so `commands.has` at call time is the contract.
+- `DialogSpec.keepOpenOnEscape(target)` lets a plugin dialog keep Escape for something inside it
+  (Monaco's popups); `PluginDialog` routes it to `DialogFrame.onEscapeKeyDown`.
+- `editor/save.ts` keeps `SCRIPT_MEMBER` / `MANIFEST_MEMBER` (`scmjs\\triggers.ts` / `.json`) only so
+  the Save dialog can say what leaving the plugin's members out means; nothing here reads them.
+- `data/triggerDefs.ts#DEATHS_TABLE_ADDRESS` is the EPD base the Classic editor's player pick uses
+  (the plugin's compiler carries its own copy).
+- TypeScript stays a runtime dependency for one job: `plugins/transpile.worker.ts` +
+  `transpileClient.ts` turn a `.ts` plugin into JavaScript for the loader (idle-terminated after
+  `WORKER_IDLE_MS`, main-thread fallback when the worker cannot start). A plugin cannot transpile the
+  plugins loaded before it, so this cannot move out.
 
 ### Plugins (`src/plugins/`, `src/atoms/pluginAtoms.ts`, `plugins/*/`)
 
@@ -574,8 +503,8 @@ built-in instead of appending after a separator.
 `loader.ts` is pure apart from `LoaderDeps` (fetch, transpile, module URL, import, built-ins):
 `parseSpec` (`builtin:`, `github:owner/repo[@ref][/dir]`, github.com URLs, any URL to a `plugin.json`
 / entry file / directory) → `resolvePlugin` (manifest, entry) → `bundleModule` (fetch **as text** —
-raw.githubusercontent serves `text/plain`, which `import()` refuses — transpile `.ts` in the compile
-worker via `compileClient#transpileInBackground` / `plugins/transpile.ts`, follow relative imports
+raw.githubusercontent serves `text/plain`, which `import()` refuses — transpile `.ts` in the transpile
+worker via `transpileClient#transpileInBackground` / `plugins/transpile.ts`, follow relative imports
 depth first, refuse bare package names and cycles, rewrite specifiers to `blob:` URLs) → `import()`.
 `candidateUrls` is the resolver a `fetch` does not come with: an extensionless specifier is tried as
 `.ts`/`.tsx`/`.mts`/`.js`/`.mjs` and then `index.*`, and `./x.js` falls back to `./x.ts` — the
@@ -777,7 +706,7 @@ The beta pass added the rest of what the editor itself does to the contract — 
 honours the remembered `SaveOptions`), `tx.replaceTerrain` / `fillArea` / `placeBlend` /
 `tilesFromIsom` / `mirror` / `moveUnits` / `placeStartLocations` / `updateSprites` / `moveSprites` /
 `updateDoodads` / `restoreAnywhere` / `invertFog` / `copyFog` / `floodFog`, `tx.strings.import`,
-`tx.cuwp`, `settings.unitAvailable` / `cuwpSlots`, `script.triggerAtLine`, `query.fogAt` / `strings`
+`tx.cuwp`, `settings.unitAvailable` / `cuwpSlots`, `query.fogAt` / `strings`
 (`placement` answers null without a map), `terrain.floodRegion` / `blendCandidates` / `flatGroupOf` /
 `symmetry` / `setSymmetry` / `mirror`, `selection.lockedLayers`, `api.clipboard` (`host.ts#clipboardApi`
 over `editor/clipboard.ts`, sharing the user's clip), `api.exchange` (`.trg` and the strings text),
@@ -791,11 +720,7 @@ nothing reaches `jotai` or `react`, and an `index.d.ts` + `package.json` on top 
 `EditorLayer` / `TerrainMode` / `ViewFlags` / `Toast` live in `editor/view.ts`, `Preferences` in
 `editor/preferences.ts` and `DialogId` in `components/dialogs/ids.ts`, re-exported by the atoms.
 
-`api.script` (`host.ts#scriptApi`) is the Script Editor without the editor: `state()` (`scriptState` over the
-extras), `declarations()` (`generateDeclarations(scriptNames(scn))`), `compile()` (`compileInBackground` with
-`reservedStorage` — the worker's supersede rule applies, so a plugin compiling while the dialog is open supersedes
-its check), `build()` (the dialog's Build sequence: `buildScript`, write `archiveExtrasAtom`, `commitTriggersAtom`),
-`print()` (`printScript`) and `simulate()`. `api.document.create(options)` is File ▸ New without React:
+`api.document.create(options)` is File ▸ New without React:
 `useMapFileActions.ts#newMapInto` (the store-level half of the hook's `newMap`, which now calls it) behind the same
 `guardedReplace` gate as `open` — a "new" `PendingAction` carries `done` / `taken` like an "open" one, and the Close
 Scenario dialog's `proceed` sets `taken` for both. A menu path whose last segment names no submenu makes one for the
@@ -813,10 +738,10 @@ access rules (tokens, per-IP and per-token budgets, bring-your-own-key, and *acc
 browser, Discord sign-in through a provider interface, roles with a weekly allowance or `unlimited`, purchased credit
 through Stripe Checkout, an account page, and `/v1/admin/*` for the site — the plugin's default access mode talks to
 `api.scmjs.dev` and needs no setup) and never any game data; the plugin gathers facts
-(terrain vocabulary, statistics, a `renderImage` PNG, `api.script.declarations()`) and applies what comes back
+(terrain vocabulary, statistics, a `renderImage` PNG, the Trigger Script plugin's `declarations` command) and applies what comes back
 through the ordinary API — a map plan is a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's
-base geometry (`layout.ts` vendored there), triggers come back as script and go through `api.script.compile` →
-repair rounds → `build`, the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
+base geometry (`layout.ts` vendored there), triggers come back as script and go through the Trigger Script
+plugin's `compile` → repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
 wire contract, kept identical in both repositories. The editor knows nothing of it beyond the three host additions
 above.
 

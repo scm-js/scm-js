@@ -5,10 +5,9 @@ import { createScenario, requiredSections } from "../src/formats/chk/create";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
 import { loadMap, readExtras, SCENARIO_PATH } from "../src/formats/mpq/scm";
-import { MANIFEST_MEMBER, SCRIPT_MEMBER } from "../src/editor/script";
 import {
   BOOKKEEPING_SECTIONS, buildChk, buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, editorOnlySections, extraKind, formatBytes, formatOf,
-  planSave, SAVE_PRESETS, TERRAIN_EDITING_SECTIONS, type SaveOptions,
+  MANIFEST_MEMBER, planSave, SAVE_PRESETS, SCRIPT_MEMBER, TERRAIN_EDITING_SECTIONS, type SaveOptions,
 } from "../src/editor/save";
 
 const MAPS_DIR = join(import.meta.dirname, "..", "fixtures", "maps");

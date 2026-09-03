@@ -21,7 +21,15 @@ import { combine, serializeChk, type ChkFile, type ChkSection } from "../formats
 import { SECTION_SPECS, sizeOf, specFor } from "../formats/chk/sections/registry";
 import type { Scenario } from "../formats/chk/scenario";
 import { saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo } from "../formats/mpq/scm";
-import { MANIFEST_MEMBER, SCRIPT_MEMBER } from "./script";
+
+/**
+ * The archive members the Trigger Script plugin keeps its source and build manifest in
+ * (`scmjs\triggers.ts`, `scmjs\triggers.json`, next to `staredit\scenario.chk`). The
+ * editor never reads them; it knows the names so the Save dialog can say what leaving
+ * them out means.
+ */
+export const SCRIPT_MEMBER = "scmjs\\triggers.ts";
+export const MANIFEST_MEMBER = "scmjs\\triggers.json";
 import { currentChk } from "./sections";
 
 export type MapFormat = "scx" | "scm" | "chk";

@@ -9,7 +9,7 @@ import { decodeTbl } from "../src/formats/dat/tbl";
 import type { UnitAssets } from "../src/formats/units/load";
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../src/data/sprites";
 import {
-  addSprites, applySpriteChanges, clampSprite, frameSize, makeSprite, moveSprites, removeSprites, setSpriteFlag, spriteAt, spriteBox, spriteDrawOrder,
+  addSprites, applySpriteChanges, clampSprite, frameSize, makeSprite, moveSprites, removeSprites, spriteAt, spriteBox, spriteDrawOrder,
   spriteKind, spritesInBox, updateSprites,
 } from "../src/editor/sprites";
 
@@ -22,6 +22,9 @@ function fresh() {
 
 const size = { width: 64, height: 32 };
 const sizeOf = () => size;
+
+const setSpriteFlag = (scn: Parameters<typeof updateSprites>[0], indices: number[], bit: number, on: boolean) =>
+  updateSprites(scn, indices, (r) => ({ flags: on ? r.flags | bit : r.flags & ~bit }));
 
 describe("sprite records", () => {
   it("writes StarEdit's flags for each kind", () => {

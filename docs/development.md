@@ -68,6 +68,20 @@ variables: `GAME_DATA_URL` (the hosted build's game-data address) and `PAGES_BAS
 (`/` for a custom domain; default is the repository name). CI has no game data, so the
 real-data test suites skip there.
 
+## Plugin typings
+
+`npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) emits the declarations a
+plugin repository vendors as `plugin-api/`: `tsc -p tsconfig.plugin-api.json`, then only
+what `plugins/api.d.ts` reaches through its imports is kept (the atoms and hooks the
+editor's own modules touch are pruned), a tree that still names `jotai` or `react` fails
+the build, and an `index.d.ts` plus a `package.json` carrying the API and editor versions
+go on top. The plain types the contract shares with the chrome — `EditorLayer`,
+`TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
+(`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the
+atom modules for that reason. Two external names remain, `mopaq` and `typescript`,
+reached through type-only imports; a plugin repository compiles with `skipLibCheck`
+and needs neither installed.
+
 ## Tests
 
 Tests live in `tests/*.test.ts`, and `src/**/*.test.ts` is picked up too.

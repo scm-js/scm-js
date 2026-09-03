@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { decodeCv5, type Tileset } from "../src/formats/tileset/decode";
-import { brushRect, stampTerrain, stampTile, type TileChange } from "../src/editor/terrain";
+import { brushRect, stampTerrain, stampTile } from "../src/editor/terrain";
 import {
-  mergeChanges, mirrorIndices, mirrorPixel, mirrorPoints, mirrorRect, requiresSquare, symmetryAvailable, symmetryAxes, SYMMETRY_MODES, type SymmetryMode,
+  keepsShape, mirrorBox, mirrorIndices, mirrorPixel, mirrorPoints, mirrorRect, mirrorTileRect, requiresSquare, symmetryAvailable, symmetryAxes, SYMMETRY_MODES, type SymmetryMode,
 } from "../src/editor/symmetry";
 
 /** A tileset with one dirt pair (groups 2/3), nine variations — the same rig as tests/terrain-edit.test.ts. */
@@ -71,6 +71,27 @@ describe("mirrored points", () => {
     expect(mirrorPixel("rot90", 32, 0, 4, 4).map((p) => `${p.x},${p.y}`)).toEqual(["32,0", "128,32", "96,128", "0,96"]);
     expect(mirrorPixel("diag", 64, 64, 4, 4)).toEqual([{ x: 64, y: 64 }]);
   });
+
+  it("mirrors a location's box, normalised, under every mode", () => {
+    const box = { left: 0, top: 32, right: 64, bottom: 96 };
+    expect(mirrorBox("h", box, 4, 4)).toEqual([box, { left: 64, top: 32, right: 128, bottom: 96 }]);
+    expect(mirrorBox("rot180", box, 4, 4)[1]).toEqual({ left: 64, top: 32, right: 128, bottom: 96 });
+    // A quarter turn of a 2×2 box at the left edge lands it against the top edge.
+    expect(mirrorBox("rot90", box, 4, 4).map((b) => `${b.left},${b.top},${b.right},${b.bottom}`)).toEqual(["0,32,64,96", "32,0,96,64", "64,32,128,96", "32,64,96,128"]);
+    expect(mirrorBox("none", box, 4, 4)).toEqual([box]);
+    // A box straddling the axis is its own image.
+    expect(mirrorBox("v", { left: 0, top: 32, right: 64, bottom: 96 }, 4, 4)).toHaveLength(1);
+  });
+
+  it("mirrors a doodad footprint by its top-left, and refuses to turn a non-square one", () => {
+    expect(mirrorTileRect("h", 1, 2, 3, 2, 10, 8)).toEqual([{ x: 1, y: 2 }, { x: 6, y: 2 }]);
+    expect(mirrorTileRect("v", 1, 2, 3, 2, 10, 8)).toEqual([{ x: 1, y: 2 }, { x: 1, y: 4 }]);
+    expect(mirrorTileRect("rot90", 0, 0, 3, 2, 8, 8)).toEqual([{ x: 0, y: 0 }]);
+    expect(mirrorTileRect("rot90", 0, 0, 2, 2, 8, 8)).toHaveLength(4);
+    expect(keepsShape("rot90", 3, 2)).toBe(false);
+    expect(keepsShape("hv", 3, 2)).toBe(true);
+    expect(keepsShape("diag", 2, 2)).toBe(true);
+  });
 });
 
 describe("mirrored footprints", () => {
@@ -108,13 +129,10 @@ describe("mirrored footprints", () => {
     expect(byAt.get(6)! & 15).toBe(byAt.get(7)! & 15);
   });
 
-  it("mirrors the Tile brush and merges a stroke's change lists", () => {
+  it("mirrors the Tile brush", () => {
     const scn = blank(8, 6);
     const a = stampTile(scn, mirrorRect("rot180", brushRect(0, 0, 1, 8, 6), 8, 6), 0x20);
     expect(a.map((c) => c.at).sort((x, y) => x - y)).toEqual([0, 47]);
-    const b: TileChange[] = [{ at: 0, before: 0x20, after: 0x31 }, { at: 5, before: 0, after: 0 }];
-    const merged = mergeChanges([a, b]);
-    expect(merged).toEqual([{ at: 0, before: 0, after: 0x31 }, { at: 47, before: 0, after: 0x20 }]);
   });
 });
 

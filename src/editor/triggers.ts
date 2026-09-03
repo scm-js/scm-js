@@ -209,6 +209,22 @@ export function moveTrigger(list: TriggerRecord[], from: number, to: number): Tr
 }
 
 /** Indices of the triggers that run for any of the given player groups. */
+/**
+ * The string arguments one action carries, read through its def — the text and the WAV
+ * path (`kind: "text" | "wav"`), whichever fields they live in — with the argument's
+ * label. Everything that maps strings to their users (the String Editor's usage list, the
+ * Sound Editor, Find) reads this so the defs stay the one place that knows the fields.
+ */
+export function actionStrings(a: ActionRecord, briefing = false): { index: number; kind: "text" | "wav"; label: string; action: string }[] {
+  const def = actionDef(a.type, briefing);
+  const name = def?.name ?? `Action ${a.type}`;
+  const out: { index: number; kind: "text" | "wav"; label: string; action: string }[] = [];
+  for (const arg of def?.args ?? []) {
+    if ((arg.kind === "text" || arg.kind === "wav") && a[arg.field] > 0) out.push({ index: a[arg.field], kind: arg.kind, label: arg.label, action: name });
+  }
+  return out;
+}
+
 export function triggersFor(list: TriggerRecord[], groups: number[]): number[] {
   const out: number[] = [];
   list.forEach((t, i) => { if (groups.some((g) => t.players[g])) out.push(i); });

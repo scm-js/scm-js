@@ -56,7 +56,7 @@ describe("saveDocument", () => {
     expect(await saveDocument(store, { fileName: "flow.scm", handle: null, options: { ...options, format: "scm" }, copy: false }, w.write)).toBe(true);
     expect(store.get(mapFilePathAtom)).toBe("renamed.scm");
     expect(store.get(mapFileHandleAtom)).toBe(picked);
-    expect(store.get(recentFilesAtom)[0]).toBe("renamed.scm");
+    expect(store.get(recentFilesAtom)[0]).toMatchObject({ name: "renamed.scm", handleKey: "recent:renamed.scm" });
   });
 
   it("says so when the browser could only download, and forgets the handle", async () => {

@@ -7,7 +7,8 @@
 import { markDirty, type Scenario } from "../formats/chk/scenario";
 import { getString } from "../formats/chk/sections/strings";
 import { defaultWavs, WAV_SLOTS } from "../formats/chk/sections/sounds";
-import { actionDef } from "../data/triggerDefs";
+import { actionStrings } from "./triggers";
+import type { TriggerRecord } from "../formats/chk/sections/triggers";
 import { internString } from "./settings";
 
 export type Extras = ReadonlyMap<string, Uint8Array>;
@@ -47,9 +48,9 @@ export function wavMemberName(fileName: string): string {
 /** Labels of the trigger / briefing actions that play the string at `stringIndex`. */
 export function wavUsage(scn: Scenario, stringIndex: number): string[] {
   const out: string[] = [];
-  const scan = (noun: string, list: { actions: { type: number; wav: number }[] }[], briefing: boolean) => {
+  const scan = (noun: string, list: TriggerRecord[], briefing: boolean) => {
     list.forEach((t, i) => {
-      for (const a of t.actions) if (a.wav === stringIndex) out.push(`${noun} ${i + 1}: ${actionDef(a.type, briefing)?.name ?? `Action ${a.type}`}`);
+      for (const a of t.actions) for (const s of actionStrings(a, briefing)) if (s.kind === "wav" && s.index === stringIndex) out.push(`${noun} ${i + 1}: ${s.action}`);
     });
   };
   scan("Trigger", scn.triggers, false);

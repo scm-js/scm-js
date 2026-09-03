@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { archiveExtrasAtom, closeDocumentAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../atoms/documentAtoms";
+import { archiveExtrasAtom, closeDocumentAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, type RecentEntry } from "../atoms/documentAtoms";
+import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
 import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
@@ -50,7 +51,8 @@ export type PendingAction =
    * on closing, and a dismissal reaches it as false through `taken`, as for "open".
    */
   | { action: "quit"; done?: (quit: boolean) => void; taken?: boolean }
-  | { action: "close" };
+  /** File ▸ Close; `done` hears true once the map is gone (a plugin's `document.close` waits on it). */
+  | { action: "close"; done?: (closed: boolean) => void; taken?: boolean };
 
 type Store = ReturnType<typeof useStore>;
 
@@ -191,7 +193,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       store.set(mapFileHandleAtom, outcome.handle ?? (outcome.route === "file" ? req.handle : null));
       store.set(saveOptionsAtom, req.options);
       store.set(mapModifiedAtom, false);
-      store.set(recentFilesAtom, [outcome.fileName, ...store.get(recentFilesAtom).filter((f) => f !== outcome.fileName)].slice(0, 10));
+      store.set(pushRecentAtom, { name: outcome.fileName, handle: outcome.handle ?? (outcome.route === "file" ? req.handle : null) });
     }
     if (outcome.route === "download") {
       store.set(statusMessageAtom, `Downloaded ${outcome.fileName} — ${size}`);
@@ -211,6 +213,37 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     store.set(pushToastAtom, { kind: "error", title: `Could not save the ${what}`, detail: message });
     return false;
   }
+}
+
+/**
+ * File ▸ Open Recent: reopen an entry from the handle kept for it — asking the browser's
+ * permission again after a reload — through the same unsaved-changes gate as Open. False
+ * when there is no usable handle (the entry is dropped from the list and the status bar says
+ * to browse for the file), the user kept the current map, or the file could not be read.
+ */
+export async function openRecentInto(store: Store, entry: RecentEntry): Promise<boolean> {
+  const handle = entry.handleKey ? await loadHandle<MapFileHandle>(entry.handleKey) : null;
+  if (!handle || !(await ensurePermission(handle as MapFileHandle & { kind: "file" }, "read"))) {
+    store.set(statusMessageAtom, handle ? `The browser did not allow reading ${entry.name} again — open it with File ▸ Open.` : `${entry.name} cannot be reopened from here — this browser keeps no file handles; open it with File ▸ Open.`);
+    if (!handle && entry.handleKey) store.set(recentFilesAtom, store.get(recentFilesAtom).map((r) => (r.name === entry.name ? { name: r.name, at: r.at } : r)));
+    return false;
+  }
+  let file: File;
+  try {
+    file = await handle.getFile();
+  } catch (err) {
+    store.set(statusMessageAtom, `Could not read ${entry.name}: ${err instanceof Error ? err.message : String(err)} — it may have moved.`);
+    store.set(recentFilesAtom, store.get(recentFilesAtom).filter((r) => r.name !== entry.name));
+    void removeHandle(entry.handleKey!);
+    return false;
+  }
+  return guardedAction(store, () => openFileInto(store, file, handle), (done) => ({ action: "open", file, handle, done }));
+}
+
+/** Forget every recent entry and the handles kept for them. */
+export function clearRecents(store: Store) {
+  for (const r of store.get(recentFilesAtom)) if (r.handleKey) void removeHandle(r.handleKey);
+  store.set(recentFilesAtom, []);
 }
 
 /** Drop the open document (File ▸ Close). */
@@ -236,6 +269,7 @@ export async function runPendingAction(store: Store, p: PendingAction): Promise<
     p.done?.(true);
   } else {
     closeMapIn(store);
+    p.done?.(true);
   }
 }
 
@@ -276,6 +310,8 @@ export function useMapFileActions() {
 
   const runPending = useCallback((p: PendingAction) => runPendingAction(store, p), [store]);
 
+  const openRecent = useCallback((entry: RecentEntry) => openRecentInto(store, entry), [store]);
+
   /**
    * Run a document-replacing action, or park it behind the Close Scenario dialog when the
    * map has unsaved changes and Preferences say to ask. True when the dialog took over.
@@ -286,5 +322,5 @@ export function useMapFileActions() {
     return true;
   }, [store, openDialog, runPending]);
 
-  return { newMap, openFile, save, setPath, closeMap, runPending, guard };
+  return { newMap, openFile, openRecent, save, setPath, closeMap, runPending, guard };
 }

@@ -1,18 +1,12 @@
 import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { isomRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
-import { hasIsom, isomReport, type IsomCheck } from "../editor/isom";
+import { hasIsom, isomReport, type IsomStatus } from "../editor/isom";
 import { useTileset } from "./useTileset";
 
 export { STALE_ISOM_SHARE } from "../editor/isom";
 
-export type IsomStatus =
-  | { kind: "no-map" }
-  | { kind: "loading" }
-  | { kind: "no-tileset" }
-  /** The map has no ISOM section (or a truncated one): the brush has nothing to work on. */
-  | { kind: "missing" }
-  | { kind: "ready"; check: IsomCheck; stale: boolean };
+export type { IsomStatus };
 
 /**
  * Whether the open map can be painted isometrically, and how well its ISOM section

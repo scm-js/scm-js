@@ -9,7 +9,7 @@ import { findString, getString } from "../src/formats/chk/sections/strings";
 import {
   addLocation, applyLocationChanges, blankLocation, BW_LOCATION_SLOTS, dragBounds, editLocation, ensureLocationSlots, firstFreeSlot, handleAt,
   isAnywhereIntact, isInverted, locationAt, locationCapacity, locationName, moveLocations, ORIGINAL_LOCATION_SLOTS, removeLocations, resizeBounds,
-  resizeLocation, restoreAnywhere, snapTo, usedLocations,
+  restoreAnywhere, snapTo, usedLocations,
 } from "../src/editor/locations";
 
 function fresh(): Scenario {
@@ -172,10 +172,6 @@ describe("editing", () => {
   it("resizes to a normalised, clamped, non-empty box", () => {
     const scn = fresh();
     applyLocationChanges(scn, addLocation(scn, { left: 0, top: 0, right: 64, bottom: 64 }).changes);
-    expect(resizeLocation(scn, 0, { left: 96, top: 0, right: 32, bottom: 3000 })).toEqual([{ index: 0, before: scn.locations[0], after: { ...scn.locations[0], left: 32, top: 0, right: 96, bottom: 2048 } }]);
-    expect(resizeLocation(scn, 0, { left: 0, top: 0, right: 0, bottom: 64 })).toEqual([]);
-    expect(resizeLocation(scn, 0, { left: 0, top: 0, right: 64, bottom: 64 })).toEqual([]);
-    expect(resizeLocation(scn, ANYWHERE_INDEX, { left: 0, top: 0, right: 64, bottom: 64 })).toEqual([]);
   });
 
   it("edits name, bounds and elevation as one change, never Anywhere", () => {

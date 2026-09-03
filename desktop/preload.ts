@@ -32,6 +32,20 @@ const bridge: DesktopBridge = {
       return () => { ipcRenderer.off("gamedata:progress", handler); };
     },
   },
+  files: {
+    onOpen: (listener) => {
+      const handler = (_e: IpcRendererEvent, file: { name: string; bytes: Uint8Array }) => listener({ name: file.name, bytes: new Uint8Array(file.bytes) });
+      ipcRenderer.on("file:open", handler);
+      // Ask for what the app was started with; the main process answers on the same channel.
+      ipcRenderer.send("file:ready");
+      return () => { ipcRenderer.off("file:open", handler); };
+    },
+  },
+  game: {
+    info: (dir) => ipcRenderer.invoke("game:info", dir ?? null),
+    pickFolder: () => ipcRenderer.invoke("game:pickFolder"),
+    test: (bytes, fileName, options) => ipcRenderer.invoke("game:test", bytes, fileName, options),
+  },
 };
 
 contextBridge.exposeInMainWorld("scmjsDesktop", bridge);

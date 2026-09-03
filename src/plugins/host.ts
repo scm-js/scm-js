@@ -10,15 +10,18 @@
 import type { createStore } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
-  centerViewOnAtom, clipboardAtom, clipSelectionAtom, cursorTileAtom, fogModeAtom, fogPlayersAtom, gridSizeAtom, mapDescriptionAtom, mapFilePathAtom, mapModifiedAtom,
-  mapNameAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlaceOptionsAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, zoomAtom,
+  centerViewOnAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorTileAtom, doodadPlacementAtom, fogModeAtom, fogPlayersAtom,
+  fogViewPlayerAtom, gridSizeAtom, locationSnapAtom, lockedLayersAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom,
+  mapNameAtom, mapOriginAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom, redoAtom, redoStackAtom,
-  replaceScenarioAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom, undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
+  archiveExtrasAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
+  undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
-import { closeDialogAtom, dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom,
@@ -43,6 +46,8 @@ import {
 import { getString, setString } from "../formats/chk/sections/strings";
 import { boundsOf, locationName } from "../editor/locations";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../editor/switches";
+import { applyCuwp, cuwpSlotView, cuwpSlotViews, patchCuwp, readCuwp } from "../editor/cuwp";
+import { emptyCuwpSlot } from "../formats/chk/sections/cuwp";
 import {
   applyBriefing, applyTriggers, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers, removeTriggers, sameTriggers,
   setPreserved, triggerNames, triggersFor,
@@ -89,7 +94,8 @@ import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
-  type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PlacementVerdict, type PluginApi, type PluginEvent,
+  type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
+  type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type ScriptApi, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
@@ -99,7 +105,24 @@ import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "../script/compileClient";
-import { guardedAction, newMapInto, openFileInto } from "../hooks/useMapFileActions";
+import { askDialog, closeMapIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
+import { defaultSaveOptions } from "../editor/save";
+import { saveBlob } from "../services/mapIo";
+import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
+import { floodRegion, flatGroupOf, replaceTerrain } from "../editor/terrain";
+import { blendCandidates, DEFAULT_BLEND_OPTIONS, placeBlend } from "../editor/blend";
+import { tilesFromIsom } from "../editor/isom";
+import { mirrorIndices, mirrorPixel, symmetryAvailable } from "../editor/symmetry";
+import { moveUnits } from "../editor/units";
+import { moveSprites, updateSprites } from "../editor/sprites";
+import { updateDoodads } from "../editor/doodads";
+import { restoreAnywhere } from "../editor/locations";
+import { copyFog, floodFog, fogPlayersAt, invertFog } from "../editor/fog";
+import { DEFAULT_START_PLACEMENT, placeStartLocations } from "../editor/startLocations";
+import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseStringTable } from "../editor/exchange";
+import { clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ObjectSelection } from "../editor/clipboard";
+import { isUnitAvailable } from "../formats/chk/sections/settings";
+import { triggerAtLine } from "../editor/script";
 import { buildScript, reservedStorage, scriptState } from "../editor/script";
 import { compileInBackground } from "../script/compileClient";
 import { generateDeclarations } from "../script/declarations";
@@ -314,6 +337,108 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       fog.add(ch);
       return ch.length;
     },
+    invertFog: (players) => {
+      const created = ensureMask(scn);
+      if (created) createdMask = created;
+      const ch = invertFog(scn, players);
+      applyFogChanges(scn, ch);
+      fog.add(ch);
+      return ch.length;
+    },
+    copyFog: (from, to) => {
+      const created = ensureMask(scn);
+      if (created) createdMask = created;
+      const ch = copyFog(scn, from, to);
+      applyFogChanges(scn, ch);
+      fog.add(ch);
+      return ch.length;
+    },
+    floodFog: (x, y, player, players, mode) => {
+      const created = ensureMask(scn);
+      if (created) createdMask = created;
+      const ch = paintFog(scn, floodFog(scn, x, y, player), players, mode);
+      applyFogChanges(scn, ch);
+      fog.add(ch);
+      return ch.length;
+    },
+
+    replaceTerrain: (from, to, rect) => {
+      if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) { notes.push("replacing a terrain type needs the tileset graphics"); return 0; }
+      return applyTiles(replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect));
+    },
+    fillArea: (x, y, fill, match = "terrainId" in fill ? "terrain" : "tile") => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+      const seed = scn.tiles[y * w + x];
+      let region: Set<number>;
+      if (match === "terrain") {
+        if (!loaded) { notes.push("a terrain fill needs the tileset graphics"); return 0; }
+        const groups = loaded.tileset.groups;
+        const typeOf = (id: number) => groups[id >> 4]?.index ?? -1;
+        const seedType = typeOf(seed);
+        region = floodRegion(scn, x, y, (id) => typeOf(id) === seedType);
+      } else {
+        region = floodRegion(scn, x, y, (id) => id === seed);
+      }
+      const cells = mirrorIndices(store.get(symmetryAtom), region, w, h);
+      if ("tileId" in fill) return applyTiles(stampTile(scn, cells, fill.tileId));
+      const type = flatOf(fill.terrainId);
+      if (!type || !loaded) return 0;
+      return applyTiles(stampTerrain(scn, loaded.tileset, { group: type.group, variation: store.get(rectVariationAtom) }, cells));
+    },
+    placeBlend: (x, y, side, id) => {
+      const ch = placeBlend(scn, { x, y }, side, id);
+      if (!ch) return false;
+      applyTiles(ch);
+      return true;
+    },
+    tilesFromIsom: () => {
+      if (!hasIsom(scn) || !loaded) { notes.push("regenerating the tiles needs ISOM and the tileset graphics"); return null; }
+      const edit = tilesFromIsom(scn, loaded.tileset);
+      applyChanges(scn, edit.tiles);
+      tiles.add(edit.tiles);
+      applyIsomChanges(scn, edit.isom);
+      isom.add(edit.isom);
+      return edit.tiles.length;
+    },
+    mirror: (cells) => [...mirrorIndices(store.get(symmetryAtom), cellsOf(cells), w, h)],
+    mirrorPoint: (px, py) => mirrorPixel(store.get(symmetryAtom), px, py, w, h),
+
+    moveUnits: (indices, dx, dy, snap) => {
+      const ch = moveUnits(scn, tables(), indices, dx, dy, snap ?? store.get(placementOptionsAtom).snapToGrid);
+      applyUnitChanges(scn, ch);
+      units.push(...ch);
+      return ch.length;
+    },
+    placeStartLocations: (options) => {
+      const r = placeStartLocations(scn, loaded?.tileset ?? null, tables(), {
+        ...DEFAULT_START_PLACEMENT, ...options, placement: store.get(placementOptionsAtom),
+      });
+      units.push(...r.changes);
+      const missed = r.placed.filter((p) => p === null).length;
+      if (missed > 0) notes.push(`no room for ${missed} start location${missed === 1 ? "" : "s"}`);
+      return r;
+    },
+
+    updateSprites: (indices, patch) => { const ch = updateSprites(scn, indices, patch); applySpriteChanges(scn, ch); sprites.push(...ch); return ch.length; },
+    moveSprites: (indices, dx, dy) => { const ch = moveSprites(scn, indices, dx, dy); applySpriteChanges(scn, ch); sprites.push(...ch); return ch.length; },
+    updateDoodads: (indices, patch) => {
+      const edit = updateDoodads(scn, loaded?.doodads ?? NO_DOODADS, indices, patch);
+      applyDoodadChanges(scn, edit.doodads);
+      applySpriteChanges(scn, edit.sprites);
+      doodads.push(...edit.doodads);
+      sprites.push(...edit.sprites);
+      return edit.doodads.length;
+    },
+
+    restoreAnywhere: () => {
+      ensureLocationSlots(scn);
+      const c = restoreAnywhere(scn);
+      if (!c) return false;
+      applyLocationChanges(scn, [c]);
+      locations.push(c);
+      return true;
+    },
+
     note: (text) => { notes.push(text); },
   };
 
@@ -332,20 +457,24 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   if (createdMask) entry.createdMask = createdMask;
   if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
 
-  const result: EditResult = {
-    changed: hasEdits(entry),
+  if (!hasEdits(entry)) return { ...EMPTY_RESULT, notes };
+  // The commit's stranded-doodad / stranded-unit pass may append to the entry's lists, so the counts come after it.
+  store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
+  const strandedUnits = (entry.units?.length ?? 0) - units.length;
+  const strandedDoodads = (entry.doodads?.length ?? 0) - doodads.length;
+  if (strandedUnits > 0) notes.push(`removed ${strandedUnits} stranded unit${strandedUnits === 1 ? "" : "s"}`);
+  if (strandedDoodads > 0) notes.push(`removed ${strandedDoodads} stranded doodad${strandedDoodads === 1 ? "" : "s"}`);
+  return {
+    changed: true,
     tiles: entry.changes.length,
     isom: createdIsom ? createdIsom.length : isomChanges.length,
-    units: units.length,
-    sprites: sprites.length,
-    doodads: doodads.length,
+    units: entry.units?.length ?? 0,
+    sprites: entry.sprites?.length ?? 0,
+    doodads: entry.doodads?.length ?? 0,
     locations: locations.length,
     fog: fogChanges.length,
     notes,
   };
-  if (!result.changed) return result;
-  store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
-  return result;
 }
 
 /* ── Picking on the map ─────────────────────────────────── */
@@ -623,6 +752,14 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     strings: {
       list: () => readStrings(scn),
       intern: (text) => withStrings(() => internString(scn, text)),
+      import: (text) => {
+        const parsed = parseStringTable(text);
+        for (const e of parsed.errors) notes.push(`line ${e.line}: ${e.message}`);
+        const before = scn.strings.strings.slice();
+        const r = withStrings(() => applyStringImport(scn, parsed.entries));
+        if (r.replaced > 0 || r.added > 0 || before.some((v, i) => v !== scn.strings.strings[i])) touch(strSection());
+        return r;
+      },
       set: (index, text) => {
         if (index <= 0) { notes.push("string 0 is reserved; use intern to add one"); return; }
         if (getString(scn.strings, index) === text) return;
@@ -653,6 +790,18 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     players: {
       list: () => playerSlotViews(scn),
       set: (slot, patch) => tracked(() => patchPlayer(scn, slot, patch)),
+    },
+    cuwp: {
+      list: () => cuwpSlotViews(scn),
+      get: (index) => cuwpSlotView(scn, index),
+      set: (index, patch, used) => tracked(() => patchCuwp(scn, index, patch, used)),
+      clear: (index) => tracked(() => {
+        const table = readCuwp(scn);
+        if (index < 0 || index >= table.slots.length) return [];
+        table.slots[index] = emptyCuwpSlot();
+        table.used[index] = false;
+        return applyCuwp(scn, table);
+      }),
     },
     forces: {
       list: () => forceViews(scn),
@@ -795,6 +944,12 @@ export function scriptApi(store: Store): ScriptApi {
       store.set(statusMessageAtom, out.block.count === 0 ? "Built: the script defines no triggers." : `Built ${out.block.count} trigger${out.block.count === 1 ? "" : "s"} → #${out.block.start + 1}–#${out.block.start + out.block.count}.`);
       return { compiled, block: out.block };
     },
+    triggerAtLine: (line) => {
+      const scn = scenario();
+      if (!scn) return null;
+      const state = scriptState(scn, store.get(archiveExtrasAtom));
+      return state.block && !state.stale ? triggerAtLine(state.block, line) : null;
+    },
     print: (triggers) => {
       const scn = scenario();
       const names = scn ? scriptNames(scn) : defaultScriptNames();
@@ -873,9 +1028,11 @@ export function queryApi(store: Store): QueryApi {
       });
       return out.sort((a, b) => a.owner - b.owner);
     },
+    fogAt: (tx, ty) => { const scn = scenario(); return scn ? fogPlayersAt(scn, tx, ty) : 0xff; },
+    strings: () => scenario()?.strings.strings.slice() ?? [],
     placement: (unitId, x, y) => {
       const scn = scenario();
-      if (!scn) return { problem: "terrain", blocker: -1 } as PlacementVerdict;
+      if (!scn) return null;
       return checkPlacement(scn, loaded()?.tileset ?? null, tables(), store.get(placementOptionsAtom), unitId, x, y);
     },
     validate: () => {
@@ -997,6 +1154,81 @@ export function runCommand(store: Store, id: string, args: unknown[] = []): unkn
   }
 }
 
+/* ── Clipboard ──────────────────────────────────────────── */
+
+/** `api.clipboard`: what the Cut / Copy / Paste layer does, over `editor/clipboard.ts`, with the user's clip. */
+function clipboardApi(store: Store): ClipboardApi {
+  const scenario = () => store.get(scenarioAtom);
+  const graphics = () => { const l = peekTileset(store.get(tilesetFileNameAtom)); return { catalogue: l?.doodads ?? NO_DOODADS, tileset: l?.tileset ?? null }; };
+  /** The source as given, else what Ctrl+C would take: the object layer's selection, or the marked area. */
+  const resolve = (source?: ClipSource): { rect: Rect } | { sel: ObjectSelection } | null => {
+    if (source && "rect" in source) return { rect: source.rect };
+    if (source) {
+      const sel = { ...EMPTY_SELECTION, units: source.units ?? [], sprites: source.sprites ?? [], doodads: source.doodads ?? [], locations: source.locations ?? [] };
+      return selectionSize(sel) > 0 ? { sel } : null;
+    }
+    const layer = store.get(activeLayerAtom);
+    const objects = (part: Partial<ObjectSelection>) => { const sel = { ...EMPTY_SELECTION, ...part }; return selectionSize(sel) > 0 ? { sel } : null; };
+    if (layer === "units") return objects({ units: store.get(selectedUnitsAtom) });
+    if (layer === "sprites") return objects({ sprites: store.get(selectedSpritesAtom) });
+    if (layer === "doodads") return objects({ doodads: store.get(selectedDoodadsAtom) });
+    if (layer === "locations") return objects({ locations: store.get(selectedLocationsAtom) });
+    const rect = store.get(clipSelectionAtom);
+    return rect ? { rect } : null;
+  };
+  const take = (source?: ClipSource): { clip: Clip; src: { rect: Rect } | { sel: ObjectSelection } } | null => {
+    const scn = scenario();
+    const src = resolve(source);
+    if (!scn || !src) return null;
+    const parts = store.get(clipPartsAtom);
+    const clip = "rect" in src ? copyRegion(scn, src.rect, parts, graphics().catalogue) : copyObjects(scn, src.sel, parts, graphics().catalogue);
+    return clip ? { clip, src } : null;
+  };
+  return {
+    clip: () => store.get(clipboardAtom),
+    setClip: (clip) => store.set(clipboardAtom, clip),
+    copy: (source) => { const t = take(source); if (t) store.set(clipboardAtom, t.clip); return t?.clip ?? null; },
+    cut: (source) => {
+      const scn = scenario();
+      const t = take(source);
+      if (!scn || !t) return null;
+      store.set(clipboardAtom, t.clip);
+      const { catalogue, tileset } = graphics();
+      const parts = store.get(clipPartsAtom);
+      const all = "rect" in t.src ? regionObjectsOf(scn, t.src.rect, catalogue) : t.src.sel;
+      const sel: ObjectSelection = { units: parts.units ? all.units : [], sprites: parts.sprites ? all.sprites : [], doodads: parts.doodads ? all.doodads : [], locations: parts.locations ? all.locations : [] };
+      const n = selectionSize(sel);
+      if (n > 0) {
+        const edit = removeObjects(scn, sel, catalogue, tileset);
+        store.set(selectedUnitsAtom, []); store.set(selectedSpritesAtom, []); store.set(selectedDoodadsAtom, []); store.set(selectedLocationsAtom, []);
+        store.set(commitEditAtom, { label: `Cut ${n} object${n === 1 ? "" : "s"}`, ...edit });
+      }
+      return t.clip;
+    },
+    paste: (tx, ty, options = {}) => {
+      const scn = scenario();
+      const clip = store.get(clipboardAtom);
+      if (!scn || !clip) return null;
+      const { catalogue, tileset } = graphics();
+      const result = pasteClip(scn, clip, tx, ty, { parts: { ...store.get(clipPartsAtom), ...options.parts }, mode: options.mode ?? store.get(clipPasteModeAtom), catalogue, tileset });
+      const c = result.counts;
+      if (c.tiles + c.doodads + c.units + c.sprites + c.locations + c.fog + c.removed > 0) {
+        store.set(selectedUnitsAtom, []); store.set(selectedSpritesAtom, []); store.set(selectedDoodadsAtom, []); store.set(selectedLocationsAtom, []);
+        store.set(commitEditAtom, { label: `Paste ${clipSummary(clip)}`, ...result.edit });
+        store.set(clipSelectionAtom, { x0: Math.max(0, tx), y0: Math.max(0, ty), x1: Math.min(scn.width, tx + clip.width), y1: Math.min(scn.height, ty + clip.height) });
+      }
+      return result;
+    },
+    parts: () => ({ ...store.get(clipPartsAtom) }),
+    setParts: (patch) => store.set(clipPartsAtom, { ...store.get(clipPartsAtom), ...patch }),
+    mode: () => store.get(clipPasteModeAtom),
+    setMode: (mode) => store.set(clipPasteModeAtom, mode),
+    pasting: () => store.get(clipPastingAtom),
+    setPasting: (on) => { if (on && store.get(activeLayerAtom) !== "clipboard") store.set(activeLayerAtom, "clipboard"); store.set(clipPastingAtom, on); },
+    summary: clipSummary,
+  };
+}
+
 /* ── The API ────────────────────────────────────────────── */
 
 const EVENT_ATOMS = {
@@ -1019,6 +1251,8 @@ const EVENT_ATOMS = {
     terrainModeAtom, activeTerrainAtom, activeTileAtom, rectVariationAtom, brushSizeAtom, activeUnitAtom, unitOwnerAtom, activeSpriteKindAtom, activeSpriteAtom,
     activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom,
   ],
+  options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
+  file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
 } as const;
 
 /**
@@ -1057,6 +1291,9 @@ export function settingsApi(store: Store): SettingsApi {
     tech: (id) => { const scn = scenario(); return scn && id >= 0 && id < TECHS_BW ? techView(scn, id, techs()) : null; },
     techs: () => { const scn = scenario(); return scn ? Array.from({ length: TECHS_BW }, (_, id) => id).filter((id) => !isUnusedTech(id)).map((id) => techView(scn, id, techs())) : []; },
     sounds: () => { const scn = scenario(); return scn ? soundList(scn, store.get(archiveExtrasAtom)) : []; },
+    unitAvailable: (player, id) => { const scn = scenario(); return scn?.unitAvailability ? isUnitAvailable(scn.unitAvailability, player, id) : true; },
+    cuwpSlots: () => { const scn = scenario(); return scn ? cuwpSlotViews(scn) : []; },
+    cuwpSlot: (index) => { const scn = scenario(); return scn ? cuwpSlotView(scn, index) : null; },
     version: () => { const scn = scenario(); return scn ? mapVersionView(scn) : null; },
   };
 }
@@ -1119,10 +1356,33 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       export: async (options = {}) => {
         const scn = scenario();
         if (!scn) return null;
-        const format = options.format ?? "scx";
-        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom) });
+        const remembered = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
+        const format = options.format ?? remembered.format;
+        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom), options: { ...remembered, ...options.saveOptions } });
         const name = options.fileName ?? store.get(mapFilePathAtom) ?? `${scenarioName(scn) || "Untitled Scenario"}.${format}`;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
+      },
+      save: async (options = {}) => {
+        const scn = scenario();
+        if (!scn) return false;
+        const path = store.get(mapFilePathAtom);
+        if (!options.copy && path) {
+          const saveOptions = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), path);
+          return saveDocument(store, { fileName: path, handle: store.get(mapFileHandleAtom), options: saveOptions, copy: false });
+        }
+        return askDialog(store, "saveAs", { copy: options.copy === true });
+      },
+      saveAs: (options = {}) => (scenario() ? askDialog(store, "saveAs", { copy: options.copy === true }) : Promise.resolve(false)),
+      close: () => {
+        if (!scenario()) return Promise.resolve(false);
+        return guardedAction(store, async () => { closeMapIn(store); return true; }, (done) => ({ action: "close", done }));
+      },
+      changeTileset: async (options) => {
+        if (!scenario()) return null;
+        const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
+        try { await loadTilesetFiles(TILESET_FILENAMES[era]); } catch { /* the fill uses the base ids without the graphics */ }
+        if (!scenario()) return null;
+        return store.set(changeTilesetAtom, { tileset: options.tileset, terrainId: options.terrainId, keepTiles: options.keepTiles });
       },
       renderImage: async (options = {}) => {
         const scn = scenario();
@@ -1251,18 +1511,46 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return out;
       },
-      active: () => ({ mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom) }),
+      active: () => ({ mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom), variation: store.get(rectVariationAtom) }),
       setActive: (brush) => {
         if (brush.mode !== undefined) store.set(terrainModeAtom, brush.mode);
         if (brush.terrain !== undefined) store.set(activeTerrainAtom, brush.terrain);
         if (brush.tile !== undefined) store.set(activeTileAtom, brush.tile);
         if (brush.brushSize !== undefined) store.set(brushSizeAtom, brush.brushSize);
+        if (brush.variation !== undefined) store.set(rectVariationAtom, brush.variation);
       },
+      floodRegion: (x, y, match = "terrain") => {
+        const scn = scenario();
+        if (!scn || x < 0 || y < 0 || x >= scn.width || y >= scn.height) return [];
+        const seed = scn.tiles[y * scn.width + x];
+        const l = loaded();
+        if (match === "terrain" && l) {
+          const groups = l.tileset.groups;
+          const typeOf = (id: number) => groups[id >> 4]?.index ?? -1;
+          const seedType = typeOf(seed);
+          return [...floodRegion(scn, x, y, (id) => typeOf(id) === seedType)];
+        }
+        return [...floodRegion(scn, x, y, (id) => id === seed)];
+      },
+      blendCandidates: (anchorId, side, options = {}) => { const l = loaded(); return l ? blendCandidates(l.tileset, anchorId, side, { ...DEFAULT_BLEND_OPTIONS, ...options }) : []; },
+      flatGroupOf: (terrainId) => { const l = loaded(); return l ? flatGroupOf(l.tileset, terrainId) : -1; },
+      symmetry: () => store.get(symmetryAtom),
+      setSymmetry: (mode) => store.set(symmetryAtom, mode),
+      symmetryAvailable: (mode) => { const scn = scenario(); return scn ? symmetryAvailable(mode, scn.width, scn.height) : mode === "none"; },
+      mirror: (cells) => {
+        const scn = scenario();
+        if (!scn) return [];
+        const list = typeof (cells as Rect).x0 === "number"
+          ? (() => { const r = cells as Rect; const out: number[] = []; for (let y = Math.max(0, r.y0); y < Math.min(scn.height, r.y1); y++) for (let x = Math.max(0, r.x0); x < Math.min(scn.width, r.x1); x++) out.push(y * scn.width + x); return out; })()
+          : [...(cells as Iterable<number>)];
+        return [...mirrorIndices(store.get(symmetryAtom), list, scn.width, scn.height)];
+      },
+      mirrorPoint: (px, py) => { const scn = scenario(); return scn ? mirrorPixel(store.get(symmetryAtom), px, py, scn.width, scn.height) : [{ x: px, y: py }]; },
     },
 
     tileset: {
       id: () => (scenario() ? TILESETS[tilesetIndex(scenario()!)].id : null),
-      name: () => TILESET_BY_ID[store.get(mapTilesetAtom)].name,
+      name: () => { const scn = scenario(); return scn ? TILESETS[tilesetIndex(scn)].name : TILESET_BY_ID[store.get(mapTilesetAtom)].name; },
       isLoaded: () => loaded() !== null,
       load: async () => {
         try { await ensureTileset(store.get(tilesetFileNameAtom)); return true; } catch { return false; }
@@ -1273,16 +1561,26 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     selection: {
       markedArea: () => store.get(clipSelectionAtom),
       markArea: (rect) => store.set(clipSelectionAtom, rect),
-      units: () => store.get(selectedUnitsAtom),
-      setUnits: (i) => store.set(selectedUnitsAtom, i),
-      sprites: () => store.get(selectedSpritesAtom),
-      setSprites: (i) => store.set(selectedSpritesAtom, i),
-      doodads: () => store.get(selectedDoodadsAtom),
-      setDoodads: (i) => store.set(selectedDoodadsAtom, i),
-      locations: () => store.get(selectedLocationsAtom),
-      setLocations: (i) => store.set(selectedLocationsAtom, i),
+      units: () => [...store.get(selectedUnitsAtom)],
+      setUnits: (i) => store.set(selectedUnitsAtom, [...i]),
+      sprites: () => [...store.get(selectedSpritesAtom)],
+      setSprites: (i) => store.set(selectedSpritesAtom, [...i]),
+      doodads: () => [...store.get(selectedDoodadsAtom)],
+      setDoodads: (i) => store.set(selectedDoodadsAtom, [...i]),
+      locations: () => [...store.get(selectedLocationsAtom)],
+      setLocations: (i) => store.set(selectedLocationsAtom, [...i]),
       layer: () => store.get(activeLayerAtom),
       setLayer: (layer) => store.set(activeLayerAtom, layer),
+      lockedLayers: () => (Object.entries(store.get(lockedLayersAtom)) as [EditorLayer, boolean | undefined][]).filter(([, v]) => v).map(([k]) => k),
+      setLayerLocked: (layer, locked) => store.set(lockedLayersAtom, { ...store.get(lockedLayersAtom), [layer]: locked }),
+    },
+
+    clipboard: clipboardApi(store),
+    exchange: {
+      encodeTrg,
+      decodeTrg,
+      formatStrings: () => { const scn = scenario(); return scn ? formatStringTable(scn.strings) : ""; },
+      parseStrings: parseStringTable,
     },
 
     palette: {
@@ -1299,6 +1597,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           doodad: store.get(activeDoodadAtom),
           fogPlayers: store.get(fogPlayersAtom),
           fogMode: store.get(fogModeAtom),
+          fogViewPlayer: store.get(fogViewPlayerAtom),
         };
       },
       setActive: (c) => {
@@ -1314,8 +1613,15 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         if (c.doodad !== undefined) store.set(activeDoodadAtom, c.doodad);
         if (c.fogPlayers !== undefined) store.set(fogPlayersAtom, c.fogPlayers);
         if (c.fogMode !== undefined) store.set(fogModeAtom, c.fogMode);
+        if (c.fogViewPlayer !== undefined) store.set(fogViewPlayerAtom, Math.max(0, Math.min(7, c.fogViewPlayer)));
       },
       playerColor: (owner) => { const scn = scenario(); return displayColorHex(scn?.playerColors, scn?.playerRgb, owner); },
+      placementOptions: () => ({ ...store.get(placementOptionsAtom) }),
+      setPlacementOptions: (patch) => store.set(placementOptionsAtom, { ...store.get(placementOptionsAtom), ...patch }),
+      doodadPlacement: () => ({ ...store.get(doodadPlacementAtom) }),
+      setDoodadPlacement: (patch) => store.set(doodadPlacementAtom, { ...store.get(doodadPlacementAtom), ...patch }),
+      locationSnap: () => store.get(locationSnapAtom),
+      setLocationSnap: (step) => store.set(locationSnapAtom, step),
       unitGroups: () => UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
       unitName,
       unitSize: (unitId) => {
@@ -1330,6 +1636,13 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
 
     ui: {
       status: (text) => store.set(statusMessageAtom, text),
+      statusText: () => store.get(statusMessageAtom),
+      toast: (t) => { store.set(pushToastAtom, { kind: t.kind ?? "info", title: t.title, detail: t.detail, ttl: t.ttl }); },
+      saveFile: async (data, fileName) => {
+        const blob = data instanceof Blob ? data : new Blob([data as unknown as BlobPart], { type: "application/octet-stream" });
+        const out = await saveBlob(blob, fileName, null);
+        return out ? { route: out.route === "download" ? "download" : "picker", fileName: out.fileName } : null;
+      },
       dialog: (spec) => {
         let key = -1;
         // The frame reads the title through this box, so `setTitle` reaches it without touching the spec.
@@ -1340,7 +1653,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
         };
         key = store.set(openDialogAtom, "pluginDialog", { spec, handle, plugin: info, title });
-        bag.add(() => { if (handle.isOpen()) handle.close(); });
+        // Closed with the plugin — and taken off the list once it closes by itself, so a plugin
+        // that opens dialogs in a loop does not grow the bag for the life of the plugin.
+        const sweep = bag.add(() => { if (handle.isOpen()) handle.close(); });
+        const unsub = store.sub(dialogStackAtom, () => { if (!handle.isOpen()) { unsub(); sweep.dispose(); } });
         return handle;
       },
       panel: (spec) => {
@@ -1358,7 +1674,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
         };
         store.set(pluginPanelsAtom, [...store.get(pluginPanelsAtom), { key, plugin: info, spec, handle, title }]);
-        bag.add(() => handle.close());
+        const sweep = bag.add(() => handle.close());
+        const unsub = store.sub(pluginPanelsAtom, () => { if (closed) { unsub(); sweep.dispose(); } });
         return handle;
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
@@ -1384,7 +1701,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       el,
       widgets,
       open: (dialog, payload) => { store.set(openDialogAtom, dialog, payload); },
-      repaint: () => store.set(terrainRevisionAtom, store.get(terrainRevisionAtom) + 1),
+      ask: (dialog, payload) => askDialog(store, dialog, payload),
+      repaint: () => store.set(viewportRepaintAtom, store.get(viewportRepaintAtom) + 1),
     },
 
     menu: {

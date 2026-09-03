@@ -10,10 +10,12 @@ import { isLocationUsed } from "../formats/chk/sections/objects";
 import { PlayerType } from "../formats/chk/sections/players";
 import { getString } from "../formats/chk/sections/strings";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
-import { actionDef, conditionDef } from "../data/triggerDefs";
-import { START_LOCATION, unitName } from "../data/units";
-import type { DialogId } from "../atoms/uiAtoms";
-import type { IsomStatus } from "../hooks/useIsom";
+import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
+import { START_LOCATION, UNIT_TYPE_COUNT, unitName } from "../data/units";
+import { UnitClass } from "../formats/chk/sections/triggers";
+import type { DialogId } from "../components/dialogs/ids";
+import type { IsomStatus } from "./isom";
+import { CUWP_SLOTS, cuwpSlotActive } from "./cuwp";
 import { isAnywhereIntact, locationName } from "./locations";
 import { TILE_PX } from "./units";
 
@@ -67,8 +69,13 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     add("error", `Missing ${missing.map((n) => n.trim()).join(", ")} — the game will not load this map.`, "File", { kind: "dialog", id: "mapRevision" });
   }
   add("info", `Map revision: ${MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label} (VER ${scn.fileVersion}, ${scn.type}, ${scn.strings.extended ? "STRx" : "STR"}).`, "Header");
+  // What the parser noticed on the way in: a section cut short, a DIM that had to be guessed.
+  for (const w of scn.warnings) add("warn", w, "File");
 
   // ── Players and start locations ──
+  if (scn.editorPlayerTypes && scn.editorPlayerTypes.some((t, i) => t !== scn.playerTypes[i])) {
+    add("warn", "The player types StarEdit shows (IOWN) differ from the ones the game reads (OWNR); another tool wrote one and not the other. Player Settings rewrites both.", "Players", { kind: "dialog", id: "playerSettings" });
+  }
   const starts = scn.units.map((u, index) => ({ u, index })).filter(({ u }) => u.unitId === START_LOCATION);
   scn.playerTypes.forEach((type, p) => {
     const mine = starts.filter(({ u }) => u.owner === p);
@@ -120,21 +127,33 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const checkString = (value: number, what: string) => {
       if (value > 0 && !stringOk(value)) add("error", `${label}: ${what} refers to string #${value}, past the end of the table.`, where, target);
     };
+    const checkUnit = (value: number, what: string) => {
+      const klass = (Object.values(UnitClass) as number[]).includes(value);
+      if (value >= UNIT_TYPE_COUNT && !klass) add("warn", `${label}: ${what} names unit type ${value}, which the game does not have (types run to ${UNIT_TYPE_COUNT - 1}, the classes ${UnitClass.Any}–${UnitClass.Factories}).`, where, target);
+    };
+    const checkPlayer = (value: number, what: string) => {
+      if (value > 26) add("info", `${label}: ${what} uses player value ${value} — beyond the game's groups, so a memory address (EUD) or a mistake.`, where, target);
+    };
     for (const c of t.conditions) {
       if (c.flags & ConditionFlag.Disabled) continue;
       const def = conditionDef(c.type);
-      if (!def) continue;
+      if (!def) { add("warn", `${label}: condition type ${c.type} is not one the editor knows; it is kept as it is.`, where, target); continue; }
       for (const a of def.args) {
         if (a.kind === "location") checkLocation(c[a.field], def.name);
+        if (a.kind === "unit") checkUnit(c[a.field], def.name);
+        if (a.kind === "player") checkPlayer(c[a.field], def.name);
         if (a.kind === "switch" && c.type === ConditionType.Switch) tested.add(c[a.field]);
       }
     }
     for (const a of t.actions) {
       if (a.flags & ActionFlag.Disabled) continue;
       const def = actionDef(a.type, briefing);
-      if (!def) continue;
+      if (!def) { add("warn", `${label}: action type ${a.type} is not one the editor knows; it is kept as it is.`, where, target); continue; }
       for (const arg of def.args) {
         if (arg.kind === "location") checkLocation(a[arg.field], def.name);
+        if (arg.kind === "unit") checkUnit(a[arg.field], def.name);
+        if (arg.kind === "player") checkPlayer(a[arg.field], def.name);
+        if (arg.kind === "aiScript" && !AI_SCRIPT_CHOICES.some((c) => aiScriptCode(c.id) === a[arg.field])) add("warn", `${label}: ${def.name} runs AI script ${a[arg.field].toString(16)}, which is not one the game ships.`, where, target);
         if (arg.kind === "text") checkString(a[arg.field], def.name);
         if (arg.kind === "wav") {
           checkString(a[arg.field], def.name);
@@ -144,10 +163,22 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
           }
         }
         if (arg.kind === "switch" && a.type === ActionType.SetSwitch && a.modifier !== SwitchAction.Clear) set.add(a[arg.field]);
+        if (arg.kind === "cuwp") {
+          const slot = a[arg.field];
+          if (slot < 1 || slot > CUWP_SLOTS) add("warn", `${label}: ${def.name} names properties slot ${slot}; the slots are 1 to ${CUWP_SLOTS}.`, where, target);
+          else if (!scn.cuwp || !cuwpSlotActive(scn.cuwp[slot - 1])) add("info", `${label}: ${def.name} uses slot ${slot}, which sets nothing (Triggers ▸ Unit Properties Slots…).`, where, { kind: "dialog", id: "cuwpEditor" });
+        }
       }
     }
   };
   scn.triggers.forEach((t, i) => checkTrigger(t, i, "Triggers", false));
+  // An Ogg plays in Remastered only; an older revision's game skips it.
+  if (scn.wavs && scn.fileVersion < 206) {
+    scn.wavs.forEach((i, slot) => {
+      const path = i > 0 ? getString(scn.strings, i) : null;
+      if (path && /\.ogg$/i.test(path)) add("warn", `Sound ${slot} is an Ogg (${path}); only Remastered plays those, and this map's revision is ${MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label}.`, "Sounds", { kind: "dialog", id: "soundEditor" });
+    });
+  }
   scn.briefing.forEach((t, i) => checkTrigger(t, i, "Briefing", true));
   for (const s of [...tested].sort((a, b) => a - b)) {
     if (!set.has(s)) add("warn", `Switch ${s + 1} is tested by a condition but no action ever sets it.`, "Triggers", { kind: "dialog", id: "switches" });

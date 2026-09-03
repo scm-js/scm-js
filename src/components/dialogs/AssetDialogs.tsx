@@ -12,8 +12,8 @@ import { useLocationTools } from "../../hooks/useLocationTools";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
 import { WAV_SLOTS } from "../../formats/chk/sections/sounds";
-import { isPlainPcm, parseWavHeader, wavFormatLabel, type WavInfo } from "../../formats/wav";
-import { convertToWav, DEFAULT_WAV_PRESET, IMPORT_EXTENSIONS, matchesTarget, WAV_PRESETS, withWavExtension } from "../../services/audioConvert";
+import { canDecodeWav, decodeWav, isPlainPcm, parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../formats/wav";
+import { convertToWav, decodeAudio, DEFAULT_WAV_PRESET, IMPORT_EXTENSIONS, matchesTarget, toAudioBuffer, WAV_PRESETS, withWavExtension } from "../../services/audioConvert";
 import { Button, ListBox, Select, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -186,8 +186,9 @@ function formatOf(bytes: Uint8Array | undefined, path: string): { label: string;
  * adds a member under `staredit\wav\` and a table entry, converting anything the browser can
  * decode (MP3, FLAC, AAC, Ogg, any WAV) to PCM WAV in the chosen format on the way in;
  * Convert does the same to a listed `.wav`; Remove clears the slot and, when nothing else
- * refers to the file, drops the member too. Playback decodes the bytes with Web Audio, so
- * the game's ADPCM-compressed WAVs neither play nor convert here.
+ * refers to the file, drops the member too. Playback and Convert decode a WAV with
+ * `formats/wav.ts` first — the game's IMA ADPCM sounds included — and fall back to Web
+ * Audio for everything else (MP3, Ogg, FLAC); the length column comes off the header.
  */
 export function SoundEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
@@ -220,7 +221,8 @@ export function SoundEditorDialog({ entry }: DialogProps) {
   };
   useEffect(() => () => { const a = audio.current; if (a) { try { a.source?.stop(); } catch { /* ended */ } void a.ctx.close(); } }, []);
 
-  // Decode each present member once for its length; failures show as "cannot decode".
+  // Each present member's length: off the WAV header where there is one, else decoded once
+  // through Web Audio (an Ogg); failures show as "cannot decode".
   useEffect(() => {
     if (!form) return;
     const pending = rows.filter((r) => r.member && !durations.has(r.member));
@@ -230,8 +232,10 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       const next = new Map(durations);
       for (const r of pending) {
         const bytes = form.extras.get(r.member!)!;
+        const info = parseWavHeader(bytes);
+        if (info && canDecodeWav(info)) { next.set(r.member!, wavDuration(info)); continue; }
         try {
-          const buf = await context().ctx.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
+          const buf = await decodeAudio(bytes);
           next.set(r.member!, buf.duration);
         } catch {
           next.set(r.member!, null);
@@ -260,7 +264,9 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     stop();
     const a = context();
     try {
-      const buf = await a.ctx.decodeAudioData(form.extras.get(r.member)!.slice().buffer as ArrayBuffer);
+      const bytes = form.extras.get(r.member)!;
+      const own = decodeWav(bytes);
+      const buf = own ? toAudioBuffer(a.ctx, own) : await a.ctx.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
       const source = a.ctx.createBufferSource();
       source.buffer = buf;
       source.connect(a.ctx.destination);
@@ -374,13 +380,13 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     if (!r.member) return <span className="faint">—</span>;
     const d = durations.get(r.member);
     if (d === undefined) return <span className="faint">…</span>;
-    return d === null ? <span className="faint" title="Web Audio could not decode this file (the game's ADPCM WAVs are not supported here)">cannot decode</span> : mmss(d);
+    return d === null ? <span className="faint" title="Neither the editor's WAV decoder nor the browser could read this file">cannot decode</span> : mmss(d);
   };
 
   const format = (r: SoundRow) => {
     const f = formatOf(r.member ? form.extras.get(r.member) : undefined, r.path);
     const odd = f.wav && !isPlainPcm(f.wav);
-    return <span className={odd ? "warn" : "dim"} title={odd ? "Not plain PCM: the game may not play it, and this editor cannot convert it" : undefined}>{f.label}</span>;
+    return <span className={odd ? "warn" : "dim"} title={odd ? (f.wav && canDecodeWav(f.wav) ? "Not plain PCM: the game plays its own ADPCM, other encodings it may not — Convert re-encodes it as PCM" : "Not plain PCM: the game may not play it, and this editor cannot convert it") : undefined}>{f.label}</span>;
   };
 
   return (
@@ -554,7 +560,7 @@ export function LocationListDialog({ entry }: DialogProps) {
           </thead>
           <tbody>
             {scenario && anywhere && isLocationUsed(anywhere) && (
-              <tr className={selected.includes(ANYWHERE_INDEX) ? "selected" : ""} onClick={(e) => tools.select([ANYWHERE_INDEX], e.shiftKey)} onDoubleClick={() => open("locationProperties", { index: ANYWHERE_INDEX })}>
+              <tr className={selected.includes(ANYWHERE_INDEX) ? "selected" : ""} onClick={(e) => tools.select([ANYWHERE_INDEX], e.shiftKey)} onDoubleClick={() => goTo(ANYWHERE_INDEX)}>
                 {cell(ANYWHERE_INDEX)}
                 <td><span className="row" style={{ gap: 4 }}><Lock size={10} className="faint" />{locationName(scenario, ANYWHERE_INDEX)}{!isAnywhereIntact(scenario) && <span className="badge warn">off map</span>}</span></td>
                 {cell(anywhere.left)}{cell(anywhere.top)}{cell(anywhere.right)}{cell(anywhere.bottom)}

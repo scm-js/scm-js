@@ -1,6 +1,5 @@
 import {
   forwardRef,
-  useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -8,7 +7,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { Tabs as RTabs, Tooltip as RTooltip } from "radix-ui";
-import { ChevronDown, ChevronUp, Construction } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 /* ── Button ─────────────────────────────────────────────── */
 
@@ -153,15 +152,6 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
-export function Placeholder({ children }: { children: ReactNode }) {
-  return (
-    <div className="placeholder-note">
-      <Construction size={13} />
-      <span>{children}</span>
-    </div>
-  );
-}
-
 /* ── ListBox ────────────────────────────────────────────── */
 
 export interface ListBoxProps<T> {
@@ -198,10 +188,6 @@ export function ListBox<T>({ items, selected, onSelect, render, showIndex, class
 }
 
 /** Convenience: a ListBox that manages its own selection. */
-export function useSelection(initial: number | null = 0) {
-  return useState<number | null>(initial);
-}
-
 /* ── Tabs ───────────────────────────────────────────────── */
 
 export interface TabDef {
@@ -249,8 +235,3 @@ export function Tip({ label, shortcut, children, side = "bottom" }: { label: Rea
 
 export const TooltipProvider = RTooltip.Provider;
 
-/* ── Swatch ─────────────────────────────────────────────── */
-
-export function Swatch({ color, size, title }: { color: string; size?: number; title?: string }) {
-  return <span className="swatch" title={title} style={{ background: color, width: size, height: size }} />;
-}

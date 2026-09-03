@@ -4,7 +4,7 @@ import { ArrowUp, Blocks, CircleCheck, CircleSlash, Download, ExternalLink, Glob
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
-import { closeDialogAtom, dialogStackAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
 import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
@@ -221,6 +221,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
     setBusy(true);
     try {
       await installPlugin(store, preview, { enabled: enable, pin, local, replaces });
+      store.set(pushToastAtom, { kind: "ok", title: replaces ? "Plugin updated" : "Plugin installed", detail: `${preview.manifest?.name ?? preview.spec}${preview.manifest?.version ? ` ${preview.manifest.version}` : ""}${enable ? "" : " — off until you turn it on in Manage Plugins"}` });
       onAdded?.();
       close(entry.key);
     } finally {

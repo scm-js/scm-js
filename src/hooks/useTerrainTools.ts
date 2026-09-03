@@ -7,10 +7,10 @@ import {
 import { commitTerrainAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  applyChanges, brushRect, floodRegion, stampTerrain, stampTile,
-  Stroke, type TileChange,
+  applyChanges, brushRect, floodRegion, replaceTerrain, stampTerrain, stampTile,
+  Stroke, type Rect, type TerrainPick, type TileChange,
 } from "../editor/terrain";
-import { mirrorIndices, mirrorRect } from "../editor/symmetry";
+import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
 import {
   applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
 } from "../editor/isom";
@@ -118,7 +118,11 @@ export function useTerrainTools() {
     return null;
   }, [store, loaded, currentTerrain, footprint, setStatus]);
 
-  /** One isometric brush application on the diamond under `p`, applied live. */
+  /**
+   * One isometric brush application on the diamond under `p`, applied live — and, under a
+   * symmetry mode, on the diamond under each image of `p` (the lattice has a diamond at
+   * every image for the map sizes the game has, all multiples of four tiles).
+   */
   const paintIsomAt = useCallback((p: MapPoint) => {
     const scn = store.get(scenarioAtom);
     const s = stroke.current;
@@ -131,11 +135,17 @@ export function useTerrainTools() {
     lastDiamond.current = d;
     const terrain = currentIsomTerrain();
     if (terrain === null) return;
-    const edit = paintIsom(scn, loaded.tileset, d, terrain, store.get(brushSizeAtom));
-    if (!edit) return;
-    s.add(edit.tiles);
-    is.add(edit.isom);
-    if (edit.tiles.length > 0) bumpRevision((r) => r + 1);
+    let changed = false;
+    for (const q of mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height)) {
+      const dq = diamondAt(q.x, q.y);
+      if (!isDiamond(dq) || dq.x < 0 || dq.y < 0 || dq.x >= isomWidth(scn) || dq.y > scn.height) continue;
+      const edit = paintIsom(scn, loaded.tileset, dq, terrain, store.get(brushSizeAtom));
+      if (!edit) continue;
+      s.add(edit.tiles);
+      is.add(edit.isom);
+      if (edit.tiles.length > 0) changed = true;
+    }
+    if (changed) bumpRevision((r) => r + 1);
   }, [store, loaded, currentIsomTerrain, bumpRevision]);
 
   const paintAt = useCallback((x: number, y: number, p?: MapPoint) => {
@@ -260,6 +270,30 @@ export function useTerrainTools() {
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
+   * Tools ▸ Replace Terrain…: every tile matching `from` becomes `to`, over the whole map or
+   * a rect. One undo step; stranded doodads and units go with it like any stroke. Returns
+   * how many tiles changed (0 with a status line when nothing matched).
+   */
+  const replace = useCallback((from: TerrainPick, to: TerrainPick, rect?: Rect): number => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return 0;
+    if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) {
+      setStatus("Replace Terrain needs the tileset graphics — Help ▸ Game Data…");
+      return 0;
+    }
+    const changes = replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect);
+    if (changes.length === 0) {
+      setStatus("Nothing to replace — no tile matches, or the replacement is what is there already.");
+      return 0;
+    }
+    const name = (p: TerrainPick) => (p.kind === "tile" ? hexTile(p.id) : terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id));
+    const label = `Replace ${name(from)} with ${name(to)}`;
+    applyChanges(scn, changes);
+    commitTerrain(scn, { label, changes }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}${rect ? " in the marked area" : ""}`);
+    return changes.length;
+  }, [store, loaded, commitTerrain, setStatus]);
+
+  /**
    * Eyedropper. Isometric mode reads the diamond's terrain straight from the ISOM, so
    * clicking a cliff face picks the ground it belongs to; in Rect mode a flat tile
    * picks its terrain type; anything else (a cliff piece, a doodad tile) drops into
@@ -358,7 +392,7 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }

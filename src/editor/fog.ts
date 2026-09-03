@@ -12,7 +12,7 @@
  * `applyFogChanges` applies or reverts a list and marks MASK dirty.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { brushRect, type TileChange } from "./terrain";
+import { type TileChange } from "./terrain";
 
 /** MASK carries fog for the eight playable slots only. */
 export const FOG_PLAYERS = 8;
@@ -68,12 +68,6 @@ export function paintFog(scn: Scenario, indices: Iterable<number>, players: numb
     if (before !== after) out.push({ at, before, after });
   }
   return out;
-}
-
-/** One N×N brush application centred on (x, y), same footprint as the terrain brushes. */
-export function paintFogAt(scn: Scenario, x: number, y: number, size: number, players: number, mode: FogMode): TileChange[] {
-  const r = brushRect(x, y, size, scn.width, scn.height);
-  return paintFog(scn, fogIndices(scn, r.x0, r.y0, r.x1, r.y1), players, mode);
 }
 
 /** Fog or clear the whole map for `players`. */

@@ -41,6 +41,17 @@ Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
 wrap it for Node, `src/gamedata/extract.worker.ts` runs it in a browser worker, and
 `desktop/main.ts` runs it in the desktop app's main process.
 
+## The game itself
+
+Tools ▸ Test Map needs the *installed* game rather than its data: the desktop build's
+main process looks in the same places the archive search does for `StarCraft.exe`
+(`x86_64\` and `x86\` for Remastered, the folder itself for 1.16) and for a `Maps` folder,
+writes the map into `Maps\scmJS\` and starts the executable (`open -a` on macOS, Wine on
+Linux); a folder picked in the dialog is searched first and remembered in Preferences. A
+browser has no such reach: Chrome and Edge write into a folder picked once through the
+File System Access API, whose handle is kept in IndexedDB (`services/handleStore.ts`,
+shared with Open Recent), and other browsers download the file.
+
 ## Extracting
 
 ```sh

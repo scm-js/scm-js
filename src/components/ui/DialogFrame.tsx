@@ -22,6 +22,8 @@ export interface DialogFrameProps {
   okLabel?: string;
   cancelLabel?: string;
   onOk?: () => void;
+  /** Grey out OK (and Apply) while the form cannot be applied. */
+  okDisabled?: boolean;
   showApply?: boolean;
   /** Called before Escape closes the dialog; `preventDefault()` keeps it open (an embedded editor wants Escape for itself). */
   onEscapeKeyDown?: (e: KeyboardEvent) => void;
@@ -42,6 +44,7 @@ export default function DialogFrame({
   okLabel = "OK",
   cancelLabel = "Cancel",
   onOk,
+  okDisabled,
   showApply,
   onEscapeKeyDown,
 }: DialogFrameProps) {
@@ -85,11 +88,11 @@ export default function DialogFrame({
               <div className="left">{footerLeft}</div>
               {footer ?? (
                 <>
-                  <Button variant="primary" onClick={() => { onOk?.(); dismiss(); }}>
+                  <Button variant="primary" disabled={okDisabled} onClick={() => { onOk?.(); dismiss(); }}>
                     {okLabel}
                   </Button>
                   <Button onClick={dismiss}>{cancelLabel}</Button>
-                  {showApply && <Button onClick={onOk}>Apply</Button>}
+                  {showApply && <Button disabled={okDisabled} onClick={onOk}>Apply</Button>}
                 </>
               )}
             </div>

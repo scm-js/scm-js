@@ -9,6 +9,9 @@ import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import type { SymmetryMode } from "../editor/symmetry";
+import type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
+import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { browserStorage } from "./storage";
 import { DEFAULT_CLIP_PARTS, type Clip, type ClipParts, type PasteMode } from "../editor/clipboard";
 import type { Rect } from "../editor/terrain";
 
@@ -19,19 +22,11 @@ export const screenAtom = atom<EditorScreen>("splash");
 
 /* ── Layers (classic SCMDraft layer combo) ──────────────── */
 
-export type EditorLayer =
-  | "terrain"
-  | "doodads"
-  | "units"
-  | "sprites"
-  | "locations"
-  | "fog"
-  | "clipboard";
+export type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
 
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
 /** Terrain sub-mode inside the Terrain palette. */
-export type TerrainMode = "isom" | "rect" | "tile" | "blend";
 export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend"];
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
@@ -96,7 +91,8 @@ export const spritePlaceOptionsAtom = atom<{ flipped: boolean; disabled: boolean
  */
 export const selectedLocationsAtom = atom<number[]>([]);
 /** Pixel grid a create, move or resize snaps to; 0 = off. StarEdit works in whole tiles. */
-export const locationSnapAtom = atom<number>(32);
+/** The Locations layer's snap step in pixels (0 = off), remembered (`scmjs.locationSnap`). */
+export const locationSnapAtom = atomWithStorage<number>("scmjs.locationSnap", 32, createJSONStorage(browserStorage), { getOnInit: true });
 export const LOCATION_SNAPS: readonly number[] = [0, 8, 16, 32, 64];
 
 /* ── Fog of war layer (see editor/fog.ts) ───────────────── */
@@ -121,7 +117,7 @@ export const clipPasteModeAtom = atom<PasteMode>("merge");
 /** Whether the clip follows the pointer waiting for a click to stamp it (Esc / right-click stops). */
 export const clipPastingAtom = atom<boolean>(false);
 
-/* ── Map document (placeholder — no real parsing yet) ───── */
+/* ── Map document mirrors: what the chrome displays (see CLAUDE.md, "two sources of truth") ── */
 
 export const mapNameAtom = atom<string>("Untitled Scenario");
 export const mapDescriptionAtom = atom<string>("Destroy all enemy buildings.");
@@ -154,23 +150,6 @@ export const viewportRectAtom = atom<{ x: number; y: number; w: number; h: numbe
  */
 export const centerViewOnAtom = atom<{ x: number; y: number } | null>(null);
 
-export interface ViewFlags {
-  grid: boolean;
-  locations: boolean;
-  locationNames: boolean;
-  units: boolean;
-  sprites: boolean;
-  doodads: boolean;
-  fog: boolean;
-  elevation: boolean;
-  buildability: boolean;
-  startLocations: boolean;
-  /** Cycle the palette so water and lava animate as they do in game. */
-  animateWater: boolean;
-  /** Run the units' iscript idle animations (turrets, pulsing buildings, fires, smoke). */
-  animateUnits: boolean;
-}
-
 export const viewFlagsAtom = atom<ViewFlags>({
   // StarEdit draws no grid until you ask for one, and terrain reads better without it.
   grid: false,
@@ -187,7 +166,39 @@ export const viewFlagsAtom = atom<ViewFlags>({
   animateUnits: true,
 });
 
-export const gridSizeAtom = atom<8 | 16 | 32 | 64 | 128>(32);
+/** View ▸ Grid Settings' spacing, remembered like the grid's look (`scmjs.gridSize`). */
+export const gridSizeAtom = atomWithStorage<8 | 16 | 32 | 64 | 128>("scmjs.gridSize", 32, createJSONStorage(browserStorage), { getOnInit: true });
+
+/**
+ * A layer the Layers panel has locked: its tools refuse to change the map (placing,
+ * painting, dragging, deleting) until it is unlocked, while selecting and looking are
+ * still fine. Session state, like the active layer.
+ */
+export const lockedLayersAtom = atom<Partial<Record<EditorLayer, boolean>>>({});
+
+/** Bumped by `api.ui.repaint()`: the viewport redraws without any revision (and so any plugin event) moving. */
+export const viewportRepaintAtom = atom(0);
+
+/** The pointer's position in map pixels, for the status bar; the tile is `cursorTileAtom`. */
+export const cursorPixelAtom = atom<{ x: number; y: number }>({ x: 0, y: 0 });
+
+/**
+ * View ▸ Zoom to Fit: the largest zoom step at which the whole map fits the viewport.
+ * `viewportRectAtom` is in tiles at the current zoom, so the viewport's pixel size is
+ * `w * zoom * 32`.
+ */
+export const zoomToFitAtom = atom(null, (get, set) => {
+  const v = get(viewportRectAtom);
+  const zoom = get(zoomAtom);
+  const pxW = v.w * zoom * 32, pxH = v.h * zoom * 32;
+  const need = Math.min(pxW / (get(mapWidthAtom) * 32), pxH / (get(mapHeightAtom) * 32));
+  const fit = [...ZOOM_STEPS].reverse().find((z) => z <= need) ?? ZOOM_STEPS[0];
+  set(zoomAtom, fit);
+  return fit;
+});
+
+/** The zoom control's steps; `zoomToFitAtom` snaps to one of these. */
+export const ZOOM_STEPS: readonly number[] = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 /* ── Symmetry (see editor/symmetry.ts) ───────────────────── */
 

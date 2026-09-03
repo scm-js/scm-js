@@ -15,21 +15,22 @@ import {
   selectedUnitsAtom,
   viewFlagsAtom,
   zoomAtom,
+  ZOOM_STEPS,
+  zoomToFitAtom,
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
+import { desktopBridge } from "../../gamedata/desktop";
 import {
-  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, undoAtom,
+  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../dialogs/PluginDialogs";
-import { useMapFileActions } from "../../hooks/useMapFileActions";
+import { clearRecents, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { usedLocations } from "../../editor/locations";
-import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 
 const REPO_URL = "https://github.com/jeany55/scm-js";
 
@@ -141,7 +142,7 @@ export const LAYERS: { id: EditorLayer; label: string; key: string }[] = [
   { id: "clipboard", label: "Cut / Copy / Paste", key: "C" },
 ];
 
-export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+export const ZOOM_LEVELS = ZOOM_STEPS;
 
 function useMenus(): Menu[] {
   const open = useSetAtom(openDialogAtom);
@@ -150,9 +151,11 @@ function useMenus(): Menu[] {
   const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const store = useStore();
+  const desktop = desktopBridge();
+  const zoomToFit = useSetAtom(zoomToFitAtom);
   const hasMap = useAtomValue(scenarioAtom) !== null;
   const { fillMap } = useTerrainTools();
-  const [recent, setRecent] = useAtom(recentFilesAtom);
+  const recent = useAtomValue(recentFilesAtom);
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
   const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
   const deleteSprites = useSetAtom(deleteSelectedSpritesAtom);
@@ -162,7 +165,7 @@ function useMenus(): Menu[] {
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
-  const { save } = useMapFileActions();
+  const { save, openRecent } = useMapFileActions();
   const [undoLabel, undo] = useAtom(undoAtom);
   const [redoLabel, redo] = useAtom(redoAtom);
   const clipTools = useClipboardTools();
@@ -182,7 +185,7 @@ function useMenus(): Menu[] {
     onChange: (v) => setPanels({ ...panels, [k]: v }),
   });
   const dlg = (label: string, dialog: DialogId, shortcut?: string, disabled?: boolean): Item => ({ kind: "item", label, dialog, shortcut, disabled });
-  const dlgWith = (label: string, dialog: DialogId, payload: Record<string, unknown>): Item => ({ kind: "item", label, dialog, payload });
+  const dlgWith = (label: string, dialog: DialogId, payload: Record<string, unknown>, shortcut?: string): Item => ({ kind: "item", label, dialog, payload, shortcut });
   const link = (label: string, url: string): Item => ({ kind: "item", label, onSelect: () => { window.open(url, "_blank", "noopener,noreferrer"); } });
 
   // Edit ▸ Delete / Select All / Deselect act on the active layer's selection, as the Del / Esc keys do.
@@ -192,15 +195,10 @@ function useMenus(): Menu[] {
     setStatus(n > 0 ? `Deleted ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}` : "Nothing selected");
   };
   const selectAll = () => {
-    const scn = store.get(scenarioAtom);
-    if (!scn) return;
+    if (!store.get(scenarioAtom)) return;
     if (layer === "clipboard") { clipTools.selectAll(); return; }
-    const all = (n: number) => Array.from({ length: n }, (_, i) => i);
-    let n = 0;
-    if (layer === "doodads") { n = scn.doodads.length; store.set(selectedDoodadsAtom, all(n)); }
-    else if (layer === "sprites") { n = scn.sprites.length; store.set(selectedSpritesAtom, all(n)); }
-    else if (layer === "locations") { const used = usedLocations(scn).filter((i) => i !== ANYWHERE_INDEX); n = used.length; store.set(selectedLocationsAtom, used); }
-    else { n = scn.units.length; store.set(selectedUnitsAtom, all(n)); if (layer !== "units") setLayer("units"); }
+    const n = store.set(selectAllAtom, layer);
+    if (!["doodads", "sprites", "locations", "units"].includes(layer)) setLayer("units");
     setStatus(`Selected ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
   };
   const deselect = () => {
@@ -211,13 +209,6 @@ function useMenus(): Menu[] {
     store.set(selectedSpritesAtom, []);
     store.set(selectedLocationsAtom, []);
   };
-  const stub = (label: string, shortcut?: string, disabled?: boolean): Item => ({
-    kind: "item",
-    label,
-    shortcut,
-    disabled,
-    onSelect: () => open("notImplemented", { feature: label.replace(/…|\.\.\./g, "") }),
-  });
   const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
   const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
 
@@ -231,12 +222,12 @@ function useMenus(): Menu[] {
           kind: "sub",
           label: "Open Recent",
           items: [
-            // The browser hands over file contents, not handles, so a name can be remembered but not reopened by itself.
+            // An entry reopens from the handle kept for it (Chromium, the desktop app); without one the name is a reminder and Open… is the way.
             ...(recent.length > 0
-              ? recent.map<Item>((f) => ({ kind: "item", label: `${f} (reopen from disk)`, disabled: true }))
-              : [{ kind: "item", label: "Nothing opened this session", disabled: true } as Item]),
+              ? recent.map<Item>((r) => ({ kind: "item", label: r.handleKey ? r.name : `${r.name} (open with File ▸ Open…)`, disabled: !r.handleKey, onSelect: () => { void openRecent(r); } }))
+              : [{ kind: "item", label: "Nothing opened yet", disabled: true } as Item]),
             sep,
-            { kind: "item", label: "Clear Recent", disabled: recent.length === 0, onSelect: () => setRecent([]) },
+            { kind: "item", label: "Clear Recent", disabled: recent.length === 0, onSelect: () => clearRecents(store) },
           ],
         },
         sep,
@@ -267,9 +258,10 @@ function useMenus(): Menu[] {
         sep,
         dlg("Map Properties…", "mapProperties", "Alt+Enter"),
         sep,
-        dlg("Close Map", "confirmClose", "Ctrl+W"),
-        sep,
-        dlg("Exit", "confirmClose", "Alt+F4"),
+        // Ctrl+W is the browser's own (it closes the tab); only the desktop build can take it.
+        dlg("Close Map", "confirmClose", desktop ? "Ctrl+W" : undefined),
+        // A browser tab cannot close itself; the desktop build quits through the same unsaved-changes gate as its close button.
+        ...(desktop ? [sep, dlgWith("Exit", "confirmClose", { pending: { action: "quit", done: (quit: boolean) => { if (quit) desktop.window.respondClose(true); } } }, desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4")] : []),
       ],
     },
     {
@@ -301,7 +293,7 @@ function useMenus(): Menu[] {
           label: "Zoom",
           items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => setZoom(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? "Ctrl+0" : undefined })) }],
         },
-        { kind: "item", label: "Zoom to Fit", shortcut: "Ctrl+Shift+0", onSelect: () => setZoom(0.25) },
+        { kind: "item", label: "Zoom to Fit", shortcut: "Ctrl+Shift+0", onSelect: () => { zoomToFit(); } },
         sep,
         flag("grid", "Grid", "Ctrl+G"),
         dlg("Grid Settings…", "gridSettings"),
@@ -362,6 +354,7 @@ function useMenus(): Menu[] {
         dlg("Text Trigger Editor…", "textTriggerEditor", "Ctrl+Shift+T"),
         dlg("Script Editor…", "scriptEditor"),
         dlg("Mission Briefing Editor…", "missionBriefing"),
+        dlg("Unit Properties Slots…", "cuwpEditor"),
         sep,
         dlg("Import Triggers…", "importTriggers"),
         dlg("Export Triggers…", "exportTriggers"),
@@ -376,13 +369,14 @@ function useMenus(): Menu[] {
         { kind: "sub", label: "Brush Size", items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,
         { kind: "item", label: "Fill Terrain", disabled: !hasMap, onSelect: fillMap },
-        stub("Replace Terrain…"),
-        stub("Auto-place Start Locations"),
+        dlg("Replace Terrain…", "replaceTerrain"),
+        dlg("Auto-place Start Locations…", "autoStarts"),
         sep,
         dlg("Check Map…", "validateMap"),
         dlg("Statistics…", "statistics"),
         sep,
-        stub("Test Map", "Ctrl+F5", true),
+        dlgWith("Test Map", "testMap", { run: true }, "Ctrl+F5"),
+        dlg("Test Map Settings…", "testMap"),
       ],
     },
     {

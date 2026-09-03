@@ -11,6 +11,7 @@ import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useCloseGuard } from "./hooks/useCloseGuard";
+import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { droppedHandle } from "./services/mapIo";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
@@ -35,6 +36,7 @@ export default function App() {
   usePlugins();
   useWindowTitle();
   useCloseGuard();
+  useDesktopFiles();
 
   const rightVisible = panels.minimap || panels.layers || panels.properties;
 

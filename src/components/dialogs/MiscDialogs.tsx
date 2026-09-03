@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { CircleX, Database, HardDrive, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { activeLayerAtom, centerViewOnAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, centerViewOnAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
+import { peekTileset } from "../../formats/tileset/load";
+import { desktopBridge } from "../../gamedata/desktop";
+import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
+import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import {
   archiveExtrasAtom, doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom,
@@ -17,7 +21,7 @@ import { findInScenario, FIND_KINDS, type FindKind, type FindResult } from "../.
 import { spriteKind } from "../../editor/sprites";
 import { TILE_PX } from "../../editor/units";
 import { issueCounts, triggerIssues, validateScenario, type IssueLevel, type IssueTarget } from "../../editor/validate";
-import type { SpriteRecord } from "../../formats/chk/sections/objects";
+import type { DoodadRecord, SpriteRecord } from "../../formats/chk/sections/objects";
 import { useIsomStatus } from "../../hooks/useIsom";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
@@ -36,8 +40,17 @@ interface StoredEntry {
 
 const STORED_LABELS: Record<string, string> = {
   "scmjs.prefs": "Preferences",
-  "scmjs.grid": "Grid settings",
+  "scmjs.grid": "Grid look",
+  "scmjs.gridSize": "Grid spacing",
+  "scmjs.locationSnap": "Location snap",
+  "scmjs.panels": "Panels shown",
+  "scmjs.docks": "Panel widths",
+  "scmjs.recents": "Recent files",
   "scmjs.plugins": "Installed plugins",
+  "scmjs.plugin-code": "Plugin code copies",
+  "scmjs.plugin-manifests": "Plugin manifests",
+  "scmjs.plugin-registries": "Plugin sources",
+  "scmjs.plugin-registry": "Browse Plugins cache",
 };
 
 /** Group the editor's keys into the rows the dialog lists; plugin keys collapse into one. */
@@ -154,7 +167,7 @@ const HOTKEYS: [string, string][] = [
   ["New / Open / Save", "Ctrl+N · Ctrl+O · Ctrl+S"],
   ["Save As", "Ctrl+Shift+S"],
   ["Map Properties", "Alt+Enter"],
-  ["Undo / Redo", "Ctrl+Z · Ctrl+Y"],
+  ["Undo / Redo", "Ctrl+Z · Ctrl+Y or Ctrl+Shift+Z"],
   ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
   ["Find", "Ctrl+F"],
   ["Toggle grid", "Ctrl+G"],
@@ -166,8 +179,10 @@ const HOTKEYS: [string, string][] = [
   ["Brush smaller / larger", "[ · ]"],
   ["Nudge selected locations (snap step / 1 px)", "Arrows · Shift+Arrows"],
   ["Delete selection / stop placing, clear selection", "Del · Esc"],
+  ["Cancel a plugin's map pick or tool", "Esc · right-click"],
   ["Trigger Editor", "Ctrl+T"],
   ["Text Trigger Editor", "Ctrl+Shift+T"],
+  ["Test Map", "Ctrl+F5"],
   ["Preferences", "Ctrl+,"],
   ["Keyboard shortcuts", "F1"],
   ["Full screen", "F11"],
@@ -244,8 +259,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>The View menu toggles both for the session; this is where they start.</p>
                 </Group>
-                <Group title="Grid">
-                  <p className="hint">The grid's spacing, colour, opacity and style are in View ▸ Grid Settings and are remembered too.</p>
+                <Group title="Grid and panels">
+                  <p className="hint">The grid's spacing, colour, opacity and style (View ▸ Grid Settings), the Locations layer's snap step, which panels are shown and how wide the side panels are, are all remembered in this browser too — the list under Browser storage says what is kept.</p>
                 </Group>
               </div>
             ),
@@ -326,9 +341,11 @@ function useJump(closeKey: number): Jump {
       }
       case "trigger":
         open("triggerEditor", { index: target.index });
+        close(closeKey);
         break;
       case "dialog":
         open(target.id);
+        close(closeKey);
         break;
     }
   };
@@ -409,7 +426,9 @@ export function FindDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const setLayer = useSetAtom(activeLayerAtom);
   const setSelectedSprites = useSetAtom(selectedSpritesAtom);
+  const setSelectedDoodads = useSetAtom(selectedDoodadsAtom);
   const setCenter = useSetAtom(centerViewOnAtom);
+  const tilesetName = useAtomValue(tilesetFileNameAtom);
   const jump = useJump(entry.key);
   const [kind, setKind] = useState<FindKind>("units");
   const [q, setQ] = useState("");
@@ -422,19 +441,28 @@ export function FindDialog({ entry }: DialogProps) {
       if (spriteKind(r) === "unit") return unitName(r.spriteId);
       return catalogue?.entries[r.spriteId]?.label ?? `Sprite #${r.spriteId}`;
     };
-    return findInScenario(scenario, { kind, query: q, matchCase, spriteName });
-  }, [scenario, kind, q, matchCase, catalogue]);
+    const doodads = peekTileset(tilesetName)?.doodads;
+    const doodadName = (d: DoodadRecord) => { const def = doodads?.byId.get(d.doodadId); return def ? doodadLabel(def) : `Doodad #${d.doodadId}`; };
+    return findInScenario(scenario, { kind, query: q, matchCase, spriteName, doodadName });
+  }, [scenario, kind, q, matchCase, catalogue, tilesetName]);
 
   const goTo = (r: FindResult) => {
     switch (r.kind) {
       case "units": jump({ kind: "unit", index: r.index }); break;
       case "locations": jump({ kind: "location", index: r.index }); break;
       case "triggers": jump({ kind: "trigger", index: r.index }); break;
-      case "strings": open("stringEditor", { index: r.index }); break;
+      case "briefing": open("missionBriefing", { index: r.index }); close(entry.key); break;
+      case "strings": open("stringEditor", { index: r.index }); close(entry.key); break;
       case "sprites":
         setSelectedSprites([r.index]);
         if (r.x !== undefined && r.y !== undefined) setCenter({ x: r.x, y: r.y });
         setLayer("sprites");
+        close(entry.key);
+        break;
+      case "doodads":
+        setSelectedDoodads([r.index]);
+        if (r.x !== undefined && r.y !== undefined) setCenter({ x: r.x, y: r.y });
+        setLayer("doodads");
         close(entry.key);
         break;
     }
@@ -461,7 +489,7 @@ export function FindDialog({ entry }: DialogProps) {
         onSelect={(i) => setSel(i)}
         style={{ height: 200 }}
         empty={!scenario ? "Open or create a map first." : q ? "No matches." : "Type to search."}
-        render={(r) => <><span className="idx">{r.kind === "triggers" || r.kind === "locations" || r.kind === "strings" ? r.index + (r.kind === "triggers" ? 1 : 0) : r.index}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span><span className="faint" style={{ marginLeft: "auto", paddingLeft: 8, whiteSpace: "nowrap" }}>{r.detail}</span></>}
+        render={(r) => <><span className="idx">{r.kind === "triggers" || r.kind === "briefing" ? r.index + 1 : r.index}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span><span className="faint" style={{ marginLeft: "auto", paddingLeft: 8, whiteSpace: "nowrap" }}>{r.detail}</span></>}
       />
       <p className="hint">Double-click or Go To selects the result on the map and switches to its layer.</p>
     </DialogFrame>
@@ -637,7 +665,7 @@ export function AboutDialog({ entry }: DialogProps) {
           <h2 className="about-app-name">scm<span>JS</span></h2>
           <div className="about-tagline">StarCraft · Brood War</div>
           <div className="about-rule" />
-          <div className="about-meta">v0.1 alpha · by Jeany</div>
+          <div className="about-meta">{desktopBridge() ? `desktop ${desktopBridge()!.version || "dev"} · ${desktopBridge()!.platform} · ` : ""}v0.1 beta · by Jeany</div>
           <div className="about-desc">A browser-based scenario editor</div>
           <p className="about-homage">
             In homage to <strong>StarEdit</strong>, <strong>StarForge</strong> and <strong>SCMDraft 2</strong> — and to the

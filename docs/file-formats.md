@@ -63,7 +63,7 @@ Decoded into typed fields and re-encoded when edited:
 | `DIM `, `ERA ` | dimensions, tileset |
 | `SPRP` | scenario name and description |
 | `STR `, `STRx` | string table (16-bit / Remastered 32-bit offsets) |
-| `OWNR`, `IOWN`, `SIDE`, `COLR`, `CRGB`, `FORC` | players, races, colours, forces |
+| `OWNR`, `IOWN`, `SIDE`, `COLR`, `CRGB`, `FORC` | players, races, colours, forces. `IOWN` is StarEdit's own copy of the player types (`scenario.editorPlayerTypes`); the editor writes both from Player Settings and Check Map warns when a file's two disagree |
 | `MTXM`, `TILE`, `ISOM` | terrain |
 | `MASK` | fog of war |
 | `UNIT`, `THG2`, `DD2 ` | units, sprites, doodads |
@@ -79,7 +79,7 @@ Kept as raw bytes and written back unchanged:
 | Section | Why |
 | --- | --- |
 | `VCOD` | StarEdit's fixed verification table, identical in every unprotected map |
-| `UPRP`, `UPUS` | CUWP slots; triggers reference them by number, and there is no editor for them yet |
+| `UPRP`, `UPUS` | the 64 Create Unit with Properties slots (`sections/cuwp.ts`: valid-state bits, valid-field bits, owner, hit points / shields / energy as percentages, resources, hangar, state bits, 20 bytes each) and StarEdit's "slot in use" byte per slot; Triggers ▸ Unit Properties Slots… edits them, the action names one 1-based in its `target` field |
 | `IVER` | obsolete StarEdit version stamp |
 | anything else | unknown or undocumented sections a map happens to carry |
 

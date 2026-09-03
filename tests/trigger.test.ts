@@ -258,7 +258,10 @@ describe.skipIf(mapFiles.length === 0)("fixture maps", () => {
         actions: t.actions.map((a) => ({ ...a, flags: a.flags & ~hints })),
       }));
       const back = parseTriggers(text, names).map((t) => t.trigger);
-      expect(encodeTriggers(strip(back))).toEqual(encodeTriggers(strip(scn.triggers)));
+      // Compared through the text, since a table with duplicate strings (Ground Zero) makes
+      // the parser's intern pick the first copy — a different index for the same words.
+      expect(formatTriggers(strip(back), names)).toEqual(formatTriggers(strip(scn.triggers), names));
+      expect(strip(back).map((t) => ({ ...t, actions: t.actions.map((a) => ({ ...a, text: 0, wav: 0 })) }))).toEqual(strip(scn.triggers).map((t) => ({ ...t, actions: t.actions.map((a) => ({ ...a, text: 0, wav: 0 })) })));
       if (scn.switchNames) expect(switchName(scn, 0)).toBeTypeOf("string");
     });
   }

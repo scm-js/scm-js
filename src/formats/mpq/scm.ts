@@ -136,8 +136,13 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
   return creator.writeAsync();
 }
 
-/** Pull every listed member except scenario.chk out of an opened archive. */
-export async function readExtras(archive: Archive, files: string[] | null): Promise<Map<string, Uint8Array>> {
+/**
+ * Pull every listed member except scenario.chk out of an opened archive. A member that
+ * cannot be read (a compression this build has no decoder for, a corrupt sector) is
+ * skipped rather than fatal — and named in `problems`, since Save writes the archive from
+ * what was read and the member would be gone from the file.
+ */
+export async function readExtras(archive: Archive, files: string[] | null, problems?: string[]): Promise<Map<string, Uint8Array>> {
   const extras = new Map<string, Uint8Array>();
   if (!files) return extras;
   for (const name of files) {
@@ -145,8 +150,8 @@ export async function readExtras(archive: Archive, files: string[] | null): Prom
     if (key === normalize(SCENARIO_PATH) || key === "(listfile)") continue;
     try {
       extras.set(name, await archive.readFileAsync(name));
-    } catch {
-      // A member we cannot decompress is better skipped than fatal.
+    } catch (err) {
+      problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it will not be in a saved copy.`);
     }
   }
   return extras;

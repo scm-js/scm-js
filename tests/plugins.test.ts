@@ -308,7 +308,10 @@ describe("plugin api", () => {
     expect(file!.name).toBe("p.scx");
     const chk = await api.document.export({ format: "chk", fileName: "raw.chk" });
     expect(chk!.name).toBe("raw.chk");
-    expect(chk!.size).toBeLessThan(file!.size);
+    // The bare chk is the serialisation; the archive is what Save writes for a new map (PKWARE, encrypted), so it is the smaller one.
+    expect(chk!.size).toBe(serializeScenario(scn).length);
+    expect(file!.size).toBeGreaterThan(0);
+    expect(file!.size).toBeLessThan(chk!.size);
 
     // Open the export in place of the map: the extras come back with it, the scenario is a new object.
     store.set(mapModifiedAtom, false);
@@ -894,10 +897,10 @@ describe("plugin sections", () => {
     const api = apiOver(store);
     const list = api.document.sections.list();
     // A new map carries its raw sections first and everything else is dirty, appended in APPEND_ORDER.
-    expect(list.map((s) => s.name).slice(0, 6)).toEqual(["IVE2", "VCOD", "UPRP", "UPUS", "TYPE", "VER "]);
+    expect(list.map((s) => s.name).slice(0, 4)).toEqual(["IVE2", "VCOD", "TYPE", "VER "]);
     expect(list[0]).toMatchObject({ index: 0, offset: 0, size: 2, declaredSize: 2, truncated: false, occurrence: 0, occurrences: 1, dirty: false });
-    expect(list[4]).toMatchObject({ name: "TYPE", size: 4, dirty: true });
-    expect(list[4].spec).toMatchObject({ name: "TYPE", mode: "last", size: 4, stride: null, modelled: true, what: "Map type (RAWS/RAWB/RAWU)" });
+    expect(list[2]).toMatchObject({ name: "TYPE", size: 4, dirty: true });
+    expect(list[2].spec).toMatchObject({ name: "TYPE", mode: "last", size: 4, stride: null, modelled: true, what: "Map type (RAWS/RAWB/RAWU)" });
     const mtxm = list.find((s) => s.name === "MTXM")!;
     expect(mtxm).toMatchObject({ size: 16, spec: { size: 16, mode: "overlay" } });
     expect(list.find((s) => s.name === "VCOD")!.spec).toMatchObject({ modelled: false, size: 1040 });
@@ -911,8 +914,8 @@ describe("plugin sections", () => {
     expect(api.document.sections.spec("ZZZZ")).toBeNull();
     expect(api.document.sections.known().map((k) => k.name)).toContain("STRx");
     // A copy: writing into what came back changes nothing.
-    api.document.sections.bytes(4)[0] = 0;
-    expect(api.document.sections.bytes(4)).toEqual(new Uint8Array([0x52, 0x41, 0x57, 0x42]));
+    api.document.sections.bytes(2)[0] = 0;
+    expect(api.document.sections.bytes(2)).toEqual(new Uint8Array([0x52, 0x41, 0x57, 0x42]));
     expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.list()).toEqual([]);
   });
 
@@ -2178,5 +2181,193 @@ describe.skipIf(!haveJungle)("terrainAt against the real tileset", () => {
     expect(types.some((t) => t.id === at)).toBe(true);
     expect(api.terrain.terrainAt(16, 16)).toBe(high.id);
     expect(api.terrain.terrainAt(-1, 0)).toBeNull();
+  });
+});
+
+/* ── The beta additions ─────────────────────────────────── */
+
+import { toastsAtom } from "../src/atoms/uiAtoms";
+import { symmetryAtom } from "../src/atoms/editorAtoms";
+import { ANYWHERE_INDEX } from "../src/formats/chk/sections/objects";
+import { isLocationUsed } from "../src/formats/chk/sections/objects";
+
+describe("plugin api: editing additions", () => {
+  const apiOver = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("fills areas, replaces tiles and mirrors cells under the symmetry mode", () => {
+    const { store, scn } = blankStore(8, 8);
+    const api = apiOver(store);
+    scn.tiles.fill(0x20);
+    for (let i = 0; i < 4; i++) scn.tiles[i] = 0x31;
+    expect(api.terrain.floodRegion(0, 0, "tile")).toEqual([0, 1, 2, 3]);
+    const r = api.document.edit("fill", (tx) => { expect(tx.fillArea(0, 0, { tileId: 0x42 }, "tile")).toBe(4); });
+    expect(r.tiles).toBe(4);
+    expect(scn.tiles[3]).toBe(0x42);
+    api.terrain.setSymmetry("h");
+    expect(api.terrain.symmetry()).toBe("h");
+    expect(api.terrain.symmetryAvailable("rot90")).toBe(true);
+    expect(api.terrain.mirror([0]).sort((a, b) => a - b)).toEqual([0, 7]);
+    expect(api.terrain.mirrorPoint(32, 32)).toEqual([{ x: 32, y: 32 }, { x: 224, y: 32 }]);
+    const r2 = api.document.edit("replace", (tx) => {
+      expect(tx.mirror({ x0: 0, y0: 0, x1: 1, y1: 1 }).sort((a, b) => a - b)).toEqual([0, 7]);
+      expect(tx.replaceTerrain({ kind: "tile", id: 0x42 }, { kind: "tile", id: 0x20 })).toBe(4);
+      expect(tx.replaceTerrain({ kind: "tile", id: 0x99 }, { kind: "tile", id: 0x20 })).toBe(0);
+    });
+    expect(r2.tiles).toBe(4);
+    expect(api.terrain.flatGroupOf(2)).toBe(-1);
+    expect(api.terrain.blendCandidates(0x20, "left")).toEqual([]);
+    expect(api.document.undo()).toBe("replace");
+    expect(scn.tiles[0]).toBe(0x42);
+    api.terrain.setSymmetry("none");
+  });
+
+  it("moves and patches objects, restores Anywhere, and edits fog in every way", () => {
+    const { store, scn } = blankStore(8, 8);
+    const api = apiOver(store);
+    const r = api.document.edit("objects", (tx) => {
+      const [u] = tx.addUnits([tx.makeUnit(0, 0, 40, 40)]);
+      expect(tx.moveUnits([u], 32, 0, false)).toBe(1);
+      expect(scn.units[u].x).toBe(72);
+      const s = tx.placeSprite("pure", 1, 0, 50, 50);
+      expect(tx.updateSprites([s], () => ({ owner: 3 }))).toBe(1);
+      expect(tx.moveSprites([s], -100, 0)).toBe(1);
+      expect(scn.sprites[s].x).toBe(0);
+      expect(tx.updateDoodads([0], { owner: 1 })).toBe(0);
+      scn.locations[ANYWHERE_INDEX] = { ...scn.locations[ANYWHERE_INDEX], right: 32 };
+      expect(tx.restoreAnywhere()).toBe(true);
+      expect(scn.locations[ANYWHERE_INDEX].right).toBe(8 * 32);
+      expect(tx.restoreAnywhere()).toBe(false);
+      expect(tx.setFog({ x0: 0, y0: 0, x1: 2, y1: 1 }, 0x01, "clear")).toBe(2);
+      expect(tx.invertFog(0x01)).toBe(64);
+      expect(tx.copyFog(0, 0x02)).toBe(62);
+      expect(tx.floodFog(0, 0, 0, 0x04, "clear")).toBe(2);
+    });
+    expect(r).toMatchObject({ changed: true, units: 2, sprites: 3, locations: 1 });
+    expect(api.query.fogAt(0, 0) & 0x07).toBe(0x03);
+    expect(api.query.fogAt(5, 5) & 0x07).toBe(0x04);
+    expect(api.document.undo()).toBe("objects");
+    expect(scn.units).toHaveLength(0);
+    expect(isLocationUsed(scn.locations[ANYWHERE_INDEX])).toBe(true);
+  });
+
+  it("auto-places start locations for N players", () => {
+    const { store, scn } = blankStore(32, 32);
+    const api = apiOver(store);
+    const r = api.document.edit("starts", (tx) => {
+      const out = tx.placeStartLocations({ players: 4, layout: "corners", margin: 2 });
+      expect(out.placed.filter(Boolean)).toHaveLength(4);
+      expect(out.removed).toBe(0);
+      const again = tx.placeStartLocations({ players: 2, replace: true });
+      expect(again.removed).toBe(4);
+    });
+    expect(r.changed).toBe(true);
+    expect(scn.units.map((u) => u.owner)).toEqual([0, 1]);
+    expect(api.query.startLocations()).toHaveLength(2);
+  });
+
+  it("copies, cuts and pastes through the clipboard", () => {
+    const { store, scn } = blankStore(16, 8);
+    const api = apiOver(store);
+    api.document.edit("seed", (tx) => { tx.placeUnit(0, 0, 40, 40); tx.setTile(1, 1, 0x77); });
+    expect(api.clipboard.clip()).toBeNull();
+    expect(api.clipboard.copy()).toBeNull();
+    api.selection.markArea({ x0: 0, y0: 0, x1: 4, y1: 4 });
+    const clip = api.clipboard.copy()!;
+    expect(clip).toMatchObject({ width: 4, height: 4 });
+    expect(api.clipboard.summary(clip)).toContain("1 unit");
+    expect(api.clipboard.clip()).toBe(clip);
+    api.clipboard.setParts({ terrain: false });
+    expect(api.clipboard.parts().terrain).toBe(false);
+    api.clipboard.setMode("replace");
+    expect(api.clipboard.mode()).toBe("replace");
+    const pasted = api.clipboard.paste(8, 0)!;
+    expect(pasted.counts.units).toBe(1);
+    expect(pasted.counts.tiles).toBe(0);
+    expect(scn.units).toHaveLength(2);
+    expect(api.selection.markedArea()).toEqual({ x0: 8, y0: 0, x1: 12, y1: 4 });
+    expect(api.document.history().undo).toContain("Paste");
+    // Cut by explicit objects takes them off the map.
+    const cut = api.clipboard.cut({ units: [0] })!;
+    expect(cut.units).toHaveLength(1);
+    expect(scn.units).toHaveLength(1);
+    api.clipboard.setPasting(true);
+    expect(api.clipboard.pasting()).toBe(true);
+    expect(api.selection.layer()).toBe("clipboard");
+    api.clipboard.setPasting(false);
+    api.clipboard.setClip(null);
+    expect(api.clipboard.paste(0, 0)).toBeNull();
+  });
+
+  it("round-trips .trg and the strings text through api.exchange and tx.strings.import", () => {
+    const { store, scn } = blankStore();
+    const api = apiOver(store);
+    const t = api.triggers.newTrigger([17]);
+    const bytes = api.exchange.encodeTrg([t]);
+    expect(bytes.length).toBe(2400);
+    expect(api.exchange.decodeTrg(bytes)).toEqual([t]);
+    const text = api.exchange.formatStrings();
+    expect(text).toContain("1\tp");
+    const parsed = api.exchange.parseStrings("2\tHello\n99\tNew one\nbad line\n");
+    expect(parsed.entries).toHaveLength(2);
+    expect(parsed.errors).toHaveLength(1);
+    const r = api.document.update("import", (tx) => { expect(tx.strings.import("2\tHello\n99\tNew one\n")).toEqual({ replaced: 1, added: 1 }); });
+    expect(r.changed).toBe(true);
+    expect(api.names.string(2)).toBe("Hello");
+    expect(scn.strings.strings.at(-1)).toBe("New one");
+  });
+
+  it("reads and sets the editing options, copies selections, and reports placement honestly", () => {
+    const { store } = blankStore();
+    const api = apiOver(store);
+    api.palette.setPlacementOptions({ checkCollision: false });
+    expect(api.palette.placementOptions().checkCollision).toBe(false);
+    api.palette.setDoodadPlacement({ placeAnywhere: true });
+    expect(api.palette.doodadPlacement().placeAnywhere).toBe(true);
+    api.palette.setLocationSnap(8);
+    expect(api.palette.locationSnap()).toBe(8);
+    api.palette.setActive({ fogViewPlayer: 3 });
+    expect(api.palette.active().fogViewPlayer).toBe(3);
+    api.selection.setUnits([0]);
+    const mine = api.selection.units();
+    mine.push(99);
+    expect(api.selection.units()).toEqual([0]);
+    api.selection.setLayerLocked("units", true);
+    expect(api.selection.lockedLayers()).toEqual(["units"]);
+    api.selection.setLayerLocked("units", false);
+    expect(api.selection.lockedLayers()).toEqual([]);
+    expect(api.terrain.active().variation).toBe(-1);
+    api.terrain.setActive({ variation: 3 });
+    expect(api.terrain.active().variation).toBe(3);
+    expect(api.settings.unitAvailable(0, 0)).toBe(true);
+    expect(api.script.triggerAtLine(1)).toBeNull();
+    expect(api.query.strings()).toHaveLength(store.get(scenarioAtom)!.strings.strings.length);
+    const empty = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(empty.query.placement(0, 0, 0)).toBeNull();
+    expect(empty.query.fogAt(0, 0)).toBe(0xff);
+    expect(empty.query.strings()).toEqual([]);
+  });
+
+  it("raises the options and file events, and the UI extras work", async () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    let options = 0, file = 0;
+    api.events.on("options", () => { options++; });
+    api.events.on("file", () => { file++; });
+    store.set(symmetryAtom, "v");
+    api.palette.setLocationSnap(16);
+    api.document.extras.set("x\\y.txt", new Uint8Array([1]));
+    expect(options).toBeGreaterThanOrEqual(2);
+    expect(file).toBeGreaterThanOrEqual(1);
+    api.ui.status("hello");
+    expect(api.ui.statusText()).toBe("hello");
+    api.ui.toast({ title: "Done", detail: "all good" });
+    expect(store.get(toastsAtom).at(-1)).toMatchObject({ kind: "info", title: "Done", detail: "all good" });
+    // Export with explicit options: uncompressed is larger than the remembered PKWARE default.
+    const packed = await api.document.export();
+    const plain = await api.document.export({ saveOptions: { compression: "none", encrypt: false } });
+    expect(plain!.size).toBeGreaterThan(packed!.size);
+    expect(api.tileset.name()).toBe("Badlands");
+    bag.dispose();
   });
 });

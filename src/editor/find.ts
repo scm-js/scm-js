@@ -5,20 +5,24 @@
  */
 import type { Scenario } from "../formats/chk/scenario";
 import { getString } from "../formats/chk/sections/strings";
-import { isLocationUsed, type SpriteRecord } from "../formats/chk/sections/objects";
-import { actionDef, conditionDef } from "../data/triggerDefs";
+import { isLocationUsed, type DoodadRecord, type SpriteRecord } from "../formats/chk/sections/objects";
+import type { TriggerRecord } from "../formats/chk/sections/triggers";
+import { conditionDef } from "../data/triggerDefs";
+import { actionStrings } from "./triggers";
 import { unitName } from "../data/units";
 import { locationName } from "./locations";
 import { unitCustomName } from "./settings";
 import { TILE_PX } from "./units";
 
-export type FindKind = "units" | "locations" | "sprites" | "strings" | "triggers";
+export type FindKind = "units" | "locations" | "sprites" | "doodads" | "strings" | "triggers" | "briefing";
 export const FIND_KINDS: { value: FindKind; label: string }[] = [
   { value: "units", label: "Units" },
   { value: "locations", label: "Locations" },
   { value: "sprites", label: "Sprites" },
+  { value: "doodads", label: "Doodads" },
   { value: "strings", label: "Strings" },
   { value: "triggers", label: "Triggers" },
+  { value: "briefing", label: "Mission briefing" },
 ];
 
 export interface FindResult {
@@ -38,20 +42,19 @@ export interface FindOptions {
   matchCase?: boolean;
   /** Display name of a sprite record (needs the game data); the id when omitted. */
   spriteName?: (r: SpriteRecord) => string;
+  /** Display name of a doodad record (needs the tileset); the id when omitted. */
+  doodadName?: (r: DoodadRecord) => string;
   limit?: number;
 }
 
-/** Every string index a trigger's conditions and actions refer to (text, comments, labels, wav paths). */
-export function triggerStrings(t: Scenario["triggers"][number]): number[] {
+/** Every string index a trigger's conditions and actions refer to (text, comments, labels, wav paths); `briefing` reads the MBRF action table. */
+export function triggerStrings(t: TriggerRecord, briefing = false): number[] {
   const out: number[] = [];
   for (const c of t.conditions) {
     const def = conditionDef(c.type);
     for (const a of def?.args ?? []) if ((a.kind === "text" || a.kind === "wav") && c[a.field] > 0) out.push(c[a.field]);
   }
-  for (const a of t.actions) {
-    const def = actionDef(a.type);
-    for (const arg of def?.args ?? []) if ((arg.kind === "text" || arg.kind === "wav") && a[arg.field] > 0) out.push(a[arg.field]);
-  }
+  for (const a of t.actions) for (const s of actionStrings(a, briefing)) out.push(s.index);
   return out;
 }
 
@@ -98,13 +101,28 @@ export function findInScenario(scn: Scenario, options: FindOptions): FindResult[
         if (hit(s) || String(index) === q) push({ kind, index, label: s, detail: `String #${index}` });
       });
       break;
-    case "triggers":
-      scn.triggers.forEach((t, index) => {
-        const texts = triggerStrings(t).map((i) => getString(scn.strings, i) ?? "");
-        const match = texts.find((s) => hit(s));
-        if (match !== undefined || String(index + 1) === q) push({ kind, index, label: `Trigger ${index + 1}`, detail: match ?? `${t.conditions.length} conditions · ${t.actions.length} actions` });
+    case "doodads":
+      scn.doodads.forEach((d, index) => {
+        const name = options.doodadName ? options.doodadName(d) : `Doodad #${d.doodadId}`;
+        if (hit(name) || String(d.doodadId) === q) {
+          push({ kind, index, label: name, detail: `Player ${d.owner + 1} · ${Math.floor(d.x / TILE_PX)}, ${Math.floor(d.y / TILE_PX)}`, x: d.x / TILE_PX, y: d.y / TILE_PX });
+        }
       });
       break;
+    case "triggers":
+    case "briefing": {
+      const briefing = kind === "briefing";
+      (briefing ? scn.briefing : scn.triggers).forEach((t, index) => {
+        const texts = triggerStrings(t, briefing).map((i) => getString(scn.strings, i) ?? "");
+        const match = texts.find((s) => hit(s));
+        if (match !== undefined || String(index + 1) === q) push({ kind, index, label: `${briefing ? "Briefing" : "Trigger"} ${index + 1}`, detail: match ?? `${t.conditions.length} conditions · ${t.actions.length} actions` });
+      });
+      break;
+    }
+    default: {
+      const never: never = kind;
+      return never;
+    }
   }
   return out;
 }

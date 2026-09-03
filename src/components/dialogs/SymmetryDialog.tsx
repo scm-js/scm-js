@@ -9,7 +9,7 @@ import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
 /**
- * Tools ▸ Symmetry…: the mirror mode the Rect, Tile and Fog brushes paint under (see
+ * Tools ▸ Symmetry…: the mirror mode the brushes paint and the palettes place under (see
  * editor/symmetry.ts). Editor state, not map data — nothing here touches the scenario —
  * but it is a settings-style transaction all the same: OK applies, Cancel leaves the mode
  * as it was. Modes that need a square map are listed but disabled on a map that is not.
@@ -50,13 +50,15 @@ export function SymmetryDialog({ entry }: DialogProps) {
       </Group>
       <Group title="Applies to">
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Terrain — Rect and Tile brushes, and their fills" checked disabled />
+          <Check label="Terrain — Isometric, Rect and Tile brushes, and the fills" checked disabled />
           <Check label="Fog of War brush and fill" checked disabled />
+          <Check label="Placing units, sprites, doodads and locations" checked disabled />
         </div>
         <p className="hint" style={{ marginTop: 6 }}>
-          Every cell a stroke covers is painted on its mirror images too, as one undo step. The Isometric and Blend brushes are
-          not mirrored — the ISOM lattice does not mirror tile by tile — and neither is object placement. The axes show on the map
-          while a mode is active.
+          Every cell a stroke covers is painted on its mirror images too, and a unit, sprite, doodad or location you place lands on
+          each image of the spot as well (checked against the placement rules one by one; a doodad that would have to turn is
+          skipped) — one undo step each time. Moving and deleting objects is not mirrored, and neither is the Blend brush, which
+          places from a picked anchor. The axes show on the map while a mode is active.
         </p>
       </Group>
     </DialogFrame>

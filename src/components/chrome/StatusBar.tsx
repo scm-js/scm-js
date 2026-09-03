@@ -1,9 +1,10 @@
 import { useAtomValue } from "jotai";
-import { activeLayerAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, zoomAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, zoomAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { hexTile } from "../../formats/tileset/palette";
+import { tileGroup, tileSubIndex } from "../../formats/chk/sections/terrain";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { LAYERS } from "./MenuBar";
 
@@ -11,6 +12,7 @@ const VERSION_LABEL = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", brood
 
 export default function StatusBar() {
   const cursor = useAtomValue(cursorTileAtom);
+  const pixel = useAtomValue(cursorPixelAtom);
   const w = useAtomValue(mapWidthAtom);
   const h = useAtomValue(mapHeightAtom);
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -29,13 +31,13 @@ export default function StatusBar() {
         <span className="k">Tile</span>
         <span className="v">{cursor.x}, {cursor.y}</span>
       </span>
-      <span className="status-cell" title="Cursor pixel">
+      <span className="status-cell" title="Cursor position in map pixels">
         <span className="k">Px</span>
-        <span className="v">{cursor.x * 32}, {cursor.y * 32}</span>
+        <span className="v">{pixel.x}, {pixel.y}</span>
       </span>
       <span className="status-cell" title="MTXM tile id under the cursor (group · slot)">
         <span className="k">Id</span>
-        <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileId >> 4}:${tileId & 15}`}</span>
+        <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId)}:${tileSubIndex(tileId)}`}</span>
       </span>
       <span className="status-cell" title="Map dimensions">
         <span className="k">Map</span>

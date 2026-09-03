@@ -21,8 +21,8 @@ import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import type { UnitGroup } from "../data/units";
 import type { SpriteGroup } from "../data/sprites";
-import type { EditorLayer, TerrainMode } from "../atoms/editorAtoms";
-import type { DialogId } from "../atoms/uiAtoms";
+import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../editor/view";
+import type { DialogId } from "../components/dialogs/ids";
 import type { MapImageOptions } from "../services/mapImage";
 import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
 import type { CombineMode } from "../formats/chk/reader";
@@ -35,7 +35,6 @@ import type { FindKind, FindOptions, FindResult } from "../editor/find";
 import type { StringUsage } from "../editor/strings";
 import type { PlacementProblem, PlacementVerdict } from "../editor/placement";
 import type { FlingyDat, ImagesDat, Race, SpritesDat, TechdataDat, UnitsDat, UpgradesDat, WeaponsDat } from "../formats/dat/dat";
-import type { ViewFlags } from "../atoms/editorAtoms";
 import type { ScriptBlock, ScriptState } from "../editor/script";
 import type { CompileResult } from "../script/compiler";
 import type { SimulationEvent } from "../script/simulate";
@@ -45,6 +44,18 @@ import type {
 import type { MapVersion } from "../formats/chk/scenario";
 import type { ResizeResult } from "../editor/resize";
 import type { SoundRow } from "../editor/sounds";
+import type { CuwpSlotPatch, CuwpSlotView } from "../editor/cuwp";
+import type { SaveOptions } from "../editor/save";
+import type { ChangeTilesetResult } from "../editor/tileset";
+import type { TerrainPick } from "../editor/terrain";
+import type { SymmetryMode } from "../editor/symmetry";
+import type { PlacementOptions } from "../editor/placement";
+import type { DoodadPlacementOptions } from "../editor/doodads";
+import type { StartLayout, StartPlacementResult } from "../editor/startLocations";
+import type { BlendCandidate, BlendOptions, Side } from "../editor/blend";
+import type { Clip, ClipParts, PasteMode, PasteResult } from "../editor/clipboard";
+import type { StringImport } from "../editor/exchange";
+import type { Preferences } from "../editor/preferences";
 
 export type {
   TriggerRecord, ConditionRecord, ActionRecord, ConditionDef, ActionDef, ArgDef, ArgKind, Choice, TriggerNames, TextTrigger,
@@ -53,6 +64,8 @@ export type {
 };
 export type {
   PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, ResizeResult, SoundRow,
+  CuwpSlotView, CuwpSlotPatch, SaveOptions, ChangeTilesetResult, TerrainPick, SymmetryMode, PlacementOptions, DoodadPlacementOptions, StartLayout, StartPlacementResult,
+  BlendCandidate, BlendOptions, Side, Clip, ClipParts, PasteMode, PasteResult, Toast, Preferences, StringImport,
 };
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode, RebuildResult, IsomReport };
 
@@ -130,6 +143,10 @@ export interface PluginApi {
   readonly terrain: TerrainApi;
   readonly tileset: TilesetApi;
   readonly selection: SelectionApi;
+  /** Cut / Copy / Paste: the clip, its parts, and pasting — what the clipboard layer does. */
+  readonly clipboard: ClipboardApi;
+  /** The file formats behind File ▸ Import / Export: `.trg` and the strings text. */
+  readonly exchange: ExchangeApi;
   readonly palette: PaletteApi;
   readonly names: NamesApi;
   readonly query: QueryApi;
@@ -179,10 +196,30 @@ export interface EditResult {
 export type MapFileFormat = "scx" | "scm" | "chk";
 
 export interface ExportOptions {
-  /** The container: `scx` (default) or `scm` archives, `chk` the bare scenario. */
+  /** The container: the open file's (else `scx`) — `scx` / `scm` archives, `chk` the bare scenario. */
   format?: MapFileFormat;
   /** The file's name; defaults to the open file's, or the scenario name plus the format. */
   fileName?: string;
+  /**
+   * Compression, encryption and what is left out: over the options Save last used for this
+   * map (or its defaults — PKWARE and encryption for a new map, the way it was opened for
+   * an opened one), so the bytes are what Save would write unless you say otherwise.
+   */
+  saveOptions?: Partial<Omit<SaveOptions, "format">>;
+}
+
+/** `document.save` / `saveAs`. */
+export interface SaveDocumentOptions {
+  /** Write a copy: the document keeps its own name, handle and clean state. */
+  copy?: boolean;
+}
+
+export interface ChangeTilesetOptions {
+  tileset: TilesetId;
+  /** ISOM id of the terrain the map is refilled with; the tileset's default when omitted. */
+  terrainId?: number;
+  /** Keep the tile numbers and change only ERA (what SCMDraft's switch does). */
+  keepTiles?: boolean;
 }
 
 /**
@@ -208,18 +245,19 @@ export interface DocumentHistory {
   redoDepth: number;
 }
 
-/** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
+/** Scenario ▸ Resize / Crop Map's form. Width and height are clamped to 1…256, the anchor to 0…8. */
 export interface ResizeDocumentOptions {
   width: number;
   height: number;
   /** 3 × 3 grid, row-major: 0 top-left … 4 centre … 8 bottom-right. Default 4. */
   anchor?: number;
-  /** Terrain id (a `TerrainType.id`) for the new area; the tileset's default when omitted. */
+  /** ISOM id of the terrain for the new area (a `TerrainType.id`); the tileset's default when omitted. */
   terrainId?: number;
   /** Pull locations that hang past the new edge back inside; default true. */
   clampLocations?: boolean;
 }
 
+/** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
 export interface NewDocumentOptions {
   width: number;
   height: number;
@@ -274,10 +312,25 @@ export interface DocumentApi {
    */
   create(options: NewDocumentOptions): Promise<boolean>;
   /**
-   * The open map as a file, exactly as Save would write it — archive extras included.
-   * Null when no map is open.
+   * The open map as a file, as Save would write it — the remembered save options, the
+   * archive extras included — unless `saveOptions` says otherwise. Null when no map is open.
    */
   export(options?: ExportOptions): Promise<File | null>;
+  /**
+   * File ▸ Save: write the map back where it came from with the options last confirmed
+   * for it — into the file when the browser gave a handle, else through the browser's
+   * save dialog or as a download; a map with no file yet goes through the Save dialog.
+   * Resolves true once written, false when the user dismissed a dialog or the write failed
+   * (the status bar and a toast say so).
+   */
+  save(options?: SaveDocumentOptions): Promise<boolean>;
+  /** File ▸ Save As (or Save Copy As with `copy`): the Save dialog, resolving as `save` does. */
+  saveAs(options?: SaveDocumentOptions): Promise<boolean>;
+  /**
+   * File ▸ Close: through the same unsaved-changes gate as `open`. Resolves true once the
+   * map is closed (`isOpen()` is then false), false when the user kept it.
+   */
+  close(): Promise<boolean>;
   /**
    * A picture of the map as File ▸ Export ▸ Image draws it, as a PNG. `pixelsPerTile`
    * is the one dial (32 is the game's art 1:1, 1 is a minimap); the other options
@@ -293,6 +346,13 @@ export interface DocumentApi {
    * locations clamped unless `clampLocations` is false. Null with no map.
    */
   resize(options: ResizeDocumentOptions): ResizeResult | null;
+  /**
+   * Scenario ▸ Map Properties ▸ Tileset: change ERA and lay the terrain again with the
+   * new tileset's terrain (tile numbers do not carry across tilesets; the doodads go with
+   * them, everything else stays). Waits for the new graphics so the fill uses real tiles.
+   * Like `resize`, a transaction outside the undo model. Null with no map.
+   */
+  changeTileset(options: ChangeTilesetOptions): Promise<ChangeTilesetResult | null>;
   readonly extras: ExtrasApi;
   readonly sections: SectionsApi;
 }
@@ -455,6 +515,62 @@ export interface EditTransaction {
   /** Set (`"fog"`) or clear the `players` bits (bit n = player n + 1) over cells; creates MASK on first use. */
   setFog(cells: Cells, players: number, mode: FogMode): number;
 
+  /**
+   * Tools ▸ Replace Terrain: every tile matching `from` (a flat terrain by ISOM id, or
+   * one exact tile) becomes `to`, over `rect` or the whole map; pairs are laid as the
+   * Rect brush lays them. Returns tiles changed. Terrain picks need the graphics.
+   */
+  replaceTerrain(from: TerrainPick, to: TerrainPick, rect?: Rect): number;
+  /**
+   * The bucket fill: the 4-connected area around (x, y) of the same terrain type (`match:
+   * "terrain"`, the Rect fill) or the same exact tile (`"tile"`), laid with `terrainId`
+   * as the Rect brush would, or set to `tileId`. Returns tiles changed.
+   */
+  fillArea(x: number, y: number, fill: { terrainId: number } | { tileId: number }, match?: "terrain" | "tile"): number;
+  /**
+   * The Blend brush: `id` goes on the cell beside the anchor tile on `side`
+   * (`terrain.blendCandidates` ranks what fits). Returns whether the cell was on the map.
+   */
+  placeBlend(x: number, y: number, side: Side, id: number): boolean;
+  /**
+   * What StarEdit does after an isometric edit: regenerate every tile from the ISOM
+   * lattice (the reverse of `rebuildIsom`). Needs ISOM and the graphics; returns tiles
+   * changed, or null without them.
+   */
+  tilesFromIsom(): number | null;
+  /**
+   * The cells and their images under the symmetry mode (Tools ▸ Symmetry…), each once —
+   * what the built-in brushes paint over. With the mode off, the cells as given.
+   */
+  mirror(cells: Cells): number[];
+  /** A map pixel and its images under the symmetry mode, the original first. */
+  mirrorPoint(px: number, py: number): { x: number; y: number }[];
+
+  /** Shift units by a pixel delta; buildings re-snap to the grid when `snap` (the palette's option when omitted). Returns records changed. */
+  moveUnits(indices: number[], dx: number, dy: number, snap?: boolean): number;
+  /**
+   * Tools ▸ Auto-place Start Locations: one per player on a ring or in the corners, each
+   * moved to the nearest spot the placement checks accept; `replace` removes the existing
+   * ones first. Players count from 1.
+   */
+  placeStartLocations(options: { players: number; layout?: StartLayout; margin?: number; replace?: boolean }): StartPlacementResult;
+
+  updateSprites(indices: number[], patch: (r: SpriteRecord) => Partial<SpriteRecord>): number;
+  /** Shift sprites by a pixel delta, clamped to the map. Returns records changed. */
+  moveSprites(indices: number[], dx: number, dy: number): number;
+  /** Change a doodad's owner or disabled flag (its tiles stay). Returns records changed. */
+  updateDoodads(indices: number[], patch: { owner?: number; disabled?: number }): number;
+
+  /** Put Anywhere (slot 63) back to the whole map; returns whether it had to move. */
+  restoreAnywhere(): boolean;
+
+  /** Flip every tile's fog bit for `players`; returns tiles changed. */
+  invertFog(players: number): number;
+  /** Copy one player's fog (0-based) onto the players in the `to` bit mask (bit n = player n + 1); returns tiles changed. */
+  copyFog(from: number, to: number): number;
+  /** Fog or clear the connected area around (x, y) that shares `player`'s fog state, for `players`; returns tiles changed. */
+  floodFog(x: number, y: number, player: number, players: number, mode: FogMode): number;
+
   /** A line for the status bar, appended to the label. */
   note(text: string): void;
 }
@@ -505,6 +621,11 @@ export interface StringsUpdate {
   set(index: number, text: string): void;
   /** Install a whole table; unreferenced trailing blanks are dropped, other indices keep their place. */
   apply(list: (string | null)[]): void;
+  /**
+   * File ▸ Import ▸ Strings: `index<TAB>text` lines (`exchange.formatStrings` writes
+   * them) set in place, indices past the end appended. Returns how many were replaced and added.
+   */
+  import(text: string): { replaced: number; added: number };
 }
 
 export interface SwitchesUpdate {
@@ -542,6 +663,8 @@ export interface UpdateTransaction {
   readonly techs: TechsUpdate;
   /** WAV and the archive's sound files: the Sound Editor. */
   readonly sounds: SoundsUpdate;
+  /** UPRP / UPUS: the Create Unit with Properties slots (Triggers ▸ Unit Properties Slots…). */
+  readonly cuwp: CuwpUpdate;
   /** Scenario ▸ Map Revision: VER / TYPE and, moving to or from Remastered, the string table's width. */
   setVersion(version: MapVersion, extendedStrings?: boolean): void;
   /** A line for the status bar, appended to the label. */
@@ -594,6 +717,24 @@ export interface SoundsUpdate {
   remove(slot: number, deleteFile?: boolean): boolean;
 }
 
+/**
+ * The 64 Create Unit with Properties slots. A slot is addressed 0-based here; the action
+ * that uses one stores the number 1-based (`target` = slot + 1), as `CuwpSlotView.index`
+ * + 1. A view's field is `null` where the created units keep the type's default.
+ */
+export interface CuwpUpdate {
+  list(): CuwpSlotView[];
+  get(index: number): CuwpSlotView | null;
+  /**
+   * Patch one slot: a number sets the field and its "applied" bit, `null` clears the bit;
+   * a boolean forces a special state, `null` leaves it to the unit. `used` is StarEdit's
+   * "in use" tick, on by itself once the slot sets anything.
+   */
+  set(index: number, patch: CuwpSlotPatch, used?: boolean): boolean;
+  /** Back to an empty, unticked slot. */
+  clear(index: number): boolean;
+}
+
 /* ── Settings (read) ────────────────────────────────────── */
 
 /**
@@ -613,6 +754,11 @@ export interface SettingsApi {
   tech(techId: number): TechView | null;
   techs(): TechView[];
   sounds(): SoundRow[];
+  /** Whether a player (0-based) may build a unit type — PUNI's per-player byte resolved against its global default. */
+  unitAvailable(player: number, unitId: number): boolean;
+  /** The Create Unit with Properties slots, 0-based, with how many actions name each. */
+  cuwpSlots(): CuwpSlotView[];
+  cuwpSlot(index: number): CuwpSlotView | null;
   version(): MapVersionView | null;
 }
 
@@ -728,6 +874,8 @@ export interface ScriptApi {
   build(source: string, options?: { takeOver?: boolean }): Promise<ScriptBuildResult>;
   /** Records as raw `trigger()` calls in the script language — what Import map triggers writes. */
   print(triggers: TriggerRecord[]): string;
+  /** The index (in the map's trigger list) of the trigger a 1-based source line generated, per the build manifest; null when none did or the block is stale. */
+  triggerAtLine(line: number): number | null;
   /**
    * Run the trigger-cycle interpreter over records: Deaths, Switch, Always and Never
    * are modelled, other conditions count as false, other actions are logged as events.
@@ -775,8 +923,12 @@ export interface QueryApi {
   locationsIn(rect: Rect): number[];
   /** The map's start locations, by player. */
   startLocations(): StartLocation[];
-  /** Whether a unit type may be placed centred there, and what stops it. */
-  placement(unitId: number, x: number, y: number): PlacementVerdict;
+  /** Whether a unit type may be placed centred there, and what stops it; null with no map. */
+  placement(unitId: number, x: number, y: number): PlacementVerdict | null;
+  /** The MASK bits at a tile: bit n set = player n + 1 starts fogged there (every bit when the map has no MASK). */
+  fogAt(tx: number, ty: number): number;
+  /** The string table as it stands (index 0 is nothing); empty with no map. */
+  strings(): (string | null)[];
   /** Check Map: every issue the editor knows how to spot, with a `target` to go to. */
   validate(): Issue[];
   /** Tools ▸ Statistics: tile, unit, resource and player counts. Null without a map. */
@@ -938,6 +1090,8 @@ export interface ActiveBrush {
   /** The Tile brush's MTXM id. */
   tile: number;
   brushSize: number;
+  /** The Rect brush's variation slot, or -1 for a random one per pair. */
+  variation: number;
 }
 
 export interface TerrainApi {
@@ -973,6 +1127,25 @@ export interface TerrainApi {
   isDiamond(d: Diamond): boolean;
   /** Every in-bounds diamond whose centre tile lies in `rect`, row by row. */
   diamondsIn(rect: Rect): Diamond[];
+  /** The 4-connected area around a tile of the same terrain type (`"terrain"`, the Rect fill's reading) or the same exact tile (`"tile"`), as flat indices. */
+  floodRegion(x: number, y: number, match?: "terrain" | "tile"): number[];
+  /**
+   * The Blend brush's list: drawable tiles whose opposite edge meets the anchor tile's
+   * `side`, nearest first, with the pixel distance (`0..255`, designed pairs 0.2–8).
+   * Empty without the graphics.
+   */
+  blendCandidates(anchorTileId: number, side: Side, options?: Partial<BlendOptions>): BlendCandidate[];
+  /** The Rect brush's terrain, in the tileset's own terms: the even CV5 group of a flat pair, or -1. */
+  flatGroupOf(terrainId: number): number;
+  /** Tools ▸ Symmetry…: the mode the brushes paint and the palettes place under. */
+  symmetry(): SymmetryMode;
+  setSymmetry(mode: SymmetryMode): void;
+  /** Whether a mode can run on the open map (the rotations and diagonals need a square one). */
+  symmetryAvailable(mode: SymmetryMode): boolean;
+  /** Flat indices of `cells` and their images under the symmetry mode, each once. */
+  mirror(cells: Rect | Iterable<number>): number[];
+  /** A map pixel and its images under the symmetry mode, the original first. */
+  mirrorPoint(px: number, py: number): { x: number; y: number }[];
   active(): ActiveBrush;
   setActive(brush: Partial<ActiveBrush>): void;
 }
@@ -1002,6 +1175,74 @@ export interface SelectionApi {
   setLocations(indices: number[]): void;
   layer(): EditorLayer;
   setLayer(layer: EditorLayer): void;
+  /** Layers the Layers panel has locked: their tools refuse to change the map. */
+  lockedLayers(): EditorLayer[];
+  setLayerLocked(layer: EditorLayer, locked: boolean): void;
+}
+
+/* ── Clipboard ──────────────────────────────────────────── */
+
+/** What `clipboard.copy` / `cut` take: the marked area (or any tile rect), or objects by index. */
+export type ClipSource =
+  | { rect: Rect }
+  | { units?: number[]; sprites?: number[]; doodads?: number[]; locations?: number[] };
+
+export interface PasteOptionsSpec {
+  /** Over what `clipboard.parts()` says. */
+  parts?: Partial<ClipParts>;
+  /** Over `clipboard.mode()`. */
+  mode?: PasteMode;
+}
+
+/**
+ * The Cut / Copy / Paste layer. The clip is self-contained (it outlives the map it came
+ * from and pastes into another) and shared with the user's own clipboard, so a plugin
+ * that copies here is copying for the user too.
+ */
+export interface ClipboardApi {
+  /** What is on the clipboard, or null. */
+  clip(): Clip | null;
+  /** Put a clip on the clipboard (one from `copy`, or built elsewhere); null clears it. */
+  setClip(clip: Clip | null): void;
+  /**
+   * Copy a source — the marked area when omitted (or, on an object layer, that layer's
+   * selection, as Ctrl+C does) — with the parts ticked in `parts()`. Null when there is
+   * nothing to copy.
+   */
+  copy(source?: ClipSource): Clip | null;
+  /** Copy, then remove the source's objects as one undo step (terrain and fog stay). Null when there was nothing. */
+  cut(source?: ClipSource): Clip | null;
+  /**
+   * Stamp the clip with its top-left tile at (tx, ty), one undo step; the pasted area
+   * becomes the marked one. Null when there is no clip or no map.
+   */
+  paste(tx: number, ty: number, options?: PasteOptionsSpec): PasteResult | null;
+  parts(): ClipParts;
+  setParts(patch: Partial<ClipParts>): void;
+  mode(): PasteMode;
+  setMode(mode: PasteMode): void;
+  /** Whether the clipboard layer is armed: the next click on the map pastes. */
+  pasting(): boolean;
+  /** Arm pasting (switches to the clipboard layer) or stop. */
+  setPasting(on: boolean): void;
+  /** One line for a clip: `12 × 8 tiles · 3 units · 2 doodads`. */
+  summary(clip: Clip): string;
+}
+
+/* ── Import / export formats ────────────────────────────── */
+
+/**
+ * The file formats File ▸ Import / Export read and write, so a plugin can keep triggers
+ * or strings outside the map in a form the editor (and SCMDraft) take back.
+ */
+export interface ExchangeApi {
+  /** Raw 2400-byte TRIG records, SCMDraft's `.trg`; string indices are the map's own. */
+  encodeTrg(triggers: TriggerRecord[]): Uint8Array;
+  decodeTrg(bytes: Uint8Array): TriggerRecord[];
+  /** The whole string table as `index<TAB>text` lines, control bytes as `<XX>`. */
+  formatStrings(): string;
+  /** Parse that form (`errors` names the lines that were not `N<TAB>text`); `tx.strings.import` applies it. */
+  parseStrings(text: string): StringImport;
 }
 
 /* ── Palettes ───────────────────────────────────────────── */
@@ -1012,6 +1253,8 @@ export interface SelectionApi {
  * `terrain.active()`.) Players are 0-based: `owner` 0 is Player 1.
  */
 export interface PaletteChoice {
+  /** The player whose fog the Fog of War layer draws, 0-based. */
+  fogViewPlayer: number;
   /** units.dat id the Units palette places. */
   unit: number;
   /** The player it places for, 0–11. */
@@ -1052,8 +1295,17 @@ export interface DoodadInfo {
 export interface PaletteApi {
   active(): PaletteChoice;
   setActive(choice: Partial<PaletteChoice>): void;
-  /** The colour a player's units are shown in, `#rrggbb`. */
+  /** The colour a player's units are shown in, `#rrggbb` (the same as `graphics.playerColor`). */
   playerColor(owner: number): string;
+  /** The Units palette's placement checks and snapping — what `placeUnit`, `canPlaceUnit` and `query.placement` apply, and whether an edit removes stranded units. */
+  placementOptions(): PlacementOptions;
+  setPlacementOptions(patch: Partial<PlacementOptions>): void;
+  /** The Doodads palette's rules: place anywhere, snap to grid. */
+  doodadPlacement(): DoodadPlacementOptions;
+  setDoodadPlacement(patch: Partial<DoodadPlacementOptions>): void;
+  /** The Locations layer's snap step in pixels, 0 for off. */
+  locationSnap(): number;
+  setLocationSnap(step: 0 | 8 | 16 | 32 | 64): void;
 
   /** Every unit type, grouped the way the Units palette lists them. */
   unitGroups(): UnitGroup[];
@@ -1320,7 +1572,18 @@ export interface PickFilesOptions {
 }
 
 export interface UiApi {
+  /** Set the status bar line. */
   status(text: string): void;
+  /** The status bar line as it stands. */
+  statusText(): string;
+  /** A short notice over the map that leaves by itself — how Save reports; `ttl` 0 keeps it until dismissed. */
+  toast(toast: { kind?: Toast["kind"]; title: string; detail?: string; ttl?: number }): void;
+  /**
+   * Write a file to disk the way the editor's own exports do: into the file the browser's
+   * save dialog picks, or as a download where there is no dialog. Resolves with where it
+   * went, or null when the user dismissed the dialog.
+   */
+  saveFile(data: Blob | Uint8Array, fileName: string): Promise<{ route: "picker" | "download"; fileName: string } | null>;
   dialog(spec: DialogSpec): DialogHandle;
   /** Open a floating panel over the map. As many as you like; each closes with the plugin. */
   panel(spec: PanelSpec): PanelHandle;
@@ -1369,9 +1632,14 @@ export interface UiApi {
   el<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Record<string, unknown>, ...children: WidgetChild[]): HTMLElementTagNameMap[K];
   /** Buttons, fields, forms and lists in the editor's own styles. */
   readonly widgets: WidgetsApi;
-  /** Open a built-in dialog. */
+  /** Open a built-in dialog (fire and forget; `ask` waits for one that answers). */
   open(dialog: DialogId, payload?: Record<string, unknown>): void;
-  /** Ask the viewport to repaint (a transaction does this by itself). */
+  /**
+   * Open a built-in dialog that answers — `"saveAs"`, `"confirmClose"`, `"newMap"` — and
+   * resolve true when it went through, false when it was dismissed.
+   */
+  ask(dialog: DialogId, payload?: Record<string, unknown>): Promise<boolean>;
+  /** Ask the viewport to repaint (a transaction does this by itself). Raises no event. */
   repaint(): void;
 }
 
@@ -1589,6 +1857,7 @@ export interface HotkeyApi {
 export type PluginEvent =
   /** A map was opened, closed or replaced. */
   | "document"
+  /** Any committed edit (every `document.edit`, stroke, undo and redo bumps it, terrain or not), and a fog edit. */
   | "terrain"
   | "units"
   | "doodads"
@@ -1608,7 +1877,11 @@ export type PluginEvent =
   /** The map's unsaved-changes flag changed. */
   | "modified"
   /** A palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog players. */
-  | "palette";
+  | "palette"
+  /** An editing option moved: symmetry, placement rules, doodad rules, location snap, the fog view player, clip parts and paste mode, locked layers, the grid look, Preferences. */
+  | "options"
+  /** The document's file changed: its name or handle after a Save, the save options, the archive extras, the recent list. */
+  | "file";
 
 /** Why the document changed. */
 export type DocumentChangeReason =

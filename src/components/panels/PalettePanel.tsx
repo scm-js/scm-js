@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
-  Brush,
   ChevronDown,
   ChevronRight,
   CloudFog,
@@ -70,7 +69,7 @@ import { DoodadThumb } from "./DoodadThumb";
 import type { DoodadCategory, DoodadDef } from "../../formats/tileset/doodads";
 import { useDoodadTools } from "../../hooks/useDoodadTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { CLIP_PARTS, clipSummary, type ClipPart } from "../../editor/clipboard";
+import { ALL_CLIP_PARTS, CLIP_PARTS, clipSummary, DEFAULT_CLIP_PARTS, type ClipPart } from "../../editor/clipboard";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
@@ -682,6 +681,10 @@ function ClipboardPalette() {
               <Check key={p} label={CLIP_PART_LABELS[p]} checked={parts[p]} onChange={(e) => setParts({ ...parts, [p]: e.target.checked })} />
             ))}
           </div>
+          <div className="row" style={{ gap: 4, marginTop: 6 }}>
+            <Button size="sm" onClick={() => setParts(ALL_CLIP_PARTS)} title="Terrain, doodads, units, sprites, locations and fog">Everything</Button>
+            <Button size="sm" onClick={() => setParts(DEFAULT_CLIP_PARTS)} title="The picture and what stands on it; locations and fog left out">Default</Button>
+          </div>
           <div className="hint" style={{ marginTop: 6 }}>What a copy takes and a paste lays down. Terrain carries the ground under its doodads, so a paste without them shows plain ground.</div>
         </fieldset>
         <fieldset className="group" style={{ marginTop: 10 }}>
@@ -729,10 +732,6 @@ export default function PalettePanel() {
             </Tip>
           </span>
         ))}
-        <span className="rail-sep" />
-        <Tip label="Brush settings" side="right">
-          <button className="rail-btn"><Brush size={16} /></button>
-        </Tip>
       </div>
       <div className="palette-main">{body}</div>
     </div>

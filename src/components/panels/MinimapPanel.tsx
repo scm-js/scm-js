@@ -7,7 +7,6 @@ import {
 import { fogImageData } from "../viewport/fog";
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { TILESET_BY_ID } from "../../data/tilesets";
-import { SAMPLE_START_LOCATIONS } from "../../data/samples";
 import { displayColorHex } from "../../data/players";
 import { isResource, unitGeometry } from "../../editor/units";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
@@ -36,7 +35,7 @@ export default function MinimapPanel() {
   const mapStarts = useAtomValue(startLocationsAtom);
   const locations = mapLocations;
   const selectedLocations = useAtomValue(selectedLocationsAtom);
-  const startLocations = scenario ? mapStarts : SAMPLE_START_LOCATIONS;
+  const startLocations = scenario ? mapStarts : [];
 
   useEffect(() => {
     const c = ref.current;

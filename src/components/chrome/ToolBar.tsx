@@ -21,7 +21,7 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, zoomToFitAtom, type EditorLayer } from "../../atoms/editorAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
@@ -44,6 +44,7 @@ const Sep = () => <span className="tb-sep" />;
 
 export default function ToolBar() {
   const open = useSetAtom(openDialogAtom);
+  const zoomToFit = useSetAtom(zoomToFitAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const { save } = useMapFileActions();
   const [undoLabel, undo] = useAtom(undoAtom);
@@ -100,12 +101,12 @@ export default function ToolBar() {
       <TB icon={ZoomOut} label="Zoom Out" shortcut="Ctrl+−" onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
       <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
       <TB icon={ZoomIn} label="Zoom In" shortcut="Ctrl++" onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
-      <TB icon={Maximize} label="Zoom to Fit" shortcut="Ctrl+Shift+0" onClick={() => setZoom(0.25)} />
+      <TB icon={Maximize} label="Zoom to Fit" shortcut="Ctrl+Shift+0" onClick={() => { zoomToFit(); }} />
       <span className="tb-spacer" />
       <TB icon={Users} label="Player Settings…" onClick={dlg("playerSettings")} text="Players" />
       <TB icon={Zap} label="Trigger Editor…" shortcut="Ctrl+T" onClick={dlg("triggerEditor")} text="Triggers" accent />
       <Sep />
-      <TB icon={Play} label="Test Map (coming soon)" shortcut="Ctrl+F5" disabled text="Test" />
+      <TB icon={Play} label="Test Map — write the map where StarCraft lists it" shortcut="Ctrl+F5" onClick={() => open("testMap", { run: true })} text="Test" />
     </div>
   );
 }

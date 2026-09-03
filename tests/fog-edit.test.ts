@@ -3,7 +3,7 @@ import { createScenario } from "../src/formats/chk/create";
 import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
 import {
   ALL_FOG_PLAYERS, applyFogChanges, copyFog, defaultMask, ensureMask, fillFog, floodFog, fogByte, fogCount, fogPlayersAt,
-  invertFog, isFogged, paintFog, paintFogAt, playerBit,
+  invertFog, isFogged, paintFog, playerBit,
 } from "../src/editor/fog";
 import { Stroke } from "../src/editor/terrain";
 
@@ -17,6 +17,16 @@ function fresh(width = 8, height = 8) {
 /** A blank map that still serialises every section a new file needs (DIM included). */
 function whole(width: number, height: number) {
   return createScenario({ name: "t", description: "", width, height, tileset: 4 });
+}
+
+import { brushRect } from "../src/editor/terrain";
+
+/** One N×N brush application centred on (x, y): the cells of the terrain brushes' footprint. */
+function paintFogAt(scn: Parameters<typeof paintFog>[0], x: number, y: number, size: number, players: number, mode: "fog" | "clear") {
+  const r = brushRect(x, y, size, scn.width, scn.height);
+  const cells: number[] = [];
+  for (let ty = r.y0; ty < r.y1; ty++) for (let tx = r.x0; tx < r.x1; tx++) cells.push(ty * scn.width + tx);
+  return paintFog(scn, cells, players, mode);
 }
 
 describe("fog bytes", () => {

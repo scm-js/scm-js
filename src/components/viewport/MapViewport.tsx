@@ -40,13 +40,16 @@ import {
   terrainModeAtom,
   unitOwnerAtom,
   unitPlacingAtom,
+  lockedLayersAtom,
+  cursorPixelAtom,
+  viewportRepaintAtom,
   viewFlagsAtom,
   viewportRectAtom,
   zoomAtom,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
 import { gridLookAtom } from "../../atoms/preferencesAtoms";
-import { openDialogAtom } from "../../atoms/uiAtoms";
+import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
@@ -80,10 +83,10 @@ import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
 import { diamondAt } from "../../editor/isom";
 import { atlasSource, setAtlasStep } from "../../formats/tileset/atlas";
 import { cycleStepAt, GAME_FRAME_MS } from "../../formats/tileset/cycle";
-import { megatileForTile } from "../../formats/tileset/decode";
+import { groupBuildable, groupHeight, megatileForTile, minitileHeight } from "../../formats/tileset/decode";
+import { LAYERS } from "../chrome/MenuBar";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex, playerTeamColor } from "../../data/players";
-import { SAMPLE_START_LOCATIONS } from "../../data/samples";
 import { hashNoise } from "./noise";
 
 const TILE = 32;
@@ -162,6 +165,10 @@ export default function MapViewport() {
   const gridSize = useAtomValue(gridSizeAtom);
   const gridLook = useAtomValue(gridLookAtom);
   const layer = useAtomValue(activeLayerAtom);
+  const lockedLayers = useAtomValue(lockedLayersAtom);
+  const repaintRequest = useAtomValue(viewportRepaintAtom);
+  const setStatus = useSetAtom(statusMessageAtom);
+  const setCursorPixel = useSetAtom(cursorPixelAtom);
   const brush = useAtomValue(brushSizeAtom);
   const terrainMode = useAtomValue(terrainModeAtom);
   const symmetry = useAtomValue(symmetryAtom);
@@ -251,7 +258,7 @@ export default function MapViewport() {
   const showFog = scenario !== null && flags.fog;
   const locations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
-  const startLocations = scenario ? mapStarts : SAMPLE_START_LOCATIONS;
+  const startLocations = scenario ? mapStarts : [];
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
 
   const tilePx = TILE * zoom;
@@ -296,8 +303,8 @@ export default function MapViewport() {
       }
     };
 
-    // terrain
-    const tiles = scenario?.tiles;
+    // terrain — with View ▸ Doodads off, the ground the doodads stand on (TILE) instead of the picture (MTXM)
+    const tiles = scenario ? (flags.doodads ? scenario.tiles : scenario.editorTiles) : undefined;
     let animatedInView = false;
     if (tiles && tilesetAssets) {
       const { atlas, tileset: ts } = tilesetAssets;
@@ -391,6 +398,49 @@ export default function MapViewport() {
           if (arm > 0) ctx.stroke(); else ctx.fill();
         }
         ctx.globalAlpha = 1;
+      }
+    }
+
+    // elevation / buildability overlays (View menu): what the minitile flags say about the ground —
+    // ground height as a tint per minitile (mid amber, high red), unbuildable groups hatched in blue.
+    if ((flags.elevation || flags.buildability) && tiles && tilesetAssets && tilePx >= 4) {
+      const ts = tilesetAssets.tileset;
+      const mini = tilePx / 4;
+      const perMini = mini >= 2;
+      for (let ty = y0; ty < y1; ty++) {
+        for (let tx = x0; tx < x1; tx++) {
+          const id = tiles[ty * mapW + tx];
+          const megatile = megatileForTile(ts, id);
+          const px = tx * tilePx - sx, py = ty * tilePx - sy;
+          if (flags.elevation && megatile >= 0) {
+            if (perMini) {
+              for (let m = 0; m < 16; m++) {
+                const h = minitileHeight(ts, megatile, m);
+                if (h === 0) continue;
+                ctx.fillStyle = h === 2 ? "rgba(240,90,90,0.32)" : "rgba(230,185,92,0.30)";
+                ctx.fillRect(px + (m % 4) * mini, py + Math.floor(m / 4) * mini, mini + 0.5, mini + 0.5);
+              }
+            } else {
+              const h = groupHeight(ts.groups[id >> 4] ?? ts.groups[0]);
+              if (h > 0) { ctx.fillStyle = h === 2 ? "rgba(240,90,90,0.32)" : "rgba(230,185,92,0.30)"; ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5); }
+            }
+          }
+          if (flags.buildability) {
+            const g = ts.groups[id >> 4];
+            if (g && !groupBuildable(g)) {
+              ctx.fillStyle = "rgba(80,140,240,0.26)";
+              ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+              if (tilePx >= 12) {
+                ctx.strokeStyle = "rgba(80,140,240,0.55)";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(px, py + tilePx);
+                ctx.lineTo(px + tilePx, py);
+                ctx.stroke();
+              }
+            }
+          }
+        }
       }
     }
 
@@ -732,8 +782,8 @@ export default function MapViewport() {
     ctx.lineWidth = 1;
     ctx.strokeRect(-sx + 0.5, -sy + 0.5, worldW - 1, worldH - 1);
 
-    // symmetry axes (Tools ▸ Symmetry…): the mirror lines the Rect, Tile and Fog brushes paint across
-    if (symmetry !== "none" && (layer === "terrain" || layer === "fog") && symmetryAvailable(symmetry, mapW, mapH)) {
+    // symmetry axes (Tools ▸ Symmetry…): the mirror lines the brushes paint and the palettes place across
+    if (symmetry !== "none" && layer !== "clipboard" && symmetryAvailable(symmetry, mapW, mapH)) {
       const axes = symmetryAxes(symmetry, mapW, mapH);
       ctx.strokeStyle = "rgba(142,240,164,0.85)";
       ctx.lineWidth = 1;
@@ -912,31 +962,29 @@ export default function MapViewport() {
     } else if (hv && hp && spritePlacing && !spriteGestureRef.current) {
       // Where the active sprite would land: its graphic at half strength (a marker while
       // the GRP loads) inside its frame box. Sprites have no placement rules to fail.
-      const ghost = spriteTools.ghostAt(hp);
-      if (ghost) {
+      // Under a symmetry mode the images follow, drawn fainter.
+      spriteTools.ghostsAt(hp).forEach((ghost, i) => {
         const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
         ctx.imageSmoothingEnabled = zoom < 1;
-        if (!drawThg2Sprite(ghost.id, ghost.flags, ghost.owner, gx, gy, 0.6)) drawSpriteMarker(gx, gy);
+        if (!drawThg2Sprite(ghost.id, ghost.flags, ghost.owner, gx, gy, i === 0 ? 0.6 : 0.4)) drawSpriteMarker(gx, gy);
         ctx.imageSmoothingEnabled = true;
         const b = ghost.box;
         ctx.strokeStyle = "#e6b95c";
         ctx.lineWidth = 1;
         ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom) - 1, Math.round((b.bottom - b.top) * zoom) - 1);
-      }
+      });
     } else if (hv && hp && doodadPlacing && !doodadGestureRef.current) {
-      const ghost = doodadTools.ghostAt(hp);
-      if (ghost) drawDoodadGhost(ghost, ghost.verdict.ok ? 0.75 : 0.45);
+      doodadTools.ghostsAt(hp).forEach((ghost, i) => drawDoodadGhost(ghost, ghost.verdict.ok ? (i === 0 ? 0.75 : 0.5) : 0.45));
     } else if (hp && unitsEditing && unitGestureRef.current?.mode === "marquee") {
       drawMarquee(unitGestureRef.current);
     } else if (hv && hp && unitPlacing && !unitGestureRef.current) {
       // Where the active unit would land: its sprite at half strength, and the box that
       // snaps to the grid for buildings (the collision box for everything else). Red when
       // the placement checks would refuse the spot, with the unit in the way outlined.
-      const ghost = unitTools.ghostAt(hp);
-      if (ghost) {
+      unitTools.ghostsAt(hp).forEach((ghost, i) => {
         const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
         ctx.imageSmoothingEnabled = zoom < 1;
-        const drawn = drawUnitSprite(ghost.unitId, ghost.owner, gx, gy, ghost.problem ? 0.35 : 0.6);
+        const drawn = drawUnitSprite(ghost.unitId, ghost.owner, gx, gy, ghost.problem ? 0.35 : i === 0 ? 0.6 : 0.4);
         ctx.imageSmoothingEnabled = true;
         const b = ghost.geometry.building ? placementBox(ghost.geometry, ghost.x, ghost.y) : unitBox(ghost.geometry, ghost.x, ghost.y);
         const bx = b.left * zoom - sx, by = b.top * zoom - sy, bw = (b.right - b.left) * zoom, bh = (b.bottom - b.top) * zoom;
@@ -954,7 +1002,7 @@ export default function MapViewport() {
           ctx.strokeRect(Math.round(ob.left * zoom - sx) + 0.5, Math.round(ob.top * zoom - sy) + 0.5, Math.round((ob.right - ob.left) * zoom), Math.round((ob.bottom - ob.top) * zoom));
           ctx.setLineDash([]);
         }
-      }
+      });
     } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing && !clipEditing) {
       const b = (layer === "terrain" && !blending) || layer === "fog" ? brush : 1;
       const off = Math.floor((b - 1) / 2);
@@ -1051,11 +1099,14 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry, repaintRequest]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
   useAutoShow(layer === "locations", "locations", setFlags);
+  useAutoShow(layer === "units", "units", setFlags);
+  useAutoShow(layer === "sprites", "sprites", setFlags);
+  useAutoShow(layer === "doodads", "doodads", setFlags);
   // The Locations layer sets its own pointer cursor (move / resize); drop it on leaving.
   useEffect(() => {
     if (layer !== "locations" && surfaceRef.current) surfaceRef.current.style.cursor = "";
@@ -1182,6 +1233,11 @@ export default function MapViewport() {
     if (e.button !== 0) return;
     const t = tileAt(e);
     if (!inMap(t)) return;
+    // A layer locked in the Layers panel takes no edits; a plugin's tool or pick still runs.
+    if (!tooling && !picking && lockedLayers[layer]) {
+      setStatus(`The ${LAYERS.find((l) => l.id === layer)?.label ?? layer} layer is locked — unlock it in the Layers panel to edit`);
+      return;
+    }
     if (tooling) {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -1308,6 +1364,7 @@ export default function MapViewport() {
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = tileAt(e);
     const point = pointAt(e);
+    setCursorPixel({ x: Math.max(0, Math.min(worldW, Math.round(point.px))), y: Math.max(0, Math.min(worldH, Math.round(point.py))) });
     if (overlays.length) hoverOverlays(toolPointer(e, (e.buttons & 1) !== 0));
     if (tooling || toolDownRef.current) {
       const c = clampToMap(t);
@@ -1629,7 +1686,7 @@ export default function MapViewport() {
     { label: "Paste Here", disabled: !scenario || !clip, onSelect: withMenuTile((x, y) => { clipTools.pasteAt(x, y); }) },
     { label: "Paste", disabled: !scenario || !clip, onSelect: () => { clipTools.paste(); } },
     { label: "", sep: true },
-    { label: "Center Minimap Here", onSelect: () => open("notImplemented", { feature: "Center Minimap" }) },
+    { label: "Center View Here", disabled: !scenario, onSelect: withMenuTile((x, y) => clearCenterOn({ x: x + 0.5, y: y + 0.5 })) },
     { label: "Map Properties…", onSelect: () => open("mapProperties") },
   ];
   // What plugins registered for the map, after their own separator.

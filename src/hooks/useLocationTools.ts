@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
-import { centerViewOnAtom, locationSnapAtom, selectedLocationsAtom, viewportRectAtom } from "../atoms/editorAtoms";
+import { centerViewOnAtom, locationSnapAtom, selectedLocationsAtom, symmetryAtom, viewportRectAtom } from "../atoms/editorAtoms";
+import { mirrorBox } from "../editor/symmetry";
 import { commitEditAtom, deleteSelectedLocationsAtom, locationsRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -98,24 +99,37 @@ export function useLocationTools() {
     return scn ? dragBounds(from, to, snap(), scn) : null;
   }, [store, snap]);
 
-  /** Make a location in the lowest free slot; returns its index, or -1 when there is no room. */
+  /**
+   * Make a location in the lowest free slot — and, under a symmetry mode, one per image of
+   * its box, as one undo step; returns the first's index, or -1 when there is no room.
+   */
   const create = useCallback((bounds: Bounds, name?: string): number => {
     const scn = store.get(scenarioAtom);
     if (!scn) return -1;
     ensureLocationSlots(scn);
-    const { index, changes } = addLocation(scn, bounds, name);
-    if (index < 0) {
+    const boxes = mirrorBox(store.get(symmetryAtom), bounds, scn.width, scn.height);
+    const all: LocationChange[] = [];
+    const made: number[] = [];
+    for (const box of boxes) {
+      const { index, changes } = addLocation(scn, box, name);
+      if (index < 0) break;
+      applyLocationChanges(scn, changes);
+      all.push(...changes);
+      made.push(index);
+    }
+    if (made.length === 0) {
       setStatus(`All ${locationCapacity(scn) - 1} location slots are in use — delete one first`);
       return -1;
     }
-    const restored = changes.some((c) => c.index === ANYWHERE_INDEX);
-    const b = changes[changes.length - 1].after;
-    run(`Create location ${locationName(scn, index) === `Location ${index}` ? index : ""}`.trimEnd(), changes);
-    // The label above is computed before the change applies; recompute the name now that it has.
-    setStatus(`Created location ${index} "${locationName(scn, index)}" at ${at(b)} — ${tiles(b)}${restored ? " · restored Anywhere in slot 63" : ""}`);
-    setSelected([index]);
+    const index = made[0];
+    const restored = all.some((c) => c.index === ANYWHERE_INDEX);
+    const b = scn.locations[index];
+    // `run` applies the list; the boxes are already in place, so hand it an empty apply — commit only.
+    commit({ label: made.length === 1 ? `Create location ${locationName(scn, index) === `Location ${index}` ? index : ""}`.trimEnd() : `Create ${made.length} locations`, changes: [], locations: all });
+    setStatus(`Created location ${index} "${locationName(scn, index)}" at ${at(b)} — ${tiles(b)}${made.length > 1 ? ` and ${made.length - 1} mirror image${made.length === 2 ? "" : "s"}` : ""}${restored ? " · restored Anywhere in slot 63" : ""}${made.length < boxes.length ? " · the table filled up before every image was made" : ""}`);
+    setSelected(made);
     return index;
-  }, [store, run, setStatus, setSelected]);
+  }, [store, commit, setStatus, setSelected]);
 
   /** The palette's New button: a 4×4-tile location in the middle of the view. */
   const createInView = useCallback((): number => {

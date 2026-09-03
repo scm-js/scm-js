@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Construction, FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
+import { FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
 import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
-import { closeDialogAtom, openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_NEW_MAP, saveDocument, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
@@ -113,9 +113,18 @@ export function OpenMapDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const load = useSetAtom(loadDocumentAtom);
-  const { guard } = useMapFileActions();
+  const { guard, openRecent } = useMapFileActions();
   const modified = useAtomValue(mapModifiedAtom);
   const prefs = useAtomValue(preferencesAtom);
+  const reopen = async (i: number) => {
+    const r = recents[i];
+    if (!r?.handleKey) { setError(`${r?.name ?? "This file"} cannot be reopened from here — browse for it.`); return; }
+    setBusy(true);
+    setError(null);
+    const ok = await openRecent(r);
+    setBusy(false);
+    if (ok) close(entry.key);
+  };
 
   const accept = useCallback(async (picked: PickedMapFile | null) => {
     if (!picked) return;
@@ -154,7 +163,8 @@ export function OpenMapDialog({ entry }: DialogProps) {
       onOk={() => { void accept(null); }}
       footer={
         <>
-          <Button variant="primary" disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>
+          {sel !== null && recents[sel]?.handleKey && <Button variant="primary" disabled={busy} onClick={() => { void reopen(sel); }}>Open {recents[sel].name}</Button>}
+          <Button variant={sel !== null && recents[sel]?.handleKey ? undefined : "primary"} disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>
             {busy ? <><Loader2 size={13} className="spin" /> Opening…</> : "Browse…"}
           </Button>
           <Button onClick={() => close(entry.key)}>Cancel</Button>
@@ -182,8 +192,12 @@ export function OpenMapDialog({ entry }: DialogProps) {
       {error && <p className="error-text">{error}</p>}
       <Group title="Recent" flush>
         {recents.length === 0
-          ? <p className="hint" style={{ padding: "10px 12px" }}>Nothing opened yet this session.</p>
-          : <ListBox items={recents} selected={sel} onSelect={setSel} style={{ height: 120 }} render={(f) => <><FolderOpen size={12} className="faint" /><span className="mono">{f}</span></>} />}
+          ? <p className="hint" style={{ padding: "10px 12px" }}>Nothing opened yet.</p>
+          : (
+            <div onDoubleClick={() => { if (sel !== null) void reopen(sel); }} onKeyDown={(e) => { if (e.key === "Enter" && sel !== null) { e.preventDefault(); void reopen(sel); } }}>
+              <ListBox items={recents} selected={sel} onSelect={setSel} style={{ height: 120 }} render={(r) => <><FolderOpen size={12} className={r.handleKey ? "" : "faint"} /><span className="mono">{r.name}</span><span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{r.handleKey ? "double-click to reopen" : "browse for it"}</span></>} />
+            </div>
+          )}
       </Group>
     </DialogFrame>
   );
@@ -461,7 +475,7 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
 
   // `taken` before the close: an open waiting on this answer (a plugin's `document.open`) watches
   // the dialog stack, and this is how it tells "going on" from a dismissal.
-  const proceed = async () => { if (pending.action !== "close") pending.taken = true; close(entry.key); await runPending(pending); };
+  const proceed = async () => { pending.taken = true; close(entry.key); await runPending(pending); };
   const saveFirst = async () => {
     setBusy(true);
     try {
@@ -507,19 +521,6 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
   );
 }
 
-/* ── Not implemented ────────────────────────────────────── */
-
-export function NotImplementedDialog({ entry }: DialogProps) {
-  const close = useSetAtom(closeDialogAtom);
-  const feature = String(entry.payload?.feature ?? "This feature");
-  return (
-    <DialogFrame dialogKey={entry.key} title="Not Yet Implemented" icon={<Construction size={14} />} size="sm" footer={<Button variant="primary" autoFocus onClick={() => close(entry.key)}>OK</Button>}>
-      <p><strong>{feature}</strong> is part of the planned feature set but isn't wired up yet.</p>
-      <p className="hint">The UI is being laid out first; real map I/O, rendering and editing land next.</p>
-    </DialogFrame>
-  );
-}
-
 /* ── Export Image ───────────────────────────────────────── */
 
 /** What each scale is; the pixel size it produces is on the footer, live. */
@@ -551,6 +552,7 @@ export function ExportImageDialog({ entry }: DialogProps) {
   const fogPlayer = useAtomValue(fogViewPlayerAtom);
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const toast = useSetAtom(pushToastAtom);
 
   const [opts, setOpts] = useState<MapImageOptions>(() => ({ ...DEFAULT_IMAGE_OPTIONS, fogPlayer }));
   const base = (path ?? name).replace(/\.(scm|scx|chk)$/i, "").replace(/[^\w\- ]+/g, "") || "scenario";
@@ -597,8 +599,11 @@ export function ExportImageDialog({ entry }: DialogProps) {
     try {
       const blob = await exportMapImage(scenario, opts);
       const out = `${fileName || "scenario"}.png`;
-      if (await saveBlob(blob, out)) {
-        setStatus(`Exported ${out} — ${size.width}×${size.height}, ${(blob.size / 1024).toFixed(0)} KB`);
+      const outcome = await saveBlob(blob, out);
+      if (outcome) {
+        const text = `Exported ${outcome.fileName} — ${size.width}×${size.height}, ${(blob.size / 1024).toFixed(0)} KB`;
+        setStatus(text);
+        toast({ kind: "ok", title: outcome.route === "download" ? "Image downloaded" : "Image exported", detail: outcome.route === "download" ? `${text}. It is in the browser's downloads folder.` : text });
         close(entry.key);
       }
     } catch (err) {

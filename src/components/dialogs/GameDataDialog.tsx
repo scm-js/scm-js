@@ -3,7 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { FolderOpen, Globe, HardDrive, Search, Trash2 } from "lucide-react";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
-import { closeDialogAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { retryTilesetParts } from "../../formats/tileset/load";
 import { retryFailedParts } from "../../formats/units/load";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
@@ -42,6 +42,7 @@ function explain(source: AssetSource | null): string {
 
 export function GameDataDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
+  const toast = useSetAtom(pushToastAtom);
   const [source, setSource] = useAtom(gameDataSourceAtom);
   const bump = useSetAtom(gameDataRevisionAtom);
   const [prefs, setPrefs] = useAtom(preferencesAtom);
@@ -55,10 +56,13 @@ export function GameDataDialog({ entry }: DialogProps) {
   const desktop = desktopBridge();
   const auto = entry.payload?.auto === true;
 
+  const [desktopCopy, setDesktopCopy] = useState<DesktopLocateResult | null>(null);
   useEffect(() => {
     if (!desktop) return;
     desktop.gameData.searchDirs().then(setSearchDirs, () => {});
-  }, [desktop]);
+    // What the app already holds, read off its stamp — no search, no extraction.
+    desktop.gameData.status().then(setDesktopCopy, () => {});
+  }, [desktop, source]);
 
   const progress: InstallProgress = (fraction, label) => setBusy({ fraction, label });
 
@@ -69,6 +73,7 @@ export function GameDataDialog({ entry }: DialogProps) {
     setSource(next);
     bump((n) => n + 1);
     setMessage({ text });
+    toast({ kind: "ok", title: "Game data ready", detail: text });
   };
 
   const run = async (work: () => Promise<void>) => {
@@ -129,7 +134,8 @@ export function GameDataDialog({ entry }: DialogProps) {
     if (!found) return;
     if (found.status === "ready") {
       resetAssetSource();
-      return resolveAssetSource().then((next) => adopted(next, `Extracted from ${found.from}.`));
+      const problems = found.problems?.length ? ` ${found.problems.length} archive${found.problems.length === 1 ? "" : "s"} could not be opened: ${found.problems.join("; ")}` : "";
+      return resolveAssetSource().then((next) => adopted(next, `Extracted from ${found.from}.${problems}`));
     }
     throw new Error(found.status === "missing" ? `No StarCraft archives in the ${found.searched.length} places searched.` : found.message);
   };
@@ -194,6 +200,7 @@ export function GameDataDialog({ entry }: DialogProps) {
 
         <Group title="From your StarCraft installation">
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {desktop && desktopCopy?.status === "ready" && <span className="hint" style={{ alignSelf: "center" }}>App copy: {desktopCopy.files} files from {desktopCopy.from}, {new Date(desktopCopy.at).toLocaleDateString()}</span>}
             {desktop && <Button size="sm" disabled={!!busy} onClick={desktopSearch}><Search size={11} /> Search this computer</Button>}
             {desktop && <Button size="sm" disabled={!!busy} onClick={desktopFolder}><FolderOpen size={11} /> Choose the StarCraft folder…</Button>}
             {!desktop && <Button size="sm" disabled={!!busy} onClick={() => fileInput.current?.click()}><FolderOpen size={11} /> Choose StarDat.mpq and BrooDat.mpq…</Button>}

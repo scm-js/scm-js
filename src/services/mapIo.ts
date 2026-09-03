@@ -26,7 +26,7 @@ export async function openMapFile(file: File, handle: MapFileHandle | null = nul
   const bytes = new Uint8Array(await file.arrayBuffer());
   const loaded = await loadMap(bytes);
   const scenario = parseScenario(loaded.chk);
-  const extras = loaded.archive ? await readExtras(loaded.archive, loaded.files) : new Map<string, Uint8Array>();
+  const extras = loaded.archive ? await readExtras(loaded.archive, loaded.files, scenario.warnings) : new Map<string, Uint8Array>();
   return { scenario, extras, fileName: file.name, handle, origin: loaded.scenarioInfo };
 }
 

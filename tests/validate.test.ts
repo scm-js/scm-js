@@ -12,6 +12,7 @@ function fresh() {
   const scn = createScenario({ width: 64, height: 64, era: 0, name: "v" });
   // Two human slots with start locations, the rest closed: a map with nothing to say.
   scn.playerTypes = scn.playerTypes.map((_, i) => (i < 2 ? PlayerType.Human : PlayerType.Inactive));
+  scn.editorPlayerTypes = scn.playerTypes.slice();
   scn.units.push(makeUnit(null, START_LOCATION, 0, 100, 100, 1), makeUnit(null, START_LOCATION, 1, 900, 900, 2));
   return scn;
 }

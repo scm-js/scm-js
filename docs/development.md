@@ -109,9 +109,9 @@ version comes from the tag, or `<package.json version>-latest.<date>.<sha>` on `
 into `package.json` before building, and `vite.config.ts` injects that as
 `__APP_VERSION__` — `src/version.ts` is where the splash and the About dialog read it,
 and electron-builder names the installers after it. Bumping the app's version means
-editing `package.json` and nothing else. Repository
-variables: `GAME_DATA_URL` (the hosted build's game-data address) and `PAGES_BASE`
-(`/` for a custom domain; default is the repository name). CI has no game data, so the
+editing `package.json` and nothing else. There is one repository
+variable, `PAGES_BASE` (`/` for a custom domain; default is the repository name) — no
+build carries game data or an address to fetch it from. CI has no game data, so the
 real-data test suites skip there.
 
 ## Plugin typings

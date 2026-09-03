@@ -16,12 +16,6 @@ export interface Preferences {
   animateWater: boolean;
   animateUnits: boolean;
   /**
-   * Where to fetch the game data from when this build has none and the browser keeps no
-   * copy: the extracted tree, or the two archives, under one address. "" means the
-   * build's own default (`VITE_GAME_DATA_URL`), which a desktop build leaves empty.
-   */
-  gameDataUrl: string;
-  /**
    * Tools ▸ Test Map: whether to start the game after writing the map (desktop build), and
    * the game folder to use when the desktop build should not search ("" = search). The
    * browser's folder is a handle in IndexedDB (`services/handleStore.ts`), not here.
@@ -35,6 +29,5 @@ export const DEFAULT_PREFERENCES: Preferences = {
   newMap: { tileset: "badlands", width: 128, height: 128 },
   animateWater: true,
   animateUnits: true,
-  gameDataUrl: "",
   testMap: { launch: true, dir: "" },
 };

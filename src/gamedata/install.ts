@@ -1,15 +1,35 @@
 /**
  * Main-thread side of installing game data into the browser: hand the archives to the
  * extraction worker, relay its progress, keep the files in memory when it could not
- * store them. Two ways in — files the user picked, or a URL that serves the archives.
+ * store them. Two ways in, and they are the two the Game Data dialog offers: Blizzard's own
+ * StarEdit package, read member by member out of the zip (`installFromZipUrl`), or the two
+ * archives the user picked off their own disk (`installFromFiles`).
  */
 import { isGameArchive, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
 import { keepInMemory, type StoredCopy } from "./store";
+import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
 export const ARCHIVE_NAMES = ["StarDat.mpq", "BrooDat.mpq"] as const;
+
+/**
+ * Blizzard's own standalone StarEdit package, which carries both archives and is offered
+ * free. It is fetched through a forwarder (`github.com/scm-js/cloudflare-blizzard-forwarder`)
+ * for the one reason a browser cannot go to Blizzard directly: `download.blizzard.com`
+ * answers with a certificate for `*.cloudfront.net`, plain HTTP is mixed content on an
+ * HTTPS page, and no route there sends `Access-Control-Allow-Origin`. The desktop build
+ * uses the same address: its renderer is an ordinary page under `app://scmjs/` and enforces
+ * CORS like any other, so going to Blizzard directly there would mean a download in the main
+ * process and an IPC channel to carry it — for a route the disk search already covers.
+ *
+ * The archives inside are the trimmed StarEdit distribution, not the game's own, which
+ * matters only in that they are enough: they extract to the same files a 1.16 install does,
+ * byte for byte. The `patch_rt.mpq` that also rides in the zip is deliberately left alone —
+ * folding it in would change seven tables and diverge from every other install route.
+ */
+export const BLIZZARD_ZIP_URL = "https://gamedata.scmjs.dev/StarEdit.zip";
 
 export class InstallError extends Error {
   constructor(message: string) {
@@ -42,44 +62,40 @@ export async function installFromFiles(files: readonly File[], progress?: Instal
   return runWorker(inputs, archives.map((f) => f.name).join(" + "), progress);
 }
 
-/** Download `StarDat.mpq` and `BrooDat.mpq` from under `base` (a URL ending in `/`), then the same. */
-export async function installFromUrl(base: string, progress?: InstallProgress): Promise<StoredCopy> {
-  const inputs: ExtractRequest["archives"] = [];
-  let i = 0;
-  for (const name of ARCHIVE_NAMES) {
-    const url = base + name;
-    let res: Response;
-    try {
-      res = await fetch(url);
-    } catch (err) {
-      throw new InstallError(`${url} could not be fetched (${err instanceof Error ? err.message : String(err)}). The server has to allow cross-origin requests.`);
-    }
-    if (!res.ok) throw new InstallError(`${url}: HTTP ${res.status}`);
-    const share = 1 / ARCHIVE_NAMES.length;
-    const bytes = await readWithProgress(res, (f) => progress?.((i + f) * share * 0.5, `Downloading ${name}`));
-    inputs.push({ name, bytes });
-    i++;
-  }
-  return runWorker(inputs, base, (f, label) => progress?.(0.5 + f * 0.5, label));
-}
+/**
+ * Install from a zip that carries the two archives, without downloading the rest of it:
+ * the zip's directory says where each member's bytes are, so only those are fetched and
+ * inflated (82 MB of Blizzard's 101 MB package). The server has to answer range requests,
+ * which is the forwarder's whole job.
+ */
+export async function installFromZipUrl(url: string, progress?: InstallProgress): Promise<StoredCopy> {
+  progress?.(0, "Reading the download");
+  const entries = await readZipDirectory(httpRangeReader(url)).catch((err) => {
+    throw new InstallError(err instanceof ZipError ? err.message : `${url} could not be read (${err instanceof Error ? err.message : String(err)}).`);
+  });
 
-async function readWithProgress(res: Response, report: (fraction: number) => void): Promise<ArrayBuffer> {
-  const total = Number(res.headers.get("content-length") ?? 0);
-  if (!res.body || total <= 0) return res.arrayBuffer();
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    size += value.length;
-    report(Math.min(1, size / total));
+  const { found, missing } = findMembers(entries, ARCHIVE_NAMES);
+  if (missing.length > 0) throw new InstallError(`${url} does not carry ${missing.join(" or ")}.`);
+
+  // The download is the first half of the bar and the extraction the second, as an install
+  // from loose archives has it; within the download, each member is weighted by its size.
+  const wanted = ARCHIVE_NAMES.map((name) => ({ name, entry: found.get(name)! }));
+  const total = wanted.reduce((n, w) => n + w.entry.compressedSize, 0);
+  let doneBytes = 0;
+
+  const inputs: ExtractRequest["archives"] = [];
+  for (const { name, entry } of wanted) {
+    const reader = httpRangeReader(url, {
+      onProgress: (received) => progress?.(((doneBytes + received) / total) * 0.5, `Downloading ${name}`),
+    });
+    const bytes = await readZipMember(reader, entry).catch((err) => {
+      throw new InstallError(err instanceof ZipError ? err.message : `${name} could not be read from ${url} (${err instanceof Error ? err.message : String(err)}).`);
+    });
+    doneBytes += entry.compressedSize;
+    inputs.push({ name, bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer });
   }
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) { out.set(c, at); at += c.length; }
-  return out.buffer;
+
+  return runWorker(inputs, url, (f, label) => progress?.(0.5 + f * 0.5, label));
 }
 
 function runWorker(archives: ExtractRequest["archives"], from: string, progress?: InstallProgress): Promise<StoredCopy> {

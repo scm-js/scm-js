@@ -14,7 +14,6 @@ import {
 } from "../../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { clearStoredDataAtom, DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
-import { BUILD_GAME_DATA_URL } from "../../gamedata/source";
 import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize } from "../../atoms/storage";
 import { unitName } from "../../data/units";
 import { spriteCatalogue } from "../../data/sprites";
@@ -140,23 +139,19 @@ function StorageSection({ onCleared }: { onCleared: () => void }) {
 }
 
 /** Preferences ▸ Game data: the address the resolver falls back to, and the way to the dialog. */
-function GameDataSection({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+function GameDataSection() {
   const open = useSetAtom(openDialogAtom);
   const source = useAtomValue(gameDataSourceAtom);
   return (
     <Group title="Game data">
-      <div className="row" style={{ alignItems: "baseline", marginBottom: 6 }}>
+      <div className="row" style={{ alignItems: "baseline" }}>
         <span className="grow dim">{source?.label ?? "Locating…"}</span>
         <Button size="sm" onClick={() => open("gameData")}><HardDrive size={11} /> Game Data…</Button>
       </div>
-      <div className="form wide">
-        <Field label="Web address">
-          <TextInput className="mono" value={value} placeholder={BUILD_GAME_DATA_URL || "https://…"} spellCheck={false} onChange={(e) => onChange(e.target.value)} />
-        </Field>
-      </div>
       <p className="hint" style={{ marginTop: 4 }}>
-        Used when this build carries no game data and the browser keeps no copy: the extracted files or the two archives under one address.
-        {BUILD_GAME_DATA_URL ? " Blank means this build's default." : " Blank means none, and the editor asks."}
+        {source?.kind === "none"
+          ? "The editor is drawing flat terrain colours and marker units. Game Data… installs StarCraft's graphics."
+          : "Where the terrain and unit graphics are coming from. Game Data… is where to change it."}
       </p>
     </Group>
   );
@@ -243,7 +238,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>Also the map the editor opens on.</p>
                 </Group>
-                <GameDataSection value={local.gameDataUrl} onChange={(gameDataUrl) => patch({ gameDataUrl })} />
+                <GameDataSection />
                 <StorageSection onCleared={() => setLocal(DEFAULT_PREFERENCES)} />
               </div>
             ),

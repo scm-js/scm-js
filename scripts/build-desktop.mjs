@@ -1,8 +1,7 @@
 /**
  * `npm run build:desktop [-- <platform|arch|target|option>…]`: the three steps a desktop
- * build is — the web bundle in desktop mode (which blanks `VITE_GAME_DATA_URL`, so an
- * installed app looks on the user's disk rather than at the hosted bucket), the main
- * process bundled by `desktop/vite.config.ts`, and electron-builder over the two — with
+ * build is — the web bundle in desktop mode, the main process bundled by
+ * `desktop/vite.config.ts`, and electron-builder over the two — with
  * the packaging step's platform, architecture and targets picked on the command line.
  *
  * With no arguments it is what it always was: this OS, the targets `electron-builder.yml`

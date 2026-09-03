@@ -23,18 +23,43 @@ settles the session's source once, in this order:
 3. **Desktop**: the desktop app searches the disk (next to the app, its data folder,
    `$SCM_DATA_DIR`, the usual install locations) and extracts from the first folder
    with the archives; the result is then step 1.
-4. **Configured address**: Preferences ▸ Game data, else the build's
-   `VITE_GAME_DATA_URL`. The address serves either the extracted tree (this directory's
-   layout, `tileset/manifest.json` at the top — fetched file by file) or `StarDat.mpq`
-   and `BrooDat.mpq` (downloaded once, extracted in the browser, kept as step 2). The
-   server must send `Access-Control-Allow-Origin`.
-5. **None**: flat colours and markers, and Help ▸ Game Data… opens.
+4. **None**: flat colours and markers, and Help ▸ Game Data… opens.
 
-The hosted build sets `VITE_GAME_DATA_URL` from the `GAME_DATA_URL` repository
-variable at build time; the desktop build never has one (`--mode desktop` blanks it),
-so it searches the disk and otherwise asks. Help ▸ Game Data… is the same chain by
-hand: pick the two archives or the StarCraft folder, search the computer (desktop),
-or enter an address; it also shows the current source and removes a copy.
+There used to be a fifth step between 3 and 4 — a web address, from a
+`VITE_GAME_DATA_URL` build default or a preference over it, serving either an extracted
+tree or the two archives. It is gone. Nothing is fetched from an address the user did not
+name; when the chain runs out, the editor asks.
+
+## Getting the files
+
+Help ▸ Game Data… shows the current source, and when there is none, the two ways to get
+one:
+
+- **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
+  free download, and it carries both archives. The two are the trimmed StarEdit
+  distribution rather than the game's own, which matters only in that they are enough:
+  they extract to the same files a 1.16 install does, byte for byte. Note that the
+  `patch_rt.mpq` in the same package is deliberately not applied — folding it in changes
+  seven tables (`units.dat`, `weapons.dat`, `upgrades.dat`, `techdata.dat`, `flingy.dat`,
+  `iscript.bin`, `stat_txt.tbl`) and would diverge from every other route.
+
+  The zip is 101 MB and only two of its 152 members are wanted, so `src/gamedata/zip.ts`
+  reads the archive's own directory over HTTP `Range` requests and inflates just those two
+  with `DecompressionStream("deflate-raw")` — 82 MB transferred, no zip library. It goes
+  through a Cloudflare Worker
+  ([scm-js/cloudflare-blizzard-forwarder](https://github.com/scm-js/cloudflare-blizzard-forwarder))
+  for one reason: `download.blizzard.com` answers with a certificate for
+  `*.cloudfront.net`, plain HTTP is mixed content on an HTTPS page, and no route there
+  sends `Access-Control-Allow-Origin`. The worker adds the header and forwards ranges;
+  it holds nothing and redistributes nothing. The desktop build uses the same address —
+  its renderer is an ordinary page and enforces CORS like any other.
+
+- **Use your own StarCraft files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder
+  holding them; on the desktop, search the computer or point at the StarCraft folder.
+  Remastered installs have neither archive, so a Remastered-only user wants the download.
+
+Either way the extraction runs here and the result is kept, so it happens once. The dialog
+also removes a copy, which puts the chain back to where it was.
 
 Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
 `ReadMember` over the archives in, a map of paths to bytes out), `scripts/extract-*.mjs`

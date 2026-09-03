@@ -63,7 +63,7 @@ export function usePreload() {
       // The warm-up pulls the other tilesets' bytes into the HTTP cache ahead of a map that
       // needs them; the desktop serves them from its own folder, where that is only disk I/O.
       const source = currentAssetSource();
-      if (!(desktopBridge() && source?.kind !== "remote")) warmRemainingTilesets(tileset);
+      if (!desktopBridge()) warmRemainingTilesets(tileset);
       if (source?.kind === "none") store.set(openDialogAtom, "gameData", { auto: true });
     });
   }, [setLog, setSource, setStep, store]);

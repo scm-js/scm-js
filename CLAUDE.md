@@ -838,24 +838,40 @@ Help ▸ Game Data… changes it) by running `locateGameData(deps)` — a pure c
 `unit/manifest.json` answers JSON — a dev server answers index.html with 200, hence the parse), **stored**
 (`store.ts`: the OPFS copy under `gamedata/` with a `stamp.json` written last; a memory `Map` when there is
 no OPFS), **desktop** (`window.scmjsDesktop.gameData.locate()`, then it is bundled again — the source carries
-`desktop: true`), **remote** (Preferences `gameDataUrl`, read straight from storage by `storedPreference`
-because a viewport effect can ask before the app's effects run, else `VITE_GAME_DATA_URL`: the extracted
-tree if `tileset/manifest.json` answers, else `StarDat.mpq` downloaded + extracted into the stored copy),
-**none**. The preload's first task is the resolution (progress on the splash for a download / desktop
-extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData` dialog with
-`{ auto: true }` when it ends at none. After an install the dialog calls `retryFailedParts` (drops the
-`LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
-`useUnitAssets` depend on — that is how a map already open picks the graphics up. `GameDataDialog.tsx`
-is the three routes: files / folder (`install.ts#installFromFiles` → `extract.worker.ts`, which writes the
-OPFS copy with sync access handles — the one write path every browser has, worker-only — or posts the files
-back for `keepInMemory`), the desktop's search / folder picker, and an address (`adoptGameDataUrl`, saved to
-Preferences). The desktop's Remove resolves again with `{ search: false }` so it does not extract the same
-files straight back.
+`desktop: true`), **none**. There is deliberately no fifth step: the configured web address
+(`VITE_GAME_DATA_URL` and a `gameDataUrl` preference over it, serving an extracted tree or the two archives)
+was **removed** along with `installFromUrl`, the `remote` source kind and the CI variable — nothing is
+fetched from an address the user did not name, and the chain running out and asking is easier to explain
+than four ways of not being asked. The preload's first task is the resolution (progress on the splash for a
+desktop extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData`
+dialog with `{ auto: true }` when it ends at none. After an install the dialog calls `retryFailedParts`
+(drops the `LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
+`useUnitAssets` depend on — that is how a map already open picks the graphics up.
+
+`GameDataDialog.tsx` shows one thing at a time: with data it is a status line and Remove copy, without it
+the two routes. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads
+Blizzard's own free StarEdit package — which carries trimmed StarDat/BrooDat that extract to the same 931
+files a 1.16 install does, byte for byte, provided the `patch_rt.mpq` in the same zip is left alone (it
+changes seven tables). `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
+`onProgress` that streams so an 82 MB member does not freeze the bar), `readZipDirectory` (EOCD then the
+central directory, Zip64 reported rather than misread), `readZipMember` (the *local* header is measured
+rather than trusting the directory's copy of its extra field, then `DecompressionStream("deflate-raw")`)
+and `findMembers` (by base name, ignoring folder and case). Only 82 MB of the 101 MB zip is transferred and
+no zip library is needed; `tests/zip.test.ts` drives it all over a zip built in the test. It goes through
+`github.com/scm-js/cloudflare-blizzard-forwarder`, a Cloudflare Worker at `gamedata.scmjs.dev` that adds
+the CORS header and forwards ranges, because `download.blizzard.com` serves a `*.cloudfront.net`
+certificate, plain HTTP is mixed content, and no route there sends `Access-Control-Allow-Origin`; the
+desktop uses the same address, its renderer being an ordinary page. The second route is **files / folder**
+(`installFromFiles` → `extract.worker.ts`, which writes the OPFS copy with sync access handles — the one
+write path every browser has, worker-only — or posts the files back for `keepInMemory`) with the desktop's
+search / folder picker beside it. The desktop's Remove resolves again with `{ search: false }` so it does
+not extract the same files straight back.
 
 `extract.ts` is the extraction itself, pure and dependency-free apart from `iscript.ts` (`.ts` import
 specifiers on purpose: Node's type stripping runs it), producing the exact bytes and manifests the old
 scripts wrote — `scripts/extract-*.mjs` are thin wrappers now, `archives.ts` is the mopaq side. Never
-redistribute what it produces; the hosted build's `GAME_DATA_URL` bucket is the maintainer's call.
+redistribute what it produces: the forwarder passes Blizzard's own download through and keeps nothing, and
+no build ships game data or an address to fetch it from.
 
 `desktop/main.ts` (Electron, bundled by `desktop/vite.config.ts` into `desktop/dist/*.cjs`, `ssr: true` +
 `noExternal` so mopaq and the shared extraction ride along, `publicDir: false`) serves `dist/` under
@@ -880,14 +896,14 @@ never electron-builder's `portable` target, whose SFX re-extracts the whole app 
 launch and can only cover the wait with a static `.bmp` painted over the desktop (`docs/development.md`) — that file, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
 once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
-pink. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode blanks
-`VITE_GAME_DATA_URL`) + the main bundle + electron-builder, where its arguments pick the packaging
+pink. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode no longer changes anything —
+it used to blank the game-data address) + the main bundle + electron-builder, where its arguments pick the packaging
 step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
 electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
 is what CI runs. The workflow has exactly two channels — `latest` (every push to main:
-Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `GAME_DATA_URL` and
-`PAGES_BASE` as repository variables; there is deliberately no nightly. The version is
+Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `PAGES_BASE` the one
+repository variable; there is deliberately no nightly. The version is
 `package.json`'s and nothing hardcodes it: `vite.config.ts` defines `__APP_VERSION__`,
 `src/version.ts` is what the splash and the About dialog read, CI `npm version`s the field
 from the tag (or `<package.json version>-latest.<date>.<sha>` on main) before building, and

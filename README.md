@@ -15,8 +15,8 @@ you deliberately change.
 
 Three ways to run it:
 
-- **In the browser.** Every push to `main` deploys the editor to GitHub Pages, and the
-  hosted build knows where to fetch the game data from, so it just opens.
+- **In the browser.** Every push to `main` deploys the editor to GitHub Pages. It asks
+  for StarCraft's graphics on first use and can fetch them from Blizzard in one click.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
   macOS and Linux, and a Windows zip to unpack and run without installing (`latest`
   follows `main`; the numbered releases are the tagged versions). On first start the app looks for a StarCraft installation and extracts
@@ -25,13 +25,19 @@ Three ways to run it:
 
 The editor draws terrain and units with graphics out of StarCraft's own archives.
 Blizzard's data is not redistributable and none of it is in this repository, so the
-editor gets it from one of: files bundled with the build, a copy it kept in the browser
-earlier, the desktop app's search of the disk, or a web address serving either the
-extracted files or the two archives. When none of those answers it opens **Help ▸ Game
-Data…**, where you can pick `StarDat.mpq` and `BrooDat.mpq` (or the StarCraft folder)
-or enter an address; the extraction then runs in the browser and the result is kept
-for next time. Brood War's `BrooDat.mpq` is required. Remastered installations do not
-carry the two archives; they come from a classic (1.16) install.
+editor looks for it in three places: files bundled with the build, a copy it kept in the
+browser earlier, and — in the desktop app — a StarCraft installation on the disk. When
+none of those answers it opens **Help ▸ Game Data…**, which offers two ways to fix that:
+
+- **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
+  free download, and it carries the two archives the graphics come from. No account, and
+  nothing to find on your own disk — this is the one that works if you have never owned
+  a copy of the 1.16 game.
+- **Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
+  them. Brood War's `BrooDat.mpq` is required, and Remastered installations carry
+  neither archive — they come from a classic (1.16) install, or from the download above.
+
+Either way the extraction runs in the browser and the result is kept for next time.
 
 ```sh
 npm install

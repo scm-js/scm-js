@@ -6,10 +6,10 @@
 #   vX.Y.Z   a pushed tag — a proper release with the same assets, notes generated from
 #            the commits since the previous tag
 #
-# The hosted web build gets its game-data address from the GAME_DATA_URL repository
-# variable (Settings ▸ Variables) and its base path from PAGES_BASE (default: the
-# repository name; set "/" for a custom domain). Desktop builds carry no address on
-# purpose — they look on the user's disk and ask otherwise. Nothing here has, or needs,
+# The hosted web build gets its base path from the PAGES_BASE repository variable
+# (Settings ▸ Variables; default: the repository name, set "/" for a custom domain). No
+# build carries game data or an address to fetch it from — every one of them looks on the
+# user's disk and otherwise asks (src/gamedata/source.ts). Nothing here has, or needs,
 # the game data: the real-data test suites skip in CI.
 #
 # Code signing: none yet. Windows shows SmartScreen's "unrecognized app" screen, and macOS
@@ -89,7 +89,6 @@ jobs:
         run: npm run build
         env:
           SCMJS_BASE: /
-          VITE_GAME_DATA_URL: ${{ vars.GAME_DATA_URL }}
       - run: cd dist && zip -qr "../scmjs-web-${{ needs.channel.outputs.version }}.zip" .
       - uses: actions/upload-artifact@v4
         with:
@@ -102,7 +101,6 @@ jobs:
         run: npm run build
         env:
           SCMJS_BASE: ${{ vars.PAGES_BASE || format('/{0}/', github.event.repository.name) }}
-          VITE_GAME_DATA_URL: ${{ vars.GAME_DATA_URL }}
       - uses: actions/upload-pages-artifact@v3
         if: needs.channel.outputs.tagged == 'false'
         with:

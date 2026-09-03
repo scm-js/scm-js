@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
 import { pickArchives } from "../src/gamedata/install";
-import { fromUrl, locateGameData, normalizeBase, type LocateDeps } from "../src/gamedata/source";
+import { locateGameData, type LocateDeps } from "../src/gamedata/source";
 import type { StoredCopy } from "../src/gamedata/store";
 
 const DATA = join(__dirname, "..", "fixtures", "data");
@@ -114,12 +114,26 @@ function deps(over: Partial<LocateDeps> & { answers?: string[] } = {}): LocateDe
     calls,
     bundledBase: "/",
     probeManifest: async (url) => { calls.push(`manifest ${url}`); return answers.includes(url); },
-    probeFile: async (url) => { calls.push(`file ${url}`); return answers.includes(url); },
     stored: async () => null,
     desktop: null,
-    configuredUrl: "",
-    installFromUrl: async (base) => { calls.push(`install ${base}`); return { ...copy, from: base }; },
     ...over,
+  };
+}
+
+/** A desktop bridge whose game-data half answers as `over` says. */
+function bridge(over: Partial<NonNullable<LocateDeps["desktop"]>["gameData"]>): NonNullable<LocateDeps["desktop"]> {
+  return {
+    platform: "win32",
+    version: "0",
+    gameData: {
+      status: async () => ({ status: "missing", searched: [] }),
+      locate: async () => ({ status: "missing", searched: [] }),
+      pickFolder: async () => null,
+      clear: async () => {},
+      onProgress: () => () => {},
+      searchDirs: async () => [],
+      ...over,
+    },
   };
 }
 
@@ -147,74 +161,31 @@ describe("locateGameData", () => {
 
   it("then the desktop's disk search, which makes the files bundled", async () => {
     const progress: string[] = [];
-    const d = deps({
-      desktop: {
-        platform: "linux",
-        version: "0",
-        gameData: {
-          status: async () => ({ status: "missing", searched: [] }),
-          locate: async () => ({ status: "ready", from: "/games/StarCraft", files: 933, bytes: 1, at: "" }),
-          pickFolder: async () => null,
-          clear: async () => {},
-          onProgress: () => () => {},
-          searchDirs: async () => [],
-        },
-      },
-    });
+    const d = deps({ desktop: bridge({ locate: async () => ({ status: "ready", from: "/games/StarCraft", files: 933, bytes: 1, at: "" }) }) });
     const source = await locateGameData(d, (_, label) => progress.push(label));
     expect(source.kind).toBe("bundled");
     expect(source.label).toBe("Extracted from /games/StarCraft");
     expect(progress[0]).toBe("Looking for a StarCraft installation");
   });
 
-  it("then the configured address serving the extracted tree", async () => {
-    const d = deps({ configuredUrl: "https://data.example/sc", answers: ["https://data.example/sc/tileset/manifest.json"] });
-    const source = await locateGameData(d);
-    expect(source.kind).toBe("remote");
-    expect(source.base).toBe("https://data.example/sc/");
-  });
-
-  it("or the address serving the archives, which are installed as the stored copy", async () => {
-    const d = deps({ configuredUrl: "https://data.example/sc/", answers: ["https://data.example/sc/StarDat.mpq"] });
-    const source = await locateGameData(d);
-    expect(source.kind).toBe("stored");
-    expect(source.stored?.from).toBe("https://data.example/sc/");
-    expect(d.calls).toContain("install https://data.example/sc/");
-  });
-
-  it("ends at none with the reasons in order", async () => {
-    const source = await locateGameData(deps({ configuredUrl: "https://data.example/none" }));
-    expect(source.kind).toBe("none");
-    expect(source.tried).toEqual([
-      "Nothing bundled with this build",
-      "No copy kept in the browser",
-      "Nothing at https://data.example/none/ (neither tileset/manifest.json nor StarDat.mpq answered)",
-    ]);
-  });
-
-  it("says when no address is configured", async () => {
-    const source = await locateGameData(deps());
-    expect(source.tried[2]).toBe("No web address configured");
-  });
-
-  it("carries a failed install on to none rather than throwing", async () => {
-    const d = deps({ configuredUrl: "https://x/", answers: ["https://x/StarDat.mpq"], installFromUrl: async () => { throw new Error("CORS"); } });
+  it("ends at none with the reasons in order, and asks for nothing else", async () => {
+    const d = deps();
     const source = await locateGameData(d);
     expect(source.kind).toBe("none");
-    expect(source.tried.at(-1)).toBe("https://x/: CORS");
-  });
-});
-
-describe("fromUrl and normalizeBase", () => {
-  it("normalises the address to one trailing slash", () => {
-    expect(normalizeBase("  https://x/y ")).toBe("https://x/y/");
-    expect(normalizeBase("https://x/y/")).toBe("https://x/y/");
-    expect(normalizeBase("")).toBe("");
+    expect(source.tried).toEqual(["Nothing bundled with this build", "No copy kept in the browser"]);
+    // No address is consulted any more: the two manifest probes are the whole of it.
+    expect(d.calls).toEqual(["manifest /tileset/manifest.json", "manifest /unit/manifest.json"]);
   });
 
-  it("answers null and a reason when nothing is there", async () => {
-    const tried: string[] = [];
-    expect(await fromUrl(deps(), "https://x/", tried)).toBeNull();
-    expect(tried).toEqual(["Nothing at https://x/ (neither tileset/manifest.json nor StarDat.mpq answered)"]);
+  it("carries a desktop search that found nothing on to none rather than throwing", async () => {
+    const source = await locateGameData(deps({ desktop: bridge({ locate: async () => ({ status: "missing", searched: ["C:\\StarCraft", "D:\\Games"] }) }) }));
+    expect(source.kind).toBe("none");
+    expect(source.tried.at(-1)).toBe("No StarCraft archives in 2 places on this computer");
+  });
+
+  it("treats a throwing desktop bridge as one more thing tried", async () => {
+    const source = await locateGameData(deps({ desktop: bridge({ locate: async () => { throw new Error("bridge gone"); } }) }));
+    expect(source.kind).toBe("none");
+    expect(source.tried.at(-1)).toBe("Desktop search failed: bridge gone");
   });
 });

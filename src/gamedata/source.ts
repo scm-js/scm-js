@@ -3,29 +3,31 @@
  * `formats/units/load.ts`) fetch every file through `fetchAsset`, which resolves the
  * source once per session and remembers it:
  *
- *   1. bundled  — `public/` in this build (a clone that ran `npm run extract`, or the
- *                 desktop app's own copy, served under the same base by its protocol)
- *   2. stored   — a copy an earlier upload or download left in the browser (`store.ts`)
- *   3. desktop  — the desktop app searches the disk and extracts, then it is 1 again
- *   4. remote   — the configured URL: either the extracted tree (`tileset/manifest.json`
- *                 answers) fetched file by file, or the two archives, downloaded once,
- *                 extracted here and kept as 2
- *   5. none     — the editor runs with flat colours and marker units, and asks
+ *   1. bundled — `public/` in this build (a clone that ran `npm run extract`, or the
+ *                desktop app's own copy, served under the same base by its protocol)
+ *   2. stored  — a copy an earlier install left in the browser (`store.ts`)
+ *   3. desktop — the desktop app searches the disk and extracts, then it is 1 again
+ *   4. none    — the editor runs with flat colours and marker units, and asks
  *
- * The configured URL is Preferences ▸ Game data, else the build's `VITE_GAME_DATA_URL`
- * (the hosted build sets it; a desktop build does not, so it asks). `locateGameData` is
- * the chain over injected probes so the order can be tested without a browser.
+ * There is deliberately no fifth step. The editor used to also carry a configured web
+ * address (a `VITE_GAME_DATA_URL` build default and a preference over it) serving either
+ * an extracted tree or the two archives; it was dropped once Blizzard's own free StarEdit
+ * package became installable in one click (`install.ts#installFromZipUrl`), because the
+ * chain reaching a dead end and asking is easier to explain than four ways of not being
+ * asked. Getting the files is now something the user does, on step 4, from Help ▸ Game
+ * Data… — never a silent fetch from an address they did not name.
+ *
+ * `locateGameData` is the chain over injected probes so the order can be tested without a
+ * browser.
  */
-import { storedPreference } from "../atoms/preferencesAtoms";
 import { desktopBridge, type DesktopBridge } from "./desktop";
-import { installFromUrl, type InstallProgress } from "./install";
 import { readStored, storedCopy, type StoredCopy } from "./store";
 
-export type SourceKind = "bundled" | "stored" | "remote" | "none";
+export type SourceKind = "bundled" | "stored" | "none";
 
 export interface AssetSource {
   kind: SourceKind;
-  /** URL prefix the files are fetched under (bundled / remote), ending in `/`. */
+  /** URL prefix the files are fetched under (bundled), ending in `/`. */
   base?: string;
   /** One line for the dialog and the status bar. */
   label: string;
@@ -37,33 +39,14 @@ export interface AssetSource {
   desktop?: true;
 }
 
-/** The default URL baked into this build, or "". */
-export const BUILD_GAME_DATA_URL: string = (import.meta.env.VITE_GAME_DATA_URL as string | undefined)?.trim() ?? "";
-
-/** A URL as a base: trimmed, with one trailing slash; "" stays "". */
-export function normalizeBase(url: string): string {
-  const s = url.trim();
-  if (!s) return "";
-  return s.endsWith("/") ? s : `${s}/`;
-}
-
-/** Preferences first, then the build's default. */
-export function configuredGameDataUrl(): string {
-  return normalizeBase(storedPreference("gameDataUrl", "") || BUILD_GAME_DATA_URL);
-}
-
 /* ── The chain ──────────────────────────────────────────── */
 
 export interface LocateDeps {
   bundledBase: string;
   /** True when a GET of `url` answers JSON — the manifest probe. A dev server answers index.html for anything, so a 200 alone means nothing. */
   probeManifest(url: string): Promise<boolean>;
-  /** True when a GET of `url` answers with something that is not a web page. */
-  probeFile(url: string): Promise<boolean>;
   stored(): Promise<StoredCopy | null>;
   desktop: DesktopBridge | null;
-  configuredUrl: string;
-  installFromUrl(base: string, progress?: InstallProgress): Promise<StoredCopy>;
 }
 
 const describeStored = (copy: StoredCopy) =>
@@ -73,8 +56,8 @@ export function megabytes(bytes: number): string {
   return `${(bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0)} MB`;
 }
 
-/** Run the chain. `report` gets the slow steps' progress (a desktop extraction, a download). */
-export async function locateGameData(deps: LocateDeps, report?: InstallProgress): Promise<AssetSource> {
+/** Run the chain. `report` gets the one slow step's progress (the desktop extraction). */
+export async function locateGameData(deps: LocateDeps, report?: InstallProgressLike): Promise<AssetSource> {
   const tried: string[] = [];
   const bundled = async () =>
     (await deps.probeManifest(`${deps.bundledBase}tileset/manifest.json`)) || (await deps.probeManifest(`${deps.bundledBase}unit/manifest.json`));
@@ -88,7 +71,9 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgress)
   if (copy) return { kind: "stored", label: describeStored(copy), tried, stored: copy };
   tried.push("No copy kept in the browser");
 
-  // 3. The desktop app: the disk, then the files are served as bundled.
+  // 3. The desktop app: the disk, then the files are served as bundled. Silent when it
+  //    works — a user whose StarCraft folder is where the game puts it never hears about
+  //    any of this.
   if (deps.desktop) {
     report?.(0, "Looking for a StarCraft installation");
     const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, label));
@@ -103,45 +88,11 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgress)
     }
   }
 
-  // 4. The configured address.
-  const url = normalizeBase(deps.configuredUrl);
-  if (url) {
-    const remote = await fromUrl(deps, url, tried, report);
-    if (remote) return remote;
-  } else {
-    tried.push("No web address configured");
-  }
-
   return { kind: "none", label: "No game data", tried };
 }
 
-/**
- * The address step on its own: the extracted tree if `tileset/manifest.json` answers,
- * else the archives if `StarDat.mpq` does (downloaded and extracted into the stored
- * copy). Null when neither, with the reason pushed onto `tried`.
- */
-export async function fromUrl(deps: Pick<LocateDeps, "probeManifest" | "probeFile" | "installFromUrl">, url: string, tried: string[], report?: InstallProgress): Promise<AssetSource | null> {
-  try {
-    if (await deps.probeManifest(`${url}tileset/manifest.json`)) return { kind: "remote", base: url, label: url, tried };
-    if (await deps.probeFile(`${url}StarDat.mpq`)) {
-      const stored = await deps.installFromUrl(url, report);
-      return { kind: "stored", label: describeStored(stored), tried, stored };
-    }
-    tried.push(`Nothing at ${url} (neither tileset/manifest.json nor StarDat.mpq answered)`);
-  } catch (err) {
-    tried.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  return null;
-}
-
-/** The dialog's "Use this address": the URL step alone, made the session's source when it answers. */
-export async function adoptGameDataUrl(url: string, report?: InstallProgress): Promise<AssetSource | null> {
-  const tried: string[] = [];
-  const source = await fromUrl(defaultDeps(), normalizeBase(url), tried, report);
-  if (source) setAssetSource(source);
-  else if (tried.length) throw new Error(tried[tried.length - 1]);
-  return source;
-}
+/** `install.ts`'s progress shape, repeated so this module does not import it. */
+type InstallProgressLike = (fraction: number, label: string) => void;
 
 /** A stored copy just written by the dialog, made the session's source. */
 export function adoptStoredCopy(copy: StoredCopy): AssetSource {
@@ -163,27 +114,12 @@ async function probeManifest(url: string): Promise<boolean> {
   }
 }
 
-async function probeFile(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, { method: "HEAD" }).catch(() => fetch(url, { headers: { Range: "bytes=0-3" } }));
-    if (!res.ok) return false;
-    const type = res.headers.get("content-type") ?? "";
-    if (res.body && res.headers.get("content-length") === null) await res.body.cancel();
-    return !type.includes("text/html");
-  } catch {
-    return false;
-  }
-}
-
 function defaultDeps(options: ResolveOptions = {}): LocateDeps {
   return {
     bundledBase: import.meta.env.BASE_URL,
     probeManifest,
-    probeFile,
     stored: storedCopy,
     desktop: options.search === false ? null : desktopBridge(),
-    configuredUrl: configuredGameDataUrl(),
-    installFromUrl,
   };
 }
 
@@ -204,7 +140,7 @@ const listeners = new Set<(source: AssetSource) => void>();
  * The session's source, resolved once; every caller shares the one run. `report` only
  * reaches the run that starts it (the startup preload), which is where progress shows.
  */
-export function resolveAssetSource(report?: InstallProgress, options?: ResolveOptions): Promise<AssetSource> {
+export function resolveAssetSource(report?: InstallProgressLike, options?: ResolveOptions): Promise<AssetSource> {
   if (!resolving) {
     resolving = locateGameData(defaultDeps(options), report).then((source) => {
       current = source;
@@ -220,13 +156,13 @@ export function currentAssetSource(): AssetSource | null {
   return current;
 }
 
-/** Called when the source changes — the dialog installed something, or a preference moved. */
+/** Called when the source changes — the dialog installed something, or a copy was removed. */
 export function onAssetSource(listener: (source: AssetSource) => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
 }
 
-/** Forget the resolution so the next `fetchAsset` runs the chain again (after an install, a clear or a URL change). */
+/** Forget the resolution so the next `fetchAsset` runs the chain again (after an install or a clear). */
 export function resetAssetSource(): void {
   resolving = null;
   current = null;
@@ -251,7 +187,6 @@ export async function fetchAsset(path: string, init?: RequestInit): Promise<Resp
   const source = await resolveAssetSource();
   switch (source.kind) {
     case "bundled":
-    case "remote":
       return fetch(source.base + path, init);
     case "stored": {
       const blob = await readStored(path);

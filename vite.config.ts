@@ -8,7 +8,7 @@ import { defineConfig } from 'vite'
 const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   plugins: [
     react(),
     // `index.html` carries the boot splash (the markup that paints before the bundle
@@ -25,8 +25,5 @@ export default defineConfig(({ mode }) => ({
   base: process.env.SCMJS_BASE || '/',
   define: {
     __APP_VERSION__: JSON.stringify(version),
-    // The desktop build never carries a default game-data address, whatever .env says: it
-    // looks on the user's disk and otherwise asks (src/gamedata/source.ts).
-    ...(mode === 'desktop' ? { 'import.meta.env.VITE_GAME_DATA_URL': '""' } : {}),
   },
 }))

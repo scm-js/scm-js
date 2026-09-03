@@ -1022,7 +1022,17 @@ window went from ~420 ms after launch to ~200 ms, and the frame it shows is the 
 empty rectangle. `showWhenReady` in `desktop/main.ts` is what shows it. The saved maximized state is applied
 **there**, not at creation: on Windows `maximize()` is a `ShowWindow` call, so maximizing a
 `show: false` window shows it — which used to put a black window on screen at 140 ms and
-leave every signal below with nothing to do. It also does not trust `ready-to-show` alone — a hidden window is not guaranteed to be composited at all (Windows),
+leave every signal below with nothing to do. Neither platform applies the maximize
+synchronously, though, so a window that is going to be maximized is *created* at the work area
+of the display it opens on (`openingBounds`) — otherwise the first composited frame was the
+window at its created size in a corner, flashing to full screen a moment later — and
+`keepRestoreBounds` holds the rectangle the user left behind, which `saveWindowState` writes
+while the window is still maximized and the first "restore down" puts it back to. The maximize
+itself lands `MAXIMIZE_AFTER_MS` after the window is up rather than as part of showing it, so
+the frame the window appears with is one the renderer painted for the size it has (a maximize
+in the same frame resized the renderer as the window appeared, leaving the app drawn small in
+the corner until the next frame); `traceBounds` puts the geometry of each step in `startup.log`
+next to a probe of the renderer's own `innerWidth`. It also does not trust `ready-to-show` alone — a hidden window is not guaranteed to be composited at all (Windows),
 and waiting only for that paint meant seconds of no window and then an editor whose splash
 had already run behind nothing. The signals are, in order: the paint, `dom-ready` +
 `SHOW_AFTER_DOM_MS` (the boot splash is that markup, and the window's `backgroundColor` is

@@ -65,6 +65,14 @@ function trace(label: string) {
   }
 }
 
+/** A window milestone with the geometry it happened at — how a launch that looks wrong is told apart. */
+function traceBounds(win: BrowserWindow, label: string) {
+  if (win.isDestroyed()) return trace(label);
+  const b = win.getBounds();
+  const c = win.getContentBounds();
+  trace(`${label} — ${b.width}×${b.height} at ${b.x},${b.y}, content ${c.width}×${c.height}${win.isMaximized() ? ", maximized" : ""}`);
+}
+
 trace("main script evaluated");
 
 interface Stamp { from: string; at: string; files: number; bytes: number; summary: string }
@@ -287,6 +295,7 @@ function handleRequest(req: Request): Promise<Response> | Response {
 /* ── Remembering the window ─────────────────────────────── */
 
 interface WindowState { x?: number; y?: number; width: number; height: number; maximized: boolean }
+interface Rect { x: number; y: number; width: number; height: number }
 
 /**
  * What the *first* run gets: maximized, because the editor is a chrome-heavy tool and its
@@ -306,6 +315,13 @@ const MIN_HEIGHT = 600;
  */
 const SHOW_AFTER_DOM_MS = 300;
 const SHOW_LATEST_MS = 2000;
+/**
+ * How long after the window is on screen the maximize is applied. The window is *created* at
+ * the work area (`openingBounds`), so it is already the size it is about to be and the delay
+ * costs nothing visible — but it keeps the resize out of the frame the window is first shown
+ * with, which is the frame the renderer painted for the size it was created at.
+ */
+const MAXIMIZE_AFTER_MS = 60;
 /** How much of a saved rectangle must still land on a screen for its position to be reused. */
 const MUST_BE_VISIBLE = 100;
 
@@ -361,14 +377,64 @@ function watchWindowState(win: BrowserWindow) {
 function saveWindowState(win: BrowserWindow) {
   // getNormalBounds is the *un*-maximized rectangle: what "restore down" should give back next
   // time. getBounds would save the maximized size as the restored one, so unmaximizing after a
-  // restart would do nothing visible.
-  const { x, y, width, height } = win.getNormalBounds();
+  // restart would do nothing visible. A window opened at the work area (`openingBounds`) has no
+  // such rectangle of its own yet, so the one it was opened for stands in until it is restored.
+  const { x, y, width, height } = restoreBounds.get(win) ?? win.getNormalBounds();
   const state: WindowState = { x, y, width, height, maximized: win.isMaximized() };
   try {
     writeFileSync(windowStateFile(), JSON.stringify(state));
   } catch {
     // Nothing the user needs to hear about: the next run just opens at the first-run size.
   }
+}
+
+/**
+ * Where a window is *created* when the last session left it maximized.
+ *
+ * `maximize()` is called on the hidden window, but neither Windows nor an X11 window manager
+ * applies it synchronously: the first composited frame could still be the window at its created
+ * size, in a corner, a moment before it jumped to full screen — which is what the launch looked
+ * like. Creating it at the work area of the display it is going to open on makes that frame the
+ * right size and place, so there is nothing left to see. The rectangle the user actually left
+ * behind is kept by `keepRestoreBounds` instead, since it is no longer the window's own idea of
+ * its restored size.
+ */
+function openingBounds(state: WindowState): Rect {
+  const rect = { x: state.x ?? 0, y: state.y ?? 0, width: state.width, height: state.height };
+  const display = state.x !== undefined && state.y !== undefined
+    ? screen.getDisplayMatching(rect)
+    : screen.getPrimaryDisplay();
+  return display.workArea;
+}
+
+/**
+ * The restored rectangle of a window that was opened maximized at the work area size. It is
+ * what gets saved while the window is still maximized, and what the first "restore down" puts
+ * the window back to — after that the window has a normal rectangle of its own and this is
+ * dropped. A window opened un-maximized never has an entry.
+ */
+const restoreBounds = new WeakMap<BrowserWindow, Rect>();
+
+/** The saved rectangle, centred on the opening display when the last run left no position. */
+function restoreRect(state: WindowState, opening: Rect): Rect {
+  const width = Math.min(state.width, opening.width);
+  const height = Math.min(state.height, opening.height);
+  if (state.x !== undefined && state.y !== undefined) return { x: state.x, y: state.y, width, height };
+  return {
+    x: Math.round(opening.x + (opening.width - width) / 2),
+    y: Math.round(opening.y + (opening.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+function keepRestoreBounds(win: BrowserWindow, normal: Rect) {
+  restoreBounds.set(win, normal);
+  win.once("unmaximize", () => {
+    const bounds = restoreBounds.get(win);
+    restoreBounds.delete(win);
+    if (bounds && !win.isDestroyed()) win.setBounds(bounds);
+  });
 }
 
 /* ── Closing with unsaved changes ───────────────────────── */
@@ -442,15 +508,38 @@ function showWhenReady(win: BrowserWindow, maximized: boolean) {
   const show = (why: string) => {
     stop();
     if (win.isDestroyed() || win.isVisible()) return;
-    trace(`show (${why})`);
+    traceBounds(win, `show (${why})`);
     // The saved maximized state is applied *here*, not at creation: on Windows `maximize()`
     // is a `ShowWindow` call, so a hidden window that is maximized is no longer hidden. Doing
     // it up front defeated `show: false` altogether — the window appeared black at 140 ms and
     // stayed that way until the renderer painted at 430 ms, and every signal below then found
     // it visible already and did nothing. A window that is up but empty is exactly the launch
     // this whole path exists to avoid.
-    if (maximized) win.maximize();
-    if (!win.isVisible()) win.show();
+    //
+    // It is applied a moment *after* the window is up, not as part of showing it. The window
+    // was created at the work area for this (`openingBounds`), so it is already the size the
+    // maximize is going to give it — but a maximize taking effect as the window appears resizes
+    // the renderer at the same moment, and what is on screen until the next frame arrives is
+    // the one painted for the old size, in the corner of a window that is now bigger. Showing
+    // first means the frame the window appears with is one painted for the size it has.
+    win.show();
+    if (maximized) {
+      timers.push(setTimeout(() => {
+        if (win.isDestroyed() || win.isMaximized()) return;
+        win.maximize();
+        traceBounds(win, "maximize");
+      }, MAXIMIZE_AFTER_MS));
+    }
+    // What the *page* thinks it is, once everything above has settled: a window at the right
+    // size whose content is painted small in a corner is a renderer that never got the resize,
+    // and this line next to the ones above is what tells the two apart.
+    timers.push(setTimeout(() => {
+      if (win.isDestroyed()) return;
+      win.webContents
+        .executeJavaScript("[innerWidth, innerHeight, devicePixelRatio]")
+        .then(([w, h, dpr]: [number, number, number]) => trace(`renderer ${w}×${h} @${dpr}`))
+        .catch(() => {});
+    }, 1000));
   };
   win.once("ready-to-show", () => show("ready-to-show"));
   win.webContents.once("dom-ready", () => {
@@ -467,10 +556,12 @@ function showWhenReady(win: BrowserWindow, maximized: boolean) {
 function createWindow() {
   const icon = join(distDir, "icon.png");
   const state = readWindowState();
+  // A maximized session opens at the work area, not at its restored rectangle (`openingBounds`).
+  const opening = state.maximized ? openingBounds(state) : null;
   const win = new BrowserWindow({
-    ...(state.x !== undefined ? { x: state.x, y: state.y } : {}),
-    width: state.width,
-    height: state.height,
+    ...(opening ?? (state.x !== undefined ? { x: state.x, y: state.y } : {})),
+    width: opening?.width ?? state.width,
+    height: opening?.height ?? state.height,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
@@ -486,6 +577,8 @@ function createWindow() {
       additionalArguments: [`--scmjs-version=${app.getVersion()}`],
     },
   });
+  if (opening) keepRestoreBounds(win, restoreRect(state, opening));
+  traceBounds(win, `window created${opening ? " for a maximized session" : ""}`);
   showWhenReady(win, state.maximized);
   watchWindowState(win);
   guardClose(win);

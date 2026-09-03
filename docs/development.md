@@ -236,6 +236,23 @@ Doing it up front defeated the whole arrangement — the window appeared black a
 stayed that way until the renderer painted, and every signal below found it visible already
 and did nothing.
 
+But neither Windows nor an X11 window manager applies that maximize synchronously, so the
+first composited frame could still be the window at its created size in a corner, jumping to
+full screen a moment later. A window that is going to be maximized is therefore **created at
+the work area** of the display it will open on (`openingBounds`), which makes that frame the
+right size and place. The rectangle the user actually left behind is no longer the window's
+own idea of its restored size, so `keepRestoreBounds` holds it: it is what gets saved while
+the window is still maximized, and where the first "restore down" puts the window.
+
+The maximize is then applied `MAXIMIZE_AFTER_MS` (60 ms) *after* the window is on screen, not
+as part of showing it: a maximize landing in the same frame resizes the renderer at the moment
+the window appears, and what is on screen until the next frame arrives is the one painted for
+the old size — the app in a small rectangle in the corner of a window that is already big.
+The window is created at the size the maximize is going to give it, so the delay costs nothing
+visible. `startup.log` carries the geometry of each step (`traceBounds`: created, shown,
+maximized) and the renderer's own `innerWidth`/`innerHeight` a second later, which is what
+tells a window that is the wrong size apart from a renderer that never got the resize.
+
 `ready-to-show` is the frame the shell wants, but it is not a promise: a window that is
 not on screen is not guaranteed to be composited, and on Windows one that never announced
 a paint meant seconds of no window at all, followed by an editor whose splash had already

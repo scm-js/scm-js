@@ -63,7 +63,12 @@ kept per document in `saveOptionsAtom` and reused by Ctrl+S.
 bundle to GitHub Pages and recreates the rolling `latest` prerelease (installers for
 Windows, macOS x64/arm64, Linux AppImage/deb, and a zip of the web bundle); a pushed
 `vX.Y.Z` tag makes a numbered release with the same assets and generated notes. The
-version comes from the tag, or `<last tag>-latest.<date>.<sha>` on `main`. Repository
+version comes from the tag, or `<package.json version>-latest.<date>.<sha>` on `main`
+(the workflow warns when a tag and `package.json` disagree); both jobs `npm version` it
+into `package.json` before building, and `vite.config.ts` injects that as
+`__APP_VERSION__` — `src/version.ts` is where the splash and the About dialog read it,
+and electron-builder names the installers after it. Bumping the app's version means
+editing `package.json` and nothing else. Repository
 variables: `GAME_DATA_URL` (the hosted build's game-data address) and `PAGES_BASE`
 (`/` for a custom domain; default is the repository name). CI has no game data, so the
 real-data test suites skip there.

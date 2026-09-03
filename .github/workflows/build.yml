@@ -50,15 +50,23 @@ jobs:
       - id: pick
         shell: bash
         run: |
+          # package.json is the version everything else follows: the web jobs stamp it into
+          # the bundle (vite.config.ts → `__APP_VERSION__`) and electron-builder names the
+          # installers after it. A tag says which version it is; main says which one is
+          # being worked towards.
+          pkg=$(node -p "require('./package.json').version")
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag=${GITHUB_REF#refs/tags/v}
+            if [[ "$tag" != "$pkg" ]]; then
+              echo "::warning::tag v$tag does not match package.json ($pkg); building as $tag"
+            fi
             echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            echo "version=$tag" >> "$GITHUB_OUTPUT"
             echo "tagged=true" >> "$GITHUB_OUTPUT"
           else
-            # The newest version tag, as a prerelease of it: 1.2.0-latest.20260902.abc1234
-            last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.0.0)
+            # A prerelease of the version in development: 0.1.0-latest.20260902.abc1234
             echo "name=latest" >> "$GITHUB_OUTPUT"
-            echo "version=${last#v}-latest.$(date -u +%Y%m%d).$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            echo "version=${pkg%%-*}-latest.$(date -u +%Y%m%d).$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
             echo "tagged=false" >> "$GITHUB_OUTPUT"
           fi
 

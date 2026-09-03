@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { screenAtom } from "../../atoms/editorAtoms";
 import { preloadLogAtom, preloadStepAtom } from "../../atoms/preloadAtoms";
+import { APP_VERSION_SHORT } from "../../version";
 import { PINK, PINK_HI, buildSphere, drawNebula, drawSphereGlow, drawSphereWire, drawStars, generateStars, projectSphere } from "./starfield";
 
 /* ── Timing ─────────────────────────────────────────────── */
@@ -127,7 +128,7 @@ export default function SplashScreen() {
             <i style={{ width: `${progress * 100}%` }} />
           </div>
           <div className="splash-foot">
-            <span className="splash-version">v0.1 alpha</span>
+            <span className="splash-version">v{APP_VERSION_SHORT}</span>
             <span className="splash-author">by Jeany</span>
           </div>
           <div className="splash-skip">

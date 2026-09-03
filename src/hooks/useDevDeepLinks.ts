@@ -6,6 +6,8 @@ import {
 } from "../atoms/editorAtoms";
 import { openDialogAtom, type DialogId } from "../atoms/uiAtoms";
 import { TILESET_BY_ID, type TilesetId } from "../data/tilesets";
+import { LAYERS } from "../components/chrome/MenuBar";
+import { DIALOG_IDS } from "../components/dialogs/DialogHost";
 
 let applied = false;
 
@@ -29,7 +31,10 @@ export function useDevDeepLinks() {
     const p = new URLSearchParams(window.location.search);
     if (p.has("nosplash")) store.set(screenAtom, "editor");
     const layer = p.get("layer");
-    if (layer) store.set(activeLayerAtom, layer as EditorLayer);
+    if (layer) {
+      if (LAYERS.some((l) => l.id === layer)) store.set(activeLayerAtom, layer as EditorLayer);
+      else console.warn(`[deep link] no layer "${layer}" — one of ${LAYERS.map((l) => l.id).join(", ")}`);
+    }
     const mode = p.get("mode") ? terrainMode(p.get("mode")!) : null;
     if (mode) store.set(terrainModeAtom, mode);
     const zoom = Number(p.get("zoom"));
@@ -41,6 +46,9 @@ export function useDevDeepLinks() {
       store.set(fogViewPlayerAtom, fogPlayer - 1);
       store.set(fogPlayersAtom, 1 << (fogPlayer - 1));
     }
-    for (const d of p.getAll("dialog")) store.set(openDialogAtom, d as DialogId);
+    for (const d of p.getAll("dialog")) {
+      if (DIALOG_IDS.has(d)) store.set(openDialogAtom, d as DialogId);
+      else console.warn(`[deep link] no dialog "${d}" — one of ${[...DIALOG_IDS].join(", ")}`);
+    }
   }, [store]);
 }

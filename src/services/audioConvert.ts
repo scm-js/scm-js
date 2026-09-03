@@ -7,7 +7,7 @@
  * cover every format worth accepting, and a WASM decoder bundle would be several megabytes
  * for the same result.
  */
-import { encodeWav, isPlainPcm, parseWavHeader, type WavBits, type WavInfo } from "../formats/wav";
+import { encodeWav, isPlainPcm, parseWavHeader, type WavBits, type WavInfo, decodeWav, wavDuration, type PcmAudio } from "../formats/wav";
 
 export interface WavTarget {
   sampleRate: number;
@@ -42,10 +42,28 @@ export function matchesTarget(info: WavInfo, target: WavTarget): boolean {
   return isPlainPcm(info) && info.sampleRate === target.sampleRate && info.channels === target.channels && info.bitsPerSample === target.bits;
 }
 
-/** Decodes with a throw-away offline context, which needs no user gesture and no output device. */
+/**
+ * Decodes with a throw-away offline context, which needs no user gesture and no output
+ * device. A WAV in an encoding `formats/wav.ts` reads — the game's IMA ADPCM sounds above
+ * all — is decoded there first, since the browser's WAV decoder knows plain PCM only.
+ */
 export async function decodeAudio(bytes: Uint8Array): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(1, 1, 44100);
+  const own = decodeWav(bytes);
+  if (own) return toAudioBuffer(ctx, own);
   return ctx.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
+}
+
+/** Decoded samples as a Web Audio buffer, for playback and the offline resampler. */
+export function toAudioBuffer(ctx: BaseAudioContext, pcm: PcmAudio): AudioBuffer {
+  const frames = Math.max(1, pcm.channels[0]?.length ?? 0);
+  const buffer = ctx.createBuffer(Math.max(1, pcm.channels.length), frames, pcm.sampleRate);
+  pcm.channels.forEach((data, c) => {
+    const copy = new Float32Array(frames);
+    copy.set(data.subarray(0, frames));
+    buffer.copyToChannel(copy, c);
+  });
+  return buffer;
 }
 
 /** Resamples and down- or up-mixes `buffer` to the target through an offline render. */
@@ -70,7 +88,7 @@ export interface ConvertResult {
 /** `bytes` as a PCM WAV in `target`; a file already in that format is returned unchanged. */
 export async function convertToWav(bytes: Uint8Array, target: WavTarget): Promise<ConvertResult> {
   const info = parseWavHeader(bytes);
-  if (info && matchesTarget(info, target)) return { bytes, converted: false, seconds: info.dataLength / (info.channels * (info.bitsPerSample / 8)) / info.sampleRate };
+  if (info && matchesTarget(info, target)) return { bytes, converted: false, seconds: wavDuration(info) };
   const buffer = await decodeAudio(bytes);
   const channels = await renderTo(buffer, target);
   return { bytes: encodeWav(channels, target.sampleRate, target.bits), converted: true, seconds: buffer.duration };

@@ -145,12 +145,6 @@ export function buildDoodadCatalogue(tileset: Tileset, dddata: Uint8Array | null
 /** An empty catalogue, for when the tileset graphics are missing. */
 export const NO_DOODADS: DoodadCatalogue = { doodads: [], byId: new Map(), categories: [], hasPlacementData: false };
 
-/** The doodad a CV5 group belongs to, or null for terrain groups. */
-export function doodadOfGroup(catalogue: DoodadCatalogue, group: number): DoodadDef | null {
-  for (const def of catalogue.doodads) if (group >= def.group && group < def.group + def.height) return def;
-  return null;
-}
-
 /** Row-major cell index of tile column `col`, row `row`. */
 export const doodadCell = (def: DoodadDef, col: number, row: number) => row * def.width + col;
 

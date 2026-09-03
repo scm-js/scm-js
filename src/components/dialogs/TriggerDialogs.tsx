@@ -16,6 +16,7 @@ import { ArrowDown, ArrowUp, Braces, Code2, Copy, MessageSquare, Plus, Trash2, Z
 import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, scriptStateAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { findBlock, type ScriptBlock, type ScriptManifest } from "../../editor/script";
+import { DEATHS_TABLE_ADDRESS } from "../../script/compiler";
 import {
   ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
@@ -27,6 +28,7 @@ import {
   type ActionRecord, type ConditionRecord, type TriggerRecord,
 } from "../../formats/chk/sections/triggers";
 import { formatAction, formatCondition, formatTriggers, parseTriggers, summarizeTrigger, TriggerTextError, triggerComment, withComment, type TriggerNames } from "../../formats/triggers/text";
+import { cuwpSlotLabel, CUWP_SLOTS } from "../../editor/cuwp";
 import { usedLocations } from "../../editor/locations";
 import { unitCustomName } from "../../editor/settings";
 import {
@@ -81,10 +83,58 @@ function ChoiceSelect({ value, onChange, options, width }: { value: number; onCh
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
 }
 
+/** The player value a Deaths condition or Set Deaths action needs to reach a memory address (EUD): the address's offset into the deaths table, in dwords. */
+export function epdOf(address: number): number {
+  return ((address - DEATHS_TABLE_ADDRESS) / 4) >>> 0;
+}
+
+/** The address a player value reaches through the deaths table, for the tooltip. */
+export function addressOfEpd(player: number): number {
+  return (DEATHS_TABLE_ADDRESS + player * 4) >>> 0;
+}
+
+/**
+ * The player pick, with an EUD helper: a raw value stands for a memory address in a Deaths
+ * condition or Set Deaths action, and the address box turns one into the other.
+ */
+function PlayerArg({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const raw = !PLAYER_GROUP_CHOICES.some((c) => c.value === value);
+  const parsed = (() => {
+    const t = text.trim().replace(/^0x/i, "");
+    return /^[0-9a-f]+$/i.test(t) ? parseInt(t, 16) : null;
+  })();
+  return (
+    <span className="row" style={{ gap: 6 }}>
+      <ChoiceSelect value={value} onChange={onChange} options={PLAYER_GROUP_CHOICES} width={200} />
+      <Button size="sm" onClick={() => { setEditing(!editing); setText(raw ? addressOfEpd(value).toString(16).toUpperCase() : ""); }} title={raw ? `EUD: this player value reads memory at 0x${addressOfEpd(value).toString(16).toUpperCase()} through the deaths table` : "EUD: set the player to the value that reaches a memory address through the deaths table (Deaths and Set Deaths only)"}>EPD…</Button>
+      {editing && (
+        <span className="row" style={{ gap: 4 }}>
+          <TextInput className="mono" style={{ width: 110 }} placeholder="58A364" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && parsed !== null) { onChange(epdOf(parsed)); setEditing(false); } }} />
+          <Button size="sm" disabled={parsed === null} onClick={() => { onChange(epdOf(parsed!)); setEditing(false); }}>Set</Button>
+          <span className="hint">{parsed === null ? "hex address" : `player ${epdOf(parsed)}`}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
+  const open = useSetAtom(openDialogAtom);
   switch (kind) {
+    case "cuwp": {
+      // The action stores the slot 1-based; 0 is what StarEdit writes for "no slot yet".
+      const options = [{ value: 0, label: "No slot" }, ...Array.from({ length: CUWP_SLOTS }, (_, i) => ({ value: i + 1, label: cuwpSlotLabel(i, scenario.cuwp?.[i], scenario.cuwpUsed?.[i]) }))];
+      return (
+        <span className="row" style={{ gap: 6 }}>
+          <ChoiceSelect value={value} onChange={onChange} options={options} width={300} />
+          <Button size="sm" onClick={() => open("cuwpEditor", { slot: value > 0 ? value : 1 })} title="Edit the slots (Triggers ▸ Unit Properties Slots…)">Edit…</Button>
+        </span>
+      );
+    }
     case "player":
-      return <ChoiceSelect value={value} onChange={onChange} options={PLAYER_GROUP_CHOICES} width={200} />;
+      return <PlayerArg value={value} onChange={onChange} />;
     case "unit": {
       const options = [
         ...UNIT_CLASS_CHOICES,
@@ -121,7 +171,7 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
           <span className="hint">{value === 0 ? "all" : ""}</span>
         </span>
       );
-    case "number": case "amount": case "duration": case "percent": case "cuwp": case "slot":
+    case "number": case "amount": case "duration": case "percent": case "slot":
       return <NumberInput value={value} onChange={onChange} min={0} max={kind === "percent" ? 100 : 4294967295} width={120} unit={kind === "duration" ? "ms" : undefined} />;
     default: {
       const options = CHOICES[kind] ?? [];
@@ -253,7 +303,7 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
 
 /* ── Trigger list editor ────────────────────────────────── */
 
-function TriggerListEditor({ list, setList, briefing, names, scenario, manifest }: {
+function TriggerListEditor({ list, setList, briefing, names, scenario, manifest, initial }: {
   list: TriggerRecord[];
   setList: (next: TriggerRecord[]) => void;
   briefing: boolean;
@@ -261,6 +311,8 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest 
   scenario: Scenario;
   /** The trigger script's build manifest: its block is shown locked (found by content, so it follows local edits). */
   manifest?: ScriptManifest | null;
+  /** The row to open on — Check Map's and Find's go-to. */
+  initial?: number;
 }) {
   const openDialog = useSetAtom(openDialogAtom);
   const groups = useMemo(() => visibleGroups(list), [list]);
@@ -268,7 +320,7 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, manifest 
   const isGenerated = (i: number) => !!block && i >= block.start && i < block.start + block.count;
   const [filter, setFilter] = useState<Set<number> | null>(null); // null = every group
   const [q, setQ] = useState("");
-  const [sel, setSel] = useState<number | null>(list.length ? 0 : null);
+  const [sel, setSel] = useState<number | null>(initial !== undefined && initial >= 0 && initial < list.length ? initial : list.length ? 0 : null);
 
   const shown = useMemo(() => {
     const out: number[] = [];
@@ -467,7 +519,7 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       showApply
       footerLeft={<span>{local.length} trigger{local.length === 1 ? "" : "s"}</span>}
     >
-      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} manifest={script.block ? script.manifest : null} />
+      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} manifest={script.block ? script.manifest : null} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
     </DialogFrame>
   );
 }
@@ -494,7 +546,7 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
       showApply
       footerLeft={<span>{local.length} briefing{local.length === 1 ? "" : "s"} · one per player, played before the map starts</span>}
     >
-      <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} />
+      <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
     </DialogFrame>
   );
 }
@@ -516,6 +568,11 @@ function textOf(scn: Scenario, block: ScriptBlock | null): string {
   return parts.filter((p) => p !== "").join("\n");
 }
 
+/**
+ * The Text Trigger Editor edits either list: TRIG, or — with `payload.briefing` or the
+ * Briefing tab — MBRF in the same syntax with the briefing action set. Switching tabs
+ * re-reads the map, so compile (Apply) first.
+ */
 export function TextTriggerEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(triggersRevisionAtom);
@@ -523,19 +580,22 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const close = useSetAtom(closeDialogAtom);
   const names = useNames(scenario);
-  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ text: textOf(scn, script.block), error: null as TriggerTextError | null, status: "" }));
+  const [briefing, setBriefing] = useState(entry.payload?.briefing === true);
+  const sourceOf = (scn: Scenario, brief: boolean) => (brief ? formatTriggers(scn.briefing, triggerNames(scn), true) : textOf(scn, script.block));
+  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ text: sourceOf(scn, briefing), error: null as TriggerTextError | null, status: "" }));
   const [wrap, setWrap] = useState(false);
   if (!scenario || !form || !names) return <NoMap entry={entry} title="Text Trigger Editor" icon={<Braces size={14} />} />;
 
   const lines = form.text.split("\n").length;
+  const what = briefing ? "briefing" : "trigger";
 
-  /** Parse the text; on success replace the scenario's triggers. Returns whether it compiled. */
+  /** Parse the text; on success replace the scenario's list. Returns whether it compiled. */
   const compile = (): boolean => {
     try {
-      const parsed = parseTriggers(form.text, names).map((t) => t.trigger);
-      applyTriggers(scenario, parsed);
+      const parsed = parseTriggers(form.text, names, briefing).map((t) => t.trigger);
+      if (briefing) applyBriefing(scenario, parsed); else applyTriggers(scenario, parsed);
       commit();
-      setForm({ ...form, error: null, status: `Compiled ${parsed.length} trigger${parsed.length === 1 ? "" : "s"}.` });
+      setForm({ ...form, error: null, status: `Compiled ${parsed.length} ${what}${parsed.length === 1 ? "" : "s"}.` });
       return true;
     } catch (e) {
       if (e instanceof TriggerTextError) setForm({ ...form, error: e, status: "" });
@@ -545,11 +605,15 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
   };
   const format = () => {
     try {
-      const parsed = parseTriggers(form.text, names).map((t) => t.trigger);
-      setForm({ ...form, text: formatTriggers(parsed, names), error: null, status: "Formatted." });
+      const parsed = parseTriggers(form.text, names, briefing).map((t) => t.trigger);
+      setForm({ ...form, text: formatTriggers(parsed, names, briefing), error: null, status: "Formatted." });
     } catch (e) {
       if (e instanceof TriggerTextError) setForm({ ...form, error: e, status: "" });
     }
+  };
+  const switchTo = (brief: boolean) => {
+    setBriefing(brief);
+    setForm({ text: sourceOf(scenario, brief), error: null, status: "" });
   };
 
   return (
@@ -561,7 +625,7 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
       footerLeft={
         form.error
           ? <span className="trig-error">{form.error.message}</span>
-          : <span>{lines} lines · TrigEdit syntax{form.status ? ` · ${form.status}` : ""}</span>
+          : <span>{lines} lines · TrigEdit syntax · {briefing ? "mission briefing (MBRF)" : "triggers (TRIG)"}{form.status ? ` · ${form.status}` : ""}</span>
       }
       footer={
         <>
@@ -572,9 +636,11 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
       }
     >
       <div className="row">
+        <Check radio label="Triggers" checked={!briefing} onChange={() => switchTo(false)} title="TRIG — the map's triggers" />
+        <Check radio label="Briefing" checked={briefing} onChange={() => switchTo(true)} title="MBRF — the mission briefing, in the same syntax with the briefing actions" />
         <Button size="sm" onClick={compile}>Compile</Button>
         <Button size="sm" onClick={format}>Format</Button>
-        <Button size="sm" onClick={() => setForm({ ...form, text: textOf(scenario, script.block), error: null, status: "Reloaded from the map." })}>Reload</Button>
+        <Button size="sm" onClick={() => setForm({ ...form, text: sourceOf(scenario, briefing), error: null, status: "Reloaded from the map." })}>Reload</Button>
         <span className="grow" />
         <Check label="Word wrap" checked={wrap} onChange={(e) => setWrap(e.target.checked)} />
       </div>

@@ -7,9 +7,27 @@
  */
 
 export type DesktopLocateResult =
-  | { status: "ready"; from: string; files: number; bytes: number; at: string }
+  | { status: "ready"; from: string; files: number; bytes: number; at: string; /** Archives that could not be opened on the way, if any. */ problems?: string[] }
   | { status: "missing"; searched: string[] }
   | { status: "failed"; message: string };
+
+/** Where the desktop build found the game: its executable and its Maps folder, if any. */
+export interface DesktopGameInfo {
+  /** The game executable, or null when none of the searched folders holds one. */
+  exe: string | null;
+  /** The game's Maps folder (created on first use when the install is known), or null. */
+  mapsDir: string | null;
+  installDir: string | null;
+  searched: string[];
+}
+
+export interface DesktopTestResult {
+  /** Where the map was written. */
+  path: string;
+  launched: boolean;
+  /** Why the game was not launched, when it was asked for. */
+  message?: string;
+}
 
 export interface DesktopBridge {
   platform: string;
@@ -41,6 +59,23 @@ export interface DesktopBridge {
     onProgress(listener: (fraction: number, label: string) => void): () => void;
     /** The directories `locate` looks in, for the dialog to list. */
     searchDirs(): Promise<string[]>;
+  };
+  /** Map files the operating system hands the app: a double-click, "Open with", a path on the command line. */
+  files: {
+    /** A file arrived; open it the way File ▸ Open does. Fires for the file the app was started with once the editor listens. */
+    onOpen(listener: (file: { name: string; bytes: Uint8Array }) => void): () => void;
+  };
+  /** Tools ▸ Test Map: hand the map to the installed game. */
+  game: {
+    /** Look for the game (its executable and Maps folder) in the usual places, or under `dir` when given. */
+    info(dir?: string): Promise<DesktopGameInfo>;
+    /** A native folder dialog for the game's folder. `null` when dismissed. */
+    pickFolder(): Promise<string | null>;
+    /**
+     * Write the map into the `scmJS` folder under the Maps folder (`dir` names the game or
+     * Maps folder; the located one when omitted) and, when asked, start the game.
+     */
+    test(bytes: Uint8Array, fileName: string, options: { dir?: string; launch: boolean }): Promise<DesktopTestResult>;
   };
 }
 

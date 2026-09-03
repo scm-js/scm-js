@@ -175,7 +175,3 @@ export function moveSprites(scn: Scenario, indices: number[], dx: number, dy: nu
   return updateSprites(scn, indices, (r) => clampSprite(r.x + dx, r.y + dy, scn.width, scn.height));
 }
 
-/** Set or clear one `SpriteFlag` bit on the sprites at `indices`. */
-export function setSpriteFlag(scn: Scenario, indices: number[], bit: number, on: boolean): SpriteChange[] {
-  return updateSprites(scn, indices, (r) => ({ flags: on ? r.flags | bit : r.flags & ~bit }));
-}

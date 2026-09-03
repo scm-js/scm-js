@@ -1,4 +1,9 @@
+import type { MapFileHandle } from "../services/mapIo";
+import type { MemberInfo } from "../formats/mpq/scm";
 import { atom, type Getter, type Setter } from "jotai";
+import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { browserStorage } from "./storage";
+import { storeHandle } from "../services/handleStore";
 import {
   mapVersionOf, scenarioDescription, scenarioName, tilesetIndex, type Scenario,
 } from "../formats/chk/scenario";
@@ -6,9 +11,9 @@ import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
-  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom,
+  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom,
+  spritePlacingAtom, type EditorLayer,
 } from "./editorAtoms";
 import { statusMessageAtom } from "./uiAtoms";
 import { applyChanges } from "../editor/terrain";
@@ -18,11 +23,12 @@ import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { applyEntry, hasEdits, touchesDoodads, type HistoryEntry } from "../editor/history";
-import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations } from "../editor/locations";
+import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { relocateScriptBlock, scriptState, type ScriptState } from "../editor/script";
 import { resizeScenario, type ResizeResult } from "../editor/resize";
+import { changeTileset, type ChangeTilesetResult } from "../editor/tileset";
 import { baseTerrain } from "../formats/tileset/terrain";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
@@ -31,11 +37,34 @@ export const scenarioAtom = atom<Scenario | null>(null);
 /** Non-scenario archive members, carried across on save so custom assets survive. */
 export const archiveExtrasAtom = atom<Map<string, Uint8Array>>(new Map());
 
-/** Problems the parser noticed — surfaced rather than swallowed. */
-export const scenarioWarningsAtom = atom<string[]>((get) => get(scenarioAtom)?.warnings ?? []);
 
-/** File names opened this session, most recent first. */
-export const recentFilesAtom = atom<string[]>([]);
+/**
+ * File ▸ Open Recent. Names survive a reload (`scmjs.recents`); the file handle behind a
+ * name — what lets the entry reopen from disk — lives in IndexedDB under `handleKey`
+ * (`services/handleStore.ts`), where Chromium browsers and the desktop build keep one and
+ * Firefox and Safari have none, so an entry without a handle is listed but reopens through
+ * the file picker.
+ */
+export interface RecentEntry {
+  name: string;
+  /** When it was last opened or saved, ms since the epoch. */
+  at: number;
+  /** IndexedDB key of the file handle, when one could be kept. */
+  handleKey?: string;
+}
+
+export const MAX_RECENTS = 10;
+
+export const recentFilesAtom = atomWithStorage<RecentEntry[]>("scmjs.recents", [], createJSONStorage(browserStorage), { getOnInit: true });
+
+/** Put `name` at the top of the recents, keeping (or replacing) its handle key; the handle itself goes to IndexedDB. */
+export const pushRecentAtom = atom(null, (get, set, req: { name: string; handle: MapFileHandle | null }) => {
+  const { name, handle } = req;
+  const key = handle ? `recent:${name}` : get(recentFilesAtom).find((r) => r.name === name)?.handleKey;
+  const entry: RecentEntry = { name, at: Date.now(), ...(key ? { handleKey: key } : {}) };
+  set(recentFilesAtom, [entry, ...get(recentFilesAtom).filter((r) => r.name !== name)].slice(0, MAX_RECENTS));
+  if (handle) void storeHandle(`recent:${name}`, handle);
+});
 
 /** Bumped whenever terrain changes, so the viewport knows to repaint. */
 export const terrainRevisionAtom = atom(0);
@@ -122,6 +151,43 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   });
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);
+  afterWholeDocumentChange(get, set);
+  return result;
+});
+
+export interface ChangeTilesetRequest {
+  tileset: TilesetId;
+  /** ISOM id of the terrain the map is refilled with (the tileset's default when omitted). */
+  terrainId?: number;
+  /** Keep the tile numbers and change only ERA. */
+  keepTiles?: boolean;
+}
+
+/**
+ * Scenario ▸ Map Properties ▸ Tileset: change ERA and refill the terrain (editor/tileset.ts).
+ * A transaction like Resize — history dropped, every revision bumped. The new tileset's
+ * graphics should be loaded first (`ensureTileset`) so the fill uses real tile ids; the
+ * caller does that, since an atom cannot await. Null when there is no map.
+ */
+export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest): ChangeTilesetResult | null => {
+  const scn = get(scenarioAtom);
+  if (!scn) return null;
+  const era = Math.max(0, TILESETS.findIndex((t) => t.id === req.tileset));
+  const previous = peekTileset(get(tilesetFileNameAtom));
+  const next = peekTileset(TILESET_FILENAMES[era]);
+  const tileset = next?.tileset ?? null;
+  const result = changeTileset(scn, {
+    era, tileset, keepTiles: req.keepTiles,
+    fill: baseTerrain(tileset, req.terrainId ?? TILESETS[era].defaultIsom),
+    doodads: previous?.doodads ?? null,
+  });
+  set(mapTilesetAtom, req.tileset);
+  afterWholeDocumentChange(get, set);
+  return result;
+});
+
+/** What every transaction that moves the whole document does afterwards: drop the history, clear the selections, repaint everything. */
+function afterWholeDocumentChange(get: Getter, set: Setter) {
   set(mapModifiedAtom, true);
   set(undoStackAtom, []);
   set(redoStackAtom, []);
@@ -136,11 +202,12 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
-  return result;
-});
+}
 
 export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
   const scn = get(scenarioAtom);
+  // The scenario is mutated in place; a tileset change bumps the settings revision so this re-reads ERA.
+  get(settingsRevisionAtom);
   if (scn) return TILESET_FILENAMES[tilesetIndex(scn)];
   const id = get(mapTilesetAtom);
   const index = TILESETS.findIndex((t) => t.id === id);
@@ -151,6 +218,10 @@ export interface LoadedDocument {
   scenario: Scenario;
   extras: Map<string, Uint8Array>;
   fileName: string | null;
+  /** A handle Save can write straight back to, when the browser gave one. */
+  handle?: MapFileHandle | null;
+  /** How the scenario was stored in the archive it came from. */
+  origin?: MemberInfo | null;
   /** How the document came to be installed; File ▸ Open when omitted. */
   reason?: DocumentChangeReason;
 }
@@ -176,6 +247,10 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(scenarioAtom, scenario);
   set(archiveExtrasAtom, doc.extras);
   set(mapFilePathAtom, doc.fileName);
+  set(mapFileHandleAtom, doc.handle ?? null);
+  set(mapOriginAtom, doc.origin ?? null);
+  // A re-parse keeps the options the user confirmed; a new document starts from the defaults.
+  if (doc.reason !== "replace") set(saveOptionsAtom, null);
 
   set(mapNameAtom, scenarioName(scenario) ?? doc.fileName ?? "Untitled Scenario");
   set(mapDescriptionAtom, scenarioDescription(scenario) ?? "");
@@ -202,7 +277,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(redoStackAtom, []);
 
   if (doc.fileName) {
-    set(recentFilesAtom, [doc.fileName, ...get(recentFilesAtom).filter((f) => f !== doc.fileName)].slice(0, 10));
+    set(pushRecentAtom, { name: doc.fileName, handle: doc.handle ?? null });
   }
 });
 
@@ -213,7 +288,9 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * of the document may have changed. The mirror atoms are refilled from the new object.
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
-  set(loadDocumentAtom, { scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), reason: "replace" });
+  set(loadDocumentAtom, {
+    scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
+  });
   set(mapModifiedAtom, true);
 });
 
@@ -222,6 +299,9 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());
   set(mapFilePathAtom, null);
+  set(mapFileHandleAtom, null);
+  set(mapOriginAtom, null);
+  set(saveOptionsAtom, null);
   set(mapModifiedAtom, false);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
@@ -436,6 +516,23 @@ export const startLocationsAtom = atom<ViewStartLocation[]>((get) => {
 /* ── Doodad selection edits ──────────────────────────────── */
 
 /** Remove the selected doodads (tiles, DD2 records and overlay sprites) as one undo step. Returns how many went. */
+/**
+ * Edit ▸ Select All (Ctrl+A) on an object layer: every doodad, sprite, used location (never
+ * Anywhere) or unit; the clipboard layer marks the whole map through its own hook. Returns
+ * how many were selected.
+ */
+export const selectAllAtom = atom(null, (get, set, layer: EditorLayer): number => {
+  const scn = get(scenarioAtom);
+  if (!scn) return 0;
+  const all = (n: number) => Array.from({ length: n }, (_, i) => i);
+  switch (layer) {
+    case "doodads": set(selectedDoodadsAtom, all(scn.doodads.length)); return scn.doodads.length;
+    case "sprites": set(selectedSpritesAtom, all(scn.sprites.length)); return scn.sprites.length;
+    case "locations": { const used = usedLocations(scn).filter((i) => i !== ANYWHERE_INDEX); set(selectedLocationsAtom, used); return used.length; }
+    default: set(selectedUnitsAtom, all(scn.units.length)); return scn.units.length;
+  }
+});
+
 export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedDoodadsAtom);

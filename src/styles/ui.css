@@ -579,17 +579,6 @@ input[type="range"] {
   background: var(--border);
   margin: 4px 0;
 }
-.placeholder-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-faint);
-  font-size: var(--fs-xs);
-}
-
 /* tooltip */
 .tooltip {
   background: var(--bg-5);

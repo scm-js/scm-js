@@ -3,13 +3,15 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom,
-  brushSizeAtom, cursorTileAtom, doodadPlacementAtom,
+  brushSizeAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorTileAtom, doodadPlacementAtom,
   doodadPlacingAtom, fogModeAtom, fogPlayersAtom,
   fogViewPlayerAtom, locationSnapAtom, mapTilesetAtom,
   rectVariationAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom, spritePlaceOptionsAtom, spritePlacingAtom, terrainModeAtom,
   unitOwnerAtom, unitPlacingAtom,
 } from "../../atoms/editorAtoms";
 import { doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
+import { CLIP_PARTS, clipSummary } from "../../editor/clipboard";
+import { tilesetIndex } from "../../formats/chk/scenario";
 import { boundsOf, isAnywhereIntact, isInverted, locationName } from "../../editor/locations";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
@@ -487,6 +489,34 @@ function FogProps() {
     );
 }
 
+/* ── Cut / Copy / Paste ─────────────────────────────────── */
+
+/** The marked area, what the clipboard holds, and how a paste lands. */
+function ClipProps() {
+  const scenario = useAtomValue(scenarioAtom);
+  const marked = useAtomValue(clipSelectionAtom);
+  const clip = useAtomValue(clipboardAtom);
+  const parts = useAtomValue(clipPartsAtom);
+  const mode = useAtomValue(clipPasteModeAtom);
+  const pasting = useAtomValue(clipPastingAtom);
+  useAtomValue(terrainRevisionAtom);
+  if (!scenario) return <div className="props-empty"><SquareDashed size={20} />Open or create a map first.</div>;
+  const parted = CLIP_PARTS.filter((p) => parts[p]).map((p) => p === "fog" ? "fog of war" : p);
+  return (
+    <div className="props">
+      <div className="props-section">Marked area</div>
+      {marked
+        ? <Row k="Tiles">{marked.x0}, {marked.y0} → {marked.x1 - 1}, {marked.y1 - 1} · {marked.x1 - marked.x0} × {marked.y1 - marked.y0}</Row>
+        : <div className="span hint">Drag on the map to mark an area; Ctrl+C copies it, Ctrl+X cuts it, Del clears it.</div>}
+      <div className="props-section">Clipboard</div>
+      <Row k="Holds">{clip ? <span className="mono">{clipSummary(clip)}</span> : <span className="faint">empty</span>}</Row>
+      <Row k="Copies">{parted.length > 0 ? parted.join(", ") : <span className="faint">nothing ticked</span>}</Row>
+      <Row k="Paste">{mode === "replace" ? "replace — clears units, sprites and doodads under the paste" : "merge — over what is there"}{pasting ? " · click the map to paste" : ""}</Row>
+      {clip && clip.era !== tilesetIndex(scenario) && <div className="span hint">The clip is from another tileset: its terrain and doodads will not paste, the rest will.</div>}
+    </div>
+  );
+}
+
 export default function PropertiesPanel() {
   const layer = useAtomValue(activeLayerAtom);
 
@@ -495,8 +525,8 @@ export default function PropertiesPanel() {
   if (layer === "doodads") return <DoodadProps />;
   if (layer === "sprites") return <SpriteProps />;
   if (layer === "fog") return <FogProps />;
-
   if (layer === "locations") return <LocationProps />;
+  if (layer === "clipboard") return <ClipProps />;
 
   return (
     <div className="props-empty">

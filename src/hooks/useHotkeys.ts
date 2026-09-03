@@ -2,12 +2,13 @@ import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom,
+  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom, zoomToFitAtom,
   type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, undoAtom,
+  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, selectAllAtom, undoAtom,
 } from "../atoms/documentAtoms";
+import { desktopBridge } from "../gamedata/desktop";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
@@ -47,6 +48,8 @@ export function useHotkeys() {
   const pluginHotkeys = useAtomValue(pluginHotkeysAtom);
   const cancelPick = useSetAtom(cancelMapPickAtom);
   const cancelTool = useSetAtom(cancelMapToolAtom);
+  const selectAll = useSetAtom(selectAllAtom);
+  const zoomToFit = useSetAtom(zoomToFitAtom);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,13 +88,22 @@ export function useHotkeys() {
           t: () => open("triggerEditor"),
           f: () => open("find"),
           ",": () => open("preferences"),
+          f5: () => open("testMap", { run: true }),
           "=": () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z),
           "+": () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z),
           "-": () => setZoom((z) => [...ZOOM_LEVELS].reverse().find((v) => v < z) ?? z),
           "0": () => setZoom(1),
+          a: () => {
+            if (activeLayer === "clipboard") { clipTools.selectAll(); return; }
+            const n = selectAll(activeLayer);
+            if (!["doodads", "sprites", "locations", "units"].includes(activeLayer)) setLayer("units");
+            setStatus(`Selected ${n} ${activeLayer === "doodads" ? "doodad" : activeLayer === "sprites" ? "sprite" : activeLayer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
+          },
+          // Ctrl+W is the browser's own shortcut (close the tab); only the desktop build sees it here.
+          ...(desktopBridge() ? { w: () => open("confirmClose") } : {}),
         };
-        // Inside a text field the browser keeps its own clipboard and undo.
-        if (map[k] && !(typing && ["=", "+", "-", "0", "g", "t", "f", "z", "y", "x", "c", "v"].includes(k))) { e.preventDefault(); map[k](); }
+        // Inside a text field the browser keeps its own clipboard, selection and undo.
+        if (map[k] && !(typing && ["=", "+", "-", "0", "g", "t", "f", "z", "y", "x", "c", "v", "a"].includes(k))) { e.preventDefault(); map[k](); }
         return;
       }
       if (mod && e.shiftKey) {
@@ -99,7 +111,7 @@ export function useHotkeys() {
         if (k === "s") { e.preventDefault(); open("saveAs"); }
         if (k === "z" && !typing) { e.preventDefault(); const l = redo(); setStatus(l ? `Redid: ${l}` : "Nothing to redo"); }
         if (k === "t") { e.preventDefault(); open("textTriggerEditor"); }
-        if (k === ")" || k === "0") { e.preventDefault(); setZoom(0.25); }
+        if (k === ")" || k === "0") { e.preventDefault(); zoomToFit(); }
         return;
       }
       if (e.altKey && e.key === "Enter") { e.preventDefault(); open("mapProperties"); return; }
@@ -171,5 +183,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool]);
+  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit]);
 }

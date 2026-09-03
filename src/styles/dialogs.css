@@ -1199,3 +1199,57 @@
   min-height: 0;
   flex: 1;
 }
+
+/* save dialog — the section table and the totals under it */
+.save-sections {
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--bevel-sunken);
+}
+.save-sections .table { table-layout: fixed; }
+.save-sections .table th:nth-child(1), .save-sections .table td:nth-child(1) { width: 58px; }
+.save-sections .table th:nth-child(3), .save-sections .table td:nth-child(3) { width: 66px; text-align: right; }
+.save-sections .table th:nth-child(4), .save-sections .table td:nth-child(4) { width: 80px; overflow: visible; }
+.save-sections .table td { padding: 2px 8px; overflow: hidden; text-overflow: ellipsis; }
+.save-sections tr.dropped td { color: var(--text-faint); text-decoration: line-through; }
+.save-sections tr.dropped td.fate, .save-sections tr.merged td.fate { text-decoration: none; }
+.save-sections td.name { font-family: var(--font-mono); }
+.save-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-size: var(--fs-sm);
+}
+.save-summary .k { color: var(--text-dim); }
+.save-summary .v { font-family: var(--font-mono); }
+.save-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 120px;
+  overflow: auto;
+}
+.save-extras .check { height: 20px; }
+.save-extras .check .size { margin-left: auto; color: var(--text-faint); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.save-extras .check > span { display: flex; flex: 1; gap: 8px; min-width: 0; }
+.save-extras .check .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.save-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: rgba(224, 165, 69, 0.08);
+  border: 1px solid rgba(224, 165, 69, 0.25);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.save-warning svg { flex: none; color: var(--warn); margin-top: 1px; }
+.save-presets { display: flex; gap: 6px; align-items: center; }
+.save-options .check { height: auto; min-height: 22px; align-items: flex-start; padding: 3px 0; }
+.save-options .check input { margin-top: 1px; }
+.save-options .check > span { white-space: normal; }
+

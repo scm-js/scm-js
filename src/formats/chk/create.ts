@@ -1,9 +1,9 @@
 /**
  * A scenario built from nothing, for File ▸ New and for the map the editor opens on.
  *
- * The CHK it carries holds only the three sections the editor never models — StarEdit's
- * version stamp (IVE2), the game's verification table (VCOD) and the empty CUWP slots
- * (UPRP / UPUS) — as raw bytes; every modelled section is marked dirty, so
+ * The CHK it carries holds only the two sections the editor never models — StarEdit's
+ * version stamp (IVE2) and the game's verification table (VCOD) — as raw bytes; every
+ * modelled section is marked dirty, so
  * `serializeScenario` writes them all out in StarEdit's section order. The settings
  * tables start on their defaults but are *present*, since the game refuses a map
  * without them: what comes out is the same set of sections a fresh StarEdit map has.
@@ -14,6 +14,7 @@ import {
   defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
 } from "./sections/settings";
 import { defaultWavs } from "./sections/sounds";
+import { defaultCuwp, defaultCuwpUsed } from "./sections/cuwp";
 import { defaultVcod } from "./sections/vcod";
 import type { ChkSection } from "./reader";
 import type { Scenario } from "./scenario";
@@ -27,19 +28,15 @@ const STAREDIT_VERSION = 11;
 /** BW maps carry 255 location slots; index 63 is the fixed "Anywhere". */
 const LOCATION_SLOTS = 255;
 
-/** CUWP: 64 slots of 20 bytes, and the 64 "slot used" bytes. */
-const UPRP_SIZE = 1280;
-const UPUS_SIZE = 64;
-
 /**
  * Sections `createScenario` fills in, and therefore has to have written on save: the
  * section set of a Brood War map StarEdit creates — the `x` layouts of the settings
  * pairs only, as in Blizzard's own maps (a hybrid map is the one that carries both).
  */
 const CREATED_SECTIONS = [
-  "TYPE", "VER ", "ERA ", "DIM ", "SIDE", "OWNR", "COLR", "MTXM", "TILE", "ISOM", "MASK",
+  "TYPE", "VER ", "ERA ", "DIM ", "SIDE", "OWNR", "IOWN", "COLR", "MTXM", "TILE", "ISOM", "MASK",
   "UNIT", "THG2", "DD2 ", "MRGN", "STR ", "SPRP", "FORC", "TRIG", "MBRF", "WAV ",
-  "PUNI", "UNIx", "UPGx", "PUPx", "TECx", "PTEx",
+  "PUNI", "UNIx", "UPGx", "PUPx", "TECx", "PTEx", "UPRP", "UPUS",
 ];
 
 /** Where each string the table is created with lands, by construction. */
@@ -80,8 +77,6 @@ export function rawCreatedSections(): ChkSection[] {
   return [
     raw("IVE2", ive2),
     raw("VCOD", defaultVcod()),
-    raw("UPRP", new Uint8Array(UPRP_SIZE)),
-    raw("UPUS", new Uint8Array(UPUS_SIZE)),
   ];
 }
 
@@ -110,6 +105,7 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     // Eight open slots plus the four neutral ones, which is what a melee map looks like
     // before anyone touches Player Settings.
     playerTypes: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerType.Human : PlayerType.Neutral)),
+    editorPlayerTypes: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerType.Human : PlayerType.Neutral)),
     playerRaces: Array.from({ length: PLAYER_SLOTS }, (_, i) => (i < FORCE_SLOTS ? PlayerRace.UserSelectable : PlayerRace.Neutral)),
     playerColors: [0, 1, 2, 3, 4, 5, 6, 7],
     playerRgb: null,
@@ -120,6 +116,8 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
     techSettings: defaultTechSettings(),
     techRestrictions: defaultTechRestrictions(),
     wavs: defaultWavs(),
+    cuwp: defaultCuwp(),
+    cuwpUsed: defaultCuwpUsed(),
     forces: {
       playerForce: Array.from({ length: FORCE_SLOTS }, () => 0),
       nameIndex: [0, 1, 2, 3].map((i) => STRING_INDEX.force1 + i),

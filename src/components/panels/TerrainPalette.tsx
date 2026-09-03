@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ContextMenu } from "radix-ui";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
@@ -9,6 +9,7 @@ import {
 import { activeLayerAtom, clipSelectionAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
+import { openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
@@ -22,6 +23,22 @@ import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
+
+/**
+ * What a palette shows when the tileset files are not there: the graphics are installed from
+ * Help ▸ Game Data… (files, a folder, the desktop app's search, or an address), so the message
+ * offers that dialog rather than naming an extraction script.
+ */
+function NoTileset({ what, loading }: { what: string; loading: boolean }) {
+  const open = useSetAtom(openDialogAtom);
+  if (loading) return <div className="hint" style={{ padding: 12 }}>Loading tileset…</div>;
+  return (
+    <div className="hint" style={{ padding: 12, display: "grid", gap: 8, justifyItems: "start" }}>
+      <span>No tileset graphics installed — {what}</span>
+      <Button size="sm" onClick={() => open("gameData")}>Set up game data…</Button>
+    </div>
+  );
+}
 
 /**
  * One line about the active symmetry mode (Tools ▸ Symmetry…): the Rect and Tile brushes
@@ -161,9 +178,7 @@ function RectTab() {
       )}
       <div className="palette-scroll">
         {types.length === 0 && (
-          <div className="hint" style={{ padding: 12 }}>
-            {error ? "No tileset graphics installed — the Rect brush needs them to know which tiles make up each terrain." : "Loading tileset…"}
-          </div>
+          <NoTileset loading={!error} what="the Rect brush needs them to know which tiles make up each terrain." />
         )}
         <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
           {types.map((t) => (
@@ -307,9 +322,7 @@ function TileTab() {
           : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={setActive} />
       ) : (
         <div className="palette-scroll">
-          <div className="hint" style={{ padding: 12 }}>
-            {error ? "No tileset graphics installed — nothing to browse. Ids still paint; the map shows flat colour until the files are extracted." : "Loading tileset…"}
-          </div>
+          <NoTileset loading={!error} what="nothing to browse. Ids still paint; the map shows flat colour until they are installed." />
         </div>
       )}
       <SelectedTileFooter id={active} />
@@ -402,9 +415,7 @@ function BlendTab() {
       </div>
       <div className="palette-scroll">
         {!loaded && (
-          <div className="hint" style={{ padding: 12 }}>
-            {error ? "No tileset graphics installed — the Blend brush compares tile pixels, so it needs them." : "Loading tileset…"}
-          </div>
+          <NoTileset loading={!error} what="the Blend brush compares tile pixels, so it needs them." />
         )}
         {loaded && !sides && (
           <div className="hint" style={{ padding: 12, display: "grid", gap: 8 }}>

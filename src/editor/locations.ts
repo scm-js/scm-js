@@ -268,16 +268,6 @@ export function moveLocations(scn: Scenario, indices: number[], dx: number, dy: 
   });
 }
 
-/** Give a location new bounds (normalised and clamped); a zero-area box or no change yields nothing. */
-export function resizeLocation(scn: Scenario, index: number, bounds: Bounds): LocationChange[] {
-  if (editable(scn, [index]).length === 0) return [];
-  const b = clampBounds(normalizeBounds(bounds), scn);
-  if (b.right === b.left || b.bottom === b.top) return [];
-  const r = scn.locations[index];
-  if (sameBounds(r, b)) return [];
-  return [{ index, before: r, after: { ...r, ...b } }];
-}
-
 export interface LocationPatch {
   name?: string;
   left?: number;

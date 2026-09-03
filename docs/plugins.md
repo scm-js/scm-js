@@ -314,7 +314,10 @@ ones' results, and both commit once at the end.
 | `history()` | `{ undo, redo, undoDepth, redoDepth }`: the labels the Edit menu shows and how deep each stack is, without moving anything — so a plugin can tell whether its own edit is still the top entry before undoing it. |
 | `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
 | `create({ width, height, tileset, name?, description?, terrainId? })` | A blank map in place of the current one, the way File ▸ New makes one — flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every section a fresh map needs — through the same unsaved-changes gate as `open`. Resolves true once the new map is the open document, false when the user kept the current one. |
-| `export({ format?, fileName? })` | The open map as a `File`, exactly as Save writes it, archive extras included: `scx` (default), `scm`, or a bare `chk`. Null with no map. Hand it to a `FormData` and it uploads. |
+| `export({ format?, fileName?, saveOptions? })` | The open map as a `File`, as Save writes it — the save options last confirmed for this map (or their defaults: PKWARE and encryption for a new map, the way it was opened for an opened one), archive extras included — `scx` / `scm` / a bare `chk`; `saveOptions` overrides compression, encryption and what is left out. Null with no map. Hand it to a `FormData` and it uploads. |
+| `save({ copy? })` / `saveAs({ copy? })` | File ▸ Save and Save As. `save` writes back where the map came from with its remembered options — into the file when the browser gave a handle, else through the browser's save dialog or as a download — and a map with no file yet goes through the Save dialog; `saveAs` always opens it; `copy` writes a copy and leaves the document's name and clean state alone. Resolve true once written, false when the user dismissed a dialog or the write failed. |
+| `close()` | File ▸ Close, through the same unsaved-changes gate as `open`; true once the map is gone. |
+| `changeTileset({ tileset, terrainId?, keepTiles? })` | Map Properties' tileset change: ERA moves and the terrain is laid again with `terrainId` (the new tileset's default when omitted) after the new graphics load, the doodads go, everything else stays; `keepTiles` changes only ERA. A transaction outside the undo model that drops both history stacks, like `resize`. |
 | `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
 | `resize({ width, height, anchor?, terrainId?, clampLocations? })` | Scenario ▸ Resize / Crop Map: content keeps its place relative to the anchor (a 3 × 3 grid, 4 = centre), the new ground is `terrainId` or the tileset's default, objects outside the new bounds are dropped and locations clamped. A transaction outside the undo model that **drops both history stacks**, as the dialog does. Returns the `ResizeResult` (what was dropped), null with no map. |
 | `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
@@ -377,17 +380,27 @@ repaints.
 | `fillFlat(rect, terrainId)` | Lay terrain the way a new map is laid, ISOM lattice included. |
 | `rebuildIsom()` | Reconstruct the ISOM from the tiles — for a map that arrived without one, or whose lattice no longer matches after Rect / Tile edits: exact for terrain laid down isometrically, a best guess under doodads and for hand-placed tiles. A missing or wrongly sized ISOM is created (undo removes it again); an existing one gets only the diamonds that differ. Needs the tileset graphics; null without them, else `{ created, changed, diamonds, unresolved }`. |
 | `paintIsom(diamond, terrainId, extent = 1)` | The isometric brush on one diamond: sets the ISOM and generates the cliff/shore tiles around it. Needs ISOM and the tileset. |
+| `tilesFromIsom()` | The reverse of `rebuildIsom`: every tile regenerated from the lattice, what StarEdit does after an isometric edit. Needs ISOM and the tileset; tiles changed, or null. |
+| `replaceTerrain(from, to, rect?)` | Tools ▸ Replace Terrain: every tile matching `from` — `{ kind: "terrain", id }` for a flat terrain by ISOM id, `{ kind: "tile", id }` for one exact tile — becomes `to`, over `rect` or the whole map, pairs laid as the Rect brush lays them. Returns tiles changed. |
+| `fillArea(x, y, { terrainId } \| { tileId }, match?)` | The bucket fill: the connected area of the same terrain type (`"terrain"`, the Rect fill's reading — needs the graphics) or the same exact tile (`"tile"`), mirrored under the symmetry mode, laid with a terrain or set to a tile. |
+| `placeBlend(x, y, side, id)` | The Blend brush: `id` on the cell beside the anchor on `side`; `terrain.blendCandidates` says what fits. |
+| `mirror(cells)` / `mirrorPoint(px, py)` | The cells' (or the pixel's) images under Tools ▸ Symmetry, the way the built-in brushes and palettes take them. |
 
 | Objects | |
 | --- | --- |
 | `makeUnit(unitId, owner, x, y)` | A StarEdit-style record (serial, masks) at map pixels. |
 | `addUnits(records)` / `removeUnits(indices)` / `updateUnits(indices, patch)` | |
+| `moveUnits(indices, dx, dy, snap?)` | Shift by a pixel delta; buildings re-snap to the grid when `snap` (the palette's option by default). |
+| `placeStartLocations({ players, layout?, margin?, replace? })` | Tools ▸ Auto-place Start Locations: one per player (from 1) on a `"ring"` or in the `"corners"`, each moved to the nearest spot the placement checks accept; `replace` removes the existing ones first. Returns `{ changes, placed, removed }`, `placed` null for a player nothing within reach fit. |
 | `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: a building snaps its placement box to the tile grid (when the palette's *Snap to grid* is on), nothing leaves the map. Returns the index. No checks — |
 | `canPlaceUnit(unitId, x, y)` | — ask this first if you want them: the palette's collision and terrain checks with its current options. |
 | `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map; returns the index. |
-| `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` | Doodads stamp MTXM and may carry an overlay sprite; both are handled. |
-| `addLocation(bounds, name?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) is refused. |
+| `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position — in place, so indices hold. |
+| `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` / `updateDoodads(indices, { owner?, disabled? })` | Doodads stamp MTXM and may carry an overlay sprite; all three keep the tiles, the record and the overlay together. |
+| `addLocation(bounds, name?, elevationFlags?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) and unused slots are refused by `editLocation`; `addLocation` also puts Anywhere back if it was missing. |
+| `restoreAnywhere()` | Anywhere back to the whole map; true when it had to move. |
 | `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask; creates MASK on first use. |
+| `invertFog(players)` / `copyFog(from, toMask)` / `floodFog(x, y, player, players, mode)` | The Fog palette's other three: flip the bits, copy one player's fog onto the players in a mask, fill the connected area that shares one player's state. |
 | `note(text)` | A line for the status bar, alongside the label. |
 
 ### `UpdateTransaction`
@@ -405,7 +418,7 @@ so `changed` is false when every operation was a no-op.
 
 | Tables | |
 | --- | --- |
-| `tx.strings` | `list()`, `intern(text)` (an identical entry, else a new one; **never** overwrites, because the old index may be shared with a trigger), `set(index, text)` (overwrite one slot — everything pointing at it sees the new text), `apply(list)` (a whole table; unreferenced trailing blanks are dropped, every other index keeps its place). |
+| `tx.strings` | `list()`, `intern(text)` (an identical entry, else a new one; **never** overwrites, because the old index may be shared with a trigger), `set(index, text)` (overwrite one slot — everything pointing at it sees the new text; slot 0 is refused), `apply(list)` (a whole table; unreferenced trailing blanks are dropped, every other index keeps its place), `import(text)` (File ▸ Import ▸ Strings' `index<TAB>text` form, see `api.exchange`). |
 | `tx.switches` | `names()` (256, `""` where a switch has none) and `setName(index, name)`; creates SWNM on the first name. |
 | `tx.properties({ name?, description? })` | SPRP. `""` restores the file-name default. |
 | `tx.note(text)` | A line for the status bar. |
@@ -418,6 +431,7 @@ so `changed` is false when every operation was a no-op.
 | `tx.upgrades` | `get(upgradeId)` — an `UpgradeView` (effective costs and factors, `defaults`, `levels`: the default start and cap and each player's effective `{ start, max, usesDefault }`) — and `set(upgradeId, { useDefault?, mineralCost?, mineralFactor?, gasCost?, gasFactor?, timeCost?, timeFactor?, levels? })` with `levels: [{ player: 0-based or "default", start?, max?, useDefault? }]`. |
 | `tx.techs` | `get(techId)` — a `TechView` (effective costs, `defaults`, `state`: the default column and each player's effective `{ available, researched, usesDefault }`) — and `set(techId, { useDefault?, mineralCost?, gasCost?, researchTime?, energyCost?, state? })` with `state: [{ player, available?, researched?, useDefault? }]`. |
 | `tx.sounds` | `list()` — the WAV slots in use as `SoundRow`s (`slot`, `path`, `present`, `size`, `usedBy`) — `add(path, bytes?)` (the first free slot, or the slot the path already has; with `bytes` the file goes into the archive under `staredit\wav\`) and `remove(slot, deleteFile?)`. |
+| `tx.cuwp` | Triggers ▸ Unit Properties Slots: `list()` / `get(index)` — `CuwpSlotView`s (0-based `index`; `hitPointsPercent`, `shieldsPercent`, `energyPercent`, `resources`, `hangar` as numbers or null where the created units keep the type's default; `cloaked` … `invincible` as booleans or null; `used`, `references`, `summary`) — `set(index, patch, used?)` (a number sets the field and its "applied" bit, null clears it; a boolean forces a state, null leaves it) and `clear(index)`. The *Create Unit with Properties* action stores the slot 1-based in `target`. |
 | `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"` — VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered. |
 
 Ids are the game's: units.dat ids for `unitTypes`, upgrades.dat / techdata.dat ids for
@@ -443,9 +457,10 @@ There is no undo entry, so a plugin that wants one keeps its own copy of what it
 
 The same views without a transaction, for reading: `players()` / `player(slot)`,
 `forces()`, `unitType(id)` / `unitTypes()` (every type with a name), `upgrade(id)` /
-`upgrades()`, `tech(id)` / `techs()`, `sounds()`, `version()` (`{ version, label,
-fileVersion, type, extendedStrings, extension }`). Empty lists and nulls with no map.
-Writing goes through `document.update`.
+`upgrades()`, `tech(id)` / `techs()`, `sounds()`, `unitAvailable(player, unitId)` (PUNI
+resolved against its default), `cuwpSlots()` / `cuwpSlot(index)`, `version()`
+(`{ version, label, fileVersion, type, extendedStrings, extension }`). Empty lists and
+nulls with no map. Writing goes through `document.update`.
 
 ### `api.triggers`
 
@@ -478,6 +493,7 @@ and its build manifest are archive members, so they save with the `.scx`.
 | `compile(source)` | Compile without building: a `CompileResult` with `ok`, `diagnostics` (1-based lines, `source: "typescript"` or `"compiler"`), the records and the variable allocation. Runs in the compile worker; a newer compile supersedes an unfinished one, which rejects with `CompileSuperseded`. |
 | `build(source, { takeOver? })` | The Script Editor's Build: compile and, when clean, replace the block (or append when the old one was edited) and store the source and manifest with the map — `{ compiled, block }`, `block` null when there were errors. `takeOver` replaces the whole trigger list with the script's. Not in the undo model; marks the map modified. |
 | `print(triggers)` | Records as raw `trigger()` calls in the script language — what Import map triggers writes. |
+| `triggerAtLine(line)` | Which trigger (index in the map's list) a 1-based source line generated, per the build manifest; null when none did or the block is stale. |
 | `simulate(triggers, cycles, { player? })` | The trigger-cycle interpreter: Deaths, Switch, Always and Never modelled, other conditions false, other actions logged — `{ cycles, events, switches }`. What the Script Editor's Simulate button runs. |
 
 ### `api.query`
@@ -491,10 +507,12 @@ here writes, and everything answers empty without a map.
 | `unitsIn(rect)` / `spritesIn(rect)` / `locationsIn(rect)` | Units and sprites whose centre is in a tile rect; locations wholly inside it. |
 | `unitsOf(owner)` | Every unit a player owns (0-based). |
 | `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
-| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }` — `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. |
+| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }` — `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. Null with no map. |
+| `fogAt(tx, ty)` | The MASK bits at a tile (bit n = player n + 1 starts fogged; every bit when the map has no MASK). |
+| `strings()` | The string table as it stands. |
 | `validate()` | Check Map's `Issue[]` — `{ level, text, where, target? }`, and `target` is what `view.goTo` takes. |
-| `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts. |
-| `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "strings" \| "triggers", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |
+| `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts, the briefing's too. |
+| `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "doodads" \| "strings" \| "triggers" \| "briefing", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |
 | `stringUsage()` / `unusedStrings()` | Which records refer to each string index, and which slots nothing refers to. |
 
 A linter plugin is `validate()` plus `find()` plus `view.goTo` and nothing else.
@@ -506,7 +524,7 @@ where it is.
 
 | | |
 | --- | --- |
-| `zoom()` / `setZoom(z)` | Clamped to 0.05…8. |
+| `zoom()` / `setZoom(z)` | Clamped to 0.05…8 (the zoom control's own steps run 0.25…4). |
 | `visible()` | The tiles on screen, as a `Rect`. |
 | `center(x, y)` | Scroll so a tile is in the middle. |
 | `goTo(target)` | `{ kind: "tile", x, y }`, or `{ kind: "unit" \| "sprite" \| "location", index }` — scrolls there and selects the object. An `Issue.target` from `query.validate()` is one of these. |
@@ -565,7 +583,15 @@ name, group, height, buildable), `isomTypes()` (ids the isometric brush can pain
 `terrainColor(terrainId)` (mean of the pair's common variations), `heightOf(terrainId)`
 (0 low / 1 high / 2 higher, null for anything that is not a flat terrain), `diamondAt(px, py)`,
 `isDiamond(d)`, `diamondsIn(rect)` (every lattice diamond whose centre tile is in the
-rect), `active()` / `setActive(...)` for the palette's brush, terrain and tile.
+rect), `floodRegion(x, y, match?)` (the bucket fill's area, by terrain type or exact
+tile), `blendCandidates(anchorTileId, side, options?)` (the Blend palette's ranked list,
+with the pixel distance of each seam), `flatGroupOf(terrainId)` (the even CV5 group of a
+flat pair), `active()` / `setActive(...)` for the palette's brush, terrain, tile, size and
+Rect variation, and the symmetry mode: `symmetry()` / `setSymmetry(mode)` (`"none"`,
+`"h"`, `"v"`, `"hv"`, `"rot180"`, `"rot90"`, `"diag"`, `"adiag"`),
+`symmetryAvailable(mode)` (the last three need a square map), `mirror(cells)` and
+`mirrorPoint(px, py)` — the images the built-in brushes paint and the palettes place on,
+so a plugin edit can honour the user's setting the way `tx.fillArea` does by itself.
 `checkIsom()` is asynchronous: it waits for the tileset graphics (rejecting when they are
 missing) and resolves with how well the ISOM describes the tiles — `rects` measured,
 `mismatched` among them, `stale` when the share is past what the palette warns at — or
@@ -580,7 +606,29 @@ extracted — that is a normal state, degrade), `raw()` for the decoded `LoadedT
 
 `markedArea()` / `markArea(rect | null)` — the Cut / Copy / Paste layer's marked
 rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()`,
-`locations()` (indices) with matching setters; `layer()` / `setLayer()`.
+`locations()` (indices, copied — sort yours freely) with matching setters; `layer()` /
+`setLayer()`; `lockedLayers()` / `setLayerLocked(layer, on)` for the Layers panel's
+padlocks (a locked layer's tools refuse to change the map).
+
+### `api.clipboard`
+
+The Cut / Copy / Paste layer, sharing the user's own clip: `clip()` / `setClip(clip |
+null)`; `copy(source?)` and `cut(source?)`, where `source` is `{ rect }` for a tile rect
+or `{ units?, sprites?, doodads?, locations? }` for objects by index — omitted, they take
+what Ctrl+C would: the object layer's selection, else the marked area — with the parts
+ticked in `parts()`; `paste(tx, ty, { parts?, mode? })`, the clip's top-left at a tile, one
+undo step, the pasted area marked afterwards, returning the `PasteResult` (counts per
+list, notes for what was skipped); `parts()` / `setParts(patch)`, `mode()` / `setMode("merge"
+| "replace")`, `pasting()` / `setPasting(on)` (arm the layer so the next click stamps),
+and `summary(clip)`. A `Clip` is self-contained — it outlives the map it came from and
+pastes into another, with terrain and doodads refused across tilesets.
+
+### `api.exchange`
+
+The file formats behind File ▸ Import / Export: `encodeTrg(triggers)` / `decodeTrg(bytes)`
+for SCMDraft's raw `.trg` (2400-byte records; string indices are the map's own), and
+`formatStrings()` / `parseStrings(text)` for the `index<TAB>text` strings file (control
+bytes as `<XX>`), which `tx.strings.import` applies.
 
 ### `api.palette`
 
@@ -591,7 +639,10 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 
 | | |
 | --- | --- |
-| `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1) and `fogMode`. |
+| `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1), `fogMode` and `fogViewPlayer` (whose fog the viewport draws). |
+| `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules — `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded` — which govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. |
+| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid`. |
+| `locationSnap()` / `setLocationSnap(step)` | The Locations layer's snap step in pixels (0 off, 8, 16, 32, 64). |
 | `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb` — Remastered custom colours included. |
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
 | `spriteGroups()` / `spriteName(kind, id)` | The Sprites palette's groups (empty until the unit tables are loaded) and names. |
@@ -615,7 +666,9 @@ without the tileset graphics.
 
 | | |
 | --- | --- |
-| `status(text)` | The status bar. |
+| `status(text)` / `statusText()` | The status bar. |
+| `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself — how Save reports (`"ok"`, `"info"`, `"warn"`, `"error"`; `ttl` 0 keeps it until dismissed). |
+| `saveFile(data, fileName)` | Write bytes or a `Blob` to disk the way the editor's own exports do: through the browser's save dialog where it has one, else as a download. Resolves `{ route, fileName }`, or null when dismissed. |
 | `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
 | `panel(spec)` | A panel that floats over the map and blocks nothing: the user keeps drawing, scrolling and using hotkeys while it is open (except while typing in one of its fields). `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS pixels (260 by default) and the panel is as tall as its content; `onClose` fires however it closes. The user drags it by its title bar and closes it with the ×; it opens at the top-right of the map and remembers where it was left for the session. The handle has `close()`, `isOpen()`, `setTitle()`. Open as many as you like; they all close with the plugin. |
 | `mapTool(spec)` | Take over the pointer on the map. The viewport hands the tool every press, move and release ahead of the active layer's own tools (`onDown` / `onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and the modifier keys — kept inside the map while a button is held, as the built-in brushes do), hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls `draw(ctx, view)` last on every repaint so the tool can preview what it will do (`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`, `view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a right-click calls `onCancel` — return `true` to keep running (you dropped a gesture of your own), otherwise the tool stops — and `onStop(reason)` is told once whichever way it ends: `"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed), `"replaced"` (another tool started; one runs at a time), `"disabled"`. A `pickArea` / `pickTile` in progress is served first. Paint is the worked example. |
@@ -629,8 +682,9 @@ without the tileset graphics.
 | `progress(label, { title?, cancellable? })` | A progress panel over the map for long work — it blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
 | `el(tag, props?, ...children)` | The DOM helper the widgets are built from: `style` takes an object, `on*` keys take listeners, everything else is a property or an attribute. |
 | `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, onClick })`, `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`. Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
-| `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …). |
-| `repaint()` | Bump the terrain revision when you changed something the transaction did not cover. |
+| `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …), fire and forget. |
+| `ask(dialogId, payload?)` | A built-in dialog that answers — `"saveAs"`, `"confirmClose"`, `"newMap"` — resolving true when it went through, false when it was dismissed. |
+| `repaint()` | Redraw the viewport when you changed something the transaction did not cover (an overlay's picture, say). Raises no event. |
 
 ### `api.menu` / `api.contextMenu` / `api.hotkeys`
 
@@ -659,13 +713,19 @@ without the tileset graphics.
 
 ### `api.events`
 
-`on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"` (fog edits
-included — they paint the same revision), `"units"`, `"sprites"` (the doodads revision,
-which THG2 records ride on), `"doodads"`, `"locations"`, `"settings"`, `"triggers"`,
-`"layer"`, `"selection"`, `"clipboard"` (the marked area or the clip), `"view"` (scrolled,
-zoomed, or a View tick moved), `"tool"` (a map tool or pick started or stopped),
-`"modified"` (the unsaved-changes flag), and `"palette"` (a palette's pick changed:
-terrain brush, unit and owner, sprite, doodad, fog players).
+`on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"` (every committed
+edit, stroke, undo and redo bumps it, terrain or not — fog edits included — so it is the
+"something changed on the map" event), `"units"`, `"sprites"` (the doodads revision,
+which THG2 records ride on), `"doodads"`, `"locations"`, `"settings"` (every settings
+dialog's OK, Map Properties included), `"triggers"`, `"layer"`, `"selection"`,
+`"clipboard"` (the marked area or the clip), `"view"` (scrolled, zoomed, a View tick
+moved, or an overlay registered or toggled), `"tool"` (a map tool or pick started or
+stopped), `"modified"` (the unsaved-changes flag), `"palette"` (a palette's pick
+changed: terrain brush, unit and owner, sprite, doodad, fog players), `"options"` (an
+editing option moved: symmetry, placement and doodad rules, location snap, the fog view
+player, clip parts and paste mode, locked layers, the grid look, Preferences) and
+`"file"` (the document's name or handle after a Save, its save options, the archive
+extras, the recent list).
 
 The `"document"` listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open,
 a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included),

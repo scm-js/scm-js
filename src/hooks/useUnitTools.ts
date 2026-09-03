@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, unitOwnerAtom, unitPlacingAtom } from "../atoms/editorAtoms";
+import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, symmetryAtom, unitOwnerAtom, unitPlacingAtom } from "../atoms/editorAtoms";
 import { commitEditAtom, deleteSelectedUnitsAtom, scenarioAtom, tilesetFileNameAtom, unitsRevisionAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -8,6 +8,7 @@ import {
   type PixelBox, type UnitChange, type UnitGeometry,
 } from "../editor/units";
 import { checkPlacement, placementReason, type PlacementProblem } from "../editor/placement";
+import { mirrorPixel } from "../editor/symmetry";
 import type { UnitRecord } from "../formats/chk/sections/objects";
 import type { UnitsDat } from "../formats/dat/dat";
 import { peekTileset } from "../formats/tileset/load";
@@ -67,22 +68,42 @@ export function useUnitTools() {
     return { unitId, owner: store.get(unitOwnerAtom), x, y, geometry, ...verdict };
   }, [store, tables, tilesetOf]);
 
-  /** Place the active unit at `p`; false (with a status message) when the checks refuse it. */
+  /** The ghost and its images under the symmetry mode (Tools ▸ Symmetry…), the pointed one first. */
+  const ghostsAt = useCallback((p: MapPoint): UnitGhost[] => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return [];
+    return mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height).map((q) => ghostAt({ px: q.x, py: q.y })).filter((g): g is UnitGhost => g !== null);
+  }, [store, ghostAt]);
+
+  /**
+   * Place the active unit at `p` — and, under a symmetry mode, at its images, each checked
+   * against the ones placed before it; false (with a status message) when the checks
+   * refuse the pointed spot. One undo step.
+   */
   const placeAt = useCallback((p: MapPoint): boolean => {
     const scn = store.get(scenarioAtom);
-    const ghost = ghostAt(p);
+    const ghosts = ghostsAt(p);
+    const ghost = ghosts[0];
     if (!scn || !ghost) return false;
     if (ghost.problem) {
       setStatus(describeProblem(tables, ghost.unitId, ghost, scn));
       return false;
     }
-    const record = makeUnit(tables, ghost.unitId, ghost.owner, ghost.x, ghost.y, nextSerial(scn));
-    const units = addUnits(scn, [record]);
-    applyUnitChanges(scn, units);
-    commit({ label: `Place ${unitName(ghost.unitId)}`, changes: [], units });
-    setStatus(`Placed ${unitName(ghost.unitId)} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    const opts = store.get(placementOptionsAtom);
+    const units: UnitChange[] = [];
+    let serial = nextSerial(scn);
+    let skipped = 0;
+    for (const g of ghosts) {
+      if (g !== ghost && checkPlacement(scn, tilesetOf(), tables, opts, g.unitId, g.x, g.y).problem !== null) { skipped++; continue; }
+      const list = addUnits(scn, [makeUnit(tables, g.unitId, g.owner, g.x, g.y, serial++)]);
+      applyUnitChanges(scn, list);
+      units.push(...list);
+    }
+    const n = units.length;
+    commit({ label: n === 1 ? `Place ${unitName(ghost.unitId)}` : `Place ${n} × ${unitName(ghost.unitId)}`, changes: [], units });
+    setStatus(`Placed ${n === 1 ? "" : `${n} × `}${unitName(ghost.unitId)} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y}${skipped ? ` (${skipped} mirror image${skipped === 1 ? "" : "s"} refused)` : ""} — Esc or right-click to stop placing`);
     return true;
-  }, [store, tables, ghostAt, commit, setStatus]);
+  }, [store, tables, tilesetOf, ghostsAt, commit, setStatus]);
 
   /** Arm placement of `unitId` (the palette's click). */
   const startPlacing = useCallback((unitId?: number) => {
@@ -209,7 +230,7 @@ export function useUnitTools() {
   }, [deleteSelectedUnits, setStatus]);
 
   return useMemo(
-    () => ({ assets, tables, geometryOf, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, dragProblem, endDrag, updateSelected, setOwner, deleteSelected }),
-    [assets, tables, geometryOf, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, dragProblem, endDrag, updateSelected, setOwner, deleteSelected],
+    () => ({ assets, tables, geometryOf, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, dragProblem, endDrag, updateSelected, setOwner, deleteSelected }),
+    [assets, tables, geometryOf, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, dragProblem, endDrag, updateSelected, setOwner, deleteSelected],
   );
 }

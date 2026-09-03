@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
 import {
-  activeSpriteAtom, activeSpriteKindAtom, activeUnitSpriteAtom, selectedSpritesAtom, spritePlaceOptionsAtom, spritePlacingAtom, unitOwnerAtom,
+  activeSpriteAtom, activeSpriteKindAtom, activeUnitSpriteAtom, selectedSpritesAtom, spritePlaceOptionsAtom, spritePlacingAtom, symmetryAtom, unitOwnerAtom,
 } from "../atoms/editorAtoms";
+import { mirrorPixel } from "../editor/symmetry";
 import { commitEditAtom, deleteSelectedSpritesAtom, doodadsRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -113,18 +114,28 @@ export function useSpriteTools() {
     return { ...a, x, y, box };
   }, [store, active, sizeOf]);
 
+  /** The ghost and its images under the symmetry mode, the pointed one first. */
+  const ghostsAt = useCallback((p: MapPoint): SpriteGhost[] => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return [];
+    return mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height).map((q) => ghostAt({ px: q.x, py: q.y })).filter((g): g is SpriteGhost => g !== null);
+  }, [store, ghostAt]);
+
+  /** Place the active sprite at `p` and, under a symmetry mode, at its images — one undo step. */
   const placeAt = useCallback((p: MapPoint): boolean => {
     const scn = store.get(scenarioAtom);
-    const ghost = ghostAt(p);
+    const ghosts = ghostsAt(p);
+    const ghost = ghosts[0];
     if (!scn || !ghost) return false;
-    const record = makeSprite(ghost.kind, ghost.id, ghost.owner, ghost.x, ghost.y, store.get(spritePlaceOptionsAtom));
-    const sprites = addSprites(scn, [record]);
+    const opts = store.get(spritePlaceOptionsAtom);
+    const sprites = addSprites(scn, ghosts.map((g) => makeSprite(g.kind, g.id, g.owner, g.x, g.y, opts)));
     applySpriteChanges(scn, sprites);
     const name = spriteName(assets, ghost.kind, ghost.id);
-    commit({ label: `Place sprite ${name}`, changes: [], sprites });
-    setStatus(`Placed ${ghost.kind === "unit" ? "unit sprite" : "sprite"} ${name} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    const n = sprites.length;
+    commit({ label: n === 1 ? `Place sprite ${name}` : `Place ${n} × sprite ${name}`, changes: [], sprites });
+    setStatus(`Placed ${n === 1 ? "" : `${n} × `}${ghost.kind === "unit" ? "unit sprite" : "sprite"} ${name} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
     return true;
-  }, [store, assets, ghostAt, commit, setStatus]);
+  }, [store, assets, ghostsAt, commit, setStatus]);
 
   /** Arm placement (the palette's click); with arguments, also choose what to place. */
   const startPlacing = useCallback((kind?: SpriteKind, id?: number) => {
@@ -229,8 +240,8 @@ export function useSpriteTools() {
   }, [deleteSelectedSprites, setStatus]);
 
   return useMemo(
-    () => ({ assets, sizeOf, boxOf, active, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, endDrag, updateSelected, setOwner, setFlag, deleteSelected }),
-    [assets, sizeOf, boxOf, active, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, endDrag, updateSelected, setOwner, setFlag, deleteSelected],
+    () => ({ assets, sizeOf, boxOf, active, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, endDrag, updateSelected, setOwner, setFlag, deleteSelected }),
+    [assets, sizeOf, boxOf, active, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, beginDrag, dragTo, endDrag, updateSelected, setOwner, setFlag, deleteSelected],
   );
 }
 

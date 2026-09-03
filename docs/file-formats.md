@@ -14,8 +14,17 @@ files open directly.
 directions. Reading needs PKWARE DCL decompression, because that is what StarCraft
 compresses nearly every file in its own archives with. Non-scenario members are held
 in `archiveExtrasAtom` and written back on save, so a map's custom content survives a
-round trip through the editor. `scenario.chk` is written uncompressed, which older
-StarCraft builds need.
+round trip through the editor. The Save dialog decides how the archive is written
+(`src/editor/save.ts`, `saveMap`'s options): PKWARE DCL compression with encryption and
+4 KB sectors is Blizzard's own layout — every fixture map's `scenario.chk` is stored that
+way, flags `0x80010200` — and what every StarCraft build reads; zlib is smaller but needs
+1.16.1 or Remastered; uncompressed is readable by anything. A map is written back the way
+it was opened unless the dialog says otherwise (`loadMap` reports it as `scenarioInfo`), and
+a new map gets StarEdit's layout. mopaq 1.3.0 carries the PKWARE encoder. The same dialog
+can leave out the sections the game never reads — ISOM, TILE, DD2, IVER, IVE2, IOWN, UPUS,
+SWNM, WAV (`editorOnly` in the section registry) — sections the registry does not know,
+bytes after the last section, and can merge repeated sections through `combine`, the same
+resolution the reader uses. None of that touches the scenario in memory.
 
 ## The fidelity model
 
@@ -54,7 +63,7 @@ Decoded into typed fields and re-encoded when edited:
 | `DIM `, `ERA ` | dimensions, tileset |
 | `SPRP` | scenario name and description |
 | `STR `, `STRx` | string table (16-bit / Remastered 32-bit offsets) |
-| `OWNR`, `IOWN`, `SIDE`, `COLR`, `CRGB`, `FORC` | players, races, colours, forces |
+| `OWNR`, `IOWN`, `SIDE`, `COLR`, `CRGB`, `FORC` | players, races, colours, forces. `IOWN` is StarEdit's own copy of the player types (`scenario.editorPlayerTypes`); the editor writes both from Player Settings and Check Map warns when a file's two disagree |
 | `MTXM`, `TILE`, `ISOM` | terrain |
 | `MASK` | fog of war |
 | `UNIT`, `THG2`, `DD2 ` | units, sprites, doodads |
@@ -70,7 +79,7 @@ Kept as raw bytes and written back unchanged:
 | Section | Why |
 | --- | --- |
 | `VCOD` | StarEdit's fixed verification table, identical in every unprotected map |
-| `UPRP`, `UPUS` | CUWP slots; triggers reference them by number, and there is no editor for them yet |
+| `UPRP`, `UPUS` | the 64 Create Unit with Properties slots (`sections/cuwp.ts`: valid-state bits, valid-field bits, owner, hit points / shields / energy as percentages, resources, hangar, state bits, 20 bytes each) and StarEdit's "slot in use" byte per slot; Triggers ▸ Unit Properties Slots… edits them, the action names one 1-based in its `target` field |
 | `IVER` | obsolete StarEdit version stamp |
 | anything else | unknown or undocumented sections a map happens to carry |
 

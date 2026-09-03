@@ -63,7 +63,11 @@ export function readPlayerSettings(scn: Scenario): PlayerSettings {
 /** Write the four player tables back, marking only the sections that changed. OWNR and IOWN always agree. */
 export function applyPlayerSettings(scn: Scenario, next: PlayerSettings) {
   const differs = (a: number[], b: number[]) => a.length !== b.length || a.some((v, i) => v !== b[i]);
-  if (differs(scn.playerTypes, next.types)) { scn.playerTypes = next.types.slice(); markDirty(scn, "OWNR", "IOWN"); }
+  if (differs(scn.playerTypes, next.types) || (scn.editorPlayerTypes && differs(scn.editorPlayerTypes, next.types))) {
+    scn.playerTypes = next.types.slice();
+    scn.editorPlayerTypes = next.types.slice();
+    markDirty(scn, "OWNR", "IOWN");
+  }
   if (differs(scn.playerRaces, next.races)) { scn.playerRaces = next.races.slice(); markDirty(scn, "SIDE"); }
   if (differs(scn.playerColors, next.colors)) { scn.playerColors = next.colors.slice(); markDirty(scn, "COLR"); }
   if (differs(scn.forces.playerForce, next.force)) { scn.forces.playerForce = next.force.slice(); markDirty(scn, "FORC"); }

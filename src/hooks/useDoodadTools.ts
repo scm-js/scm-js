@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, unitOwnerAtom } from "../atoms/editorAtoms";
+import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, symmetryAtom, unitOwnerAtom } from "../atoms/editorAtoms";
+import { mirrorTileRect } from "../editor/symmetry";
+import type { TileChange } from "../editor/terrain";
 import { commitEditAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -78,22 +80,50 @@ export function useDoodadTools() {
   const entryFor = (label: string, edit: DoodadEdit): HistoryEntry =>
     ({ label, changes: [], doodadTiles: edit.tiles, doodads: edit.doodads, sprites: edit.sprites });
 
-  /** Place the active doodad at `p`; false (with a status message) when the checks refuse it. */
+  /**
+   * The ghost and its images under the symmetry mode, the pointed one first. A doodad
+   * cannot be turned, so a quarter turn or a diagonal mirrors only a square footprint.
+   */
+  const ghostsAt = useCallback((p: MapPoint): DoodadGhost[] => {
+    const scn = store.get(scenarioAtom);
+    const first = ghostAt(p);
+    if (!scn || !first) return [first].filter((g): g is DoodadGhost => g !== null);
+    const opts = store.get(doodadPlacementAtom);
+    return mirrorTileRect(store.get(symmetryAtom), first.x, first.y, first.def.width, first.def.height, scn.width, scn.height).map((q, i) =>
+      i === 0 ? first : { ...first, x: q.x, y: q.y, verdict: checkDoodadPlacement(scn, tileset, first.def, q.x, q.y, opts) });
+  }, [store, tileset, ghostAt]);
+
+  /**
+   * Place the active doodad at `p` and, under a symmetry mode, at its images (each checked
+   * against the map as the previous one left it); false with a status message when the
+   * checks refuse the pointed spot. One undo step.
+   */
   const placeAt = useCallback((p: MapPoint): boolean => {
     const scn = store.get(scenarioAtom);
-    const ghost = ghostAt(p);
+    const ghosts = ghostsAt(p);
+    const ghost = ghosts[0];
     if (!scn || !ghost) return false;
     if (!ghost.verdict.ok) {
       setStatus(describeRefusal(ghost.def, ghost.verdict, catalogue.hasPlacementData));
       return false;
     }
-    const edit = placeDoodad(scn, ghost.def, ghost.x, ghost.y, ghost.owner);
-    apply(scn, edit);
+    const opts = store.get(doodadPlacementAtom);
+    const tiles: TileChange[] = [], doodads: DoodadChange[] = [], sprites: SpriteChange[] = [];
+    let placed = 0;
+    for (const g of ghosts) {
+      if (g !== ghost && !checkDoodadPlacement(scn, tileset, g.def, g.x, g.y, opts).ok) continue;
+      const edit = placeDoodad(scn, g.def, g.x, g.y, g.owner);
+      apply(scn, edit);
+      tiles.push(...edit.tiles);
+      doodads.push(...edit.doodads);
+      sprites.push(...edit.sprites);
+      placed++;
+    }
     setSelected([]);
-    commit(entryFor(`Place ${doodadLabel(ghost.def)}`, edit));
-    setStatus(`Placed ${doodadLabel(ghost.def)} (${ghost.def.width}×${ghost.def.height}) at tile ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    commit(entryFor(placed === 1 ? `Place ${doodadLabel(ghost.def)}` : `Place ${placed} × ${doodadLabel(ghost.def)}`, { tiles, doodads, sprites }));
+    setStatus(`Placed ${placed === 1 ? "" : `${placed} × `}${doodadLabel(ghost.def)} (${ghost.def.width}×${ghost.def.height}) at tile ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
     return true;
-  }, [store, catalogue, ghostAt, apply, commit, setSelected, setStatus]);
+  }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
 
   /** Arm placement of doodad `id` (the palette's click). */
   const startPlacing = useCallback((id?: number) => {
@@ -247,7 +277,7 @@ export function useDoodadTools() {
   }, [deleteSelectedDoodads, setStatus]);
 
   return useMemo(
-    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected }),
-    [loaded, catalogue, tilesetName, activeDef, ghostAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected],
+    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected }),
+    [loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected],
   );
 }

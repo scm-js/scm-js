@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  Anim, ANIM_COUNT_BY_TYPE, animOffset, decodeIscript, Op, OPCODE_ARGS, OPCODE_NAMES, readInstruction, walkAnimation,
+  Anim, ANIM_COUNT_BY_TYPE, animOffset, decodeIscript, Op, OPCODE_ARGS, readInstruction, walkAnimation,
 } from "../src/formats/dat/iscript";
-import { decodeLo, loOffset, loSlotCount, loUsedSlots } from "../src/formats/dat/lo";
+import { decodeLo, loOffset, loUsedSlots } from "../src/formats/dat/lo";
 import { decodeImagesDat } from "../src/formats/dat/dat";
 
 const PUBLIC = join(import.meta.dirname, "..", "public");
@@ -24,9 +24,6 @@ const u32 = (v: number) => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24)
 
 describe("iscript opcode table", () => {
   it("names and argument layouts line up", () => {
-    expect(OPCODE_NAMES).toHaveLength(OPCODE_ARGS.length);
-    expect(OPCODE_NAMES[Op.playfram]).toBe("playfram");
-    expect(OPCODE_NAMES[Op.dogrddamage]).toBe("dogrddamage");
     expect(OPCODE_ARGS[Op.imgol]).toBe("wss");
     expect(OPCODE_ARGS[Op.waitrand]).toBe("bb");
     expect(OPCODE_ARGS[Op.curdirectcondjmp]).toBe("www");
@@ -83,8 +80,6 @@ describe(".lo overlay files", () => {
     expect(lo.frames).toBe(2);
     expect(loOffset(lo, 0, 0)).toEqual({ x: 3, y: -2 });
     expect(loOffset(lo, 0, 1)).toBeNull();
-    expect(loSlotCount(lo, 0)).toBe(1);
-    expect(loSlotCount(lo, 1)).toBe(2);
     // Used slots need not be contiguous.
     const gap = decodeLo(bytes(u32(1), u32(2), u32(12), [127, 127, 4, 4]));
     expect(loUsedSlots(gap, 0)).toEqual([1]);

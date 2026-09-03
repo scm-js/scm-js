@@ -15,6 +15,8 @@ import { START_LOCATION, unitName } from "../data/units";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource } from "./units";
 import { spriteKind } from "./sprites";
 import { isPreserved } from "./triggers";
+import { tileGroup } from "../formats/chk/sections/terrain";
+import { TriggerFlag } from "../formats/chk/sections/triggers";
 
 export interface PlayerStatistics {
   slot: number;
@@ -42,7 +44,8 @@ export interface MapStatistics {
   sprites: { pure: number; unit: number };
   locations: number;
   triggers: { count: number; conditions: number; actions: number; preserved: number; disabled: number };
-  briefings: number;
+  /** MBRF: the briefing's records and the actions in them. */
+  briefings: { count: number; actions: number };
   switchesNamed: number;
   sounds: number;
   /** Tiles per terrain type ("Edges and cliffs" for the unnamed edge sets), most common first; null without the tileset graphics. */
@@ -82,8 +85,10 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
     conditions += t.conditions.length;
     actions += t.actions.length;
     if (isPreserved(t)) preserved++;
-    if (t.flags & 0x08) disabled++;
+    if (t.flags & TriggerFlag.Disabled) disabled++;
   }
+  let briefingActions = 0;
+  for (const t of scn.briefing) briefingActions += t.actions.length;
 
   let terrain: MapStatistics["terrain"] = null;
   if (tileset && terrainNames) {
@@ -98,7 +103,7 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
       nameOf.set(i, name);
     });
     for (const id of scn.tiles) {
-      const name = nameOf.get(id >> 4) ?? "Unknown";
+      const name = nameOf.get(tileGroup(id)) ?? `Group ${tileGroup(id)} (not in the tileset)`;
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     terrain = [...counts].sort((a, b) => b[1] - a[1]).map(([name, tiles]) => ({ name, tiles }));
@@ -119,7 +124,7 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
     sprites: { pure: scn.sprites.filter((s) => spriteKind(s) === "pure").length, unit: scn.sprites.filter((s) => spriteKind(s) === "unit").length },
     locations: scn.locations.filter((l, i) => i !== ANYWHERE_INDEX && isLocationUsed(l)).length,
     triggers: { count: scn.triggers.length, conditions, actions, preserved, disabled },
-    briefings: scn.briefing.length,
+    briefings: { count: scn.briefing.length, actions: briefingActions },
     switchesNamed: scn.switchNames ? scn.switchNames.filter((s) => s !== 0).length : 0,
     sounds: scn.wavs ? scn.wavs.filter((w) => w !== 0).length : 0,
     terrain,
@@ -138,7 +143,7 @@ export function statisticsText(s: MapStatistics): string {
     "Players:",
     ...s.players.map((p) => `  ${p.slot + 1}. ${p.type}, ${p.race}: ${p.units} units, ${na(p.buildings)} buildings, ${p.startLocations} start location${p.startLocations === 1 ? "" : "s"}`),
     `Doodads: ${s.doodads}; sprites: ${s.sprites.pure} pure, ${s.sprites.unit} unit; locations: ${s.locations}`,
-    `Triggers: ${s.triggers.count} (${s.triggers.conditions} conditions, ${s.triggers.actions} actions, ${s.triggers.preserved} preserved, ${s.triggers.disabled} disabled); briefings: ${s.briefings}`,
+    `Triggers: ${s.triggers.count} (${s.triggers.conditions} conditions, ${s.triggers.actions} actions, ${s.triggers.preserved} preserved, ${s.triggers.disabled} disabled); briefing: ${s.briefings.count} record${s.briefings.count === 1 ? "" : "s"}, ${s.briefings.actions} actions`,
     `Switches named: ${s.switchesNamed}; sounds: ${s.sounds}`,
   ];
   if (s.terrain) {

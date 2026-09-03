@@ -5,7 +5,10 @@ import { scenarioAtom } from "../src/atoms/documentAtoms";
 import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
-import { guardedAction, needsCloseConfirm, type PendingAction } from "../src/hooks/useMapFileActions";
+import { guardedAction, needsCloseConfirm, runPendingAction, type PendingAction } from "../src/hooks/useMapFileActions";
+import { mapFilePathAtom } from "../src/atoms/editorAtoms";
+import { serializeScenario } from "../src/formats/chk/scenario";
+import { statusMessageAtom } from "../src/atoms/uiAtoms";
 
 /** A store with a map open, modified, and the preference on: what `useCloseGuard` guards. */
 function dirtyStore() {
@@ -56,3 +59,31 @@ describe("close guard", () => {
     expect(await again).toBe(true);
   });
 });
+
+describe("runPendingAction", () => {
+  it("runs the action with or without a listener", async () => {
+    // A dropped file and the File ▸ New dialog carry no `done`; the action must still happen.
+    const store = dirtyStore();
+    const bytes = serializeScenario(createScenario({ width: 16, height: 8, era: 2, name: "dropped" }));
+    await runPendingAction(store, { action: "open", file: new File([bytes as unknown as BlobPart], "dropped.chk") });
+    expect(store.get(mapFilePathAtom)).toBe("dropped.chk");
+    expect(store.get(scenarioAtom)?.width).toBe(16);
+    expect(store.get(mapModifiedAtom)).toBe(false);
+
+    await runPendingAction(store, { action: "new", options: { width: 64, height: 32, tileset: "jungle", name: "fresh", description: "" } });
+    expect(store.get(scenarioAtom)?.height).toBe(32);
+    expect(store.get(mapFilePathAtom)).toBeNull();
+
+    const heard: boolean[] = [];
+    await runPendingAction(store, { action: "open", file: new File([bytes as unknown as BlobPart], "again.chk"), done: (ok) => heard.push(ok) });
+    await runPendingAction(store, { action: "quit", done: (ok) => heard.push(ok) });
+    const unreadable = { name: "bad.scx", arrayBuffer: () => Promise.reject(new Error("unreadable")) } as unknown as File;
+    await runPendingAction(store, { action: "open", file: unreadable, done: (ok) => heard.push(ok) });
+    expect(heard).toEqual([true, true, false]);
+    expect(store.get(statusMessageAtom)).toMatch(/Could not open bad\.scx: unreadable/);
+
+    await runPendingAction(store, { action: "close" });
+    expect(store.get(scenarioAtom)).toBeNull();
+  });
+});
+

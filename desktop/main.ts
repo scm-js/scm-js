@@ -12,13 +12,14 @@
  * with electron-builder (`electron-builder.yml`).
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from "electron";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData } from "../src/gamedata/extract";
-import type { DesktopLocateResult } from "../src/gamedata/desktop";
+import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
 
 const SCHEME = "app";
 const HOST = "scmjs";
@@ -97,7 +98,6 @@ function extractFrom(dir: string): DesktopLocateResult {
   try {
     report(0, "Reading the archives");
     const { archives, problems } = openArchives(paths.map((p) => ({ name: p.split(/[\\/]/).pop()!, bytes: new Uint8Array(readFileSync(p)) })));
-    for (const p of problems) console.warn("game data:", p);
     if (archives.length === 0) return { status: "failed", message: problems[0] ?? "No archive could be opened." };
     const result = extractGameData(readerFor(archives), (f, label) => report(f * 0.9, label));
 
@@ -113,7 +113,7 @@ function extractFrom(dir: string): DesktopLocateResult {
     const stamp: Stamp = { from: dir, at: new Date().toISOString(), files: result.files.size, bytes: result.bytes, summary: describeExtraction(result) };
     writeFileSync(join(out, STAMP), JSON.stringify(stamp));
     report(1, "Done");
-    return { status: "ready", ...stamp };
+    return { status: "ready", ...stamp, ...(problems.length > 0 ? { problems } : {}) };
   } catch (err) {
     return { status: "failed", message: err instanceof Error ? err.message : String(err) };
   }
@@ -131,6 +131,98 @@ function locate(): DesktopLocateResult {
   }
   return { status: "missing", searched };
 }
+
+/* ── Test Map: the installed game ───────────────────────── */
+
+/** Where each StarCraft build keeps its executable, relative to the install folder. */
+const EXE_CANDIDATES = process.platform === "darwin"
+  ? ["StarCraft.app", "StarCraft/StarCraft.app"]
+  : ["x86_64/StarCraft.exe", "x86/StarCraft.exe", "StarCraft.exe"];
+/** The folder Test Map writes into, under Maps, so the game lists it and nothing of the user's is touched. */
+const TEST_FOLDER = "scmJS";
+
+/** The game in `dir`: an executable and a Maps folder, either being enough to call it an install. */
+function gameIn(dir: string): { exe: string | null; mapsDir: string | null } | null {
+  const exe = EXE_CANDIDATES.map((c) => join(dir, c)).find((p) => existsSync(p)) ?? null;
+  // A Maps folder handed over directly counts as one too.
+  const mapsDir = /maps$/i.test(basename(dir)) && existsSync(dir) ? dir : existsSync(join(dir, "Maps")) ? join(dir, "Maps") : null;
+  if (!exe && !mapsDir) return null;
+  return { exe, mapsDir: mapsDir ?? (exe ? join(dir, "Maps") : null) };
+}
+
+function gameInfo(preferred: string | null): DesktopGameInfo {
+  const dirs = preferred ? [resolve(preferred), ...searchDirs()] : searchDirs();
+  for (const dir of dirs) {
+    const found = gameIn(dir);
+    if (found) return { ...found, installDir: /maps$/i.test(basename(dir)) ? dirname(dir) : dir, searched: dirs };
+  }
+  return { exe: null, mapsDir: null, installDir: null, searched: dirs };
+}
+
+/** Start the game: the executable itself on Windows, `open` on macOS, Wine elsewhere. */
+function launchGame(exe: string): string | null {
+  try {
+    const cwd = dirname(exe);
+    const child = process.platform === "darwin"
+      ? spawn("open", ["-a", exe], { detached: true, stdio: "ignore" })
+      : process.platform === "win32"
+        ? spawn(exe, [], { detached: true, stdio: "ignore", cwd })
+        : spawn("wine", [exe], { detached: true, stdio: "ignore", cwd });
+    child.on("error", (err) => console.warn("test map: launch failed:", err.message));
+    child.unref();
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+function testMap(bytes: Uint8Array, fileName: string, options: { dir?: string; launch: boolean }): DesktopTestResult {
+  const info = gameInfo(options.dir ?? null);
+  if (!info.mapsDir) throw new Error("No StarCraft installation was found — pick its folder first.");
+  const out = join(info.mapsDir, TEST_FOLDER);
+  mkdirSync(out, { recursive: true });
+  const target = join(out, basename(fileName));
+  writeFileSync(target, bytes);
+  if (!options.launch) return { path: target, launched: false };
+  if (!info.exe) return { path: target, launched: false, message: "The game's executable was not found next to the Maps folder." };
+  const problem = launchGame(info.exe);
+  return problem ? { path: target, launched: false, message: problem } : { path: target, launched: true };
+}
+
+/* ── Map files from the OS ──────────────────────────────── */
+
+/** A map path among the arguments the app (or a second copy of it) was started with. */
+function mapArg(argv: string[]): string | null {
+  return argv.slice(1).find((a) => /\.(scm|scx|chk)$/i.test(a) && existsSync(a)) ?? null;
+}
+
+/** The file to hand the renderer once it listens: the launch argument, or a macOS open-file. */
+let pendingOpen: string | null = mapArg(process.argv);
+
+function sendOpen(win: BrowserWindow, path: string) {
+  try {
+    win.webContents.send("file:open", { name: basename(path), bytes: readFileSync(path) });
+  } catch (err) {
+    console.warn("open file:", err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** One running copy: a double-click while the app runs opens in its window instead of starting another. */
+const singleInstance = app.requestSingleInstanceLock();
+if (!singleInstance) app.quit();
+app.on("second-instance", (_e, argv) => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+  const path = mapArg(argv);
+  if (path) sendOpen(win, path);
+});
+app.on("open-file", (e, path) => {
+  e.preventDefault();
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) sendOpen(win, path); else pendingOpen = path;
+});
 
 /* ── Serving the bundle ─────────────────────────────────── */
 
@@ -339,6 +431,21 @@ app.whenReady().then(() => {
     if (picked.canceled || picked.filePaths.length === 0) return null;
     return extractFrom(picked.filePaths[0]);
   });
+  ipcMain.on("file:ready", (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (win && pendingOpen) { sendOpen(win, pendingOpen); pendingOpen = null; }
+  });
+  ipcMain.handle("game:info", (_e, dir: string | null) => gameInfo(dir));
+  ipcMain.handle("game:pickFolder", async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const picked = await dialog.showOpenDialog(win ?? undefined as never, {
+      title: "Choose the StarCraft folder",
+      message: "The folder holding the game (or its Maps folder)",
+      properties: ["openDirectory"],
+    });
+    return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0];
+  });
+  ipcMain.handle("game:test", (_e, bytes: Uint8Array, fileName: string, options: { dir?: string; launch: boolean }) => testMap(new Uint8Array(bytes), fileName, options));
 
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

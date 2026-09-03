@@ -954,3 +954,15 @@ export function tilesFromIsom(scn: Scenario & { isom: Uint16Array }, tileset: Ti
   for (let y = 0; y + 1 < h; y++) for (let x = 0; x + 1 < w; x++) pass.updateTile({ x, y });
   return pass.finish();
 }
+
+/**
+ * What `useIsomStatus` measured for the open map — whether it can be painted
+ * isometrically and how well its lattice describes its tiles. Check Map reads it.
+ */
+export type IsomStatus =
+  | { kind: "no-map" }
+  | { kind: "loading" }
+  | { kind: "no-tileset" }
+  /** The map has no ISOM section (or a truncated one): the brush has nothing to work on. */
+  | { kind: "missing" }
+  | { kind: "ready"; check: IsomCheck; stale: boolean };

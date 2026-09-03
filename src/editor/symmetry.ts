@@ -4,10 +4,13 @@
  * brushes lay the same thing down on both sides at once. The mirroring works on *sets
  * of cells*, not on strokes — `stampTerrain` then derives left/right pairs from column
  * parity as usual, so a mirrored Rect footprint still comes out as valid pairs whatever
- * the map's width. The isometric and Blend brushes are not covered: the ISOM lattice
- * does not mirror cell by cell.
+ * the map's width. Objects go through the continuous versions (`mirrorPixel`,
+ * `mirrorBox`, `mirrorTileRect`): a unit's centre, a location's box, a doodad's
+ * footprint. The isometric brush mirrors the *point* it paints at (the diamond under each
+ * image), so a cliff drawn on one side is drawn on the other by the same brush; only Blend
+ * stays out, since it places from a picked anchor rather than a point.
  */
-import type { Rect, TileChange } from "./terrain";
+import type { Rect } from "./terrain";
 
 export type SymmetryMode = "none" | "h" | "v" | "hv" | "rot180" | "rot90" | "diag" | "adiag";
 
@@ -66,27 +69,77 @@ export function mirrorPoints(mode: SymmetryMode, x: number, y: number, width: nu
   return out;
 }
 
+type ImageMap = (x: number, y: number) => Point;
+
+/**
+ * The maps from a point to its images (the identity excluded) over a continuous plane
+ * `w` by `h` — pixels or tiles, whichever the caller measures in. Modes that turn the
+ * plane need it square and answer nothing otherwise.
+ */
+function imageMaps(mode: SymmetryMode, w: number, h: number): ImageMap[] {
+  const flipX: ImageMap = (x, y) => ({ x: w - x, y });
+  const flipY: ImageMap = (x, y) => ({ x, y: h - y });
+  const turn: ImageMap = (x, y) => ({ x: w - x, y: h - y });
+  switch (mode) {
+    case "h": return [flipX];
+    case "v": return [flipY];
+    case "hv": return [flipX, flipY, turn];
+    case "rot180": return [turn];
+    case "rot90": return w === h ? [(x, y) => ({ x: w - y, y: x }), turn, (x, y) => ({ x: y, y: h - x })] : [];
+    case "diag": return w === h ? [(x, y) => ({ x: y, y: x })] : [];
+    case "adiag": return w === h ? [(x, y) => ({ x: h - y, y: w - x })] : [];
+    default: return [];
+  }
+}
+
+/** Whether a mode's images keep a `rw` × `rh` box's shape (a quarter turn or a diagonal swaps the sides). */
+export function keepsShape(mode: SymmetryMode, rw: number, rh: number): boolean {
+  return rw === rh || !(mode === "rot90" || mode === "diag" || mode === "adiag");
+}
+
 /**
  * A pixel position and its images — the continuous version of `mirrorPoints`, for
  * anything placed by pixel rather than by tile (a unit's centre). `width`/`height` are
  * in tiles; the map is `width * 32` pixels wide.
  */
 export function mirrorPixel(mode: SymmetryMode, px: number, py: number, width: number, height: number): Point[] {
-  const w = width * 32, h = height * 32;
-  const mx = w - px, my = h - py;
-  let images: Point[];
-  switch (mode) {
-    case "h": images = [{ x: mx, y: py }]; break;
-    case "v": images = [{ x: px, y: my }]; break;
-    case "hv": images = [{ x: mx, y: py }, { x: px, y: my }, { x: mx, y: my }]; break;
-    case "rot180": images = [{ x: mx, y: my }]; break;
-    case "rot90": images = w === h ? [{ x: w - py, y: px }, { x: mx, y: my }, { x: py, y: h - px }] : []; break;
-    case "diag": images = w === h ? [{ x: py, y: px }] : []; break;
-    case "adiag": images = w === h ? [{ x: h - py, y: w - px }] : []; break;
-    default: images = [];
-  }
   const out: Point[] = [{ x: px, y: py }];
-  for (const p of images) if (!out.some((q) => q.x === p.x && q.y === p.y)) out.push(p);
+  for (const map of imageMaps(mode, width * 32, height * 32)) {
+    const p = map(px, py);
+    if (!out.some((q) => q.x === p.x && q.y === p.y)) out.push(p);
+  }
+  return out;
+}
+
+export interface Box { left: number; top: number; right: number; bottom: number }
+
+/**
+ * A pixel box and its images, normalised — a location's bounds. A quarter turn of a box
+ * is still a box, so every mode applies. `width`/`height` in tiles.
+ */
+export function mirrorBox(mode: SymmetryMode, box: Box, width: number, height: number): Box[] {
+  const out: Box[] = [{ ...box }];
+  for (const map of imageMaps(mode, width * 32, height * 32)) {
+    const a = map(box.left, box.top), b = map(box.right, box.bottom);
+    const img: Box = { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) };
+    if (!out.some((q) => q.left === img.left && q.top === img.top && q.right === img.right && q.bottom === img.bottom)) out.push(img);
+  }
+  return out;
+}
+
+/**
+ * The top-left tiles of a `rw` × `rh` footprint's images — a doodad's. An image that
+ * would turn the footprint on its side is dropped (`keepsShape`), since the doodad cannot
+ * be turned.
+ */
+export function mirrorTileRect(mode: SymmetryMode, x: number, y: number, rw: number, rh: number, width: number, height: number): Point[] {
+  const out: Point[] = [{ x, y }];
+  if (!keepsShape(mode, rw, rh)) return out;
+  for (const map of imageMaps(mode, width, height)) {
+    const a = map(x, y), b = map(x + rw, y + rh);
+    const p = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
+    if (!out.some((q) => q.x === p.x && q.y === p.y)) out.push(p);
+  }
   return out;
 }
 
@@ -110,23 +163,6 @@ export function mirrorIndices(mode: SymmetryMode, indices: Iterable<number>, wid
     for (const p of mirrorPoints(mode, at % width, Math.floor(at / width), width, height)) out.add(p.y * width + p.x);
   }
   return out;
-}
-
-/**
- * Merge several change lists over the same map into one: a cell that appears more than
- * once keeps its first `before` and its last `after`, and cells that end where they
- * started are dropped. Order follows first appearance.
- */
-export function mergeChanges(lists: readonly (readonly TileChange[])[]): TileChange[] {
-  const merged = new Map<number, TileChange>();
-  for (const list of lists) {
-    for (const c of list) {
-      const prev = merged.get(c.at);
-      if (prev) prev.after = c.after;
-      else merged.set(c.at, { ...c });
-    }
-  }
-  return [...merged.values()].filter((c) => c.before !== c.after);
 }
 
 export interface AxisLine {

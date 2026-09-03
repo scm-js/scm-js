@@ -67,7 +67,7 @@ export function StatisticsDialog({ entry }: DialogProps) {
               <Field label="Sprites"><span className="mono">{s.sprites.pure + s.sprites.unit} <span className="faint">· {s.sprites.pure} pure, {s.sprites.unit} unit</span></span></Field>
               <Field label="Locations"><span className="mono">{s.locations} <span className="faint">+ Anywhere</span></span></Field>
               <Field label="Triggers"><span className="mono">{s.triggers.count} <span className="faint">· {s.triggers.conditions} conditions, {s.triggers.actions} actions, {s.triggers.preserved} preserved, {s.triggers.disabled} disabled</span></span></Field>
-              <Field label="Briefings"><span className="mono">{s.briefings}</span></Field>
+              <Field label="Briefing"><span className="mono">{s.briefings.count} <span className="faint">· {s.briefings.actions} actions</span></span></Field>
               <Field label="Strings"><span className="mono">{s.strings.set} <span className="faint">of {s.strings.slots} slots ({s.strings.extended ? "STRx" : "STR"})</span></span></Field>
               <Field label="Switches"><span className="mono">{s.switchesNamed} <span className="faint">named</span></span></Field>
               <Field label="Sounds"><span className="mono">{s.sounds} <span className="faint">in the WAV table</span></span></Field>

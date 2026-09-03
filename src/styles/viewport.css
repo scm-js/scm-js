@@ -88,12 +88,22 @@
   pointer-events: none;
 }
 
-/* non-blocking notice over the map (e.g. tileset graphics missing) */
-.viewport-notice {
+/* non-blocking notices over the map (e.g. tileset graphics missing), stacked so two do not overlap */
+.viewport-notices {
   position: absolute;
   left: 28px;
   top: 28px;
   z-index: 5;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  pointer-events: none;
+}
+.viewport-notice {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  pointer-events: auto;
   max-width: 460px;
   padding: 8px 11px;
   border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);

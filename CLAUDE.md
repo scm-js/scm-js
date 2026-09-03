@@ -88,9 +88,14 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   what Check Map tests a file against.
   `scenario.isom` is `null` only when the *file* had no `ISOM`; `encodeSection` then omits the section
   rather than writing a zeroed one; the same holds for `mask`, `wavs` and the settings tables.
-- `mpq/scm.ts` wraps `mopaq`: `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
+- `mpq/scm.ts` wraps `mopaq` (≥ 1.3.0, the user's own library at `github.com/jeany55/mopaq`, published
+  to npm from a `v*` tag): `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
   Non-scenario archive members are kept in `archiveExtrasAtom` and written back on save so custom
-  sounds/graphics survive. `scenario.chk` is written uncompressed on purpose.
+  sounds/graphics survive. `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
+  StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
+  `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
+  game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib
+  needs 1.16.1+.
 
 ### Terrain editing (`src/editor/terrain.ts`, `src/hooks/useTerrainTools.ts`)
 
@@ -105,8 +110,18 @@ Symmetry (`src/editor/symmetry.ts`, `symmetryAtom`): `mirrorRect` / `mirrorIndic
 footprint or flood region into the set of cells including its images, and the Rect / Tile / Fog
 brushes run their normal stamp over that set — so pairs still come from column parity and `Stroke`
 needs no extra merging. Square-only modes (rot90, diag, adiag) act as `none` on non-square maps
-(`symmetryAvailable`). `mirrorPixel` exists for object placement but nothing uses it yet; ISOM and
-Blend are deliberately not covered. The viewport draws the axes; `tests/symmetry.test.ts`.
+(`symmetryAvailable`). The continuous versions cover objects: `mirrorPixel` (a unit's or sprite's
+centre — `useUnitTools` / `useSpriteTools` expose `ghostsAt` and place every image the checks
+accept), `mirrorBox` (a location's bounds, `useLocationTools.create`) and `mirrorTileRect` (a
+doodad footprint; `keepsShape` drops an image that would turn a non-square one). The isometric
+brush paints the diamond under each image of the pointer (`paintIsomAt`). Blend, moving and
+deleting are deliberately not covered. The viewport draws the axes on every layer but the
+clipboard and draws the mirrored ghosts fainter; `tests/symmetry.test.ts`.
+
+Replace Terrain (`terrain.ts#replaceTerrain` / `matchingTiles`, `useTerrainTools.replace`,
+`ReplaceTerrainDialog` in `dialogs/TerrainDialogs.tsx`) swaps a `TerrainPick` — a flat terrain by
+ISOM id (matched by CV5 group index like the Rect fill) or one exact tile — for another over the
+map or the marked area, through `stampTerrain` / `stampTile`; one undo step, ISOM untouched.
 
 The Isometric brush lives in `src/editor/isom.ts` — a port of Chkdraft's reverse-engineering of StarEdit
 (MIT). Read its header comment first. Key facts: the ISOM section is a lattice of diamonds whose values
@@ -221,6 +236,19 @@ arms the clipboard layer and the viewport's `onDown` calls `pasteAt(tile)` while
 replace/merge, stranding, edge clipping, the full undo/redo round trip and a fixture-map copy
 into a blank map.
 
+### CUWP (`src/formats/chk/sections/cuwp.ts`, `src/editor/cuwp.ts`, `dialogs/CuwpDialog.tsx`)
+
+`scenario.cuwp` is UPRP (64 `CuwpSlot`s of 20 bytes: valid-state bits, valid-field bits, owner,
+hit points / shields / energy as percentages, resources, hangar, state bits, four unused bytes) and
+`scenario.cuwpUsed` UPUS (StarEdit's 64 "in use" bytes), both `null` when the file has no section
+and modelled on a new map. The *Create Unit with Properties* action stores the slot **1-based** in
+`target` (`triggerDefs.ts` kind `cuwp`; the Classic editor's widget lists slots by `cuwpSlotLabel`
+and opens the dialog with `payload.slot`). `editor/cuwp.ts`: `readCuwp` / `applyCuwp` (a
+settings-style transaction that marks UPRP and UPUS only when they change; a file with no UPUS gets
+one only when a tick goes on), `cuwpUsage`, `cuwpSlotView(s)` / `patchCuwpSlot` / `patchCuwp` (the
+plugin API's `tx.cuwp` and `settings.cuwpSlots`). Check Map warns on a slot out of 1..64 and notes a
+slot that sets nothing. `tests/cuwp.test.ts`.
+
 ### Scenario settings (`src/editor/settings.ts`, `src/formats/chk/sections/{players,settings}.ts`)
 
 The Map Revision, Player Settings, Force Settings, Player Colors and Unit Settings dialogs edit the
@@ -235,7 +263,9 @@ drawn sprite. Strings the dialogs need (force names, custom unit names) go throu
 an identical entry is reused, otherwise one is appended — never overwritten, because the old index
 may be shared with a trigger.
 
-Sections: OWNR is always written together with IOWN (StarEdit's copy); `playerRgb` is CRGB
+Sections: OWNR is always written together with IOWN (StarEdit's copy, decoded into
+`scenario.editorPlayerTypes` — `applyPlayerSettings` sets both, `encodeSection` writes IOWN from it,
+and Check Map warns when a file's two disagree); `playerRgb` is CRGB
 (Remastered: an RGB triple and a `ColorMode` per playable slot; `null` = no section, and Player
 Colors drops it again when every slot is back on `Palette`) — `displayColorHex` is the colour a slot shows
 anywhere in the chrome and `playerTeamColor` what its sprites are painted with (`TeamColorSpec`: a `tunit.pcx`
@@ -260,6 +290,12 @@ for the dialogs come from `assets.upgrades` / `assets.techs` (`upgrades.dat`, `t
 in `dat.ts`, optional like `weapons.dat`). `tests/data-settings.test.ts` pins the codecs, the
 re-striding, the new-map section set and byte-for-byte re-encoding of the fixture maps. `setMapVersion` rewrites VER/TYPE and flips `strings.extended` (STR ↔ STRx: both names go
 dirty and the inapplicable one encodes to `null`, which `serializeScenario` treats as "drop").
+Map Properties also changes the tileset: `editor/tileset.ts#changeTileset` (ERA, the terrain laid
+again with `flatTerrain` and ISOM to match, the doodads and their overlay sprites dropped — or
+`keepTiles` for ERA alone) through `changeTilesetAtom`, a whole-document transaction like Resize
+(`afterWholeDocumentChange` drops the history and bumps every revision; `tilesetFileNameAtom` reads
+the settings revision so it re-derives from the mutated ERA). The dialog `ensureTileset`s the new
+graphics first so the fill uses real tile ids.
 Upgrade / Technology Settings (`DataDialogs.tsx`) share `CatalogueList` (a race-grouped id list) and
 follow Unit Settings exactly: `useScenarioForm(read*Settings)`, in-place typed-array edits plus a
 `bump`, `apply*Settings(clone…)`, `commitSettingsAtom`; the per-player rows show the effective value
@@ -302,11 +338,51 @@ Triggers appends or replaces through `applyTriggers` / `applyBriefing` + `commit
 Strings and the String Editor re-sync `mapNameAtom` / `mapDescriptionAtom` after apply because the
 chrome reads the mirror atoms. `editor/statistics.ts#mapStatistics` feeds Tools ▸ Statistics. Menu
 items may carry a `payload` handed to `openDialogAtom` (Validate Triggers is `validateMap` with
-`{ only: "triggers" }`); Edit ▸ Delete / Select All / Deselect act on the active layer's selection like
-the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain (whole map via `flatTerrain`, so
-the ISOM lattice is regenerated to match, one undo entry). Open Recent lists names only — browsers hand
-over file contents, not handles. Replace Terrain, Auto-place Start Locations
-and Test Map are still `stub()` entries in `MenuBar.tsx` (the Melee Wizard plugin covers start locations; the Repair plugin took over Rebuild ISOM from Tiles); scmscx.com, Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until ticked) are default plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
+`{ only: "triggers" }`); Edit ▸ Delete / Select All (`selectAllAtom`, also Ctrl+A) / Deselect act on the
+active layer's selection like the Del / Esc keys; `useTerrainTools().fillMap` is Tools ▸ Fill Terrain
+(whole map via `flatTerrain`, so the ISOM lattice is regenerated to match, one undo entry). Open Recent
+(`recentFilesAtom`, persisted as `scmjs.recents`) reopens from the file handle kept in IndexedDB
+(`services/handleStore.ts`, key `recent:<name>`; `pushRecentAtom` stores it on open and save,
+`useMapFileActions.ts#openRecentInto` asks permission and opens through the unsaved-changes gate);
+without a handle (Firefox, Safari) an entry is listed and reopens through File ▸ Open. There are no
+menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.ts` (`AutoStartsDialog`),
+Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
+`game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
+into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
+Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until ticked) are default
+plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
+`zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
+(the viewport's `onDown` refuses a locked layer's gestures), `cursorPixelAtom` the status bar's Px.
+`gridSizeAtom`, `locationSnapAtom`, `panelsAtom` and the dock widths are `atomWithStorage` now.
+
+### Saving (`src/editor/save.ts`, `src/services/mapIo.ts`, `useMapFileActions.ts#saveDocument`, `SaveMapDialog`)
+
+`editor/save.ts` is pure: `SaveOptions` (format, compression, encrypt, `omitExtras`, the strip ticks,
+`mergeRepeats`, `dropTrailing`), `planSave(scn, extras, options)` → a `SavePlan` (every `currentChk`
+section with a fate — kept / dropped / merged — and reason, every extra with `kept`, sizes, counts for
+the ticks, warnings in words), `buildChk` / `buildMapFile` (the `.chk` alone or `saveMap` around it;
+zlib gets 64 KB sectors, the rest StarEdit's 4 KB). The strip groups are `TERRAIN_EDITING_SECTIONS`
+(ISOM, TILE, DD2) and `BOOKKEEPING_SECTIONS` (IVER, IVE2, IOWN, UPUS, SWNM, WAV) — the registry's
+`editorOnly` flag, and `tests/save.test.ts` keeps the two in step; nothing the game requires can be
+stripped. Merging uses `combine` with the registry's mode, at the first occurrence. `defaultSaveOptions`
+is the file's own extension and *the way it was opened* (`mapOriginAtom`), else StarEdit's layout;
+`SAVE_PRESETS.everything` / `.smallest` are the dialog's two buttons. Nothing here mutates the scenario.
+
+`mapIo.ts` keeps the File System Access handle (`MapFileHandle`, typed locally — the DOM lib lacks the
+permission methods) from `pickMapFile`, `droppedHandle` (must be *called* inside the drop event) and
+the save picker; `saveBytes(bytes, name, handle)` answers a `SaveOutcome { route: "file" | "picker" |
+"download", fileName, handle }` or null for a dismissed picker — a handle write asks
+`queryPermission` / `requestPermission` first and falls back to the picker on refusal.
+`mapFileHandleAtom` / `mapOriginAtom` / `saveOptionsAtom` (`editorAtoms.ts`) ride on `LoadedDocument`
+and are cleared by close; a `"replace"` load keeps the options. `saveDocument(store, req, write?)` is
+the one writer: builds (or takes the dialog's) bytes, calls the writer, and on success — unless
+`req.copy` — sets path, handle, options, modified=false, recents, then a status line and a toast
+(`pushToastAtom` / `toastsAtom`, `Toasts.tsx` bottom-right) worded "Saved" or "Downloaded … in the
+browser's downloads folder", since a download is the only route Firefox and Safari have. `save(mode)`
+in the hook: `"save"` with a path writes with the remembered options; otherwise `askDialog(store,
+"saveAs", { copy })` opens `SaveMapDialog` and resolves when it calls `payload.done(true)` (after
+`taken`) or leaves the stack — so Close Scenario's Save waits for the whole thing. Save Copy As is the
+same dialog with `{ copy: true }`. `tests/save-flow.test.ts` covers the store half with a fake writer.
 
 ### Strings, sounds, switches (`src/editor/strings.ts`, `sounds.ts`, `switches.ts`)
 
@@ -318,11 +394,17 @@ unreferenced trailing blanks and keeps a blank slot something still points at. `
 joins `scn.wavs` with `archiveExtrasAtom` (`soundList`, `orphanSounds`, member names normalised for
 case and slashes); the Sound Editor's working copy carries both the table and a new extras `Map`, and
 apply replaces the atom, so an imported file only reaches the archive on OK / Apply. Import converts
-through `services/audioConvert.ts` (`convertToWav`: Web Audio `decodeAudioData` in a throw-away
-`OfflineAudioContext`, an offline render for resampling / downmix, `WAV_PRESETS` for the targets — no
-decoder library, the platform decoders cover MP3 / FLAC / AAC / Ogg) and `formats/wav.ts` (pure:
-`parseWavHeader` incl. WAVE_FORMAT_EXTENSIBLE, `encodeWav` 8/16-bit PCM, `decodePcmWav`; `tests/wav.test.ts`);
-a file already a PCM WAV in the target format is kept byte for byte, and a converted one is renamed `.wav`.
+through `services/audioConvert.ts` (`convertToWav` / `decodeAudio`: `formats/wav.ts#decodeWav` first,
+else Web Audio `decodeAudioData` in a throw-away `OfflineAudioContext`; an offline render for
+resampling / downmix, `WAV_PRESETS` for the targets — the platform decoders cover MP3 / FLAC / AAC / Ogg)
+and `formats/wav.ts` (pure: `parseWavHeader` incl. WAVE_FORMAT_EXTENSIBLE, `blockAlign` and the `fmt `
+extra bytes; `encodeWav` 8/16-bit PCM; `decodeWav` for 8/16/24/32-bit PCM, float, A-law, µ-law, IMA
+ADPCM — the game's own sound encoding — and Microsoft ADPCM, `canDecodeWav` / `wavFrames` /
+`wavDuration` off the header; `tests/wav.test.ts` encodes each format on the test side and checks the
+decoders against it). A file already a PCM WAV in the target format is kept byte for byte, and a
+converted one is renamed `.wav`. `mopaq` cannot read the MPQ-ADPCM-*compressed* members of the game's
+own archives — that is the archive's compression, not the WAV encoding, and out of this repository's
+hands.
 `editor/switches.ts` edits SWNM (`applySwitchNames` creates the section on the first name and interns
 names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
 `tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.
@@ -337,6 +419,16 @@ field, label }`, argument order = SCMDraft's TrigEdit). Everything that shows a 
 editor's widgets, the text printer/parser, later the script API's typings — reads that table; the
 codec knows no types. Decoding drops only *trailing* empty condition/action slots, so anything after
 a type-0 entry survives; encoding pads back to 16/64. `switchNames` is SWNM (null when absent).
+
+`BRIEFING_ACTION_DEFS` puts the portrait slot in `player` (the first group): Blizzard's own maps
+say so — `fixtures/maps/(6)Ground Zero.scm` and `(4)Spring Thaw.scx` (gitignored copies from the
+install's Maps folder) carry briefings, and `tests/briefing.test.ts` decodes, round-trips through
+the text format and re-encodes them; StarEdit sets hint bits (0x04 and the unit-type hints) on every
+briefing action that text cannot carry, so that test masks them. `editor/triggers.ts#actionStrings`
+is the one walker over an action's text / WAV arguments (the String Editor's usage list, the Sound
+Editor and Find all read it). The Text Trigger Editor's Briefing mode edits MBRF in the same syntax.
+The Classic editor's player pick carries an EPD box (`epdOf` / `addressOfEpd` over
+`DEATHS_TABLE_ADDRESS`) for EUD work.
 
 The text format (`formats/triggers/text.ts`) resolves names through a `TriggerNames` context
 (`triggerNames(scn)` in `editor/triggers.ts`) so it is testable without a scenario; unknown names
@@ -674,6 +766,25 @@ plugin's dialog looks like a built-in one). All of it is additive — `PLUGIN_AP
 and the vendored `plugin-api/` in each plugin repository needs refreshing after
 `npm run build:plugin-types`.
 
+The beta pass added the rest of what the editor itself does to the contract — read `api.ts` and
+`docs/plugins.md` for the list: `document.save` / `saveAs` / `close` / `changeTileset` (`export`
+honours the remembered `SaveOptions`), `tx.replaceTerrain` / `fillArea` / `placeBlend` /
+`tilesFromIsom` / `mirror` / `moveUnits` / `placeStartLocations` / `updateSprites` / `moveSprites` /
+`updateDoodads` / `restoreAnywhere` / `invertFog` / `copyFog` / `floodFog`, `tx.strings.import`,
+`tx.cuwp`, `settings.unitAvailable` / `cuwpSlots`, `script.triggerAtLine`, `query.fogAt` / `strings`
+(`placement` answers null without a map), `terrain.floodRegion` / `blendCandidates` / `flatGroupOf` /
+`symmetry` / `setSymmetry` / `mirror`, `selection.lockedLayers`, `api.clipboard` (`host.ts#clipboardApi`
+over `editor/clipboard.ts`, sharing the user's clip), `api.exchange` (`.trg` and the strings text),
+`palette.placementOptions` / `doodadPlacement` / `locationSnap` / `fogViewPlayer`, `ui.statusText` /
+`toast` / `saveFile` / `ask`, and the `"options"` and `"file"` events. `ui.repaint` bumps
+`viewportRepaintAtom` (no event) rather than the terrain revision; `EditResult` is computed after
+`commitTerrainAtom` so stranded units and doodads count; a dialog's or panel's disposable leaves the
+`Contributions` bag when it closes by itself. `npm run build:plugin-types` is
+`scripts/build-plugin-types.mjs`: tsc, then a prune to what `plugins/api.d.ts` reaches, a check that
+nothing reaches `jotai` or `react`, and an `index.d.ts` + `package.json` on top — which is why
+`EditorLayer` / `TerrainMode` / `ViewFlags` / `Toast` live in `editor/view.ts`, `Preferences` in
+`editor/preferences.ts` and `DialogId` in `components/dialogs/ids.ts`, re-exported by the atoms.
+
 `api.script` (`host.ts#scriptApi`) is the Script Editor without the editor: `state()` (`scriptState` over the
 extras), `declarations()` (`generateDeclarations(scriptNames(scn))`), `compile()` (`compileInBackground` with
 `reservedStorage` — the worker's supersede rule applies, so a plugin compiling while the dialog is open supersedes
@@ -965,6 +1076,10 @@ again, measure `longtask` entries before blaming the loading code.
   one, else the scenario name, with a leading `*` while it is modified, and the plain
   `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page
   title into the window title, so the desktop build's title bar and taskbar entry follow it too.
+- `src/hooks/useDesktopFiles.ts` is the desktop's "Open with": `desktop/main.ts` holds the single
+  instance lock, takes a map path from `argv` / `second-instance` / macOS `open-file`, and sends the
+  bytes on `file:open` once the renderer's `files.onOpen` listener says `file:ready`; the hook opens
+  them through `guardedAction` like a drop.
 - `src/hooks/useCloseGuard.ts` is leaving the editor altogether with unsaved changes, gated on
   the same `confirmClose` preference and the same three facts as `needsCloseConfirm`. A browser
   gets `beforeunload` (added and removed with the unsaved state, so a clean document keeps the

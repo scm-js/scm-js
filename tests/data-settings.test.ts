@@ -150,7 +150,7 @@ describe("a new scenario", () => {
     expect(sectionData(out, "UPRP")!.length).toBe(1280);
     expect(sectionData(out, "UPUS")!.length).toBe(64);
     expect(sectionData(out, "MASK")!.every((b) => b === 0xff)).toBe(true);
-    expect(rawCreatedSections().map((s) => s.name)).toEqual(["IVE2", "VCOD", "UPRP", "UPUS"]);
+    expect(rawCreatedSections().map((s) => s.name)).toEqual(["IVE2", "VCOD"]);
 
     const back = parseScenario(out);
     expect(back.upgradeSettings!.useDefault.every((v) => v === 1)).toBe(true);

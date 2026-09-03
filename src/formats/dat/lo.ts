@@ -53,7 +53,3 @@ export function loUsedSlots(lo: LoFile, frame: number): number[] {
   return out;
 }
 
-/** How many slots of `frame` are in use. */
-export function loSlotCount(lo: LoFile, frame: number): number {
-  return loUsedSlots(lo, frame).length;
-}

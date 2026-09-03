@@ -140,7 +140,6 @@ export const OPCODE_ARGS: readonly (string | undefined)[] = [
   "w", "b", "wss", "", "",
 ];
 
-export const OPCODE_NAMES: readonly string[] = Object.keys(Op);
 
 export interface IscriptHeader {
   id: number;

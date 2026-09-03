@@ -11,6 +11,7 @@
 import { markDirty, type Scenario } from "../formats/chk/scenario";
 import type { Tileset } from "../formats/tileset/decode";
 import { pickVariation, variationsOf } from "../formats/tileset/terrain";
+import { isFlatPair } from "../formats/tileset/palette";
 
 export interface TileChange {
   /** Flat index into `scenario.tiles`. */
@@ -63,10 +64,6 @@ export function stampTile(scn: Scenario, indices: Iterable<number>, id: number):
   return out;
 }
 
-export function stampTileAt(scn: Scenario, x: number, y: number, size: number, id: number): TileChange[] {
-  return stampTile(scn, rectIndices(brushRect(x, y, size, scn.width, scn.height), scn.width), id);
-}
-
 export interface FlatBrush {
   /** Even CV5 group of the terrain's flat pair. */
   group: number;
@@ -114,16 +111,44 @@ export function stampTerrain(
   return out;
 }
 
-export function stampTerrainAt(
-  scn: Scenario,
-  tileset: Tileset,
-  brush: FlatBrush,
-  x: number,
-  y: number,
-  size: number,
-  random: () => number = Math.random,
-): TileChange[] {
-  return stampTerrain(scn, tileset, brush, rectIndices(brushRect(x, y, size, scn.width, scn.height), scn.width), random);
+/** What Replace Terrain matches or writes: a flat terrain type (by ISOM id) or one exact tile. */
+export type TerrainPick = { kind: "terrain"; id: number; variation?: number } | { kind: "tile"; id: number };
+
+/**
+ * The tiles Replace Terrain would touch: every cell (in `rect`, else the whole map) whose
+ * tile is `from` — an exact id, or any tile of the flat pair carrying the terrain's ISOM
+ * id, read off the CV5 group index as the Rect fill does. A terrain match needs the
+ * tileset graphics; without them it is empty.
+ */
+export function matchingTiles(scn: Scenario, tileset: Tileset | null, from: TerrainPick, rect?: Rect): number[] {
+  const cells = rect ? rectIndices(rect, scn.width) : Array.from({ length: scn.tiles.length }, (_, i) => i);
+  if (from.kind === "tile") return cells.filter((at) => scn.tiles[at] === from.id);
+  if (!tileset) return [];
+  const groups = tileset.groups;
+  return cells.filter((at) => groups[scn.tiles[at] >> 4]?.index === from.id && isFlatPair(tileset, (scn.tiles[at] >> 4) & ~1));
+}
+
+/**
+ * Tools ▸ Replace Terrain: every tile matching `from` becomes `to` — flat pairs laid the
+ * way the Rect brush lays them (so a terrain-to-terrain swap keeps StarEdit's left/right
+ * pairing), or one exact tile everywhere. ISOM is left alone, as by the Rect brush.
+ */
+export function replaceTerrain(scn: Scenario, tileset: Tileset | null, from: TerrainPick, to: TerrainPick, rect?: Rect, random: () => number = Math.random): TileChange[] {
+  const cells = matchingTiles(scn, tileset, from, rect);
+  if (cells.length === 0) return [];
+  if (to.kind === "tile") return stampTile(scn, cells, to.id);
+  if (!tileset) return [];
+  const group = flatGroupOf(tileset, to.id);
+  if (group < 0) return [];
+  return stampTerrain(scn, tileset, { group, variation: to.variation }, cells, random);
+}
+
+/** The even CV5 group of the flat pair carrying an ISOM terrain id, or -1. */
+export function flatGroupOf(tileset: Tileset, terrainId: number): number {
+  for (let g = 2; g + 1 < tileset.groups.length; g += 2) {
+    if (tileset.groups[g].index === terrainId && isFlatPair(tileset, g)) return g;
+  }
+  return -1;
 }
 
 /**

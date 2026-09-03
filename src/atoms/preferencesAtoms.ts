@@ -8,36 +8,14 @@
  */
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage, RESET } from "jotai/utils";
-import type { TilesetId } from "../data/tilesets";
+import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, clearStoredData, storedKeys } from "./storage";
+import { clearHandles } from "../services/handleStore";
+import { recentFilesAtom } from "./documentAtoms";
 
-export interface Preferences {
-  /** Show the splash while the game data loads; off starts straight on the editor. */
-  splash: boolean;
-  /** Ask before closing or replacing a map with unsaved changes. */
-  confirmClose: boolean;
-  /** What File ▸ New and the startup map start with. */
-  newMap: { tileset: TilesetId; width: number; height: number };
-  /** Initial View ▸ Animate Water / Animate Units. */
-  animateWater: boolean;
-  animateUnits: boolean;
-  /**
-   * Where to fetch the game data from when this build has none and the browser keeps no
-   * copy: the extracted tree, or the two archives, under one address. "" means the
-   * build's own default (`VITE_GAME_DATA_URL`), which a desktop build leaves empty.
-   */
-  gameDataUrl: string;
-}
-
-export const DEFAULT_PREFERENCES: Preferences = {
-  splash: true,
-  confirmClose: true,
-  newMap: { tileset: "badlands", width: 128, height: 128 },
-  animateWater: true,
-  animateUnits: true,
-  gameDataUrl: "",
-};
+export type { Preferences } from "../editor/preferences";
+export { DEFAULT_PREFERENCES } from "../editor/preferences";
 
 /**
  * One preference straight from storage, for code that runs before (or outside) the
@@ -103,6 +81,8 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   set(pluginCodeAtom, RESET);
   set(userRegistriesAtom, RESET);
   set(registryCacheAtom, RESET);
+  set(recentFilesAtom, RESET);
+  void clearHandles();
   clearStoredData();
   return before;
 });

@@ -1,50 +1,13 @@
 import { atom } from "jotai";
+import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { browserStorage } from "./storage";
+import type { DialogId } from "../components/dialogs/ids";
+import type { Toast } from "../editor/view";
+
+export type { DialogId, Toast };
 
 /* ── Dialog registry ────────────────────────────────────── */
 
-export type DialogId =
-  | "newMap"
-  | "openMap"
-  | "saveAs"
-  | "exportImage"
-  | "mapProperties"
-  | "resizeMap"
-  | "mapRevision"
-  | "playerSettings"
-  | "forceSettings"
-  | "playerColors"
-  | "unitSettings"
-  | "upgradeSettings"
-  | "techSettings"
-  | "stringEditor"
-  | "soundEditor"
-  | "switches"
-  | "locationList"
-  | "unitProperties"
-  | "locationProperties"
-  | "spriteProperties"
-  | "triggerEditor"
-  | "textTriggerEditor"
-  | "scriptEditor"
-  | "missionBriefing"
-  | "symmetry"
-  | "gridSettings"
-  | "preferences"
-  | "shortcuts"
-  | "validateMap"
-  | "statistics"
-  | "importTriggers"
-  | "exportTriggers"
-  | "importStrings"
-  | "exportStrings"
-  | "find"
-  | "about"
-  | "confirmClose"
-  | "notImplemented"
-  | "plugins"
-  | "confirmPlugin"
-  | "pluginDialog"
-  | "gameData";
 
 export interface DialogEntry {
   id: DialogId;
@@ -82,17 +45,42 @@ export interface PanelVisibility {
   statusbar: boolean;
 }
 
-export const panelsAtom = atom<PanelVisibility>({
+const DEFAULT_PANELS: PanelVisibility = {
   palette: true,
   minimap: true,
   properties: true,
   layers: true,
   toolbar: true,
   statusbar: true,
-});
+};
 
-export const leftDockWidthAtom = atom<number>(272);
-export const rightDockWidthAtom = atom<number>(248);
+/** View ▸ Panels, remembered (`scmjs.panels`); a panel added later starts shown. */
+export const panelsAtom = atomWithStorage<PanelVisibility>("scmjs.panels", DEFAULT_PANELS, {
+  ...createJSONStorage<PanelVisibility>(browserStorage),
+  getItem: (key, initial) => { const v = createJSONStorage<PanelVisibility>(browserStorage).getItem(key, initial); return v && typeof v === "object" ? { ...DEFAULT_PANELS, ...v } : initial; },
+}, { getOnInit: true });
+
+/** The side docks' widths in pixels, remembered together (`scmjs.docks`). */
+export const dockWidthsAtom = atomWithStorage<{ left: number; right: number }>("scmjs.docks", { left: 272, right: 248 }, createJSONStorage(browserStorage), { getOnInit: true });
+export const leftDockWidthAtom = atom((get) => get(dockWidthsAtom).left, (get, set, width: number) => set(dockWidthsAtom, { ...get(dockWidthsAtom), left: width }));
+export const rightDockWidthAtom = atom((get) => get(dockWidthsAtom).right, (get, set, width: number) => set(dockWidthsAtom, { ...get(dockWidthsAtom), right: width }));
 
 /** Transient status-bar message ("Ready", "Saved", …). */
 export const statusMessageAtom = atom<string>("Ready");
+
+/* ── Toasts ─────────────────────────────────────────────── */
+
+export const toastsAtom = atom<Toast[]>([]);
+
+let nextToast = 1;
+export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, "id" | "ttl"> & { ttl?: number }): number => {
+  const id = nextToast++;
+  const ttl = toast.ttl ?? (toast.kind === "error" ? 12000 : 6000);
+  set(toastsAtom, [...get(toastsAtom).slice(-3), { ...toast, id, ttl }]);
+  return id;
+});
+
+export const dismissToastAtom = atom(null, (get, set, id: number) => {
+  set(toastsAtom, get(toastsAtom).filter((t) => t.id !== id));
+});
+

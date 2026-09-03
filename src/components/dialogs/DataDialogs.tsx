@@ -549,7 +549,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
                 </Field>
               ))}
             </div>
-            <p className="hint" style={{ marginTop: 6 }}>Energy is what a cast costs once researched. {FRAMES_HINT}{dat ? "" : " techdata.dat is not installed, so defaults show as 0 — re-run npm run extract."}</p>
+            <p className="hint" style={{ marginTop: 6 }}>Energy is what a cast costs once researched. {FRAMES_HINT}{dat ? "" : " techdata.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…)."}</p>
           </Group>
           <Group title="Availability" flush>
             <div className="row" style={{ padding: "6px 8px 2px", gap: 14 }}>

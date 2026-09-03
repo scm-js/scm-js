@@ -39,11 +39,23 @@ the last move or resize as well as on close, so a session that ends in a crash o
 remembers. A position that no longer lands on any attached screen is dropped and the platform
 places the window. Closing the window (or quitting) while the open map has unsaved changes is
 held back in the main process and handed to the editor, which asks with its own Close Scenario
-dialog — Save goes through the ordinary File ▸ Save path; in a browser tab the same preference
+dialog — Save goes through the ordinary File ▸ Save path (which, with a file handle from the
+open or save picker, writes in place; see below); in a browser tab the same preference
 arms `beforeunload`, where all the page can do is make the browser ask its own generic question
 (`src/hooks/useCloseGuard.ts`). The icon comes from `public/icon.png`, the same file electron-builder
 turns into the `.ico` / `.icns`. `SCMJS_DEV_URL=http://localhost:5173 npm run desktop`
 points the window at the dev server.
+
+Saving (`src/hooks/useMapFileActions.ts#saveDocument`, `src/services/mapIo.ts`) keeps the File
+System Access handle a Chromium browser or Electron gives for a file — from `showOpenFilePicker`,
+a drop's `getAsFileSystemHandle()` (requested inside the drop event) or `showSaveFilePicker` —
+in `mapFileHandleAtom`, so Ctrl+S writes in place after one permission prompt; without a handle it
+goes through the save picker, and without the API (Firefox, Safari) it downloads, and the toast
+says which happened (`pushToastAtom`, `components/chrome/Toasts.tsx`). The Save dialog
+(`SaveMapDialog`, `payload.copy` for Save Copy As) previews `editor/save.ts#planSave` and hands
+the built bytes to `saveDocument`; `askDialog` lets a caller — Close Scenario's Save — await its
+answer the way `guardedAction` awaits the close confirmation. The options confirmed there are
+kept per document in `saveOptionsAtom` and reused by Ctrl+S.
 
 ## Releases
 
@@ -55,6 +67,20 @@ version comes from the tag, or `<last tag>-latest.<date>.<sha>` on `main`. Repos
 variables: `GAME_DATA_URL` (the hosted build's game-data address) and `PAGES_BASE`
 (`/` for a custom domain; default is the repository name). CI has no game data, so the
 real-data test suites skip there.
+
+## Plugin typings
+
+`npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) emits the declarations a
+plugin repository vendors as `plugin-api/`: `tsc -p tsconfig.plugin-api.json`, then only
+what `plugins/api.d.ts` reaches through its imports is kept (the atoms and hooks the
+editor's own modules touch are pruned), a tree that still names `jotai` or `react` fails
+the build, and an `index.d.ts` plus a `package.json` carrying the API and editor versions
+go on top. The plain types the contract shares with the chrome — `EditorLayer`,
+`TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
+(`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the
+atom modules for that reason. Two external names remain, `mopaq` and `typescript`,
+reached through type-only imports; a plugin repository compiles with `skipLibCheck`
+and needs neither installed.
 
 ## Tests
 

@@ -8,7 +8,7 @@
  */
 import { markDirty, scenarioDescription, scenarioName, strSectionName, type Scenario } from "../formats/chk/scenario";
 import type { ActionRecord } from "../formats/chk/sections/triggers";
-import { actionDef } from "../data/triggerDefs";
+import { actionStrings } from "./triggers";
 import { unitName } from "../data/units";
 
 export type StringUsageKind = "name" | "description" | "force" | "location" | "unit" | "switch" | "trigger" | "briefing" | "wav";
@@ -47,9 +47,7 @@ export function stringUsages(scn: Scenario): Map<number, StringUsage[]> {
     const noun = kind === "trigger" ? "Trigger" : "Briefing";
     list.forEach((t, ti) => {
       for (const a of t.actions) {
-        const name = actionDef(a.type, kind === "briefing")?.name ?? `Action ${a.type}`;
-        if (a.text !== 0) add(a.text, { kind, ref: ti, label: `${noun} ${ti + 1}: ${name}` });
-        if (a.wav !== 0) add(a.wav, { kind, ref: ti, label: `${noun} ${ti + 1}: ${name} (WAV)` });
+        for (const s of actionStrings(a, kind === "briefing")) add(s.index, { kind, ref: ti, label: `${noun} ${ti + 1}: ${s.action}${s.kind === "wav" ? " (WAV)" : ""}` });
       }
     });
   };

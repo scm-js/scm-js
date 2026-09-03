@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Download, FileText, Upload } from "lucide-react";
 import { commitSettingsAtom, commitTriggersAtom, scenarioAtom, scriptStateAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { mapDescriptionAtom, mapFilePathAtom, mapNameAtom } from "../../atoms/editorAtoms";
-import { closeDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import {
   applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggersToText, type TriggerFileFormat,
 } from "../../editor/exchange";
@@ -52,6 +52,7 @@ export function ExportTriggersDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(triggersRevisionAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const toast = useSetAtom(pushToastAtom);
   const stem = useFileStem();
   const [format, setFormat] = useState<TriggerFileFormat>((entry.payload?.format as TriggerFileFormat) ?? "txt");
   const [target, setTarget] = useState<Target>("triggers");
@@ -61,7 +62,12 @@ export function ExportTriggersDialog({ entry }: DialogProps) {
   const fileName = `${stem}${target === "briefing" ? "-briefing" : "-triggers"}.${format}`;
   const doExport = async () => {
     const bytes = format === "trg" ? encodeTrg(list) : encodeText(triggersToText(scenario, list, target === "briefing"));
-    if (await saveBytes(bytes, fileName)) setStatus(`Exported ${list.length} ${target === "briefing" ? "briefing" : "trigger"}${list.length === 1 ? "" : "s"} to ${fileName}`);
+    const out = await saveBytes(bytes, fileName);
+    if (out) {
+      const text = `Exported ${list.length} ${target === "briefing" ? "briefing" : "trigger"}${list.length === 1 ? "" : "s"} to ${out.fileName}`;
+      setStatus(text);
+      toast({ kind: "ok", title: out.route === "download" ? "Triggers downloaded" : "Triggers exported", detail: out.route === "download" ? `${text} — in the browser's downloads folder.` : text });
+    }
   };
 
   return (
@@ -95,6 +101,7 @@ export function ImportTriggersDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const toast = useSetAtom(pushToastAtom);
   const [target, setTarget] = useState<Target>("triggers");
   const [replace, setReplace] = useState(false);
   const [state, setState] = useState<ImportState | null>(null);
@@ -122,7 +129,9 @@ export function ImportTriggersDialog({ entry }: DialogProps) {
     const next = replace ? state.triggers : [...existing, ...state.triggers];
     if (target === "triggers") applyTriggers(scenario, next); else applyBriefing(scenario, next);
     commit();
-    setStatus(`Imported ${state.triggers.length} ${target === "briefing" ? "briefing" : "trigger"}${state.triggers.length === 1 ? "" : "s"} from ${state.fileName}${replace ? " (replaced the list)" : ""}`);
+    const text = `Imported ${state.triggers.length} ${target === "briefing" ? "briefing" : "trigger"}${state.triggers.length === 1 ? "" : "s"} from ${state.fileName}${replace ? " (replaced the list)" : ""}`;
+    setStatus(text);
+    toast({ kind: "ok", title: "Triggers imported", detail: text });
     close(entry.key);
   };
   const count = target === "triggers" ? scenario.triggers.length : scenario.briefing.length;
@@ -169,12 +178,17 @@ export function ExportStringsDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const toast = useSetAtom(pushToastAtom);
   const stem = useFileStem();
   if (!scenario) return <NoMap entry={entry} title="Export Strings" icon={<FileText size={14} />} />;
   const fileName = `${stem}-strings.txt`;
   const count = scenario.strings.strings.filter((s, i) => i > 0 && s !== null).length;
   const doExport = async () => {
-    if (await saveBytes(encodeText(formatStringTable(scenario.strings)), fileName)) setStatus(`Exported ${count} strings to ${fileName}`);
+    const out = await saveBytes(encodeText(formatStringTable(scenario.strings)), fileName);
+    if (out) {
+      setStatus(`Exported ${count} strings to ${out.fileName}`);
+      toast({ kind: "ok", title: out.route === "download" ? "Strings downloaded" : "Strings exported", detail: `${count} strings — ${out.fileName}${out.route === "download" ? ", in the browser's downloads folder" : ""}` });
+    }
   };
   return (
     <DialogFrame dialogKey={entry.key} title="Export Strings" icon={<Download size={14} />} size="sm" okLabel="Export" onOk={() => { void doExport(); }} footerLeft={<span className="mono hint">{fileName}</span>}>
@@ -196,6 +210,7 @@ export function ImportStringsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const toast = useSetAtom(pushToastAtom);
   const setName = useSetAtom(mapNameAtom);
   const setDescription = useSetAtom(mapDescriptionAtom);
   const [state, setState] = useState<StringImportState | null>(null);
@@ -216,6 +231,7 @@ export function ImportStringsDialog({ entry }: DialogProps) {
     if (name !== null) setName(name);
     setDescription(getString(scenario.strings, scenario.descriptionIndex) ?? "");
     setStatus(`Imported strings from ${state.fileName}: ${replaced} replaced, ${added} added`);
+    toast({ kind: "ok", title: "Strings imported", detail: `${state.fileName}: ${replaced} replaced, ${added} added` });
     close(entry.key);
   };
   const size = scenario.strings.strings.length;

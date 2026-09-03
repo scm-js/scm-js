@@ -18,6 +18,7 @@ import {
   type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
 } from "./sections/settings";
 import { decodeWavs, encodeWavs } from "./sections/sounds";
+import { decodeCuwp, decodeCuwpUsed, encodeCuwp, encodeCuwpUsed, type CuwpSlot } from "./sections/cuwp";
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
 } from "./sections/terrain";
@@ -53,6 +54,13 @@ export interface Scenario {
   descriptionIndex: number;
 
   playerTypes: number[];
+  /**
+   * IOWN: StarEdit's own copy of the player types — what its Player Settings dialog
+   * shows, where the game reads OWNR. The editor keeps the two in step; a file where they
+   * differ (another tool wrote one and not the other) is flagged by Check Map. Null when
+   * the file has no section.
+   */
+  editorPlayerTypes: number[] | null;
   playerRaces: number[];
   playerColors: number[];
   /** CRGB, Remastered's per-slot colour choice; null when the file has none (every client then reads COLR). */
@@ -72,6 +80,10 @@ export interface Scenario {
   techRestrictions: TechRestrictions | null;
   /** WAV: 512 string indices of the map's sound paths; null when the file has no section. */
   wavs: number[] | null;
+  /** UPRP: the 64 Create Unit with Properties slots (the action names one 1-based); null when the file has no section. */
+  cuwp: CuwpSlot[] | null;
+  /** UPUS: StarEdit's "slot in use" byte per CUWP slot; null when the file has no section. */
+  cuwpUsed: boolean[] | null;
 
   /** MTXM: what the game draws — terrain with the doodads stamped over it. */
   tiles: Uint16Array;
@@ -255,6 +267,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const maskData = take("MASK", dim);
 
   const ownr = take("OWNR");
+  const iown = take("IOWN");
   const side = take("SIDE");
   const colr = take("COLR");
   const crgb = take("CRGB");
@@ -272,6 +285,8 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const ptec = take("PTEC");
   const wav = take("WAV ");
   const swnm = take("SWNM");
+  const uprp = take("UPRP");
+  const upus = take("UPUS");
 
   const scn: Scenario = {
     chk,
@@ -286,6 +301,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     nameIndex: sprp ? sprp.u16() : 0,
     descriptionIndex: sprp ? sprp.u16() : 0,
     playerTypes: ownr ? decodeBytes(ownr, PLAYER_SLOTS) : Array.from({ length: PLAYER_SLOTS }, () => 0),
+    editorPlayerTypes: iown ? decodeBytes(iown, PLAYER_SLOTS) : null,
     playerRaces: side ? decodeBytes(side, PLAYER_SLOTS) : Array.from({ length: PLAYER_SLOTS }, () => 7),
     playerColors: colr ? decodeBytes(colr, FORCE_SLOTS) : [0, 1, 2, 3, 4, 5, 6, 7],
     playerRgb: crgb ? decodePlayerRgb(crgb) : null,
@@ -297,6 +313,8 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     techSettings: tecx ? decodeTechSettings(tecx) : tecs ? decodeTechSettings(tecs) : null,
     techRestrictions: ptex ? decodeTechRestrictions(ptex) : ptec ? decodeTechRestrictions(ptec) : null,
     wavs: wav ? decodeWavs(wav) : null,
+    cuwp: uprp ? decodeCuwp(uprp) : null,
+    cuwpUsed: upus ? decodeCuwpUsed(upus) : null,
     tiles: mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     editorTiles: tileData ? decodeTiles(tileData, width, height) : mtxm ? decodeTiles(mtxm, width, height) : new Uint16Array(width * height),
     isom: isomData ? decodeIsom(isomData, width, height) : null,
@@ -351,8 +369,9 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
     case "STRx":
       return scn.strings.extended ? encodeStrings(scn.strings) : null;
     case "OWNR":
-    case "IOWN":
       return encodeBytes(scn.playerTypes, PLAYER_SLOTS);
+    case "IOWN":
+      return encodeBytes(scn.editorPlayerTypes ?? scn.playerTypes, PLAYER_SLOTS);
     case "SIDE":
       return encodeBytes(scn.playerRaces, PLAYER_SLOTS);
     case "COLR":
@@ -385,6 +404,10 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
       return scn.techRestrictions ? encodeTechRestrictions(scn.techRestrictions, TECHS_BW) : null;
     case "WAV ":
       return scn.wavs ? encodeWavs(scn.wavs) : null;
+    case "UPRP":
+      return scn.cuwp ? encodeCuwp(scn.cuwp) : null;
+    case "UPUS":
+      return scn.cuwpUsed ? encodeCuwpUsed(scn.cuwpUsed) : null;
     case "MTXM":
       return encodeTiles(scn.tiles);
     case "TILE":
@@ -432,7 +455,7 @@ const APPEND_ORDER = [
  */
 export const MODELLED_SECTIONS: ReadonlySet<string> = new Set([
   "TYPE", "VER ", "DIM ", "ERA ", "SPRP", "STR ", "STRx", "OWNR", "IOWN", "SIDE", "COLR", "CRGB", "FORC",
-  "UNIS", "UNIx", "PUNI", "UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV ",
+  "UNIS", "UNIx", "PUNI", "UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV ", "UPRP", "UPUS",
   "MTXM", "TILE", "ISOM", "MASK", "UNIT", "THG2", "DD2 ", "MRGN", "TRIG", "MBRF", "SWNM",
 ]);
 

@@ -54,20 +54,53 @@ tileset colours for terrain and coloured markers for units. See
 
 Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 
+### Saving
+
+Ctrl+S writes the map back where it came from. In Chrome, Edge and the desktop app the
+editor keeps a handle to the file it opened (from the Open dialog, a drop or the Save
+dialog), so Save writes in place after the browser has asked once for permission. Firefox
+and Safari hand over a file's contents but no way back to it, so there every save is a
+download and the notice that appears bottom-right says so; look in the downloads folder.
+Save As (Ctrl+Shift+S) and Save Copy As open the Save dialog — a copy is written without
+the open map changing its name or file — and a map that has no file yet goes through it on
+its first Ctrl+S. When a save is done, a notice appears bottom-right with the name and size,
+the status bar says the same, and the dot next to the map's name in the menubar stops glowing.
+
+The Save dialog is where the file's shape is decided, with everything it will write listed
+on the right before it is:
+
+- **Format**: `.scx`, `.scm`, or a bare `.chk` (the scenario alone, no archive).
+- **Compression**: PKWARE is what StarEdit writes and what Blizzard's own maps are stored
+  as, so every StarCraft build reads it; zlib is smaller and needs 1.16.1 or Remastered;
+  none is the largest and readable by anything. A map keeps the compression it was opened
+  with by default; a new map gets StarEdit's. StarEdit's encryption is a tick beside it.
+- **Other files in the archive**: the sounds and the trigger script members, each with a
+  tick, so a copy for release can leave the source out.
+- **Sections**: the game reads none of ISOM, TILE, DD2 (the terrain-editing data), IVER,
+  IVE2, IOWN, UPUS, SWNM or WAV (editor bookkeeping); each group can be left out, as can
+  sections the format reference does not know, and repeated sections can be merged into
+  the one the game would act on. The dialog says what each costs an editor later (no
+  isometric brush without ISOM, for instance); the map in the editor is not changed.
+  *Everything* and *Smallest that plays* set the ticks in one go.
+- **Check Map** runs alongside, with its counts and a button to the full list.
+
+The options confirmed in the dialog are what Ctrl+S reuses for that map from then on.
+
 ## What works, and what does not
 
 ### Map files
 
 | | Status |
 | --- | --- |
-| Open and save `.scm`, `.scx`, `.chk` | Yes |
+| Open and save `.scm`, `.scx`, `.chk` | Yes. Save writes in place where the browser allows it (Chrome, Edge, the desktop app) and downloads elsewhere; the Save dialog chooses compression (PKWARE as StarEdit, zlib, none), encryption, which archive files ride along and which editor-only sections are left out, and shows what it will write first. |
 | Preserve unmodelled sections, repeated sections and custom archive files | Yes |
 | New map, with the full section set StarEdit writes | Yes |
 | Resize and crop, with a 3×3 anchor | Yes |
 | Switch revision: StarCraft 1.00, Hybrid, Brood War, Remastered | Yes |
-| Change a map's tileset | Not yet |
-| Open Recent | Names only. A browser hands over file contents rather than a handle, so a listed map has to be reopened from disk. |
-| More than one map open at once | Not yet |
+| Change a map's tileset | Yes, in Map Properties: ERA changes and the terrain is laid again with the new tileset's terrain (tile numbers mean something else in every tileset; the doodads go with them, everything else stays), or keep the tile numbers as SCMDraft does. Clears the undo history. |
+| Open Recent | Yes. In Chrome, Edge and the desktop app a recent map reopens from disk (the file handle is kept in the browser; it asks once before reading). Firefox and Safari keep the names and reopen through File ▸ Open. |
+| Open a map from the file manager | Yes, in the desktop app: double-click, "Open with", or a path on the command line, into the running window. |
+| More than one map open at once | No. One map per tab or window; open the editor twice. |
 
 ### Terrain
 
@@ -78,8 +111,9 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Flood fill, fill map, pick tile | Yes |
 | Elevation and buildability overlays | Yes |
 | Water and lava animation | Yes |
-| Symmetry | Partial. Rect, Tile and Fog strokes mirror; objects, the isometric brush and Blend do not. |
-| Replace Terrain | Not yet |
+| Symmetry | Yes. The Isometric, Rect and Tile brushes, the fills, the Fog brush, and placing units, sprites, doodads and locations all land on the images of the spot too (mirror, both axes, 180°, 90° and the diagonals on a square map). Moving and deleting are not mirrored, and neither is Blend. |
+| Replace Terrain | Yes. One terrain type (or one exact tile) becomes another, over the whole map or the marked area, laid as the Rect brush lays it; one undo step. |
+| Elevation and buildability overlays | Yes: ground height per minitile, unbuildable tiles hatched. |
 | Terrain from Image | Yes, as a plugin installed by default (File ▸ Import, or right-click the terrain palette / map: *into Area…* lets you drag the target first). File, paste, drop or URL; colour adjustments; key colours per terrain with an eyedropper; despeckle and island removal. |
 
 ### Objects
@@ -94,7 +128,8 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Cut, copy and paste, including between maps | Yes |
 | Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
-| Auto-place Start Locations | Yes, as a plugin (Melee Wizard: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Melee Wizard…). Click where Player 1 starts and the others land on its images under the symmetry you chose (mirror, 180°, 90°, both diagonals; 2, 4 or 8 players). The Tools menu's own entry is still a stub. |
+| Auto-place Start Locations | Yes. Tools ▸ Auto-place Start Locations puts one per player on a ring or in the corners, each moved to the nearest ground the placement checks accept, as one undo step. The Melee Wizard plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Melee Wizard…) does the elaborate version: click where Player 1 starts and the others land on its images under the symmetry you chose, with bases. |
+| Lock a layer | Yes, in the Layers panel: a locked layer's tools stop changing the map. |
 | Lay out a base's resources: the mineral line on the three-tile ring, the geyser past its end, for every player at once | Yes, as a plugin (Melee Wizard). Press on the hall spot and drag towards the minerals; presets for main, natural and third; amounts, end-patch amounts, mineral types; spots the map refuses are shown in red and left out. Also bases at every start location in one go, a blocking patch tool, mirroring the selected units, a symmetry check and a resource summary. |
 | See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability: tick it, then View ▸ Walkability or Ctrl+Shift+W). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map as an overlay that stays on while you place units and follows every edit; hover reads the ground under the pointer; Tools ▸ Walkability… is the settings and the lists. |
 
@@ -107,9 +142,9 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Script editor: a TypeScript subset that generates triggers | Yes |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |
-| Mission briefings | Partial. The editor is there, but no fixture map has a briefing, so the field layout follows the community reference and is unverified. |
-| Create Unit with Properties (CUWP) | Partial. The slots survive a round trip and the action takes a slot number, but there is no editor for the slots themselves. |
-| EUD triggers | Partial. Raw player and unit values are accepted everywhere, and the script's raw level has `Memory` / `SetMemory`. No dedicated EUD UI. |
+| Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |
+| Create Unit with Properties (CUWP) | Yes. Triggers ▸ Unit Properties Slots… edits the 64 slots (vitals, resources, hangar, the special states), the action picks a slot by what it sets, and Check Map flags a slot that sets nothing. |
+| EUD triggers | Yes, as far as an editor without an address database goes: any raw player and unit value is accepted, the player pick has an EPD box that turns a memory address into the player value a Deaths condition or Set Deaths action needs (and shows the address a raw value reaches), Check Map points out the raw values, and the script's raw level has `Memory` / `SetMemory`. |
 
 ### Scenario data
 
@@ -119,7 +154,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
 | Switch names | Yes |
-| Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV the browser decodes to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The game's own ADPCM `.wav`s neither play nor convert here. |
+| Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
 
 ### Tools
 
@@ -133,7 +168,7 @@ Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 | Plugins (Plugins ▸ Browse Plugins… / Manage Plugins…) | Yes. Search the project's published plugins and install one, or load a `plugin.ts` from any public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
-| Test Map | Not yet. It needs a local StarCraft to hand the file to, which a browser tab cannot do. |
+| Test Map | Yes (Ctrl+F5). Neither StarCraft build opens a map from the outside, so Test Map writes the map into a `scmJS` folder under the game's Maps folder, where Single Player ▸ Custom Game lists it, and the desktop app starts the game as well. In Chrome and Edge the map goes into a folder you pick once (the game's Maps folder); other browsers download it. |
 | Generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes, as a plugin (AI: install it from Plugins ▸ Browse Plugins…, then Tools ▸ AI). It needs a server that holds an Anthropic key — [scm-js/ai-server](https://github.com/scm-js/ai-server) is one to deploy — or your own key typed into its settings. Every change it makes is one undo step. |
 
 ## Working in the editor
@@ -157,7 +192,17 @@ Four brush modes:
 Drag to paint, `[` and `]` resize the brush from 1×1 to 7×7, Alt+click picks the tile
 under the cursor, and right-click offers Pick and Fill Area. The status bar shows the
 tile id and the Properties panel breaks it into group, slot, elevation, walkability
-and buildability.
+and buildability. View ▸ Elevation Overlay tints the ground by height, minitile by
+minitile, and Buildability Overlay hatches what a building cannot stand on.
+
+Tools ▸ Replace Terrain turns every tile of one terrain type (or one exact tile) into
+another, over the whole map or the area marked on the Cut / Copy / Paste layer, laid the
+way the Rect brush lays it; Fill Terrain lays the whole map anew.
+
+Tools ▸ Symmetry mirrors what you do across the map's axes or about its centre — every
+brush, the fills, and placing units, sprites, doodads and locations, each as one undo
+step. The ghost shows where the images will land, and a doodad that would have to turn
+is skipped. Blend, moving and deleting are not mirrored.
 
 The isometric brush ripples outward as it paints: a neighbour that cannot legally
 border the new terrain becomes the intermediate one, and cliff faces stack as tall as
@@ -177,8 +222,11 @@ seam first, with the mean colour difference under each thumbnail. Nothing in the
 data describes these matches; they are measured off the graphics, so the tileset has
 to be extracted.
 
-Rect, Tile and Blend leave `ISOM` alone, which is what SCMDraft does in its
-non-isometric modes.
+Rect, Tile, Blend and Replace Terrain leave `ISOM` alone, which is what SCMDraft does in
+its non-isometric modes.
+
+The Layers panel locks a layer with the padlock: its tools stop changing the map until
+you unlock it, while selecting and looking still work.
 
 ### Doodads
 
@@ -214,6 +262,11 @@ minitiles under a ground unit's collision box. The unit in the way gets outlined
 
 The matching Remove Stranded Units toggle on the Terrain palette deletes units that
 your terrain edit just made illegal, as part of the same undo step.
+
+Tools ▸ Auto-place Start Locations puts one start location per player on a ring or in
+the corners, each moved to the nearest ground the placement checks accept, and selects
+them so you can drag them where you want; the Melee Wizard plugin lays out symmetric
+starts and bases from a point you pick.
 
 Double-click a unit for every field its record holds: hit points, shields, energy,
 resources and hangar with their "used" bits, the five special properties, the
@@ -324,8 +377,17 @@ Generated triggers show up in the classic editor with a `script` badge, and hand
 triggers around the generated block are left alone.
 
 Mission briefings get their own editor over the same record layout with the briefing
-action set. No fixture map has a briefing to check against, so treat that one as
-untested.
+action set, and the Text Trigger Editor has a Briefing mode in the same syntax. The
+layout is checked against the briefings on Blizzard's own multiplayer maps.
+
+Triggers ▸ Unit Properties Slots is the table behind *Create Unit with Properties*: 64
+slots, each the hit points, shields and energy (as percentages), resources, hangar count
+and special states a trigger applies to the units it creates. The action's argument
+lists the slots by what they set and opens the editor on one.
+
+For EUD work, the player pick next to a Deaths condition or Set Deaths action has an
+EPD box: type a memory address and it becomes the player value that reaches it through
+the deaths table, and a raw value shows which address it reaches.
 
 All of these are OK / Apply / Cancel transactions and sit outside undo, as in
 StarEdit.
@@ -336,7 +398,11 @@ The Scenario menu holds the map's own tables, each its own transaction and none 
 them in the undo history.
 
 Map Properties, Map Revision, Player Settings, Force Settings and Player Colors cover
-the header data. Player Colors includes Remastered's per-slot RGB, where a slot can be
+the header data. Map Properties can change the tileset: tile numbers mean something
+else in every tileset, so the terrain is laid again with a terrain you pick and the
+doodads go with it, while units, sprites, locations, fog and triggers stay; or keep the
+tile numbers, as SCMDraft does, to see what they draw. It clears the undo history like
+a resize. Player Colors includes Remastered's per-slot RGB, where a slot can be
 a palette colour, random, the player's choice, or a custom colour, and the section
 only exists while some slot needs it.
 
@@ -357,19 +423,30 @@ and writes it as PCM WAV in the format picked next to the button; the default, 2
 16-bit mono, is what the game's own sounds are, and the other presets are the rates its
 mixer takes, down to 11025 Hz 8-bit for maps chasing the size limit. A PCM WAV already in
 that format is stored byte for byte, and "keep as they are" stores PCM WAVs and Oggs
-unchanged (an Ogg plays in Remastered only). The Format column reads each file's header,
-and Convert re-encodes a listed `.wav` in place. No decoder ships with the editor: this
-is Web Audio's `decodeAudioData` and an offline render for the resampling, so the set of
-formats is the browser's.
+unchanged (an Ogg plays in Remastered only, and Check Map says so on an older revision).
+The Format column reads each file's header, the Length column comes off it, and Convert
+re-encodes a listed `.wav` in place. WAVs are decoded by the editor itself in every
+encoding the game and the usual tools produce — 8 to 32-bit PCM, float, A-law, µ-law,
+IMA and Microsoft ADPCM — so a sound lifted from the game's archives plays and converts;
+MP3, Ogg and FLAC go through the browser's decoders and an offline render resamples.
 
 ### Checking and exporting
 
-Tools ▸ Check Map looks for the sections a file of its revision needs, start locations
-that do not match the player table, the unit limit, off-map units, a missing or moved
-Anywhere, duplicate location names, string capacity, triggers pointing at unused
-locations or strings past the end of the table, Play WAV actions with no file in the
-archive, switches tested but never set, disabled triggers, and ISOM health.
-Double-click an issue to go to it.
+Tools ▸ Check Map looks for the sections a file of its revision needs, what the parser
+noticed on the way in, player types where StarEdit's copy disagrees with the game's,
+start locations that do not match the player table, the unit limit, off-map units, a
+missing or moved Anywhere, duplicate location names, string capacity, triggers pointing
+at unused locations or strings past the end of the table, unit and player values the
+game does not have, AI scripts it does not ship, condition and action types the editor
+does not know, properties slots that set nothing, Play WAV actions with no file in the
+archive, Oggs on a map older than Remastered, switches tested but never set, disabled
+triggers, and ISOM health. Double-click an issue to go to it.
+
+Tools ▸ Test Map (Ctrl+F5) hands the map to the game. Neither StarCraft build opens a
+map from the outside, so the editor writes it into a `scmJS` folder under the game's
+Maps folder, where Single Player ▸ Custom Game lists it; the desktop app finds the
+installation (or takes a folder you pick) and starts the game as well, while a browser
+writes into a folder you pick once — Chrome and Edge — or downloads the file.
 
 File ▸ Export ▸ Image renders the whole map to a PNG, with one dial that decides what
 the picture is:
@@ -599,16 +676,20 @@ F1 lists the lot. The ones worth knowing up front:
 | Del / Esc | delete selection / stop placing |
 | Ctrl+T, Ctrl+Shift+T | trigger editors |
 | Ctrl+F | find |
+| Ctrl+A | select all on the layer |
 | Ctrl+G | grid |
+| Ctrl+Shift+0 | zoom to fit |
+| Ctrl+F5 | test map |
 
 Preferences (Ctrl+,) persist in the browser: the splash screen, whether to confirm
 before replacing a modified map — the same tick decides whether closing the tab or
-quitting the desktop app asks about unsaved changes — defaults for new maps, and whether
-water and units animate at startup. Its Browser storage box lists everything the editor keeps in this
-browser — the preferences, the grid settings, the installed plugin list, the copies of
-any plugins set to load from storage, and whatever the plugins store — and **Clear all
-data** throws the lot away, putting the defaults (and the default plugins) back. The map you have open is not kept in the browser and is not
-touched by it.
+quitting the desktop app asks about unsaved changes — defaults for new maps, whether
+water and units animate at startup, and Test Map's folder and launch tick. The grid,
+the location snap, which panels are shown and how wide they are, and the recent files
+are remembered too. Its Browser storage box lists everything the editor keeps in this
+browser, and **Clear all data** throws the lot away — the file handles behind Open
+Recent and Test Map included — putting the defaults (and the default plugins) back. The
+map you have open is not kept in the browser and is not touched by it.
 
 ## Documentation
 

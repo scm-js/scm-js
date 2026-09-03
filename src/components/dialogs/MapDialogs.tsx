@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Grid3x3, Maximize, ScrollText } from "lucide-react";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
-import { commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { changeTilesetAtom, commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { ensureTileset, TILESET_FILENAMES } from "../../formats/tileset/load";
 import { gridLookAtom, type GridStyle } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
@@ -12,7 +13,7 @@ import { PLAYER_TYPES } from "../../data/players";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
-import { MAP_SIZES, TILESET_BY_ID } from "../../data/tilesets";
+import { MAP_SIZES, TILESET_BY_ID, TILESETS, type TilesetId } from "../../data/tilesets";
 import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -38,18 +39,38 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   useAtomValue(settingsRevisionAtom); // the revision and player summary change under the other dialogs
   useAtomValue(triggersRevisionAtom);
   const setModified = useSetAtom(mapModifiedAtom);
+  const commitSettings = useSetAtom(commitSettingsAtom);
+  const changeTs = useSetAtom(changeTilesetAtom);
+  const setStatus = useSetAtom(statusMessageAtom);
   const [localName, setLocalName] = useState(name);
   const [localDesc, setLocalDesc] = useState(desc);
+  const [localTileset, setLocalTileset] = useState<TilesetId>(tileset);
+  const [fill, setFill] = useState(TILESET_BY_ID[tileset].defaultIsom);
+  const [keepTiles, setKeepTiles] = useState(false);
+  const tilesetChanged = localTileset !== tileset;
+  const pickTileset = (id: TilesetId) => { setLocalTileset(id); setFill(TILESET_BY_ID[id].defaultIsom); };
 
   // Writing back marks SPRP and the string table dirty; every other section is still
-  // re-emitted from the bytes we read.
+  // re-emitted from the bytes we read. A tileset change is the whole-document transaction
+  // in editor/tileset.ts, run once the new graphics are in so the fill uses real tiles.
   const apply = () => {
     setName(localName);
     setDesc(localDesc);
     if (!scenario) return;
     if (localName !== name) setScenarioName(scenario, localName);
     if (localDesc !== desc) setScenarioDescription(scenario, localDesc);
-    if (localName !== name || localDesc !== desc) setModified(true);
+    if (localName !== name || localDesc !== desc) { setModified(true); commitSettings(); }
+    if (tilesetChanged) {
+      const era = Math.max(0, TILESETS.findIndex((t) => t.id === localTileset));
+      const run = () => {
+        const r = changeTs({ tileset: localTileset, terrainId: fill, keepTiles });
+        if (!r) return;
+        const dropped = [r.doodadsDropped && `${r.doodadsDropped} doodad${r.doodadsDropped === 1 ? "" : "s"}`, r.spritesDropped && `${r.spritesDropped} overlay sprite${r.spritesDropped === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
+        setStatus(`Tileset changed to ${TILESET_BY_ID[localTileset].name}${r.refilled ? ` — terrain refilled with ${TILESET_BY_ID[localTileset].terrain.find((t) => t.id === fill)?.name ?? "the default"}` : " — tile numbers kept"}${dropped ? `, dropped ${dropped}` : ""}`);
+      };
+      setStatus(`Loading the ${TILESET_BY_ID[localTileset].name} graphics…`);
+      ensureTileset(TILESET_FILENAMES[era]).then(run, run);
+    }
   };
 
   return (
@@ -63,9 +84,22 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <Group title="Terrain">
           <div className="form">
-            <Field label="Tileset">
-              <div className="row"><span className="swatch" style={{ background: TILESET_BY_ID[tileset].color }} /><span>{TILESET_BY_ID[tileset].name}</span></div>
+            <Field label="Tileset" hint={tilesetChanged ? "Tile numbers mean something else in every tileset, so the terrain is laid again and the doodads go. Units, sprites, locations, fog and triggers stay. This clears the undo history." : undefined}>
+              <div className="row">
+                <span className="swatch" style={{ background: TILESET_BY_ID[localTileset].color }} />
+                <Select value={localTileset} onChange={(e) => pickTileset(e.target.value as TilesetId)} options={TILESETS.map((t) => ({ value: t.id, label: t.name }))} />
+              </div>
             </Field>
+            {tilesetChanged && !keepTiles && (
+              <Field label="Refill with">
+                <Select value={String(fill)} onChange={(e) => setFill(Number(e.target.value))} options={TILESET_BY_ID[localTileset].terrain.map((t) => ({ value: String(t.id), label: t.name }))} />
+              </Field>
+            )}
+            {tilesetChanged && (
+              <Field label="">
+                <Check label="Keep the tile numbers" title="Change only the tileset id and leave every tile number as it is — what SCMDraft's tileset switch does; the picture becomes whatever those numbers draw in the new tileset" checked={keepTiles} onChange={(e) => setKeepTiles(e.target.checked)} />
+              </Field>
+            )}
             <Field label="Size">
               <div className="row"><span className="mono">{w} × {h}</span><Button size="sm" onClick={() => open("resizeMap")}>Resize…</Button></div>
             </Field>

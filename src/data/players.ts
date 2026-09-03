@@ -1,7 +1,5 @@
 /** Player / force / colour reference data. */
 
-export const PLAYER_COUNT = 12;
-
 import { ColorMode, PlayerRace, PlayerType, type PlayerRgb } from "../formats/chk/sections/players";
 import { TEAM_COLOR_ROWS, type TeamColorSpec } from "../formats/units/teamColor";
 
@@ -120,11 +118,3 @@ export function playerTeamColor(colors: readonly number[] | null | undefined, rg
   return { rgb: hexToRgb(PLAYER_COLORS[index].hex) ?? [0, 0, 0] };
 }
 
-/** Player groups selectable in triggers. */
-export const TRIGGER_PLAYER_GROUPS = [
-  "Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6", "Player 7", "Player 8",
-  "Player 9", "Player 10", "Player 11", "Player 12",
-  "Current Player", "Foes", "Allies", "Neutral Players", "All Players",
-  "Force 1", "Force 2", "Force 3", "Force 4",
-  "Non Allied Victory Players",
-];

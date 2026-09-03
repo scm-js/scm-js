@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { decodeCv5, type Tileset } from "../src/formats/tileset/decode";
 import {
-  applyChanges, brushRect, floodRegion, linePoints, stampTerrain, stampTerrainAt, stampTile, stampTileAt, Stroke,
+  applyChanges, brushRect, floodRegion, linePoints, stampTerrain, stampTile, Stroke,
 } from "../src/editor/terrain";
 
 /** A tileset with one dirt pair (groups 2/3, index 2), nine variations and no rare ones. */
@@ -29,6 +29,16 @@ function seeded(seed: number): () => number {
 function blank(width = 8, height = 6) {
   return createScenario({ width, height, era: 0, name: "t" });
 }
+
+const cells = (scn: { width: number; height: number }, x: number, y: number, size: number) => {
+  const r = brushRect(x, y, size, scn.width, scn.height);
+  const out: number[] = [];
+  for (let ty = r.y0; ty < r.y1; ty++) for (let tx = r.x0; tx < r.x1; tx++) out.push(ty * scn.width + tx);
+  return out;
+};
+const stampTileAt = (scn: Parameters<typeof stampTile>[0], x: number, y: number, size: number, id: number) => stampTile(scn, cells(scn, x, y, size), id);
+const stampTerrainAt = (scn: Parameters<typeof stampTerrain>[0], ts: Parameters<typeof stampTerrain>[1], brush: Parameters<typeof stampTerrain>[2], x: number, y: number, size: number, random?: () => number) =>
+  stampTerrain(scn, ts, brush, cells(scn, x, y, size), random);
 
 describe("brush footprint", () => {
   it("centres odd brushes and hangs even ones right and down, clipped to the map", () => {

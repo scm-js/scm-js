@@ -5,6 +5,7 @@ import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { activeLayerAtom, centerViewOnAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
 import { peekTileset } from "../../formats/tileset/load";
 import { desktopBridge } from "../../gamedata/desktop";
+import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
@@ -665,7 +666,7 @@ export function AboutDialog({ entry }: DialogProps) {
           <h2 className="about-app-name">scm<span>JS</span></h2>
           <div className="about-tagline">StarCraft · Brood War</div>
           <div className="about-rule" />
-          <div className="about-meta">{desktopBridge() ? `desktop ${desktopBridge()!.version || "dev"} · ${desktopBridge()!.platform} · ` : ""}v0.1 beta · by Jeany</div>
+          <div className="about-meta">{desktopBridge() ? `desktop ${desktopBridge()!.version || "dev"} · ${desktopBridge()!.platform} · ` : ""}v{APP_VERSION} · by Jeany</div>
           <div className="about-desc">A browser-based scenario editor</div>
           <p className="about-homage">
             In homage to <strong>StarEdit</strong>, <strong>StarForge</strong> and <strong>SCMDraft 2</strong> — and to the

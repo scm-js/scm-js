@@ -947,7 +947,11 @@ once at a fixed angle and flattened to four paths grouped by depth, in violet ra
 pink. `npm run build:desktop` is `build --mode desktop` (the mode blanks `VITE_GAME_DATA_URL`) + the
 main bundle + electron-builder. The workflow has exactly two channels — `latest` (every push to main:
 Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `GAME_DATA_URL` and
-`PAGES_BASE` as repository variables; there is deliberately no nightly.
+`PAGES_BASE` as repository variables; there is deliberately no nightly. The version is
+`package.json`'s and nothing hardcodes it: `vite.config.ts` defines `__APP_VERSION__`,
+`src/version.ts` is what the splash and the About dialog read, CI `npm version`s the field
+from the tag (or `<package.json version>-latest.<date>.<sha>` on main) before building, and
+electron-builder names the installers after it.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

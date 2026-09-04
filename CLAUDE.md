@@ -868,8 +868,12 @@ across the map the moment the graphics land. `newMapInto` records that fill in `
 ISOM again in place, leaving the map unmodified; it refuses once the map has been edited or has a path, so
 a file's own terrain is never touched. `tests/blank-fill.test.ts`.
 
-`GameDataDialog.tsx` shows one thing at a time: with data it is a status line and Remove copy, without it
-the two routes. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads
+`GameDataDialog.tsx` shows one thing at a time: with data it is a status line ("Now") and Remove copy;
+without, the status line is replaced by a caution notice (`.gd-alert`) saying what the editor cannot draw,
+because flat colours and coloured markers read as broken rather than unconfigured, and the two routes are
+weighted rather than listed — the download is a card (`.gd-card`) carrying the one large button
+(`.gd-cta`), the user's own archives the quieter `.gd-alt` under it, and the footer says "Continue without
+graphics" so leaving is a choice rather than a dismissal. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads
 Blizzard's own free StarEdit package — which carries trimmed StarDat/BrooDat that extract to the same 931
 files a 1.16 install does, byte for byte, provided the `patch_rt.mpq` in the same zip is left alone (it
 changes seven tables). `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an

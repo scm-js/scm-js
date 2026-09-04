@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Download, FolderOpen, HardDrive, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, FolderOpen, HardDrive, Search, Trash2 } from "lucide-react";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { retryTilesetParts } from "../../formats/tileset/load";
@@ -23,11 +23,19 @@ import type { DialogProps } from "./DialogHost";
  *
  * The dialog used to list every route the editor knows at all times: pick the archives,
  * pick a folder, search the disk, or type a web address, whether or not any of it was
- * needed. It shows one thing at a time now. With data in place it is a status line and a
- * way to remove the copy; without, it is the download and the file picker, in that order,
- * because the download is the one that works for someone who has never owned a copy of
- * the 1.16 game. The desktop's search of the disk sits with them, since a user who has
- * just installed StarCraft wants it re-run rather than a fresh download.
+ * needed. It shows one thing at a time now, and the two states are shaped differently.
+ *
+ * With data in place it is a status line ("Now") and a way to remove the copy. Without, it
+ * is a *prompt*: the state line is replaced by a caution notice, because an editor that
+ * draws flat colours and coloured markers looks broken rather than unconfigured, and the
+ * one thing the user has to know is that something is missing and one click fixes it. The
+ * two routes are then weighted rather than listed side by side — the Blizzard download is
+ * a card carrying the one large button, since it is the only route that works for someone
+ * who has never owned a copy of the 1.16 game, and the user's own archives are the quieter
+ * alternative under it. The desktop's search of the disk sits with those, since a user who
+ * has just installed StarCraft wants it re-run rather than a fresh download. The footer
+ * says "Continue without graphics" while there are none, so leaving is a choice made
+ * rather than a dialog dismissed.
  *
  * It opens on its own after the splash when the preload found nothing (`payload.auto`), and
  * in that case closes itself once something has been installed — the whole of it is then a
@@ -184,17 +192,31 @@ export function GameDataDialog({ entry }: DialogProps) {
       title="Game Data"
       icon={<HardDrive size={14} />}
       size={have ? "md" : "lg"}
-      footer={<Button variant="primary" onClick={() => close(entry.key)}>Close</Button>}
+      footer={<Button variant={have ? "primary" : "default"} onClick={() => close(entry.key)}>{have ? "Close" : "Continue without graphics"}</Button>}
     >
       <div className="stack">
-        <Group title="Now">
-          <div className="row" style={{ alignItems: "baseline" }}>
-            <span className="grow">{source?.label ?? "Locating…"}</span>
-            {removable && <Button size="sm" variant="danger" disabled={!!busy} onClick={remove}><Trash2 size={11} /> Remove copy</Button>}
+        {have ? (
+          <Group title="Now">
+            <div className="row" style={{ alignItems: "baseline" }}>
+              <span className="grow">{source?.label ?? "Locating…"}</span>
+              {removable && <Button size="sm" variant="danger" disabled={!!busy} onClick={remove}><Trash2 size={11} /> Remove copy</Button>}
+            </div>
+            <p className="hint" style={{ marginTop: 4 }}>{explain(source)}</p>
+            {revision > 0 && <p className="hint" style={{ marginTop: 4 }}>Open maps pick the graphics up as they arrive.</p>}
+          </Group>
+        ) : (
+          <div className="gd-alert">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>{source === null ? "Looking for StarCraft’s graphics…" : "The editor has no StarCraft graphics"}</strong>
+              <p>
+                Terrain is drawn as flat colours and units as coloured markers, so a map cannot really be
+                seen or edited by eye. The graphics come from StarCraft’s own archives, which cannot ship
+                with the editor — install them once, below, and everything draws properly.
+              </p>
+            </div>
           </div>
-          <p className="hint" style={{ marginTop: 4 }}>{explain(source)}</p>
-          {revision > 0 && have && <p className="hint" style={{ marginTop: 4 }}>Open maps pick the graphics up as they arrive.</p>}
-        </Group>
+        )}
 
         {busy && (
           <div className="col" style={{ gap: 4 }}>
@@ -208,22 +230,24 @@ export function GameDataDialog({ entry }: DialogProps) {
 
         {!have && (
           <>
-            <p className="hint">
-              The editor draws terrain and units with graphics from StarCraft&rsquo;s own archives, which cannot ship with it.
-            </p>
-
-            <Group title="Download from Blizzard">
-              <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <Button size="sm" variant="primary" disabled={!!busy} onClick={fromBlizzard}><Download size={11} /> Download the graphics</Button>
-                <span className="hint">About 82 MB.</span>
+            <section className="gd-card">
+              <div className="gd-card-head">
+                <Download size={16} />
+                <span className="gd-card-title grow">Download from Blizzard</span>
+                <span className="badge gold">Recommended</span>
               </div>
-              <p className="hint" style={{ marginTop: 4 }}>
-                Blizzard offers the StarCraft map editor as a free download, and it carries the two archives the graphics come from.
+              <p>
+                Blizzard offers the StarCraft map editor as a free download, and it carries the two archives
+                the graphics come from. You do not need StarCraft installed, or a copy of the game at all.
                 The files are extracted here and kept in {hostTerms().here}, so this happens once.
               </p>
-            </Group>
+              <Button className="gd-cta" variant="primary" disabled={!!busy} onClick={fromBlizzard}>
+                <Download size={14} /> Download the graphics — 82 MB
+              </Button>
+            </section>
 
-            <Group title="Use your own StarCraft files">
+            <section className="gd-alt">
+              <div className="gd-alt-head"><HardDrive size={13} /> Already have StarCraft 1.16? Use your own files</div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 {desktop && <Button size="sm" disabled={!!busy} onClick={desktopSearch}><Search size={11} /> Search this computer</Button>}
                 {desktop && <Button size="sm" disabled={!!busy} onClick={desktopFolder}><FolderOpen size={11} /> Choose the StarCraft folder…</Button>}
@@ -246,7 +270,7 @@ export function GameDataDialog({ entry }: DialogProps) {
                   <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{searchDirs.map((d) => <li key={d} className="mono">{d}</li>)}</ul>
                 </details>
               )}
-            </Group>
+            </section>
 
             {source?.kind === "none" && source.tried.length > 0 && (
               <details className="hint">

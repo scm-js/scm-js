@@ -1199,3 +1199,90 @@
   word-break: break-all;
   user-select: text;
 }
+
+/* ── Game Data ──────────────────────────────────────────────
+   With no graphics installed the dialog is a prompt, not a status screen: the state line
+   ("Now") is replaced by a caution notice that says what the editor cannot do, and the two
+   routes are weighted — the Blizzard download is a card with the one large button on it,
+   because it is the only route that works for someone who never owned the 1.16 game, and
+   the user's own archives are the quieter alternative below it. */
+.gd-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--warn) 11%, var(--bg-2));
+  border-radius: var(--radius-lg);
+}
+.gd-alert > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn);
+}
+.gd-alert strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--warn);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.gd-alert p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.gd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--gold) 6%, var(--bg-2));
+  box-shadow: var(--bevel-raised);
+}
+.gd-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gd-card-head > svg { flex: none; color: var(--gold); }
+.gd-card-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.gd-card p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.gd-cta {
+  align-self: flex-start;
+  height: 34px;
+  padding: 0 18px;
+  font-size: var(--fs-lg);
+}
+
+.gd-alt {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.gd-alt-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.gd-alt-head > svg { flex: none; color: var(--text-faint); }
+.gd-alt p { margin: 0; }

@@ -936,10 +936,13 @@ the manual run. `repair.ts` applies the byte-level repairs to the chunk list by 
 The bytes as the map came in stay in memory until the next open for *Restore original*.
 The one **content** finding is the Remastered newline-colour change: `analyze` takes the table
 from `api.query.strings()` and the reading of it from `api.text` (as `TextHelpers`, so the module
-stays pure and the colour numbering lives only in the editor — `colors.ts` there is down to a
-snippet helper), and answers a `set-strings` repair, applied through `document.update` rather than
-`replaceFile` — so it marks STR dirty and keeps the undo history — and run *before* any
-`sections.rebuild`, since a rebuild re-encodes STR from the editor's model.
+stays pure and testable against a stand-in, and the colour numbering lives only in the editor —
+`colors.ts` there is that interface and a `snippet` for the quote the finding carries), and answers
+a payload-free `set-strings` repair, applied through `document.update` rather than `replaceFile` —
+so it marks STR dirty and keeps the undo history. It runs *after* `replaceFile`, which installs a
+whole new scenario and would drop it, and *before* any `sections.rebuild`, since a rebuild
+re-encodes STR from the model it wrote into; the strings are read again at that point rather than
+carried in the repair, since the byte-level pass may have moved them.
 It is a warning with `recommended: false`: whether the map was authored before or after the
 remaster is the one thing the plugin cannot know, so it explains and never ticks itself. It moved
 Rebuild ISOM from Tiles out of the editor.

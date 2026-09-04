@@ -94,7 +94,7 @@ removed; each says whether it starts on (scmscx.com, Terrain from Image, Repair,
 Walkability and Paint are the defaults today, and all five start on). Being a default buys
 a plugin nothing else — it is fetched and loaded by the steps above like any other.
 
-Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.0`. A moving
+Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.1`. A moving
 spec meant a push to a plugin repository changed every editor already in use and no
 released version could be rebuilt as it shipped, so moving a default forward is now a
 commit in `defaults.ts` that goes out with the next release.

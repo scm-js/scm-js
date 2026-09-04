@@ -895,24 +895,31 @@ describe("plugin lifecycle", () => {
   });
 
   it("ships scmscx.com, Terrain from Image, Repair, Walkability and Paint on, pinned to a version", () => {
-    expect(DEFAULT_REMOTE_PLUGINS).toEqual([
-      { spec: "github:scm-js/plugin-scm-scx@v1.0.0", enabled: true },
-      { spec: "github:scm-js/plugin-image-to-terrain@v1.0.0", enabled: true },
-      { spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true },
-      { spec: "github:scm-js/plugin-walkability@v1.1.0", enabled: true },
-      { spec: "github:scm-js/plugin-paint@v1.0.0", enabled: true },
+    // Which five, in which order, and all on — the versions deliberately not, since every
+    // plugin release would otherwise have to come back and edit this.
+    expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
+      "github:scm-js/plugin-scm-scx",
+      "github:scm-js/plugin-image-to-terrain",
+      "github:scm-js/plugin-repair",
+      "github:scm-js/plugin-walkability",
+      "github:scm-js/plugin-paint",
     ]);
+    expect(DEFAULT_REMOTE_PLUGINS.every((d) => d.enabled)).toBe(true);
     // The point of the pin: a released editor loads the code it was tested against, and
     // the desktop build can compile that exact version in. A default on a moving branch
-    // would change under everyone who already has the editor.
-    for (const d of DEFAULT_REMOTE_PLUGINS) expect(isPinned(d.spec)).toBe(true);
+    // would change under everyone who already has the editor. A version tag, not a bare
+    // commit, so what it names can be read.
+    for (const d of DEFAULT_REMOTE_PLUGINS) {
+      expect(isPinned(d.spec), d.spec).toBe(true);
+      expect(d.spec, d.spec).toMatch(/@v\d+\.\d+\.\d+$/);
+    }
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other,
     // at the tag it names.
+    const tagOf = (spec: string) => spec.slice(spec.lastIndexOf("@") + 1);
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
-      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/v1.0.0/plugin.json",
+      manifestUrl: `https://raw.githubusercontent.com/scm-js/plugin-scm-scx/${tagOf(DEFAULT_REMOTE_PLUGINS[0].spec)}/plugin.json`,
     });
-    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/v1.0.0/plugin.json" });
     // Whether this build bundled them (`scripts/vendor-plugins.mjs`, which the desktop
     // build runs) or fetches them, every default is in the list exactly once and under
     // the same identity — that is what stops a bundled copy appearing beside its remote.

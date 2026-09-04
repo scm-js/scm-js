@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { bundleModule, loadPlugin, parseSpec, previewPlugin, type LoaderDeps } from "../src/plugins/loader";
+import { bundleModule, loadPlugin, parseSpec, previewPlugin, resolvePlugin, type LoaderDeps } from "../src/plugins/loader";
 import { resolveActivate } from "../src/plugins/host";
 import { transpileTs } from "../src/plugins/transpile";
 import { DEFAULT_REMOTE_PLUGINS } from "../src/plugins/defaults";
@@ -42,19 +42,40 @@ const nodeDeps: LoaderDeps = {
 };
 
 describe.skipIf(!live)("loading a plugin over the network", () => {
-  // The whole path, on the plugin with the deepest import graph of the defaults: its
-  // entry pulls in three siblings, one of them extensionless, which is what `candidateUrls`
-  // exists for and what the first remote load of Terrain from Image once 404ed on.
   it("fetches, transpiles and imports Repair at its pinned version", { timeout: 60_000 }, async () => {
     const spec = DEFAULT_REMOTE_PLUGINS.find((d) => d.spec.includes("plugin-repair"))!.spec;
     const { manifest, module, icon } = await loadPlugin(spec, nodeDeps);
     expect(manifest.name).toBe("Repair");
     expect(manifest.version).toBeTruthy();
     expect(icon).not.toBeNull();
-    // An entry that imports its siblings and exports something the host can call is the
-    // whole contract; running it needs a store and a document, which the rest of the
-    // suite covers offline.
+    // An entry that exports something the host can call is the whole contract; running it
+    // needs a store and a document, which the rest of the suite covers offline.
     expect(typeof resolveActivate(module)).toBe("function");
+  });
+
+  // Every default publishes a `build` now, so the test above takes the bundle: one fetch
+  // and no compiler. That is the right thing for it to do and it leaves the *source* path
+  // — transpile, follow the imports, resolve an extension that is not written — walked by
+  // nothing, which is what this file exists to prevent. So it is walked deliberately here,
+  // on the deepest import graph of the defaults: Repair's entry pulls in three siblings,
+  // one of them extensionless, which is what `candidateUrls` is for and what the first
+  // remote load of Terrain from Image once 404ed on.
+  it("transpiles and follows the imports when it loads the source instead", { timeout: 60_000 }, async () => {
+    const spec = DEFAULT_REMOTE_PLUGINS.find((d) => d.spec.includes("plugin-repair"))!.spec;
+    const source = parseSpec(spec) as { base: string };
+    const { manifest, entryUrl, built } = await resolvePlugin(parseSpec(spec), nodeDeps);
+    expect(built).toBe(true);
+    expect(manifest.entry).toBeTruthy();
+
+    let transpiles = 0;
+    const url = await bundleModule(new URL(manifest.entry!, source.base).href, {
+      ...nodeDeps,
+      transpile: async (text, fileName) => { transpiles++; return transpileTs(ts, text, fileName); },
+    });
+    // The bundle the manifest names is one file; the source it was built from is not.
+    expect(entryUrl).not.toBe(new URL(manifest.entry!, source.base).href);
+    expect(transpiles).toBeGreaterThan(3);
+    expect(typeof resolveActivate(await nodeDeps.importModule(url))).toBe("function");
   });
 
   it("reads every default's manifest at the version it is pinned to", { timeout: 90_000 }, async () => {

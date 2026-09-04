@@ -563,9 +563,9 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-scm-scx@v1.0.0`, `github:scm-js/plugin-image-to-terrain@v1.0.0`,
-`github:scm-js/plugin-repair@v1.0.0`, `github:scm-js/plugin-walkability@v1.1.0` and
-`github:scm-js/plugin-paint@v1.0.0`, all on; Melee Wizard,
+scmscx.com, Terrain from Image, Repair, Walkability and Paint, each pinned to a tag and
+all on; that file is the only place the versions are written down, so read them there
+rather than here; Melee Wizard,
 Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says

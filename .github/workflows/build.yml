@@ -216,24 +216,32 @@ jobs:
         with:
           path: dist
 
-  # `github.com/scm-js/plugin-api` holds one generated `index.d.ts` — the plugin API's
-  # declarations, which plugin repositories take as a devDependency instead of each
-  # carrying a copy of the emitted tree and refreshing it by hand. `main` there is the tip
-  # of the contract and a `v*` tag is the contract as of that release, so this runs on the
-  # same two channels and pushes nothing when `src/plugins/api.ts` has not moved.
+  # `@scm-js/plugin-api` is the plugin API's declarations as one generated `index.d.ts`,
+  # which plugin repositories take as a devDependency instead of each carrying a copy of
+  # the emitted tree and refreshing it by hand. It goes to two places: the npm registry,
+  # which is what they depend on (`^1`, `npm outdated`, `npm update`, and a page somebody
+  # outside the organisation can find), and github.com/scm-js/plugin-api, which is the
+  # audit trail behind the tarball and holds its README.
   #
-  # The version written into its package.json is the editor's, and only a release sets it:
-  # a `ci` run leaves package.json alone, so a push to main that did not touch the contract
-  # changes no file there and makes no commit.
+  # The version is the *API's*, not the editor's — major is PLUGIN_API_VERSION and the
+  # minor moves when the declarations do — so this runs on every build and does nothing at
+  # all when `src/plugins/api.ts` has not moved. That is also why it does not depend on the
+  # channel: a contract that moved on main is a contract plugin authors can have today.
   #
   # PLUGIN_API_PAT is an organisation secret — a token with Contents: write on
   # scm-js/plugin-api and nothing else — because a repository's own GITHUB_TOKEN cannot
-  # write to another repository. Without it this reports what it would have pushed and
-  # stops: the types being one build behind is not worth failing a release over.
+  # write to another repository. Without it this reports what it would have done and stops:
+  # the types being one build behind is not worth failing a release over.
+  #
+  # PUBLISH_PLUGIN_API is the repository variable that turns the npm half on. It is
+  # separate because the tarball needs the @scm-js scope to exist and npm's trusted
+  # publishing (or NPM_TOKEN) to be configured for it, and an npm version, once published,
+  # cannot be taken back. `--provenance` comes from the `id-token: write` above, so the
+  # package page names this workflow run and the commit it was built from.
   plugin-api:
     name: Plugin API types
     needs: [channel, web]
-    if: needs.channel.outputs.channel == 'ci' || needs.channel.outputs.channel == 'stable'
+    if: needs.channel.outputs.channel != 'skip'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -241,26 +249,26 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          registry-url: https://registry.npmjs.org
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-      - name: Set the released version
-        if: needs.channel.outputs.channel == 'stable'
-        run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.PLUGIN_API_PAT }}
-          TAG: ${{ needs.channel.outputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TO_NPM: ${{ vars.PUBLISH_PLUGIN_API }}
         run: |
           set -e
           if [ -z "$GH_TOKEN" ]; then
-            echo "::notice::PLUGIN_API_PAT is not set; reporting what would be pushed to scm-js/plugin-api."
+            echo "::notice::PLUGIN_API_PAT is not set; reporting what would be published."
             node scripts/publish-plugin-api.mjs
             exit 0
           fi
-          if [ -n "$TAG" ]; then
-            node scripts/publish-plugin-api.mjs --push --tag "$TAG"
+          if [ "$TO_NPM" = "true" ]; then
+            node scripts/publish-plugin-api.mjs --push --npm
           else
+            echo "::notice::the PUBLISH_PLUGIN_API variable is not 'true'; pushing the repository without publishing to npm."
             node scripts/publish-plugin-api.mjs --push
           fi
 

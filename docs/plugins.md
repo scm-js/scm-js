@@ -28,9 +28,9 @@ exceptions to it.
 - Every contribution is a `Disposable`. Disabling or reloading a plugin removes
   everything it added, whether or not the plugin cleaned up after itself.
 - The API is versioned (`PLUGIN_API_VERSION`) and typed: `npm run build:plugin-types`
-  rolls the contract into one `index.d.ts` and pushes it to
-  [`scm-js/plugin-api`](https://github.com/scm-js/plugin-api), which a plugin repository
-  takes as a devDependency (`npm i -D github:scm-js/plugin-api`) instead of carrying a
+  rolls the contract into one `index.d.ts`, published as
+  [`@scm-js/plugin-api`](https://www.npmjs.com/package/@scm-js/plugin-api), which a plugin
+  repository takes as a devDependency (`npm i -D @scm-js/plugin-api`) instead of carrying a
   copy of the editor's emitted tree. A manifest's
   `"api": N` is the version the plugin needs; a host providing an older one refuses to load it.
   The version is 1 and stays there while the only plugins are the ones in the scm-js
@@ -313,17 +313,20 @@ The `import type` line is erased before the file runs, so the package only matte
 editing and checking:
 
 ```sh
-npm i -D github:scm-js/plugin-api
+npm i -D @scm-js/plugin-api
 ```
 
-[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) holds one generated
-`index.d.ts` — the whole contract, no imports, nothing to configure. Its `main` is the tip
-of the contract and each `v*` tag is the contract as of that editor release, so pin it
-(`github:scm-js/plugin-api#v0.1.0`) if you want to; `PLUGIN_API_VERSION` is 1 and
-additions do not move it, so the tip stays compatible with everything written so far, and
-`npm update @scm-js/plugin-api` takes it. It is a *type* dependency: the loader never sees
-the specifier, which is why a bare package name here does not break the rule that a
-plugin's runtime code cannot import packages.
+One generated `index.d.ts` — the whole contract, no imports of its own, nothing to
+configure. **The major is `PLUGIN_API_VERSION`**, so `"^1"` is the range to write and it
+is honest: the minor moves whenever the declarations change, and a break would move the
+major and `PLUGIN_API_VERSION` together. `npm outdated` and `npm update` then say what you
+would expect. The same two files are committed and tagged at
+[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) if you would rather read them
+there or depend on a git ref.
+
+It is a *type* dependency: the loader never sees the specifier, which is why a bare
+package name here does not break the rule that a plugin's runtime code cannot import
+packages.
 
 Everything `add`/`on` returns is a `Disposable`; keep the ones you need to drop early
 and forget the rest — deactivation disposes them all. Returning a function from

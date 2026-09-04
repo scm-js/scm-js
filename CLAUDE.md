@@ -616,16 +616,25 @@ of which gains a dependency, since the build already needs GitHub to vendor.
 may be unpinned.
 
 **A plugin repository's typings and its build.** The contract reaches the plugin
-repositories as `@scm-js/plugin-api`, a devDependency
-(`npm i -D github:scm-js/plugin-api`) holding one generated `index.d.ts`:
-`scripts/build-plugin-types.mjs` bundles it, `scripts/publish-plugin-api.mjs` pushes it
-and the `plugin-api` job in build.yml runs that on main and on a `v*` tag (main is the tip
-of the contract, a tag is the contract as of that release, which is why the package's
-version is the editor's; `PLUGIN_API_PAT` is the organisation secret, and a run without it
-reports instead of failing). Before this each of the nine repositories carried its own copy
-of the 61-file emitted tree, refreshed by hand. Nothing is fetched at runtime for it —
-`import type` is erased before the loader sees a specifier, which is what lets a plugin
-depend on a package at all.
+repositories as `@scm-js/plugin-api`, a devDependency on `^1` holding one generated
+`index.d.ts`: `scripts/build-plugin-types.mjs` bundles it and
+`scripts/publish-plugin-api.mjs` publishes it — to **npm**, which is what the plugin
+repositories depend on, and to `github.com/scm-js/plugin-api`, which is the audit trail
+behind the tarball and holds its README. The `plugin-api` job in build.yml runs it on every
+build. Before this each of the nine repositories carried its own copy of the 61-file
+emitted tree, refreshed by hand. Nothing is fetched at runtime for it — `import type` is
+erased before the loader sees a specifier, which is what lets a plugin depend on a package
+at all.
+The version is the **API's**, not the editor's: major is `PLUGIN_API_VERSION`, the minor
+moves when the declarations do (`nextVersion`, asked of the registry), and the editor
+version is in neither file — editor 0.1.0 → 0.2.0 is an ordinary release that semver reads
+as a break, and an npm version cannot be republished, so anything in there that moves on
+its own would publish out of a build that changed nothing. A build that did not move the
+contract publishes, tags and commits nothing. `PLUGIN_API_PAT` is the organisation secret
+for the git push (a run without it reports instead of failing); the npm half is behind the
+`PUBLISH_PLUGIN_API` repository variable and goes out with `--provenance`, which is also
+why the package's `repository` names scm-js — provenance attests to where the workflow ran.
+`tests/plugin-api-package.test.ts` pins the version rule and the no-imports rule.
 `PluginManifest.build` is the other half: a plugin repository publishes a
 `dist/plugin.js` (one esbuild call, committed) and names it, and `resolvePlugin` loads
 **it** in place of `entry` — one fetch, no transpile worker, no `bundleModule` graph walk,

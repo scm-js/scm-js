@@ -11,7 +11,7 @@
  * `dts-bundle-generator`, and `scripts/publish-plugin-api.mjs` pushes that one file to
  * `github.com/scm-js/plugin-api`, which plugin repositories take as a devDependency:
  *
- *   "devDependencies": { "@scm-js/plugin-api": "github:scm-js/plugin-api#v0.1.0" }
+ *   "devDependencies": { "@scm-js/plugin-api": "^1" }
  *   import type { PluginApi } from "@scm-js/plugin-api";
  *
  * The bundle is checked as it is generated (the tool type-checks its own output), and
@@ -21,9 +21,10 @@
  * sees a specifier, which is why a bare package name here does not break the rule that
  * plugins cannot import packages.
  *
- * The package's version is the **editor's**, because that is what these declarations
- * are: the contract as of that build. `scmjs.pluginApiVersion` carries `PLUGIN_API_VERSION`
- * separately — it is 1 and additions do not move it.
+ * The package's major is `PLUGIN_API_VERSION` and its minor moves whenever the
+ * declarations change, so a plugin can depend on `^1` and mean it (see `nextVersion`).
+ * The editor's own version is deliberately not in there: it would move the package on a
+ * release that did not touch the contract, and npm versions cannot be republished.
  *
  *   node scripts/build-plugin-types.mjs                  # → plugin-api/
  *   node scripts/build-plugin-types.mjs --out DIR        # → somewhere else
@@ -68,10 +69,10 @@ export function buildBundle({ apiVersion, generator = generateDtsBundle } = {}) 
   const stray = importsIn(body);
   if (stray.length > 0) throw new Error(`The bundle still imports ${stray.join(", ")}; every type it names has to be in the file.`);
   if (!/\binterface PluginApi\b/.test(body)) throw new Error("The bundle does not declare PluginApi.");
-  // The banner deliberately names no editor version and no date: this file is pushed on
-  // every build, and anything in it that moves on its own would make a commit out of a
-  // build that changed nothing. The editor version lives in `package.json`, where a
-  // release moves it. `editorVersion` is still taken, so a caller that wants it can say so.
+  // The banner deliberately names no editor version and no date. This file is regenerated
+  // on every build, and anything in it that moves on its own would publish a version out
+  // of a build that changed nothing — which npm, whose versions are immutable, would then
+  // hold forever. What moves is the minor, and only when these declarations do.
   const banner = [
     "/**",
     ` * Type declarations for the scmJS plugin API — version ${apiVersion}.`,
@@ -85,17 +86,38 @@ export function buildBundle({ apiVersion, generator = generateDtsBundle } = {}) 
   return banner + body;
 }
 
-export function packageJson({ editorVersion, apiVersion }) {
+/**
+ * The package's major **is** `PLUGIN_API_VERSION`, and the minor moves whenever the
+ * declarations change.
+ *
+ * It used to be the editor's version, which was harmless while this was a git dependency
+ * (you pin a ref and the number is decoration) and wrong the moment it went to npm: an
+ * editor `0.1.0` → `0.2.0` is an ordinary release, but to semver that is a breaking
+ * change, so `^0.1` would refuse it — while the contract it describes never broke.
+ * `^1` is the range a plugin should be able to write, and this is what makes it true.
+ *
+ * `repository` names scm-js rather than scm-js/plugin-api because that is where the
+ * declarations are generated and where the publishing workflow runs, which is what npm's
+ * provenance attests to. The editor version stays out of the package entirely and is
+ * recorded in the commit `publish-plugin-api.mjs` makes instead.
+ */
+export function nextVersion(apiVersion, published) {
+  const m = published && /^(\d+)\.(\d+)\./.exec(published);
+  if (!m || Number(m[1]) !== apiVersion) return `${apiVersion}.0.0`;
+  return `${apiVersion}.${Number(m[2]) + 1}.0`;
+}
+
+export function packageJson({ version, apiVersion }) {
   return JSON.stringify({
     name: PACKAGE_NAME,
-    version: editorVersion,
+    version,
     description: "Type declarations for the scmJS plugin API",
     license: "MIT",
     types: "index.d.ts",
     files: ["index.d.ts"],
-    repository: { type: "git", url: "git+https://github.com/scm-js/plugin-api.git" },
+    repository: { type: "git", url: "git+https://github.com/scm-js/scm-js.git" },
     homepage: "https://github.com/scm-js/scm-js/blob/main/docs/plugins.md",
-    scmjs: { pluginApiVersion: apiVersion, editorVersion },
+    scmjs: { pluginApiVersion: apiVersion },
   }, null, 2) + "\n";
 }
 
@@ -106,7 +128,11 @@ export function writePluginApi(out, files) {
   return Object.keys(files);
 }
 
-export function generate() {
+/**
+ * `version` is what the publish script worked out from the registry; a local run has no
+ * registry to ask, so it says `<api>.0.0` and only `index.d.ts` is worth looking at.
+ */
+export function generate({ version } = {}) {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const apiVersion = apiVersionOf(readFileSync(ENTRY, "utf8"));
   const editorVersion = pkg.version;
@@ -115,7 +141,7 @@ export function generate() {
     editorVersion,
     files: {
       "index.d.ts": buildBundle({ apiVersion }),
-      "package.json": packageJson({ editorVersion, apiVersion }),
+      "package.json": packageJson({ version: version ?? `${apiVersion}.0.0`, apiVersion }),
     },
   };
 }
@@ -128,11 +154,12 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   try {
     const { files, apiVersion, editorVersion } = generate();
     if (check) {
-      const differs = Object.entries(files).filter(([name, text]) => {
-        try { return readFileSync(join(out, name), "utf8") !== text; } catch { return true; }
-      });
-      if (differs.length > 0) {
-        console.error(`plugin-api: ${out} is out of date (${differs.map(([n]) => n).join(", ")}). Run \`npm run build:plugin-types\`.`);
+      // Only the declarations: `package.json`'s version is decided at publish time against
+      // the registry, so comparing it here would fail on every run for no reason.
+      let same = false;
+      try { same = readFileSync(join(out, "index.d.ts"), "utf8") === files["index.d.ts"]; } catch { same = false; }
+      if (!same) {
+        console.error(`plugin-api: ${out}/index.d.ts is out of date. Run \`npm run build:plugin-types\`.`);
         process.exit(1);
       }
       console.log(`plugin-api: ${out} is up to date (API ${apiVersion}, editor ${editorVersion}).`);

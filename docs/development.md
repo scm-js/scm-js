@@ -346,20 +346,29 @@ release was found for this build"); and against a local `generic` feed the whole
 
 `npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) rolls the contract into
 **one** `plugin-api/index.d.ts` with `dts-bundle-generator` over `src/plugins/api.ts`,
-plus a `package.json` naming the API and editor versions. `npm run publish:plugin-types`
-(`scripts/publish-plugin-api.mjs`) pushes those two files to
-[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api), and a plugin repository takes
-them as a devDependency (`npm i -D github:scm-js/plugin-api`) — where each used to carry a
-hand-refreshed copy of the 61-file, 480 KB emitted tree. `tsc` emits one declaration per
+plus a `package.json`. `npm run publish:plugin-types` (`scripts/publish-plugin-api.mjs`)
+publishes those two files as **`@scm-js/plugin-api`** on npm and commits and tags them at
+[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) — the registry is what plugin
+repositories depend on (`^1`), the repository is the audit trail behind the tarball. Each
+of them used to carry a hand-refreshed copy of the 61-file, 480 KB emitted tree.
+
+The version is the **API's**: major is `PLUGIN_API_VERSION`, the minor moves when the
+declarations do, and the editor's own version is deliberately not in it — editor 0.1.0 to
+0.2.0 is an ordinary release that semver would read as a break, and an npm version cannot
+be republished once it is wrong. `nextVersion` asks the registry what is published and
+bumps from that; a build that did not move the contract publishes nothing, tags nothing and
+commits nothing. `tsc` emits one declaration per
 module the entry reaches, which is why the bundling step exists at all; the build refuses
 a bundle that still carries an import, since one that names `jotai` or `react` (or a file
 the bundler missed) is a plugin repository that cannot compile with the file alone.
 
-build.yml publishes on the same two channels as the editor — `main` for the tip of the
-contract, a `v*` tag for the release — using the `PLUGIN_API_PAT` organisation secret, and
-reports rather than fails when the secret is absent. The generated file deliberately
-carries no editor version or date so that a build which did not move the contract makes no
-commit there. The plain types the contract shares with the chrome — `EditorLayer`,
+build.yml's `plugin-api` job runs on every build, since a contract that moved on main is
+one plugin authors can have today. The git push uses the `PLUGIN_API_PAT` organisation
+secret and reports rather than fails when it is absent; the npm publish is behind the
+`PUBLISH_PLUGIN_API` repository variable, because a tarball needs the scope and npm's
+trusted publishing set up and cannot be taken back once it is out. It goes out with
+`--provenance`, so the package page names the workflow run and the commit. The plain types
+the contract shares with the chrome — `EditorLayer`,
 `TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
 (`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the
 atom modules for that reason. Two external names remain, `mopaq` and `typescript`,

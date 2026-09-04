@@ -126,9 +126,9 @@ a version is cut:
 
 | channel | trigger | what lands |
 | --- | --- | --- |
-| `ci` | every push to `main` | lint, tests, the web bundle, the GitHub Pages deploy. No installers, no release. |
-| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes (see below), and the container image on GHCR. |
+| `ci` | every push to `main` | lint, tests, and the web bundle built and thrown away. Nothing is deployed and nothing is released. |
+| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease — plus that same zip unpacked onto `nightly.editor.scmjs.dev`. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes (see below), the container image on GHCR, and the Pages deploy of `editor.scmjs.dev`. |
 
 `tsc -b` covers `desktop/` through `tsconfig.desktop.json`, so a main-process type error
 fails a push to `main`; only the packaging step waits for the nightly. The cron exits
@@ -265,9 +265,9 @@ The Build workflow is then **dispatched on the tag** rather than left to the tag
 because a push made with the repository's own `GITHUB_TOKEN` starts no further workflow
 run (GitHub's recursion guard) — `workflow_dispatch` through the API is the documented
 exception, and dispatching on `refs/tags/vX.Y.Z` puts Build in exactly the state the push
-would have. Build is dispatched on `main` too, so Pages is not left on the previous commit
-for the same reason. (A PAT in a secret would make the tag push trigger Build directly;
-this needs no secret.)
+would have — and that one dispatch is the whole release, the hosted editor included, since
+Pages now serves the tag. (A PAT in a secret would make the tag push trigger Build
+directly; this needs no secret.)
 
 ### Versions
 
@@ -281,12 +281,46 @@ alphanumeric prerelease identifiers lexically. `package.json` in the repository 
 ever set by the Release workflow, so a clean checkout builds as the last released version
 rather than as a number nobody chose.
 
-There is one repository variable, `PAGES_BASE` (`/` for a custom domain; default is the
-repository name) — no build carries game data or an address to fetch it from. CI has no
-game data, so the real-data test suites skip there. The web build deployed to Pages is
-`main`'s, not the newest tag's: the hosted editor is the "try it now" instance. To serve
-the tag instead, move the `pages` job's condition from `channel == 'ci'` to
-`channel == 'stable'`.
+No build carries game data or an address to fetch it from, and CI has no game data, so the
+real-data test suites skip there.
+
+### The two hosted builds
+
+`editor.scmjs.dev` is the newest tag and `nightly.editor.scmjs.dev` is `main` as of the
+last nightly. The point of the split is that everything the project ships is now a version
+you can name: the hosted editor, the installers, the container image and the release notes
+are one build, so "it's broken on the website" has an answer.
+
+| | deployed by | from |
+| --- | --- | --- |
+| `editor.scmjs.dev` | the `pages` job, on the `stable` channel | GitHub Pages on this repository |
+| `nightly.editor.scmjs.dev` | the `nightly-site` job, on the `nightly` channel | one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch |
+
+The nightly site is the release's own web zip unpacked, never a second build, the way the
+container image is. The push is a single orphan commit each time, so that repository stays
+the size of one bundle instead of growing by 5 MB a night, and it carries `CNAME` (where a
+branch-served Pages site keeps its custom domain, so it has to be in every push) and
+`.nojekyll`.
+
+They are **separate origins**, which is deliberate and not free. The extracted game data
+lives in OPFS and every `scmjs.` setting in `localStorage`, both scoped to the origin, so
+the nightly asks for the game data again and keeps its own preferences, recents, installed
+plugins and plugin code snapshots. What that buys is a nightly that cannot write a stored
+shape the stable build then reads back — worth more than the second download, for a channel
+whose whole job is to be ahead of the stable one.
+
+To put `editor.scmjs.dev` back on an older version, dispatch Build on that tag: the deploy
+is the only thing a re-run rewrites. Un-promoting a release (ticking "This is a
+pre-release") moves the download redirect but not the site.
+
+Three repository variables and one secret, none of them required — a fork builds and
+releases without any of them:
+
+| | |
+| --- | --- |
+| `PAGES_BASE` | the hosted build's base path; `/` for a custom domain, and the default is the repository name. When it is not `/` the `web` job builds the bundle a second time, since the release zip is always rooted. |
+| `NIGHTLY_DOMAIN` | the domain written into the nightly site's `CNAME`. Unset, the deploy is skipped. |
+| `NIGHTLY_PAT` (secret) | a fine-grained token whose only permission is Contents: write on `<owner>/nightly`, because a repository's own `GITHUB_TOKEN` cannot write to another repository. A **repository** secret on this repository, not an organisation one like `PLUGIN_API_PAT`: only `build.yml` reads it, and an org secret is readable by every workflow in every repository it is shared with. Unset, the deploy is skipped with a notice rather than failing the nightly. |
 
 ### In-app updates
 

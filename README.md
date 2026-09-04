@@ -15,8 +15,12 @@ you deliberately change.
 
 Four ways to run it:
 
-- **In the browser.** Every push to `main` deploys the editor to GitHub Pages. It asks
-  for StarCraft's graphics on first use and can fetch them from Blizzard in one click.
+- **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest numbered
+  release — the same build as the installers below, so a bug report there names a version.
+  It asks for StarCraft's graphics on first use and can fetch them from Blizzard in one
+  click. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is `main`, rebuilt
+  each night; being a separate site it asks for the graphics again and keeps its own
+  settings, plugins and recent files.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
   macOS and Linux, and a Windows zip to unpack and run without installing (the numbered
   releases are the tagged versions; `nightly` is one rolling prerelease built from `main`).

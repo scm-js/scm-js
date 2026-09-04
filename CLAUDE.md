@@ -1062,11 +1062,23 @@ it used to blank the game-data address) + the main bundle + electron-builder, wh
 step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
 electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
-is what CI runs. The workflow has three channels — `ci` (every push to main: lint, tests, Pages;
-**no installers and no release**), `nightly` (a daily cron, skipped when main has not moved: the
+is what CI runs. The workflow has three channels — `ci` (every push to main: lint, tests and the web
+bundle built and thrown away, so a broken bundle fails the push that broke it; **nothing deployed,
+no installers and no release**), `nightly` (a daily cron, skipped when main has not moved: the
 installers on ONE rolling prerelease whose `nightly` tag is force-moved and whose assets are
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
-numbered releases, the only ones that accumulate) — with `PAGES_BASE` the one repository variable.
+numbered releases, the only ones that accumulate).
+**Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was
+main's HEAD, which was the one artifact whose version nobody could get back to), and the
+`nightly-site` job unpacks the nightly's own web zip — never a second build — onto
+`nightly.editor.scmjs.dev` as one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch,
+carrying the `CNAME` a branch-served Pages site keeps its domain in. Rolling the site back is
+dispatching build.yml on an older tag. They are separate origins deliberately: OPFS and every
+`scmjs.` key are per origin, so the nightly asks for the game data again and keeps its own
+preferences, plugins and recents rather than writing a stored shape the stable build reads back.
+Repository variables `PAGES_BASE` (`/` for a custom domain; when it is not `/` the `web` job builds
+a second time for Pages) and `NIGHTLY_DOMAIN`, secret `NIGHTLY_PAT` (Contents: write on
+`<owner>/nightly`, the `PLUGIN_API_PAT` shape); the nightly deploy skips with a notice without them.
 A `v*` tag also pushes the **container image**: the `image` job downloads the `web` job's own zip,
 unzips it and builds `docker/Dockerfile` (nginx + `docker/nginx.conf`, no `RUN` step, so
 `linux/amd64,linux/arm64` is one buildx manifest and needs no QEMU) to `ghcr.io/<repo>` as `latest`,
@@ -1093,9 +1105,9 @@ electron-builder writes it into `latest*.yml`. A release is cut by the **Release
 over an existing tag, or backwards past the last release, runs lint/tests/build *before*
 writing anything, then commits the release version (the whole diff is `"version"` in
 package.json and the lock; skipped when it already says it) and annotates `vX.Y.Z` on that
-commit. It then **dispatches** build.yml on the tag (and on main, for Pages), because a push
-made with `GITHUB_TOKEN` starts no workflow run while `workflow_dispatch` through the API is
-the exception. A tagged release's notes are `docs/releases/<version>.md` — committed on main
+commit. It then **dispatches** build.yml on the tag — one dispatch is the whole release, hosted
+editor included — because a push made with `GITHUB_TOKEN` starts no workflow run while
+`workflow_dispatch` through the API is the exception. A tagged release's notes are `docs/releases/<version>.md` — committed on main
 beforehand, read by build.yml's release job out of the tag's own tree (the full three-part
 version names it, so cutting `0.3` reads `0.3.0.md`) — or the Release form's `notes` input,
 which wins over the file and is passed on as a build.yml dispatch input, so it lives only in

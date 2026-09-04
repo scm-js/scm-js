@@ -36,7 +36,9 @@
 # `workflow_dispatch` through the API is the documented exception, and dispatching Build
 # *on the tag ref* puts it in exactly the state the tag push would have: `github.ref` is
 # `refs/tags/vX.Y.Z`, so its channel job picks `stable`. (With a PAT in a secret the tag
-# push would trigger it directly; this needs no secret.)
+# push would trigger it directly; this needs no secret.) That one dispatch is the whole
+# release: the assets, the container image and the deploy of editor.scmjs.dev, which is
+# the tag's own build — nothing here dispatches Build on main any more.
 name: Release
 
 on:
@@ -246,14 +248,6 @@ jobs:
             gh workflow run build.yml --ref "v$VERSION"
           fi
 
-      - name: Redeploy Pages from main
-        if: ${{ !inputs.dry_run }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # The two commits above were pushed with GITHUB_TOKEN, so they started no run of
-        # their own and the hosted editor would otherwise sit on the previous commit.
-        run: gh workflow run build.yml --ref main
-
       - name: Summary
         shell: bash
         run: |
@@ -268,6 +262,6 @@ jobs:
               echo "- Tagged \`v${{ steps.v.outputs.version }}\` at \`${{ steps.tag.outputs.sha }}\`"
               echo "- Notes: ${notes:-none written; the generated list alone}"
               echo "- Nightlies from here are \`$(node scripts/next-version.mjs)-nightly.…\`"
-              echo "- Build dispatched on the tag; the release appears when it finishes"
+              echo "- Build dispatched on the tag; the release and editor.scmjs.dev follow when it finishes"
             fi
           } >> "$GITHUB_STEP_SUMMARY"

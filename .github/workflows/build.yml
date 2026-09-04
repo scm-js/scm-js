@@ -1,17 +1,20 @@
 # Three channels, and the release list only grows when a version is cut:
 #
-#   ci        every push to main — lint, tests, the web bundle, and the GitHub Pages
-#             deploy. No installers, no release. `tsc -b` covers desktop/ through
-#             tsconfig.desktop.json, so a main-process type error is caught here; only
-#             the packaging step waits for the nightly.
+#   ci        every push to main — lint, tests and the web bundle, which is then thrown
+#             away. Nothing is deployed and nothing is released; the build is here so a
+#             broken bundle fails the push (`tsc -b` covers desktop/ through
+#             tsconfig.desktop.json, so a main-process type error is caught here too).
+#             Only the packaging step waits for the nightly.
 #   nightly   a daily cron (and manual dispatch) — installers for Windows, macOS and
 #             Linux plus a zip of the web bundle, on ONE rolling prerelease whose tag
 #             `nightly` is force-moved to the commit it was built from and whose assets
 #             are replaced in place. It is never deleted and never recreated, so the
 #             download counts survive and nobody watching releases is re-notified. The
-#             cron exits early when main has not moved since the last one.
+#             cron exits early when main has not moved since the last one. That same web
+#             zip is unpacked onto nightly.editor.scmjs.dev, so the hosted nightly and the
+#             nightly installers are one build carrying one version string.
 #   vX.Y.Z    a tag — a permanent release with the same assets, the container image on
-#             GHCR, and notes: `docs/releases/<version>.md` from the tag's own tree (or
+#             GHCR, the GitHub Pages deploy of editor.scmjs.dev, and notes: `docs/releases/<version>.md` from the tag's own tree (or
 #             the `notes` dispatch input, which wins) above GitHub's generated list of
 #             commits, and the generated list alone when neither is there. These are the
 #             only releases that accumulate, which is the point. `release.yml` is what
@@ -44,15 +47,36 @@
 # the notes and `latest*.yml`. To un-promote a bad stable release, tick "This is a
 # pre-release" on it and the redirect falls back to the one before it — no new tag.
 #
-# The web build deployed to Pages is main's, not the newest tag's: the hosted editor is
-# the "try it now" instance. Serve the tag instead by moving the `pages` job's condition
-# from `channel == ci` to `channel == stable`.
+# The hosted editor is a release, like every other way of running this:
 #
-# The hosted web build gets its base path from the PAGES_BASE repository variable
-# (Settings ▸ Variables; default: the repository name, set "/" for a custom domain). No
-# build carries game data or an address to fetch it from — every one of them looks on the
-# user's disk and otherwise asks (src/gamedata/source.ts). Nothing here has, or needs,
-# the game data: the real-data test suites skip in CI.
+#   editor.scmjs.dev          the newest tag, deployed by the `pages` job on the stable
+#                             channel — the same commit as the installers, the same
+#                             version in About, the same notes to read.
+#   nightly.editor.scmjs.dev  main as of the last nightly, deployed by the `nightly-site`
+#                             job into scm-js/nightly's gh-pages branch (one force-pushed
+#                             orphan commit, so that repository never grows).
+#
+# They are separate origins on purpose and it costs something: the extracted game data
+# lives in OPFS and every `scmjs.` setting in localStorage, both scoped to the origin, so
+# trying the nightly means installing the game data again and it keeps its own
+# preferences, recents and installed plugins. That is the price of a nightly that cannot
+# write a stored shape the stable build then reads.
+#
+# To put editor.scmjs.dev back on an older version, dispatch this workflow on that tag —
+# the deploy is the only thing a re-run rewrites (`gh release create` would refuse the
+# existing tag, and nothing else in a stable run is idempotent-unsafe). Un-promoting a
+# release moves the download redirect but not the site.
+#
+# Repository variables (Settings ▸ Variables): PAGES_BASE is the hosted build's base path
+# ("/" for a custom domain; the default is the repository name), and NIGHTLY_DOMAIN is the
+# custom domain written into the nightly site's CNAME — unset, and the nightly deploy is
+# skipped, as it is without the NIGHTLY_PAT secret — a fine-grained token whose only
+# permission is Contents: write on <owner>/nightly, kept as a *repository* secret rather
+# than an organisation one like PLUGIN_API_PAT, since only this workflow reads it. Neither
+# missing is an error: a fork builds and releases without either. No build carries game
+# data or an address to fetch it from — every one of them looks on the user's disk and
+# otherwise asks (src/gamedata/source.ts). Nothing here has, or needs, the game data: the
+# real-data test suites skip in CI.
 #
 # Code signing: none yet. Windows shows SmartScreen's "unrecognized app" screen, and macOS
 # refuses an unsigned app until the user runs `xattr -d com.apple.quarantine`; the Linux
@@ -186,9 +210,11 @@ jobs:
         run: npx vitest run tests/plugin-network.test.ts
         env:
           SCMJS_NETWORK_TESTS: "1"
-      # The bundle that goes on the release: served from the root of wherever it is put.
-      - name: Build (release zip)
-        if: needs.channel.outputs.channel != 'ci'
+      # Built on every channel, including the one that ships nothing: a broken bundle
+      # should fail the push that broke it, not the tag a fortnight later. It is also the
+      # bundle the release zip, the container image and the nightly site all carry —
+      # served from the root of wherever it is put.
+      - name: Build
         run: npm run build
         env:
           SCMJS_BASE: /
@@ -204,15 +230,18 @@ jobs:
           name: web-zip
           path: scmJS-web.zip
           if-no-files-found: error
-      # The same, under the path GitHub Pages serves this repository from.
+      # The same bundle again under the path GitHub Pages serves this repository from —
+      # only when that is not the root, which is to say only for a fork with no custom
+      # domain. editor.scmjs.dev is at the root and takes the build above as it is, so the
+      # site and the release zip are then the same files rather than two builds that agree.
       - name: Build (Pages)
-        if: needs.channel.outputs.channel == 'ci'
+        if: needs.channel.outputs.channel == 'stable' && vars.PAGES_BASE != '/'
         run: npm run build
         env:
           SCMJS_BASE: ${{ vars.PAGES_BASE || format('/{0}/', github.event.repository.name) }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-pages-artifact@v3
-        if: needs.channel.outputs.channel == 'ci'
+        if: needs.channel.outputs.channel == 'stable'
         with:
           path: dist
 
@@ -292,9 +321,11 @@ jobs:
   pages:
     name: Deploy Pages
     needs: [channel, web]
-    # Not restricted to a push: `release.yml` dispatches this on main after its two
-    # commits, which — being pushed with GITHUB_TOKEN — start no run of their own.
-    if: needs.channel.outputs.channel == 'ci'
+    # editor.scmjs.dev is the newest tag, not main's HEAD: what the hosted editor is
+    # running has a version number, release notes and an installer that matches it. Main
+    # goes to nightly.editor.scmjs.dev below, once a night. `release.yml` dispatches this
+    # workflow on the tag it writes, because a tag pushed with GITHUB_TOKEN starts no run.
+    if: needs.channel.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -302,6 +333,52 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  nightly-site:
+    name: Nightly site
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'nightly'
+    runs-on: ubuntu-latest
+    steps:
+      # The zip the nightly release carries, unzipped — never rebuilt, so the hosted
+      # nightly cannot differ from the one people download, exactly as the image job
+      # takes the stable zip rather than building its own.
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-zip
+      - run: unzip -q scmJS-web.zip -d site
+      - name: Push to the nightly site repository
+        env:
+          # A fine-grained token with Contents: write on that repository and nothing else.
+          # Without it this reports and stops: a fork should not fail its nightly over a
+          # site it does not host.
+          NIGHTLY_PAT: ${{ secrets.NIGHTLY_PAT }}
+          DOMAIN: ${{ vars.NIGHTLY_DOMAIN }}
+          VERSION: ${{ needs.channel.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NIGHTLY_PAT:-}" ] || [ -z "${DOMAIN:-}" ]; then
+            echo "::notice::NIGHTLY_PAT or NIGHTLY_DOMAIN is not set; the nightly site was not deployed."
+            exit 0
+          fi
+          cd site
+          # CNAME is where a branch-served Pages site keeps its custom domain, so it has
+          # to be in every push or the domain is dropped. .nojekyll turns off the Jekyll
+          # build a branch-served site otherwise gets: it would process the whole bundle
+          # for nothing, and it drops files whose names begin with an underscore.
+          printf '%s\n' "$DOMAIN" > CNAME
+          touch .nojekyll
+          # One orphan commit, force-pushed: the site is ~5 MB and there is nothing to
+          # learn from its history, so the repository stays the size of one bundle rather
+          # than growing by that much every night.
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "scmJS $VERSION (${GITHUB_SHA:0:7})"
+          git push -qf "https://x-access-token:$NIGHTLY_PAT@github.com/${GITHUB_REPOSITORY_OWNER}/nightly" gh-pages
+          echo "### Nightly site" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://$DOMAIN — scmJS $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
   desktop:
     name: Desktop (${{ matrix.os }})

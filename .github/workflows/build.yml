@@ -158,7 +158,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      # This job lints, tests and runs Vite; nothing here launches Electron, and every
+      # `electron` import lives under `desktop/`. Without this, electron's postinstall
+      # pulls a 282 MB binary into ~/.cache/electron — which setup-node's `cache: npm`
+      # (~/.npm) does not cover — on every run, and on the `ci` channel this is the only
+      # job there is. `electron.d.ts` ships in the npm package, so `tsc -b`'s
+      # tsconfig.desktop.json reference still type-checks. The Desktop jobs run on their
+      # own runners with their own `npm ci` and are unaffected.
       - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
       - run: npm run lint
       - run: npm test

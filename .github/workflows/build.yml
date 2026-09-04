@@ -10,11 +10,13 @@
 #             are replaced in place. It is never deleted and never recreated, so the
 #             download counts survive and nobody watching releases is re-notified. The
 #             cron exits early when main has not moved since the last one.
-#   vX.Y.Z    a tag — a permanent release with the same assets and generated notes, plus
-#             the container image on GHCR. These are the only ones that accumulate, which
-#             is the point. `release.yml` is what cuts one: it tags, dispatches this
-#             workflow on the tag, and moves package.json on to the next version so the
-#             nightlies keep sorting above it.
+#   vX.Y.Z    a tag — a permanent release with the same assets, the container image on
+#             GHCR, and notes: `docs/releases/<version>.md` from the tag's own tree (or
+#             the `notes` dispatch input, which wins) above GitHub's generated list of
+#             commits, and the generated list alone when neither is there. These are the
+#             only releases that accumulate, which is the point. `release.yml` is what
+#             cuts one: it tags, dispatches this workflow on the tag, and moves
+#             package.json on to the next version so the nightlies keep sorting above it.
 #
 # The container image (`docker/Dockerfile`, pushed by the `image` job to
 # `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip
@@ -73,6 +75,10 @@ on:
         description: Build installers and publish the nightly prerelease
         type: boolean
         default: false
+      notes:
+        description: "Release notes for a tagged build. Blank reads docs/releases/<version>.md, and with neither the release carries the generated list alone."
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -342,13 +348,27 @@ jobs:
           CHANNEL: ${{ needs.channel.outputs.channel }}
           TAG: ${{ needs.channel.outputs.tag }}
           VERSION: ${{ needs.channel.outputs.version }}
+          NOTES: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           if [[ "$CHANNEL" == "stable" ]]; then
-            gh release create "$TAG" assets/* \
-              --title "scmJS $VERSION" \
-              --generate-notes \
-              --verify-tag
+            # What a person wrote goes above what GitHub generates: the dispatch input if
+            # the Release workflow was given one, else docs/releases/<version>.md out of
+            # this tag's own tree (docs/releases/README.md). Neither is required — with
+            # nothing written the release is the generated list alone, as it always was.
+            file="docs/releases/$VERSION.md"
+            args=(--title "scmJS $VERSION" --generate-notes --verify-tag)
+            if [[ -n "${NOTES//[[:space:]]/}" ]]; then
+              printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+              args+=(--notes-file "$RUNNER_TEMP/notes.md")
+              echo "Notes: the dispatch input."
+            elif [[ -s "$file" ]]; then
+              args+=(--notes-file "$file")
+              echo "Notes: $file."
+            else
+              echo "Notes: none written for $VERSION; the generated list alone."
+            fi
+            gh release create "$TAG" assets/* "${args[@]}"
             exit 0
           fi
 

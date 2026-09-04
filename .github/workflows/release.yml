@@ -17,6 +17,13 @@
 # free to mean something true instead: the version that was last released. It changes here
 # and nowhere else.
 #
+# The release's own words come from `docs/releases/<version>.md` — committed, reviewed and
+# read by build.yml out of the tag's own tree — or from this form's `notes` input, which
+# wins over the file and reaches the build as a dispatch input. Either goes above GitHub's
+# generated list of commits; with neither, the release carries that list alone, which is
+# what every release carried before. Nothing is required, so a missing file is a notice
+# here rather than a refusal (docs/releases/README.md).
+#
 # Everything is checked before anything is written: this runs the same lint, tests and
 # build the Build workflow does — and builds and serves the container image, since that
 # one is pushed to `ghcr.io/…:latest`, which a `docker run` picks up without asking —
@@ -37,6 +44,10 @@ on:
     inputs:
       version:
         description: "Version to release, e.g. 0.3 or 1.0. Blank promotes the line the nightlies are already building (a patch bump of the newest tag)."
+        type: string
+        required: false
+      notes:
+        description: "Release notes, shown above GitHub's generated list. Blank uses docs/releases/<version>.md when that file is there."
         type: string
         required: false
       dry_run:
@@ -112,6 +123,36 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
 
+      # Where the release's own words come from. Resolved here, before anything is
+      # written, so the run says what the release will read like — and says so when
+      # nothing was written, which is allowed: the release then carries GitHub's
+      # generated list of commits alone, as it did before there were notes at all.
+      - name: Work out the release notes
+        id: notes
+        shell: bash
+        env:
+          NOTES: ${{ inputs.notes }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          file="docs/releases/$VERSION.md"
+          if [[ -n "${NOTES//[[:space:]]/}" ]]; then
+            source="the workflow input"
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          elif [[ -s "$file" ]]; then
+            source="$file"
+            cp "$file" "$RUNNER_TEMP/notes.md"
+          else
+            source=""
+            echo "::notice::No notes for $VERSION — the release will carry the generated list alone. Write docs/releases/$VERSION.md, or fill in the notes input."
+          fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          if [[ -n "$source" ]]; then
+            echo "Notes from $source:"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          fi
+
       # Everything the Build workflow would do, before a tag exists to clean up.
       - run: npm ci
       - run: npm version --no-git-tag-version --allow-same-version "${{ steps.v.outputs.version }}"
@@ -178,9 +219,23 @@ jobs:
 
       - name: Build the release
         if: ${{ !inputs.dry_run }}
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build.yml --ref "v${{ steps.v.outputs.version }}"
+          VERSION: ${{ steps.v.outputs.version }}
+          NOTES: ${{ inputs.notes }}
+          FROM_INPUT: ${{ steps.notes.outputs.source == 'the workflow input' }}
+        run: |
+          set -euo pipefail
+          # Notes typed into this form are handed on as a dispatch input; a
+          # docs/releases/<version>.md is not, because the build reads it out of the
+          # tag's own tree — so re-running the build on that tag by hand reproduces the
+          # committed notes and drops the one-off, which is the right way round.
+          if [[ "$FROM_INPUT" == "true" ]]; then
+            gh workflow run build.yml --ref "v$VERSION" -f notes="$NOTES"
+          else
+            gh workflow run build.yml --ref "v$VERSION"
+          fi
 
       - name: Redeploy Pages from main
         if: ${{ !inputs.dry_run }}
@@ -196,10 +251,13 @@ jobs:
           {
             echo "### scmJS ${{ steps.v.outputs.version }}"
             echo
+            notes="${{ steps.notes.outputs.source }}"
             if [[ "${{ inputs.dry_run }}" == "true" ]]; then
               echo "Dry run — nothing was pushed."
+              echo "- Notes: ${notes:-none written; the generated list alone}"
             else
               echo "- Tagged \`v${{ steps.v.outputs.version }}\` at \`${{ steps.tag.outputs.sha }}\`"
+              echo "- Notes: ${notes:-none written; the generated list alone}"
               echo "- Nightlies from here are \`$(node scripts/next-version.mjs)-nightly.…\`"
               echo "- Build dispatched on the tag; the release appears when it finishes"
             fi

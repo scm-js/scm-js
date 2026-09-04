@@ -959,7 +959,13 @@ writing anything, then commits the release version (the whole diff is `"version"
 package.json and the lock; skipped when it already says it) and annotates `vX.Y.Z` on that
 commit. It then **dispatches** build.yml on the tag (and on main, for Pages), because a push
 made with `GITHUB_TOKEN` starts no workflow run while `workflow_dispatch` through the API is
-the exception.
+the exception. A tagged release's notes are `docs/releases/<version>.md` — committed on main
+beforehand, read by build.yml's release job out of the tag's own tree (the full three-part
+version names it, so cutting `0.3` reads `0.3.0.md`) — or the Release form's `notes` input,
+which wins over the file and is passed on as a build.yml dispatch input, so it lives only in
+the release; either goes above GitHub's `--generate-notes` list, and with neither the release
+carries that list alone. Nothing is required: the pre-flight prints what it found (a dry run
+shows the release's body) and says so as a notice when there is nothing.
 
 There is deliberately **no** step moving package.json on to the next version:
 `scripts/next-version.mjs` derives what a nightly is called from the release tags instead — a

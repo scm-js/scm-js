@@ -107,7 +107,7 @@ a version is cut:
 | --- | --- | --- |
 | `ci` | every push to `main` | lint, tests, the web bundle, the GitHub Pages deploy. No installers, no release. |
 | `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets and generated notes, plus the container image on GHCR. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes (see below), and the container image on GHCR. |
 
 `tsc -b` covers `desktop/` through `tsconfig.desktop.json`, so a main-process type error
 fails a push to `main`; only the packaging step waits for the nightly. The cron exits
@@ -189,8 +189,8 @@ Dockerfile stops the release instead of landing on `latest`.
 Run the **Release** workflow (`.github/workflows/release.yml`) from the Actions tab. It
 takes the version to release — `0.3`, `1.0` and `1` are accepted and padded to three
 parts, and blank promotes the line the nightlies have already been building, so what
-people have been testing is what ships — and a `dry_run` tick that does everything except
-push.
+people have been testing is what ships — an optional `notes` box (below), and a `dry_run`
+tick that does everything except push.
 
 It refuses to run anywhere but `main`, refuses a version whose tag exists, refuses one
 that is not newer than the last release (going backwards would offer nobody an update and
@@ -221,6 +221,24 @@ both tested in `tests/next-version.test.ts`: with no release tags nothing has sh
 `package.json`'s own version is used as it stands, and a prerelease tag (`v1.0.0-beta.1`)
 answers with its release version, since `1.0.0-nightly.…` sorts above `1.0.0-beta.1` and
 below `1.0.0`.
+
+### Release notes
+
+A tagged release's body is what someone wrote, followed by GitHub's generated list of
+commits and pull requests. What someone wrote comes from one of two places:
+
+- `docs/releases/<version>.md`, committed to `main` before the release is cut and read by
+  the Build workflow out of the **tag's own tree**. The name is the full three-part
+  version, so cutting `0.3` reads `docs/releases/0.3.0.md`. This is the normal way: the
+  notes are reviewed like any other change and stay with the commit they describe.
+- The Release workflow's `notes` input, for a one-off not worth committing. It wins over
+  the file and is handed to Build as a dispatch input, so it lives only in the release —
+  re-running Build on that tag by hand falls back to the file.
+
+Neither is required. With nothing written the release carries the generated list alone, as
+every release did before; the Release workflow says so as a notice in its pre-flight,
+where it also prints the notes it found, so a dry run shows exactly what the release will
+read like. `docs/releases/README.md` is the convention.
 
 The Build workflow is then **dispatched on the tag** rather than left to the tag push,
 because a push made with the repository's own `GITHUB_TOKEN` starts no further workflow

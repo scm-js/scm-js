@@ -14,9 +14,14 @@ import { closeDocumentAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, 
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
-import { ActionType, ConditionType, PlayerGroup } from "../src/formats/chk/sections/triggers";
+import {
+  ActionFlag, ActionType, AllianceStatus, BriefingActionType, Comparison, ConditionFlag, ConditionType,
+  Order, PlayerGroup, ResourceType, ScoreType, SetModifier, SwitchAction, SwitchState, TriggerFlag,
+  UnitClass, UnitState as TriggerUnitState,
+} from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
 import { Elevation, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid } from "../src/formats/chk/sections/objects";
+import { DEATHS_TABLE_ADDRESS } from "../src/data/triggerDefs";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, MINERAL_FIELD_IDS, TILE_PX, VESPENE_GEYSER } from "../src/editor/units";
 import {
   activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom,
@@ -318,6 +323,73 @@ describe("plugin api", () => {
     expect(c.unit.defaultGas).toBe(DEFAULT_GAS);
     expect([c.isResource(c.unit.mineralFields[0]), c.isResource(c.unit.vespeneGeyser), c.isResource(0)])
       .toEqual([isResource(176), true, false]);
+  });
+
+  // The trigger half, same rule: a plugin comparing `type` against these is comparing
+  // against the numbers `sections/triggers.ts` encodes, not a copy of them.
+  it("hands over the trigger enumerations by identity", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const t = api.consts.triggers;
+    expect(t.condition).toBe(ConditionType);
+    expect(t.action).toBe(ActionType);
+    expect(t.briefingAction).toBe(BriefingActionType);
+    expect(t.player).toBe(PlayerGroup);
+    expect(t.comparison).toBe(Comparison);
+    expect(t.switchState).toBe(SwitchState);
+    expect(t.switchAction).toBe(SwitchAction);
+    expect(t.modifier).toBe(SetModifier);
+    expect(t.unitState).toBe(TriggerUnitState);
+    expect(t.order).toBe(Order);
+    expect(t.alliance).toBe(AllianceStatus);
+    expect(t.resource).toBe(ResourceType);
+    expect(t.score).toBe(ScoreType);
+    expect(t.unitClass).toBe(UnitClass);
+    expect(t.conditionFlags).toBe(ConditionFlag);
+    expect(t.actionFlags).toBe(ActionFlag);
+    expect(t.triggerFlags).toBe(TriggerFlag);
+    expect(t.deathsTable).toBe(DEATHS_TABLE_ADDRESS);
+  });
+
+  // Every argument group is keyed by `ArgDef.kind`, which is what lets a generic argument
+  // editor look one up with the kind the def handed it.
+  it("keys the argument enumerations by the def's own `kind`", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const t = api.consts.triggers as unknown as Record<string, unknown>;
+    const kinds = new Set(api.triggers.defs.conditions().concat(api.triggers.defs.actions() as never[])
+      .flatMap((d) => d.args.map((a) => a.kind)));
+    const enumerated = ["comparison", "switchState", "switchAction", "modifier", "unitState", "order", "alliance", "resource", "score"];
+    for (const kind of enumerated) {
+      expect(kinds.has(kind as never), `${kind} is no longer an ArgKind`).toBe(true);
+      expect(t[kind], `consts.triggers.${kind}`).toBeTypeOf("object");
+    }
+  });
+
+  // What it is for: building a record without a magic number in the plugin, and reading
+  // it back through the editor's own codec.
+  it("is enough to write a trigger without a magic number", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const t = api.consts.triggers;
+    const result = api.document.update("add", (tx) => {
+      const trigger = api.triggers.newTrigger([t.player.Player1]);
+      const cond = api.triggers.newCondition(t.condition.CountdownTimer);
+      cond.comparison = t.comparison.AtMost;
+      cond.amount = 30;
+      trigger.conditions[0] = cond;
+      const say = api.triggers.newAction(t.action.DisplayText);
+      say.text = tx.strings.intern("30 seconds remaining");
+      trigger.actions[0] = say;
+      trigger.actions[1] = api.triggers.newAction(t.action.PreserveTrigger);
+      tx.triggers.add(trigger);
+    });
+    expect(result.sections).toContain("TRIG");
+    const added = api.triggers.list().at(-1)!;
+    expect(api.triggers.isPreserved(added)).toBe(true);
+    expect(api.names.condition(added.conditions[0]!.type)).toBe("Countdown Timer");
+    expect(api.names.action(added.actions[0]!.type)).toBe("Display Text Message");
+    expect(api.names.string(added.actions[0]!.text)).toBe("30 seconds remaining");
   });
 
   // What the group is for, end to end: a record the plugin builds itself reads back the

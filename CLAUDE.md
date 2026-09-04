@@ -833,8 +833,13 @@ views without a transaction; `document.resize` is `resizeDocumentAtom` (history 
 `viewFlagsAtom`, and `goTo` taking the same shape `Issue.target` carries, so a linter can scroll to
 what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), **`api.consts`**
 (the numbers a record is *written* in: `TILE_PX`, the special unit ids and default resource amounts
-from `editor/units.ts`, and the `UnitValid` / `UnitUsed` / `UnitState` / `UnitRelation` / `SpriteFlag`
-/ `Elevation` bit masks and `ANYWHERE_INDEX` from `sections/objects.ts`, handed over by identity —
+from `editor/units.ts`, the `UnitValid` / `UnitUsed` / `UnitState` / `UnitRelation` / `SpriteFlag`
+/ `Elevation` bit masks and `ANYWHERE_INDEX` from `sections/objects.ts`, and `consts.triggers` —
+every enumeration in `sections/triggers.ts` (`ConditionType`, `ActionType`, `BriefingActionType`,
+`PlayerGroup`, the enumerated arguments, the three flag words) plus `DEATHS_TABLE_ADDRESS`, keyed by
+`ArgDef.kind` so `api.consts.triggers[arg.kind]` resolves an argument's values; `api.ts` names their
+types as `typeof ConditionType` rather than respelling the literals, so the bundle cannot drift from
+the codec. All handed over by identity —
 `tests/plugins.test.ts` pins that they are the editor's own objects and not a second copy. They are on
 `api` rather than in `@scm-js/plugin-api` because that package is types only: `import type` is erased
 before the loader sees the specifier, which is what lets a plugin depend on a package at all, so a

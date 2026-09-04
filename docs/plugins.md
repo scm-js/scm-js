@@ -483,19 +483,19 @@ the other two (`api.names.units()` / `upgrades()` / `techs()` list them with the
 names). Players are 0-based here, as in the records; the chrome shows `slot + 1`.
 
 ```js
-// Type numbers come from the defs, not from an enum: a plugin gets no `ConditionType`,
-// because the typings are erased before your code runs (see api.consts for the same reason).
-const typeOf = (defs, name) => defs.find((d) => d.name === name).type;
-const countdown = typeOf(api.triggers.defs.conditions(), "Countdown Timer");
-const display = typeOf(api.triggers.defs.actions(), "Display Text Message");
+const { condition, action, comparison, player } = api.consts.triggers;
 
 api.document.update("Add a countdown", (tx) => {
-  const text = tx.strings.intern("30 seconds remaining");   // applies at once…
-  const trigger = api.triggers.newTrigger();
-  trigger.conditions[0] = api.triggers.newCondition(countdown);
-  const say = api.triggers.newAction(display);
-  say.text = text;                                          // …so this index is already good
+  const trigger = api.triggers.newTrigger([player.Player1]);
+  const timer = api.triggers.newCondition(condition.CountdownTimer);
+  timer.comparison = comparison.AtMost;
+  timer.amount = 30;
+  trigger.conditions[0] = timer;
+
+  const say = api.triggers.newAction(action.DisplayText);
+  say.text = tx.strings.intern("30 seconds remaining");   // interned above, readable here
   trigger.actions[0] = say;
+  trigger.actions[1] = api.triggers.newAction(action.PreserveTrigger);
   tx.triggers.add(trigger);
 });
 ```
@@ -607,7 +607,8 @@ and stays null when the game data was never extracted — degrade, do not throw.
 ### `api.consts`
 
 The numbers a record is *written* in, so a plugin does not carry the hex itself. These are
-the editor's own tables (`sections/objects.ts`, `editor/units.ts`), handed over at run time.
+the editor's own tables — the very objects its codec encodes with, handed over at run time,
+not copies that can drift from them.
 
 | | |
 | --- | --- |
@@ -619,6 +620,33 @@ the editor's own tables (`sections/objects.ts`, `editor/units.ts`), handed over 
 | `sprite.flags` | THG2's `PureSprite` / `Flipped` / `Disabled`. `PureSprite` is the one that decides whether `spriteId` is a sprites.dat id the game only draws, or a units.dat id it creates the unit for. |
 | `location.anywhere` | 63. That slot is Anywhere and the editor protects it everywhere — no builder returns it, `locationAt` never picks it, the viewport draws no box for it. `tx.restoreAnywhere()` is what puts it back. |
 | `location.elevation` | `elevationFlags`. A **set** bit *excludes* that elevation, so 0 means everywhere. |
+| `triggers` | The numbers a TRIG / MBRF record is written in — see below. |
+
+**`consts.triggers`.** A trigger record is sixteen conditions and sixty-four actions of
+plain numbers, and `triggers.defs` only says which *field* each argument lives in. This
+says what to put in it: `condition` and `action` (and `briefingAction`, where the same
+byte means something else) are the type numbers, `player` the 27 player-group values —
+which are also the indices of a trigger's own `players` array — and the rest are the
+enumerated arguments: `comparison`, `switchState`, `switchAction`, `modifier`,
+`unitState` (Set Doodad State / Set Invincibility), `order`, `alliance`, `resource`,
+`score`, and `unitClass` for the four ids past units.dat (*Any unit*, *Men*, *Buildings*,
+*Factories*). `conditionFlags`, `actionFlags` and `triggerFlags` are the flag bits, and
+`deathsTable` is the address an EUD player value is counted from
+(`epd = (address - deathsTable) / 4 + 0x2000`).
+
+Those argument keys are `ArgDef.kind`, so a generic argument editor can look one up with
+the kind the def handed it:
+
+```js
+const arg = api.triggers.defs.action(record.type).args[0];
+const values = api.consts.triggers[arg.kind];      // e.g. { AtLeast: 0, AtMost: 1, Exactly: 10 }
+```
+
+For *generating* a run of triggers, `tx.triggers.fromText` is still the better tool — it
+resolves location and unit names against the open map, which no constant can. These are
+for editing a field of an existing record, and for reading one back
+(`record.type === api.consts.triggers.condition.Bring`).
+
 Why this is on `api` and not in the npm package: `@scm-js/plugin-api` is types only, and
 `import type` is erased before the loader sees the specifier — which is exactly what lets
 a plugin depend on a package at all. A *value* imported from it type-checks and is then

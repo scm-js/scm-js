@@ -41,8 +41,13 @@ import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTyp
 import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
-  ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
+  ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
 } from "../data/triggerDefs";
+import {
+  ActionFlag, ActionType, AllianceStatus, BriefingActionType, Comparison, ConditionFlag, ConditionType,
+  Order, PlayerGroup, ResourceType, ScoreType, SetModifier, SwitchAction, SwitchState, TriggerFlag,
+  UnitClass, UnitState as TriggerUnitState,
+} from "../formats/chk/sections/triggers";
 import { getString, setString } from "../formats/chk/sections/strings";
 import { boundsOf, locationName } from "../editor/locations";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../editor/switches";
@@ -1405,6 +1410,29 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       sprite: { flags: SpriteFlag },
       location: { anywhere: ANYWHERE_INDEX, elevation: Elevation },
+      // By identity, like the masks above: these are the codec's own tables, so a plugin
+      // reading `type === api.consts.triggers.condition.Bring` is comparing against the
+      // number `sections/triggers.ts` writes, not a copy that can drift from it.
+      triggers: {
+        condition: ConditionType,
+        action: ActionType,
+        briefingAction: BriefingActionType,
+        player: PlayerGroup,
+        comparison: Comparison,
+        switchState: SwitchState,
+        switchAction: SwitchAction,
+        modifier: SetModifier,
+        unitState: TriggerUnitState,
+        order: Order,
+        alliance: AllianceStatus,
+        resource: ResourceType,
+        score: ScoreType,
+        unitClass: UnitClass,
+        conditionFlags: ConditionFlag,
+        actionFlags: ActionFlag,
+        triggerFlags: TriggerFlag,
+        deathsTable: DEATHS_TABLE_ADDRESS,
+      },
       isResource,
     },
     graphics: createGraphicsApi(store, bag),

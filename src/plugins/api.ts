@@ -29,6 +29,11 @@ import type { MapImageOptions } from "../services/mapImage";
 import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
 import type { CombineMode } from "../formats/chk/reader";
 import type { ActionRecord, ConditionRecord, TriggerRecord } from "../formats/chk/sections/triggers";
+import type {
+  ActionFlag, ActionType, AllianceStatus, BriefingActionType, Comparison, ConditionFlag, ConditionType,
+  Order, PlayerGroup, ResourceType, ScoreType, SetModifier, SwitchAction, SwitchState, TriggerFlag,
+  UnitClass, UnitState as TriggerUnitState,
+} from "../formats/chk/sections/triggers";
 import type { ActionDef, ArgDef, ArgKind, Choice, ConditionDef } from "../data/triggerDefs";
 import type { TextTrigger, TriggerNames } from "../formats/triggers/text";
 import type { Issue, IssueLevel, IssueTarget } from "../editor/validate";
@@ -1149,8 +1154,9 @@ export interface DataApi {
 
 /**
  * The constants a plugin needs to *write* a record rather than read one: the bit masks in
- * a UNIT / THG2 / MRGN record, the few unit ids the game itself treats specially, and the
- * one conversion — 32 pixels to a tile — every object position goes through.
+ * a UNIT / THG2 / MRGN record, the condition, action and argument numbers of a TRIG /
+ * MBRF one, the few unit ids the game itself treats specially, and the one conversion —
+ * 32 pixels to a tile — every object position goes through.
  *
  * They are the editor's own (`sections/objects.ts`, `editor/units.ts`) and they arrive
  * here at run time rather than in the typings on purpose: `@scm-js/plugin-api` is erased
@@ -1162,9 +1168,14 @@ export interface DataApi {
 export interface ConstsApi {
   /** Map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. */
   readonly tile: 32;
+  /** UNIT: the special unit ids, the default resource amounts, and the record's four bit masks. */
   readonly unit: UnitConsts;
+  /** THG2: the sprite record's flag word. */
   readonly sprite: SpriteConsts;
+  /** MRGN: the Anywhere slot, and the elevation bits. */
   readonly location: LocationConsts;
+  /** TRIG / MBRF: the condition and action types, and the enumerated arguments. */
+  readonly triggers: TriggerConsts;
   /** Whether a unit type is a mineral field or a vespene geyser. */
   isResource(unitId: number): boolean;
 }
@@ -1206,6 +1217,57 @@ export interface LocationConsts {
    * everywhere, and StarEdit's ticked "Low ground" box is bit 0 clear.
    */
   readonly elevation: { readonly LowGround: 1; readonly MediumGround: 2; readonly HighGround: 4; readonly LowAir: 8; readonly MediumAir: 16; readonly HighAir: 32 };
+}
+
+/**
+ * The numbers a TRIG / MBRF record is written in: the condition and action types, and the
+ * enumerated arguments the game stores as bare bytes.
+ *
+ * A trigger record is sixteen conditions and sixty-four actions of plain numbers — the
+ * codec knows no types — so writing one field by field means knowing that a Countdown
+ * Timer condition is type 1 and `AtLeast` is 0. `triggers.defs` says which *field* an
+ * argument lives in; this says what to put in it.
+ *
+ * The keys of the argument groups are `ArgDef.kind`, so a generic argument editor can
+ * look one up by the kind the def gave it (`api.consts.triggers[arg.kind]`).
+ *
+ * Generating a whole run of triggers is usually better done through
+ * `tx.triggers.fromText`, which resolves names against the open map; these are for
+ * editing a field of an existing record, and for reading one back.
+ */
+export interface TriggerConsts {
+  /** Condition `type`. */
+  readonly condition: typeof ConditionType;
+  /** Action `type` in TRIG. */
+  readonly action: typeof ActionType;
+  /** Action `type` in MBRF, where the same byte means something else. */
+  readonly briefingAction: typeof BriefingActionType;
+  /** The 27 player-group values, which are also the indices of a trigger's `players`. */
+  readonly player: typeof PlayerGroup;
+  readonly comparison: typeof Comparison;
+  readonly switchState: typeof SwitchState;
+  readonly switchAction: typeof SwitchAction;
+  /** Set Resources / Set Score / Modify …: `SetTo`, `Add`, `Subtract`. */
+  readonly modifier: typeof SetModifier;
+  /** Set Doodad State / Set Invincibility: `Enable`, `Disable`, `Toggle`. */
+  readonly unitState: typeof TriggerUnitState;
+  readonly order: typeof Order;
+  readonly alliance: typeof AllianceStatus;
+  readonly resource: typeof ResourceType;
+  readonly score: typeof ScoreType;
+  /** The unit ids past units.dat that a condition or action accepts: *Any unit*, *Men*, *Buildings*, *Factories*. */
+  readonly unitClass: typeof UnitClass;
+  /** A condition's `flags`. `UnitTypeUsed` is the hint bit the text format cannot carry. */
+  readonly conditionFlags: typeof ConditionFlag;
+  /** An action's `flags`. */
+  readonly actionFlags: typeof ActionFlag;
+  /** A trigger's `flags`; `Preserve` is what `triggers.isPreserved` reads. */
+  readonly triggerFlags: typeof TriggerFlag;
+  /**
+   * The address of the game's death table, which is the base an EUD player value is
+   * counted from: `epd = (address - deathsTable) / 4 + 0x2000`.
+   */
+  readonly deathsTable: number;
 }
 
 /* ── Terrain and tileset ────────────────────────────────── */

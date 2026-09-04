@@ -367,7 +367,13 @@ one plugin authors can have today. The git push uses the `PLUGIN_API_PAT` organi
 secret and reports rather than fails when it is absent; the npm publish is behind the
 `PUBLISH_PLUGIN_API` repository variable, because a tarball needs the scope and npm's
 trusted publishing set up and cannot be taken back once it is out. It goes out with
-`--provenance`, so the package page names the workflow run and the commit. The plain types
+`--provenance`, so the package page names the workflow run and the commit. Authentication
+is OIDC alone — there is no npm token, which is why the job's `setup-node` has no
+`registry-url` (that writes an `.npmrc` holding an empty `_authToken` for npm to present
+instead of exchanging its OIDC one). The trusted publisher on npmjs.com names this
+repository and `build.yml`, leaves Environment blank, and must have **Allowed actions**
+permitting a *direct* publish — staging is always allowed and direct is opt-in, and
+without it a correct publisher still answers `403 OIDC permission denied for this action`. The plain types
 the contract shares with the chrome — `EditorLayer`,
 `TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
 (`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the

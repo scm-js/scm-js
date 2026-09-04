@@ -29,10 +29,15 @@
  * In CI the git push needs `PLUGIN_API_PAT` (an organisation secret: a token with
  * Contents: write on `scm-js/plugin-api` and nothing else, since a repository's own
  * GITHUB_TOKEN cannot write to another repository), passed as `GH_TOKEN`. The npm publish
- * needs either npm's trusted publishing over OIDC — nothing to store, and the reason the
- * package's `repository` names scm-js, where the workflow runs — or an `NPM_TOKEN`. The
- * tarball is published with `--provenance` when Actions built it, so the package page
- * names the workflow run and the commit it came from.
+ * authenticates with npm's trusted publishing over OIDC and nothing else — there is no
+ * token to store, and it is the reason the package's `repository` names scm-js, where the
+ * workflow runs. The tarball is published with `--provenance` when Actions built it, so
+ * the package page names the workflow run and the commit it came from.
+ *
+ * This is a *direct* publish, which npm's trusted publisher treats as a separate
+ * permission from staging: the package's **Allowed actions** must permit publishing
+ * directly, or the registry answers `403 OIDC permission denied for this action` however
+ * right the org, repository and workflow are.
  *
  * An npm version cannot be republished, so the order matters: the tarball goes first and
  * the repository is pushed and tagged once it lands. The failure that leaves is a version

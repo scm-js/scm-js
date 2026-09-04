@@ -632,7 +632,10 @@ as a break, and an npm version cannot be republished, so anything in there that 
 its own would publish out of a build that changed nothing. A build that did not move the
 contract publishes, tags and commits nothing. `PLUGIN_API_PAT` is the organisation secret
 for the git push (a run without it reports instead of failing); the npm half is behind the
-`PUBLISH_PLUGIN_API` repository variable and goes out with `--provenance`, which is also
+`PUBLISH_PLUGIN_API` repository variable, authenticates by OIDC alone (no npm token, hence no
+`registry-url` on that job's `setup-node` — it writes an `.npmrc` with an empty `_authToken`; and
+the trusted publisher's **Allowed actions** must permit a *direct* publish, since staging is the
+only one allowed by default), and goes out with `--provenance`, which is also
 why the package's `repository` names scm-js — provenance attests to where the workflow ran.
 `tests/plugin-api-package.test.ts` pins the version rule and the no-imports rule.
 `PluginManifest.build` is the other half: a plugin repository publishes a

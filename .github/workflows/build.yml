@@ -235,11 +235,22 @@ jobs:
   #
   # PUBLISH_PLUGIN_API is the repository variable that turns the npm half on. It is
   # separate because the tarball needs the @scm-js scope to exist and npm's trusted
-  # publishing (or NPM_TOKEN) to be configured for it, and an npm version, once published,
-  # cannot be taken back. `--provenance` comes from the `id-token: write` above, so the
-  # package page names this workflow run and the commit it was built from; the same
-  # `id-token` is what OIDC authenticates the publish with, so with trusted publishing
-  # configured there is no NPM_TOKEN to hold at all.
+  # publishing to be configured for it, and an npm version, once published, cannot be
+  # taken back. `--provenance` comes from the `id-token: write` above, so the package page
+  # names this workflow run and the commit it was built from; the same `id-token` is what
+  # OIDC authenticates the publish with, so there is no npm token here at all.
+  #
+  # Which is why setup-node below is deliberately *not* given `registry-url`: that writes
+  # an .npmrc holding `_authToken=${NODE_AUTH_TOKEN}` and `always-auth=true`, and with no
+  # token secret set that is an **empty** credential for npm to present instead of
+  # exchanging its OIDC one. The publish wants no .npmrc at all.
+  #
+  # The trusted publisher on npmjs.com must name this repository and `build.yml`, leave
+  # Environment blank (this job declares none), and have **Allowed actions** set to permit
+  # publishing *directly*: staging is always allowed, direct publish is opt-in and off by
+  # default, and `publish-plugin-api.mjs` runs a direct `npm publish`. Without that a
+  # correctly configured publisher still answers `403 OIDC permission denied for this
+  # action` — which is about the action, not the identity. That cost an afternoon once.
   plugin-api:
     name: Plugin API types
     needs: [channel, web]
@@ -251,14 +262,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          registry-url: https://registry.npmjs.org
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.PLUGIN_API_PAT }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TO_NPM: ${{ vars.PUBLISH_PLUGIN_API }}
         run: |
           set -e
@@ -270,7 +279,8 @@ jobs:
           if [ "$TO_NPM" = "true" ]; then
             # Trusted publishing over OIDC needs npm 11.5.1 or newer, and the runner's
             # Node 22 ships npm 10.x — without this the publish falls back to looking for
-            # a token that trusted publishing exists precisely so as not to have.
+            # a token that trusted publishing exists precisely so as not to have (and
+            # that nothing here sets).
             npm install -g npm@latest
             npm --version
             node scripts/publish-plugin-api.mjs --push --npm

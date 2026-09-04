@@ -1159,6 +1159,36 @@ export default function MapViewport() {
     }
   }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry, repaintRequest]);
 
+  /**
+   * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —
+   * goes through one animation frame. A burst of events therefore costs one paint at most,
+   * and that paint happens immediately before the browser's own, which is the least latency
+   * a canvas can have. `drawRef` is assigned during render so the frame always runs the
+   * newest closure; an effect would land after the frame that a render's own request booked.
+   */
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const drawPending = useRef(false);
+  const drawRaf = useRef(0);
+  const scheduleDraw = useCallback(() => {
+    drawPending.current = true;
+    if (drawRaf.current) return;
+    drawRaf.current = requestAnimationFrame(() => {
+      drawRaf.current = 0;
+      if (!drawPending.current) return;
+      drawPending.current = false;
+      drawRef.current();
+    });
+  }, []);
+  // The ref has to be cleared as well as the frame cancelled: React's development
+  // double-mount runs this cleanup on a component that goes on living, and a stale
+  // frame id here would make every later request think one was already booked.
+  useEffect(() => () => {
+    if (drawRaf.current) cancelAnimationFrame(drawRaf.current);
+    drawRaf.current = 0;
+    drawPending.current = false;
+  }, []);
+
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);
   useAutoShow(layer === "locations", "locations", setFlags);
@@ -1180,21 +1210,23 @@ export default function MapViewport() {
     return () => ro.disconnect();
   }, []);
 
+  // `draw` is in the deps on purpose: its identity changes with everything the picture is
+  // drawn from, so this effect is how a state change reaches the canvas. Setting width or
+  // height clears the bitmap, so only do it when the size really moved.
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
     const dpr = window.devicePixelRatio || 1;
-    c.width = size.w * dpr;
-    c.height = size.h * dpr;
-    c.style.width = `${size.w}px`;
-    c.style.height = `${size.h}px`;
-    draw();
+    if (c.width !== size.w * dpr || c.height !== size.h * dpr) {
+      c.width = size.w * dpr;
+      c.height = size.h * dpr;
+      c.style.width = `${size.w}px`;
+      c.style.height = `${size.h}px`;
+    }
+    scheduleDraw();
   }, [size, draw]);
 
   /* ── water / lava animation ──────────────────────────── */
-  const drawRef = useRef(draw);
-  useEffect(() => { drawRef.current = draw; }, [draw]);
-
   useEffect(() => {
     const anim = flags.animateWater ? tilesetAssets?.atlas.animation : undefined;
     const units = flags.animateUnits && (flags.units || flags.sprites) && animator?.enabled ? animator : null;
@@ -1219,7 +1251,8 @@ export default function MapViewport() {
         for (let i = 0; i < steps; i++) if (units.tick()) repaint = true;
         if (!unitsInViewRef.current) repaint = repaint && animatedInViewRef.current;
       }
-      if (repaint) drawRef.current();
+      // A repaint booked for this frame is served here rather than painted twice over.
+      if (repaint || drawPending.current) { drawPending.current = false; drawRef.current(); }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -1232,7 +1265,7 @@ export default function MapViewport() {
     el.scrollLeft = centerOn.x * tilePx - el.clientWidth / 2;
     el.scrollTop = centerOn.y * tilePx - el.clientHeight / 2;
     clearCenterOn(null);
-    draw();
+    scheduleDraw();
   }, [centerOn, tilePx, clearCenterOn, draw]);
 
   /* keep the view centred when zooming */
@@ -1246,7 +1279,7 @@ export default function MapViewport() {
     el.scrollLeft = cx * ratio - el.clientWidth / 2;
     el.scrollTop = cy * ratio - el.clientHeight / 2;
     prevZoom.current = zoom;
-    draw();
+    scheduleDraw();
   }, [zoom, draw]);
 
   /* ── pointer ─────────────────────────────────────────── */
@@ -1306,14 +1339,14 @@ export default function MapViewport() {
       hoverPointRef.current = pointAt(e);
       setCursor(t);
       callTool("onDown", toolPointer(e, true));
-      draw();
+      scheduleDraw();
       return;
     }
     if (picking) {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       pickGestureRef.current = { from: t, to: t };
-      draw();
+      scheduleDraw();
       return;
     }
     if (doodadsEditing) {
@@ -1330,7 +1363,7 @@ export default function MapViewport() {
       } else {
         doodadGestureRef.current = { mode: placingDoodad ? "click" : "select", from: p, to: p, additive: e.shiftKey };
       }
-      draw();
+      scheduleDraw();
       return;
     }
     if (spritesEditing) {
@@ -1346,7 +1379,7 @@ export default function MapViewport() {
       } else {
         spriteGestureRef.current = { mode: placingSprite ? "click" : "select", from: p, to: p, additive: e.shiftKey };
       }
-      draw();
+      scheduleDraw();
       return;
     }
     if (unitsEditing) {
@@ -1365,7 +1398,7 @@ export default function MapViewport() {
         // selection), a drag box-selects.
         unitGestureRef.current = { mode: placing ? "click" : "select", from: p, to: p, additive: e.shiftKey };
       }
-      draw();
+      scheduleDraw();
       return;
     }
     if (locationsEditing) {
@@ -1389,17 +1422,17 @@ export default function MapViewport() {
           locationGestureRef.current = { mode: "click", from: p, to: p, additive: e.shiftKey };
         }
       }
-      draw();
+      scheduleDraw();
       return;
     }
     if (clipEditing) {
       e.preventDefault();
-      if (clipPasting) { clipTools.pasteAt(t.x, t.y); draw(); return; }
+      if (clipPasting) { clipTools.pasteAt(t.x, t.y); scheduleDraw(); return; }
       // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
       e.currentTarget.setPointerCapture(e.pointerId);
       clipGestureRef.current = { from: t, to: t };
       setClipSelection(tileRect(t, t));
-      draw();
+      scheduleDraw();
       return;
     }
     if (fogPainting) {
@@ -1409,7 +1442,7 @@ export default function MapViewport() {
       e.currentTarget.setPointerCapture(e.pointerId);
       strokeRef.current = t;
       fogTools.beginStroke(t.x, t.y, e.shiftKey);
-      draw();
+      scheduleDraw();
       return;
     }
     if (blending) { tools.pickAt(t.x, t.y); return; }
@@ -1432,7 +1465,7 @@ export default function MapViewport() {
       hoverPointRef.current = clampPoint(point);
       setCursor(c);
       callTool("onMove", toolPointer(e, toolDownRef.current));
-      draw();
+      scheduleDraw();
       return;
     }
     const pGesture = pickGestureRef.current;
@@ -1442,7 +1475,7 @@ export default function MapViewport() {
       hoverRef.current = c;
       hoverPointRef.current = clampPoint(point);
       setCursor(c);
-      draw();
+      scheduleDraw();
       return;
     }
     if (picking) e.currentTarget.style.cursor = "crosshair";
@@ -1453,7 +1486,7 @@ export default function MapViewport() {
       hoverRef.current = c;
       hoverPointRef.current = clampPoint(point);
       setCursor(c);
-      draw();
+      scheduleDraw();
       return;
     }
     const dGesture = doodadGestureRef.current;
@@ -1465,7 +1498,7 @@ export default function MapViewport() {
       hoverRef.current = clampToMap(t);
       hoverPointRef.current = p;
       setCursor(hoverRef.current);
-      draw();
+      scheduleDraw();
       return;
     }
     const sGesture = spriteGestureRef.current;
@@ -1477,7 +1510,7 @@ export default function MapViewport() {
       hoverRef.current = clampToMap(t);
       hoverPointRef.current = p;
       setCursor(hoverRef.current);
-      draw();
+      scheduleDraw();
       return;
     }
     const gesture = unitGestureRef.current;
@@ -1489,7 +1522,7 @@ export default function MapViewport() {
       hoverRef.current = clampToMap(t);
       hoverPointRef.current = p;
       setCursor(hoverRef.current);
-      draw();
+      scheduleDraw();
       return;
     }
     const lGesture = locationGestureRef.current;
@@ -1501,7 +1534,7 @@ export default function MapViewport() {
       hoverRef.current = clampToMap(t);
       hoverPointRef.current = p;
       setCursor(hoverRef.current);
-      draw();
+      scheduleDraw();
       return;
     }
     const stroking = strokeRef.current;
@@ -1523,7 +1556,7 @@ export default function MapViewport() {
       }
     }
     if (!inMap(t)) {
-      if (hoverRef.current) { hoverRef.current = null; hoverPointRef.current = null; draw(); }
+      if (hoverRef.current) { hoverRef.current = null; hoverPointRef.current = null; scheduleDraw(); }
       return;
     }
     hoverPointRef.current = point;
@@ -1533,12 +1566,17 @@ export default function MapViewport() {
       e.currentTarget.style.cursor = h ? HANDLE_CURSOR[h] : locationTools.pickAt(point) >= 0 ? "move" : "";
     }
     const diamondKey = terrainMode === "isom" ? `${diamondAt(point.px, point.py).x},${diamondAt(point.px, point.py).y}` : "";
-    if (spritesEditing || locationsEditing || !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current) {
+    const moved = !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current;
+    if (moved) {
       hoverRef.current = t;
       hoverDiamondRef.current = diamondKey;
+      // The status bar's tile only changes with the tile, so leave the atom alone in between.
       setCursor(t);
-      draw();
     }
+    // The object layers' ghosts follow the pointer in pixels, not tiles, so they repaint on
+    // every move; a terrain or fog brush is tile-shaped and only needs the crossings. The
+    // frame coalescer is what makes "every move" cost one paint per frame at most.
+    if (moved || unitsEditing || doodadsEditing || spritesEditing || locationsEditing) scheduleDraw();
   };
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1546,7 +1584,7 @@ export default function MapViewport() {
       toolDownRef.current = false;
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
       callTool("onUp", toolPointer(e, false));
-      draw();
+      scheduleDraw();
       return;
     }
     const pGesture = pickGestureRef.current;
@@ -1555,7 +1593,7 @@ export default function MapViewport() {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
       mapPick?.finish(mapPick.kind === "tile" ? pGesture.to : tileRect(pGesture.from, pGesture.to));
       e.currentTarget.style.cursor = "";
-      draw();
+      scheduleDraw();
       return;
     }
     const cGesture = clipGestureRef.current;
@@ -1563,7 +1601,7 @@ export default function MapViewport() {
       clipGestureRef.current = null;
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
       setClipSelection(tileRect(cGesture.from, cGesture.to));
-      draw();
+      scheduleDraw();
       return;
     }
     const dGesture = doodadGestureRef.current;
@@ -1580,7 +1618,7 @@ export default function MapViewport() {
       } else if (!dGesture.additive) {
         doodadTools.select([]);
       }
-      draw();
+      scheduleDraw();
       return;
     }
     const sGesture = spriteGestureRef.current;
@@ -1595,7 +1633,7 @@ export default function MapViewport() {
       } else if (!sGesture.additive) {
         spriteTools.select([]);
       }
-      draw();
+      scheduleDraw();
       return;
     }
     const gesture = unitGestureRef.current;
@@ -1610,7 +1648,7 @@ export default function MapViewport() {
       } else if (!gesture.additive) {
         unitTools.select([]);
       }
-      draw();
+      scheduleDraw();
       return;
     }
     const lGesture = locationGestureRef.current;
@@ -1624,14 +1662,14 @@ export default function MapViewport() {
       } else if (!lGesture.additive) {
         locationTools.select([]);
       }
-      draw();
+      scheduleDraw();
       return;
     }
     if (!strokeRef.current) return;
     strokeRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     if (fogPainting) fogTools.endStroke(); else tools.endStroke();
-    draw();
+    scheduleDraw();
   };
 
   const onLeave = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1640,18 +1678,18 @@ export default function MapViewport() {
     hoverRef.current = null;
     hoverPointRef.current = null;
     e.currentTarget.style.cursor = "";
-    draw();
+    scheduleDraw();
   };
   const onContextMenu = (e: React.MouseEvent) => {
     // While a plugin waits for a pick, a right-click cancels it instead of opening the menu.
-    if (picking) { e.preventDefault(); pickGestureRef.current = null; cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; draw(); return; }
+    if (picking) { e.preventDefault(); pickGestureRef.current = null; cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; scheduleDraw(); return; }
     // A plugin's tool: the right-click is its cancel (the tool may keep running and only drop a gesture).
-    if (tooling) { e.preventDefault(); toolDownRef.current = false; cancelTool(); draw(); return; }
+    if (tooling) { e.preventDefault(); toolDownRef.current = false; cancelTool(); scheduleDraw(); return; }
     // While placing, a right-click leaves placement mode instead of opening the menu.
-    if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); draw(); return; }
-    if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); draw(); return; }
-    if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); draw(); return; }
-    if (clipPasting) { e.preventDefault(); clipTools.stopPasting(); draw(); return; }
+    if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); scheduleDraw(); return; }
+    if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); scheduleDraw(); return; }
+    if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); scheduleDraw(); return; }
+    if (clipPasting) { e.preventDefault(); clipTools.stopPasting(); scheduleDraw(); return; }
     if (locationsEditing && hoverPointRef.current) {
       // Right-clicking a location selects it so the menu's items act on it.
       const hit = locationTools.pickAt(hoverPointRef.current);
@@ -1768,7 +1806,7 @@ export default function MapViewport() {
       <div className="ruler left"><canvas ref={leftRef} /></div>
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
-          <div ref={scrollerRef} className="scroller" onScroll={draw} tabIndex={0}>
+          <div ref={scrollerRef} className="scroller" onScroll={scheduleDraw} tabIndex={0}>
             <div
               ref={surfaceRef}
               className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing || clipPasting ? "placing" : ""}`}

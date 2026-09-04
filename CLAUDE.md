@@ -1115,6 +1115,14 @@ again, measure `longtask` entries before blaming the loading code.
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+  Every repaint request — a pointer move, a scroll, the `[size, draw]` effect that fires
+  whenever `draw`'s identity changes — goes through `scheduleDraw()`, which books one
+  `requestAnimationFrame` and coalesces the rest, so a burst of events costs one paint and it
+  lands immediately before the browser's own. Call it rather than `draw()` from anything
+  event- or render-driven; `draw()` itself is only run by the frame and by the animation loop
+  (which serves a booked request instead of painting twice). The object layers' ghosts follow
+  the pointer in pixels, so `onMove` schedules a paint on every move there — a terrain or fog
+  brush is tile-shaped and only repaints on the crossings.
 - `src/editor/platform.ts` is what the chrome says about the shell it is in: `isDesktop()`
   (the Electron bridge is there) and `hostTerms()`, which answers the words — "browser" /
   "app", "this browser" / "this app", "Browser" / "Application" for a heading, and where a

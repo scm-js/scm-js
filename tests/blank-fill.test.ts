@@ -92,3 +92,9 @@ if (have) describe("re-laying a blank map when the graphics arrive", () => {
     releaseTileset("badlands");
   });
 });
+
+// vitest fails a file that registers no suite at all, and the guard above is this file's
+// only one — so CI, which has no game data, needs something here to skip.
+if (!have) describe.skip("re-laying a blank map when the graphics arrive", () => {
+  it("needs public/tileset/badlands.* — run npm run extract", () => {});
+});

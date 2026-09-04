@@ -169,17 +169,32 @@ export interface PluginInfo {
 export interface PluginApi {
   readonly apiVersion: number;
   readonly plugin: PluginInfo;
+  /**
+   * The open map: what it says, and the three ways of writing to it — `edit` (terrain and
+   * objects, one undo entry), `update` (the tables every dialog's OK writes) and
+   * `sections` (raw bytes). Opening, saving, exporting and closing are here too.
+   */
   readonly document: DocumentApi;
   /** The settings dialogs' tables, read-only; `document.update` writes them. */
   readonly settings: SettingsApi;
   readonly triggers: TriggersApi;
+  /**
+   * Reading the terrain: the tileset's paintable types, the ISOM lattice, flood regions,
+   * blend candidates and the symmetry mode. Painting goes through `document.edit`.
+   */
   readonly terrain: TerrainApi;
+  /** The loaded tileset graphics: whether they are there, and the decoded files behind them. */
   readonly tileset: TilesetApi;
+  /** What is selected on each object layer, the marked area, the active layer and the locked ones. */
   readonly selection: SelectionApi;
   /** Cut / Copy / Paste: the clip, its parts, and pasting — what the clipboard layer does. */
   readonly clipboard: ClipboardApi;
   /** The file formats behind File ▸ Import / Export: `.trg` and the strings text. */
   readonly exchange: ExchangeApi;
+  /**
+   * The palettes' current picks — the terrain brush, the unit, sprite and doodad, the fog
+   * mode — and the placement options a plugin that places things should honour.
+   */
   readonly palette: PaletteApi;
   readonly names: NamesApi;
   /** StarCraft's `<XX>` text control codes: what they mean, and what a string looks like drawn. */
@@ -190,12 +205,24 @@ export interface PluginApi {
   readonly consts: ConstsApi;
   readonly graphics: GraphicsApi;
   readonly view: ViewApi;
+  /**
+   * Everything a plugin puts on the screen: the status line, toasts, dialogs, floating
+   * panels, `confirm` / `alert` / `prompt` / `progress`, a map tool that owns the pointer,
+   * a passive overlay drawn over the map, and picking an area or a tile.
+   */
   readonly ui: UiApi;
+  /** Items in the editor's menu bar. A path whose last segment names no submenu makes one. */
   readonly menu: MenuApi;
+  /** Items in the right-click menus of the map and the terrain palette. */
   readonly contextMenu: ContextMenuApi;
+  /** Key combinations, tried before the editor's own and never while a text field has focus. */
   readonly hotkeys: HotkeyApi;
   readonly commands: CommandsApi;
   readonly events: EventsApi;
+  /**
+   * A small key-value store of the plugin's own, kept in the browser's local storage under
+   * the plugin's id and listed with everything else in Preferences ▸ Browser storage.
+   */
   readonly storage: StorageApi;
   /** `console.log` with the plugin's name in front. */
   log(...args: unknown[]): void;
@@ -327,6 +354,14 @@ export interface DocumentApi {
    *
    * `build` is synchronous — see `Sync`. Await what you need (graphics, a pick, a
    * fetch) before the call, then write in one go.
+   *
+   * @example
+   * // One undo entry called "Fill", however many operations it takes.
+   * const result = api.document.edit("Fill", (tx) => {
+   *   tx.stampTerrain({ x0: 0, y0: 0, x1: 8, y1: 8 }, terrainId);
+   *   tx.placeUnit(api.consts.unit.startLocation, 0, 4 * api.consts.tile, 4 * api.consts.tile);
+   * });
+   * api.ui.status(`${result.tiles} tiles, ${result.units} units`);
    */
   edit<R>(label: string, build: (tx: EditTransaction) => Sync<R>): EditResult;
   /**
@@ -336,6 +371,11 @@ export interface DocumentApi {
    * Operations apply as they are called; the commit marks the map modified and bumps
    * what the chrome reads. There is no undo entry: keep your own if you need one.
    * `build` is synchronous, as `edit`'s is.
+   *
+   * @example
+   * api.document.update("Rename", (tx) => {
+   *   tx.properties({ name: "Lost Temple", description: "Four players." });
+   * });
    */
   update<R>(label: string, build: (tx: UpdateTransaction) => Sync<R>): UpdateResult;
   undo(): string | null;
@@ -1962,6 +2002,20 @@ export interface MenuItemSpec {
 }
 
 export interface MenuApi {
+/**
+ * Items in the editor's menu bar.
+ *
+ * @example
+ * api.menu.add("Tools", {
+ *   label: "Count units\u2026",
+ *   icon: "plugin",
+ *   run: () => api.ui.alert(`Player 1 has ${api.query.unitsOf(0).length} units.`),
+ * });
+ *
+ * @example
+ * // A path whose last segment names no submenu makes one, at the end of that menu.
+ * api.menu.add("Tools/My plugin", { label: "Settings\u2026", command: "settings" });
+ */
   add(path: MenuPath, item: MenuItemSpec): Disposable;
 }
 
@@ -1994,7 +2048,10 @@ export interface ContextMenuApi {
 }
 
 export interface HotkeyApi {
-  /** `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name. */
+  /** `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name.    *
+   * @example
+   * api.hotkeys.add("Ctrl+Shift+W", () => handle.setVisible(!handle.visible()));
+   */
   add(combo: string, run: (() => void) | { command: string }): Disposable;
 }
 
@@ -2054,11 +2111,27 @@ export interface DocumentEvent {
  * reason `"replace"`, which every other listener sees in turn.
  */
 export interface EventsApi {
+/**
+ * @example
+ * // Notifications, in activation order; a listener never intercepts what it hears.
+ * api.events.on("document", (e) => {
+ *   if (e.reason === "open") check(e.fileName);
+ * });
+ * api.events.on("terrain", () => redraw());
+ */
   on(event: "document", listener: (event: DocumentEvent) => void): Disposable;
   on(event: PluginEvent, listener: () => void): Disposable;
 }
 
 export interface StorageApi {
+/**
+ * A small key-value store of the plugin's own, under its id in the browser's local
+ * storage and listed in Preferences \u25b8 Browser storage.
+ *
+ * @example
+ * const opts = api.storage.get("options", { showGrid: true });
+ * api.storage.set("options", { ...opts, showGrid: false });
+ */
   get<T>(key: string, fallback: T): T;
   set(key: string, value: unknown): void;
   remove(key: string): void;

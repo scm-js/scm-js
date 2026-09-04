@@ -25,3 +25,6 @@ fixtures/
 
 # Default plugins vendored into the desktop build (regenerate with `npm run vendor:plugins`)
 /plugins/
+
+# The documentation site (regenerate with `npm run build:docs`)
+/docs-site/

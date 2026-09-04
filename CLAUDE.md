@@ -9,7 +9,9 @@ StarEdit / SCMDraft 2. It opens real `.scm`/`.scx` maps (MPQ archives via `mopaq
 the game's own tileset graphics, and writes playable archives back. `README.md` is the map-maker's
 guide (what each layer does, and the table of what is and is not implemented) — read it first; the
 technical companions are `docs/file-formats.md`, `docs/game-data.md`, `docs/plugins.md` and
-`docs/development.md`. Keep all five current when behaviour changes.
+`docs/development.md`. Keep all five current when behaviour changes — they are also the
+documentation *site* (`npm run build:docs` → docs.scmjs.dev), which renders them rather
+than holding anything of its own.
 
 ## Commands
 
@@ -1145,6 +1147,46 @@ below the release that comes next, or it offers nothing until that version ships
 is the only choice that can never be too high, so nothing has to be decided in advance about
 whether the next release is 0.9.0 or 1.0.0. That leaves package.json meaning the **last
 released version**, which is true without anyone maintaining it.
+
+### The documentation site (`scripts/build-docs.mjs`, `scripts/lib/docs/`)
+
+`docs.scmjs.dev` is `npm run build:docs`, deployed by build.yml's `docs` job onto
+`scm-js/docs`'s `gh-pages` branch — one force-pushed orphan commit with a `CNAME`, the
+`nightly-site` shape, behind the `DOCS_PAT` secret and the `DOCS_DOMAIN` variable and
+skipped with a notice without them. It is a **stable-channel** job: the hosted editor, the
+installers, the notes and the docs are one tag, and every page's footer carries the
+version. (`@scm-js/plugin-api` still publishes from main, so a plugin author on the newest
+package can be one release ahead of the reference; the API is additive, so what they see
+is a member missing from these pages rather than one that behaves differently.)
+
+Two halves, and only the second is generated in any interesting sense. The guides are
+`README.md` and `docs/*.md` split at their `##` headings, one page each, with the `###`
+beneath as the page's contents list (`markdown.mjs`, `marked`) — **nothing writes prose**,
+because a generator that did would be a fifth document to keep current against the four
+the top of this file names. `site.mjs` is the URL model and, with it, the link rewriter
+that is the whole reason those documents keep working here: they are written to be read as
+GitHub blobs, so `docs/plugins.md` becomes a page, a bare `#fragment` finds whichever page
+that heading landed on, and `LICENSE` or `../../releases` goes back to the repository.
+
+The reference is read out of `plugin-api/index.d.ts` — the *bundle* rather than the source
+tree, because that one file with no imports is exactly what a plugin repository compiles
+against. `api.mjs` parses it with the TypeScript compiler API (doc comments out of the
+leading trivia, not `node.jsDoc`, which is not public), takes `PluginApi`'s `…Api`
+properties as the pages, and `assignTypes` puts a supporting type on the page of the only
+group that can reach it — transitively, so `IsomReport` and `Diamond` both land under
+`terrain` — leaving what two groups share on `/api/types/`. So `src/plugins/api.ts` is the
+only place the reference is written: a group with no doc comment reads as a bare interface
+name on the site (`tests/docs.test.ts` fails when one does), and an `@example` there shows
+up as a code block *and* in a plugin author's editor tooltip.
+
+`render.mjs` is the HTML and a small TypeScript colouriser whose real job is the links —
+every declared name in a signature links to where it is documented. The site is plain
+static files in the editor's palette, like `scm-js/site`: one stylesheet, one script
+(`assets/search.js`, a JSON index fetched on first use and scanned in the page), no
+framework and nothing fetched at runtime. `tests/docs.test.ts` pins the split (a `#` inside
+a fenced shell block is not a page; no line of a guide is dropped between them), the link
+rules, and the reference's shape; the API cases `describe.skipIf` when the bundle is not on
+disk, as a fresh clone's are.
 
 ### In-app updates (`desktop/updater.ts`, `src/editor/updates.ts`)
 

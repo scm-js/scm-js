@@ -1,257 +1,142 @@
 # Plugins
 
-scmJS can load third-party code — a *plugin* — from a public Git repository or any
-URL, and let it add menu items, context-menu entries, hotkeys and dialogs, read the
-open map and edit it through the same undo model the built-in tools use. This document
-is the plugin author's guide and the reference for the host side. Two plugins are the
-worked examples for everything below, each in its own repository:
-**Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain),
-installed by default), a dialog, a pick on the map and a terrain transaction; and **Paint**
-([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), also a default), a floating
-panel, a tool that owns the pointer and draws its own preview, and transactions on every
-layer; **Walkability** (a default) and **Melee Wizard** (installed from Browse Plugins) are
-the read-only analysis drawn over the map and the placement wizard, described
-at the end. All are
-fetched over the network and transpiled in the browser like anybody else's, which is the
-point: the plugins that ship with the editor are the proof the loading path works, not
-exceptions to it.
+scmJS loads third-party code — a *plugin* — from a public Git repository or any URL, and
+lets it add menu items, context-menu entries, hotkeys, dialogs, floating panels, map tools
+and overlays, read the open map and edit it through the same undo model the built-in tools
+use. This document is the plugin author's guide; **Host side (for editor developers)** near
+the end is the editor's half of it, and every call is also generated into a page at
+[docs.scmjs.dev/api](https://docs.scmjs.dev/api/).
 
-## Design
+Nine plugins are written against exactly this API, each in its own repository, and they are
+the worked examples for everything below — there is a section on each at the end. Nothing
+about them is privileged: the versions that ship are pinned and compiled into the build, so
+a fresh install needs no network, but a plugin you write takes the same path through the
+same loader.
 
-### Goals
+## How a plugin works
 
-- A plugin is one small TypeScript (or JavaScript) file in a public repo. No build step,
-  no npm, no bundler: point the editor at the repo and it runs.
-- Plugins never touch scenario internals. Every edit is a *transaction* that becomes one
-  undo entry, marks the right sections dirty and lifts stranded doodads and units — the
-  same path a brush stroke takes.
-- Every contribution is a `Disposable`. Disabling or reloading a plugin removes
-  everything it added, whether or not the plugin cleaned up after itself.
-- The API is versioned (`PLUGIN_API_VERSION`) and typed: `npm run build:plugin-types`
-  rolls the contract into one `index.d.ts`, published as
-  [`@scm-js/plugin-api`](https://www.npmjs.com/package/@scm-js/plugin-api), which a plugin
-  repository takes as a devDependency (`npm i -D @scm-js/plugin-api`) instead of carrying a
-  copy of the editor's emitted tree. A manifest's
-  `"api": N` is the version the plugin needs; a host providing an older one refuses to load it.
-  The version is 1 and stays there while the only plugins are the ones in the scm-js
-  organisation, which move with the editor; the first change that would break a plugin
-  written by somebody else bumps it.
+A plugin is one TypeScript (or JavaScript) file with an `activate(api)` export, sitting in
+a public repository next to a `plugin.json`. Nothing has to be installed and there is no
+build step to start with: the editor fetches your source, transpiles it in the browser and
+calls `activate` with the whole API. **Writing a plugin** below is the file itself; this is
+what the editor does around it, and what it promises while your code runs.
 
-### Non-goals (version 1)
+### What the editor does for you
 
-- **No sandbox.** A plugin runs in the page with the page's privileges: it can read the
-  open map, the archive extras and the editor's localStorage, and it can make network
-  requests. That is the same trust as a browser extension. Adding one therefore goes
-  through a confirmation screen that says so (see *Adding one*, below), pins remote
-  plugins to the ref you gave, and never auto-updates. An iframe sandbox is possible later; it would cost the UI contributions.
-- **No React for plugins.** A plugin dialog gets a DOM element to fill (`mount(el)`).
-  Sharing the host's React would need import maps and version coupling; a plugin that
-  wants a framework can bundle its own into that element.
-- **No package imports.** `import x from "some-npm-package"` is refused at load time.
-  Relative imports between files in the plugin repo work, with or without a file
-  extension (the loader fetches them and resolves the extension itself). A plugin that
-  needs a library ships a prebuilt bundle and points `plugin.json` at it.
+- **Every edit is one undo entry.** You never touch scenario internals. `api.document.edit`
+  takes a label and a builder, applies your operations as you call them, and commits the
+  lot as a single `HistoryEntry` — the same path a brush stroke takes, so the right CHK
+  sections are marked dirty, the canvas repaints, and doodads or units your terrain edit
+  stranded are lifted in the same entry. `api.document.update` is the same shape for the
+  tables that live outside the undo model (triggers, strings, the settings dialogs' data),
+  and `api.document.sections` for raw bytes. See **The three kinds of write**.
+- **Everything you add is taken back for you.** A menu item, hotkey, context-menu entry,
+  dialog, panel, overlay, map tool or event listener each hand you a `Disposable`, and the
+  editor keeps its own list of them besides. Turning your plugin off, reloading it or
+  removing it sweeps the lot whether or not you cleaned up. What `activate` returns —
+  nothing, a cleanup function, or a `Disposable` — is for the things the editor cannot see:
+  your timers, your `AbortController`, your worker.
+- **Reading the map is always safe.** Every method that reads answers `null`, `[]` or
+  `false` when no map is open, rather than throwing. You do not have to guard the empty
+  editor.
+- **The graphics may not be there.** The user may not have installed Blizzard's data, and
+  the editor works without it. Anything that needs the tileset degrades — a terrain
+  operation writes nothing and leaves a note on the result rather than failing — so check
+  what you get back rather than assuming.
 
-### How a plugin loads
+### The contract
 
-1. The *spec* the user typed is parsed (`loader.ts#parseSpec`):
-   - `builtin:<name>` — a plugin compiled into the editor from `plugins/<name>/`.
-     Nothing ships that way today; the mechanism is there for a fork that wants one in
-     the bundle.
-   - `github:owner/repo`, `github:owner/repo@ref`, `github:owner/repo@ref/sub/dir`,
-     or a `https://github.com/owner/repo[/tree/ref[/sub/dir]]` URL — resolved to
-     `https://raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`.
-   - Any other URL: `…/plugin.json` is a manifest, `…/x.ts` / `.js` / `.mjs` / `.tsx` is an
-     entry file (a manifest is synthesised from its name), anything else is a directory
-     holding `plugin.json`. `http://localhost:…` works, which is how you develop one.
-2. The manifest is fetched and validated (`PluginManifest`; only `name` is required).
-3. The file to import is the manifest's **`build`** when it has one, else its `entry`. A
-   `build` is a JavaScript bundle the repository publishes (`dist/plugin.js`), and taking
-   it ends the story here: one fetch, no compiler, no import graph, and the plugin may use
-   npm dependencies, which the source path below cannot resolve. `entry` stays in the
-   manifest either way, because it is what a person reads and what loads for a repository
-   that publishes no build.
-4. The entry file is fetched **as text** and, if it is TypeScript, transpiled in the
-   transpile worker (`ts.transpileModule`; TypeScript is in the editor's bundle for this
-   alone). Fetching as text matters: `raw.githubusercontent.com` serves
-   `text/plain`, which a browser refuses to `import()` as a module.
-5. Relative imports are followed the same way, depth first, and each file becomes a
-   `blob:` module URL; the import specifiers are rewritten to those URLs. There is no
-   resolver behind a `fetch`, so the loader supplies one (`candidateUrls`): a specifier
-   that names no extension — `"./convert"`, how TypeScript is normally written — is
-   tried as `.ts`, `.tsx`, `.mts`, `.js`, `.mjs` and then as that directory's `index.*`,
-   and a `"./convert.js"` falls back to `convert.ts` the way a TypeScript project means
-   it. Circular imports and bare package names are errors with a message that says which
-   file.
-6. The file is `import()`ed. Its default export (or a named `activate`) is called with
-   the `PluginApi`. Whatever it returns — nothing, a function, or a `Disposable` — is kept
-   for deactivation.
+`npm i -D @scm-js/plugin-api` is the whole toolchain — one generated `index.d.ts`, types
+only, nothing to configure (**Writing a plugin** has the file that uses it).
 
-Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
-activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
-are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (scmscx.com, Repair, Walkability, Terrain from
-Image and Paint are the defaults today, and all five start on). Being a default buys
-a plugin nothing else — it is fetched and loaded by the steps above like any other.
+The package's **major is the API version** and its minor moves when the declarations do, so
+`^1` is a range you can write and mean. Your manifest's `"api": N` is the version you
+*need*; a host offering an older one refuses to load you rather than failing halfway
+through `activate`. It is 1 today, and additions do not move it — a new call appearing on
+`api` never breaks a plugin that does not use it, so `PLUGIN_API_VERSION` is reserved for
+a change that would.
 
-Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.1`. A moving
-spec meant a push to a plugin repository changed every editor already in use and no
-released version could be rebuilt as it shipped, so moving a default forward is now a
-commit in `defaults.ts` that goes out with the next release.
+### What you write in
 
-Two things follow from the pin. Every build runs `scripts/vendor-plugins.mjs` first
-(`prebuild`, and `scripts/build-desktop.mjs` for its own bundle), which writes each
-default's own source at that tag into `plugins/` for `builtin.ts` to glob, so the defaults
-are **compiled in rather than fetched** — the same code, since the version is fixed. It is
-worth more than it sounds: a `.ts` plugin has to be transpiled before the browser will
-import it, one transpile starts the compile worker, and TypeScript is inlined into that
-worker, so five remote `.ts` defaults put 3.4 MB (975 KB gzipped) of compiler on the cold
-path. Measured on the production build, a first visit went from 1235 KB gzipped to 344 KB.
-It is all or nothing — one remote `.ts` default starts the worker and costs the lot — and
-the fetching path is still there for a build that skips the vendoring
-(`SCMJS_SKIP_VENDOR=1`) and for every plugin the user adds.
+- **The DOM, not React.** `api.ui.dialog` and `api.ui.panel` hand you an element to fill
+  (`mount(el)`). `api.ui.el` and `api.ui.widgets` build that content in the editor's own
+  classes, so a plain-DOM dialog looks like a built-in one without you copying any CSS. If
+  you would rather have a framework, bundle one into that element — it is your element.
+- **Relative imports, with or without the extension.** `./convert`, `./convert.js`
+  (resolving to `convert.ts` the way a TypeScript project means it), or a directory with an
+  `index.ts` — the loader tries all of those. A cycle is an error naming the file.
+- **No bare package names on the source path.** `import x from "some-package"` is refused
+  when the editor loads your source: there is no module resolver behind a `fetch`. An
+  `import type` from `@scm-js/plugin-api` is fine, because the compiler erases it before
+  the loader ever sees a specifier. If you need a real dependency, ship a bundle and name
+  it in the manifest's `build` — see **Building**.
 
-And a plugin is now identified by `pluginKey(spec)` (the repository, whatever version
-follows it, with a bundled copy answering for the spec it was built from) rather than by
-the spec string, which is what keeps `effectiveInstalls` from listing — and running — the
-same plugin twice across those forms.
+### What your users are told about you
 
-Compiling the defaults in costs the one thing worth naming: the remote loading path used
-to be exercised by simply opening the editor, on every machine, every day.
-`tests/plugin-network.test.ts` is the deliberate replacement — a real plugin fetched,
-transpiled and imported over the network — off unless `SCMJS_NETWORK_TESTS=1`, and run by
-CI on the job that vendors and by the release pre-flight.
+A plugin runs in the page with the page's privileges. It can read and change the open map,
+read and write the files stored in the map archive, read and write the editor's own browser
+storage, and make network requests. **There is no sandbox**, the install screen says so in
+those words, and it is the same trust a browser extension asks for. Three things follow
+that are worth writing for:
 
-An activation that fails is no longer silent: `plugins/failures.ts` turns whatever the pass
-left in `pluginRuntimesAtom` into one toast naming what did not load, with a button to
-Manage Plugins. `activatePlugin` returns the load in flight for a spec that is already
-loading, so a caller can await the pass and see the result.
+- **They see your manifest before any of your code is fetched.** The Add screen shows the
+  name, version, author, description and icon out of `plugin.json`, links to the repository
+  and homepage, and the addresses your code will come from — and that is all it fetches.
+  It is the only thing a user has to judge you by, so fill it in.
+- **They are pinned to a commit, and never auto-updated.** Installing stores the exact
+  commit your ref pointed at, so a push of yours does not reach anyone already running the
+  plugin. They move forward with the **Update** button, which shows them the new version's
+  manifest before anything changes. Tag your releases: a tag is what the registry lists and
+  what a considered version looks like from the outside.
+- **They may be running a copy saved in their browser**, if they ticked *Load from a copy
+  saved here*. That copy is only replaced when they press Reload.
 
-### Browsing a registry
+For the same reason, ship your `dist/plugin.js` unminified. What the confirmation dialog
+offers a user is your repository, and a plugin they cannot read is a plugin they cannot
+judge.
 
-Plugins ▸ **Browse Plugins…** is the same dialog as Manage Plugins with the Browse tab
-open. What it lists comes from *registries*: one JSON file per registry, holding an entry
-per plugin — the spec to install, and the fields that plugin's own `plugin.json` carries,
-so a whole list is shown from one request rather than one manifest fetch per row. The
-project's own is `github.com/scm-js/registry`, generated from the organisation itself —
-every repository named `plugin-…` or wearing the `scmjs` and `plugin` topics, described by
-the `plugin.json` at its newest version tag (an untagged one falls back to its default
-branch) — hourly, and within about a minute of a plugin repository saying it changed;
-`DEFAULT_REGISTRIES` in `defaults.ts` names it and the user can add more under **Sources**
-(`userRegistriesAtom`).
+### How the editor finds your code
 
-Listing is therefore automatic, and carries no judgement at all: a registry decides what
-is *offered*, never what is trusted. There is no review mark, and installing from a Browse
-row goes through the same confirmation as an address pasted by hand — which says the one
-thing that is always true, that there is no sandbox and an installed plugin runs with the
-editor's own privileges.
+The *spec* is the address a user pastes into Manage Plugins, or that a registry lists:
 
-`plugins/registry.ts` is the whole host side and is pure apart from the fetching:
-
-| | |
+| Spec | |
 | --- | --- |
-| `parseRegistry(raw, url)` | Checks the file's shape, canonicalises each entry's spec (`canonicalSpec(parseSpec(...))`, so rows match the installed list), drops entries it cannot use and counts them in `skipped`. One bad row never empties a list. |
-| `entryIcon(entry)` | `resolveIcon` against the *plugin's* base, so a manifest's `icon: "icon.svg"` can be copied into the index verbatim. |
-| `searchRegistry(entries, query)` | Every word has to match something; name beats tag beats description beats author beats spec. |
-| `groupByInstall(entries, stateOf)` | Splits the results into what the editor does not have and what it already lists (turned off counts as installed), each group keeping its order — the Browse pane's grouping and its filter counts. |
-| `mergeRegistries(list)` | Entries of every registry, the first to list a spec winning. |
-| `loadRegistry(store, url, opts)` | Fetch into `registryCacheAtom` unless the cached copy is younger than `REGISTRY_MAX_AGE` (an hour) or `force` was asked for. A failure records `registryStateAtom` and **keeps** the cached list — the browser shows the last list it had rather than emptying itself because the network blinked. |
-| `addRegistry` / `removeRegistry` | The user's list; a default cannot be removed. |
+| `github:owner/repo` | The default branch — fine for a private experiment, but see the pinning note above. |
+| `github:owner/repo@v1.2` | A tag, a branch or a commit. This is what a registry lists and what a default names. |
+| `github:owner/repo@v1.2/plugins/mine` | A folder inside a repository, for several plugins in one. |
+| `https://github.com/owner/repo/tree/v1.2/plugins/mine` | The same, as the URL a user copies out of their address bar. |
+| `https://…/plugin.json` | A manifest anywhere — GitLab, your own host, a gist. |
+| `https://…/plugin.ts` | An entry file with no manifest; one is synthesised from the file name. |
+| `http://localhost:3000/` | A directory holding `plugin.json`. This is how you develop one: serve your working copy and add it. |
 
-Almost everything a registry lists is a plugin the editor already has — the defaults are
-published from the same repositories — so a flat list of rows reads as a copy of the
-Installed tab. The pane splits it instead: `groupByInstall` over the search results, the
-group that can be installed first under its own heading, and a filter (All / Not installed
-/ Installed) carrying the count of each. A row says which it is by an accent down its left
-edge, by the one action that fits it (**Install**, **Turn on**, or **Manage**, which
-switches to the Installed tab and flashes the row) and by a line naming the state in
-words.
+What loads is the manifest's **`build`** when it has one, and its `entry` otherwise. A
+build ends the story in one fetch — no compiler, no walking your imports — and is the only
+way to use an npm dependency; the source path is the shortest way to start. `entry` stays
+in the manifest either way, because it is what a person reads and what loads for a
+repository that publishes no build.
 
-An entry is not a way in. Install hands the entry's `spec` to the same
-`inspectPlugin` → `ConfirmPluginDialog` → `installPlugin` path a pasted address takes, so
-the manifest is read from the plugin itself, the commit is resolved and pinned at install
-time (not taken from the index), and the same warning is shown. A registry decides what is
-*listed*, never what is trusted — there is no sandbox either way.
+### Getting yours listed
 
-Getting a plugin listed is a pull request against `plugins.json` in that repository; the
-index's `README.md` has the shape of an entry. Nothing about it is privileged: any URL
-serving a file of that shape is a registry, which is how a fork points the editor at its
-own plugins without changing any code.
+Plugins ▸ **Browse Plugins…** reads *registries*: one JSON file holding an entry per
+plugin — the spec to install, plus the fields that plugin's own `plugin.json` carries, so a
+whole list arrives in one request. The project's own is
+[`scm-js/registry`](https://github.com/scm-js/registry), generated from the organisation
+itself: every repository named `plugin-…` **or** carrying both the `scmjs` and `plugin`
+topics, described by the `plugin.json` at its newest version tag (an untagged repository
+falls back to its default branch), refreshed hourly and within about a minute of a plugin
+repository saying it changed. Listing there is opt-out.
 
-### Adding one
+For a plugin outside the organisation, open a pull request against that repository's
+`plugins.json`; its README has the shape of an entry. Nothing about being listed is
+privileged — any URL serving a file of that shape is a registry, and a user can add one
+under **Sources**. A registry decides what is *offered*, never what is trusted: installing
+from a Browse row goes through exactly the same confirmation, the same manifest fetch and
+the same pinning as an address pasted by hand.
 
-Pressing **Add** in Manage Plugins does not install anything. `previewPlugin` canonicalises
-the spec, asks GitHub which commit the spec's ref points at (`resolveCommit`, the public
-commits API, one request and no token), and reads the `plugin.json` at that commit through
-steps 1–2 above and no further (`resolvePlugin(..., { entry: false })`). No entry file is
-fetched, nothing is transpiled and nothing is imported.
-
-The confirmation opens only if that found a manifest. An address that answers with no
-plugin behind it is reported under the Add field, and the preview travels to the dialog in
-its payload rather than being fetched again.
-
-`ConfirmPluginDialog` shows what came back: the manifest's name, version, author,
-description and icon, links to the repository (`PluginSource.webUrl`, which `parseSpec`
-derives for a GitHub spec) and homepage, the addresses for the version being installed
-(`addressesOf`), and the warning that a plugin has the editor's own access and no sandbox.
-The entry is named only when the manifest names one; probing for `plugin.ts` / `plugin.js`
-would mean fetching code, which has not been agreed to yet.
-
-Three ticks are read straight into `installPlugin`:
-
-| Tick | Default | Effect |
-| --- | --- | --- |
-| Enable it now | on | `activatePlugin` after the install; off just lists it. |
-| Pin to this version | on, when a commit resolved | Stores `github:owner/repo@<sha>` (`PluginPreview.pin`) instead of the moving spec. `isPinned` recognises one. |
-| Load from a copy saved here | off | Stores `PluginInstall.local`; see below. |
-
-The addresses on screen follow the pin tick, since pinning changes which commit every one
-of them names. A spec that carries a ref already (`@v1.2`) is resolved the same way: the
-pin names the commit that tag points at today.
-
-Reload re-fetches whatever the spec names, so for a pinned plugin it re-fetches the same
-commit. Moving to a newer one is the **Update** button on the row: it previews
-`unpin(spec)`, and when the branch now holds a different commit it opens this same dialog
-with `replaces` set. The install goes through `installPlugin` again with the old spec named,
-which deactivates it, drops it from the list and drops its stored copy, because the two
-commits are different specs as far as everything else here is concerned. The ticks start
-from the old install's own settings.
-
-A manifest that could not be fetched or parsed (`PluginPreview.problem`) stops the add:
-the Manage Plugins field says so, with the address that refused underneath, and if the
-dialog is reached with one anyway it says the same and disables Add. An unusable *spec*
-fails earlier still, before anything is fetched. A manifest asking for a newer `api` than
-the host provides is flagged on the dialog (`needsApi`) rather than only failing on load,
-and `pinProblem` says why there is no pin (not a GitHub plugin, or GitHub did not answer).
-
-### Loading from a copy in the browser
-
-`PluginInstall.local` means "prefer the copy". `loadDepsFor` in `host.ts` decides what one
-activation uses:
-
-- no copy yet: the ordinary deps wrapped in `recordingDeps`, which keeps every fetched
-  file. `storeSnapshot` writes them to `pluginCodeAtom` (`scmjs.plugin-code`, keyed by
-  spec) when the load succeeds. A snapshot over `MAX_SNAPSHOT` is skipped with a console
-  warning and the plugin stays remote.
-- a copy: `storedDeps`, which answers out of the snapshot and has no network path at all.
-  A URL the snapshot does not hold is an error naming it, so a plugin that grew a file
-  since the copy was made says so instead of quietly fetching it. `describePlugin` uses the
-  copy too, so the plugin's address is never touched while the option is on.
-
-`PluginRuntime.loadedFrom` records which of the two happened, and the Manage Plugins row
-badges it. `reloadPlugin` drops the copy first, so Reload is how both a pinned plugin and a
-stored one are moved forward. Turning the option off (`setInstalled`, the row's disk
-button) drops the copy as well: turning it on again fetches the plugin rather than reviving
-something months old.
-
-A plugin that is listed but **not running** — one you turned off, a default included — is
-still described in Manage Plugins: `describePlugin` does step 1–2 only
-(`resolvePlugin(..., { entry: false })`), so the name, version, description and icon come
-out of one `plugin.json` fetch with no code fetched and nothing executed. The dialog asks
-for that the first time it shows a row it has no manifest for, and the answer is kept in
-`scmjs.plugin-manifests`, so the next visit renders from storage while the refresh runs
-behind it. A description that cannot be fetched changes nothing: the plugin is *off*, not
-failed.
+Five plugins are **defaults** — the editor lists them from the start and they are compiled
+into the build, so a fresh install has them with no network at all. They are ordinary
+plugins from their own repositories, each pinned to a tag; being a default buys nothing
+else. Which five, and how that works, is under **Host side**.
 
 ## Writing a plugin
 
@@ -316,24 +201,17 @@ editing and checking:
 npm i -D @scm-js/plugin-api
 ```
 
-One generated `index.d.ts` — the whole contract, no imports of its own, nothing to
-configure. **The major is `PLUGIN_API_VERSION`**, so `"^1"` is the range to write and it
-is honest: the minor moves whenever the declarations change, and a break would move the
-major and `PLUGIN_API_VERSION` together. `npm outdated` and `npm update` then say what you
-would expect. The same two files are committed and tagged at
+`npm outdated` and `npm update` say what you would expect (the versioning rule is under
+**The contract**), and the same files are committed and tagged at
 [`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) if you would rather read them
 there or depend on a git ref.
-
-It is a *type* dependency: the loader never sees the specifier, which is why a bare
-package name here does not break the rule that a plugin's runtime code cannot import
-packages.
 
 Everything `add`/`on` returns is a `Disposable`; keep the ones you need to drop early
 and forget the rest — deactivation disposes them all. Returning a function from
 `activate` runs it at deactivation too, for anything outside the API (timers, sockets).
 
 To develop: serve the folder (`npx serve --cors .`), add `http://localhost:3000/`
-in Tools ▸ Plugins ▸ Manage Plugins…, and press **Reload** after each change.
+in Plugins ▸ Manage Plugins…, and press **Reload** after each change.
 
 ### Building
 
@@ -378,10 +256,12 @@ than going unnoticed.
 The bundle is not minified. What the confirmation dialog offers to show a user is the
 repository, and a plugin they cannot read is a plugin they cannot judge.
 
-## API reference
+## The API, group by group
 
-The complete typings are in `src/plugins/api.ts`; this is the tour. Every method that
-reads the map returns `null` / `[]` / `false` when no map is open rather than throwing.
+The complete typings are the package's own `index.d.ts`, and every one of them is generated into
+a page at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/); this is the tour. Every
+method that reads the map returns `null` / `[]` / `false` when no map is open rather than
+throwing.
 
 ### Promises, and the one thing that is synchronous
 
@@ -407,7 +287,7 @@ loaded — and so may a dialog button's `run`, which keeps the dialog open until
 settles and closes it on anything but `false`.
 
 The callbacks that remain are the ones that are genuinely callbacks rather than a
-deferred answer: event listeners (`api.on(…)`), the DOM handlers of `ui.widgets`, a
+deferred answer: event listeners (`api.events.on(…)`), the DOM handlers of `ui.widgets`, a
 dialog's or panel's `mount`, and the pointer and `draw` hooks of `ui.mapTool` and
 `ui.overlay`. Every one of them returns a `Disposable` or a cleanup function, so there
 is no `off()` to pair up and nothing to unregister at deactivation.
@@ -503,7 +383,7 @@ the registry.
 The writes — `write(index, bytes)`, `rename(index, name)`, `insert(index, name, bytes)`,
 `remove(index)`, `move(from, to)` and `replaceFile(bytes)` — are a different kind of
 transaction from `edit`: the edited file is parsed again from scratch and installed as
-the open document (`replaceScenarioAtom`), so the change reaches every part of the editor
+the open document, so the change reaches every part of the editor
 whether or not it models the section, and, as with Resize, the undo history is dropped
 and every selection cleared. The map is marked modified and `"document"` fires. Each
 returns `{ warnings }`, what the parser said of the result; a bad index or a name longer
@@ -603,12 +483,18 @@ the other two (`api.names.units()` / `upgrades()` / `techs()` list them with the
 names). Players are 0-based here, as in the records; the chrome shows `slot + 1`.
 
 ```js
+// Type numbers come from the defs, not from an enum: a plugin gets no `ConditionType`,
+// because the typings are erased before your code runs (see api.consts for the same reason).
+const typeOf = (defs, name) => defs.find((d) => d.name === name).type;
+const countdown = typeOf(api.triggers.defs.conditions(), "Countdown Timer");
+const display = typeOf(api.triggers.defs.actions(), "Display Text Message");
+
 api.document.update("Add a countdown", (tx) => {
-  const text = tx.strings.intern("30 seconds remaining");
+  const text = tx.strings.intern("30 seconds remaining");   // applies at once…
   const trigger = api.triggers.newTrigger();
-  trigger.conditions[0] = api.triggers.newCondition(ConditionType.Countdown);
-  const say = api.triggers.newAction(ActionType.DisplayText);
-  say.text = text;
+  trigger.conditions[0] = api.triggers.newCondition(countdown);
+  const say = api.triggers.newAction(display);
+  say.text = text;                                          // …so this index is already good
   trigger.actions[0] = say;
   tx.triggers.add(trigger);
 });
@@ -733,7 +619,6 @@ the editor's own tables (`sections/objects.ts`, `editor/units.ts`), handed over 
 | `sprite.flags` | THG2's `PureSprite` / `Flipped` / `Disabled`. `PureSprite` is the one that decides whether `spriteId` is a sprites.dat id the game only draws, or a units.dat id it creates the unit for. |
 | `location.anywhere` | 63. That slot is Anywhere and the editor protects it everywhere — no builder returns it, `locationAt` never picks it, the viewport draws no box for it. `tx.restoreAnywhere()` is what puts it back. |
 | `location.elevation` | `elevationFlags`. A **set** bit *excludes* that elevation, so 0 means everywhere. |
-
 Why this is on `api` and not in the npm package: `@scm-js/plugin-api` is types only, and
 `import type` is erased before the loader sees the specifier — which is exactly what lets
 a plugin depend on a package at all. A *value* imported from it type-checks and is then
@@ -804,7 +689,8 @@ extracted — that is a normal state, degrade), `raw()` for the decoded `LoadedT
 
 `markedArea()` / `markArea(rect | null)` — the Cut / Copy / Paste layer's marked
 rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()`,
-`locations()` (indices, copied — sort yours freely) with matching setters; `layer()` /
+`locations()` (indices, copied — sort yours freely), each with a setter
+(`setUnits`, `setSprites`, `setDoodads`, `setLocations`); `layer()` /
 `setLayer()`; `lockedLayers()` / `setLayerLocked(layer, on)` for the Layers panel's
 padlocks (a locked layer's tools refuse to change the map).
 
@@ -1062,6 +948,193 @@ dirty, encoded and picked out — the raw created sections for IVE2 / VCOD / UPR
 `rebuildSections` (the given names added to a copy's dirty set, `serializeScenario`,
 `parseScenario`) and `requiredSectionNames` (`requiredSections` with `STRx` substituted
 on an extended-strings file).
+
+
+### The loading pipeline
+
+`loader.ts` is pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it
+takes, so `tests/plugins.test.ts` runs the whole of this in Node.
+
+1. The spec the user typed is parsed (`parseSpec`) into a base URL. `builtin:<name>` is a
+   plugin compiled into the editor from `plugins/<name>/`; a `github:` spec or a
+   github.com URL resolves to
+   `https://raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`; any other URL is a
+   manifest, an entry file (a manifest is synthesised from its name) or a directory holding
+   `plugin.json`. The forms are tabulated for authors under **How the editor finds your
+   code**.
+2. The manifest is fetched and validated (`PluginManifest`; only `name` is required).
+3. The file to import is the manifest's `build` when it has one, else its `entry`.
+   `ResolvedPlugin.built` / `PluginAddresses.built` carry which happened, so
+   `ConfirmPluginDialog` can name the bundle *and* the source it was built from.
+4. That file is fetched **as text** and, if it is TypeScript, transpiled in the transpile
+   worker (`ts.transpileModule`; TypeScript is in the editor's bundle for this alone).
+   Fetching as text matters: `raw.githubusercontent.com` serves `text/plain`, which a
+   browser refuses to `import()` as a module.
+5. Relative imports are followed the same way, depth first, and each file becomes a `blob:`
+   module URL with the specifiers rewritten to those URLs. There is no resolver behind a
+   `fetch`, so the loader supplies one (`candidateUrls`): a specifier naming no extension —
+   `"./convert"`, how TypeScript is normally written — is tried as `.ts`, `.tsx`, `.mts`,
+   `.js`, `.mjs` and then as that directory's `index.*`, and `"./convert.js"` falls back to
+   `convert.ts`. The bundled built-in never needed this because Vite resolved for it, and
+   the first remote load of Terrain from Image 404ed on `./convert`. Circular imports and
+   bare package names are errors naming the file.
+6. The module is `import()`ed and its default export (or a named `activate`) called with the
+   `PluginApi`. Whatever it returns is kept for deactivation.
+
+An activation that fails is not silent: `plugins/failures.ts` turns whatever the pass left
+in `pluginRuntimesAtom` into one toast naming what did not load, with a button to Manage
+Plugins (`ttl: 0`, so it outlives the splash). For that to work `activatePlugin` returns
+the load **in flight** for a spec that is already loading rather than a resolved promise —
+React's double mount otherwise had the second pass reading the runtimes before a single
+fetch had finished.
+
+### Defaults, pinning and vendoring
+
+Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
+activated at startup by `usePlugins`. The defaults (`src/plugins/defaults.ts`) are merged
+over that list by `effectiveInstalls`, so they are always shown and can be turned on or off
+but not removed; each says whether it starts on. Being a default buys a plugin nothing
+else — it is fetched and loaded by the steps above like any other.
+
+Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.1`. A moving
+spec meant a push to a plugin repository changed every editor already in use and no
+released version could be rebuilt as it shipped, so moving a default forward is now a
+commit in `defaults.ts` that goes out with the next release. `isPinned` therefore counts
+any explicit ref that is not a branch name (`MOVING_REFS`), and identity moved off the spec
+string: `pluginKey(spec)` is the repository whatever version follows it, with a bundled copy
+answering for the spec it was built from, which is what keeps `effectiveInstalls` from
+listing — and running — the same plugin twice across those forms.
+
+Every build runs `scripts/vendor-plugins.mjs` first (`prebuild`, and
+`scripts/build-desktop.mjs` for its own bundle), which writes each default's own source at
+that tag into `plugins/` for `builtin.ts` to glob, so the defaults are **compiled in rather
+than fetched** — the same code, since the version is fixed. It is worth more than it
+sounds: a `.ts` plugin has to be transpiled before the browser will import it, one
+transpile starts the compile worker, and TypeScript is inlined into that worker, so five
+remote `.ts` defaults put 3.4 MB (975 KB gzipped) of compiler on the cold path. Measured on
+the production build, a first visit went from 1235 KB gzipped and 20 cross-origin requests
+to 344 KB and none. It is all or nothing — one remote `.ts` default starts the worker and
+costs the lot — and the fetching path is still there for a build that skips the vendoring
+(`SCMJS_SKIP_VENDOR=1`) and for every plugin the user adds.
+
+That costs the one thing worth naming: the remote loading path used to be exercised by
+simply opening the editor, on every machine, every day. `tests/plugin-network.test.ts` is
+the deliberate replacement — a real plugin fetched, transpiled and imported over the
+network — off unless `SCMJS_NETWORK_TESTS=1`, and run by CI on the job that vendors and by
+the release pre-flight.
+
+### The registry, on the host side
+
+`plugins/registry.ts` is the whole host side of Browse Plugins and is pure apart from the
+fetching. What a registry *is*, and how a plugin gets listed, is under **Getting yours
+listed**.
+
+| | |
+| --- | --- |
+| `parseRegistry(raw, url)` | Checks the file's shape, canonicalises each entry's spec (`canonicalSpec(parseSpec(...))`, so rows match the installed list), drops entries it cannot use and counts them in `skipped`. One bad row never empties a list. |
+| `entryIcon(entry)` | `resolveIcon` against the *plugin's* base, so a manifest's `icon: "icon.svg"` can be copied into the index verbatim. |
+| `searchRegistry(entries, query)` | Every word has to match something; name beats tag beats description beats author beats spec. |
+| `groupByInstall(entries, stateOf)` | Splits the results into what the editor does not have and what it already lists (turned off counts as installed), each group keeping its order — the Browse pane's grouping and its filter counts. |
+| `mergeRegistries(list)` | Entries of every registry, the first to list a spec winning. |
+| `loadRegistry(store, url, opts)` | Fetch into `registryCacheAtom` unless the cached copy is younger than `REGISTRY_MAX_AGE` (an hour) or `force` was asked for. A failure records `registryStateAtom` and **keeps** the cached list — the browser shows the last list it had rather than emptying itself because the network blinked. |
+| `addRegistry` / `removeRegistry` | The user's list (`userRegistriesAtom`); a default cannot be removed. |
+
+Almost everything a registry lists is a plugin the editor already has — the defaults are
+published from the same repositories — so a flat list of rows reads as a copy of the
+Installed tab. The pane splits it instead: `groupByInstall` over the search results, the
+group that can be installed first under its own heading, and a filter (All / Not installed
+/ Installed) carrying the count of each. A row says which it is by an accent down its left
+edge, by the one action that fits it (**Install**, **Turn on**, or **Manage**, which
+switches to the Installed tab and flashes the row) and by a line naming the state in words.
+
+An entry is not a way in. Install hands the entry's `spec` to the same
+`inspectPlugin` → `ConfirmPluginDialog` → `installPlugin` path a pasted address takes, so
+the manifest is read from the plugin itself and the commit resolved and pinned at install
+time rather than taken from the index.
+
+### Adding one
+
+Pressing **Add** in Manage Plugins does not install anything. `previewPlugin` canonicalises
+the spec, asks GitHub which commit the spec's ref points at (`resolveCommit`, the public
+commits API, one request and no token), and reads the `plugin.json` at that commit through
+steps 1–2 of the pipeline and no further (`resolvePlugin(..., { entry: false })`). No entry
+file is fetched, nothing is transpiled and nothing is imported.
+
+The confirmation opens only if that found a manifest. An address that answers with no
+plugin behind it is reported under the Add field — a details screen with no details on it
+reads as a broken dialog rather than a wrong address — and the preview travels to the
+dialog in its payload rather than being fetched again.
+
+`ConfirmPluginDialog` shows what came back: the manifest's name, version, author,
+description and icon, links to the repository (`PluginSource.webUrl`, which `parseSpec`
+derives for a GitHub spec) and homepage, the addresses for the version being installed
+(`addressesOf`), and the warning that a plugin has the editor's own access and no sandbox.
+The entry is named only when the manifest names one; probing for `plugin.ts` / `plugin.js`
+would mean fetching code, which has not been agreed to yet.
+
+Three ticks are read straight into `installPlugin`, which is the only writer past this
+point — it seeds the manifest through `rememberManifest`, then `setInstalled` and
+`activatePlugin`:
+
+| Tick | Default | Effect |
+| --- | --- | --- |
+| Enable it now | on | `activatePlugin` after the install; off just lists it. |
+| Pin to this version | on, when a commit resolved | Stores `github:owner/repo@<sha>` (`PluginPreview.pin`) instead of the moving spec. `isPinned` recognises one. |
+| Load from a copy saved here | off | Stores `PluginInstall.local`; see below. |
+
+The addresses on screen follow the pin tick, since pinning changes which commit every one
+of them names. A spec that carries a ref already (`@v1.2`) is resolved the same way: the pin
+names the commit that tag points at today. The label and the explanation under the third
+tick read the same whether it is on or off — one that swapped between describing the copy
+and describing the fetch read as two different options — so the only state-dependent part
+is the size of the copy, shown next to it.
+
+Reload re-fetches whatever the spec names, so for a pinned plugin it re-fetches the same
+commit. Moving to a newer one is the **Update** button on the row: it previews
+`unpin(spec)`, and when the branch now holds a different commit it opens this same dialog
+with `replaces` set. The install goes through `installPlugin` again with the old spec named,
+which deactivates it, drops it from the list and drops its stored copy, because the two
+commits are different specs as far as everything else here is concerned. The ticks start
+from the old install's own settings.
+
+A manifest that could not be fetched or parsed (`PluginPreview.problem`) stops the add: the
+Manage Plugins field says so, with the address that refused underneath, and if the dialog is
+reached with one anyway it says the same and disables Add. An unusable *spec* fails earlier
+still, before anything is fetched. A manifest asking for a newer `api` than the host
+provides is flagged on the dialog (`needsApi`) rather than only failing on load, and
+`pinProblem` says why there is no pin (not a GitHub plugin, or GitHub did not answer).
+
+### Loading from a copy in the browser
+
+`PluginInstall.local` means "prefer the copy". `loadDepsFor` in `host.ts` decides what one
+activation uses:
+
+- no copy yet: the ordinary deps wrapped in `recordingDeps`, which keeps every fetched
+  file. `storeSnapshot` writes them to `pluginCodeAtom` (`scmjs.plugin-code`, keyed by
+  spec) when the load succeeds. A snapshot over `MAX_SNAPSHOT` is skipped with a console
+  warning and the plugin stays remote.
+- a copy: `storedDeps`, which answers out of the snapshot and has no network path at all.
+  A URL the snapshot does not hold is an error naming it, so a plugin that grew a file
+  since the copy was made says so instead of quietly fetching it. `describePlugin` uses the
+  copy too, so the plugin's address is never touched while the option is on.
+
+`PluginRuntime.loadedFrom` records which of the two happened, and the Manage Plugins row
+badges it. `reloadPlugin` drops the copy first, so Reload is how both a pinned plugin and a
+stored one are moved forward. Turning the option off (`setInstalled`, the row's disk button)
+drops the copy as well: turning it on again fetches the plugin rather than reviving
+something months old.
+
+A plugin that is listed but **not running** — one you turned off, a default included — is
+still described in Manage Plugins: `describePlugin` does steps 1–2 only
+(`resolvePlugin(..., { entry: false })`), so the name, version, description and icon come
+out of one `plugin.json` fetch with no code fetched and nothing executed. One attempt per
+spec per store (`forgetDescription`, which `reloadPlugin` calls, asks again); the dialog
+triggers it for every row with no manifest, and the answer is kept in
+`scmjs.plugin-manifests` (built-ins excluded — nothing to fetch, and their icon URLs are
+build-hashed), so the next visit renders from storage while the refresh runs behind it.
+`PluginRuntime.describing` and `status: "loading"` both spin the row's badge, since a row
+that silently rewrites itself when a fetch lands reads as a glitch. A description that
+cannot be fetched changes nothing: the plugin is *off*, not failed.
 
 ## Terrain from Image
 

@@ -28,6 +28,7 @@
     "extract:units": "node scripts/extract-units.mjs",
     "check:assets": "node scripts/extract-assets.mjs --check",
     "build:plugin-types": "node scripts/build-plugin-types.mjs",
+    "build:docs": "node scripts/build-plugin-types.mjs && node scripts/build-docs.mjs",
     "publish:plugin-types": "node scripts/publish-plugin-api.mjs"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "dts-bundle-generator": "^9.5.1",
     "electron": "^44.1.1",
     "electron-builder": "^26.15.3",
+    "marked": "^18.0.11",
     "oxlint": "^1.79.0",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"

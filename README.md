@@ -605,153 +605,20 @@ work offline and the container image work on a network that cannot reach GitHub.
 you add yourself are fetched from their addresses as before, and if one does not load, a
 notice says so rather than leaving you to find a menu item missing.
 
-**Terrain from Image**
-([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is
-installed by default: File ▸ Import ▸ Terrain from Image…, or
-right-click the terrain palette or the map — *Terrain from Image…* takes the marked area
-when the Cut / Copy / Paste layer has one, and *Terrain from Image into Area…* first lets
-you drag the target rectangle on the map (Esc cancels) and then opens the dialog with it
-selected; *Pick on Map…* in the dialog does the same without losing your settings. Bring
-the picture in with Choose File, Ctrl+V / Paste (a screenshot), a drop onto the dialog, or
-a URL. Choose how it fits the area (stretch, fit inside, fill) and flips; tune brightness,
-contrast, saturation, hue and gamma with the *Source* preview following; tick the terrains
-it may become. Each terrain has a *key colour* — what in the picture it should match — set
-with its swatch or the eyedropper (arm it on a row, click the source), so "this blue is
-Water, that green is Jungle" is one click each. *Adaptive colour* fits the picture's range
-to the palette's on its own, *Exact key colours* is plain nearest-colour, *Brightness
-bands* runs the ticked terrains dark → light (a heightmap); *Weigh* leans the match towards
-lightness or hue, *blur* / *despeckle* / *min. region* clean the result up. Apply is one
-undo step. *Isometric terrain* paints every lattice diamond with the isometric brush, low
-ground first and rare features last, so cliffs and shorelines are generated at every
-boundary; *Flat tiles* stamps flat pairs and leaves the ISOM alone.
+Each lives in its own repository and is versioned separately from the editor, so its own
+README is where its features are documented. One line each, the five defaults first:
 
-**Repair** ([scm-js/plugin-repair](https://github.com/scm-js/plugin-repair)) starts on.
-When a map opens it reads the file the way the game does and, if anything is missing,
-damaged, repeated, the wrong size or otherwise odd — a stripped VCOD or TILE, a section
-declared longer than the file, a header with a negative length and the real sections
-hidden behind it, string offsets pointing nowhere, a blank or absent ISOM — a dialog
-lists each finding with what the game does about it and a tick for the repair; the
-recommended ones are ticked already. Repair rewrites the file (the undo history goes,
-as with Section Explorer and Resize) and *Restore original* puts the bytes back as they
-came in, until the next map opens. Tools ▸ Repair Map… runs the same check by hand, and
-the dialog's footer turns the automatic one off. It is also where Rebuild ISOM from
-Tiles went: a map with no `ISOM`, or one out of step after Rect and Tile edits, is one of
-its findings.
-
-**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is
-Tools ▸ Paint…, Ctrl+Shift+P, or right-click the map — *Paint…*. A panel floats
-over the map (drag it by its title; it blocks nothing). Pick a tool in it and draw: what
-gets laid down is whatever the active layer's palette has picked, so choose a unit and a
-player on the Units layer, a doodad on the Doodads layer, a terrain or a tile on the
-Terrain layer, fog players on the Fog of War layer, and switch layers to change the brush.
-Freehand and Line are drags (Shift snaps a line to 45°); Rectangle and Ellipse drag a box
-(Shift squares or rounds it, Alt draws from the centre); Polygon is one click per corner
-and a click on the first corner to finish; Star drags from the centre, and the drag turns
-it (points and inner radius in the panel, an inner radius of 100% is a regular polygon);
-Spray scatters while you drag; Text stamps the panel's text in a 5 × 7 dot font, one
-object or one tile per dot; Eraser removes the layer's units, sprites or doodads under the
-stroke. *Filled* fills a closed shape in a grid, a staggered grid or at random; *Spacing*
-is the distance between objects (auto = the object's own size); *Jitter* nudges them off
-their spots; *Width* is the brush width in tiles for terrain and fog and the eraser's and
-spray's radius; *Players* keeps the palette's player, cycles 1–8 along the shape, or picks
-one at random each; *Units* can skip the spots the Units palette's placement checks
-refuse. A count follows the pointer while you draw. Esc drops the shape in progress, and
-again (or a right-click) leaves the tool. Terrain is painted as flat tiles like the Rect
-brush, so run Tools ▸ Repair Map… afterwards if you want the isometric brush back there.
-Every stroke is one undo step.
-
-**scmscx.com** ([scm-js/plugin-scm-scx](https://github.com/scm-js/plugin-scm-scx)) is
-on from the start. File ▸ Find on scmscx.com… searches the map archive at
-[scmscx.com](https://scmscx.com) the way its own search page does (scenario names, file
-names, descriptions, unit and force names; sorted by match, upload or modification
-time, or name), filters by tileset, players and size, shows each map's minimap and
-details, and opens the one you pick. Random picks a map among the matches, and a map
-address pasted from the site opens that map. One thing to know: scmscx.com does not
-send the CORS header a browser needs to let a page on another site read its answers, so
-from an editor served anywhere but scmscx.com the search cannot connect today. The
-dialog says so and links to the site, where you can download the map and drop it onto
-the editor; the plugin tries the site first every time, so it works with no change once
-the site allows it. Settings holds an optional forwarder address for anyone who runs one.
-
-**Section Explorer** ([scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer))
-is not installed to start with; install it from Plugins ▸ Browse Plugins…, and then
-Tools ▸ Section Explorer… (Ctrl+Shift+H) opens the
-map file as the game reads it: every section in file order on the left, with badges for
-the ones the editor keeps as raw bytes, has never heard of, holds unsaved changes for, or
-that repeat or have the wrong length; the bytes of the chosen section in the middle, each
-field in its own colour, with the usual hex-editor keys (type hex or text, Tab between
-columns, Insert mode, Delete, Ctrl+Z, Ctrl+C / Ctrl+V as hex, Ctrl+F, Ctrl+G); and on the
-right what the byte under the cursor is — *Triggers › trigger 3 › actions › action 0 ›
-unitId = 0 (Terran Marine)* — with a control to change it (a number, a drop-down of
-names, a tick per flag bit, text), the raw readings in every width, and a tree of the
-whole section that follows the cursor. Records can be inserted and removed, sections
-added, removed, renamed and reordered, and a section or the whole `scenario.chk` exported
-or imported. Nothing reaches the map until Apply, which makes the editor read the file
-again from scratch — every dialog and the map view follow, and the undo history goes, as
-with Resize.
-
-**Walkability** ([scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability))
-is installed by default. View ▸ Walkability (Ctrl+Shift+W, or the eye in the
-Layers panel) reads the ground the way a unit does — the sixteen minitiles under every
-tile, with buildings and resources as walls — and draws what it finds over the map: the
-islands (ground no path joins) and which start locations share one, pockets no start
-location reaches, the areas the map divides into and the chokes between them as rings
-with their width in tiles, seams where a unit can step between ground heights with no
-ramp, and for every pair of start locations the air distance, the ground distance and
-the narrowest point on the widest route. The overlay is a view, not a tool: it stays on
-while you place units and doodads and redraws after every edit. Tools ▸ Walkability…
-opens the settings (what to draw, the unit size, opacity) with the readout of the cell
-under the pointer and the problems; *Details…* lists every start location, pair, island,
-area and choke, each a click from the spot.
-*Unit size* closes the passages a Marine, a Dragoon or a Siege Tank does not fit
-through; the panel follows every edit while it is open, and Copy report puts a text
-summary on the clipboard. It only reads the map.
-
-**Melee Wizard** ([scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard))
-is installed from Plugins ▸ Browse Plugins…. Tools ▸ Melee Wizard… (Ctrl+Shift+M) opens a panel
-for the parts of a ladder-style map that are geometry: pick a symmetry (mirror, 180°,
-90°, both diagonals — 2, 4 or 8 players), press *Start locations* and click where Player
-1 starts, and the others land on its images; press *Add base*, press on the hall spot,
-drag towards the minerals and let go, and the mineral line is laid out on the ring three
-tiles from the hall (the closest the game allows and the distance it mines fastest from),
-wrapping round the hall's corner when you point at one, the geyser just past the end of
-the line, the same base for every player — spots the ground or another unit would
-refuse show in red while you drag and are left out. *Bases at every start location* does
-that for each start location the map has. Presets for main, natural and third; amounts,
-end-patch amounts and mineral types; a blocking patch tool; *Mirror selected units*,
-*Check symmetry* (selects every unit without a counterpart) and a per-player resource
-summary. Every placement is one undo step.
-
-**Trigger Script** ([scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script))
-is installed from Plugins ▸ Browse Plugins…. Triggers ▸ Script Editor… opens a TypeScript file
-kept inside the map, checked as you type against the map's own names and compiled into
-a block of the trigger list on Build: raw `trigger()` calls one to one, and structured
-code — variables, `if`, loops, functions — lowered to a death-counter state machine.
-Simulate runs the result for thirty cycles and lists what happened. The editor (Monaco)
-and the TypeScript compiler are fetched from a CDN the first time the dialog opens, so
-that first open needs a connection; the browser keeps them afterwards. The language is
-in the plugin's README. The AI plugin's *Write Triggers…* uses it, so that needs this
-one on.
-
-**AI** ([scm-js/plugin-ai](https://github.com/scm-js/plugin-ai)) is not in the list;
-install it from Plugins ▸ Browse Plugins…. It puts an AI submenu under Tools and needs a
-server to talk to: [scm-js/ai-server](https://github.com/scm-js/ai-server) is a small
-one you deploy yourself (it holds the Anthropic key, hands out access tokens with daily
-budgets, and knows nothing about maps), or type your own Anthropic key into Tools ▸ AI ▸
-Settings… and the server forwards it without keeping it. *Generate Map…* takes a
-description, a size, a tileset and a player count and lays the map out — terrain painted
-with the isometric brush from a coarse plan, bases with the Melee Wizard's geometry, a
-name and a description — then offers to refine it from a picture of the result or to
-review it. *Redo Area…* does the same for the marked area. *Write Triggers…* answers in
-the Trigger Script plugin's language, compiles it there, fixes what the compiler complains
-about and builds it (so it needs that plugin on); *Explain Triggers…* walks through the
-map's triggers in plain language.
-*Name and Describe…*, *Write Briefing…*, *Review Map…* (the map's picture and statistics
-go up, a critique with places to look at comes back) and *Rewrite Strings…* (translate,
-fix spelling, retone, with a before/after table to tick) round it out, and *Assistant*
-(Ctrl+Shift+A) is a panel where you ask for changes in words: it looks at the map through
-its tools, takes screenshots, and makes one undoable edit at a time. Nothing leaves the
-browser until you press the button, and every dialog shows what a request cost.
+| Plugin | Where | What it does |
+| --- | --- | --- |
+| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) and opens the map you pick. The site sends no CORS header, so the search cannot connect from an editor served anywhere else today; the dialog says so and links to the site. |
+| [Repair](https://github.com/scm-js/plugin-repair) | on open, Tools ▸ Repair Map… | Reads a map the way the game does and lists what is missing, damaged, repeated or the wrong size, each with the repair and what the game does without it. Also where Rebuild ISOM from Tiles lives. |
+| [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them, height seams with no ramp, and the distances between start locations. Reads only. |
+| [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag — painted with the isometric brush, so cliffs and shorelines are generated at every boundary. |
+| [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
+| [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | The parts of a ladder-style map that are geometry: symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from. |
+| [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | Triggers ▸ Script Editor… | A TypeScript file kept inside the map, checked against the map's own names and compiled into a block of the trigger list — including `if`, loops and variables, lowered to a death-counter state machine. |
+| [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section in file order, an annotated hex editor over the bytes, and what the byte under the cursor means. |
+| [AI](https://github.com/scm-js/plugin-ai) | Tools ▸ AI | Generates and reviews maps, writes triggers and briefings, rewrites strings, and an assistant panel that edits the map from a description. Needs a server to talk to, or your own Anthropic key. |
 
 ## Keyboard
 
@@ -787,6 +654,12 @@ rather than at the next reload, the default plugins included. The map you have o
 never kept there and is not touched by any of it.
 
 ## Documentation
+
+All of it is also a site — [docs.scmjs.dev](https://docs.scmjs.dev) — with these documents
+as pages, a search box, and a reference for every call in the plugin API generated from
+the editor's own declarations. It is built from the tag the hosted editor runs, so the
+version in its footer is the one at [editor.scmjs.dev](https://editor.scmjs.dev). These
+files stay the source; the site renders them.
 
 | Document | Covers |
 | --- | --- |

@@ -380,6 +380,73 @@ jobs:
           echo "### Nightly site" >> "$GITHUB_STEP_SUMMARY"
           echo "https://$DOMAIN — scmJS $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
+  # docs.scmjs.dev: the repository's own guides (README.md, docs/*.md) rendered as pages,
+  # and the plugin API reference generated from `plugin-api/index.d.ts` — the same bundled
+  # declarations the `plugin-api` job publishes to npm. `scripts/build-docs.mjs` writes
+  # both; nothing on the site is prose written by a generator, which is what keeps the
+  # four documents `CLAUDE.md` names the only place any of it is maintained.
+  #
+  # Built on the **stable** channel only, and that is the point: the hosted editor, the
+  # installers, the release notes and the documentation are one tag. Reading a page about
+  # a dialog that will not exist for a fortnight is worse than reading one that is a
+  # release behind, and "which version is this describing" then has an answer — the one in
+  # the footer of every page. The exception to keep in mind is @scm-js/plugin-api, which
+  # publishes from main: a plugin author on the newest package can be ahead of the
+  # reference by one release. The API is additive, so what they see is a member missing
+  # from these pages rather than one that behaves differently.
+  #
+  # Deployed the way the nightly site is: one force-pushed orphan commit on the gh-pages
+  # branch of <owner>/docs, whose main branch keeps the repository's own README. DOCS_PAT
+  # is a fine-grained token with Contents: write on that repository and nothing else, and
+  # DOCS_DOMAIN the custom domain its CNAME carries. Without either this reports and
+  # stops — a fork should not fail a release over a site it does not host.
+  docs:
+    name: Docs site
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      # `build:docs` bundles the declarations first, so the reference is this tag's
+      # contract rather than whatever happens to be on disk.
+      - name: Build
+        env:
+          DOMAIN: ${{ vars.DOCS_DOMAIN }}
+        run: |
+          set -euo pipefail
+          npm run build:docs -- --out docs-site ${DOMAIN:+--domain "$DOMAIN"}
+      - name: Push to the docs repository
+        env:
+          DOCS_PAT: ${{ secrets.DOCS_PAT }}
+          DOMAIN: ${{ vars.DOCS_DOMAIN }}
+          VERSION: ${{ needs.channel.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCS_PAT:-}" ] || [ -z "${DOMAIN:-}" ]; then
+            echo "::notice::DOCS_PAT or DOCS_DOMAIN is not set; the documentation site was not deployed."
+            exit 0
+          fi
+          cd docs-site
+          # As the nightly site: CNAME in every push or a branch-served Pages site loses
+          # its domain, and .nojekyll so nothing is run over the output.
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "scmJS $VERSION docs (${GITHUB_SHA:0:7})"
+          git push -qf "https://x-access-token:$DOCS_PAT@github.com/${GITHUB_REPOSITORY_OWNER}/docs" gh-pages
+          echo "### Documentation" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://$DOMAIN — scmJS $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
   desktop:
     name: Desktop (${{ matrix.os }})
     needs: channel

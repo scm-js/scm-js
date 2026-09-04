@@ -596,6 +596,14 @@ want to profile renders. Production builds never had the problem.
 
 ## Where things are documented
 
+All of it is published as [docs.scmjs.dev](https://docs.scmjs.dev), built by
+`npm run build:docs` (`scripts/build-docs.mjs`) and deployed by build.yml's `docs` job on
+a tag, like the hosted editor. Two halves: these documents split at their `##` headings
+into pages, and the plugin API reference generated from the bundled `plugin-api/index.d.ts`
+— so a doc comment in `src/plugins/api.ts` is a paragraph on the site, and a member with
+none shows as a bare signature. Nothing on the site is prose a generator wrote, and these
+files stay where all of it is maintained.
+
 | Topic | File |
 | --- | --- |
 | What the editor does, for map makers | [../README.md](../README.md) |

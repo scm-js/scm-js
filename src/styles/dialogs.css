@@ -1020,28 +1020,6 @@
 .plugin-warning strong {
   color: var(--warn);
 }
-/* The counterpart to the warning: shown only when the registry's mark describes the very
-   commit being added, so it can never sit next to code nobody read. */
-.plugin-reviewed {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 9px 11px;
-  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-  background: color-mix(in srgb, var(--ok) 9%, var(--bg-2));
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-.plugin-reviewed > svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--ok);
-}
-.plugin-reviewed strong {
-  color: var(--ok);
-}
 /* The three choices being made on the Add screen; each tick carries its own explanation,
    because "pin to this version" and "keep a copy" mean nothing without one. */
 .plugin-options {

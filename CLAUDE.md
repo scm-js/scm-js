@@ -361,8 +361,9 @@ menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
 into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
-Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until ticked) are default
-plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
+Terrain from Image, Repair, Walkability and Paint are default plugins, all on
+(`src/plugins/defaults.ts`); Melee Wizard, Trigger Script and Section Explorer are installed from
+Browse Plugins.
 `zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
 (the viewport's `onDown` refuses a locked layer's gestures), `cursorPixelAtom` the status bar's Px.
 `gridSizeAtom`, `locationSnapAtom`, `placementOptionsAtom` (`scmjs.placement`),
@@ -536,8 +537,8 @@ runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
 `github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain`, `github:scm-js/plugin-repair`
-and `github:scm-js/plugin-walkability`, all on; Melee Wizard, Trigger Script, Paint and Section
-Explorer are published in the registry but are not defaults — plus any built-in, each a
+`github:scm-js/plugin-walkability` and `github:scm-js/plugin-paint`, all on; Melee Wizard,
+Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -771,7 +772,7 @@ and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers t
 list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
 real-tileset suite via `primeTileset`).
 
-**Paint** (`github.com/scm-js/plugin-paint`, not a default — installed from Browse Plugins) is the worked example for
+**Paint** (`github.com/scm-js/plugin-paint`, a default that starts on) is the worked example for
 `ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and
 the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.test.ts`. Its brush
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's

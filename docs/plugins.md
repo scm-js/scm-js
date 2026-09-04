@@ -7,10 +7,10 @@ is the plugin author's guide and the reference for the host side. Two plugins ar
 worked examples for everything below, each in its own repository:
 **Terrain from Image** ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain),
 installed by default), a dialog, a pick on the map and a terrain transaction; and **Paint**
-([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed from Browse
-Plugins), a floating panel, a tool that owns the pointer and draws its own preview, and
-transactions on every layer; **Walkability** and **Melee Wizard** (both listed by default
-but off) are the read-only analysis drawn over the map and the placement wizard, described
+([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), also a default), a floating
+panel, a tool that owns the pointer and draws its own preview, and transactions on every
+layer; **Walkability** (a default) and **Melee Wizard** (installed from Browse Plugins) are
+the read-only analysis drawn over the map and the placement wizard, described
 at the end. All are
 fetched over the network and transpiled in the browser like anybody else's, which is the
 point: the plugins that ship with the editor are the proof the loading path works, not
@@ -98,17 +98,11 @@ branch) — hourly, and within about a minute of a plugin repository saying it c
 `DEFAULT_REGISTRIES` in `defaults.ts` names it and the user can add more under **Sources**
 (`userRegistriesAtom`).
 
-Listing is therefore automatic, and says nothing about a plugin having been read. The one
-field that carries a judgement is `RegistryEntry.reviewed`: the release someone at that
-registry read the code of, which the *registry* drops again once the plugin moves past it,
-so the editor never has to date a mark — an entry either carries one describing its
-`commit` or carries none. The Browse row shows it as a `reviewed` badge beside `default`,
-and Install carries the mark *and the commit it describes* into `ConfirmPluginDialog`'s
-payload, which repeats it only when the commit being added is that one: pinning names the
-commit, so the two can be compared, while following a branch means what loads is not
-decided on that screen at all and the claim drops to a line saying so. It is not a safety
-claim either way: there is no sandbox, and an installed plugin runs with the editor's own
-privileges.
+Listing is therefore automatic, and carries no judgement at all: a registry decides what
+is *offered*, never what is trusted. There is no review mark, and installing from a Browse
+row goes through the same confirmation as an address pasted by hand — which says the one
+thing that is always true, that there is no sandbox and an installed plugin runs with the
+editor's own privileges.
 
 `plugins/registry.ts` is the whole host side and is pure apart from the fetching:
 
@@ -856,8 +850,8 @@ rebuilds it, if you want the isometric brush back). One undo entry either way.
 
 ## Paint
 
-[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), installed from Plugins ▸
-Browse Plugins… — Tools ▸ Paint…, `Ctrl+Shift+P`, or *Paint…* on
+[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), a default — Tools ▸ Paint…,
+`Ctrl+Shift+P`, or *Paint…* on
 the map's right-click menu then opens a panel that floats
 over the map (`api.ui.panel`). Pick a tool in it — freehand, line, rectangle, ellipse,
 polygon, star, spray, text, eraser — and draw on the map; the *brush* is whatever the

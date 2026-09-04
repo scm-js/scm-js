@@ -147,7 +147,7 @@ The options confirmed in the dialog are what Ctrl+S reuses for that map from the
 | Locations: create, resize, snap, rename, elevation flags | Yes |
 | Fog of war, per player | Yes |
 | Cut, copy and paste, including between maps | Yes |
-| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
+| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (on by default): Tools ▸ Paint…. Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
 | Auto-place Start Locations | Yes. Tools ▸ Auto-place Start Locations puts one per player on a ring or in the corners, each moved to the nearest ground the placement checks accept, as one undo step. The Melee Wizard plugin (install it from Plugins ▸ Browse Plugins…, then Tools ▸ Melee Wizard…) does the elaborate version: click where Player 1 starts and the others land on its images under the symmetry you chose, with bases. |
 | Lock a layer | Yes, in the Layers panel: a locked layer's tools stop changing the map. |
@@ -554,8 +554,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. scmscx.com, Terrain from Image, Repair
-and Walkability are the defaults, and all four start on. Melee Wizard, Trigger Script, Paint
+working connection on the first load of a session. scmscx.com, Terrain from Image, Repair,
+Walkability and Paint are the defaults, and all five start on. Melee Wizard, Trigger Script
 and Section Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like
 any other.
 
@@ -592,8 +592,7 @@ the dialog's footer turns the automatic one off. It is also where Rebuild ISOM f
 Tiles went: a map with no `ISOM`, or one out of step after Rect and Tile edits, is one of
 its findings.
 
-**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is not
-installed to start with; find it in Plugins ▸ Browse Plugins… and install it, then
+**Paint** ([scm-js/plugin-paint](https://github.com/scm-js/plugin-paint)) is
 Tools ▸ Paint…, Ctrl+Shift+P, or right-click the map — *Paint…*. A panel floats
 over the map (drag it by its title; it blocks nothing). Pick a tool in it and draw: what
 gets laid down is whatever the active layer's palette has picked, so choose a unit and a

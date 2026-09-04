@@ -860,12 +860,13 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Terrain from Image, Repair and Walkability on, as remote defaults", () => {
+  it("ships scmscx.com, Terrain from Image, Repair, Walkability and Paint on, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-scm-scx", enabled: true },
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-repair", enabled: true },
       { spec: "github:scm-js/plugin-walkability", enabled: true },
+      { spec: "github:scm-js/plugin-paint", enabled: true },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
@@ -877,11 +878,11 @@ describe("plugin lifecycle", () => {
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
     // A fresh editor runs Walkability with the rest.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-walkability", enabled: true });
-    // Melee Wizard, Trigger Script, Paint and Section Explorer are not defaults: they are found and
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: true });
+    // Melee Wizard, Trigger Script and Section Explorer are not defaults: they are found and
     // installed through Browse Plugins.
     expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-melee-wizard");
     expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-trigger-script");
-    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-paint");
     expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-section-explorer");
     // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
     expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-scx", enabled: true });
@@ -1916,23 +1917,19 @@ describe("plugin registries", () => {
     expect(() => parseRegistry({ plugins: "no" }, REGISTRY_URL)).toThrow(RegistryError);
   });
 
-  it("carries the reviewed mark through, and only as a string", () => {
+  it("drops a field the index carries that is not a string", () => {
     const registry = parseRegistry(
       {
         plugins: [
-          { spec: "github:o/read", name: "Read", version: "1.0.0", reviewed: "1.0.0" },
-          // A registry drops a lapsed mark itself, so the editor never has to date one;
-          // anything that is not a string is simply not a mark.
-          { spec: "github:o/unread", name: "Unread", version: "2.0.0" },
-          { spec: "github:o/odd", name: "Odd", reviewed: true },
-          { spec: "github:o/blank", name: "Blank", reviewed: "  " },
+          { spec: "github:o/one", name: "One", version: "1.0.0", author: "A" },
+          { spec: "github:o/odd", name: "Odd", author: true },
+          { spec: "github:o/blank", name: "Blank", author: "  " },
         ],
       },
       REGISTRY_URL,
     );
     expect(registry.plugins).toEqual([
-      { spec: "github:o/read", name: "Read", version: "1.0.0", reviewed: "1.0.0" },
-      { spec: "github:o/unread", name: "Unread", version: "2.0.0" },
+      { spec: "github:o/one", name: "One", version: "1.0.0", author: "A" },
       { spec: "github:o/odd", name: "Odd" },
       { spec: "github:o/blank", name: "Blank" },
     ]);

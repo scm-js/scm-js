@@ -158,12 +158,34 @@ describe("scenario", () => {
     expect(scenarioDescription(again)).toBe("A description.");
   });
 
-  it("appends a dirty section that the file never had", () => {
+  it("writes a dirty section the file never had, where StarEdit puts it", () => {
     const scn = parseScenario(sampleChk());
     scn.locations = [{ left: 1, top: 2, right: 3, bottom: 4, nameIndex: 1, elevationFlags: 0 }];
     markDirty(scn, "MRGN");
-    const again = parseScenario(serializeScenario(scn));
+    const out = serializeScenario(scn);
+    const again = parseScenario(out);
     expect(again.locations[0]).toEqual({ left: 1, top: 2, right: 3, bottom: 4, nameIndex: 1, elevationFlags: 0 });
+    // Between its neighbours in APPEND_ORDER, not after everything: a file that gains a
+    // section back is still a file in the order StarEdit writes.
+    const names = parseChk(out).sections.map((s) => s.name);
+    expect(names).toEqual(["TYPE", "VER ", "ERA ", "DIM ", "OWNR", "SIDE", "MTXM", "STR ", "MRGN", "SPRP", "FORC"]);
+  });
+
+  it("puts a new section before the sections it cannot place, and moves nothing already there", () => {
+    // A protected file's shape: a name the editor knows nothing about, at the end.
+    const scn = parseScenario(concat(sampleChk(), section("JUNK", new Uint8Array([1, 2, 3]))));
+    markDirty(scn, "ISOM");
+    scn.isom = new Uint16Array(3 * 5 * 4);
+    const names = parseChk(serializeScenario(scn)).sections.map((s) => s.name);
+    expect(names).toEqual(["TYPE", "VER ", "ERA ", "DIM ", "OWNR", "SIDE", "MTXM", "ISOM", "STR ", "SPRP", "FORC", "JUNK"]);
+  });
+
+  it("puts a section that comes before everything at the front", () => {
+    // The same file with its first section, TYPE, cut off the front.
+    const scn = parseScenario(sampleChk().slice(parseChk(sampleChk()).sections[0].data.length + 8));
+    expect(scn.chk.sections.map((s) => s.name)).not.toContain("TYPE");
+    markDirty(scn, "TYPE");
+    expect(parseChk(serializeScenario(scn)).sections[0].name).toBe("TYPE");
   });
 });
 

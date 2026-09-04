@@ -313,6 +313,72 @@ in Tools ▸ Plugins ▸ Manage Plugins…, and press **Reload** after each chan
 The complete typings are in `src/plugins/api.ts`; this is the tour. Every method that
 reads the map returns `null` / `[]` / `false` when no map is open rather than throwing.
 
+### Promises, and the one thing that is synchronous
+
+**Everything asynchronous is a promise.** There is no completion callback and no
+`(err, result)` anywhere in the API: `await` it and read the answer, or check it for
+`null`. That covers opening, saving, exporting and rendering a map
+(`document.open` / `create` / `save` / `saveAs` / `close` / `export` / `renderImage` /
+`changeTileset`), loading game data (`tileset.load`, `data.load`, `graphics.load`,
+`terrain.checkIsom`), and everything that waits for the user (`ui.pickArea`, `pickTile`,
+`pickFiles`, `saveFile`, `loadImage`, `readClipboardImage`, `confirm`, `alert`, `prompt`,
+`ask`). A user who dismisses something resolves the promise with `null` or `false`
+rather than rejecting, so the ordinary path needs no `try`:
+
+```ts
+const rect = await api.ui.pickArea({ prompt: "Pick an area to flatten" });
+if (!rect) return;                       // Esc, a right-click, or no map
+await api.tileset.load();                // the graphics the fill needs
+api.document.edit("Flatten", tx => tx.stampTerrain(rect, terrainId));
+```
+
+`activate` itself may be `async` — the host awaits it before the plugin counts as
+loaded — and so may a dialog button's `run`, which keeps the dialog open until it
+settles and closes it on anything but `false`.
+
+The callbacks that remain are the ones that are genuinely callbacks rather than a
+deferred answer: event listeners (`api.on(…)`), the DOM handlers of `ui.widgets`, a
+dialog's or panel's `mount`, and the pointer and `draw` hooks of `ui.mapTool` and
+`ui.overlay`. Every one of them returns a `Disposable` or a cleanup function, so there
+is no `off()` to pair up and nothing to unregister at deactivation.
+
+The **one** exception is a transaction's builder. `document.edit(label, build)` and
+`document.update(label, build)` take a **synchronous** `build`: its operations apply as
+they are called and the commit closes the transaction the moment it returns. An `async`
+builder would therefore commit whatever ran before its first `await` and let the rest
+mutate the map outside that entry, where undo cannot reach it. TypeScript refuses one,
+and the host also catches it at runtime — the result's `notes` and the console say so —
+for a plugin written in plain JavaScript.
+
+```ts
+// Wrong: commits at the await, and the placement lands outside the undo entry.
+api.document.edit("Place", async tx => {
+  await api.data.load();
+  tx.placeUnit(0, 0, 128, 128);
+});
+
+// Right: await first, then write in one go.
+await api.data.load();
+api.document.edit("Place", tx => tx.placeUnit(0, 0, 128, 128));
+```
+
+Long work of your own gets a progress panel that does not block the editor;
+`handle.cancelled()` is the poll and `handle.signal` the same answer as an
+`AbortSignal`, so anything that takes one stops with the panel:
+
+```ts
+const job = api.ui.progress("Converting", { cancellable: true });
+try {
+  for (let i = 0; i < steps; i++) {
+    if (job.cancelled()) break;
+    job.report(i / steps, `Row ${i}`);
+    const data = await fetch(url, { signal: job.signal });
+  }
+} finally {
+  job.done();
+}
+```
+
 ### The three kinds of write
 
 Everything a plugin can change about the open map goes through one of three, and they
@@ -326,7 +392,8 @@ differ in what they cost:
 
 They are the editor's own three: a stroke, a dialog's OK, and a raw file edit. Both
 transactions apply their operations **as they are called**, so later ones see earlier
-ones' results, and both commit once at the end.
+ones' results, and both commit once at the end — which is why the builder is
+synchronous (above).
 
 ### `api.document`
 
@@ -674,6 +741,39 @@ per-map ones read the open scenario and answer a placeholder without one: `strin
 `switch(index)`, `player(slot)`, and `tile(id)` — the terrain a MTXM id belongs to, null
 without the tileset graphics.
 
+### `api.text`
+
+StarCraft's `<XX>` text control codes — bytes 0x01–0x1F in a string, which set the colour,
+move the text or hide it. This is the editor's own table, the one the String Editor's
+buttons and preview are drawn from, so a plugin that shows or rewrites map text carries no
+copy of its own. Worth using rather than reimplementing: the numbering is easy to get
+wrong, and the editor's own table was wrong from 0x12 up until it was checked against the
+classic player palette.
+
+| | |
+| --- | --- |
+| `codes()` / `code(byte)` | Every byte the game gives a meaning, in order, or one of them (null for a byte it ignores). A `TextCode` is `{ byte, code, label, effect, rgb, player? }` — `effect` is `"color"`, `"mimic"`, `"invisible"`, `"align"`, `"clip"`, `"nothing"` or `"space"`, and `rgb` is `#rrggbb` for the colours and null for the rest. The twelve that are a player colour carry `player`. |
+| `insertable()` | The codes worth offering as buttons: everything but tab, the newlines and the byte that does nothing. |
+| `defaultColor()` | What the game starts a string in. |
+| `escape(byte)` | `<0E>`, the way every StarCraft editor writes a control byte. |
+| `runs(text, options?)` | The string split into lines of coloured runs, the way the game draws it: `TextLine { runs, align }`, `TextRun { text, color, invisible, clipped }`. `invisible` marks what an `<0B>` / `<14>` hides rather than dropping it, `clipped` what an `<0C>` cut off, and `align` reads `<12>` / `<13>`. |
+| `plain(text)` | The text with every control byte removed — what the string actually says. |
+| `bleedingLines(text)` / `fixBleeding(text)` | See below. |
+
+**The Remastered newline change.** StarCraft 1.16.1 reset the text colour at every line
+break; Remastered carries it onto the next line of the same string. So a multi-line string
+written before the remaster — most map descriptions, objectives and briefing text — can be
+drawn today in colours its author never chose. `runs` models Remastered's rule; pass
+`{ resetPerLine: true }` to see the old rendering. `bleedingLines(text)` returns the lines
+that differ (`{ line, carried }`, `carried` being the whole `TextCode` inherited), and
+`fixBleeding(text)` writes the default colour at the head of each of them so both games
+draw the string alike — idempotent, and it never changes what the string says. The Repair
+plugin's string finding is exactly these two functions over `api.query.strings()`.
+
+Text *stacking* — the 1.16.1 trick of drawing lines on top of each other — is a different
+thing, and there is nothing here for it: Remastered does not render the overlap at all, and
+the intended picture *was* the overlap, so there is nothing to restore it to.
+
 ### `api.ui`
 
 | | |
@@ -691,7 +791,7 @@ without the tileset graphics.
 | `loadImage(source)` | Decode a `File` / `Blob`, a `data:` URL or an `http(s)` URL into an `ImageBitmap`. A remote URL is fetched with CORS and, failing that, loaded through an `<img crossOrigin>`; a site that allows neither rejects with a message that says to save the picture and choose the file. |
 | `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use `onPaste` instead — it needs no permission. |
 | `confirm(message, opts?)` / `alert(message, opts?)` / `prompt(message, opts?)` | A yes/no, a note, and a line of text, as dialogs in the editor's chrome rather than the browser's blocking boxes. `confirm` resolves `false` and `prompt` `null` on Cancel, Escape or the ×. Options: `title`, `confirmLabel`, `cancelLabel`, `danger` (a destructive primary button), and for `prompt` also `value`, `placeholder`, `multiline`. |
-| `progress(label, { title?, cancellable? })` | A progress panel over the map for long work — it blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
+| `progress(label, { title?, cancellable? })` | A progress panel over the map for long work — it blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `signal` (the same answer as an `AbortSignal`, for `fetch` and anything else that takes one), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
 | `el(tag, props?, ...children)` | The DOM helper the widgets are built from: `style` takes an object, `on*` keys take listeners, everything else is a property or an attribute. |
 | `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, onClick })`, `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`. Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
 | `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …), fire and forget. |

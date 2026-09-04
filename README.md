@@ -446,7 +446,18 @@ own.
 
 The String Editor lists every string with where it is used, and edits keep their
 index, so triggers and locations keep pointing where they did. Control bytes show and
-type as `<XX>`, and a row of buttons inserts the game's colour codes.
+type as `<XX>`, a row of buttons inserts the game's colour codes — each drawn in the
+colour it produces — and a preview under the box shows the string the way the game
+draws it: colours applied, `<12>` / `<13>` alignment honoured, and the text an `<0B>`
+hides struck through rather than dropped. The same bar and preview sit under Map
+Properties' name and description.
+
+The preview follows **Remastered's** rule, where a colour set on one line carries onto
+the next. StarCraft 1.16.1 reset the colour at every line break, so a string written
+before the remaster can draw in colours its author never chose; the *1.16.1 colours*
+tick shows the old rendering beside it, and the Repair plugin offers to write the reset
+the old game used to supply. (Text *stacking* — overlapping lines drawn on top of each
+other — is a separate 1.16.1 trick, and Remastered does not render it at all.)
 
 The Sound Editor joins the map's sound table with the `.wav` files in the archive:
 import, play, remove, and adopt files the archive carries but the table does not list.

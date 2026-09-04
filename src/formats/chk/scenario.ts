@@ -440,6 +440,10 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
 /**
  * Order used when a dirty section has no existing occurrence to replace. Roughly
  * StarEdit's own write order, which keeps diffs against other editors readable.
+ * `insertionPoint` places a new section *among* the ones already there by this ranking
+ * rather than after all of them: a map that gains its ISOM back (the Repair plugin's
+ * rebuild) would otherwise be left with the lattice past FORC, which is a file no editor
+ * writes — and which the plugin then reports as out of order all over again.
  */
 const APPEND_ORDER = [
   "TYPE", "VER ", "IVER", "IVE2", "VCOD", "IOWN", "OWNR", "ERA ", "DIM ", "SIDE",
@@ -459,6 +463,23 @@ export const MODELLED_SECTIONS: ReadonlySet<string> = new Set([
   "MTXM", "TILE", "ISOM", "MASK", "UNIT", "THG2", "DD2 ", "MRGN", "TRIG", "MBRF", "SWNM",
 ]);
 
+const appendRank = (name: string) => { const i = APPEND_ORDER.indexOf(name); return i < 0 ? APPEND_ORDER.length : i; };
+
+/**
+ * Where a section with no occurrence of its own belongs: just past the last section that
+ * comes before it in `APPEND_ORDER`, or at the front when nothing does. On a file already
+ * in that order the result is still in it; on one that is not — a protected map, whose
+ * unknown sections all rank last — the new section lands next to its neighbours rather
+ * than after whatever the file happens to end with, and nothing already there moves.
+ */
+function insertionPoint(sections: readonly ChkSection[], name: string): number {
+  const rank = appendRank(name);
+  for (let i = sections.length - 1; i >= 0; i--) {
+    if (appendRank(sections[i].name) <= rank) return i + 1;
+  }
+  return 0;
+}
+
 export function serializeScenario(scn: Scenario): Uint8Array {
   if (scn.dirty.size === 0) return serializeChk(scn.chk);
 
@@ -476,14 +497,10 @@ export function serializeScenario(scn: Scenario): Uint8Array {
   });
 
   const missing = [...scn.dirty].filter((n) => !lastIndex.has(n));
-  missing.sort((a, b) => {
-    const ia = APPEND_ORDER.indexOf(a);
-    const ib = APPEND_ORDER.indexOf(b);
-    return (ia < 0 ? APPEND_ORDER.length : ia) - (ib < 0 ? APPEND_ORDER.length : ib);
-  });
+  missing.sort((a, b) => appendRank(a) - appendRank(b));
   for (const name of missing) {
     const data = encodeSection(scn, name);
-    if (data) out.push({ name, offset: -1, declaredSize: data.length, data });
+    if (data) out.splice(insertionPoint(out, name), 0, { name, offset: -1, declaredSize: data.length, data });
   }
 
   return serializeChk({ sections: out, trailing: scn.chk.trailing });

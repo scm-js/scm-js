@@ -621,3 +621,68 @@ input[type="range"] {
     opacity: 1;
   }
 }
+
+/* ── StarCraft text colour codes ─────────────────────────── */
+
+.code-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--bg-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.code-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.code-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* The layout and visibility codes have no colour, so they lean on the label alone. */
+.code-chip.is-effect {
+  font-style: italic;
+}
+.code-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  flex: none;
+}
+
+/* The game draws text on its own dark ground, so the preview supplies one rather than
+   inheriting the dialog's — the colours only read correctly against it. */
+.string-preview {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0b0b12;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+}
+.string-preview-line {
+  min-height: 1.45em;
+}
+.string-preview .is-hidden {
+  opacity: 0.35;
+  text-decoration: line-through;
+}

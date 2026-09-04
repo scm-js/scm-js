@@ -54,6 +54,7 @@ import {
 } from "../editor/triggers";
 import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
 import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
+import { bleedingLines, DEFAULT_TEXT_COLOR, escapeCode, fixBleeding, INSERTABLE_CODES, plainText, runsOf, TEXT_CODES, textCode } from "../editor/textColors";
 import {
   changeMapVersion, forceViews, internString, mapVersionView, patchForce, patchPlayer, patchTech, patchUnitType, patchUpgrade, playerSlotViews, techView, unitTypeView, upgradeView,
 } from "../editor/settings";
@@ -152,12 +153,26 @@ export class Contributions {
 const EMPTY_RESULT: EditResult = { changed: false, tiles: 0, isom: 0, units: 0, sprites: 0, doodads: 0, locations: 0, fog: 0, notes: [] };
 
 /**
+ * A builder that hands back a promise is an `async` one, and a transaction cannot span
+ * an await: it commits the moment the builder returns, so everything after that first
+ * await mutates the scenario outside the entry and undo cannot take it back. TypeScript
+ * refuses one (`Sync` in `api.ts`); a plugin written in plain JavaScript finds out here,
+ * in its result's notes and in the console, rather than through an undo that half works.
+ */
+function checkSyncBuilder(call: string, returned: unknown, notes: string[]): void {
+  if (typeof (returned as PromiseLike<unknown> | null | undefined)?.then !== "function") return;
+  const text = `${call}'s builder is async — a transaction commits when the builder returns, so anything after its first await is outside the undo entry. Await before the call, not inside it.`;
+  notes.push(text);
+  console.error(`[scmJS] ${text}`);
+}
+
+/**
  * Run `build` against a transaction over the open scenario and commit what it did as
  * one undo entry. Operations apply as they are called and accumulate change lists in
  * `applyEntry` order; the terrain lists go through `Stroke` so a cell written twice
  * records one change from its original tile to its final one.
  */
-export function runTransaction(store: Store, label: string, build: (tx: EditTransaction) => void): EditResult {
+export function runTransaction(store: Store, label: string, build: (tx: EditTransaction) => unknown): EditResult {
   const scn = store.get(scenarioAtom);
   if (!scn) return { ...EMPTY_RESULT, notes: ["no map is open"] };
   const loaded = peekTileset(store.get(tilesetFileNameAtom));
@@ -435,7 +450,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     note: (text) => { notes.push(text); },
   };
 
-  build(tx);
+  checkSyncBuilder("document.edit", build(tx), notes);
 
   const entry: HistoryEntry = { label, changes: tiles.finish() };
   const isomChanges = isom.finish();
@@ -669,7 +684,7 @@ const named = (labels: readonly string[]): NamedValue[] => labels.map((label, va
  * the ordering hazards of a working-copy model (switch names interning while a copy of
  * the string table is held) do not arise here.
  */
-export function runUpdate(store: Store, label: string, build: (tx: UpdateTransaction) => void): UpdateResult {
+export function runUpdate(store: Store, label: string, build: (tx: UpdateTransaction) => unknown): UpdateResult {
   const scn = store.get(scenarioAtom);
   if (!scn) return { changed: false, sections: [], notes: ["no map is open"] };
   const sections = new Set<string>();
@@ -848,7 +863,7 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     note: (text) => { notes.push(text); },
   };
 
-  build(tx);
+  checkSyncBuilder("document.update", build(tx), notes);
 
   const touched = [...sections];
   if (touched.length === 0) return { changed: false, sections: [], notes };
@@ -1399,6 +1414,20 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       switch: (index) => { const scn = scenario(); return (scn && readSwitchNames(scn)[index]) || `Switch ${index + 1}`; },
       player: (slot) => `Player ${slot + 1}`,
       tile: (id) => { const l = loaded(); return l ? tileInfo(l.tileset, names(), id).label : null; },
+    },
+
+    // Pure and map-independent: the whole of it is `editor/textColors.ts`, handed over so
+    // a plugin that shows or rewrites map text does not carry its own copy of the table.
+    text: {
+      codes: () => [...TEXT_CODES],
+      code: (byte) => textCode(byte) ?? null,
+      insertable: () => [...INSERTABLE_CODES],
+      defaultColor: () => DEFAULT_TEXT_COLOR,
+      runs: (text, options) => runsOf(text, options),
+      plain: plainText,
+      escape: escapeCode,
+      bleedingLines,
+      fixBleeding,
     },
 
     terrain: {

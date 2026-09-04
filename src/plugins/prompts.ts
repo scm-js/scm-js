@@ -97,6 +97,9 @@ export function promptDialog(open: OpenDialog, text: string, options: PromptOpti
 export function progressPanel(open: OpenPanel, label: string, options: ProgressOptions = {}): ProgressHandle {
   let cancelled = false;
   let closed = false;
+  /** The same cancellation as a signal, so `fetch` and friends can be handed it. */
+  const aborter = new AbortController();
+  const cancel = () => { cancelled = true; aborter.abort(); };
   /** `done()` closes the panel itself: that must not read as the user cancelling. */
   let finishing = false;
   let fill: HTMLElement | null = null;
@@ -121,12 +124,12 @@ export function progressPanel(open: OpenPanel, label: string, options: ProgressO
       const head = el("div", { className: "row between" }, el("span", {}, label), percent);
       const rows: (HTMLElement | false)[] = [head, bar, line];
       if (options.cancellable) {
-        rows.push(el("div", { className: "row end" }, w.button("Cancel", { onClick: () => { cancelled = true; } })));
+        rows.push(el("div", { className: "row end" }, w.button("Cancel", { onClick: cancel })));
       }
       body.append(el("div", { className: "col", style: { gap: "8px" } }, ...rows));
       return () => { closed = true; };
     },
-    onClose: () => { if (!finishing) cancelled = true; closed = true; },
+    onClose: () => { if (!finishing) cancel(); closed = true; },
   });
 
   return {
@@ -141,6 +144,7 @@ export function progressPanel(open: OpenPanel, label: string, options: ProgressO
       if (text !== undefined && line) line.textContent = text;
     },
     cancelled: () => cancelled,
+    signal: aborter.signal,
     done: () => { finishing = true; if (!closed) panel.close(); closed = true; },
     isOpen: () => !closed && panel.isOpen(),
   };

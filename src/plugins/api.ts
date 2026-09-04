@@ -22,6 +22,7 @@ import type { SpriteKind } from "../editor/sprites";
 import type { UnitGroup } from "../data/units";
 import type { SpriteGroup } from "../data/sprites";
 import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../editor/view";
+import type { Align, BleedingLine, CodeEffect, RunOptions, TextCode, TextLine, TextRun } from "../editor/textColors";
 import type { DialogId } from "../components/dialogs/ids";
 import type { MapImageOptions } from "../services/mapImage";
 import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
@@ -76,6 +77,28 @@ export const PLUGIN_API_VERSION = 1;
 export interface Disposable {
   dispose(): void;
 }
+
+/**
+ * A transaction builder's return type: whatever it likes, so long as it is not a promise.
+ *
+ * Everything asynchronous in this API is a promise — `await` it. The two transaction
+ * builders (`document.edit` and `document.update`) are the exception, and deliberately
+ * so: their operations apply as they are called and one commit closes the transaction
+ * when the builder returns, so an `async` builder would commit the part of its work that
+ * ran before the first `await` and leave the rest to land outside the entry, breaking
+ * undo without an error. Do the awaiting *before* the call:
+ *
+ * ```ts
+ * await api.tileset.load();                       // the async part, first
+ * api.document.edit("Fill", tx => tx.stampTerrain(rect, id));  // then the write
+ * ```
+ *
+ * TypeScript refuses an `async` builder because of this type; `runTransaction` and
+ * `runUpdate` also catch one at runtime, for a plugin written in plain JavaScript.
+ */
+export type Sync<T> = T extends PromiseLike<unknown>
+  ? "a transaction builder must be synchronous: await before document.edit() / update(), not inside it"
+  : T;
 
 /* ── Manifest and module ────────────────────────────────── */
 
@@ -145,6 +168,8 @@ export interface PluginApi {
   readonly exchange: ExchangeApi;
   readonly palette: PaletteApi;
   readonly names: NamesApi;
+  /** StarCraft's `<XX>` text control codes: what they mean, and what a string looks like drawn. */
+  readonly text: TextApi;
   readonly query: QueryApi;
   readonly data: DataApi;
   readonly graphics: GraphicsApi;
@@ -277,16 +302,20 @@ export interface DocumentApi {
    * Run `build` against a transaction and record what it did as one undo entry.
    * Operations apply as they are called, so later ones see earlier ones' results.
    * Returns an all-zero result with `changed: false` when no map is open.
+   *
+   * `build` is synchronous — see `Sync`. Await what you need (graphics, a pick, a
+   * fetch) before the call, then write in one go.
    */
-  edit(label: string, build: (tx: EditTransaction) => void): EditResult;
+  edit<R>(label: string, build: (tx: EditTransaction) => Sync<R>): EditResult;
   /**
    * The second kind of write: the tables and settings that live outside the undo model
    * — triggers, the string table, switch names, the scenario's own properties — as one
    * transaction, the way a settings dialog's OK applies its whole form at once.
    * Operations apply as they are called; the commit marks the map modified and bumps
    * what the chrome reads. There is no undo entry: keep your own if you need one.
+   * `build` is synchronous, as `edit`'s is.
    */
-  update(label: string, build: (tx: UpdateTransaction) => void): UpdateResult;
+  update<R>(label: string, build: (tx: UpdateTransaction) => Sync<R>): UpdateResult;
   undo(): string | null;
   redo(): string | null;
   /** The undo and redo stacks' tops — the labels the Edit menu shows — and their depths, without moving anything. */
@@ -1347,6 +1376,52 @@ export interface NamesApi {
   tile(id: number): string | null;
 }
 
+export type { Align, BleedingLine, CodeEffect, RunOptions, TextCode, TextLine, TextRun };
+
+/**
+ * Bytes 0x01–0x1F in a string are colour and layout codes. This is the editor's own table
+ * of what each one does — the same one the String Editor's buttons and preview are drawn
+ * from — plus the reading of a string that turns those bytes into what the game shows.
+ *
+ * A plugin that displays or rewrites map text should use this rather than carrying a copy:
+ * the numbering is easy to get wrong (the editor's own table was, from 0x12 up, until it
+ * was checked against the classic player palette).
+ *
+ * ## Remastered
+ *
+ * `runs` models Remastered's rule, where a colour set on one line carries onto the next.
+ * StarCraft 1.16.1 reset the colour at every line break, so a string written before the
+ * remaster can draw in colours its author never chose — `bleedingLines` finds exactly
+ * those lines and `fixBleeding` writes the reset the old game supplied. Pass
+ * `resetPerLine` to `runs` to see the old rendering.
+ */
+export interface TextApi {
+  /** Every byte the game gives a meaning, in order; `rgb` is set for the colours only. */
+  codes(): TextCode[];
+  /** One byte's meaning, or null for a byte the game ignores. */
+  code(byte: number): TextCode | null;
+  /** The codes worth offering as buttons: no tab, newlines or the do-nothing byte. */
+  insertable(): TextCode[];
+  /** `#rrggbb` — what the game starts a string in, and what 1.16.1 reset to at a line break. */
+  defaultColor(): string;
+  /** The string split into lines of coloured runs, the way the game draws it. */
+  runs(text: string, options?: RunOptions): TextLine[];
+  /** The text with every control byte removed — what the string actually says. */
+  plain(text: string): string;
+  /** `<0E>`, the way every StarCraft editor writes a control byte. */
+  escape(byte: number): string;
+  /**
+   * The lines of `text` that Remastered draws in a colour 1.16.1 did not: a line that sets
+   * no colour of its own, after one that left a colour set. Empty for a single-line string.
+   */
+  bleedingLines(text: string): BleedingLine[];
+  /**
+   * `text` with the default colour written at the head of every bleeding line, so both
+   * games draw it alike. Idempotent, and never changes what the string says.
+   */
+  fixBleeding(text: string): string;
+}
+
 /* ── UI ─────────────────────────────────────────────────── */
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
@@ -1654,7 +1729,14 @@ export interface ProgressOptions {
 export interface ProgressHandle {
   /** How far along (0…1), and optionally a line under the bar. */
   report(fraction: number, text?: string): void;
+  /** True once the user pressed Cancel or closed the panel. Poll it inside a loop. */
   cancelled(): boolean;
+  /**
+   * The same answer as a signal, for work that takes one: aborted when the user
+   * cancels, so `fetch(url, { signal })` and anything built on `AbortSignal` stop
+   * with the panel. Never aborted by `done()`.
+   */
+  readonly signal: AbortSignal;
   done(): void;
   isOpen(): boolean;
 }

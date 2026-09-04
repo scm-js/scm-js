@@ -66,9 +66,10 @@ export function unusedStrings(scn: Scenario, usages = stringUsages(scn)): number
 /* ── Control bytes ───────────────────────────────────────── */
 
 /**
- * StarCraft reads bytes 0x01–0x1F as colour and layout codes (`<04>` is the yellow the
- * community writes in its text editors). Tab, line feed and carriage return stay literal
- * so multi-line text edits naturally; everything else below 0x20 shows as `<XX>`.
+ * StarCraft reads bytes 0x01–0x1F as colour and layout codes; `editor/textColors.ts` is
+ * the table of what each one means and what it looks like. Tab, line feed and carriage
+ * return stay literal so multi-line text edits naturally; everything else below 0x20
+ * shows as `<XX>`.
  */
 const LITERAL_CONTROLS = new Set([0x09, 0x0a, 0x0d]);
 

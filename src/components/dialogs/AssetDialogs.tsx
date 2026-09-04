@@ -15,7 +15,8 @@ import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/se
 import { WAV_SLOTS } from "../../formats/chk/sections/sounds";
 import { canDecodeWav, decodeWav, isPlainPcm, parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../formats/wav";
 import { convertToWav, decodeAudio, DEFAULT_WAV_PRESET, IMPORT_EXTENSIONS, matchesTarget, toAudioBuffer, WAV_PRESETS, withWavExtension } from "../../services/audioConvert";
-import { Button, ListBox, Select, TextInput } from "../ui";
+import { Button, Check, ListBox, Select, TextInput } from "../ui";
+import { ColorCodeBar, insertAtCaret, StringPreview } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -24,14 +25,6 @@ function NoMap({ entry, title, icon }: { entry: DialogProps["entry"]; title: str
 }
 
 /* ── String Editor ──────────────────────────────────────── */
-
-/** The colour and layout codes StarEdit's help lists; inserted as `<XX>` and stored as the byte. */
-const COLOR_CODES: [string, string][] = [
-  ["<01>", "Cyan (default text)"], ["<02>", "Cyan"], ["<03>", "Yellow"], ["<04>", "White"], ["<05>", "Grey"], ["<06>", "Red"], ["<07>", "Green"],
-  ["<08>", "Player colour"], ["<0B>", "Invisible"], ["<0C>", "Remove beyond"], ["<0E>", "Blue"], ["<0F>", "Turquoise"], ["<10>", "Purple"],
-  ["<11>", "Orange"], ["<13>", "Right align"], ["<14>", "Centre align"], ["<15>", "Invisible"], ["<16>", "Dark red"], ["<18>", "Black"],
-  ["<19>", "Dark green"], ["<1A>", "Yellow-green"], ["<1B>", "Pale yellow"], ["<1C>", "Tan"], ["<1D>", "Aqua"], ["<1E>", "Pale green"], ["<1F>", "Blue-grey"],
-];
 
 /**
  * Scenario ▸ String Editor: every entry of STR / STRx with where it is referenced. Edits
@@ -48,6 +41,9 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const [list, setList] = useScenarioForm(scenario, readStrings);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number>(typeof entry.payload?.index === "number" ? (entry.payload.index as number) : 1);
+  // Preview the string the way 1.16.1 drew it (colour reset at every line break) rather
+  // than the way Remastered does; the difference is the whole point of the tick.
+  const [classic, setClassic] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
   // Usages are by index and indices never move, so the scenario's own picture stays right for the working copy.
   const usages = useMemo<Map<number, StringUsage[]>>(() => (scenario ? stringUsages(scenario) : new Map()), [scenario]);
@@ -75,13 +71,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const setText = (index: number, text: string | null) => { const next = list.slice(); next[index] = text; setList(next); };
 
   const insertCode = (code: string) => {
-    const ta = textRef.current;
-    const shown = escapeControls(current ?? "");
-    const at = ta ? ta.selectionStart : shown.length;
-    const end = ta ? ta.selectionEnd : shown.length;
-    const next = shown.slice(0, at) + code + shown.slice(end);
-    setText(sel, unescapeControls(next));
-    requestAnimationFrame(() => { if (ta) { ta.focus(); ta.setSelectionRange(at + code.length, at + code.length); } });
+    setText(sel, unescapeControls(insertAtCaret(textRef.current, escapeControls(current ?? ""), code)));
   };
   const addString = () => { const next = [...list, ""]; setList(next); setSel(next.length - 1); setQ(""); };
   const apply = () => {
@@ -129,14 +119,10 @@ export function StringEditorDialog({ entry }: DialogProps) {
           </table>
         </div>
         <div className="col" style={{ gap: 6 }}>
-          <div className="row between">
-            <span className="dim" style={{ fontSize: 11 }}>
-              String #{current === undefined ? "—" : sel} · {(usages.get(sel) ?? []).map((u) => u.label).join(", ") || (list[sel] === null ? "blank slot" : "not referenced")}
-            </span>
-            <span className="row" style={{ gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              {COLOR_CODES.map(([c, what]) => <button key={c} className="kbd" title={`Insert ${c} — ${what}`} onClick={() => insertCode(c)} disabled={sel <= 0 || sel >= list.length}>{c}</button>)}
-            </span>
-          </div>
+          <span className="dim" style={{ fontSize: 11 }}>
+            String #{current === undefined ? "—" : sel} · {(usages.get(sel) ?? []).map((u) => u.label).join(", ") || (list[sel] === null ? "blank slot" : "not referenced")}
+          </span>
+          <ColorCodeBar onInsert={insertCode} disabled={sel <= 0 || sel >= list.length} />
           <textarea
             ref={textRef}
             className="textarea grow mono"
@@ -146,7 +132,16 @@ export function StringEditorDialog({ entry }: DialogProps) {
             onChange={(e) => setText(sel, unescapeControls(e.target.value))}
             placeholder={sel > 0 && sel < list.length ? "Empty string" : "Select a string to edit it"}
           />
-          <p className="hint">Bytes below 0x20 are shown as &lt;XX&gt; and may be typed that way; &lt;04&gt; is white, &lt;08&gt; the player's colour. Tab and line breaks stay literal.</p>
+          <StringPreview text={current ?? ""} resetPerLine={classic} placeholder="Nothing to draw" />
+          <div className="row between">
+            <p className="hint" style={{ margin: 0 }}>Bytes below 0x20 are shown as &lt;XX&gt; and may be typed that way; tab and line breaks stay literal.</p>
+            <Check
+              label="1.16.1 colours"
+              title="Reset the colour at every line break, the way 1.16.1 drew it. Remastered carries a colour onto the next line instead — if the two previews differ, the string renders differently now than when it was written."
+              checked={classic}
+              onChange={(e) => setClassic(e.target.checked)}
+            />
+          </div>
         </div>
       </div>
     </DialogFrame>

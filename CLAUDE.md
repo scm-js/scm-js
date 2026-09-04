@@ -74,7 +74,10 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   `sections/{terrain,objects,players,strings}.ts`.
 - `Scenario.dirty` is a `Set` of section names. On save, `serializeScenario` re-encodes **only** dirty
   sections (via `encodeSection`'s switch) and emits everything else byte for byte. New sections with no
-  existing occurrence are inserted per `APPEND_ORDER`. Any mutation of scenario state must call
+  existing occurrence go in *among* the ones already there, at the place `APPEND_ORDER` ranks them
+  (`insertionPoint`: after the last section that comes before them, else at the front) — appending
+  them at the end instead left a map that got its ISOM back with the lattice past FORC, which no
+  editor writes and the Repair plugin then reported as out of order. Any mutation of scenario state must call
   `markDirty(scn, "NAME", ...)` for every section it affects, or the change is silently dropped on save.
 - To model a new section: add a codec in `sections/`, decode it in `parseScenario`, add a case to
   `encodeSection`, and add a `tests/chk.test.ts` round-trip.
@@ -406,7 +409,22 @@ same dialog with `{ copy: true }`. `tests/save-flow.test.ts` covers the store ha
 UNIS/UNIx names, SWNM, WAV, every TRIG/MBRF action's `text` and `wav`); the String Editor edits a
 working copy of the table and `applyStrings` writes it back **without renumbering** — it trims only
 unreferenced trailing blanks and keeps a blank slot something still points at. `escapeControls` /
-`unescapeControls` show bytes below 0x20 as `<XX>` (tab, LF, CR stay literal). `editor/sounds.ts`
+`unescapeControls` show bytes below 0x20 as `<XX>` (tab, LF, CR stay literal), and
+`editor/textColors.ts` is what those bytes *mean*: `TEXT_CODES` (the community table at
+wiki.staredit.net/wiki/Color, whose twelve player colours are the classic BW palette — the
+editor's older table was wrong from 0x12 up, with the alignment codes a byte early and 0x18
+called black instead of player 9's green), `runsOf` turning a string into coloured runs the
+way the game draws it, and the Remastered newline change: 1.16.1 reset the colour at every
+line break and Remastered carries it on, so `bleedingLines` finds the lines that render
+differently now and `fixBleeding` writes the reset the old game supplied (`RESET_CODE`,
+0x02, the cyan that *is* the default). `components/ui/ColorCodes.tsx` is the shared chrome —
+`ColorCodeBar` (a swatch per code) and `StringPreview` — used by the String Editor and Map
+Properties' name/description, which is why `TextInput` / `TextArea` take a `ref`. The whole
+module is on the plugin API as **`api.text`** (`TextApi` in `plugins/api.ts`,
+`host.ts#text`), so no plugin carries a copy of the numbering — the Repair plugin's string
+finding is `bleedingLines` / `fixBleeding` over `api.query.strings()`, injected into its
+pure `analyze` as `TextHelpers`. `tests/text-colors.test.ts` covers the module and
+`tests/plugins.test.ts` the API group. `editor/sounds.ts`
 joins `scn.wavs` with `archiveExtrasAtom` (`soundList`, `orphanSounds`, member names normalised for
 case and slashes); the Sound Editor's working copy carries both the table and a new extras `Map`, and
 apply replaces the atom, so an imported file only reaches the archive on OK / Apply. Import converts
@@ -503,6 +521,15 @@ to `commitTerrainAtom` — the stranded-doodad / stranded-unit pass pulled out o
 Anything that needs the graphics (`stampTerrain`, `fillFlat`, `paintIsom`, `placeDoodad`) degrades
 to a `notes` entry and `0` without them, never throws. `terrain.diamondsIn(rect)` is inclusive of the
 far edges so a whole-map rect covers the last lattice column and row.
+The API is **promise-first**: everything asynchronous returns a `Promise` (a dismissal resolves
+`null` / `false` rather than rejecting), `activate` and a dialog button's `run` may be `async`, and
+the callbacks that remain are subscriptions — events, DOM handlers, `mount`, a map tool's or
+overlay's hooks — each returning a `Disposable` or a cleanup function. The **one** exception is a
+transaction's builder: `edit` / `update` commit when `build` returns, so an `async` one would commit
+what ran before its first `await` and let the rest mutate the map outside the entry. `Sync<T>` in
+`api.ts` (a conditional type resolving to a sentence when `T` is a promise) makes TypeScript refuse
+it, and `host.ts#checkSyncBuilder` catches it at runtime for a plain-JavaScript plugin — a `notes`
+entry and a `console.error`, not a throw. `ProgressHandle` carries `signal` beside `cancelled()`.
 `api.document.open(file)` is File ▸ Open without React: `host.ts#openDocument` builds a `File` and
 runs `useMapFileActions.ts#openFileInto` (the store-level half of the hook's `openFile`), or, when
 `needsCloseConfirm(store)` says the map is modified and Preferences ask, parks an "open"
@@ -867,7 +894,15 @@ ISOM report → findings, each with a level, what the game does with the file as
 recommended tick) and opens its dialog only when an error or warning came back; Tools ▸ Repair Map… is
 the manual run. `repair.ts` applies the byte-level repairs to the chunk list by object identity (one
 `replaceFile`), then the plugin runs `sections.rebuild` and one `document.edit` with `tx.rebuildIsom`.
-The bytes as the map came in stay in memory until the next open for *Restore original*. It moved
+The bytes as the map came in stay in memory until the next open for *Restore original*.
+The one **content** finding is the Remastered newline-colour change: `analyze` takes the table
+from `api.query.strings()` and the reading of it from `api.text` (as `TextHelpers`, so the module
+stays pure and the colour numbering lives only in the editor — `colors.ts` there is down to a
+snippet helper), and answers a `set-strings` repair, applied through `document.update` rather than
+`replaceFile` — so it marks STR dirty and keeps the undo history — and run *before* any
+`sections.rebuild`, since a rebuild re-encodes STR from the editor's model.
+It is a warning with `recommended: false`: whether the map was authored before or after the
+remaster is the one thing the plugin cannot know, so it explains and never ticks itself. It moved
 Rebuild ISOM from Tiles out of the editor.
 
 **Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts on) is the read-only

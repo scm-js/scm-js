@@ -1,10 +1,10 @@
 import {
   forwardRef,
   type ButtonHTMLAttributes,
+  type ComponentPropsWithRef,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
-  type TextareaHTMLAttributes,
 } from "react";
 import { Tabs as RTabs, Tooltip as RTooltip } from "radix-ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -39,11 +39,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
 /* ── Inputs ─────────────────────────────────────────────── */
 
-export function TextInput({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+// `ComponentPropsWithRef` rather than the plain attribute types: React 19 passes `ref`
+// as an ordinary prop, and the colour-code bar needs one to type at the caret.
+export function TextInput({ className = "", ...rest }: ComponentPropsWithRef<"input">) {
   return <input type="text" className={`input ${className}`} {...rest} />;
 }
 
-export function TextArea({ className = "", ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea({ className = "", ...rest }: ComponentPropsWithRef<"textarea">) {
   return <textarea className={`textarea ${className}`} {...rest} />;
 }
 

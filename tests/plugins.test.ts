@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
@@ -35,7 +35,7 @@ import {
 import { transpileTs } from "../src/plugins/transpile";
 import {
   activatePlugin, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
-  reloadPlugin, resolveActivate, runTransaction, setInstalled,
+  reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey } from "../src/plugins/defaults";
@@ -47,7 +47,7 @@ import {
 import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
-import { pluginIdOf, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
+import { pluginIdOf, type EditTransaction, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
 /* ── Specs and manifests ────────────────────────────────── */
 
@@ -433,6 +433,24 @@ describe("plugin transactions", () => {
     const result = runTransaction(store, "paint", (tx) => { expect(tx.stampTerrain({ x0: 0, y0: 0, x1: 2, y1: 2 }, 2)).toBe(0); });
     expect(result.changed).toBe(false);
     expect(result.notes[0]).toMatch(/tileset graphics/);
+  });
+
+  // TypeScript refuses an async builder (`Sync` in api.ts); a plain-JavaScript plugin
+  // gets told here instead of through an undo entry that holds half the work.
+  it("says so when a builder is async", () => {
+    const { store, scn } = blankStore();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const build = (async (tx: EditTransaction) => { tx.setTile(0, 0, 0x21); await Promise.resolve(); }) as (tx: EditTransaction) => unknown;
+    const result = runTransaction(store, "async", build);
+    expect(result.notes.some((n) => /async/.test(n))).toBe(true);
+    expect(errors).toHaveBeenCalled();
+    expect(scn.tiles[0]).toBe(0x21); // what ran before the await is still in the entry
+    errors.mockRestore();
+
+    const errors2 = vi.spyOn(console, "error").mockImplementation(() => {});
+    const update = runUpdate(store, "async", (() => Promise.resolve()) as () => unknown);
+    expect(update.notes.some((n) => /async/.test(n))).toBe(true);
+    errors2.mockRestore();
   });
 });
 
@@ -980,11 +998,13 @@ describe("plugin sections", () => {
     const { store, scn } = blankStore(4, 2);
     const api = apiOver(store);
     const list = api.document.sections.list();
-    // A new map carries its raw sections first and everything else is dirty, appended in APPEND_ORDER.
-    expect(list.map((s) => s.name).slice(0, 4)).toEqual(["IVE2", "VCOD", "TYPE", "VER "]);
-    expect(list[0]).toMatchObject({ index: 0, offset: 0, size: 2, declaredSize: 2, truncated: false, occurrence: 0, occurrences: 1, dirty: false });
-    expect(list[2]).toMatchObject({ name: "TYPE", size: 4, dirty: true });
-    expect(list[2].spec).toMatchObject({ name: "TYPE", mode: "last", size: 4, stride: null, modelled: true, what: "Map type (RAWS/RAWB/RAWU)" });
+    // Every section of a new map is written where APPEND_ORDER puts it — the raw ones
+    // (IVE2, VCOD) among the encoded ones rather than ahead of them, as StarEdit writes it.
+    expect(list.map((s) => s.name).slice(0, 6)).toEqual(["TYPE", "VER ", "IVE2", "VCOD", "IOWN", "OWNR"]);
+    expect(list[0]).toMatchObject({ index: 0, offset: 0, size: 4, declaredSize: 4, truncated: false, occurrence: 0, occurrences: 1, dirty: true });
+    // IVE2 is one of the four a new map carries as raw bytes: written, but not from the model.
+    expect(list[2]).toMatchObject({ name: "IVE2", size: 2, dirty: false });
+    expect(list[0].spec).toMatchObject({ name: "TYPE", mode: "last", size: 4, stride: null, modelled: true, what: "Map type (RAWS/RAWB/RAWU)" });
     const mtxm = list.find((s) => s.name === "MTXM")!;
     expect(mtxm).toMatchObject({ size: 16, spec: { size: 16, mode: "overlay" } });
     expect(list.find((s) => s.name === "VCOD")!.spec).toMatchObject({ modelled: false, size: 1040 });
@@ -998,8 +1018,8 @@ describe("plugin sections", () => {
     expect(api.document.sections.spec("ZZZZ")).toBeNull();
     expect(api.document.sections.known().map((k) => k.name)).toContain("STRx");
     // A copy: writing into what came back changes nothing.
-    api.document.sections.bytes(2)[0] = 0;
-    expect(api.document.sections.bytes(2)).toEqual(new Uint8Array([0x52, 0x41, 0x57, 0x42]));
+    api.document.sections.bytes(0)[0] = 0;
+    expect(api.document.sections.bytes(0)).toEqual(new Uint8Array([0x52, 0x41, 0x57, 0x42]));
     expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.list()).toEqual([]);
   });
 
@@ -1050,7 +1070,7 @@ describe("plugin sections", () => {
     api.document.sections.move(n, 0);
     list = api.document.sections.list();
     expect(list[0]).toMatchObject({ name: "AB  ", offset: 0 });
-    expect(list[1]).toMatchObject({ name: "IVE2", offset: 11 });
+    expect(list[1]).toMatchObject({ name: "TYPE", offset: 11 });
     // A second DIM: the game (and the parser) read the last one.
     const dim = list.findIndex((s) => s.name === "DIM ");
     api.document.sections.insert(dim + 1, "DIM ", new Uint8Array([8, 0, 2, 0]));
@@ -1152,8 +1172,11 @@ describe("plugin sections: defaults, rebuild, trailing, required", () => {
     const list = sections.list();
     expect(list.filter((s) => s.name === "DIM ")).toHaveLength(1);
     expect(list.find((s) => s.name === "ERA ")!.size).toBe(2);
-    // TILE came back from the editor's ground tiles, at the spot APPEND_ORDER puts a new section.
-    expect(list.some((s) => s.name === "TILE")).toBe(true);
+    // TILE came back from the editor's ground tiles, at the spot APPEND_ORDER puts it —
+    // between ISOM and DD2, not after the junk chunk at the end of the file.
+    const names = list.map((s) => s.name);
+    expect(names.slice(names.indexOf("ISOM"), names.indexOf("ISOM") + 3)).toEqual(["ISOM", "TILE", "DD2 "]);
+    expect(names.indexOf("TILE")).toBeLessThan(names.indexOf("JUNK"));
     expect(sections.combined("TILE")).toEqual(sections.combined("MTXM"));
     // The junk chunk and the bytes after it are untouched by a rebuild: Save keeps what it does not model.
     expect(list.some((s) => s.name === "JUNK")).toBe(true);
@@ -1236,6 +1259,54 @@ describe("plugin names", () => {
     const none = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
     expect(none.names.string(1)).toBeNull();
     expect(none.names.location(2)).toBe("Location 2");
+  });
+});
+
+describe("plugin text codes", () => {
+  const RED = "\x06";
+  const WHITE = "\x04";
+
+  it("hands over the editor's own table", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    const codes = api.text.codes();
+    expect(codes[0].byte).toBe(0x01);
+    expect(codes.at(-1)!.byte).toBe(0x1f);
+    expect(api.text.code(0x06)).toMatchObject({ code: "<06>", effect: "color", rgb: "#c81818" });
+    // The numbering that was wrong before it was checked against the player palette.
+    expect(api.text.code(0x12)).toMatchObject({ effect: "align" });
+    expect(api.text.code(0x18)).toMatchObject({ rgb: "#088008", player: 9 });
+    expect(api.text.code(0x20)).toBeNull();
+    expect(api.text.escape(0x0e)).toBe("<0E>");
+    expect(api.text.defaultColor()).toBe("#b8b8e8");
+    // The button set leaves out whitespace and the byte that does nothing.
+    expect(api.text.insertable().map((c) => c.byte)).not.toContain(0x0a);
+    expect(api.text.insertable().map((c) => c.byte)).not.toContain(0x1a);
+  });
+
+  it("reads a string the way the game draws it, under either game's rule", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    const text = `${RED}Objective:\nDestroy the base`;
+    expect(api.text.plain(text)).toBe("Objective:\nDestroy the base");
+    // Remastered carries the colour on; 1.16.1 reset it at the break.
+    expect(api.text.runs(text)[1].runs[0].color).toBe("#c81818");
+    expect(api.text.runs(text, { resetPerLine: true })[1].runs[0].color).toBe("#b8b8e8");
+  });
+
+  it("finds and fixes the lines Remastered recoloured", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.text.bleedingLines(`${RED}a\nb`)).toMatchObject([{ line: 1, carried: { code: "<06>", rgb: "#c81818" } }]);
+    expect(api.text.bleedingLines(`${RED}a\n${WHITE}b`)).toEqual([]);
+    const fixed = api.text.fixBleeding(`${RED}a\nb`);
+    expect(fixed).toBe(`${RED}a\n\x02b`);
+    expect(api.text.bleedingLines(fixed)).toEqual([]);
+    // Both games now draw it alike, which is the whole point.
+    const colors = (resetPerLine: boolean) => api.text.runs(fixed, { resetPerLine }).map((l) => l.runs.map((r) => r.color));
+    expect(colors(false)).toEqual(colors(true));
+  });
+
+  it("needs no map", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(() => api.text.runs("anything")).not.toThrow();
   });
 });
 

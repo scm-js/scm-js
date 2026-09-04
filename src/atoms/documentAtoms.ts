@@ -16,6 +16,7 @@ import {
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, type EditorLayer,
 } from "./editorAtoms";
+import { START_LOCATION } from "../data/units";
 import { statusMessageAtom } from "./uiAtoms";
 import { applyChanges } from "../editor/terrain";
 import { applyUnitChanges, removeUnits } from "../editor/units";
@@ -440,9 +441,6 @@ export const redoAtom = atom(
 
 /* ── Derived overlays ────────────────────────────────────── */
 
-/** The Start Location unit id, which the editor draws as a player marker. */
-export const START_LOCATION_UNIT = 214;
-
 export interface ViewLocation {
   index: number;
   name: string;
@@ -500,7 +498,7 @@ export const startLocationsAtom = atom<ViewStartLocation[]>((get) => {
   get(unitsRevisionAtom); // the list is mutated in place
   if (!scn) return [];
   return scn.units
-    .filter((u) => u.unitId === START_LOCATION_UNIT)
+    .filter((u) => u.unitId === START_LOCATION)
     .map((u) => ({ player: u.owner, x: u.x / 32, y: u.y / 32 }));
 });
 

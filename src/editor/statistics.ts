@@ -12,7 +12,7 @@ import { isFlatPair } from "../formats/tileset/palette";
 import { TILESETS, type TerrainName } from "../data/tilesets";
 import { playerRaceLabel, playerTypeLabel } from "../data/players";
 import { START_LOCATION, unitName } from "../data/units";
-import { DEFAULT_GAS, DEFAULT_MINERALS, isResource } from "./units";
+import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, VESPENE_GEYSER } from "./units";
 import { spriteKind } from "./sprites";
 import { isPreserved } from "./triggers";
 import { tileGroup } from "../formats/chk/sections/terrain";
@@ -52,8 +52,6 @@ export interface MapStatistics {
   terrain: { name: string; tiles: number }[] | null;
 }
 
-const MINERAL_FIELD_MAX = 178;
-
 export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNames: readonly TerrainName[] | null, dat: UnitsDat | null): MapStatistics {
   const players: PlayerStatistics[] = Array.from({ length: PLAYER_SLOTS }, (_, slot) => ({
     slot, type: playerTypeLabel(scn.playerTypes[slot] ?? 0), race: playerRaceLabel(scn.playerRaces[slot] ?? 0), units: 0, buildings: dat ? 0 : null, startLocations: 0,
@@ -73,7 +71,7 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
       if (u.unitId === START_LOCATION) p.startLocations++;
     } else unownedUnits++;
     if (isResource(u.unitId)) {
-      const mineral = u.unitId <= MINERAL_FIELD_MAX;
+      const mineral = u.unitId !== VESPENE_GEYSER;
       const amount = u.validStates & UnitUsed.Resources ? u.resourceAmount : mineral ? DEFAULT_MINERALS : DEFAULT_GAS;
       if (mineral) { resources.minerals += amount; resources.fields++; } else { resources.gas += amount; resources.geysers++; }
     }

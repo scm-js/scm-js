@@ -1,6 +1,7 @@
 import { markDirty, type Scenario } from "../formats/chk/scenario";
 import { UnitUsed, UnitValid, type UnitRecord } from "../formats/chk/sections/objects";
 import { NO_UNIT, UnitFlag, type UnitsDat } from "../formats/dat/dat";
+import { START_LOCATION } from "../data/units";
 
 /**
  * Unit edits as invertible change lists, in the same spirit as terrain's `TileChange`.
@@ -155,8 +156,10 @@ export { UnitRelation, UnitState, UnitUsed, UnitValid } from "../formats/chk/sec
 export const DEFAULT_MINERALS = 1500;
 export const DEFAULT_GAS = 5000;
 
-const MINERAL_FIELDS = new Set([176, 177, 178]);
-const VESPENE_GEYSER = 188;
+/** The three mineral field types, in the order a mineral line cycles them. */
+export const MINERAL_FIELD_IDS = [176, 177, 178] as const;
+export const VESPENE_GEYSER = 188;
+const MINERAL_FIELDS = new Set<number>(MINERAL_FIELD_IDS);
 
 export function isResource(unitId: number): boolean {
   return MINERAL_FIELDS.has(unitId) || unitId === VESPENE_GEYSER;
@@ -178,7 +181,7 @@ export function nextSerial(scn: Scenario): number {
 export function makeUnit(units: UnitsDat | null, unitId: number, owner: number, x: number, y: number, serial: number): UnitRecord {
   const flags = units ? units.flags[unitId] : 0;
   const has = (f: number) => (flags & f) !== 0;
-  const isStart = unitId === 214;
+  const isStart = unitId === START_LOCATION;
   const resources = MINERAL_FIELDS.has(unitId) ? DEFAULT_MINERALS : unitId === VESPENE_GEYSER ? DEFAULT_GAS : 0;
   const shields = units ? units.shieldEnable[unitId] !== 0 : false;
   const energy = has(UnitFlag.Spellcaster);

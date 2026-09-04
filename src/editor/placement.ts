@@ -13,7 +13,7 @@ import type { Scenario } from "../formats/chk/scenario";
 import type { UnitsDat } from "../formats/dat/dat";
 import { groupBuildable, megatileForTile, TileFlag, type Tileset } from "../formats/tileset/decode";
 import { placementBox, TILE_PX, unitBox, unitGeometry, type PixelBox, type UnitGeometry } from "./units";
-import { unitName } from "../data/units";
+import { START_LOCATION, unitName } from "../data/units";
 
 export interface PlacementOptions {
   /** Refuse to put a unit on top of another (ground units and buildings only). */
@@ -29,8 +29,6 @@ export interface PlacementOptions {
 export const DEFAULT_PLACEMENT: PlacementOptions = { checkCollision: true, checkTerrain: true, removeStranded: true, snapToGrid: true };
 
 export type PlacementProblem = "terrain" | "collision";
-
-export const START_LOCATION = 214;
 
 const MINITILE = 8;
 

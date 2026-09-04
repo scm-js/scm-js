@@ -1,5 +1,6 @@
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import { START_LOCATION } from "../data/units";
+import { MINERAL_FIELD_IDS, VESPENE_GEYSER } from "../editor/units";
 import {
   ensureTileset, onTilesetProgress, peekTileset, TILESET_FILENAMES, type TilesetFileName,
 } from "../formats/tileset/load";
@@ -52,7 +53,7 @@ export interface PreloadTask {
 }
 
 /** The units a blank map and the palette's first screen draw; small, and always wanted. */
-const WARM_UNITS = [176, 177, 178, 188, START_LOCATION];
+const WARM_UNITS = [...MINERAL_FIELD_IDS, VESPENE_GEYSER, START_LOCATION];
 
 export function tilesetFileName(id: TilesetId): TilesetFileName {
   const index = TILESETS.findIndex((t) => t.id === id);

@@ -1160,6 +1160,10 @@ frames range from 8² to 256²; evicted canvases are zero-sized so the bitmap go
 `tunit.pcx` row `playerColorIndex(scn.playerColors, owner)` (COLR-aware) remapping palette indices
 8–15, painted through the *tileset* palette — so sprites need the tileset loaded too. `unitName(id)` and
 `UNIT_GROUPS` (ids, not names) live in `src/data/units.ts`; `activeUnitAtom` is a units.dat id.
+The special ids have one home each and nothing else may spell them out: `data/units.ts#START_LOCATION`
+is 214 (`editor/placement.ts`, `documentAtoms`'s `START_LOCATION_UNIT` and the bare ids in
+`services/preload.ts` / `editor/statistics.ts` were four more copies of it) and `editor/units.ts` owns
+`MINERAL_FIELD_IDS` / `VESPENE_GEYSER` / `DEFAULT_MINERALS` / `DEFAULT_GAS` beside `isResource`.
 
 Edits are `UnitChange { index, before, after }` lists (insert / remove / replace, removals highest index
 first) carried in `HistoryEntry.units`; `applyUnitChanges` marks `UNIT` dirty. `unitsRevisionAtom` is the

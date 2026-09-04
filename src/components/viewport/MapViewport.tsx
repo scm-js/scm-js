@@ -50,7 +50,7 @@ import {
 } from "../../atoms/editorAtoms";
 import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
+import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
@@ -77,7 +77,7 @@ import { tilesetIndex } from "../../formats/chk/scenario";
 import { placementBox, unitBox, unitGeometry } from "../../editor/units";
 import type { TileRect } from "../../editor/doodads";
 import { doodadOrigin } from "../../formats/tileset/doodads";
-import { unitName } from "../../data/units";
+import { START_LOCATION, unitName } from "../../data/units";
 import { linePoints } from "../../editor/terrain";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
 import { diamondAt } from "../../editor/isom";
@@ -634,7 +634,7 @@ export default function MapViewport() {
         if (sprite && tilePx >= 8 && drawAnimatedUnit(sprite, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;
         if (drawUnitSprite(u.unitId, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;
         // The numbered start-location marker below stands in for its sprite.
-        if (u.unitId !== START_LOCATION_UNIT) drawUnitMarker(u.owner, ux, uy);
+        if (u.unitId !== START_LOCATION) drawUnitMarker(u.owner, ux, uy);
       }
       ctx.imageSmoothingEnabled = true;
 
@@ -941,7 +941,7 @@ export default function MapViewport() {
         if (clipParts.units) {
           for (const u of clip.units) {
             const ux = (u.x + ox) * zoom - sx, uy = (u.y + oy) * zoom - sy;
-            if (!drawUnitSprite(u.unitId, u.owner, ux, uy, 0.6) && u.unitId !== START_LOCATION_UNIT) drawUnitMarker(u.owner, ux, uy);
+            if (!drawUnitSprite(u.unitId, u.owner, ux, uy, 0.6) && u.unitId !== START_LOCATION) drawUnitMarker(u.owner, ux, uy);
           }
         }
         if (clipParts.sprites) {

@@ -13,7 +13,7 @@ you deliberately change.
 
 ## Getting started
 
-Three ways to run it:
+Four ways to run it:
 
 - **In the browser.** Every push to `main` deploys the editor to GitHub Pages. It asks
   for StarCraft's graphics on first use and can fetch them from Blizzard in one click.
@@ -24,6 +24,17 @@ Three ways to run it:
   what it needs; two archives dropped next to the app are found too. It checks for a newer
   version at startup and offers it in a notice — never installing on its own — and
   **Help ▸ Check for Updates…** asks whenever you like.
+- **In a container.** Every numbered release publishes one, so the editor is a
+  `docker run` away — nothing to build, and nothing to uninstall afterwards:
+
+  ```sh
+  docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest   # then http://localhost:8080
+  ```
+
+  It is nginx serving the release's own web bundle, so it behaves like the hosted editor:
+  everything lives in the browser you open it from, and it asks for the graphics on first
+  use. `:latest` is the newest numbered release (never a nightly); `:0.2.1`, `:0.2` and
+  `:0` pin as far as you like.
 - **From source**, below.
 
 The editor draws terrain and units with graphics out of StarCraft's own archives.

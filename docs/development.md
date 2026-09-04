@@ -107,7 +107,7 @@ a version is cut:
 | --- | --- | --- |
 | `ci` | every push to `main` | lint, tests, the web bundle, the GitHub Pages deploy. No installers, no release. |
 | `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets and generated notes. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets and generated notes, plus the container image on GHCR. |
 
 `tsc -b` covers `desktop/` through `tsconfig.desktop.json`, so a main-process type error
 fails a push to `main`; only the packaging step waits for the nightly. The cron exits
@@ -146,6 +146,43 @@ That redirect can only resolve a fixed file name, which is why `electron-builder
 in the browser's downloads folder; the version is in the release title, the notes and
 `latest*.yml`. To un-promote a bad stable release, tick "This is a pre-release" on it and
 the redirect falls back to the one before — no new tag, no rebuild.
+
+### The container image
+
+`docker/Dockerfile` is nginx with the built web bundle in it, pushed to
+`ghcr.io/scm-js/scm-js` by the `image` job on a tagged release only:
+
+```sh
+docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest   # http://localhost:8080
+```
+
+The tags are `latest`, the full version and the moving `X.Y` and `X`
+(`docker/metadata-action` reads them off the tag the run is on). A nightly publishes no
+image: an installer is something you choose and can roll back by keeping the old file,
+while `latest` in a registry is what a `docker run` picks up without asking, so only a
+version cut on purpose goes there.
+
+Two decisions are worth knowing:
+
+- **It copies a bundle rather than building one.** The `web` job has already built,
+  linted and tested the zip the release carries; the image job downloads that artifact
+  and unzips it, so the image cannot differ from the download. It also makes
+  `--platform linux/amd64,linux/arm64` free — with no `RUN` step there is nothing to
+  emulate, and the files are the same bytes on either architecture, so buildx writes one
+  manifest list and needs no QEMU. A node build stage would have cost minutes per
+  architecture to produce identical output.
+- **It carries no game data.** `vite build` copies `public/` into `dist/`, so a clone
+  that ran `npm run extract` has Blizzard's extracted trees sitting in the bundle;
+  `.dockerignore` cuts them back out of the build context rather than trusting them to be
+  absent, and the nginx config answers 404 for those five paths so the manifest probe
+  gets an honest answer. A container starts at step 4 of the resolver and asks through
+  Help ▸ Game Data…, exactly like the hosted build. Mounting your own tree over those
+  paths is in [game-data.md](game-data.md#getting-the-files).
+
+Locally, `npm run build:image` builds the bundle and the image (tagged `scmjs`). The
+Release workflow builds and *serves* the image before it tags anything — a request for
+the page, one hashed asset and a check that `/tileset/manifest.json` 404s — so a broken
+Dockerfile stops the release instead of landing on `latest`.
 
 ### Cutting a release
 

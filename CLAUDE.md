@@ -24,6 +24,7 @@ npx vitest run -t "flood fill"            # tests matching a name
 npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons/upgrades/techdata.dat), game, scripts, unit (BrooDat required)
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"    # or explicit .mpq paths
 npm run check:assets   # what is on disk, no archives touched (predev/prebuild run this with --warn)
+npm run build:image    # web bundle + docker/Dockerfile -> the `scmjs` image (nginx, no game data)
 node scripts/extract-tilesets.mjs         # just the tilesets
 node scripts/extract-units.mjs            # just the unit data
 ```
@@ -930,6 +931,15 @@ is what CI runs. The workflow has three channels — `ci` (every push to main: l
 installers on ONE rolling prerelease whose `nightly` tag is force-moved and whose assets are
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate) — with `PAGES_BASE` the one repository variable.
+A `v*` tag also pushes the **container image**: the `image` job downloads the `web` job's own zip,
+unzips it and builds `docker/Dockerfile` (nginx + `docker/nginx.conf`, no `RUN` step, so
+`linux/amd64,linux/arm64` is one buildx manifest and needs no QEMU) to `ghcr.io/<repo>` as `latest`,
+the version and the moving `X.Y` / `X`; nightlies publish none, since `latest` is what a `docker run`
+takes without asking. `.dockerignore` cuts `dist/{tileset,arr,unit,game,scripts}` out of the context
+and the nginx config 404s those paths, so no image can carry Blizzard's data and a container starts at
+step 4 of the resolver — mounting an extracted tree over them is how to serve your own.
+`npm run build:image` is the local build, and `release.yml` builds and *serves* the image in its
+pre-flight, before it tags.
 The download buttons on the site are plain hrefs to
 `/releases/latest/download/<asset>`, which GitHub redirects to the newest **non-prerelease**
 release — so the nightly is invisible to them and nothing needs updating when a version ships;

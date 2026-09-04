@@ -10,10 +10,22 @@
 #             are replaced in place. It is never deleted and never recreated, so the
 #             download counts survive and nobody watching releases is re-notified. The
 #             cron exits early when main has not moved since the last one.
-#   vX.Y.Z    a tag — a permanent release with the same assets and generated notes. These
-#             are the only ones that accumulate, which is the point. `release.yml` is what
-#             cuts one: it tags, dispatches this workflow on the tag, and moves
-#             package.json on to the next version so the nightlies keep sorting above it.
+#   vX.Y.Z    a tag — a permanent release with the same assets and generated notes, plus
+#             the container image on GHCR. These are the only ones that accumulate, which
+#             is the point. `release.yml` is what cuts one: it tags, dispatches this
+#             workflow on the tag, and moves package.json on to the next version so the
+#             nightlies keep sorting above it.
+#
+# The container image (`docker/Dockerfile`, pushed by the `image` job to
+# `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip
+# the release carries, unzipped, never rebuilt — so anyone can run the editor with
+#
+#   docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest
+#
+# Tagged releases only: an image tagged `latest` is what a `docker run` picks up without
+# asking, so nothing but a version cut on purpose goes there. It carries no game data
+# either (`.dockerignore` cuts the extracted trees out of the build context), so a
+# container asks through Help ▸ Game Data… exactly like the hosted build.
 #
 # Download links for scmjs.dev. GitHub redirects `/releases/latest/download/<asset>` to
 # the newest release that is NOT a prerelease or a draft, so the stable buttons are plain
@@ -227,6 +239,78 @@ jobs:
             release/latest*.yml
             release/*.blockmap
           if-no-files-found: error
+
+  image:
+    name: Container image
+    needs: [channel, web]
+    # Tagged releases only. A nightly is a thing you install and can roll back by keeping
+    # the old installer; an image tagged `latest` in a registry is what someone's
+    # `docker run` picks up without asking, so only a version that was cut on purpose
+    # goes there. (`release.yml` builds and smoke-tests the same image before it tags, so
+    # a broken Dockerfile stops the release rather than landing in the registry.)
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      # The bundle the release itself carries — built, linted and tested by the `web` job.
+      # Nothing is rebuilt here, so the image cannot differ from the zip.
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-zip
+      - run: unzip -q scmJS-web.zip -d dist
+      # No RUN step in the Dockerfile and static files inside it, so both architectures
+      # come out of one build with no emulation. buildx is still what writes the manifest
+      # list; QEMU is not needed.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # The full version, the moving `X.Y` and `X`, and `latest`. The semver patterns
+          # read the tag this run is on. `v1.0.0-beta.1` takes the stable channel too, so
+          # `latest` is written out here with its own condition rather than left to the
+          # action's `latest=auto` flavour: a prerelease publishes an image under its own
+          # version and nothing else, and `latest` keeps meaning the newest real release.
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(needs.channel.outputs.version, '-') }}
+          labels: |
+            org.opencontainers.image.title=scmJS
+            org.opencontainers.image.description=A StarCraft: Brood War map editor that runs in a browser tab.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+      - name: Summary
+        run: |
+          {
+            echo "### Container image"
+            echo
+            echo '```sh'
+            echo "docker run --rm -p 8080:80 ghcr.io/${{ github.repository }}:${{ needs.channel.outputs.version }}"
+            echo '```'
+            echo
+            echo "Tags pushed:"
+            echo '${{ steps.meta.outputs.tags }}' | sed 's/^/- `/;s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: Release (${{ needs.channel.outputs.tag }})

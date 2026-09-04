@@ -60,6 +60,26 @@ Help ▸ Game Data… shows the current source, and when there is none, the ways
 Either way the extraction runs here and the result is kept, so it happens once. The dialog
 also removes a copy, which puts the chain back to where it was.
 
+The container image (`docker/Dockerfile`) carries no game data — Blizzard's files are not
+redistributable, so `.dockerignore` cuts the extracted trees out of the build context and
+the image's nginx answers 404 for all five of them. A container therefore starts on step 4
+and asks, like the hosted build. To serve your own instead, mount an extracted tree over
+the paths step 1 probes:
+
+```sh
+docker run --rm -p 8080:80 \
+  -v "$PWD/public/tileset:/usr/share/nginx/html/tileset:ro" \
+  -v "$PWD/public/arr:/usr/share/nginx/html/arr:ro" \
+  -v "$PWD/public/unit:/usr/share/nginx/html/unit:ro" \
+  -v "$PWD/public/game:/usr/share/nginx/html/game:ro" \
+  -v "$PWD/public/scripts:/usr/share/nginx/html/scripts:ro" \
+  ghcr.io/scm-js/scm-js:latest
+```
+
+That is a copy on your own machine served to your own browser. Publishing such an image,
+or serving one from a public address, is redistributing Blizzard's data — see
+[ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
+
 One thing follows an install. The blank map the editor opens on was laid out before there
 was a tileset, and `flatTerrain` needs the CV5 to choose between a terrain's variations —
 with none it takes variation 0 for every pair, which is invisible under flat colours and

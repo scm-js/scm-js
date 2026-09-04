@@ -1,0 +1,16 @@
+# The build context is the built bundle and the two files beside this one — nothing else.
+# `*` first and then what is let back in, so a new directory at the root cannot quietly
+# enter the image.
+*
+!dist
+!docker
+
+# Blizzard's data is not redistributable and no image may carry it. `vite build` copies
+# `public/` into `dist/`, so a clone that ran `npm run extract` has the extracted trees
+# sitting in the bundle; they are cut back out here rather than trusted to be absent. (CI
+# builds the released bundle on a runner that has no game data at all.)
+dist/tileset
+dist/arr
+dist/unit
+dist/game
+dist/scripts

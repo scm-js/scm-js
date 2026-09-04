@@ -18,8 +18,10 @@
 # and nowhere else.
 #
 # Everything is checked before anything is written: this runs the same lint, tests and
-# build the Build workflow does, because a tag that points at a failing commit has to be
-# deleted by hand, while a workflow that stops before tagging costs nothing.
+# build the Build workflow does — and builds and serves the container image, since that
+# one is pushed to `ghcr.io/…:latest`, which a `docker run` picks up without asking —
+# because a tag that points at a failing commit has to be deleted by hand, while a
+# workflow that stops before tagging costs nothing.
 #
 # Why Build is dispatched rather than left to the tag push: a push made with the
 # repository's own GITHUB_TOKEN does not start another workflow run (GitHub's recursion
@@ -118,6 +120,26 @@ jobs:
       - run: npm run build
         env:
           SCMJS_BASE: /
+
+      # The container image the Build workflow pushes to GHCR, built and actually served
+      # here — before a tag exists — because `latest` in a registry is what someone's
+      # `docker run` picks up without asking. One architecture and never pushed; the
+      # multi-arch push is build.yml's `image` job, from this same bundle.
+      - name: Check the container image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -f docker/Dockerfile -t scmjs:check .
+          id=$(docker run -d -p 8080:80 scmjs:check)
+          trap 'docker rm -f "$id" >/dev/null' EXIT
+          for _ in $(seq 40); do curl -fsS -o /dev/null http://127.0.0.1:8080/ && break; sleep 0.25; done
+          curl -fsS http://127.0.0.1:8080/ | grep -q scmJS
+          asset=$(curl -fsS http://127.0.0.1:8080/ | grep -o '/assets/[A-Za-z0-9._-]*\.js' | head -1)
+          test -n "$asset"
+          curl -fsS -o /dev/null "http://127.0.0.1:8080$asset"
+          # Blizzard's data is not redistributable: these paths must 404, not serve.
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/tileset/manifest.json)" = 404
+          echo "Image serves $asset and carries no game data."
 
       - name: Commit and tag
         id: tag

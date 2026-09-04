@@ -87,15 +87,18 @@ export function pickVariation({ common, rare }: Variations, random: () => number
   return set[Math.min(set.length - 1, Math.floor(random() * set.length))];
 }
 
-export function flatTerrain(
+/**
+ * The MTXM half of a flat fill: left/right pairs following column parity, one random
+ * variation per pair. Split out of `flatTerrain` so a preview can draw the tiles a new
+ * map would really get without building the lattice that goes with them.
+ */
+export function flatTiles(
   width: number,
   height: number,
   terrain: BaseTerrain,
   tileset: Tileset | null,
   random: () => number = Math.random,
-  /** ERA of the map: the ISOM value of a terrain is numbered per tileset. */
-  era = 0,
-): TerrainFill {
+): Uint16Array {
   const variations = variationsOf(tileset, terrain.group);
   const pick = () => pickVariation(variations, random);
 
@@ -110,6 +113,19 @@ export function flatTerrain(
       if (x + 1 < width) tiles[row + x + 1] = right | slot;
     }
   }
+  return tiles;
+}
+
+export function flatTerrain(
+  width: number,
+  height: number,
+  terrain: BaseTerrain,
+  tileset: Tileset | null,
+  random: () => number = Math.random,
+  /** ERA of the map: the ISOM value of a terrain is numbered per tileset. */
+  era = 0,
+): TerrainFill {
+  const tiles = flatTiles(width, height, terrain, tileset, random);
 
   // Each ISOM rect is four u16 (left, top, right, bottom): the terrain's ISOM value
   // shifted left four, with a nibble saying which diamond quadrant the side belongs to.

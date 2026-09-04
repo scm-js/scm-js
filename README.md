@@ -78,6 +78,19 @@ tileset colours for terrain and coloured markers for units. See
 
 Open a map with Ctrl+O or by dropping it on the window. Ctrl+S saves.
 
+### A new scenario
+
+Ctrl+N opens the New Scenario dialog. The eight tilesets are shown as their own ground
+rather than as coloured squares, the terrain list under the size shows every flat terrain
+the tileset paints — this is the fill the map is made of, so what you see there is what
+the map will look like — and the preview draws the scenario at its real size and terrain,
+so a 64×64 map reads as coarser ground than a 256×256 one. Start locations are optional
+and on by default: one per player on a ring, each moved to the nearest ground it fits on,
+laid down with the terrain. They are part of the map from the moment it exists, so there
+is nothing to undo them from — untick *Place automatically*, or delete them on the Units
+layer. Without game data the dialog falls back to flat tileset colours and says so, as
+the map view itself does.
+
 ### Saving
 
 Ctrl+S writes the map back where it came from. In Chrome, Edge and the desktop app the

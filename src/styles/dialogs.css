@@ -176,39 +176,62 @@
   color: var(--text);
 }
 .tileset-card .thumb {
-  height: 44px;
+  display: block;
   border-radius: 2px;
-  background: var(--c);
   box-shadow: var(--bevel-sunken);
-  position: relative;
   overflow: hidden;
 }
-.tileset-card .thumb::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.14), transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(0, 0, 0, 0.35), transparent 50%),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 8px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 8px);
+
+/* new-map terrain list: fills whatever the preview column leaves over */
+.group.terrain-group {
+  flex: 1;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
 }
+.terrain-picker {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.terrain-picker .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  text-align: left;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+.terrain-picker .row:hover {
+  background: var(--bg-4);
+  color: var(--text);
+}
+.terrain-picker .row.selected {
+  background: var(--sel);
+  color: var(--text);
+}
+.terrain-picker .swatch {
+  border-radius: 2px;
+  box-shadow: var(--bevel-sunken);
+  flex: none;
+}
+
 .map-preview {
   width: 100%;
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
   background: var(--bg-0);
   box-shadow: var(--bevel-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  overflow: hidden;
 }
-.map-preview .sheet {
-  background: var(--c);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.6);
-  background-image:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 12.5%),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 12.5%);
+.map-preview canvas {
+  display: block;
 }
 
 /* player colour chips */

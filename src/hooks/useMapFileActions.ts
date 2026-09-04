@@ -3,13 +3,15 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { archiveExtrasAtom, closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, terrainRevisionAtom, type RecentEntry } from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
-import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
+import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
 import { markDirty, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
+import { peekUnitAssets } from "../formats/units/load";
+import { DEFAULT_START_PLACEMENT, placeStartLocations, type StartLayout } from "../editor/startLocations";
 import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 import { openMapFile, saveBytes, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
 import { buildMapFile, defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
@@ -23,6 +25,13 @@ export interface NewMapOptions {
   description: string;
   /** ISOM id of the terrain to fill with; the tileset's default when omitted. */
   terrainId?: number;
+  /**
+   * Start locations to lay down for players 1..N, as Tools ▸ Auto-place would. Part of
+   * making the map rather than an edit on it, so it is not in the undo history — a fresh
+   * scenario has none yet. None when omitted, which is what File ▸ New used to do.
+   */
+  startLocations?: number;
+  startLayout?: StartLayout;
 }
 
 /** What StarEdit starts on, give or take its 64x64: a blank Badlands scenario. */
@@ -101,9 +110,25 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
 
   const terrain = baseTerrain(loaded?.tileset ?? null, options.terrainId ?? info.defaultIsom);
   const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null, Math.random, era);
+  const scenario = createScenario({ width, height, era, name, description, tiles, isom });
+
+  // Start locations go on before the document is installed: they are part of the map the
+  // dialog asked for, so there is nothing to undo them back to.
+  const wanted = Math.max(0, Math.min(8, Math.floor(options.startLocations ?? 0)));
+  let starts = 0;
+  if (wanted > 0) {
+    const r = placeStartLocations(scenario, loaded?.tileset ?? null, peekUnitAssets()?.units ?? null, {
+      players: wanted,
+      layout: options.startLayout ?? DEFAULT_START_PLACEMENT.layout,
+      margin: DEFAULT_START_PLACEMENT.margin,
+      replace: false,
+      placement: store.get(placementOptionsAtom),
+    });
+    starts = r.placed.filter((p) => p !== null).length;
+  }
 
   store.set(loadDocumentAtom, {
-    scenario: createScenario({ width, height, era, name, description, tiles, isom }),
+    scenario,
     extras: new Map(),
     fileName: null,
     reason: "new",
@@ -111,7 +136,11 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
   // Without the CV5 every pair took variation 0, which draws as one megatile repeated once
   // the graphics arrive; remember to lay it again if they do (`relayBlankTerrain`).
   if (!loaded) store.set(blankFillAtom, { terrainId: terrain.id });
-  store.set(statusMessageAtom, `New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}`);
+  store.set(
+    statusMessageAtom,
+    `New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}` +
+    (wanted > 0 ? `, ${starts} start location${starts === 1 ? "" : "s"}${starts < wanted ? ` (no room for ${wanted - starts})` : ""}` : ""),
+  );
   return true;
 }
 

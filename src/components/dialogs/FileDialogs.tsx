@@ -5,6 +5,11 @@ import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapN
 import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
+import { DEFAULT_START_PLACEMENT, idealStarts } from "../../editor/startLocations";
+import { baseTerrain } from "../../formats/tileset/terrain";
+import { renderTerrainPatch, type TerrainPatch } from "../../formats/tileset/preview";
+import { PREVIEW_TILES, useTilesetGraphics, useTilesetThumbs } from "../../hooks/useTilesetPreview";
+import { MapPreview, PatchThumb, type PreviewStart } from "./TerrainPreview";
 import { DEFAULT_NEW_MAP, saveDocument, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { hostTerms } from "../../editor/platform";
@@ -22,7 +27,16 @@ import { Button, Check, Field, Group, ListBox, NumberInput, Select, TextArea, Te
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
+/** Height of a tileset card's thumbnail; it stretches to the card's width. */
+const CARD_H = 44;
+
 /* ── New Map ────────────────────────────────────────────── */
+
+/** Where the dialog marks the starts it is about to place; the fit search moves them a little. */
+function previewStarts(width: number, height: number, players: number, place: boolean): PreviewStart[] {
+  if (!place || players < 1) return [];
+  return idealStarts(width, height, players, DEFAULT_START_PLACEMENT.layout, DEFAULT_START_PLACEMENT.margin);
+}
 
 export function NewMapDialog({ entry }: DialogProps) {
   const { guard } = useMapFileActions();
@@ -34,11 +48,25 @@ export function NewMapDialog({ entry }: DialogProps) {
   const [terrain, setTerrain] = useState(TILESET_BY_ID[prefs.newMap.tileset].defaultIsom);
   const [name, setLocalName] = useState(DEFAULT_NEW_MAP.name);
   const [desc, setLocalDesc] = useState(DEFAULT_NEW_MAP.description);
-  const [players, setPlayers] = useState(8);
+  const [players, setPlayers] = useState(4);
+  const [autoStarts, setAutoStarts] = useState(true);
+
+  const thumbs = useTilesetThumbs();
+  // The chosen tileset's graphics, so the map preview can be drawn at any terrain and size.
+  const { tileset: graphics, loading } = useTilesetGraphics(tileset);
 
   const ts = TILESET_BY_ID[tileset];
+  const swatches = thumbs.get(tileset)?.swatches ?? null;
+  // Terrain the graphics can actually draw; the reference list when there are none.
+  const terrainList = swatches ?? ts.terrain.map((t) => ({ ...t, group: -1, patch: null as TerrainPatch | null }));
   const pick = (id: TilesetId) => { setTs(id); setTerrain(TILESET_BY_ID[id].defaultIsom); };
-  const maxDim = Math.max(w, h);
+
+  const patch = useMemo(() => {
+    if (!graphics) return null;
+    const base = baseTerrain(graphics, terrain);
+    return renderTerrainPatch(graphics, base, PREVIEW_TILES.cols, PREVIEW_TILES.rows);
+  }, [graphics, terrain]);
+  const starts = useMemo(() => previewStarts(w, h, players, autoStarts), [w, h, players, autoStarts]);
 
   return (
     <DialogFrame
@@ -48,15 +76,21 @@ export function NewMapDialog({ entry }: DialogProps) {
       size="lg"
       okLabel="Create"
       onOk={() => {
-        guard({ action: "new", options: { width: w, height: h, tileset, name: name || DEFAULT_NEW_MAP.name, description: desc, terrainId: terrain } });
+        guard({
+          action: "new",
+          options: {
+            width: w, height: h, tileset, name: name || DEFAULT_NEW_MAP.name, description: desc, terrainId: terrain,
+            startLocations: autoStarts ? players : 0,
+          },
+        });
       }}
-      footerLeft={<span>{ts.name} · {w}×{h} · {terrainName(ts, terrain)}</span>}
+      footerLeft={<span>{ts.name} · {w}×{h} · {terrainName(ts, terrain)}{autoStarts && players > 0 ? ` · ${players} start${players === 1 ? "" : "s"}` : ""}</span>}
     >
       <Group title="Tileset">
         <div className="tileset-grid">
           {TILESETS.map((t) => (
             <button key={t.id} className={`tileset-card ${tileset === t.id ? "selected" : ""}`} onClick={() => pick(t.id)}>
-              <span className="thumb" style={{ ["--c" as string]: t.color }} />
+              <PatchThumb patch={thumbs.get(t.id)?.card ?? null} color={t.color} height={CARD_H} className="thumb" />
               <span>{t.name}</span>
             </button>
           ))}
@@ -74,13 +108,10 @@ export function NewMapDialog({ entry }: DialogProps) {
                   <span className="hint">tiles</span>
                 </div>
               </Field>
-              <Field label="Initial terrain">
-                <Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={ts.terrain.map((t) => ({ value: String(t.id), label: t.name }))} />
-              </Field>
-              <Field label="Start locations">
+              <Field label="Start locations" hint={autoStarts ? "Placed on a ring, each nudged to the nearest ground it fits on." : "Add them yourself on the Units layer, or with Tools ▸ Auto-place."}>
                 <div className="row">
-                  <NumberInput value={players} onChange={setPlayers} min={0} max={8} width={90} />
-                  <Check label="Place automatically" />
+                  <NumberInput value={players} onChange={setPlayers} min={1} max={8} width={90} disabled={!autoStarts} />
+                  <Check label="Place automatically" checked={autoStarts} onChange={(e) => setAutoStarts(e.target.checked)} />
                 </div>
               </Field>
             </div>
@@ -91,13 +122,30 @@ export function NewMapDialog({ entry }: DialogProps) {
               <Field label="Description"><TextArea rows={3} value={desc} onChange={(e) => setLocalDesc(e.target.value)} placeholder="Shown in the game lobby…" /></Field>
             </div>
           </Group>
+          <Group title="Initial terrain" flush className="terrain-group">
+            <div className="listbox terrain-picker">
+              {terrainList.map((t) => (
+                <button
+                  key={t.id}
+                  className={`row ${terrain === t.id ? "selected" : ""}`}
+                  onClick={() => setTerrain(t.id)}
+                >
+                  <PatchThumb patch={t.patch} color={ts.color} width={22} height={22} className="swatch" />
+                  <span>{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </Group>
         </div>
-        <Group title="Preview">
-          <div className="map-preview">
-            <div className="sheet" style={{ ["--c" as string]: ts.color, width: `${(w / maxDim) * 82}%`, height: `${(h / maxDim) * 82}%` }} />
-          </div>
-          <p className="hint" style={{ marginTop: 8 }}>{w * h} tiles · {w * 32}×{h * 32} px</p>
-        </Group>
+        <div className="stack">
+          <Group title="Preview">
+            <MapPreview patch={patch} color={ts.color} width={w} height={h} starts={starts} />
+            <p className="hint" style={{ marginTop: 8 }}>
+              {w * h} tiles · {w * 32}×{h * 32} px
+              {!graphics && !loading && " · no tileset graphics, showing flat colour"}
+            </p>
+          </Group>
+        </div>
       </div>
     </DialogFrame>
   );

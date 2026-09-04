@@ -148,6 +148,38 @@ async function fetchOptional(name: string, check: (data: Uint8Array) => boolean,
   }
 }
 
+/** The four files the megatile decoder needs, fetched and decoded — no atlas, no doodads. */
+async function fetchGraphics(name: TilesetFileName, tally: Tally | null): Promise<Tileset> {
+  // Remastered ships .vx4ex alongside .vx4; prefer it when it was extracted.
+  const [cv5, vf4, vr4, wpe, vx4ex] = await Promise.all([
+    fetchPart(`${name}.cv5`, isCv5, tally),
+    fetchPart(`${name}.vf4`, isVf4, tally),
+    fetchPart(`${name}.vr4`, isVr4, tally),
+    fetchPart(`${name}.wpe`, isPalette, tally),
+    fetchOptional(`${name}.vx4ex`, isVx4Ex, tally),
+  ]);
+  const vx4 = vx4ex ?? (await fetchPart(`${name}.vx4`, isVx4, tally));
+  return loadTileset({ cv5, vf4, vr4, wpe, vx4, vx4Extended: vx4ex !== null });
+}
+
+/**
+ * A tileset's graphics *without* the atlas, and outside the tileset cache.
+ *
+ * Rasterising an atlas costs ~20 MB per tileset, which is the whole reason the New
+ * Scenario dialog — which pictures all eight — asks for this instead: it decodes one,
+ * renders the small patches it needs (`preview.ts`) and lets the tileset go. An already
+ * loaded tileset is handed back rather than fetched again.
+ */
+export async function loadTilesetGraphics(name: TilesetFileName): Promise<Tileset> {
+  const loaded = ready.get(name);
+  if (loaded) return loaded.tileset;
+  try {
+    return await fetchGraphics(name, null);
+  } catch (err) {
+    throw new TilesetMissingError(name, err);
+  }
+}
+
 /** Fetch, decode and rasterise a tileset. Repeat calls share one in-flight promise. */
 export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
   const existing = cache.get(name);
@@ -156,20 +188,12 @@ export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
   const loading = (async (): Promise<LoadedTileset> => {
     const tally: Tally = { tileset: name, loaded: 0, total: 0, emitted: 0 };
     try {
-      // Remastered ships .vx4ex alongside .vx4; prefer it when it was extracted.
-      const [cv5, vf4, vr4, wpe, vx4ex, dddata, names] = await Promise.all([
-        fetchPart(`${name}.cv5`, isCv5, tally),
-        fetchPart(`${name}.vf4`, isVf4, tally),
-        fetchPart(`${name}.vr4`, isVr4, tally),
-        fetchPart(`${name}.wpe`, isPalette, tally),
-        fetchOptional(`${name}.vx4ex`, isVx4Ex, tally),
+      const [tileset, dddata, names] = await Promise.all([
+        fetchGraphics(name, tally),
         // Optional: an older extraction has no dddata.bin (doodads then place anywhere) or names.
         fetchOptional(`${name}.dddata.bin`, isDdData, tally),
         getStatTxt(),
       ]);
-      const vx4 = vx4ex ?? (await fetchPart(`${name}.vx4`, isVx4, tally));
-
-      const tileset = loadTileset({ cv5, vf4, vr4, wpe, vx4, vx4Extended: vx4ex !== null });
       const doodads = buildDoodadCatalogue(tileset, dddata, names);
       return { name, tileset, atlas: await buildAtlas(tileset, cycleBands(TILESET_FILENAMES.indexOf(name))), doodads };
     } catch (err) {

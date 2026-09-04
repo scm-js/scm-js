@@ -304,6 +304,12 @@ export interface NewDocumentOptions {
   description?: string;
   /** ISOM id of the terrain to fill with; the tileset's default ground when omitted. */
   terrainId?: number;
+  /**
+   * Start locations to lay down for players 1..N, as `tx.placeStartLocations` would.
+   * Part of making the map, so a fresh scenario has no history to undo them from.
+   */
+  startLocations?: number;
+  startLayout?: StartLayout;
 }
 
 export interface DocumentApi {

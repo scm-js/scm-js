@@ -863,7 +863,10 @@ wrong in the same way — and a `package.json` versioned with the *editor* besid
 `api.document.create(options)` is File ▸ New without React:
 `useMapFileActions.ts#newMapInto` (the store-level half of the hook's `newMap`, which now calls it) behind the same
 `guardedReplace` gate as `open` — a "new" `PendingAction` carries `done` / `taken` like an "open" one, and the Close
-Scenario dialog's `proceed` sets `taken` for both. A menu path whose last segment names no submenu makes one for the
+Scenario dialog's `proceed` sets `taken` for both. `NewMapOptions.startLocations` (the dialog's *Place
+automatically*, on by default at four players) runs `placeStartLocations` over the scenario *before*
+`loadDocumentAtom` installs it: they are part of making the map, so the document is still unmodified and
+there is no history entry to undo them from. `tests/new-map.test.ts`. A menu path whose last segment names no submenu makes one for the
 plugin (`withPluginItems`: `"Tools/AI"` → an AI submenu at the end of Tools, after a separator; `separator: true`
 on an item draws one above it, never doubled); a missing *top* menu still falls back to Plugins. Smaller
 conveniences the AI plugin asked for: `document.history()` peeks at both stacks' labels and depths,
@@ -1169,6 +1172,22 @@ and says so. A decoded tileset is the raw files plus a ~20 MB atlas canvas, and 
 for the *document's* tileset, so `useTileset` calls `releaseTileset` on the one the map just left
 (on the transition, not a sweep — a tileset a dialog is loading ahead of a change is never taken
 away); a released tileset is fetched again if a later map needs it. `tests/tileset-cache.test.ts`.
+
+The atlas is also why the New Scenario dialog cannot go through `getTileset`: it pictures
+all eight tilesets at once, and eight atlases is more memory than the rest of the editor.
+`loadTilesetGraphics(name)` is the way round it — the four files the megatile decoder needs,
+decoded, *outside* the cache (an already loaded tileset is handed back rather than fetched
+again) — and `preview.ts` paints from one: `renderTerrainPatch(tileset, terrain, cols, rows)`
+is a `cols`x`rows` block of flat ground as RGBA, laid with `terrain.ts#flatTiles` (the MTXM
+half of `flatTerrain`, split out for this) so the picture is the fill a new map really gets.
+`hooks/useTilesetPreview.ts` holds the caches: every tileset's card thumbnail and terrain
+swatches, rendered one tileset at a time and kept as pixels while the tileset itself is
+dropped, plus `useTilesetGraphics` for the selected tileset, held only while the dialog is
+mounted so the map preview can be redrawn at any terrain and size.
+`components/dialogs/TerrainPreview.tsx` is the two canvases (`PatchThumb`, `MapPreview` —
+the map at its own scale with the start locations `idealStarts` would put on it); without
+graphics both fall back to the tileset's flat reference colour, as the viewport does.
+`tests/tileset-preview.test.ts`.
 
 ### Units (`src/formats/dat/`, `src/formats/units/`, `src/editor/units.ts`, `src/hooks/useUnitTools.ts`)
 

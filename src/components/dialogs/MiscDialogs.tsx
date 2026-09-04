@@ -575,6 +575,18 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     1× is the speed the game itself runs at.
                   </p>
                 </Group>
+                <Group title="Text colours">
+                  <Check
+                    label="Preview strings the way 1.16.1 drew them"
+                    title="1.16.1 reset the text colour at every line break; Remastered carries it onto the next line. This changes only what the editor draws — never the map."
+                    checked={local.classicText}
+                    onChange={(e) => patch({ classicText: e.target.checked })}
+                  />
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Every preview of a string follows this — Map Properties, the String
+                    Editor, force and unit names, trigger text.
+                  </p>
+                </Group>
               </div>
             ),
           },

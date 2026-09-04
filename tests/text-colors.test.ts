@@ -3,7 +3,9 @@ import {
   bleedingLines,
   DEFAULT_TEXT_COLOR,
   fixBleeding,
+  inlineRuns,
   INSERTABLE_CODES,
+  NEWLINE_MARK,
   plainText,
   RESET_CODE,
   runsOf,
@@ -114,6 +116,48 @@ describe("runsOf", () => {
   it("takes <01> back to the colour the string started in", () => {
     const [line] = runsOf(`${b(0x06)}red${b(0x01)}back`);
     expect(line.runs[1].color).toBe(DEFAULT_TEXT_COLOR);
+  });
+});
+
+describe("inlineRuns", () => {
+  it("flattens the lines into one row, marking each break", () => {
+    const runs = inlineRuns(`a\n${b(0x0e)}bee`);
+    expect(runs.map((r) => r.text)).toEqual(["a", NEWLINE_MARK, "bee"]);
+    expect(runs[2].color).toBe(textCode(0x0e)!.rgb);
+  });
+
+  it("gives the mark the colour the line before it ended in, so it does not flash white", () => {
+    const runs = inlineRuns(`${b(0x06)}red\nmore`);
+    const red = textCode(0x06)!.rgb;
+    expect(runs.map((r) => r.color)).toEqual([red, red, red]);
+  });
+
+  it("keeps a leading break rather than losing the empty line", () => {
+    expect(inlineRuns("\nx").map((r) => r.text)).toEqual([NEWLINE_MARK, "x"]);
+  });
+
+  it("drops the empty runs a code between two words leaves behind", () => {
+    expect(inlineRuns(`ab${b(0x04)}${b(0x06)}cd`).map((r) => r.text)).toEqual(["ab", "cd"]);
+  });
+
+  it("carries a colour across the break, or resets it, exactly as runsOf does", () => {
+    const text = `${b(0x06)}red\nnext`;
+    expect(inlineRuns(text)[2].color).toBe(textCode(0x06)!.rgb);
+    expect(inlineRuns(text, { resetPerLine: true })[2].color).toBe(DEFAULT_TEXT_COLOR);
+  });
+
+  it("leaves text no code coloured on the caller's own colour", () => {
+    // What the list rows and the compact fields do: only a string that really carries a
+    // colour stands out; the rest looks like the chrome around it.
+    const runs = inlineRuns(`plain${b(0x06)}red`, { initialColor: "inherit" });
+    expect(runs.map((r) => [r.text, r.color])).toEqual([
+      ["plain", "inherit"],
+      ["red", textCode(0x06)!.rgb],
+    ]);
+  });
+
+  it("says nothing at all for the empty string", () => {
+    expect(inlineRuns("")).toEqual([]);
   });
 });
 

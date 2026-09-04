@@ -22,6 +22,13 @@ export interface Preferences {
   animateWaterSpeed: number;
   animateUnitsSpeed: number;
   /**
+   * Preview the `<XX>` colour codes in strings the way **1.16.1** drew them: the colour
+   * resets at every line break. Off is Remastered's rule, which carries a colour onto the
+   * next line — see `editor/textColors.ts`. It changes only what the editor draws, never
+   * the map, and every preview in the chrome reads it.
+   */
+  classicText: boolean;
+  /**
    * Tools ▸ Test Map: whether to start the game after writing the map (desktop build), and
    * the game folder to use when the desktop build should not search ("" = search). The
    * browser's folder is a handle in IndexedDB (`services/handleStore.ts`), not here.
@@ -46,6 +53,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   animateUnits: true,
   animateWaterSpeed: 1,
   animateUnitsSpeed: 1,
+  classicText: false,
   testMap: { launch: true, dir: "" },
   updates: { checkOnStart: true, nightly: false },
 };

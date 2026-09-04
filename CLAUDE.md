@@ -417,9 +417,27 @@ called black instead of player 9's green), `runsOf` turning a string into colour
 way the game draws it, and the Remastered newline change: 1.16.1 reset the colour at every
 line break and Remastered carries it on, so `bleedingLines` finds the lines that render
 differently now and `fixBleeding` writes the reset the old game supplied (`RESET_CODE`,
-0x02, the cyan that *is* the default). `components/ui/ColorCodes.tsx` is the shared chrome —
-`ColorCodeBar` (a swatch per code) and `StringPreview` — used by the String Editor and Map
-Properties' name/description, which is why `TextInput` / `TextArea` take a `ref`. The whole
+0x02, the cyan that *is* the default), and `inlineRuns` — the same reading flattened to one
+line, with a `NEWLINE_MARK` between the lines. `components/ui/ColorCodes.tsx` is the shared
+chrome, three surfaces a field takes as many of as it has room for: `ColorCodeBar` (a swatch
+per code, refusing the mousedown so the caret it inserts at survives the click),
+`StringPreview` (the block plate, on the game's own dark ground in the game's own default
+cyan) and `InlineString` (one line, for a list row or a field-shaped box — drawn with
+`initialColor: "inherit"`, so text no code coloured keeps the chrome's colour and only a
+string that really carries a colour stands out). **`ColorTextField` is the three composed**
+and owns the `escapeControls` / `unescapeControls` round trip, so no caller repeats it:
+`preview` is `"swap"` (the read surface *is* the field until it takes focus — what lets four
+force names each have one), `"below"` (a persistent plate, Map Properties' description and
+the String Editor) or `"none"`; `codes` is `"popover"` (a Radix `Popover` on the field's own
+button, `onOpenAutoFocus` prevented so the caret stays put), `"bar"` or `"none"`. Going back
+to the read surface on blur is deferred one task on purpose — pulling the input out of the
+tree while the browser is still moving focus makes the dialog's focus trap take it back, and
+clicking from one of these fields into another landed on the dialog. It is used by Map
+Properties, the String Editor, force names, custom unit names and a trigger or briefing
+action's `text` argument; a `wav` argument and the strings the game never draws (location
+names, switch names, trigger comments) deliberately get none of it. `Preferences.classicText`
+is the 1.16.1 line-break rule, one setting every preview reads (`useClassicText`), shown in
+the String Editor and Preferences ▸ Display. The whole
 module is on the plugin API as **`api.text`** (`TextApi` in `plugins/api.ts`,
 `host.ts#text`), so no plugin carries a copy of the numbering — the Repair plugin's string
 finding is `bleedingLines` / `fixBleeding` over `api.query.strings()`, injected into its

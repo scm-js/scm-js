@@ -23,6 +23,7 @@ import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { SpritePreview } from "../panels/UnitPreview";
 import { Button, Check, Field, Group, ListBox, NumberInput, Select, TextInput } from "../ui";
+import { ColorTextField, InlineString } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -234,7 +235,8 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
               <SpritePreview kind="unit" id={sel} owner={0} colors={scenario.playerColors} rgb={scenario.playerRgb} size={64} />
             </div>
             <div className="col" style={{ gap: 2, flex: 1 }}>
-              <span className="title">{customName || unitName(sel)}</span>
+              {/* A custom name is an ordinary string, so it may carry colour codes. */}
+              <span className="title"><InlineString text={customName || unitName(sel)} /></span>
               <span className="hint">{unitName(sel)} · id {sel}{race ? ` · ${RACE_LABEL[race]}` : ""}{customName ? " · custom name" : ""}</span>
             </div>
             <Check label="Use default unit settings" checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
@@ -253,7 +255,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
                 {number("Minerals", "mineralCost", defaults.minerals, 0xffff)}
                 {number("Vespene gas", "gasCost", defaults.gas, 0xffff)}
                 <Field label="Custom name" hint="Empty for the game's own name. Applies whether or not the type uses default settings.">
-                  <TextInput placeholder={unitName(sel)} value={customName} onChange={(e) => setNames(new Map(names).set(sel, e.target.value))} />
+                  <ColorTextField placeholder={unitName(sel)} value={customName} onChange={(v) => setNames(new Map(names).set(sel, v))} />
                 </Field>
               </div>
             </Group>

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eraser, Lock, Music, Pencil, Play, Plus, RefreshCw, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { activeLayerAtom, mapDescriptionAtom, mapNameAtom, selectedLocationsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, commitSettingsAtom, locationsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
-import { applyStrings, deleteUnused, escapeControls, previewString, readStrings, stringCapacity, stringUsages, unescapeControls, type StringUsage } from "../../editor/strings";
+import { applyStrings, deleteUnused, readStrings, stringCapacity, stringUsages, type StringUsage } from "../../editor/strings";
 import { addSound, applySounds, findMember, normalizeMember, orphanSounds, readWavs, removeSound, soundBytes, soundList, wavMemberName, type SoundRow } from "../../editor/sounds";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../../editor/switches";
 import { hostTerms } from "../../editor/platform";
@@ -16,7 +17,7 @@ import { WAV_SLOTS } from "../../formats/chk/sections/sounds";
 import { canDecodeWav, decodeWav, isPlainPcm, parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../formats/wav";
 import { convertToWav, decodeAudio, DEFAULT_WAV_PRESET, IMPORT_EXTENSIONS, matchesTarget, toAudioBuffer, WAV_PRESETS, withWavExtension } from "../../services/audioConvert";
 import { Button, Check, ListBox, Select, TextInput } from "../ui";
-import { ColorCodeBar, insertAtCaret, StringPreview } from "../ui/ColorCodes";
+import { ColorTextField, InlineString } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -42,9 +43,10 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number>(typeof entry.payload?.index === "number" ? (entry.payload.index as number) : 1);
   // Preview the string the way 1.16.1 drew it (colour reset at every line break) rather
-  // than the way Remastered does; the difference is the whole point of the tick.
-  const [classic, setClassic] = useState(false);
-  const textRef = useRef<HTMLTextAreaElement>(null);
+  // than the way Remastered does; the difference is the whole point of the tick. It is
+  // one setting rather than this dialog's own, since every preview in the chrome — the
+  // list beside this field included — now draws by it.
+  const [prefs, setPrefs] = useAtom(preferencesAtom);
   // Usages are by index and indices never move, so the scenario's own picture stays right for the working copy.
   const usages = useMemo<Map<number, StringUsage[]>>(() => (scenario ? stringUsages(scenario) : new Map()), [scenario]);
 
@@ -70,9 +72,6 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const count = list.length - 1;
   const setText = (index: number, text: string | null) => { const next = list.slice(); next[index] = text; setList(next); };
 
-  const insertCode = (code: string) => {
-    setText(sel, unescapeControls(insertAtCaret(textRef.current, escapeControls(current ?? ""), code)));
-  };
   const addString = () => { const next = [...list, ""]; setList(next); setSel(next.length - 1); setQ(""); };
   const apply = () => {
     if (applyStrings(scenario, list, usages)) {
@@ -110,7 +109,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
               {rows.map((r) => (
                 <tr key={r.index} className={sel === r.index ? "selected" : ""} onClick={() => setSel(r.index)}>
                   <td className="num">{r.index}</td>
-                  <td className={r.text === null ? "faint" : ""} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 360 }}>{r.text === null ? "(blank)" : previewString(r.text) || <span className="faint">(empty)</span>}</td>
+                  <td className={r.text === null ? "faint" : ""} style={{ maxWidth: 360 }}>{r.text === null ? "(blank)" : <InlineString text={r.text} placeholder="(empty)" />}</td>
                   <td className={r.used ? "dim" : "faint"} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }} title={r.used}>{r.used || "unused"}</td>
                 </tr>
               ))}
@@ -122,24 +121,26 @@ export function StringEditorDialog({ entry }: DialogProps) {
           <span className="dim" style={{ fontSize: 11 }}>
             String #{current === undefined ? "—" : sel} · {(usages.get(sel) ?? []).map((u) => u.label).join(", ") || (list[sel] === null ? "blank slot" : "not referenced")}
           </span>
-          <ColorCodeBar onInsert={insertCode} disabled={sel <= 0 || sel >= list.length} />
-          <textarea
-            ref={textRef}
-            className="textarea grow mono"
+          <ColorTextField
+            value={current ?? ""}
+            onChange={(text) => setText(sel, text)}
+            multiline
+            rows={5}
+            codes="bar"
+            preview="below"
+            wrapClassName="grow"
+            className="mono"
             style={{ minHeight: 90 }}
-            value={escapeControls(current ?? "")}
             disabled={sel <= 0 || sel >= list.length}
-            onChange={(e) => setText(sel, unescapeControls(e.target.value))}
             placeholder={sel > 0 && sel < list.length ? "Empty string" : "Select a string to edit it"}
           />
-          <StringPreview text={current ?? ""} resetPerLine={classic} placeholder="Nothing to draw" />
           <div className="row between">
             <p className="hint" style={{ margin: 0 }}>Bytes below 0x20 are shown as &lt;XX&gt; and may be typed that way; tab and line breaks stay literal.</p>
             <Check
               label="1.16.1 colours"
-              title="Reset the colour at every line break, the way 1.16.1 drew it. Remastered carries a colour onto the next line instead — if the two previews differ, the string renders differently now than when it was written."
-              checked={classic}
-              onChange={(e) => setClassic(e.target.checked)}
+              title="Reset the colour at every line break, the way 1.16.1 drew it. Remastered carries a colour onto the next line instead — if the string changes when you tick this, it renders differently now than when it was written. The setting is the editor's, so every preview in it follows."
+              checked={prefs.classicText}
+              onChange={(e) => setPrefs({ ...prefs, classicText: e.target.checked })}
             />
           </div>
         </div>

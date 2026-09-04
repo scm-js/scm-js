@@ -9,6 +9,7 @@ import { MAP_VERSIONS, mapVersionOf } from "../../formats/chk/scenario";
 import { applyForceSettings, applyPlayerColors, applyPlayerSettings, readForceSettings, readPlayerSettings } from "../../editor/settings";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, Group, ListBox, Select, TextInput } from "../ui";
+import { ColorTextField } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -121,7 +122,7 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
             <fieldset key={fi} className="group force-box">
               <legend>Force {fi + 1}</legend>
               <div className="row" style={{ marginBottom: 6 }}>
-                <TextInput value={local.names[fi]} placeholder={`Force ${fi + 1}`} onChange={(e) => setName(fi, e.target.value)} />
+                <ColorTextField wrapClassName="grow" value={local.names[fi]} placeholder={`Force ${fi + 1}`} onChange={(v) => setName(fi, v)} />
               </div>
               <div className="row" style={{ alignItems: "stretch" }}>
                 <ListBox

@@ -466,15 +466,25 @@ index, so triggers and locations keep pointing where they did. Control bytes sho
 type as `<XX>`, a row of buttons inserts the game's colour codes — each drawn in the
 colour it produces — and a preview under the box shows the string the way the game
 draws it: colours applied, `<12>` / `<13>` alignment honoured, and the text an `<0B>`
-hides struck through rather than dropped. The same bar and preview sit under Map
-Properties' name and description.
+hides struck through rather than dropped. The list beside it draws each string the same
+way, on one line.
 
-The preview follows **Remastered's** rule, where a colour set on one line carries onto
+**Every field whose text the game draws takes the codes**, not just that one: the map
+name and description, force names, custom unit names, and the text argument of a trigger
+or briefing action. Those fields show the string the way the game draws it until you
+click into them, and the escaped `<XX>` source while you type — so a colour costs no
+extra chrome in a list of four force names. The palette button at the right-hand end of
+each opens the same bar of codes, and inserts at the caret. Strings the game never draws
+— location names, switch names, trigger comments — take no codes, since a colour in one
+would only mean something to the editor.
+
+The previews follow **Remastered's** rule, where a colour set on one line carries onto
 the next. StarCraft 1.16.1 reset the colour at every line break, so a string written
 before the remaster can draw in colours its author never chose; the *1.16.1 colours*
-tick shows the old rendering beside it, and the Repair plugin offers to write the reset
-the old game used to supply. (Text *stacking* — overlapping lines drawn on top of each
-other — is a separate 1.16.1 trick, and Remastered does not render it at all.)
+tick in the String Editor (and Preferences ▸ Display) switches every preview to the old
+rendering, and the Repair plugin offers to write the reset the old game used to supply.
+(Text *stacking* — overlapping lines drawn on top of each other — is a separate 1.16.1
+trick, and Remastered does not render it at all.)
 
 The Sound Editor joins the map's sound table with the `.wav` files in the archive:
 import, play, remove, and adopt files the archive carries but the table does not list.

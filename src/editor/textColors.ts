@@ -189,6 +189,33 @@ export function runsOf(text: string, options: RunOptions = {}): TextLine[] {
   return lines;
 }
 
+/** The visible mark a line break becomes when a string is drawn on one line. */
+export const NEWLINE_MARK = " \u23ce ";
+
+/**
+ * The same reading, flattened to a single line of runs — what a field or a list row shows
+ * when there is one line's worth of room. Line breaks become a `NEWLINE_MARK` run in the
+ * colour the line ended in, so a two-line string still reads as two lines' worth of text
+ * rather than running together, and alignment (which needs a line to act on) is dropped.
+ */
+export function inlineRuns(text: string, options: RunOptions = {}): TextRun[] {
+  const lines = runsOf(text, options);
+  const out: TextRun[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) {
+      const prev = out[out.length - 1];
+      out.push({
+        text: NEWLINE_MARK,
+        color: prev?.color ?? options.initialColor ?? DEFAULT_TEXT_COLOR,
+        invisible: prev?.invisible ?? false,
+        clipped: false,
+      });
+    }
+    for (const run of lines[i].runs) if (run.text !== "") out.push(run);
+  }
+  return out;
+}
+
 /** The text with every control byte removed — what the string actually says. */
 export function plainText(text: string): string {
   let out = "";

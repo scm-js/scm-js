@@ -686,3 +686,104 @@ input[type="range"] {
   opacity: 0.35;
   text-decoration: line-through;
 }
+
+/* The one-line reading, for a list row or a field-shaped box. The caller's box supplies
+   the dark ground; every one that uses it is already `--bg-0`, near enough the plate. */
+.string-inline {
+  display: block;
+  min-width: 0;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.string-inline .is-hidden {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+/* A field whose value carries control bytes: the bar (when the dialog keeps one open),
+   the input — or, until it is focused, the reading of it — with the button that opens the
+   code bar, and the plate under it. */
+.color-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.color-text-wrap.grow {
+  min-height: 0;
+}
+.color-text-wrap.grow .color-text {
+  flex: 1;
+  min-height: 0;
+}
+.color-text-wrap.grow .textarea {
+  height: 100%;
+}
+/* A field whose value carries control bytes: the input (or, until it is focused, the
+   reading of it) and the button that opens the code bar. */
+/* The code button sits *inside* the field rather than beside it: a plate under a field
+   that had a button on its flank ended up wider than the field it belonged to. */
+.color-text {
+  position: relative;
+  min-width: 0;
+}
+.color-text > .input,
+.color-text > .textarea,
+.color-text > .color-read {
+  width: 100%;
+}
+.color-text.has-codes > .input,
+.color-text.has-codes > .color-read {
+  padding-right: 26px;
+}
+.color-text.has-codes > .textarea {
+  padding-right: 26px;
+}
+/* The read surface stands in for the field, so it carries the field's own box exactly —
+   `.input` / `.textarea` are on it too, and only the text inside differs. */
+.color-read {
+  display: flex;
+  align-items: center;
+  cursor: text;
+  overflow: hidden;
+}
+.color-read.textarea {
+  display: block;
+  overflow: auto;
+  line-height: 1.45;
+}
+.color-read.textarea .string-inline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.color-text-codes {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  height: 21px;
+  width: 21px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+}
+.color-text-codes:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--border-strong);
+  background: var(--bg-3);
+}
+.color-text:focus-within .color-text-codes,
+.color-text:hover .color-text-codes {
+  color: var(--text-dim);
+}
+.code-popover {
+  max-width: 340px;
+  padding: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop), var(--bevel-raised);
+  z-index: 160;
+  animation: fade-in 0.1s ease;
+}

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Grid3x3, Maximize, ScrollText } from "lucide-react";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
@@ -14,9 +14,8 @@ import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
 import { MAP_SIZES, TILESET_BY_ID, TILESETS, type TilesetId } from "../../data/tilesets";
-import { Button, Check, Field, Group, Select, TextArea, TextInput } from "../ui";
-import { ColorCodeBar, insertAtCaret, StringPreview } from "../ui/ColorCodes";
-import { escapeControls, unescapeControls } from "../../editor/strings";
+import { Button, Check, Field, Group, Select } from "../ui";
+import { ColorTextField } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -50,15 +49,9 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   const [fill, setFill] = useState(TILESET_BY_ID[tileset].defaultIsom);
   const [keepTiles, setKeepTiles] = useState(false);
   // The name and description are ordinary strings in the table, so they carry the same
-  // `<XX>` control bytes every other string does; the fields show them escaped.
-  const nameRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
-  const [field, setField] = useState<"name" | "desc">("name");
+  // `<XX>` control bytes every other string does; `ColorTextField` shows them escaped
+  // while a field is being typed in and drawn the game's way the rest of the time.
   const tilesetChanged = localTileset !== tileset;
-  const insertCode = (code: string) => {
-    if (field === "name") setLocalName(unescapeControls(insertAtCaret(nameRef.current, escapeControls(localName), code)));
-    else setLocalDesc(unescapeControls(insertAtCaret(descRef.current, escapeControls(localDesc), code)));
-  };
   const pickTileset = (id: TilesetId) => { setLocalTileset(id); setFill(TILESET_BY_ID[id].defaultIsom); };
 
   // Writing back marks SPRP and the string table dirty; every other section is still
@@ -88,17 +81,11 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
     <DialogFrame dialogKey={entry.key} title="Map Properties" icon={<FileText size={14} />} size="md" onOk={apply} showApply>
       <Group title="Scenario">
         <div className="form wide">
-          <Field label="Name" hint="Up to 128 characters. Control bytes show as <XX> and may be typed that way.">
-            <TextInput ref={nameRef} value={escapeControls(localName)} onFocus={() => setField("name")} onChange={(e) => setLocalName(unescapeControls(e.target.value))} />
+          <Field label="Name" hint="Up to 128 characters. Control bytes show as <XX> while the field has focus, and may be typed that way.">
+            <ColorTextField value={localName} onChange={setLocalName} placeholder="No name" />
           </Field>
           <Field label="Description">
-            <TextArea ref={descRef} rows={5} value={escapeControls(localDesc)} onFocus={() => setField("desc")} onChange={(e) => setLocalDesc(unescapeControls(e.target.value))} />
-          </Field>
-          <Field label="">
-            <div className="col" style={{ gap: 6 }}>
-              <ColorCodeBar onInsert={insertCode} />
-              <StringPreview text={field === "name" ? localName : localDesc} placeholder={field === "name" ? "No name" : "No description"} />
-            </div>
+            <ColorTextField value={localDesc} onChange={setLocalDesc} multiline rows={5} preview="below" placeholder="No description" />
           </Field>
         </div>
       </Group>

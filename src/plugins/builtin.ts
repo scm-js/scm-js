@@ -42,5 +42,8 @@ for (const [path, load] of Object.entries(modules)) {
   const name = nameOf(path);
   const manifest = manifests[path.replace(/plugin\.ts$/, "plugin.json")] ?? { name };
   const iconUrl = manifest.icon ? icons[path.replace(/plugin\.ts$/, manifest.icon)] : undefined;
-  BUILTIN_PLUGINS[name] = { manifest: { ...manifest, entry: "plugin.ts" }, iconUrl, load: load as () => Promise<unknown> };
+  // `build` names a bundle to fetch; a built-in is compiled from its source by Vite, so
+  // the manifest the editor shows for one must not claim a file nobody will load.
+  const { build: _build, ...rest } = manifest;
+  BUILTIN_PLUGINS[name] = { manifest: { ...rest, entry: "plugin.ts" }, iconUrl, load: load as () => Promise<unknown> };
 }

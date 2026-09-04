@@ -117,12 +117,14 @@ export function validateManifest(raw: unknown, where: string): PluginManifest {
   if (typeof m.name !== "string" || m.name.trim() === "") throw new PluginLoadError(`${where} needs a "name".`);
   const str = (k: string) => (typeof m[k] === "string" ? (m[k] as string) : undefined);
   const out: PluginManifest = { name: m.name.trim() };
-  for (const k of ["id", "version", "description", "author", "homepage", "entry", "icon"] as const) {
+  for (const k of ["id", "version", "description", "author", "homepage", "entry", "build", "icon"] as const) {
     const v = str(k);
     if (v !== undefined) out[k] = v;
   }
   if (typeof m.api === "number") out.api = m.api;
-  if (out.entry && /^(?:[a-z]+:)?\/\//i.test(out.entry)) throw new PluginLoadError(`${where}: "entry" must be a path relative to the manifest.`);
+  for (const k of ["entry", "build"] as const) {
+    if (out[k] && /^(?:[a-z]+:)?\/\//i.test(out[k])) throw new PluginLoadError(`${where}: "${k}" must be a path relative to the manifest.`);
+  }
   return out;
 }
 
@@ -154,8 +156,10 @@ export function resolveIcon(icon: string | undefined, base: string | null): Plug
 
 export interface ResolvedPlugin {
   manifest: PluginManifest;
-  /** Null for a built-in. */
+  /** The file to import — the manifest's `build` when it has one, else its `entry`. Null for a built-in. */
   entryUrl: string | null;
+  /** True when `entryUrl` is the manifest's `build`: already JavaScript, already bundled. */
+  built?: boolean;
   /** The manifest's `icon`, resolved against wherever it came from. */
   icon?: PluginIcon;
 }
@@ -195,7 +199,11 @@ export async function resolvePlugin(
   try { json = JSON.parse(text); } catch { throw new PluginLoadError(`${manifestUrl} is not valid JSON.`); }
   const manifest = validateManifest(json, manifestUrl);
   const icon = resolveIcon(manifest.icon, manifestUrl) ?? undefined;
-  if (manifest.entry) return { manifest, entryUrl: wantEntry ? new URL(manifest.entry, manifestUrl).href : null, icon };
+  // A built bundle is preferred over the source it was built from: one fetch, no
+  // transpile, no import graph. `entry` stays in the manifest and stays the thing a
+  // person reads — it is what loads when a repository publishes no build.
+  const named = manifest.build ?? manifest.entry;
+  if (named) return { manifest, entryUrl: wantEntry ? new URL(named, manifestUrl).href : null, built: manifest.build !== undefined, icon };
   if (!wantEntry) return { manifest, entryUrl: null, icon };
   // No entry named: the first default that exists.
   const errors: string[] = [];
@@ -404,6 +412,8 @@ export interface PluginAddresses {
   manifestUrl: string | null;
   /** The file that will be imported, when it can be named without fetching any code. */
   entryUrl: string | null;
+  /** Set when that file is a built bundle rather than the plugin's own source. */
+  built: boolean;
   /** Where the plugin's other files are fetched from (null for a built-in). */
   base: string | null;
   /** A page a person can read the source on. */
@@ -416,10 +426,11 @@ export interface PluginAddresses {
  * has not been agreed to yet.
  */
 export function addressesOf(source: PluginSource, manifest: PluginManifest | null): PluginAddresses {
-  if (source.kind === "builtin") return { manifestUrl: null, entryUrl: null, base: null, webUrl: null };
+  if (source.kind === "builtin") return { manifestUrl: null, entryUrl: null, built: false, base: null, webUrl: null };
   let entryUrl = source.entryUrl;
-  if (!entryUrl && manifest?.entry && source.manifestUrl) entryUrl = new URL(manifest.entry, source.manifestUrl).href;
-  return { manifestUrl: source.manifestUrl, entryUrl, base: source.base, webUrl: source.webUrl ?? null };
+  const named = manifest?.build ?? manifest?.entry;
+  if (!entryUrl && named && source.manifestUrl) entryUrl = new URL(named, source.manifestUrl).href;
+  return { manifestUrl: source.manifestUrl, entryUrl, built: !source.entryUrl && manifest?.build !== undefined, base: source.base, webUrl: source.webUrl ?? null };
 }
 
 /** A pin: the exact commit a GitHub spec resolved to, and the spec that names it. */

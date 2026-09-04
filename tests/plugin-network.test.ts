@@ -68,6 +68,29 @@ describe.skipIf(!live)("loading a plugin over the network", () => {
     }
   });
 
+  // The other loading path: a repository that publishes a built bundle names it in the
+  // manifest's `build`, and the editor takes that instead of the source — one fetch, and
+  // the TypeScript compiler never starts. This runs against `main`, because that is where
+  // a build lands first; the pinned tags above still exercise the source path.
+  it("loads a plugin from its built bundle without transpiling anything", { timeout: 60_000 }, async () => {
+    let transpiles = 0;
+    const fetched: string[] = [];
+    const deps: LoaderDeps = {
+      ...nodeDeps,
+      fetchText: async (url) => { fetched.push(url); return nodeDeps.fetchText(url); },
+      transpile: async (source, fileName) => { transpiles++; return transpileTs(ts, source, fileName); },
+    };
+    const { manifest, module } = await loadPlugin("github:scm-js/plugin-paint", deps);
+    expect(manifest.build).toBe("dist/plugin.js");
+    expect(typeof resolveActivate(module)).toBe("function");
+    expect(transpiles).toBe(0);
+    // The manifest and the bundle, and nothing else: no entry probe, no import graph.
+    expect(fetched).toEqual([
+      "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/plugin.json",
+      "https://raw.githubusercontent.com/scm-js/plugin-paint/HEAD/dist/plugin.js",
+    ]);
+  });
+
   it("refuses a plugin that imports a package rather than a file", { timeout: 30_000 }, async () => {
     const entry = "https://raw.githubusercontent.com/scm-js/plugin-paint/v1.0.0/plugin.ts";
     await expect(bundleModule(entry, { ...nodeDeps, fetchText: async () => `import "lodash";` })).rejects.toThrow(/lodash|bare|package/i);

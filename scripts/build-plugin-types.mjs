@@ -1,88 +1,148 @@
 /**
- * `npm run build:plugin-types`: the typings a plugin repository vendors as `plugin-api/`.
+ * `npm run build:plugin-types`: the plugin API's type declarations, as **one file**.
  *
- * `tsc -p tsconfig.plugin-api.json` emits a declaration for every file its program
- * reaches, which is far more than the contract needs (and drags Jotai atoms in through
- * the editor's own modules). So: emit, then keep only what `plugins/api.d.ts` reaches
- * through its imports, refuse a tree that still names `jotai` or `react` (a plugin
- * repository must not need either to compile), and put an `index.d.ts` and a
- * `package.json` at the top so `import type { PluginApi } from "./plugin-api"` works and
- * the copy says which editor and API version it came from.
+ * `src/plugins/api.ts` is the contract, but it reaches sixty-odd of the editor's own
+ * modules for the types it names (`editor/view.ts`, `data/triggerDefs.ts`, the CHK
+ * sections…). `tsc` emits one `.d.ts` per module, which is a 61-file, 480 KB directory —
+ * and every plugin repository used to carry a copy of it, refreshed by hand. Nine copies
+ * of a generated tree is nine chances to be out of date with nothing to show it.
+ *
+ * So this rolls the reachable declarations into a single `index.d.ts` (~130 KB) with
+ * `dts-bundle-generator`, and `scripts/publish-plugin-api.mjs` pushes that one file to
+ * `github.com/scm-js/plugin-api`, which plugin repositories take as a devDependency:
+ *
+ *   "devDependencies": { "@scm-js/plugin-api": "github:scm-js/plugin-api#v0.1.0" }
+ *   import type { PluginApi } from "@scm-js/plugin-api";
+ *
+ * The bundle is checked as it is generated (the tool type-checks its own output), and
+ * this refuses one that still names `jotai` or `react`, or that carries any import at
+ * all: a plugin repository must compile with this file and nothing else. It is types
+ * only — a plugin imports it with `import type`, which is erased before the loader ever
+ * sees a specifier, which is why a bare package name here does not break the rule that
+ * plugins cannot import packages.
+ *
+ * The package's version is the **editor's**, because that is what these declarations
+ * are: the contract as of that build. `scmjs.pluginApiVersion` carries `PLUGIN_API_VERSION`
+ * separately — it is 1 and additions do not move it.
+ *
+ *   node scripts/build-plugin-types.mjs                  # → plugin-api/
+ *   node scripts/build-plugin-types.mjs --out DIR        # → somewhere else
+ *   node scripts/build-plugin-types.mjs --check          # fail if DIR is not up to date
  */
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { generateDtsBundle } from "dts-bundle-generator";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const out = join(root, "plugin-api");
-const entry = "plugins/api.d.ts";
+const ENTRY = join(root, "src/plugins/api.ts");
+const PROJECT = join(root, "tsconfig.plugin-api.json");
 
-rmSync(out, { recursive: true, force: true });
-execSync("npx tsc -p tsconfig.plugin-api.json", { cwd: root, stdio: "inherit" });
+export const PACKAGE_NAME = "@scm-js/plugin-api";
 
-/** Every `.d.ts` under `out`, relative, forward slashes. */
-function walk(dir) {
-  const files = [];
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) files.push(...walk(p));
-    else if (p.endsWith(".d.ts")) files.push(relative(out, p).split("\\").join("/"));
-  }
-  return files;
+/** `PLUGIN_API_VERSION` as `api.ts` declares it — read, not imported, so this stays a plain script. */
+export function apiVersionOf(source) {
+  const m = /PLUGIN_API_VERSION\s*=\s*(\d+)/.exec(source);
+  if (!m) throw new Error("Could not find PLUGIN_API_VERSION in src/plugins/api.ts.");
+  return Number(m[1]);
 }
 
-/** Relative specifiers a declaration file imports (`from "…"`, `import("…")`, `export … from "…"`). */
-function specifiers(file) {
-  const text = readFileSync(join(out, file), "utf8");
+/**
+ * Nothing in a bundled declaration file may import: every type it names has to be in it.
+ * An import that survives is either a package a plugin repository would have to install
+ * (`jotai`, `react` — the two the contract must never reach) or a file that was not
+ * bundled, and both are wrong in the same way.
+ */
+export function importsIn(dts) {
   const found = new Set();
-  for (const m of text.matchAll(/(?:from\s*|import\s*\(\s*)["']([^"']+)["']/g)) found.add(m[1]);
+  for (const m of dts.matchAll(/(?:^|\n)\s*(?:import|export)[^\n;]*?\bfrom\s*["']([^"']+)["']/g)) found.add(m[1]);
+  for (const m of dts.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) found.add(m[1]);
   return [...found];
 }
 
-const all = new Set(walk(out));
-const keep = new Set();
-const external = new Map();
-const queue = [entry];
-while (queue.length > 0) {
-  const file = queue.pop();
-  if (keep.has(file)) continue;
-  keep.add(file);
-  for (const spec of specifiers(file)) {
-    if (!spec.startsWith(".")) { external.set(spec, [...(external.get(spec) ?? []), file]); continue; }
-    const target = relative(out, resolve(out, dirname(file), spec)).split("\\").join("/") + ".d.ts";
-    if (all.has(target)) queue.push(target);
-    else console.warn(`plugin-api: ${file} imports ${spec}, which was not emitted`);
+/** The one file, with the banner that says what it is and where it came from. */
+export function buildBundle({ apiVersion, generator = generateDtsBundle } = {}) {
+  const [body] = generator(
+    [{ filePath: ENTRY, output: { noBanner: true, sortNodes: false } }],
+    { preferredConfigPath: PROJECT },
+  );
+  const stray = importsIn(body);
+  if (stray.length > 0) throw new Error(`The bundle still imports ${stray.join(", ")}; every type it names has to be in the file.`);
+  if (!/\binterface PluginApi\b/.test(body)) throw new Error("The bundle does not declare PluginApi.");
+  // The banner deliberately names no editor version and no date: this file is pushed on
+  // every build, and anything in it that moves on its own would make a commit out of a
+  // build that changed nothing. The editor version lives in `package.json`, where a
+  // release moves it. `editorVersion` is still taken, so a caller that wants it can say so.
+  const banner = [
+    "/**",
+    ` * Type declarations for the scmJS plugin API — version ${apiVersion}.`,
+    " *",
+    " * Generated by `npm run build:plugin-types` in github.com/scm-js/scm-js and published",
+    " * to github.com/scm-js/plugin-api. Do not edit: the contract is `src/plugins/api.ts`",
+    " * there, and `docs/plugins.md` is the guide.",
+    " */",
+    "",
+  ].join("\n");
+  return banner + body;
+}
+
+export function packageJson({ editorVersion, apiVersion }) {
+  return JSON.stringify({
+    name: PACKAGE_NAME,
+    version: editorVersion,
+    description: "Type declarations for the scmJS plugin API",
+    license: "MIT",
+    types: "index.d.ts",
+    files: ["index.d.ts"],
+    repository: { type: "git", url: "git+https://github.com/scm-js/plugin-api.git" },
+    homepage: "https://github.com/scm-js/scm-js/blob/main/docs/plugins.md",
+    scmjs: { pluginApiVersion: apiVersion, editorVersion },
+  }, null, 2) + "\n";
+}
+
+/** Write `index.d.ts` and `package.json` into `out`, and answer what was written. */
+export function writePluginApi(out, files) {
+  mkdirSync(out, { recursive: true });
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(out, name), text);
+  return Object.keys(files);
+}
+
+export function generate() {
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const apiVersion = apiVersionOf(readFileSync(ENTRY, "utf8"));
+  const editorVersion = pkg.version;
+  return {
+    apiVersion,
+    editorVersion,
+    files: {
+      "index.d.ts": buildBundle({ apiVersion }),
+      "package.json": packageJson({ editorVersion, apiVersion }),
+    },
+  };
+}
+
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  const argv = process.argv.slice(2);
+  const at = argv.indexOf("--out");
+  const out = at === -1 ? join(root, "plugin-api") : resolve(argv[at + 1] ?? "");
+  const check = argv.includes("--check");
+  try {
+    const { files, apiVersion, editorVersion } = generate();
+    if (check) {
+      const differs = Object.entries(files).filter(([name, text]) => {
+        try { return readFileSync(join(out, name), "utf8") !== text; } catch { return true; }
+      });
+      if (differs.length > 0) {
+        console.error(`plugin-api: ${out} is out of date (${differs.map(([n]) => n).join(", ")}). Run \`npm run build:plugin-types\`.`);
+        process.exit(1);
+      }
+      console.log(`plugin-api: ${out} is up to date (API ${apiVersion}, editor ${editorVersion}).`);
+    } else {
+      writePluginApi(out, files);
+      const kb = Math.round(files["index.d.ts"].length / 1024);
+      console.log(`plugin-api: ${out}/index.d.ts — ${kb} KB, API version ${apiVersion}, editor ${editorVersion}.`);
+    }
+  } catch (err) {
+    console.error(`plugin-api: ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
   }
 }
-
-for (const file of all) if (!keep.has(file)) rmSync(join(out, file));
-// Directories left empty by the pruning.
-function sweep(dir) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) { sweep(p); if (readdirSync(p).length === 0) rmSync(p, { recursive: true }); }
-  }
-}
-sweep(out);
-
-const forbidden = [...external.keys()].filter((s) => s === "jotai" || s.startsWith("jotai/") || s === "react" || s.startsWith("react/"));
-if (forbidden.length > 0) {
-  for (const s of forbidden) console.error(`plugin-api: the contract reaches "${s}" through ${external.get(s).join(", ")}`);
-  process.exit(1);
-}
-
-const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-const apiVersion = Number(/PLUGIN_API_VERSION\s*=\s*(\d+)/.exec(readFileSync(join(root, "src/plugins/api.ts"), "utf8"))?.[1] ?? 0);
-mkdirSync(out, { recursive: true });
-writeFileSync(join(out, "index.d.ts"), `export * from "./plugins/api";\n`);
-writeFileSync(join(out, "package.json"), JSON.stringify({
-  name: "scm-js-plugin-api",
-  version: `${apiVersion}.0.0-editor.${pkg.version}`,
-  description: "Type declarations of the scmJS plugin API (vendored; regenerate with `npm run build:plugin-types` in scm-js)",
-  types: "index.d.ts",
-  private: true,
-  scmjs: { pluginApiVersion: apiVersion, editorVersion: pkg.version, builtAt: new Date().toISOString() },
-}, null, 2) + "\n");
-const kept = [...keep].sort();
-console.log(`plugin-api: ${kept.length} declaration files kept of ${all.size}; external: ${[...external.keys()].sort().join(", ") || "none"}`);
-if (!existsSync(join(out, entry))) process.exit(1);

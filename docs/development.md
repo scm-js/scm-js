@@ -344,12 +344,22 @@ release was found for this build"); and against a local `generic` feed the whole
 
 ## Plugin typings
 
-`npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) emits the declarations a
-plugin repository vendors as `plugin-api/`: `tsc -p tsconfig.plugin-api.json`, then only
-what `plugins/api.d.ts` reaches through its imports is kept (the atoms and hooks the
-editor's own modules touch are pruned), a tree that still names `jotai` or `react` fails
-the build, and an `index.d.ts` plus a `package.json` carrying the API and editor versions
-go on top. The plain types the contract shares with the chrome — `EditorLayer`,
+`npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) rolls the contract into
+**one** `plugin-api/index.d.ts` with `dts-bundle-generator` over `src/plugins/api.ts`,
+plus a `package.json` naming the API and editor versions. `npm run publish:plugin-types`
+(`scripts/publish-plugin-api.mjs`) pushes those two files to
+[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api), and a plugin repository takes
+them as a devDependency (`npm i -D github:scm-js/plugin-api`) — where each used to carry a
+hand-refreshed copy of the 61-file, 480 KB emitted tree. `tsc` emits one declaration per
+module the entry reaches, which is why the bundling step exists at all; the build refuses
+a bundle that still carries an import, since one that names `jotai` or `react` (or a file
+the bundler missed) is a plugin repository that cannot compile with the file alone.
+
+build.yml publishes on the same two channels as the editor — `main` for the tip of the
+contract, a `v*` tag for the release — using the `PLUGIN_API_PAT` organisation secret, and
+reports rather than fails when the secret is absent. The generated file deliberately
+carries no editor version or date so that a build which did not move the contract makes no
+commit there. The plain types the contract shares with the chrome — `EditorLayer`,
 `TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
 (`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the
 atom modules for that reason. Two external names remain, `mopaq` and `typescript`,

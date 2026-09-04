@@ -589,9 +589,10 @@ the same key.
 and again by `scripts/build-desktop.mjs` unless `--skip-plugins`) is the other half: it
 reads the pinned specs straight out of `defaults.ts` with a regex (importing it would pull
 in `builtin.ts`'s Vite-only `import.meta.glob`), fetches each plugin's runtime source at
-that tag — the manifest, the icon, every `.ts`/`.js` outside `plugin-api/`, `tests/`,
-`.github/`, plus the LICENSE; `plugin-api/` is imported with `import type` and erased
-before the bundler sees it — and writes it into the gitignored `plugins/<name>/` with a
+that tag — the manifest, the icon, every `.ts`/`.js` outside `dist/`, `tests/`,
+`.github/`, plus the LICENSE; the *source*, not the plugin's own `dist/plugin.js`, since
+Vite tree-shakes what it compiles in, and `@scm-js/plugin-api` is imported with
+`import type` and erased before the bundler sees it — and writes it into the gitignored `plugins/<name>/` with a
 `vendored.json` naming the spec, which `builtin.ts` reads into `BUILTIN_REPLACES` and the
 script itself reads to know which copies are its own (it brings those up to date and
 removes ones that stopped being defaults; a hand-made directory is left alone). A copy
@@ -613,6 +614,33 @@ and `import()` through `data:` URLs in Node; `describe.skipIf` unless
 of which gains a dependency, since the build already needs GitHub to vendor.
 `tests/vendor-plugins.test.ts` pins the parse, the file filter and the rule that no default
 may be unpinned.
+
+**A plugin repository's typings and its build.** The contract reaches the plugin
+repositories as `@scm-js/plugin-api`, a devDependency
+(`npm i -D github:scm-js/plugin-api`) holding one generated `index.d.ts`:
+`scripts/build-plugin-types.mjs` bundles it, `scripts/publish-plugin-api.mjs` pushes it
+and the `plugin-api` job in build.yml runs that on main and on a `v*` tag (main is the tip
+of the contract, a tag is the contract as of that release, which is why the package's
+version is the editor's; `PLUGIN_API_PAT` is the organisation secret, and a run without it
+reports instead of failing). Before this each of the nine repositories carried its own copy
+of the 61-file emitted tree, refreshed by hand. Nothing is fetched at runtime for it —
+`import type` is erased before the loader sees a specifier, which is what lets a plugin
+depend on a package at all.
+`PluginManifest.build` is the other half: a plugin repository publishes a
+`dist/plugin.js` (one esbuild call, committed) and names it, and `resolvePlugin` loads
+**it** in place of `entry` — one fetch, no transpile worker, no `bundleModule` graph walk,
+and the plugin may use npm dependencies, which the source path cannot resolve.
+`ResolvedPlugin.built` / `PluginAddresses.built` carry which happened, so
+`ConfirmPluginDialog` names the bundle *and* the source it was built from. `entry` stays
+required reading and stays what loads for a repository with no build, so a one-file plugin
+still needs no toolchain. The shared workflow is
+`scm-js/.github/.github/workflows/plugin-ci.yml`, called in six lines by each plugin
+repository: type-check, test, rebuild and commit the bundle on main, and at a tag rebuild
+and *check* rather than write — esbuild is deterministic and the bundle carries no hash or
+date, so a tag whose `dist/plugin.js` is not what its source builds to fails. Its scheduled
+run type-checks against the newest `@scm-js/plugin-api`, which is how a moved contract
+surfaces. `tests/plugin-network.test.ts` covers both loading paths against the real
+repositories.
 A failed activation is no longer silent: `plugins/failures.ts` is pure (`pluginFailures`
 over the runtimes, `failureToast` with `ttl: 0` so it outlives the splash and a *Plugins…*
 button that opens Manage Plugins) and `usePlugins` awaits the pass and reports once per spec
@@ -678,8 +706,9 @@ Manage Plugins…), `MapViewport` and `TerrainPalette` (`plugins/contextMenu.ts#
 surfaces `viewport` / `terrainPalette`, the palette got a Radix ContextMenu of its own for this) and
 `useHotkeys` (plugin combos first, never while typing). `PluginDialogs.tsx`: Manage Plugins, and
 `PluginDialog` — the `DialogFrame` a plugin's `ui.dialog(spec)` mounts plain DOM into (host element
-in state, Radix portal timing). `npm run build:plugin-types` emits `plugin-api/` (gitignored) for
-external repos. There is no sandbox: a plugin runs with the page's privileges, and the dialog says so.
+in state, Radix portal timing). `npm run build:plugin-types` bundles the contract into one
+gitignored `plugin-api/index.d.ts` and `npm run publish:plugin-types` pushes it to
+`github.com/scm-js/plugin-api`, which every plugin repository takes as a devDependency. There is no sandbox: a plugin runs with the page's privileges, and the dialog says so.
 
 `plugins/registry.ts` is Plugins ▸ **Browse Plugins…** (the same dialog, `payload.tab`):
 `DEFAULT_REGISTRIES` (`defaults.ts`) plus `userRegistriesAtom` name JSON indexes —
@@ -788,8 +817,7 @@ the map raises a fresh `"replace"` for the rest — there is deliberately no plu
 plugin dialog and panel — a promise settled from `mount`'s cleanup, since a dismissal presses no
 button) and `el` / `widgets` (`plugins/widgets.ts`: plain DOM in the editor's own classes, so a
 plugin's dialog looks like a built-in one). All of it is additive — `PLUGIN_API_VERSION` stays 1 —
-and the vendored `plugin-api/` in each plugin repository needs refreshing after
-`npm run build:plugin-types`.
+and a plugin repository picks the addition up with `npm update @scm-js/plugin-api`.
 
 The beta pass added the rest of what the editor itself does to the contract — read `api.ts` and
 `docs/plugins.md` for the list: `document.save` / `saveAs` / `close` / `changeTileset` (`export`
@@ -805,8 +833,10 @@ over `editor/clipboard.ts`, sharing the user's clip), `api.exchange` (`.trg` and
 `viewportRepaintAtom` (no event) rather than the terrain revision; `EditResult` is computed after
 `commitTerrainAtom` so stranded units and doodads count; a dialog's or panel's disposable leaves the
 `Contributions` bag when it closes by itself. `npm run build:plugin-types` is
-`scripts/build-plugin-types.mjs`: tsc, then a prune to what `plugins/api.d.ts` reaches, a check that
-nothing reaches `jotai` or `react`, and an `index.d.ts` + `package.json` on top — which is why
+`scripts/build-plugin-types.mjs`: `dts-bundle-generator` over `src/plugins/api.ts` into a single
+`plugin-api/index.d.ts` (128 KB, where the emitted tree was 61 files and 480 KB), a check that the
+bundle carries no import at all — `jotai` and `react` above all, but a file the bundler missed is
+wrong in the same way — and a `package.json` versioned with the *editor* beside it. Which is why
 `EditorLayer` / `TerrainMode` / `ViewFlags` / `Toast` live in `editor/view.ts`, `Preferences` in
 `editor/preferences.ts` and `DialogId` in `components/dialogs/ids.ts`, re-exported by the atoms.
 
@@ -837,11 +867,11 @@ above.
 
 **Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
-`icon.svg`, a vendored `plugin-api/` so it type-checks alone, and `tests/convert.test.ts` under its
-own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
+`icon.svg`, `@scm-js/plugin-api` as a devDependency so it type-checks alone, and
+`tests/convert.test.ts` under its own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
 plugin the editor ships is loaded by the ordinary path, and its internals are documented there and
-in `docs/plugins.md`. Changing `src/plugins/api.ts` means re-running `npm run build:plugin-types`
-and refreshing that repository's `plugin-api/`. `tests/plugins.test.ts` covers the host side
+in `docs/plugins.md`. Changing `src/plugins/api.ts` reaches it through
+`github.com/scm-js/plugin-api`, which build.yml republishes on every push to main. `tests/plugins.test.ts` covers the host side
 (loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
 list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
 real-tileset suite via `primeTileset`).

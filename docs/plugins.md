@@ -28,7 +28,10 @@ exceptions to it.
 - Every contribution is a `Disposable`. Disabling or reloading a plugin removes
   everything it added, whether or not the plugin cleaned up after itself.
 - The API is versioned (`PLUGIN_API_VERSION`) and typed: `npm run build:plugin-types`
-  emits `plugin-api/` so a plugin repo can type-check against the exact surface. A manifest's
+  rolls the contract into one `index.d.ts` and pushes it to
+  [`scm-js/plugin-api`](https://github.com/scm-js/plugin-api), which a plugin repository
+  takes as a devDependency (`npm i -D github:scm-js/plugin-api`) instead of carrying a
+  copy of the editor's emitted tree. A manifest's
   `"api": N` is the version the plugin needs; a host providing an older one refuses to load it.
   The version is 1 and stays there while the only plugins are the ones in the scm-js
   organisation, which move with the editor; the first change that would break a plugin
@@ -62,11 +65,17 @@ exceptions to it.
      entry file (a manifest is synthesised from its name), anything else is a directory
      holding `plugin.json`. `http://localhost:…` works, which is how you develop one.
 2. The manifest is fetched and validated (`PluginManifest`; only `name` is required).
-3. The entry file is fetched **as text** and, if it is TypeScript, transpiled in the
+3. The file to import is the manifest's **`build`** when it has one, else its `entry`. A
+   `build` is a JavaScript bundle the repository publishes (`dist/plugin.js`), and taking
+   it ends the story here: one fetch, no compiler, no import graph, and the plugin may use
+   npm dependencies, which the source path below cannot resolve. `entry` stays in the
+   manifest either way, because it is what a person reads and what loads for a repository
+   that publishes no build.
+4. The entry file is fetched **as text** and, if it is TypeScript, transpiled in the
    transpile worker (`ts.transpileModule`; TypeScript is in the editor's bundle for this
    alone). Fetching as text matters: `raw.githubusercontent.com` serves
    `text/plain`, which a browser refuses to `import()` as a module.
-4. Relative imports are followed the same way, depth first, and each file becomes a
+5. Relative imports are followed the same way, depth first, and each file becomes a
    `blob:` module URL; the import specifiers are rewritten to those URLs. There is no
    resolver behind a `fetch`, so the loader supplies one (`candidateUrls`): a specifier
    that names no extension — `"./convert"`, how TypeScript is normally written — is
@@ -74,7 +83,7 @@ exceptions to it.
    and a `"./convert.js"` falls back to `convert.ts` the way a TypeScript project means
    it. Circular imports and bare package names are errors with a message that says which
    file.
-5. The entry is `import()`ed. Its default export (or a named `activate`) is called with
+6. The file is `import()`ed. Its default export (or a named `activate`) is called with
    the `PluginApi`. Whatever it returns — nothing, a function, or a `Disposable` — is kept
    for deactivation.
 
@@ -254,6 +263,7 @@ failed.
   "version": "1.0.0",
   "description": "Says hello from the Tools menu.",
   "entry": "plugin.ts",
+  "build": "dist/plugin.js",
   "icon": "icon.svg",
   "api": 1
 }
@@ -261,6 +271,10 @@ failed.
 
 `name` is the only required field; `id` (a slug for storage keys and log prefixes) is
 derived from the name when absent, and `entry` defaults to `plugin.ts`, then `plugin.js`.
+
+`build` names a JavaScript bundle to load in place of `entry` — see **Building** below.
+Leave it out and the editor fetches your source and transpiles it, which is the shortest
+way to start.
 
 ### The icon
 
@@ -284,7 +298,7 @@ Terrain from Image's `icon.svg` is the worked example.
 `plugin.ts`:
 
 ```ts
-import type { PluginApi } from "scm-js/plugin-api";
+import type { PluginApi } from "@scm-js/plugin-api";
 
 export default function activate(api: PluginApi) {
   api.menu.add("Tools", {
@@ -295,18 +309,71 @@ export default function activate(api: PluginApi) {
 }
 ```
 
-The `import type` line is erased at load time, so it only matters for editing: copy the
-`plugin-api/` folder that `npm run build:plugin-types` produces into your repo (or point
-`paths` in your `tsconfig.json` at it) and you get completion and checking. Terrain from
-Image vendors it and imports `./plugin-api/plugins/api`, so that repository type-checks
-on its own with nothing installed but TypeScript.
+The `import type` line is erased before the file runs, so the package only matters for
+editing and checking:
+
+```sh
+npm i -D github:scm-js/plugin-api
+```
+
+[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) holds one generated
+`index.d.ts` — the whole contract, no imports, nothing to configure. Its `main` is the tip
+of the contract and each `v*` tag is the contract as of that editor release, so pin it
+(`github:scm-js/plugin-api#v0.1.0`) if you want to; `PLUGIN_API_VERSION` is 1 and
+additions do not move it, so the tip stays compatible with everything written so far, and
+`npm update @scm-js/plugin-api` takes it. It is a *type* dependency: the loader never sees
+the specifier, which is why a bare package name here does not break the rule that a
+plugin's runtime code cannot import packages.
 
 Everything `add`/`on` returns is a `Disposable`; keep the ones you need to drop early
 and forget the rest — deactivation disposes them all. Returning a function from
 `activate` runs it at deactivation too, for anything outside the API (timers, sockets).
 
-To develop: serve the folder (`npx serve plugins/hello`), add `http://localhost:3000/`
+To develop: serve the folder (`npx serve --cors .`), add `http://localhost:3000/`
 in Tools ▸ Plugins ▸ Manage Plugins…, and press **Reload** after each change.
+
+### Building
+
+A plugin can ship a built bundle and name it in the manifest's `build`. It is worth doing
+for anything bigger than a single file: the editor fetches one JavaScript file and imports
+it, instead of fetching your source, starting the TypeScript compiler in a worker and
+walking your imports one file at a time — and only a built plugin can use an npm
+dependency, since the source path has no resolver behind its `fetch`.
+
+The organisation's plugins all do it the same way, with one esbuild call in a `build`
+script:
+
+```json
+"build": "esbuild plugin.ts --bundle --format=esm --target=es2022 --platform=browser --outfile=dist/plugin.js",
+"dev": "npm run build -- --watch"
+```
+
+and `dist/plugin.js` is committed, because the editor loads it straight from the
+repository at whatever ref the spec names. The shared workflow in
+[`scm-js/.github`](https://github.com/scm-js/.github) does the rest — a plugin repository
+calls it in six lines:
+
+```yaml
+name: CI
+on:
+  push: { branches: [main], tags: ["v*"] }
+  pull_request:
+  schedule: [{ cron: "0 6 * * 1" }]
+permissions: { contents: write }
+jobs:
+  ci:
+    uses: scm-js/.github/.github/workflows/plugin-ci.yml@main
+```
+
+It type-checks, tests, rebuilds the bundle and commits it on a push to `main`; at a `v*`
+tag it rebuilds and *checks* instead, so the bundle a pinned plugin runs is provably what
+its source builds to (esbuild's output is deterministic, and the bundle carries no commit
+hash or date for that reason). The scheduled run type-checks against the newest
+`@scm-js/plugin-api`, so a contract that moved under the plugin turns a check red rather
+than going unnoticed.
+
+The bundle is not minified. What the confirmation dialog offers to show a user is the
+repository, and a plugin they cannot read is a plugin they cannot judge.
 
 ## API reference
 

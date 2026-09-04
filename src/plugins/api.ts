@@ -2,8 +2,9 @@
  * The plugin API: everything a plugin can see and do, as types.
  *
  * This file is the contract. `host.ts` implements it over the editor's store; a plugin
- * repository type-checks against the declarations `npm run build:plugin-types` emits
- * from it. Nothing here is React, and nothing here is a Jotai atom: a plugin gets plain
+ * repository type-checks against the single declaration file `npm run build:plugin-types`
+ * bundles from it, published to `github.com/scm-js/plugin-api` and taken as a
+ * devDependency. Nothing here is React, and nothing here is a Jotai atom: a plugin gets plain
  * functions and plain data. Changing a signature or a meaning in a way an existing
  * plugin would notice is an API change — bump `PLUGIN_API_VERSION`.
  *
@@ -113,6 +114,19 @@ export interface PluginManifest {
   homepage?: string;
   /** Entry file relative to the manifest; `plugin.ts` by default, then `plugin.js`. */
   entry?: string;
+  /**
+   * A built, self-contained JavaScript bundle of the plugin, relative to the manifest
+   * (`"dist/plugin.js"`). When there is one the editor loads **it** and never `entry`:
+   * one fetch, no TypeScript compiler, no import graph to walk — and the plugin may use
+   * npm dependencies, which the source path cannot (`bundleModule` refuses a bare
+   * specifier because it has no resolver).
+   *
+   * `entry` stays the source of truth and stays in the manifest: it is what a person
+   * reads, what `npm run typecheck` checks, and what loads when there is no build. A
+   * repository that publishes one builds it in CI at the tag it is loaded from — see
+   * `docs/plugins.md`.
+   */
+  build?: string;
   /**
    * The plugin's face in Manage Plugins and on its own dialogs: an emoji (`"🗺️"`), a
    * `data:image/…` URI, an `https://…` image, or an image file beside the manifest

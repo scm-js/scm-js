@@ -27,7 +27,8 @@
     "extract:tilesets": "node scripts/extract-tilesets.mjs",
     "extract:units": "node scripts/extract-units.mjs",
     "check:assets": "node scripts/extract-assets.mjs --check",
-    "build:plugin-types": "node scripts/build-plugin-types.mjs"
+    "build:plugin-types": "node scripts/build-plugin-types.mjs",
+    "publish:plugin-types": "node scripts/publish-plugin-api.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -44,6 +45,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "dts-bundle-generator": "^9.5.1",
     "electron": "^44.1.1",
     "electron-builder": "^26.15.3",
     "oxlint": "^1.79.0",

@@ -1,11 +1,11 @@
+// The program `scripts/build-plugin-types.mjs` bundles the plugin API's declarations
+// from: the editor's own settings, narrowed to the one entry point the contract has.
+// Nothing is emitted through tsc — `dts-bundle-generator` compiles in memory and writes
+// the single `plugin-api/index.d.ts` itself.
 {
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "noEmit": false,
     "declaration": true,
-    "emitDeclarationOnly": true,
-    "outDir": "plugin-api",
-    "rootDir": "src",
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.plugin-api.tsbuildinfo"
   },
   "include": ["src/plugins/api.ts"]

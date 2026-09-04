@@ -216,6 +216,54 @@ jobs:
         with:
           path: dist
 
+  # `github.com/scm-js/plugin-api` holds one generated `index.d.ts` — the plugin API's
+  # declarations, which plugin repositories take as a devDependency instead of each
+  # carrying a copy of the emitted tree and refreshing it by hand. `main` there is the tip
+  # of the contract and a `v*` tag is the contract as of that release, so this runs on the
+  # same two channels and pushes nothing when `src/plugins/api.ts` has not moved.
+  #
+  # The version written into its package.json is the editor's, and only a release sets it:
+  # a `ci` run leaves package.json alone, so a push to main that did not touch the contract
+  # changes no file there and makes no commit.
+  #
+  # PLUGIN_API_PAT is an organisation secret — a token with Contents: write on
+  # scm-js/plugin-api and nothing else — because a repository's own GITHUB_TOKEN cannot
+  # write to another repository. Without it this reports what it would have pushed and
+  # stops: the types being one build behind is not worth failing a release over.
+  plugin-api:
+    name: Plugin API types
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'ci' || needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - name: Set the released version
+        if: needs.channel.outputs.channel == 'stable'
+        run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.PLUGIN_API_PAT }}
+          TAG: ${{ needs.channel.outputs.tag }}
+        run: |
+          set -e
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::PLUGIN_API_PAT is not set; reporting what would be pushed to scm-js/plugin-api."
+            node scripts/publish-plugin-api.mjs
+            exit 0
+          fi
+          if [ -n "$TAG" ]; then
+            node scripts/publish-plugin-api.mjs --push --tag "$TAG"
+          else
+            node scripts/publish-plugin-api.mjs --push
+          fi
+
   pages:
     name: Deploy Pages
     needs: [channel, web]

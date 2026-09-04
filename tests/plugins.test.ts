@@ -109,11 +109,26 @@ describe("plugin specs", () => {
       "https://x/b/plugin.js": "export default () => {}",
     };
     const fetchText = async (url: string) => { if (url in files) return files[url]; throw new Error("404"); };
-    expect(await resolvePlugin(parseSpec("https://x/a/"), { fetchText, builtins: {} })).toEqual({ manifest: { name: "A", entry: "src/main.ts" }, entryUrl: "https://x/a/src/main.ts" });
+    expect(await resolvePlugin(parseSpec("https://x/a/"), { fetchText, builtins: {} })).toEqual({ manifest: { name: "A", entry: "src/main.ts" }, entryUrl: "https://x/a/src/main.ts", built: false });
     expect(await resolvePlugin(parseSpec("https://x/b/"), { fetchText, builtins: {} })).toEqual({ manifest: { name: "B", entry: "plugin.js" }, entryUrl: "https://x/b/plugin.js" });
     expect(await resolvePlugin(parseSpec("https://x/c/main.ts"), { fetchText, builtins: {} })).toEqual({ manifest: { name: "main", entry: "main.ts" }, entryUrl: "https://x/c/main.ts" });
     await expect(resolvePlugin(parseSpec("https://x/none/"), { fetchText, builtins: {} })).rejects.toThrow(/Could not fetch/);
     await expect(resolvePlugin(parseSpec("builtin:nope"), { fetchText, builtins: {} })).rejects.toThrow(/No built-in/);
+  });
+
+  it("loads the manifest's build in place of its entry, and says which", async () => {
+    const manifest = { name: "Built", entry: "plugin.ts", build: "dist/plugin.js" };
+    const files: Record<string, string> = { "https://x/a/plugin.json": JSON.stringify(manifest) };
+    const fetchText = async (url: string) => { if (url in files) return files[url]; throw new Error("404"); };
+    const source = parseSpec("https://x/a/");
+    // The bundle is what runs; `entry` stays in the manifest as the source it was built from.
+    expect(await resolvePlugin(source, { fetchText, builtins: {} })).toEqual({ manifest, entryUrl: "https://x/a/dist/plugin.js", built: true });
+    // …and the confirmation names the same file, so what is shown is what will run.
+    expect(addressesOf(source, manifest)).toMatchObject({ entryUrl: "https://x/a/dist/plugin.js", built: true });
+    // Nothing is fetched for it on the describe path, as for `entry`.
+    expect(await resolvePlugin(source, { fetchText, builtins: {} }, { entry: false })).toMatchObject({ entryUrl: null });
+    // An absolute build is refused for the same reason an absolute entry is.
+    expect(() => validateManifest({ name: "N", build: "https://elsewhere/x.js" }, "m")).toThrow(/"build" must be a path relative/);
   });
 });
 
@@ -1416,6 +1431,7 @@ describe("plugin previews", () => {
     expect(addressesOf(preview.pin!.source, preview.manifest)).toEqual({
       manifestUrl: `https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`,
       entryUrl: `https://raw.githubusercontent.com/o/preview/${SHA}/src/main.ts`,
+      built: false,
       base: `https://raw.githubusercontent.com/o/preview/${SHA}/`,
       webUrl: `https://github.com/o/preview/tree/${SHA}`,
     });
@@ -1468,7 +1484,7 @@ describe("plugin previews", () => {
   it("previews a built-in without a fetch", async () => {
     const deps = fakeDeps({ hello: { manifest: { name: "Hello", version: "0.1" }, load: async () => ({}) } });
     expect(await previewPlugin("builtin:hello", deps)).toMatchObject({ spec: "builtin:hello", manifest: { name: "Hello" }, pin: null, problem: null });
-    expect(addressesOf(parseSpec("builtin:hello"), null)).toEqual({ manifestUrl: null, entryUrl: null, base: null, webUrl: null });
+    expect(addressesOf(parseSpec("builtin:hello"), null)).toEqual({ manifestUrl: null, entryUrl: null, built: false, base: null, webUrl: null });
     expect(canonicalSpec(parseSpec("builtin:hello"))).toBe("builtin:hello");
   });
 

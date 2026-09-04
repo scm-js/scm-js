@@ -28,10 +28,14 @@
  *
  * What lands in `plugins/<name>/` is the plugin's runtime source and nothing else: the
  * manifest, the icon, every `.ts`/`.js` file outside the excluded directories, and the
- * LICENSE (all five are MIT, and the copy travels with it). `plugin-api/` is deliberately
- * left out — plugins import it with `import type`, which is erased before the bundler
- * ever resolves it, so vendoring a megabyte of declarations would buy nothing; if a
- * plugin ever imports a *value* from there, this build fails loudly, which is correct.
+ * LICENSE (all five are MIT, and the copy travels with it). The source, not the plugin's
+ * own `dist/plugin.js`: Vite compiles what lands here into the app's chunk graph and
+ * tree-shakes it, which a prebuilt bundle would defeat — `dist/` is in `SKIP_DIRS` for
+ * that reason, and the manifest's `build` is ignored by `builtin.ts`. `@scm-js/plugin-api`
+ * comes in the same way it does for a plugin's own build: not at all, because plugins
+ * import it with `import type`, which is erased before the bundler ever resolves it. If a
+ * plugin ever imports a *value* from a package, this build fails loudly, which is correct
+ * — and that plugin should ship a `build` and stop being vendored as source.
  *
  * The directory is gitignored and generated. `--clean` empties it again.
  *

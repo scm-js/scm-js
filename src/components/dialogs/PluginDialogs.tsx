@@ -327,7 +327,14 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 {builtin
                   ? <span>Part of this build of the editor.</span>
                   : where?.entryUrl
-                    ? <span className="mono">{where.entryUrl}</span>
+                    ? <>
+                        <span className="mono">{where.entryUrl}</span>
+                        {where.built && (
+                          <div className="dim">
+                            A JavaScript bundle the repository builds from <span className="mono">{manifest?.entry ?? "its source"}</span>, which is what to read.
+                          </div>
+                        )}
+                      </>
                     : <span className="dim">{where?.base ? <><span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> in <span className="mono">{where.base}</span></> : "—"}</span>}
               </Fact>
             </div>

@@ -5,6 +5,7 @@ import { panelsAtom } from "./atoms/uiAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useApplyPreferences } from "./hooks/useApplyPreferences";
 import { useMapFileActions } from "./hooks/useMapFileActions";
+import type { PendingAction } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
@@ -24,6 +25,18 @@ import MapViewport from "./components/viewport/MapViewport";
 import DialogHost from "./components/dialogs/DialogHost";
 import SplashScreen from "./components/splash/SplashScreen";
 import { removeBootSplash } from "./components/splash/bootSplash";
+
+/**
+ * The first file of a drop, opened through the unsaved-changes gate. False when the drop
+ * carried no file, so the caller can leave the event alone. `droppedHandle` has to be
+ * *called* inside the event — its answer may come later.
+ */
+function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boolean): boolean {
+  const file = data?.files[0];
+  if (!file || !data) return false;
+  void droppedHandle(data).then((handle) => guard({ action: "open", file, handle }));
+  return true;
+}
 
 export default function App() {
   const screen = useAtomValue(screenAtom);
@@ -65,17 +78,39 @@ export default function App() {
   // SplashScreen, so the boot splash in index.html would sit there forever.
   useEffect(() => { if (screen !== "splash") removeBootSplash(); }, [screen]);
 
+  // The handlers above are on `.app`, and two things render *outside* it: the splash, and
+  // every dialog (Radix portals them to the body). A file dropped on either would reach no
+  // handler, and the browser's default for that is to navigate the window to the file —
+  // which in the desktop build replaces the app with the map's bytes. So the document takes
+  // whatever the tree did not: `dragover` must be cancelled for the drop event to fire at
+  // all, and a drop is cancelled always and opened only when nothing else already claimed
+  // it (`defaultPrevented`, set by the handler above or by the Open dialog's drop zone,
+  // both of which run first — React attaches its listeners to the root container and to
+  // each portal's container, inside the body).
+  useEffect(() => {
+    const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); };
+    const drop = (e: DragEvent) => {
+      // Only a file drop: text dragged into a field cancels its own `dragover`, and
+      // cancelling that drop here would swallow the text the field was about to take.
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      const taken = e.defaultPrevented;
+      e.preventDefault();
+      setDropTarget(false);
+      if (!taken) openDropped(e.dataTransfer, guard);
+    };
+    document.addEventListener("dragover", over);
+    document.addEventListener("drop", drop);
+    return () => { document.removeEventListener("dragover", over); document.removeEventListener("drop", drop); };
+  }, [guard]);
+
   const rightVisible = panels.minimap || panels.layers || panels.properties;
 
   // Dropping a map anywhere in the window opens it — the dialog's own drop zone is
   // just the discoverable version of the same thing.
   const onDrop = (e: React.DragEvent) => {
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
+    if (!openDropped(e.dataTransfer, guard)) return;
     e.preventDefault();
     setDropTarget(false);
-    // The handle request has to start inside the event; the answer can come later.
-    void droppedHandle(e.dataTransfer).then((handle) => guard({ action: "open", file, handle }));
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;

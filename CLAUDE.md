@@ -1404,7 +1404,22 @@ again, measure `longtask` entries before blaming the loading code.
 - `src/hooks/useDesktopFiles.ts` is the desktop's "Open with": `desktop/main.ts` holds the single
   instance lock, takes a map path from `argv` / `second-instance` / macOS `open-file`, and sends the
   bytes on `file:open` once the renderer's `files.onOpen` listener says `file:ready`; the hook opens
-  them through `guardedAction` like a drop.
+  them through `guardedAction` like a drop. What sends it one is `fileAssociations` in
+  `electron-builder.yml` (`.scm` / `.scx` / `.chk`, one mime type each — electron-builder writes a
+  `<mime-type>` block per association into the Linux packages' mime XML and shared-mime-info reads
+  only the first of a repeated type): the NSIS installer registers `"$appExe \"%1\""` per extension
+  and unregisters on uninstall, the deb / AppImage carry the mime XML and a `MimeType=` desktop entry
+  whose `Exec` ends in `%U`, and the macOS bundle gets the `CFBundleDocumentTypes` without which
+  Finder routes nothing and `open-file` can never fire. The Windows *zip* registers nothing, as any
+  unpacked build does not — dragging a map onto `scmJS.exe` still goes through `argv`.
+- Dropping a map on the window is `App.tsx`'s `onDrop`, and the same file has a **document-level**
+  pair of listeners behind it, because two things render outside `.app`: the splash and every dialog
+  (Radix portals them to the body). A drop that reaches no handler is navigation — the window loads
+  the file and the app is gone — so the document cancels `dragover` (without which no drop event
+  fires at all) and cancels every drop, opening the file only when nothing already claimed it
+  (`defaultPrevented`; React's own listeners, on the root container and on each portal container,
+  run first). `desktop/main.ts`'s `will-navigate` is the backstop: anything that is not the app's
+  own origin is refused, and an `http(s)` one goes out to the browser like `setWindowOpenHandler`'s.
 - `src/hooks/useCloseGuard.ts` is leaving the editor altogether with unsaved changes, gated on
   the same `confirmClose` preference and the same three facts as `needsCloseConfirm`. A browser
   gets `beforeunload` (added and removed with the unsaved state, so a clean document keeps the

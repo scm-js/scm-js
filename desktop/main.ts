@@ -554,6 +554,11 @@ function showWhenReady(win: BrowserWindow, maximized: boolean) {
 
 /* ── The window ─────────────────────────────────────────── */
 
+/** A URL's origin, or the whole string when it has none to compare (`file:` is opaque). */
+function originOf(url: string): string {
+  try { return new URL(url).origin || url; } catch { return url; }
+}
+
 function createWindow() {
   const icon = join(distDir, "icon.png");
   const state = readWindowState();
@@ -588,6 +593,17 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
+  });
+  // The window shows one page for its whole life. Anything that would replace it is a
+  // mistake — above all a file dropped on a part of the page that did not take the drop,
+  // whose default is to navigate to the file and leave the map's bytes where the editor
+  // was. The renderer cancels those itself; this is the backstop, and it sends a link out
+  // to the browser like the window-open handler above. Same-origin is allowed through so a
+  // reload (and the dev server's) still works.
+  win.webContents.on("will-navigate", (e, url) => {
+    if (originOf(url) === originOf(win.webContents.getURL())) return;
+    e.preventDefault();
+    if (/^https?:/.test(url)) void shell.openExternal(url);
   });
   // The editor has its own menu bar; the platform menu only matters on macOS (Cmd+Q, Cmd+C/V in fields).
   if (process.platform === "darwin") {

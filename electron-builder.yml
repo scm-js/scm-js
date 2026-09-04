@@ -37,6 +37,30 @@ publish:
   provider: github
   owner: scm-js
   repo: scm-js
+# What the file manager hands the app. `desktop/main.ts` already takes a map path from the
+# command line, a second launch or macOS's open-file event; without these there is nothing
+# registered to send it one — a double-click did nothing, and on macOS open-file can never
+# fire, since Finder only routes documents to an app whose bundle declares them. No `icon:`
+# per association, so each one is shown with the app's own.
+fileAssociations:
+  - ext: scm
+    name: StarCraft map
+    description: StarCraft scenario
+    role: Editor
+    mimeType: application/x-starcraft-map
+  - ext: scx
+    name: Brood War map
+    description: "StarCraft: Brood War scenario"
+    role: Editor
+    # A type of its own: electron-builder writes one <mime-type> block per association into
+    # the Linux packages' mime XML, and two blocks with the same type is a file
+    # shared-mime-info reads only the first of — .scx would have registered nothing.
+    mimeType: application/x-starcraft-broodwar-map
+  - ext: chk
+    name: StarCraft scenario
+    description: Bare CHK scenario chunk
+    role: Editor
+    mimeType: application/x-starcraft-scenario
 win:
   # One 1024² PNG for every platform — the app mark in public/, which the web build also
   # serves as its icon; electron-builder makes the .ico / .icns from it.

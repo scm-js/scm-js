@@ -957,6 +957,42 @@
 .plugin-here > svg {
   flex: none;
 }
+/* A listed plugin's facts — who wrote it, what it is filed under, when it last moved.
+   They used to be one faint sentence directly under the description and in the same
+   colour, which is the one place they could not be read; each is its own mark now. */
+.plugin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+.plugin-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.plugin-meta svg {
+  flex: none;
+  opacity: 0.75;
+}
+.plugin-by {
+  color: var(--text-dim);
+}
+.plugin-updated {
+  color: var(--text-dim);
+}
+.plugin-tag {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(230, 185, 92, 0.14);
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
 /* All / Not installed / Installed, each with how many rows it holds. */
 .browse-filters {
   flex: none;

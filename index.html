@@ -27,9 +27,19 @@
         position: fixed;
         inset: 0;
         z-index: 300;
+        /* base.css's own resets and body type, spelled out: without them the title and
+           subtitle inherit the UA's serif, the card measures content-box and the footer
+           lines sit on a different leading, so the handover is a visible jump. */
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.35;
+        -webkit-font-smoothing: antialiased;
+        font-variant-numeric: tabular-nums;
         display: grid;
         place-items: center;
         background: rgb(6, 4, 14);
+      }
+      #boot-splash, #boot-splash *, #boot-splash *::before, #boot-splash *::after {
+        box-sizing: border-box;
       }
       #boot-splash .card {
         position: relative;
@@ -106,9 +116,10 @@
       #boot-splash .log div::after {
         content: "▍";
         color: #ff5fa2;
-        animation: boot-blink 1s steps(2) infinite;
+        padding-left: 0.4em;
+        animation: boot-blink 1s step-end infinite;
       }
-      @keyframes boot-blink { to { visibility: hidden; } }
+      @keyframes boot-blink { 0% { opacity: 1 } 50% { opacity: 0 } }
       #boot-splash .bar {
         margin-top: 10px;
         height: 2px;

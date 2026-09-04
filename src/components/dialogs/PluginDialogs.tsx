@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { ArrowUp, Blocks, CircleCheck, CircleSlash, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowUp, Blocks, CircleCheck, CircleSlash, Clock, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, Trash2, User } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
@@ -408,8 +408,8 @@ function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
   onManage: () => void;
 }) {
   const tooNew = entry.api !== undefined && entry.api > PLUGIN_API_VERSION;
-  const meta = [entry.author && `by ${entry.author}`, entry.tags?.join(", "), entry.updated && `updated ${entry.updated.slice(0, 10)}`]
-    .filter(Boolean).join(" · ");
+  const tags = entry.tags ?? [];
+  const hasMeta = entry.author !== undefined || tags.length > 0 || entry.updated !== undefined;
   return (
     <div className={`item plugin-row browse-row is-${state}`} role="listitem">
       <PluginIconView icon={entryIcon(entry)} />
@@ -421,7 +421,20 @@ function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
           {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
         </div>
         {entry.description && <span className="hint">{entry.description}</span>}
-        {meta && <span className="hint">{meta}</span>}
+        {/* Author, tags and the date sat in the same faint grey as the description above
+            them, so the row read as two lines of prose. They are facts about the plugin
+            rather than more description: each gets its own mark and its own colour. */}
+        {hasMeta && (
+          <div className="plugin-meta">
+            {entry.author && <span className="plugin-by"><User size={10} />{entry.author}</span>}
+            {tags.map((t) => <span key={t} className="plugin-tag">{t}</span>)}
+            {entry.updated && (
+              <span className="plugin-updated" title={`Last updated ${entry.updated}`}>
+                <Clock size={10} />{entry.updated.slice(0, 10)}
+              </span>
+            )}
+          </div>
+        )}
         <span className="hint mono" style={{ opacity: 0.7 }}>{entry.spec}</span>
       </div>
       <div className="plugin-row-actions">

@@ -571,7 +571,7 @@ plugins from their own repositories, each **pinned to the version this release w
 with** — the badge on the row says *pinned* — so a new push by an author does not change
 the editor under you, and every copy of a given version runs the same code. Moving one
 forward is part of the next release. They can be switched on and off but not removed from
-the list. scmscx.com, Terrain from Image, Repair, Walkability and Paint are the defaults,
+the list. scmscx.com, Repair, Walkability, Terrain from Image and Paint are the defaults,
 and all five start on. Melee Wizard, Trigger Script and Section Explorer are not in that
 list: install them from Plugins ▸ Browse Plugins… like any other.
 

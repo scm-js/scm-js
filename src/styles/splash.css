@@ -129,11 +129,17 @@
 .splash-log div.current::after {
   content: "▍";
   color: var(--sp-pink);
-  animation: blink 1s steps(2) infinite;
+  padding-left: 0.4em;
+  animation: blink 1s step-end infinite;
 }
+/* opacity, not visibility: visibility interpolates as *visible* for every progress
+   below 1, so a stepped keyframe pair of it never hides the cursor at all. */
 @keyframes blink {
-  to {
-    visibility: hidden;
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 .splash-bar {

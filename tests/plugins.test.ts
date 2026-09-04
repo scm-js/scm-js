@@ -937,14 +937,14 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Terrain from Image, Repair, Walkability and Paint on, pinned to a version", () => {
+  it("ships scmscx.com, Repair, Walkability, Terrain from Image and Paint on, pinned to a version", () => {
     // Which five, in which order, and all on — the versions deliberately not, since every
     // plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-scm-scx",
-      "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-repair",
       "github:scm-js/plugin-walkability",
+      "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
     ]);
     expect(DEFAULT_REMOTE_PLUGINS.every((d) => d.enabled)).toBe(true);

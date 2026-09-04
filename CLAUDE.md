@@ -364,7 +364,7 @@ menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
 into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
-Terrain from Image, Repair, Walkability and Paint are default plugins, all on
+Repair, Walkability, Terrain from Image and Paint are default plugins, all on
 (`src/plugins/defaults.ts`); Melee Wizard, Trigger Script and Section Explorer are installed from
 Browse Plugins.
 `zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
@@ -563,7 +563,7 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-scmscx.com, Terrain from Image, Repair, Walkability and Paint, each pinned to a tag and
+scmscx.com, Repair, Walkability, Terrain from Image and Paint, each pinned to a tag and
 all on; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard,
 Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a

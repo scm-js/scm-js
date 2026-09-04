@@ -90,8 +90,8 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (scmscx.com, Terrain from Image, Repair,
-Walkability and Paint are the defaults today, and all five start on). Being a default buys
+removed; each says whether it starts on (scmscx.com, Repair, Walkability, Terrain from
+Image and Paint are the defaults today, and all five start on). Being a default buys
 a plugin nothing else — it is fetched and loaded by the steps above like any other.
 
 Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.1`. A moving

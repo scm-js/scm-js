@@ -54,7 +54,7 @@ export function useDoodadTools() {
   const catalogue: DoodadCatalogue = loaded?.doodads ?? NO_DOODADS;
   const tileset = loaded?.tileset ?? null;
   /** The drag in progress: where it started and the records it moves. */
-  const drag = useRef<{ from: MapPoint; indices: number[]; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ from: MapPoint; indices: number[]; anchorX: number; dx: number; dy: number } | null>(null);
 
   const activeDef = useCallback((): DoodadDef | null => {
     const id = store.get(activeDoodadAtom);
@@ -168,8 +168,20 @@ export function useDoodadTools() {
   const beginDrag = useCallback((p: MapPoint) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
-    drag.current = { from: p, indices: store.get(selectedDoodadsAtom).filter((i) => scn.doodads[i]), dx: 0, dy: 0 };
-  }, [store]);
+    const indices = store.get(selectedDoodadsAtom).filter((i) => scn.doodads[i]);
+    // The column the snap is measured from: the first doodad's own left column, the way a
+    // location move snaps the first box's corner rather than the pointer. Snapping the
+    // *offset* instead only preserved whatever parity the selection already had, so a
+    // doodad sitting on an odd column (an imported map, or one placed with the tick off)
+    // could never be brought onto the two-tile grid by moving it.
+    let anchorX = 0;
+    for (const i of indices) {
+      const rec = scn.doodads[i];
+      const def = catalogue.byId.get(rec.doodadId);
+      if (def) { anchorX = doodadOrigin(def, rec.x, rec.y).x; break; }
+    }
+    drag.current = { from: p, indices, anchorX, dx: 0, dy: 0 };
+  }, [store, catalogue]);
 
   /** Track the pointer; returns true when the offset (in tiles, snapped) changed. */
   const dragTo = useCallback((p: MapPoint): boolean => {
@@ -177,7 +189,11 @@ export function useDoodadTools() {
     if (!d) return false;
     let dx = Math.round((p.px - d.from.px) / 32);
     const dy = Math.round((p.py - d.from.py) / 32);
-    if (store.get(doodadPlacementAtom).snapToGrid) dx = Math.round(dx / 2) * 2;
+    if (store.get(doodadPlacementAtom).snapToGrid) {
+      // Land the anchor on an even column, then carry the rest of the selection with it.
+      const landed = Math.round((d.anchorX + dx) / 2) * 2;
+      dx = Math.max(landed, 0) - d.anchorX;
+    }
     if (dx === d.dx && dy === d.dy) return false;
     d.dx = dx;
     d.dy = dy;

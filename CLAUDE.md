@@ -321,9 +321,20 @@ behind Ctrl+F. Persisted preferences and the grid look live in `atoms/preference
 `atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory
 `Storage` when the browser has none — `storagePersists()` says which), knows that every key
 the editor writes starts with `scmjs.` (`storedKeys` / `storedSize` / `clearStoredData`),
-and backs Preferences ▸ Browser storage: `clearStoredDataAtom` `RESET`s the prefs, grid and
-installed-plugin atoms (and the plugin manifest cache) — so the defaults and the default plugins come back live — then
-sweeps whatever the plugins stored (`tests/storage.test.ts`);
+carries `mergedStorage(defaults)` — the `atomWithStorage` storage that merges a stored
+settings *object* over its defaults, so a field added later still has one — and backs
+Preferences ▸ Browser storage. `STORED_RESETS` in `preferencesAtoms.ts` is the table
+mapping each stored key to the atom that owns it; `clearStoredKeysAtom` takes a list of
+keys, `RESET`s the atoms among them (the default comes back *live*, which is the whole
+point — the plugin host reloads the default set, the grid goes back to its look) and
+sweeps the rest with `removeStoredKeys`, and `clearStoredDataAtom` is that over everything
+(`ownedStoredKeys()` plus whatever is stored, so a plugin's keys and an older version's go
+too). Keep `STORED_RESETS` complete: a key missing from it can only be removed, leaving
+the value live until a reload — `tests/storage.test.ts` greps the source for every
+`atomWithStorage("scmjs.…")` and fails when one is not in the table. The dialog's list
+(`StorageSection` in `MiscDialogs.tsx`) is one row per key — a plugin's own keys grouped
+per plugin — each opening onto the stored value and each with its own Clear button beside
+the Clear all;
 document-replacing actions (New / Open / Close / drop) go through `useMapFileActions().guard(PendingAction)`,
 which parks the action in `confirmClose`'s payload while the map is modified. `tests/resize.test.ts`,
 `tests/validate.test.ts`, `tests/find.test.ts`.
@@ -353,7 +364,10 @@ Terrain from Image and Repair (on) and Walkability and Melee Wizard (off until t
 plugins (`src/plugins/defaults.ts`); Paint and Section Explorer are installed from Browse Plugins.
 `zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
 (the viewport's `onDown` refuses a locked layer's gestures), `cursorPixelAtom` the status bar's Px.
-`gridSizeAtom`, `locationSnapAtom`, `panelsAtom` and the dock widths are `atomWithStorage` now.
+`gridSizeAtom`, `locationSnapAtom`, `placementOptionsAtom` (`scmjs.placement`),
+`doodadPlacementAtom` (`scmjs.doodadPlacement`), `panelsAtom` and the dock widths are `atomWithStorage`
+now — the two placement bags through `mergedStorage`, and every one of them listed in Preferences ▸
+Browser storage, registered in `STORED_RESETS` and so clearable on its own or with the rest.
 
 ### Saving (`src/editor/save.ts`, `src/services/mapIo.ts`, `useMapFileActions.ts#saveDocument`, `SaveMapDialog`)
 
@@ -444,7 +458,7 @@ real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in th
 
 The Script Editor — the TypeScript-subset language that generates a block of `scenario.triggers`,
 its compiler, simulator and Monaco dialog — is the **Trigger Script** plugin
-(`github.com/scm-js/plugin-trigger-script`, a default that starts off), not the editor: it was moved
+(`github.com/scm-js/plugin-trigger-script`, not a default — installed from Browse Plugins), not the editor: it was moved
 out so the editor no longer bundles Monaco and a second TypeScript (the desktop download lost ~14 MB
 of the 18 MB those chunks weighed). Its README documents the language and its internals. What stays
 here is generic:
@@ -520,8 +534,8 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain` and `github:scm-js/plugin-repair` on,
-`github:scm-js/plugin-walkability` and `github:scm-js/plugin-melee-wizard` off; Paint and Section
+`github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain`, `github:scm-js/plugin-repair`
+and `github:scm-js/plugin-walkability`, all on; Melee Wizard, Trigger Script, Paint and Section
 Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
@@ -807,7 +821,7 @@ the manual run. `repair.ts` applies the byte-level repairs to the chunk list by 
 The bytes as the map came in stay in memory until the next open for *Restore original*. It moved
 Rebuild ISOM from Tiles out of the editor.
 
-**Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts off) is the read-only
+**Walkability** (`github.com/scm-js/plugin-walkability`, a default that starts on) is the read-only
 analysis drawn over the map and the worked example for `api.ui.overlay`: `analysis.ts` there builds a
 minitile grid from `api.tileset.raw()`'s VF4 words plus the ground under buildings and resources, and
 computes an exact Euclidean clearance transform, 4-connected islands, a BWEM-style watershed into areas
@@ -820,7 +834,7 @@ and re-runs on the terrain/units/doodads/settings/document events while the over
 is open, so the picture follows the units being placed on it. The settings panel holds the readout and
 the problems; a *Details…* panel lists the rest. It never writes.
 
-**Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, a default that starts off) places symmetric
+**Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, not a default — installed from Browse Plugins) places symmetric
 start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile
 Chebyshev gap from the 4 × 3 hall, the mineral line grown along it from the pointed direction (wrapping
 round the hall's corner), the geyser past the line's end, the nine symmetries as point maps (an image that
@@ -950,9 +964,11 @@ frames range from 8² to 256²; evicted canvases are zero-sized so the bitmap go
 Edits are `UnitChange { index, before, after }` lists (insert / remove / replace, removals highest index
 first) carried in `HistoryEntry.units`; `applyUnitChanges` marks `UNIT` dirty. `unitsRevisionAtom` is the
 repaint trigger for unit changes (the list is mutated in place, like tiles); `selectedUnitsAtom` holds
-indices and is cleared by any unit edit/undo. `snapPlacement` puts anything with the Building flag on the
-tile grid by its placement box; `makeUnit` writes StarEdit-style valid/used masks (see
-`tests/unit-edit.test.ts`). The viewport draws in `drawOrder` (ground by y, then flyers) and falls back to
+indices and is cleared by any unit edit/undo. `snapPlacement` is the palette's *Snap to grid*: on, anything
+with the Building flag goes on the tile grid by its placement box and everything else on the nearest
+tile centre; off, both land at the pointer. It snaps the *destination*, so `moveUnits` brings a unit
+that sits off the grid back onto it rather than preserving its offset. `makeUnit` writes
+StarEdit-style valid/used masks (see `tests/unit-edit.test.ts`). The viewport draws in `drawOrder` (ground by y, then flyers) and falls back to
 coloured markers while a GRP loads or when the assets are missing. The UNIT bit masks (`UnitValid`,
 `UnitUsed`, `UnitState`, `UnitRelation`) live in `sections/objects.ts`; `UnitPropertiesDialog` edits every
 record field on the selection (payload `{ indices }`), writing only touched fields via `updateSelected`.
@@ -1099,6 +1115,15 @@ again, measure `longtask` entries before blaming the loading code.
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+- `src/editor/platform.ts` is what the chrome says about the shell it is in: `isDesktop()`
+  (the Electron bridge is there) and `hostTerms()`, which answers the words — "browser" /
+  "app", "this browser" / "this app", "Browser" / "Application" for a heading, and where a
+  download lands. The desktop build is the same bundle in a Chromium window, so every
+  "this browser" in the copy read wrong there; anything user-visible that names the shell
+  goes through it (Preferences ▸ storage's title, the save and export toasts, the plugin
+  dialogs' warnings, the sound importer's decoder notes, About). It decides *wording* only
+  — what the shell can do is still asked of `desktopBridge()` and the platform APIs.
+  `tests/platform.test.ts`.
 - `src/hooks/useWindowTitle.ts` keeps `document.title` on the open map — the file name when there is
   one, else the scenario name, with a leading `*` while it is modified, and the plain
   `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page

@@ -339,10 +339,14 @@ export function GridSettingsDialog({ entry }: DialogProps) {
       </Group>
       <Group title="Snapping">
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Snap locations to grid" checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
-          <Check label="Snap doodads to grid" checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
+          <Check className="wrap" label={`Snap locations to the grid (${local} px)`} checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
+          <Check className="wrap" label="Snap doodads to the two-tile isometric grid" checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
         </div>
-        <p className="hint" style={{ marginTop: 6 }}>Buildings always snap to the tile grid by their placement box; other units and sprites are placed by the pixel.</p>
+        <p className="hint" style={{ marginTop: 6 }}>
+          Locations snap to the spacing above; the Locations palette can pick a different step. A doodad's snap is
+          always the two-tile grid StarEdit places them on, whatever the spacing is — the same tick as the Doodads
+          palette's. Units have their own “Snap to grid” in the Units palette; sprites are always placed by the pixel.
+        </p>
       </Group>
     </DialogFrame>
   );

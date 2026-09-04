@@ -14,11 +14,20 @@ import {
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
 import { transferOf } from "../../plugins/images";
+import { hostTerms } from "../../editor/platform";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginInfo } from "../../plugins/api";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
+
+/** Why the *Load from a copy saved here* tick is off for a plugin that is part of the build. */
+const BUILTIN_COPY_HINT = "This plugin is part of the build; there is nothing to fetch.";
+
+/** What that tick does, in the words of whichever shell the editor is running in. */
+function localCopyHint(): string {
+  return `Saves the plugin's files in ${hostTerms().here} on the first load and runs that copy from then on. Its address is not contacted again until you press Reload.`;
+}
 
 /* ── A plugin's own dialog ──────────────────────────────── */
 
@@ -156,7 +165,7 @@ function Option({ label, hint, checked, disabled, onChange }: { label: string; h
  *
  * The three ticks are the whole point of the screen and are read straight into that call:
  * whether to run it now, whether to store the pinned spec instead of the moving one, and
- * whether to keep a copy of the code in the browser and load that from then on.
+ * whether to keep a copy of the code here and load that from then on.
  *
  * Both ways in — Add in Manage Plugins and Update on a pinned row — read the manifest
  * before they open this screen, so the preview arrives with the payload and a plugin the
@@ -212,6 +221,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
 
   // Nothing to show and nothing to agree to: the fetch failed, or it came back without a
   // manifest. Either way the screen says so and Add is off.
+  const host = hostTerms();
   const unreadable = failed ?? preview?.problem ?? null;
   const manifest = preview?.manifest;
   const name = manifest?.name ?? (spec.startsWith("builtin:") ? spec.slice("builtin:".length) : spec);
@@ -296,7 +306,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
               <div>
                 <strong>Only add plugins you trust.</strong> Plugins are not sandboxed. This one will run with the same
                 access as the editor: it can read and change the map you have open and anything you save from it, add menu
-                items and hotkeys, keep data in this browser, and make network requests.
+                items and hotkeys, keep data in {host.here}, and make network requests.
               </div>
             </div>
 
@@ -324,8 +334,8 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 label="Load from a copy saved here"
                 hint={
                   builtin
-                    ? "This plugin is part of the build; there is nothing to fetch."
-                    : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."
+                    ? BUILTIN_COPY_HINT
+                    : localCopyHint()
                 }
                 checked={local && !builtin}
                 disabled={builtin}
@@ -853,7 +863,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           : (
             <>
               <p className="hint">
-                Paste a link to the plugin. Any address the browser can read will do: a git repository, a folder
+                Paste a link to the plugin. Any address {hostTerms().here} can read will do: a git repository, a folder
                 inside one, or the <span className="mono">plugin.json</span> itself. The ones the project
                 publishes are under <strong>Browse</strong>.
               </p>
@@ -918,9 +928,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                     status rather than explanation, and is shown rather than hidden in a tooltip. */}
                 <span
                   className="plugin-copy"
-                  title={builtinPlugin
-                    ? "This plugin is part of the build; there is nothing to fetch."
-                    : "Saves the plugin's files in this browser on the first load and runs that copy from then on. Its address is not contacted again until you press Reload."}
+                  title={builtinPlugin ? BUILTIN_COPY_HINT : localCopyHint()}
                 >
                   <HardDrive size={11} />
                   <Check
@@ -928,7 +936,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                     checked={p.local === true}
                     disabled={builtinPlugin}
                     onChange={(e) => toggleLocal(p.spec, e.target.checked)}
-                    aria-label={`Load ${name} from a copy saved in this browser`}
+                    aria-label={`Load ${name} from a copy saved in ${hostTerms().here}`}
                   />
                   {p.local === true && !builtinPlugin && (
                     <span className="dim">{copy ? `· ${Math.max(1, Math.round(copy.size / 1024))} KB` : "· not saved yet"}</span>
@@ -941,7 +949,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
       </div>
       <p className="hint">
         To write one, put a <span className="mono">plugin.json</span> next to
-        a <span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> anywhere the browser can read
+        a <span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> anywhere {hostTerms().here} can read
         it. The API is in <span className="mono">docs/plugins.md</span>.
       </p>
     </div>

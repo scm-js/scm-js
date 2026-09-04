@@ -7,6 +7,7 @@ import { closeDialogAtom, openDialogAtom, pushToastAtom, statusMessageAtom } fro
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_NEW_MAP, saveDocument, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
+import { hostTerms } from "../../editor/platform";
 import { canPickSaveLocation, droppedHandle, MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, type PickedMapFile } from "../../services/mapIo";
 import {
   buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, formatBytes, planSave, SAVE_PRESETS, type MapFormat, type SaveOptions,
@@ -340,7 +341,7 @@ export function SaveMapDialog({ entry }: DialogProps) {
                 </Field>
               </div>
               {!canPickSaveLocation() && (
-                <p className="hint" style={{ marginTop: 6 }}>This browser cannot ask where to put the file: it goes to the downloads folder.</p>
+                <p className="hint" style={{ marginTop: 6 }}>{hostTerms().Here} cannot ask where to put the file: it goes to the downloads folder.</p>
               )}
             </Group>
 
@@ -603,7 +604,7 @@ export function ExportImageDialog({ entry }: DialogProps) {
       if (outcome) {
         const text = `Exported ${outcome.fileName} — ${size.width}×${size.height}, ${(blob.size / 1024).toFixed(0)} KB`;
         setStatus(text);
-        toast({ kind: "ok", title: outcome.route === "download" ? "Image downloaded" : "Image exported", detail: outcome.route === "download" ? `${text}. It is in the browser's downloads folder.` : text });
+        toast({ kind: "ok", title: outcome.route === "download" ? "Image downloaded" : "Image exported", detail: outcome.route === "download" ? `${text}. It is in ${hostTerms().downloads}.` : text });
         close(entry.key);
       }
     } catch (err) {
@@ -699,7 +700,7 @@ export function ExportImageDialog({ entry }: DialogProps) {
       </div>
       {megapixels > HUGE_MEGAPIXELS && (
         <p className="error-text">
-          {megapixels.toFixed(0)} megapixels — some browsers refuse to encode a canvas this large. Pick a smaller scale if the export fails.
+          {megapixels.toFixed(0)} megapixels — encoding a canvas this large is refused by {hostTerms().desktop ? "some builds" : "some browsers"}. Pick a smaller scale if the export fails.
         </p>
       )}
       {error && <p className="error-text">{error}</p>}

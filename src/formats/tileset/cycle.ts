@@ -67,9 +67,12 @@ export function cycleLength(bands: readonly PaletteBand[]): number {
   return length;
 }
 
-/** Which rotation the wall clock is on right now. */
-export function cycleStepAt(nowMs: number, length: number): number {
-  return Math.floor(nowMs / CYCLE_STEP_MS) % length;
+/**
+ * Which rotation the wall clock is on right now. `speed` is the multiple of the game's
+ * own rate the editor is playing at (Preferences ▸ Display).
+ */
+export function cycleStepAt(nowMs: number, length: number, speed = 1): number {
+  return Math.floor((nowMs * speed) / CYCLE_STEP_MS) % length;
 }
 
 /**

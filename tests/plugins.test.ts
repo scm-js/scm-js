@@ -860,14 +860,12 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Terrain from Image and Repair on, and Walkability, Melee Wizard and Trigger Script off, as remote defaults", () => {
+  it("ships scmscx.com, Terrain from Image, Repair and Walkability on, as remote defaults", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
       { spec: "github:scm-js/plugin-scm-scx", enabled: true },
       { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
       { spec: "github:scm-js/plugin-repair", enabled: true },
-      { spec: "github:scm-js/plugin-walkability", enabled: false },
-      { spec: "github:scm-js/plugin-melee-wizard", enabled: false },
-      { spec: "github:scm-js/plugin-trigger-script", enabled: false },
+      { spec: "github:scm-js/plugin-walkability", enabled: true },
     ]);
     // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
@@ -877,10 +875,12 @@ describe("plugin lifecycle", () => {
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json" });
     expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
-    // A fresh editor lists Walkability and Melee Wizard but does not run them until the user ticks them.
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-walkability", enabled: false });
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-melee-wizard", enabled: false });
-    // Paint and Section Explorer are not defaults: they are found and installed through Browse Plugins.
+    // A fresh editor runs Walkability with the rest.
+    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-walkability", enabled: true });
+    // Melee Wizard, Trigger Script, Paint and Section Explorer are not defaults: they are found and
+    // installed through Browse Plugins.
+    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-melee-wizard");
+    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-trigger-script");
     expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-paint");
     expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-section-explorer");
     // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
@@ -1746,7 +1746,8 @@ describe("plugin panels and palettes", () => {
       expect(tx.placeSprite("pure", 3, 1, 64, 64, { flipped: true })).toBe(0);
     });
     expect(result).toMatchObject({ units: 2, sprites: 1 });
-    expect(scn.units[0]).toMatchObject({ unitId: 0, owner: 2, x: 40, y: 40 });
+    // The palette's snap is on by default, so a non-building lands on the tile centre.
+    expect(scn.units[0]).toMatchObject({ unitId: 0, owner: 2, x: 48, y: 48 });
     expect(scn.units[1].x).toBeLessThan(scn.width * 32);
     expect(scn.units[1].y).toBe(0);
     expect(scn.sprites[0]).toMatchObject({ spriteId: 3, owner: 1, x: 64, y: 64 });

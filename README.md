@@ -134,10 +134,10 @@ The options confirmed in the dialog are what Ctrl+S reuses for that map from the
 | Cut, copy and paste, including between maps | Yes |
 | Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Paint…). Outlined or filled, spaced, jittered, per-player; one undo step each. |
 | Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
-| Auto-place Start Locations | Yes. Tools ▸ Auto-place Start Locations puts one per player on a ring or in the corners, each moved to the nearest ground the placement checks accept, as one undo step. The Melee Wizard plugin (tick it in Plugins ▸ Manage Plugins…, then Tools ▸ Melee Wizard…) does the elaborate version: click where Player 1 starts and the others land on its images under the symmetry you chose, with bases. |
+| Auto-place Start Locations | Yes. Tools ▸ Auto-place Start Locations puts one per player on a ring or in the corners, each moved to the nearest ground the placement checks accept, as one undo step. The Melee Wizard plugin (install it from Plugins ▸ Browse Plugins…, then Tools ▸ Melee Wizard…) does the elaborate version: click where Player 1 starts and the others land on its images under the symmetry you chose, with bases. |
 | Lock a layer | Yes, in the Layers panel: a locked layer's tools stop changing the map. |
 | Lay out a base's resources: the mineral line on the three-tile ring, the geyser past its end, for every player at once | Yes, as a plugin (Melee Wizard). Press on the hall spot and drag towards the minerals; presets for main, natural and third; amounts, end-patch amounts, mineral types; spots the map refuses are shown in red and left out. Also bases at every start location in one go, a blocking patch tool, mirroring the selected units, a symmetry check and a resource summary. |
-| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability: tick it, then View ▸ Walkability or Ctrl+Shift+W). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map as an overlay that stays on while you place units and follows every edit; hover reads the ground under the pointer; Tools ▸ Walkability… is the settings and the lists. |
+| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability, installed by default: View ▸ Walkability or Ctrl+Shift+W). Read from the VF4 minitile flags with buildings and resources as walls, drawn over the map as an overlay that stays on while you place units and follows every edit; hover reads the ground under the pointer; Tools ▸ Walkability… is the settings and the lists. |
 
 ### Triggers
 
@@ -145,7 +145,7 @@ The options confirmed in the dialog are what Ctrl+S reuses for that map from the
 | --- | --- |
 | Classic editor: every condition and action, per-item disable | Yes |
 | Text editor in SCMDraft's TrigEdit syntax | Yes |
-| Script editor: a TypeScript subset that generates triggers | Yes, as a plugin (Trigger Script: tick it in Plugins ▸ Manage Plugins…, then Triggers ▸ Script Editor…). |
+| Script editor: a TypeScript subset that generates triggers | Yes, as a plugin (Trigger Script: install it from Plugins ▸ Browse Plugins…, then Triggers ▸ Script Editor…). |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |
 | Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |
@@ -239,8 +239,11 @@ you unlock it, while selecting and looking still work.
 The palette is built from the current tileset's own groups, with StarEdit's categories
 and placement rules. Picking a doodad arms placement, and the ghost turns red where
 the footprint leaves the map, covers another doodad or sits on the wrong terrain.
-Place Anywhere drops that rule; Snap to Grid keeps the footprint on StarEdit's
-two-tile isometric grid.
+Place Anywhere drops that rule; Snap to Grid keeps the footprint's left column on an
+even tile — StarEdit's two-tile isometric grid, always two tiles whatever View ▸ Grid
+Settings shows. It snaps a move as well as a placement, and it snaps where the doodad
+lands rather than how far it went, so a doodad sitting on an odd column is brought onto
+the grid by dragging it.
 
 Doodads have no names in the game data, so the search box matches what the data does
 say: the category (`bridge`, `temple`, `coastal`), the id (`#12`), the footprint
@@ -256,9 +259,13 @@ record and any canopy or door overlay. Removing one restores the ground undernea
 Picking a unit type arms placement, and each click on empty ground places one. Esc or
 right-click stops placing and drops you into select mode.
 
-Buildings, resources, start locations and beacons snap their placement box to the tile
-grid the way StarEdit stores them. Everything else lands where the pointer is, and
-Snap to Grid can be turned off for pixel placement, SCMDraft-style.
+**Snap to Grid** puts buildings, resources, start locations and beacons on the tile grid
+by their placement box, the way StarEdit stores them, and every other unit on the nearest
+tile centre. Turn it off for pixel placement, SCMDraft-style — then everything lands
+exactly where the pointer is. It applies to a move as well as a placement, so dragging a
+unit that sits off the grid brings it back onto it. Sprites are always placed by the
+pixel; the Doodads and Locations layers have snaps of their own (View ▸ Grid Settings
+gathers all three).
 
 Placement checks are on by default and refuse a spot with a red ghost and a reason in
 the status bar. They are the same rules the game applies when it loads a map and
@@ -532,8 +539,8 @@ removing it; Reload fetches one again from its address and replaces any stored c
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
 plugins loaded from their own repositories over the network — nothing about them is built
 in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. scmscx.com, Terrain from Image and Repair start on;
-Walkability, Melee Wizard and Trigger Script are listed but off until you tick them. Paint
+working connection on the first load of a session. scmscx.com, Terrain from Image, Repair
+and Walkability are the defaults, and all four start on. Melee Wizard, Trigger Script, Paint
 and Section Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like
 any other.
 
@@ -624,7 +631,7 @@ again from scratch — every dialog and the map view follow, and the undo histor
 with Resize.
 
 **Walkability** ([scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability))
-is in the list but off. Tick it, and View ▸ Walkability (Ctrl+Shift+W, or the eye in the
+is installed by default. View ▸ Walkability (Ctrl+Shift+W, or the eye in the
 Layers panel) reads the ground the way a unit does — the sixteen minitiles under every
 tile, with buildings and resources as walls — and draws what it finds over the map: the
 islands (ground no path joins) and which start locations share one, pockets no start
@@ -641,7 +648,7 @@ through; the panel follows every edit while it is open, and Copy report puts a t
 summary on the clipboard. It only reads the map.
 
 **Melee Wizard** ([scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard))
-is in the list but off. Tick it, then Tools ▸ Melee Wizard… (Ctrl+Shift+M) opens a panel
+is installed from Plugins ▸ Browse Plugins…. Tools ▸ Melee Wizard… (Ctrl+Shift+M) opens a panel
 for the parts of a ladder-style map that are geometry: pick a symmetry (mirror, 180°,
 90°, both diagonals — 2, 4 or 8 players), press *Start locations* and click where Player
 1 starts, and the others land on its images; press *Add base*, press on the hall spot,
@@ -656,7 +663,7 @@ end-patch amounts and mineral types; a blocking patch tool; *Mirror selected uni
 summary. Every placement is one undo step.
 
 **Trigger Script** ([scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script))
-is in the list but off. Tick it, and Triggers ▸ Script Editor… opens a TypeScript file
+is installed from Plugins ▸ Browse Plugins…. Triggers ▸ Script Editor… opens a TypeScript file
 kept inside the map, checked as you type against the map's own names and compiled into
 a block of the trigger list on Build: raw `trigger()` calls one to one, and structured
 code — variables, `if`, loops, functions — lowered to a death-counter state machine.
@@ -707,12 +714,16 @@ F1 lists the lot. The ones worth knowing up front:
 Preferences (Ctrl+,) persist in the browser: the splash screen, whether to confirm
 before replacing a modified map — the same tick decides whether closing the tab or
 quitting the desktop app asks about unsaved changes — defaults for new maps, whether
-water and units animate at startup, and Test Map's folder and launch tick. The grid,
-the location snap, which panels are shown and how wide they are, and the recent files
-are remembered too. Its Browser storage box lists everything the editor keeps in this
-browser, and **Clear all data** throws the lot away — the file handles behind Open
-Recent and Test Map included — putting the defaults (and the default plugins) back. The
-map you have open is not kept in the browser and is not touched by it.
+water and units animate at startup and how fast each runs (0.25× to 4× the game's own
+speed), and Test Map's folder and launch tick. The grid,
+the location snap, the Units and Doodads palettes' placement options, which panels are
+shown and how wide they are, and the recent files are remembered too. Its Browser storage
+box (Application storage in the desktop app) lists everything the editor keeps, one row per
+setting or cache, with a plugin's own data under its name: open a row to see exactly what is
+stored, clear that one row, or **Clear all data** to throw the lot away — the file handles
+behind Open Recent and Test Map included. Whatever goes is back on its default at once
+rather than at the next reload, the default plugins included. The map you have open is
+never kept there and is not touched by any of it.
 
 ## Documentation
 

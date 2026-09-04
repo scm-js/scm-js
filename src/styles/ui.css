@@ -232,14 +232,28 @@ input[type="range"] {
 .check input:disabled + span {
   opacity: 0.45;
 }
+/* A tick whose label is a sentence: let it wrap instead of running off the dialog. */
+.check.wrap {
+  align-items: flex-start;
+  height: auto;
+  white-space: normal;
+}
+.check.wrap input {
+  margin-top: 3px;
+}
 
 /* ── Forms ──────────────────────────────────────────────── */
 
 .form {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  /* minmax(0, 1fr) — a <select>'s min-content width is its widest option, so a plain
+     1fr track lets a long option push the control past the dialog's edge. */
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 8px 12px;
   align-items: center;
+}
+.form > * {
+  min-width: 0;
 }
 .form > label {
   color: var(--text-dim);
@@ -251,7 +265,7 @@ input[type="range"] {
   grid-column: 1 / -1;
 }
 .form.wide {
-  grid-template-columns: 120px 1fr;
+  grid-template-columns: 120px minmax(0, 1fr);
 }
 .row {
   display: flex;

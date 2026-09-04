@@ -1156,3 +1156,46 @@
 .save-options .check input { margin-top: 1px; }
 .save-options .check > span { white-space: normal; }
 
+.about-what {
+  padding-left: 10px;
+}
+/* Preferences ▸ storage: one row per stored key, opening onto what it holds. */
+.stored-list { max-height: 208px; }
+.stored-entry + .stored-entry { border-top: 1px solid rgba(255, 255, 255, 0.03); }
+.stored-entry .item { gap: 6px; }
+.stored-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.stored-toggle svg:first-child { color: var(--text-faint); }
+.stored-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 8px 6px 26px;
+  font-size: var(--fs-xs);
+}
+.stored-detail .mono { font-family: var(--font-mono); }
+.stored-value {
+  margin: 1px 0 0;
+  max-height: 116px;
+  overflow: auto;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

@@ -83,14 +83,20 @@ export function placementBox(g: UnitGeometry, x: number, y: number): PixelBox {
  * Where a unit dropped at map pixel (px, py) lands. Buildings (and everything else with
  * the building flag: resources, start locations, beacons) snap their placement box to the
  * tile grid, which is why a Command Center's stored centre is always tile*32 + 64/48.
- * Other units go exactly where the pointer is. Everything stays inside the map. With
- * `snap` off a building lands at the pointer too, its box merely kept inside the map.
+ * Anything else snaps its *centre* to the nearest tile centre — a marine on the grid the
+ * palette's tick names, which is what SCMDraft's snap does; StarEdit has no such option
+ * and always places non-buildings by the pixel, which is `snap` off. Everything stays
+ * inside the map. With `snap` off a building lands at the pointer too, its box merely
+ * kept inside the map.
  */
 export function snapPlacement(g: UnitGeometry, px: number, py: number, mapW: number, mapH: number, snap = true): { x: number; y: number } {
   const maxX = mapW * TILE_PX - 1;
   const maxY = mapH * TILE_PX - 1;
   if (!g.building) {
-    return { x: Math.min(maxX, Math.max(0, Math.round(px))), y: Math.min(maxY, Math.max(0, Math.round(py))) };
+    const half = TILE_PX / 2;
+    const at = (v: number, max: number) =>
+      Math.min(max, Math.max(0, snap ? Math.floor(v / TILE_PX) * TILE_PX + half : Math.round(v)));
+    return { x: at(px, maxX), y: at(py, maxY) };
   }
   if (!snap) {
     const hw = g.placeW / 2, hh = g.placeH / 2;
@@ -237,8 +243,10 @@ export function updateUnits(scn: Scenario, indices: number[], patch: (u: UnitRec
 }
 
 /**
- * Shift units by a pixel delta. Buildings keep their tile alignment by re-snapping the
- * moved centre; everything is clamped to the map.
+ * Shift units by a pixel delta. With `snap` on the *destination* is snapped, not the
+ * offset — a building keeps its tile alignment and anything else lands on a tile centre,
+ * so a unit that was off the grid is brought onto it by moving it. Everything is clamped
+ * to the map.
  */
 export function moveUnits(scn: Scenario, units: UnitsDat | null, indices: number[], dx: number, dy: number, snap = true): UnitChange[] {
   return updateUnits(scn, indices, (u) => snapPlacement(unitGeometry(units, u.unitId), u.x + dx, u.y + dy, scn.width, scn.height, snap));

@@ -40,9 +40,15 @@ describe("placement snapping", () => {
     expect(snapPlacement(cc, 64 * 32, 64 * 32, 64, 64)).toEqual({ x: 60 * 32 + 64, y: 61 * 32 + 48 });
   });
 
-  it("leaves other units at the pointer, clamped", () => {
-    expect(snapPlacement(marine, 100.4, 77.6, 64, 64)).toEqual({ x: 100, y: 78 });
+  it("puts other units on the nearest tile centre when snapping", () => {
+    expect(snapPlacement(marine, 100.4, 77.6, 64, 64)).toEqual({ x: 3 * 32 + 16, y: 2 * 32 + 16 });
+    expect(snapPlacement(marine, 0, 0, 64, 64)).toEqual({ x: 16, y: 16 });
     expect(snapPlacement(marine, -5, 99999, 64, 64)).toEqual({ x: 0, y: 64 * 32 - 1 });
+  });
+
+  it("leaves other units at the pointer when snapping is off, clamped", () => {
+    expect(snapPlacement(marine, 100.4, 77.6, 64, 64, false)).toEqual({ x: 100, y: 78 });
+    expect(snapPlacement(marine, -5, 99999, 64, 64, false)).toEqual({ x: 0, y: 64 * 32 - 1 });
   });
 });
 
@@ -69,7 +75,14 @@ describe("unit change lists", () => {
   it("moves with snapping and skips no-op updates", () => {
     const scn = fresh();
     applyUnitChanges(scn, addUnits(scn, [makeUnit(null, 0, 0, 100, 100, 1)]));
-    const mv = moveUnits(scn, null, [0], 5.4, -3);
+    // Snapping on: the destination lands on the tile centre, not the offset.
+    const snapped = moveUnits(scn, null, [0], 5.4, -3);
+    expect(snapped).toHaveLength(1);
+    applyUnitChanges(scn, snapped);
+    expect([scn.units[0].x, scn.units[0].y]).toEqual([112, 112]);
+    applyUnitChanges(scn, snapped, "undo");
+
+    const mv = moveUnits(scn, null, [0], 5.4, -3, false);
     expect(mv).toHaveLength(1);
     applyUnitChanges(scn, mv);
     expect([scn.units[0].x, scn.units[0].y]).toEqual([105, 97]);

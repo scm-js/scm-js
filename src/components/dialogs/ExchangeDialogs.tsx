@@ -10,6 +10,7 @@ import {
   applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggersToText, type TriggerFileFormat,
 } from "../../editor/exchange";
 import { applyBriefing, applyTriggers } from "../../editor/triggers";
+import { hostTerms } from "../../editor/platform";
 import { getString } from "../../formats/chk/sections/strings";
 import type { TriggerRecord } from "../../formats/chk/sections/triggers";
 import { saveBytes } from "../../services/mapIo";
@@ -68,7 +69,7 @@ export function ExportTriggersDialog({ entry }: DialogProps) {
     if (out) {
       const text = `Exported ${list.length} ${target === "briefing" ? "briefing" : "trigger"}${list.length === 1 ? "" : "s"} to ${out.fileName}`;
       setStatus(text);
-      toast({ kind: "ok", title: out.route === "download" ? "Triggers downloaded" : "Triggers exported", detail: out.route === "download" ? `${text} — in the browser's downloads folder.` : text });
+      toast({ kind: "ok", title: out.route === "download" ? "Triggers downloaded" : "Triggers exported", detail: out.route === "download" ? `${text} — in ${hostTerms().downloads}.` : text });
     }
   };
 
@@ -189,7 +190,7 @@ export function ExportStringsDialog({ entry }: DialogProps) {
     const out = await saveBytes(encodeText(formatStringTable(scenario.strings)), fileName);
     if (out) {
       setStatus(`Exported ${count} strings to ${out.fileName}`);
-      toast({ kind: "ok", title: out.route === "download" ? "Strings downloaded" : "Strings exported", detail: `${count} strings — ${out.fileName}${out.route === "download" ? ", in the browser's downloads folder" : ""}` });
+      toast({ kind: "ok", title: out.route === "download" ? "Strings downloaded" : "Strings exported", detail: `${count} strings — ${out.fileName}${out.route === "download" ? `, in ${hostTerms().downloads}` : ""}` });
     }
   };
   return (

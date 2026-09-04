@@ -240,6 +240,9 @@ describe("palette cycling", () => {
     expect(cycleLength([])).toBe(1);
     expect(cycleStepAt(0, 42)).toBe(0);
     expect(cycleStepAt(CYCLE_STEP_MS * 43, 42)).toBe(1);
+    // The Preferences slider scales the wall clock: half speed is half as far along.
+    expect(cycleStepAt(CYCLE_STEP_MS * 4, 42, 0.5)).toBe(2);
+    expect(cycleStepAt(CYCLE_STEP_MS * 4, 42, 2)).toBe(8);
   });
 
   it("finds the megatiles whose minitiles touch a cycling band", () => {

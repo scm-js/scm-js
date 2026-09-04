@@ -8,6 +8,7 @@ import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/l
 import { applyStrings, deleteUnused, escapeControls, previewString, readStrings, stringCapacity, stringUsages, unescapeControls, type StringUsage } from "../../editor/strings";
 import { addSound, applySounds, findMember, normalizeMember, orphanSounds, readWavs, removeSound, soundBytes, soundList, wavMemberName, type SoundRow } from "../../editor/sounds";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../../editor/switches";
+import { hostTerms } from "../../editor/platform";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";
@@ -320,7 +321,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
           last = addSound(scenario, wavs, existing ?? name);
           done.push(prepared.note);
         } catch (err) {
-          done.push({ name: file.name, level: "warn", text: `not imported: the browser could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` });
+          done.push({ name: file.name, level: "warn", text: `not imported: the ${hostTerms().noun} could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` });
         }
       }
     } finally {
@@ -345,7 +346,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       setForm({ ...form, extras });
       setNotes([{ name: r.path, level: "ok", text: `${wavFormatLabel(parseWavHeader(before)!)} → ${wavFormatLabel(parseWavHeader(result.bytes)!)}, ${kb(before.length)} → ${kb(result.bytes.length)}` }]);
     } catch (err) {
-      setNotes([{ name: r.path, level: "warn", text: `not converted: the browser could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` }]);
+      setNotes([{ name: r.path, level: "warn", text: `not converted: the ${hostTerms().noun} could not decode it${err instanceof Error && err.message ? ` (${err.message})` : ""}` }]);
     } finally {
       setBusy(null);
     }
@@ -380,7 +381,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     if (!r.member) return <span className="faint">—</span>;
     const d = durations.get(r.member);
     if (d === undefined) return <span className="faint">…</span>;
-    return d === null ? <span className="faint" title="Neither the editor's WAV decoder nor the browser could read this file">cannot decode</span> : mmss(d);
+    return d === null ? <span className="faint" title={`Neither the editor's WAV decoder nor the ${hostTerms().noun} could read this file`}>cannot decode</span> : mmss(d);
   };
 
   const format = (r: SoundRow) => {
@@ -405,7 +406,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
         <Button size="sm" onClick={() => fileRef.current?.click()} disabled={filled >= WAV_SLOTS || !!busy}><Upload size={12} /> Import…</Button>
         <label className="row" style={{ gap: 6 }}>
           <span className="dim" style={{ fontSize: 11 }}>as</span>
-          <Select value={preset} options={IMPORT_AS} onChange={(e) => setPreset(e.target.value)} disabled={!!busy} style={{ minWidth: 290 }} title="Files are decoded by the browser and written as PCM WAV in this format. The game's own sounds are 22050 Hz, 16-bit, mono." />
+          <Select value={preset} options={IMPORT_AS} onChange={(e) => setPreset(e.target.value)} disabled={!!busy} style={{ minWidth: 290 }} title={`Files are decoded by the ${hostTerms().noun} and written as PCM WAV in this format. The game's own sounds are 22050 Hz, 16-bit, mono.`} />
         </label>
         <Button size="sm" disabled={!canConvert} onClick={() => row && void convertRow(row)} title={target ? "Re-encode the selected .wav to the chosen format" : "Choose a format to convert to"}><RefreshCw size={12} /> Convert</Button>
         {playing && row?.member === playing
@@ -446,7 +447,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
           </div>
         </div>
       )}
-      <p className="hint">Import takes MP3, FLAC, AAC, Ogg and WAV (anything the browser decodes) and writes PCM WAV in the chosen format, which every StarCraft build plays; keep an Ogg only for Remastered. Remove clears the slot; the file is dropped from the archive too unless another slot or a trigger still refers to it. Triggers play a sound by its string, so a removed slot leaves the string in the table until String Editor's Delete unused.</p>
+      <p className="hint">Import takes MP3, FLAC, AAC, Ogg and WAV (anything the {hostTerms().noun} decodes) and writes PCM WAV in the chosen format, which every StarCraft build plays; keep an Ogg only for Remastered. Remove clears the slot; the file is dropped from the archive too unless another slot or a trigger still refers to it. Triggers play a sound by its string, so a removed slot leaves the string in the table until String Editor's Delete unused.</p>
     </DialogFrame>
   );
 }

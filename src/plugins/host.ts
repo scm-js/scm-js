@@ -1710,7 +1710,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
     },
 
-    // Keys live under `scmjs.plugin.<id>.`, so Preferences ▸ Clear browser data sweeps them
+    // Keys live under `scmjs.plugin.<id>.`, so Preferences ▸ storage lists them per plugin and sweeps them
     // with the rest; `browserStorage()` is a memory stand-in when the browser has none.
     storage: {
       get: (key, fallback) => {

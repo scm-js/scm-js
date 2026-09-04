@@ -172,7 +172,7 @@ describe("locateGameData", () => {
     const d = deps();
     const source = await locateGameData(d);
     expect(source.kind).toBe("none");
-    expect(source.tried).toEqual(["Nothing bundled with this build", "No copy kept in the browser"]);
+    expect(source.tried).toEqual(["Nothing bundled with this build", "No copy kept in this browser"]);
     // No address is consulted any more: the two manifest probes are the whole of it.
     expect(d.calls).toEqual(["manifest /tileset/manifest.json", "manifest /unit/manifest.json"]);
   });

@@ -1,40 +1,110 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { CircleX, Database, HardDrive, Info, Keyboard, RotateCcw, Search, Settings2, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleX,
+  Database,
+  HardDrive,
+  Info,
+  Keyboard,
+  RotateCcw,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { activeLayerAtom, centerViewOnAtom, selectedDoodadsAtom, selectedSpritesAtom, selectedUnitsAtom } from "../../atoms/editorAtoms";
+import {
+  activeLayerAtom,
+  centerViewOnAtom,
+  selectedDoodadsAtom,
+  selectedSpritesAtom,
+  selectedUnitsAtom,
+} from "../../atoms/editorAtoms";
 import { peekTileset } from "../../formats/tileset/load";
 import { desktopBridge } from "../../gamedata/desktop";
+import { hostTerms } from "../../editor/platform";
 import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import {
-  archiveExtrasAtom, doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom,
+  archiveExtrasAtom,
+  doodadsRevisionAtom,
+  locationsRevisionAtom,
+  scenarioAtom,
+  settingsRevisionAtom,
+  triggersRevisionAtom,
+  unitsRevisionAtom,
 } from "../../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
-import { clearStoredDataAtom, DEFAULT_PREFERENCES, preferencesAtom, type Preferences } from "../../atoms/preferencesAtoms";
-import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize } from "../../atoms/storage";
+import {
+  ANIMATION_SPEEDS,
+  animationSpeedIndex,
+  clearStoredDataAtom,
+  clearStoredKeysAtom,
+  DEFAULT_PREFERENCES,
+  ownedStoredKeys,
+  preferencesAtom,
+  type Preferences,
+} from "../../atoms/preferencesAtoms";
+import {
+  STORAGE_PREFIX,
+  storagePersists,
+  storedKeys,
+  storedSize,
+  storedValue,
+} from "../../atoms/storage";
 import { unitName } from "../../data/units";
 import { spriteCatalogue } from "../../data/sprites";
-import { findInScenario, FIND_KINDS, type FindKind, type FindResult } from "../../editor/find";
+import {
+  findInScenario,
+  FIND_KINDS,
+  type FindKind,
+  type FindResult,
+} from "../../editor/find";
 import { spriteKind } from "../../editor/sprites";
 import { TILE_PX } from "../../editor/units";
-import { issueCounts, triggerIssues, validateScenario, type IssueLevel, type IssueTarget } from "../../editor/validate";
-import type { DoodadRecord, SpriteRecord } from "../../formats/chk/sections/objects";
+import {
+  issueCounts,
+  triggerIssues,
+  validateScenario,
+  type IssueLevel,
+  type IssueTarget,
+} from "../../editor/validate";
+import type {
+  DoodadRecord,
+  SpriteRecord,
+} from "../../formats/chk/sections/objects";
 import { useIsomStatus } from "../../hooks/useIsom";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
-import { Button, Check, Field, Group, ListBox, Select, Tabs, TextInput } from "../ui";
+import {
+  Button,
+  Check,
+  Field,
+  Group,
+  ListBox,
+  Select,
+  Tabs,
+  TextInput,
+} from "../ui";
 import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
-/** What one line of the storage list shows. `size` is a rough byte count. */
+/**
+ * One line of the storage list: a setting, a cache, or one plugin's own keys. `keys` is
+ * what the row's Clear button throws away — always the editor's own, never the origin's
+ * other storage — and `size` a rough byte count of them.
+ */
 interface StoredEntry {
   label: string;
   detail: string;
+  keys: string[];
   size: number;
 }
 
@@ -43,6 +113,8 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.grid": "Grid look",
   "scmjs.gridSize": "Grid spacing",
   "scmjs.locationSnap": "Location snap",
+  "scmjs.placement": "Unit placement options",
+  "scmjs.doodadPlacement": "Doodad placement options",
   "scmjs.panels": "Panels shown",
   "scmjs.docks": "Panel widths",
   "scmjs.recents": "Recent files",
@@ -53,21 +125,37 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.plugin-registry": "Browse Plugins cache",
 };
 
-/** Group the editor's keys into the rows the dialog lists; plugin keys collapse into one. */
+/**
+ * Group the editor's keys into the rows the dialog lists. A plugin's keys
+ * (`scmjs.plugin.<id>.…`) collapse into one row per plugin, so *its* data can be thrown
+ * away without touching the others'; everything else is one key to a row.
+ */
 function storedEntries(): StoredEntry[] {
   const rows: StoredEntry[] = [];
   const pluginPrefix = `${STORAGE_PREFIX}plugin.`;
-  let pluginKeys = 0;
-  let pluginSize = 0;
+  const byPlugin = new Map<string, string[]>();
   for (const key of storedKeys()) {
     if (key.startsWith(pluginPrefix)) {
-      pluginKeys++;
-      pluginSize += storedSize(key);
+      const id = key.slice(pluginPrefix.length).split(".")[0] || "?";
+      const keys = byPlugin.get(id);
+      if (keys) keys.push(key);
+      else byPlugin.set(id, [key]);
     } else {
-      rows.push({ label: STORED_LABELS[key] ?? key, detail: key, size: storedSize(key) });
+      rows.push({
+        label: STORED_LABELS[key] ?? key,
+        detail: key,
+        keys: [key],
+        size: storedSize(key),
+      });
     }
   }
-  if (pluginKeys > 0) rows.push({ label: "Plugin data", detail: `${pluginKeys} entr${pluginKeys === 1 ? "y" : "ies"} kept by plugins`, size: pluginSize });
+  for (const [id, keys] of [...byPlugin].sort(([a], [b]) => a.localeCompare(b)))
+    rows.push({
+      label: `Plugin data · ${id}`,
+      detail: `${keys.length} entr${keys.length === 1 ? "y" : "ies"} kept by the plugin`,
+      keys,
+      size: keys.reduce((n, key) => n + storedSize(key), 0),
+    });
   return rows;
 }
 
@@ -75,65 +163,163 @@ function bytes(n: number): string {
   return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} kB`;
 }
 
+/** How much of a stored value the expanded row shows before it is cut off. */
+const VALUE_LIMIT = 4000;
+
+/** The stored value, pretty-printed when it is JSON (everything the editor writes is). */
+function storedText(key: string): string {
+  const raw = storedValue(key);
+  if (raw === null) return "";
+  let text = raw;
+  try {
+    text = JSON.stringify(JSON.parse(raw), null, 1);
+  } catch {
+    // Not JSON (or too deep to parse): show it as it is.
+  }
+  return text.length > VALUE_LIMIT ? `${text.slice(0, VALUE_LIMIT)}…` : text;
+}
+
+/** One row: the summary line, its Clear button, and what it is keeping when opened. */
+function StoredRow({ entry, onClear }: { entry: StoredEntry; onClear: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="stored-entry">
+      <div className="item">
+        <button
+          className="stored-toggle"
+          aria-expanded={open}
+          title={open ? "Hide what is stored" : "Show what is stored"}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <Database size={12} className="dim" />
+          <span>{entry.label}</span>
+        </button>
+        <span className="grow dim" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {entry.detail}
+        </span>
+        <span className="dim">{bytes(entry.size)}</span>
+        <Button
+          size="sm"
+          icon
+          variant="ghost"
+          title={`Clear ${entry.label}`}
+          aria-label={`Clear ${entry.label}`}
+          onClick={onClear}
+        >
+          <Trash2 size={11} />
+        </Button>
+      </div>
+      {open && (
+        <div className="stored-detail">
+          {entry.keys.map((key) => (
+            <div key={key}>
+              {/* The summary line already names a row's key when it has only one. */}
+              {entry.keys.length > 1 && <div className="mono dim">{key}</div>}
+              <pre className="stored-value">{storedText(key) || "(empty)"}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * Preferences ▸ General ▸ Browser storage: what the editor is keeping in this browser, and
- * the one button that throws it away (`clearStoredDataAtom` — preferences, grid, the plugin
- * list and the plugins' own keys). Confirms in place rather than through a dialog, since
- * nothing about the open map is at stake; `onCleared` puts the dialog's working copy back on
- * the defaults so pressing OK afterwards does not write the old preferences straight back.
+ * Preferences ▸ General ▸ storage: what the editor is keeping here, and the buttons that
+ * throw it away — one row at a time (`clearStoredKeysAtom`) or the lot
+ * (`clearStoredDataAtom`). Both reset the atom behind a key as well as removing it, so a
+ * cleared setting goes back to its default live rather than at the next reload. Confirming
+ * happens in place rather than through a second dialog, since nothing about the open map is
+ * at stake; `onCleared` is told which keys went, so the dialog can put its working copy back
+ * on the defaults when the preferences were among them — otherwise pressing OK afterwards
+ * would write the old ones straight back.
  */
-function StorageSection({ onCleared }: { onCleared: () => void }) {
-  const clear = useSetAtom(clearStoredDataAtom);
-  const [asking, setAsking] = useState(false);
-  const [cleared, setCleared] = useState<number | null>(null);
+function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) {
+  const host = hostTerms();
+  const clearAll = useSetAtom(clearStoredDataAtom);
+  const clearKeys = useSetAtom(clearStoredKeysAtom);
+  const [asking, setAsking] = useState<{ what: string; keys: string[] | null } | null>(null);
+  const [cleared, setCleared] = useState<string | null>(null);
   const [run, setRun] = useState(0);
-  const entries = useMemo(() => { void run; return storedEntries(); }, [run]);
+  const entries = useMemo(() => {
+    void run;
+    return storedEntries();
+  }, [run]);
   const total = entries.reduce((n, e) => n + e.size, 0);
   const doClear = () => {
-    const removed = clear();
-    setAsking(false);
-    setCleared(removed);
+    if (!asking) return;
+    const gone = asking.keys ? clearKeys(asking.keys) : clearAll();
+    setAsking(null);
+    setCleared(
+      asking.keys
+        ? `Cleared ${asking.what}.`
+        : `Cleared ${gone} entr${gone === 1 ? "y" : "ies"}. The default plugins load again.`,
+    );
     setRun((n) => n + 1);
-    onCleared();
+    onCleared(asking.keys ?? ownedStoredKeys());
   };
   return (
-    <Group title="Browser storage">
-      <div className="listbox" style={{ maxHeight: 132 }}>
+    <Group title={`${host.Noun} storage`}>
+      <div className="listbox stored-list">
         {entries.length === 0 && <div className="empty">Nothing stored.</div>}
         {entries.map((e) => (
-          <div key={e.detail} className="item">
-            <Database size={12} className="dim" />
-            <span>{e.label}</span>
-            <span className="grow dim" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{e.detail}</span>
-            <span className="dim">{bytes(e.size)}</span>
-          </div>
+          <StoredRow
+            key={e.detail}
+            entry={e}
+            onClear={() => {
+              setCleared(null);
+              setAsking({ what: e.label, keys: e.keys });
+            }}
+          />
         ))}
       </div>
       <div className="row" style={{ marginTop: 6 }}>
         {asking ? (
           <>
-            <span className="hint">Clear the preferences, grid settings, installed plugins and plugin data?</span>
+            <span className="hint">
+              {asking.keys
+                ? `Clear ${asking.what}?`
+                : "Clear the preferences, grid settings, installed plugins and plugin data?"}
+            </span>
             <span className="grow" />
-            <Button size="sm" onClick={() => setAsking(false)}>Cancel</Button>
-            <Button size="sm" variant="danger" onClick={doClear}><Trash2 size={11} /> Clear</Button>
+            <Button size="sm" onClick={() => setAsking(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="danger" onClick={doClear}>
+              <Trash2 size={11} /> Clear
+            </Button>
           </>
         ) : (
           <>
             <span className="hint">
               {cleared !== null
-                ? `Cleared ${cleared} entr${cleared === 1 ? "y" : "ies"}. The default plugins load again.`
+                ? cleared
                 : entries.length === 0
-                  ? "Nothing is stored for this site."
-                  : `${bytes(total)} stored on this site. The open map is never kept in the browser, so it is not affected.`}
+                  ? `Nothing is stored in ${host.here}.`
+                  : `${bytes(total)} stored in ${host.here}. The open map is never kept here, so it is not affected.`}
             </span>
             <span className="grow" />
-            <Button size="sm" variant="danger" disabled={entries.length === 0} onClick={() => { setCleared(null); setAsking(true); }}>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={entries.length === 0}
+              onClick={() => {
+                setCleared(null);
+                setAsking({ what: "everything", keys: null });
+              }}
+            >
               <Trash2 size={11} /> Clear all data…
             </Button>
           </>
         )}
       </div>
-      {!storagePersists() && <p className="hint" style={{ marginTop: 4 }}>This browser is not letting the editor store anything, so settings last only until the tab closes.</p>}
+      {!storagePersists() && (
+        <p className="hint" style={{ marginTop: 4 }}>
+          {host.Here} is not letting the editor store anything, so settings last
+          only until the {host.desktop ? "app is closed" : "tab closes"}.
+        </p>
+      )}
     </Group>
   );
 }
@@ -146,7 +332,9 @@ function GameDataSection() {
     <Group title="Game data">
       <div className="row" style={{ alignItems: "baseline" }}>
         <span className="grow dim">{source?.label ?? "Locating…"}</span>
-        <Button size="sm" onClick={() => open("gameData")}><HardDrive size={11} /> Game Data…</Button>
+        <Button size="sm" onClick={() => open("gameData")}>
+          <HardDrive size={11} /> Game Data…
+        </Button>
       </div>
       <p className="hint" style={{ marginTop: 4 }}>
         {source?.kind === "none"
@@ -184,6 +372,36 @@ const HOTKEYS: [string, string][] = [
   ["Full screen", "F11"],
 ];
 
+/** One animation-speed slider: the range picks a step of `ANIMATION_SPEEDS`. */
+function SpeedField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const index = animationSpeedIndex(value);
+  return (
+    <Field label={label}>
+      <div className="row">
+        <input
+          type="range"
+          min={0}
+          max={ANIMATION_SPEEDS.length - 1}
+          value={index}
+          onChange={(e) => onChange(ANIMATION_SPEEDS[Number(e.target.value)])}
+          aria-label={`${label} animation speed`}
+        />
+        <span className="mono hint" style={{ width: 44 }}>
+          {ANIMATION_SPEEDS[index]}×
+        </span>
+      </div>
+    </Field>
+  );
+}
+
 /**
  * Edit ▸ Preferences: persisted in localStorage (atoms/preferencesAtoms.ts). Only
  * settings something reads are listed; the Hotkeys tab is a reference.
@@ -192,7 +410,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
   const [prefs, setPrefs] = useAtom(preferencesAtom);
   const [local, setLocal] = useState<Preferences>(prefs);
   const patch = (p: Partial<Preferences>) => setLocal({ ...local, ...p });
-  const newMap = (p: Partial<Preferences["newMap"]>) => patch({ newMap: { ...local.newMap, ...p } });
+  const newMap = (p: Partial<Preferences["newMap"]>) =>
+    patch({ newMap: { ...local.newMap, ...p } });
   const apply = () => setPrefs(local);
   return (
     <DialogFrame
@@ -203,7 +422,11 @@ export function PreferencesDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
-      footerLeft={<Button size="sm" onClick={() => setLocal(DEFAULT_PREFERENCES)}><RotateCcw size={11} /> Reset to defaults</Button>}
+      footerLeft={
+        <Button size="sm" onClick={() => setLocal(DEFAULT_PREFERENCES)}>
+          <RotateCcw size={11} /> Reset to defaults
+        </Button>
+      }
     >
       <Tabs
         className="grow"
@@ -215,31 +438,78 @@ export function PreferencesDialog({ entry }: DialogProps) {
               <div className="stack">
                 <Group title="Startup">
                   <div className="col" style={{ gap: 2 }}>
-                    <Check label="Show the splash screen while the game data loads" checked={local.splash} onChange={(e) => patch({ splash: e.target.checked })} />
+                    <Check
+                      label="Show the splash screen while the game data loads"
+                      checked={local.splash}
+                      onChange={(e) => patch({ splash: e.target.checked })}
+                    />
                   </div>
-                  <p className="hint" style={{ marginTop: 4 }}>Off starts straight on the editor; terrain and units fill in as they arrive.</p>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Off starts straight on the editor; terrain and units fill in
+                    as they arrive.
+                  </p>
                 </Group>
                 <Group title="Unsaved changes">
                   <div className="col" style={{ gap: 2 }}>
-                    <Check label="Ask before closing or replacing a map with unsaved changes" checked={local.confirmClose} onChange={(e) => patch({ confirmClose: e.target.checked })} />
+                    <Check
+                      label="Ask before closing or replacing a map with unsaved changes"
+                      checked={local.confirmClose}
+                      onChange={(e) =>
+                        patch({ confirmClose: e.target.checked })
+                      }
+                    />
                   </div>
-                  <p className="hint" style={{ marginTop: 4 }}>Applies to File ▸ New, Open, Close and a file dropped on the window.</p>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Applies to File ▸ New, Open, Close and a file dropped on the
+                    window.
+                  </p>
                 </Group>
                 <Group title="New scenario defaults">
                   <div className="form wide">
-                    <Field label="Tileset"><Select value={local.newMap.tileset} onChange={(e) => newMap({ tileset: e.target.value as TilesetId })} options={TILESETS.map((t) => ({ value: t.id, label: t.name }))} /></Field>
+                    <Field label="Tileset">
+                      <Select
+                        value={local.newMap.tileset}
+                        onChange={(e) =>
+                          newMap({ tileset: e.target.value as TilesetId })
+                        }
+                        options={TILESETS.map((t) => ({
+                          value: t.id,
+                          label: t.name,
+                        }))}
+                      />
+                    </Field>
                     <Field label="Size">
                       <div className="row">
-                        <Select style={{ width: 90 }} value={String(local.newMap.width)} onChange={(e) => newMap({ width: Number(e.target.value) })} options={MAP_SIZES.map(String)} />
+                        <Select
+                          style={{ width: 90 }}
+                          value={String(local.newMap.width)}
+                          onChange={(e) =>
+                            newMap({ width: Number(e.target.value) })
+                          }
+                          options={MAP_SIZES.map(String)}
+                        />
                         <span className="dim">×</span>
-                        <Select style={{ width: 90 }} value={String(local.newMap.height)} onChange={(e) => newMap({ height: Number(e.target.value) })} options={MAP_SIZES.map(String)} />
+                        <Select
+                          style={{ width: 90 }}
+                          value={String(local.newMap.height)}
+                          onChange={(e) =>
+                            newMap({ height: Number(e.target.value) })
+                          }
+                          options={MAP_SIZES.map(String)}
+                        />
                       </div>
                     </Field>
                   </div>
-                  <p className="hint" style={{ marginTop: 4 }}>Also the map the editor opens on.</p>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Also the map the editor opens on.
+                  </p>
                 </Group>
                 <GameDataSection />
-                <StorageSection onCleared={() => setLocal(DEFAULT_PREFERENCES)} />
+                <StorageSection
+                  onCleared={(keys) => {
+                    if (keys.includes("scmjs.prefs")) setLocal(DEFAULT_PREFERENCES);
+                  }}
+                />
               </div>
             ),
           },
@@ -250,13 +520,38 @@ export function PreferencesDialog({ entry }: DialogProps) {
               <div className="stack">
                 <Group title="Animation on startup">
                   <div className="col" style={{ gap: 2 }}>
-                    <Check label="Animate water (palette cycling)" checked={local.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
-                    <Check label="Animate units (idle animations)" checked={local.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
+                    <Check
+                      label="Animate water (palette cycling)"
+                      checked={local.animateWater}
+                      onChange={(e) =>
+                        patch({ animateWater: e.target.checked })
+                      }
+                    />
+                    <Check
+                      label="Animate units (idle animations)"
+                      checked={local.animateUnits}
+                      onChange={(e) =>
+                        patch({ animateUnits: e.target.checked })
+                      }
+                    />
                   </div>
-                  <p className="hint" style={{ marginTop: 4 }}>The View menu toggles both for the session; this is where they start.</p>
                 </Group>
-                <Group title="Grid and panels">
-                  <p className="hint">The grid's spacing, colour, opacity and style (View ▸ Grid Settings), the Locations layer's snap step, which panels are shown and how wide the side panels are, are all remembered in this browser too — the list under Browser storage says what is kept.</p>
+                <Group title="Animation speed">
+                  <div className="form wide">
+                    <SpeedField
+                      label="Water"
+                      value={local.animateWaterSpeed}
+                      onChange={(v) => patch({ animateWaterSpeed: v })}
+                    />
+                    <SpeedField
+                      label="Units"
+                      value={local.animateUnitsSpeed}
+                      onChange={(v) => patch({ animateUnitsSpeed: v })}
+                    />
+                  </div>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    1× is the speed the game itself runs at.
+                  </p>
                 </Group>
               </div>
             ),
@@ -267,10 +562,24 @@ export function PreferencesDialog({ entry }: DialogProps) {
             content: (
               <div className="listbox hotkeys" style={{ height: "100%" }}>
                 <table className="table">
-                  <thead><tr><th>Command</th><th style={{ width: 240 }}>Shortcut</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Command</th>
+                      <th style={{ width: 240 }}>Shortcut</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {HOTKEYS.map(([cmd, keys]) => (
-                      <tr key={cmd}><td>{cmd}</td><td>{keys.split(" · ").map((k) => <span key={k} className="kbd">{k}</span>)}</td></tr>
+                      <tr key={cmd}>
+                        <td>{cmd}</td>
+                        <td>
+                          {keys.split(" · ").map((k) => (
+                            <span key={k} className="kbd">
+                              {k}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -288,12 +597,31 @@ export function PreferencesDialog({ entry }: DialogProps) {
 export function ShortcutsDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   return (
-    <DialogFrame dialogKey={entry.key} title="Keyboard Shortcuts" icon={<Keyboard size={14} />} size="md" footer={<Button variant="primary" onClick={() => close(entry.key)}>Close</Button>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Keyboard Shortcuts"
+      icon={<Keyboard size={14} />}
+      size="md"
+      footer={
+        <Button variant="primary" onClick={() => close(entry.key)}>
+          Close
+        </Button>
+      }
+    >
       <div className="listbox hotkeys" style={{ maxHeight: 420 }}>
         <table className="table">
           <tbody>
             {HOTKEYS.map(([cmd, keys]) => (
-              <tr key={cmd}><td>{cmd}</td><td style={{ textAlign: "right" }}>{keys.split(" · ").map((k) => <span key={k} className="kbd">{k}</span>)}</td></tr>
+              <tr key={cmd}>
+                <td>{cmd}</td>
+                <td style={{ textAlign: "right" }}>
+                  {keys.split(" · ").map((k) => (
+                    <span key={k} className="kbd">
+                      {k}
+                    </span>
+                  ))}
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -304,7 +632,11 @@ export function ShortcutsDialog({ entry }: DialogProps) {
 
 /* ── Validate Map ───────────────────────────────────────── */
 
-const LEVEL_ICON: Record<IssueLevel, ReactNode> = { error: <CircleX size={13} />, warn: <TriangleAlert size={13} />, info: <Info size={13} /> };
+const LEVEL_ICON: Record<IssueLevel, ReactNode> = {
+  error: <CircleX size={13} />,
+  warn: <TriangleAlert size={13} />,
+  info: <Info size={13} />,
+};
 
 /** Where a target lives, so the go-to switches to the right layer. */
 type Jump = (target: IssueTarget) => void;
@@ -362,7 +694,11 @@ export function ValidateMapDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const jump = useJump(entry.key);
   const only = entry.payload?.only === "triggers";
-  const [show, setShow] = useState<Record<IssueLevel, boolean>>({ error: true, warn: true, info: true });
+  const [show, setShow] = useState<Record<IssueLevel, boolean>>({
+    error: true,
+    warn: true,
+    info: true,
+  });
   const [run, setRun] = useState(0);
   const issues = useMemo(() => {
     void run;
@@ -381,28 +717,68 @@ export function ValidateMapDialog({ entry }: DialogProps) {
       icon={<ShieldCheck size={14} />}
       size="md"
       tall
-      footer={<><Button onClick={() => setRun((n) => n + 1)}>Re-check</Button><Button variant="primary" onClick={() => close(entry.key)}>Close</Button></>}
-      footerLeft={<span>{counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn} warning{counts.warn === 1 ? "" : "s"} · {counts.info} note{counts.info === 1 ? "" : "s"}</span>}
+      footer={
+        <>
+          <Button onClick={() => setRun((n) => n + 1)}>Re-check</Button>
+          <Button variant="primary" onClick={() => close(entry.key)}>
+            Close
+          </Button>
+        </>
+      }
+      footerLeft={
+        <span>
+          {counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
+          warning{counts.warn === 1 ? "" : "s"} · {counts.info} note
+          {counts.info === 1 ? "" : "s"}
+        </span>
+      }
     >
       <div className="row">
-        <Check label="Errors" checked={show.error} onChange={(e) => setShow({ ...show, error: e.target.checked })} />
-        <Check label="Warnings" checked={show.warn} onChange={(e) => setShow({ ...show, warn: e.target.checked })} />
-        <Check label="Notes" checked={show.info} onChange={(e) => setShow({ ...show, info: e.target.checked })} />
+        <Check
+          label="Errors"
+          checked={show.error}
+          onChange={(e) => setShow({ ...show, error: e.target.checked })}
+        />
+        <Check
+          label="Warnings"
+          checked={show.warn}
+          onChange={(e) => setShow({ ...show, warn: e.target.checked })}
+        />
+        <Check
+          label="Notes"
+          checked={show.info}
+          onChange={(e) => setShow({ ...show, info: e.target.checked })}
+        />
         <span className="grow" />
-        {only && <span className="hint">triggers, briefings and switches only</span>}
+        {only && (
+          <span className="hint">triggers, briefings and switches only</span>
+        )}
       </div>
       <div className="listbox grow" style={{ minHeight: 200 }}>
         {!scenario && <div className="empty">Open or create a map first.</div>}
-        {scenario && listed.length === 0 && <div className="empty">{issues.length === 0 ? "Nothing to report." : "Nothing at the selected levels."}</div>}
+        {scenario && listed.length === 0 && (
+          <div className="empty">
+            {issues.length === 0
+              ? "Nothing to report."
+              : "Nothing at the selected levels."}
+          </div>
+        )}
         {listed.map((i, n) => (
-          <div key={n} className={`issue ${i.level}${i.target ? " jump" : ""}`} onDoubleClick={() => i.target && jump(i.target)} title={i.target ? "Double-click to go there" : undefined}>
+          <div
+            key={n}
+            className={`issue ${i.level}${i.target ? " jump" : ""}`}
+            onDoubleClick={() => i.target && jump(i.target)}
+            title={i.target ? "Double-click to go there" : undefined}
+          >
             {LEVEL_ICON[i.level]}
             <span>{i.text}</span>
             <span className="where">{i.where}</span>
           </div>
         ))}
       </div>
-      <p className="hint">Double-click an issue to go to the unit, location or dialog it is about.</p>
+      <p className="hint">
+        Double-click an issue to go to the unit, location or dialog it is about.
+      </p>
     </DialogFrame>
   );
 }
@@ -430,7 +806,10 @@ export function FindDialog({ entry }: DialogProps) {
   const [q, setQ] = useState("");
   const [matchCase, setMatchCase] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
-  const catalogue = useMemo(() => (assets ? spriteCatalogue(assets) : null), [assets]);
+  const catalogue = useMemo(
+    () => (assets ? spriteCatalogue(assets) : null),
+    [assets],
+  );
   const results = useMemo(() => {
     if (!scenario) return [];
     const spriteName = (r: SpriteRecord) => {
@@ -438,26 +817,49 @@ export function FindDialog({ entry }: DialogProps) {
       return catalogue?.entries[r.spriteId]?.label ?? `Sprite #${r.spriteId}`;
     };
     const doodads = peekTileset(tilesetName)?.doodads;
-    const doodadName = (d: DoodadRecord) => { const def = doodads?.byId.get(d.doodadId); return def ? doodadLabel(def) : `Doodad #${d.doodadId}`; };
-    return findInScenario(scenario, { kind, query: q, matchCase, spriteName, doodadName });
+    const doodadName = (d: DoodadRecord) => {
+      const def = doodads?.byId.get(d.doodadId);
+      return def ? doodadLabel(def) : `Doodad #${d.doodadId}`;
+    };
+    return findInScenario(scenario, {
+      kind,
+      query: q,
+      matchCase,
+      spriteName,
+      doodadName,
+    });
   }, [scenario, kind, q, matchCase, catalogue, tilesetName]);
 
   const goTo = (r: FindResult) => {
     switch (r.kind) {
-      case "units": jump({ kind: "unit", index: r.index }); break;
-      case "locations": jump({ kind: "location", index: r.index }); break;
-      case "triggers": jump({ kind: "trigger", index: r.index }); break;
-      case "briefing": open("missionBriefing", { index: r.index }); close(entry.key); break;
-      case "strings": open("stringEditor", { index: r.index }); close(entry.key); break;
+      case "units":
+        jump({ kind: "unit", index: r.index });
+        break;
+      case "locations":
+        jump({ kind: "location", index: r.index });
+        break;
+      case "triggers":
+        jump({ kind: "trigger", index: r.index });
+        break;
+      case "briefing":
+        open("missionBriefing", { index: r.index });
+        close(entry.key);
+        break;
+      case "strings":
+        open("stringEditor", { index: r.index });
+        close(entry.key);
+        break;
       case "sprites":
         setSelectedSprites([r.index]);
-        if (r.x !== undefined && r.y !== undefined) setCenter({ x: r.x, y: r.y });
+        if (r.x !== undefined && r.y !== undefined)
+          setCenter({ x: r.x, y: r.y });
         setLayer("sprites");
         close(entry.key);
         break;
       case "doodads":
         setSelectedDoodads([r.index]);
-        if (r.x !== undefined && r.y !== undefined) setCenter({ x: r.x, y: r.y });
+        if (r.x !== undefined && r.y !== undefined)
+          setCenter({ x: r.x, y: r.y });
         setLayer("doodads");
         close(entry.key);
         break;
@@ -471,159 +873,142 @@ export function FindDialog({ entry }: DialogProps) {
       title="Find"
       icon={<Search size={14} />}
       size="sm"
-      footer={<><Button variant="primary" disabled={!current} onClick={() => current && goTo(current)}>Go To</Button><Button onClick={() => close(entry.key)}>Close</Button></>}
-      footerLeft={<span>{q ? `${results.length} result${results.length === 1 ? "" : "s"}` : "Type to search"}</span>}
+      footer={
+        <>
+          <Button
+            variant="primary"
+            disabled={!current}
+            onClick={() => current && goTo(current)}
+          >
+            Go To
+          </Button>
+          <Button onClick={() => close(entry.key)}>Close</Button>
+        </>
+      }
+      footerLeft={
+        <span>
+          {q
+            ? `${results.length} result${results.length === 1 ? "" : "s"}`
+            : "Type to search"}
+        </span>
+      }
     >
       <div className="form wide">
-        <Field label="Find in"><Select value={kind} onChange={(e) => { setKind(e.target.value as FindKind); setSel(null); }} options={FIND_KINDS} /></Field>
-        <Field label="Search"><TextInput autoFocus value={q} onChange={(e) => { setQ(e.target.value); setSel(null); }} placeholder={kind === "units" ? "Unit name, id or 'player 3'…" : kind === "triggers" ? "Text in a trigger, or its number…" : "Name, number or text…"} onKeyDown={(e) => { if (e.key === "Enter" && results[0]) goTo(results[sel ?? 0]); }} /></Field>
-        <Field label="Options"><div className="row wrap"><Check label="Match case" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} /></div></Field>
+        <Field label="Find in">
+          <Select
+            value={kind}
+            onChange={(e) => {
+              setKind(e.target.value as FindKind);
+              setSel(null);
+            }}
+            options={FIND_KINDS}
+          />
+        </Field>
+        <Field label="Search">
+          <TextInput
+            autoFocus
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setSel(null);
+            }}
+            placeholder={
+              kind === "units"
+                ? "Unit name, id or 'player 3'…"
+                : kind === "triggers"
+                  ? "Text in a trigger, or its number…"
+                  : "Name, number or text…"
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && results[0]) goTo(results[sel ?? 0]);
+            }}
+          />
+        </Field>
+        <Field label="Options">
+          <div className="row wrap">
+            <Check
+              label="Match case"
+              checked={matchCase}
+              onChange={(e) => setMatchCase(e.target.checked)}
+            />
+          </div>
+        </Field>
       </div>
       <ListBox
         items={results}
         selected={sel}
         onSelect={(i) => setSel(i)}
         style={{ height: 200 }}
-        empty={!scenario ? "Open or create a map first." : q ? "No matches." : "Type to search."}
-        render={(r) => <><span className="idx">{r.kind === "triggers" || r.kind === "briefing" ? r.index + 1 : r.index}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span><span className="faint" style={{ marginLeft: "auto", paddingLeft: 8, whiteSpace: "nowrap" }}>{r.detail}</span></>}
+        empty={
+          !scenario
+            ? "Open or create a map first."
+            : q
+              ? "No matches."
+              : "Type to search."
+        }
+        render={(r) => (
+          <>
+            <span className="idx">
+              {r.kind === "triggers" || r.kind === "briefing"
+                ? r.index + 1
+                : r.index}
+            </span>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {r.label}
+            </span>
+            <span
+              className="faint"
+              style={{
+                marginLeft: "auto",
+                paddingLeft: 8,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {r.detail}
+            </span>
+          </>
+        )}
       />
-      <p className="hint">Double-click or Go To selects the result on the map and switches to its layer.</p>
+      <p className="hint">
+        Double-click or Go To selects the result on the map and switches to its
+        layer.
+      </p>
     </DialogFrame>
   );
 }
 
 /* ── About ──────────────────────────────────────────────── */
 
-/**
- * The credits roll. This editor is a homage, and the people below are the reason there is anything
- * to pay homage to: they reverse-engineered the file formats, wrote the editors, and documented the
- * results on staredit.net over twenty-odd years. Descriptions are deliberately plain-English —
- * what someone is remembered for, not a changelog.
- */
-interface CreditGroup {
-  title: string;
-  note?: string;
-  people: { who: string; real?: string; what: string }[];
-}
-
-const CREDITS: CreditGroup[] = [
-  {
-    title: "The editors",
-    people: [
-      {
-        who: "Heimdal",
-        real: "Jonathan Cable",
-        what: "StarForge (2003) — the first editor that simply ignored StarEdit's rules. Freehand terrain brushes, map protection, half-built buildings, and a generation of mappers who found out the format was theirs to bend.",
-      },
-      {
-        who: "Suicidal Insanity",
-        real: "Henrik Arlinghaus",
-        what: "SCMDraft 2, begun weeks after StarForge shipped and first released in March 2004. Still the editor everything else is measured against — and still being updated, twenty years on, for Remastered.",
-      },
-      {
-        who: "jjf28",
-        real: "TheNitesWhoSay",
-        what: "Chkdraft — an open-source editor, and a standalone write-up of StarCraft's isometric terrain that finally made ISOM something other people could implement. This editor's ISOM brush is descended from it.",
-      },
-      {
-        who: "Heinermann",
-        what: "BWAPI and ChkForge. The person the rest of the scene asked when a question came down to what StarCraft actually does with its own memory.",
-      },
-      {
-        who: "poiuy_qwert",
-        what: "PyMS — sixteen cross-platform tools covering very nearly every file the game ships: PyGRP for graphics, PyICE for animation scripts, PyDAT, PyBIN, PyAI. Modding on a Mac exists because of this.",
-      },
-    ],
-  },
-  {
-    title: "The archive",
-    note: "Everything above had to get inside an MPQ first.",
-    people: [
-      {
-        who: "Quantam",
-        what: "MPQDraft, and the Inside MoPaQ write-up that documented the archive format everyone else then implemented — including this editor.",
-      },
-      {
-        who: "ShadowFlare",
-        what: "WinMPQ and SFmpqapi. For most of a decade, if a StarCraft tool could open an MPQ, this is what it was calling.",
-      },
-      {
-        who: "Ladislav Zezula",
-        real: "Ladik",
-        what: "StormLib and MPQ Editor — still the reference implementation, still maintained.",
-      },
-    ],
-  },
-  {
-    title: "The EUD scene",
-    note:
-      "No single person gets credit for finding them. In July 2005 the community worked out that a Set Deaths trigger " +
-      "with an out-of-range unit id reads and writes StarCraft's own memory, and the map format quietly became a " +
-      "programming environment. Blizzard patched it out in 1.13b and 1.13f — then, in Remastered 1.21, emulated the " +
-      "overflow so the maps would run again.",
-    people: [
-      {
-        who: "FaRTy1billion",
-        what: "EUDDB, EUDTrig, the EUD Action Enabler, the String Chunk Calculator, and the first EUD drop-ban. Catalogued the addresses so everyone else did not have to.",
-      },
-      {
-        who: "rockz",
-        what: "The UMS Assistance answers that explained EUDs in language a mapmaker could actually act on. Half the scene learned it from these posts.",
-      },
-      {
-        who: "yoonkwun",
-        what: "The EUD Reference; detecting player chat text and unit facing from inside a map, which nobody thought triggers could do.",
-      },
-      {
-        who: "trgk",
-        real: "phu54321",
-        what: "eudplib and euddraft — EUD map-making as an actual programming language, with epScript on top. The break between hand-placed triggers and compiled ones.",
-      },
-      {
-        who: "Armoha",
-        what: "Keeps eudplib and euddraft alive and current on Remastered, which is why EUD maps are still being made rather than just remembered.",
-      },
-    ],
-  },
-  {
-    title: "The Network",
-    note: "staredit.net itself — six versions of a forum that outlived most of the games it was about.",
-    people: [
-      {
-        who: "Clokr_",
-        what: "Reverse-engineered the map parsing behind SEN's download database, so the site could read the maps it was hosting.",
-      },
-      {
-        who: "Kenoli",
-        what: "Ran (U)nknown Productions alongside Esponeo and MindArchon — a clan operated as a workshop for mapmakers rather than a team, and hard enough to get into that people remember being intimidated by it.",
-      },
-      {
-        who: "Hamma · DevliN · Excalibur · Forsaken Archer · NudeRaider · Roy · Jamal · Beer_KeG · DavidJcobb",
-        what: "Built it, skinned it, moderated it, and paid the hosting bill.",
-      },
-    ],
-  },
-];
-
-const THANKS = [
-  { who: "Quetz", what: "who puts up with all of this." },
-  { who: "Clan (U) Unknown", what: "(U)nknown Productions — for keeping the scene worth being part of." },
-];
-
 const STACK = [
-  ["React 19 + TypeScript", "UI, strict build via tsc"],
-  ["Vite 8", "dev server and bundler"],
-  ["Jotai", "all editor state; no context layering"],
-  ["Radix UI · lucide-react", "dialog primitives and icons"],
-  ["mopaq", "MPQ archive read/write for .scm / .scx"],
-  ["Canvas 2D", "terrain atlas, sprites, minimap, this dialog's background"],
-  ["Vitest · oxlint", "tests and linting"],
+  ["React 19 · TypeScript", "the UI; tsc is the type check, oxlint the linter"],
+  ["Jotai", "every piece of editor state; no context layering"],
+  ["Vite 8 · Vitest", "dev server, bundler and the test runner"],
+  ["Radix UI · lucide-react", "dialog and menu primitives, icons"],
+  ["Canvas 2D", "terrain atlas, sprites, minimap, splash, this background"],
+  ["mopaq", "MPQ read and write, PKWARE included, for .scm / .scx"],
+  ["Web Workers", "the MPQ extraction, and TypeScript for plugin files"],
+  ["OPFS · IndexedDB · localStorage", "extracted graphics, file handles, preferences"],
+  ["File System Access", "open and save in place; picker and download fallbacks"],
+  ["Web Audio", "imported sounds converted to formats the game reads"],
+  ["DecompressionStream", "the zip reader, over HTTP range requests"],
+  ["Electron · electron-builder", "the desktop build"],
 ];
 
 export function AboutDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const projectPage = (path: string) => window.open(`https://github.com/jeany55/scm-js${path}`, "_blank", "noopener,noreferrer");
+  const projectPage = (path: string) =>
+    window.open(
+      `https://github.com/jeany55/scm-js${path}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
 
   // Same drifting nebula and starfield the splash screen paints, at dialog scale.
   useEffect(() => {
@@ -637,10 +1022,15 @@ export function AboutDialog({ entry }: DialogProps) {
     const frame = (t: number) => {
       if (!start) start = t;
       const el = t - start;
-      const cw = canvas.clientWidth, ch = canvas.clientHeight;
+      const cw = canvas.clientWidth,
+        ch = canvas.clientHeight;
       if (cw && ch) {
-        const w = Math.round(cw * devicePixelRatio), h = Math.round(ch * devicePixelRatio);
-        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+        const w = Math.round(cw * devicePixelRatio),
+          h = Math.round(ch * devicePixelRatio);
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
         ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         ctx.clearRect(0, 0, cw, ch);
         drawNebula(ctx, cw, ch, el);
@@ -653,43 +1043,68 @@ export function AboutDialog({ entry }: DialogProps) {
   }, []);
 
   return (
-    <DialogFrame dialogKey={entry.key} title="About scmJS" icon={<Info size={14} />} size="md" tall footer={<Button variant="primary" onClick={() => close(entry.key)}>OK</Button>}>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="About scmJS"
+      icon={<Info size={14} />}
+      size="md"
+      tall
+      footer={
+        <Button variant="primary" onClick={() => close(entry.key)}>
+          OK
+        </Button>
+      }
+    >
       <div className="about-space">
         <canvas ref={canvasRef} className="about-canvas" />
         <div className="about-content">
           <WireSphere size={104} className="about-logo" />
-          <h2 className="about-app-name">scm<span>JS</span></h2>
-          <div className="about-tagline">StarCraft · Brood War</div>
+          <h2 className="about-app-name">
+            scm<span>JS</span>
+          </h2>
+          <div>
+            {desktopBridge()
+              ? `${desktopBridge()!.platform} · ${APP_VERSION}`
+              : APP_VERSION}
+          </div>
+          {/* <div className="about-tagline">
+            StarCraft · Brood War · Remastered
+          </div> */}
+          <div className="about-desc">Starcraft 1 Map Editor</div>
           <div className="about-rule" />
-          <div className="about-meta">{desktopBridge() ? `desktop ${desktopBridge()!.version || "dev"} · ${desktopBridge()!.platform} · ` : ""}v{APP_VERSION} · by Jeany</div>
-          <div className="about-desc">A browser-based scenario editor</div>
-          <p className="about-homage">
-            In homage to <strong>StarEdit</strong>, <strong>StarForge</strong> and <strong>SCMDraft 2</strong> — and to the
-            people of <strong>staredit.net</strong>, who spent twenty years taking this game apart to see how it worked.
-          </p>
+          <div className="about-meta">
+            By Jeany <i>(aka MindArchon)</i>
+          </div>
         </div>
       </div>
 
-      <div className="about-credits">
-        {CREDITS.map((group) => (
-          <section key={group.title} className="about-group">
-            <h3>{group.title}</h3>
-            {group.note && <p className="about-note">{group.note}</p>}
-            <ul>
-              {group.people.map((p) => (
-                <li key={p.who}>
-                  <span className="who">
-                    {p.who}
-                    {p.real && <em> · {p.real}</em>}
-                  </span>
-                  <span className="what">{p.what}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+      <div className="about-group">
+        <h3>Acknowledgements</h3>
+        <div className="what" style={{ color: "#ffffff" }}>
+          Over the course of thirty years, we've gone from hacking custom
+          versions of StarEdit to understanding the inner workings of the game,
+          the map file format, and creating sophisticated tools through a
+          dedicated community effort.
+        </div>
 
-        <section className="about-group about-thanks">
+        {/* {CREDITS.map((group) => (
+            <section key={group.title} className="about-group">
+              <h3>{group.title}</h3>
+              {group.note && <p className="about-note">{group.note}</p>}
+              <ul>
+                {group.people.map((p) => (
+                  <li key={p.who}>
+                    <span className="who">
+                      {p.who}
+                      {p.real && <em> · {p.real}</em>}
+                    </span>
+                    <span className="what">{p.what}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))} */}
+        {/* <section className="about-group about-thanks">
           <h3>Special thanks</h3>
           <ul>
             {THANKS.map((t) => (
@@ -699,7 +1114,44 @@ export function AboutDialog({ entry }: DialogProps) {
               </li>
             ))}
           </ul>
-        </section>
+        </section> */}
+      </div>
+
+      <div
+        className="about-group"
+        style={{ fontWeight: 600, color: "#ff5fa2" }}
+      >
+        Special thanks (in no particular order)
+      </div>
+      <div className="about-group">
+        <div
+          className="what"
+          style={{ color: "#ffffff", paddingBottom: "10px" }}
+        >
+          <h4>Clan Unknown</h4>
+          <div className="about-what">
+            Unknown pushed map making to its absolute limit, inspiring map
+            makers to really see what was possible. Thanks to <b>Bolt_Head</b>,{" "}
+            <b>Kenoli</b>, <b>SwaP</b>, <b>Shmidley</b>, <b>PickleWeezle</b> and
+            everyone else for keeping the clan alive and active.
+          </div>
+        </div>
+
+        <div className="what" style={{ color: "#ffffff" }}>
+          <h4>Staredit.net</h4>
+          <div className="about-what">
+            Our map making hub. Thanks to <b>YoshiDaSnipa</b>,{" "}
+            <b>Shadowflare</b>, <b>Heimdal</b> for showing us we can make our
+            own editor, <b>Suicidal Insanity</b> for creating SCMDraft and
+            blowing us all away, <b>Clokr_</b> for their tools, <b>jjf28</b> for
+            finally reverse engineering the sections we didn't understand,{" "}
+            <b>Heinermann</b> for their technical knowledge, <b>poiuy_qwert</b>{" "}
+            for their modding tools, <b>Ladislav Zezula</b> for StormLib and
+            showing us we can edit MPQs, and <b>FaRTy1billion</b>, <b>rockz</b>,{" "}
+            <b>yoonkwun</b>, <b>trgk</b>, and <b>Armoha</b> for their work on
+            EUDs and modern tooling.
+          </div>
+        </div>
       </div>
 
       <details className="about-details">
@@ -714,24 +1166,54 @@ export function AboutDialog({ entry }: DialogProps) {
             ))}
           </dl>
           <p>
-            Reads and writes real <code>.scm</code> / <code>.scx</code> archives. CHK sections the editor does not model are
-            copied back byte for byte, so a map survives a round trip through it. Terrain is rendered from the game's own
-            tileset files, which are not redistributed — a fresh clone extracts them from an installed copy of Brood War.
+            Reads and writes real <code>.scm</code> / <code>.scx</code>{" "}
+            archives. CHK sections the editor does not model are copied back
+            byte for byte, and so are archive members it has no use for, so a
+            map only loses what you deliberately change.
           </p>
           <p>
-            The isometric terrain brush is a port of Chkdraft's reverse-engineering of StarEdit (MIT). Palette-cycling
-            tables and tileset names come from Chkdraft as well.
+            Terrain and units are drawn from the game's own files. None of
+            Blizzard's data is redistributed here: the editor extracts it from
+            an installed copy of Brood War, or from the free StarEdit download
+            Blizzard still serves, and keeps the result in {hostTerms().here} for
+            next time.
+          </p>
+          <p>
+            There is no server behind any of this — the web build is static
+            files on GitHub Pages, and the one service it talks to is a
+            Cloudflare Worker that adds a CORS header to Blizzard's download.
+            Plugins are fetched from their repositories, compiled in a worker if
+            they are TypeScript, and run with the page's own privileges; there
+            is no sandbox around them.
+          </p>
+          <p>
+            The isometric terrain brush is a port of Chkdraft's
+            reverse-engineering of StarEdit (MIT). Palette-cycling tables and
+            tileset names come from Chkdraft as well.
           </p>
           <div className="about-links">
-            <button className="about-link" onClick={() => projectPage("/#readme")}>Docs</button>
-            <button className="about-link" onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}>Attribution</button>
-            <button className="about-link" onClick={() => projectPage("")}>Source</button>
+            <button
+              className="about-link"
+              onClick={() => projectPage("/#readme")}
+            >
+              Docs
+            </button>
+            <button
+              className="about-link"
+              onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}
+            >
+              Attribution
+            </button>
+            <button className="about-link" onClick={() => projectPage("")}>
+              Source
+            </button>
           </div>
         </div>
       </details>
 
       <p className="about-disclaimer">
-        StarCraft is a trademark of Blizzard Entertainment. Not affiliated with or endorsed by Blizzard.
+        StarCraft is a trademark of Blizzard Entertainment. Not affiliated with
+        or endorsed by Blizzard.
       </p>
     </DialogFrame>
   );

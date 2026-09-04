@@ -137,16 +137,18 @@ export function AutoStartsDialog({ entry }: DialogProps) {
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Auto-place Start Locations" icon={<Flag size={14} />} size="sm" okLabel="Place" onOk={apply} footerLeft={<span className="hint">{existing} on the map now</span>}>
+    <DialogFrame dialogKey={entry.key} title="Auto-place Start Locations" icon={<Flag size={14} />} size="md" okLabel="Place" onOk={apply} footerLeft={<span className="hint">{existing} on the map now</span>}>
       <div className="form wide">
         <Field label="Players"><NumberInput value={players} onChange={setPlayers} min={1} max={8} width={80} /></Field>
-        <Field label="Layout">
-          <Select value={layout} onChange={(e) => setLayout(e.target.value as StartLayout)} options={[{ value: "ring", label: "Ring — evenly around the map, top-left first" }, { value: "corners", label: "Corners, then the edge midpoints" }]} />
+        <Field label="Layout" hint={layout === "ring" ? "Evenly around the map, top-left first." : "The four corners, then the edge midpoints."}>
+          <Select value={layout} onChange={(e) => setLayout(e.target.value as StartLayout)} options={[{ value: "ring", label: "Ring" }, { value: "corners", label: "Corners" }]} />
         </Field>
         <Field label="Inset" hint="Tiles from the map edge to the ideal spot; each start then moves to the nearest ground it fits on."><NumberInput value={margin} onChange={setMargin} min={0} max={64} width={80} unit="tiles" /></Field>
-        <Field label=""><Check label={`Replace the ${existing} start location${existing === 1 ? "" : "s"} already on the map`} checked={replace} disabled={existing === 0} onChange={(e) => setReplace(e.target.checked)} /></Field>
+        <div className="span">
+          <Check className="wrap" label={`Replace the ${existing} start location${existing === 1 ? "" : "s"} already on the map`} checked={replace} disabled={existing === 0} onChange={(e) => setReplace(e.target.checked)} />
+        </div>
       </div>
-      <p className="hint">Players 1 to N get one each, on buildable ground away from other units (the Units palette's placement checks). Drag them afterwards as you would any unit; the Melee Wizard plugin lays out symmetric starts and bases from a point you pick.</p>
+      <p className="hint" style={{ marginTop: 10 }}>Players 1 to N get one each, on buildable ground away from other units (the Units palette's placement checks). Drag them afterwards as you would any unit; the Melee Wizard plugin lays out symmetric starts and bases from a point you pick.</p>
     </DialogFrame>
   );
 }

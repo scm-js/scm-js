@@ -81,9 +81,9 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (scmscx.com and Terrain from Image do; Paint,
-Section Explorer, Walkability and Melee Wizard wait to be ticked). Being a default buys a plugin nothing else — it is fetched and loaded by the
-steps above like any other.
+removed; each says whether it starts on (scmscx.com, Terrain from Image, Repair and
+Walkability are the defaults today, and all four start on). Being a default buys a plugin
+nothing else — it is fetched and loaded by the steps above like any other.
 
 ### Browsing a registry
 
@@ -208,8 +208,8 @@ stored one are moved forward. Turning the option off (`setInstalled`, the row's 
 button) drops the copy as well: turning it on again fetches the plugin rather than reviving
 something months old.
 
-A plugin that is listed but **not running** — a default that starts off, or one you
-turned off — is still described in Manage Plugins: `describePlugin` does step 1–2 only
+A plugin that is listed but **not running** — one you turned off, a default included — is
+still described in Manage Plugins: `describePlugin` does step 1–2 only
 (`resolvePlugin(..., { entry: false })`), so the name, version, description and icon come
 out of one `plugin.json` fetch with no code fetched and nothing executed. The dialog asks
 for that the first time it shows a row it has no manifest for, and the answer is kept in
@@ -390,9 +390,9 @@ repaints.
 | --- | --- |
 | `makeUnit(unitId, owner, x, y)` | A StarEdit-style record (serial, masks) at map pixels. |
 | `addUnits(records)` / `removeUnits(indices)` / `updateUnits(indices, patch)` | |
-| `moveUnits(indices, dx, dy, snap?)` | Shift by a pixel delta; buildings re-snap to the grid when `snap` (the palette's option by default). |
+| `moveUnits(indices, dx, dy, snap?)` | Shift by a pixel delta. With `snap` (the palette's option by default) the *destination* is snapped — a building to the tile grid by its placement box, anything else to the nearest tile centre — so a unit that sits off the grid is brought onto it. |
 | `placeStartLocations({ players, layout?, margin?, replace? })` | Tools ▸ Auto-place Start Locations: one per player (from 1) on a `"ring"` or in the `"corners"`, each moved to the nearest spot the placement checks accept; `replace` removes the existing ones first. Returns `{ changes, placed, removed }`, `placed` null for a player nothing within reach fit. |
-| `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: a building snaps its placement box to the tile grid (when the palette's *Snap to grid* is on), nothing leaves the map. Returns the index. No checks — |
+| `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: with its *Snap to grid* on, a building's placement box goes on the tile grid and anything else on the nearest tile centre; nothing leaves the map. Returns the index. No checks — |
 | `canPlaceUnit(unitId, x, y)` | — ask this first if you want them: the palette's collision and terrain checks with its current options. |
 | `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map; returns the index. |
 | `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position — in place, so indices hold. |
@@ -625,8 +625,8 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 | | |
 | --- | --- |
 | `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1), `fogMode` and `fogViewPlayer` (whose fog the viewport draws). |
-| `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules — `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded` — which govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. |
-| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid`. |
+| `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules — `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded` — which govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. Remembered in the browser (`scmjs.placement`), so a change outlives the session. |
+| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid` (the two-tile isometric grid, never View ▸ Grid Settings' spacing). Remembered in the browser (`scmjs.doodadPlacement`). |
 | `locationSnap()` / `setLocationSnap(step)` | The Locations layer's snap step in pixels (0 off, 8, 16, 32, 64). |
 | `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb` — Remastered custom colours included. |
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
@@ -732,9 +732,10 @@ the earlier state is recomputed from the later one.
 
 `get(key, fallback)`, `set(key, value)`, `remove(key)`: JSON in localStorage under a
 per-plugin prefix (`scmjs.plugin.<id>.`). Safe when storage is unavailable (falls back to
-memory). The user can throw it all away — Preferences ▸ General ▸ Browser storage ▸ Clear
-all data sweeps every `scmjs.` key, plugin keys included — so treat what you store as a
-convenience, never as the only copy of something.
+memory). The user can see and throw it away — Preferences ▸ General ▸ Browser storage lists
+your keys as one row under your plugin's id, opening onto the values, with a Clear button of
+its own, and Clear all data sweeps every `scmjs.` key — so treat what you store as a
+convenience, never as the only copy of something, and keep it small and readable.
 
 ### `api.plugin`, `api.apiVersion`, `api.log(...)`
 
@@ -940,8 +941,8 @@ again. Both pure modules have tests in that repository.
 
 ## Walkability
 
-[scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability), listed by
-default and off until ticked, is the worked example for a read-only analysis drawn over
+[scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability), a default that
+starts on, is the worked example for a read-only analysis drawn over
 the map: Tools ▸ Walkability… (`Ctrl+Shift+W`) reads every tile's sixteen VF4 words
 through `api.tileset.raw()` (`groups[id >> 4].megatiles[id & 15]` → `megatileFlags`),
 marks the ground under every building and resource (`api.data.units()` extents, or
@@ -973,8 +974,8 @@ summary. The plugin never writes to the map.
 
 ## Melee Wizard
 
-[scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard), listed by
-default and off until ticked, is the worked example for `placeUnit` / `canPlaceUnit` /
+[scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard), installed from
+Browse Plugins, is the worked example for `placeUnit` / `canPlaceUnit` /
 `updateUnits` inside one `document.edit`, and for a map tool whose press-and-drag is
 previewed with `draw`: Tools ▸ Melee Wizard… (`Ctrl+Shift+M`). `layout.ts` there is the
 pure geometry with its tests: `ringPositions` enumerates the tile positions of a
@@ -1032,8 +1033,8 @@ back through `replaceFile`.
 
 ## Trigger Script
 
-[scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script), a default
-that starts off, is the Script Editor: a TypeScript-subset language kept as a file inside
+[scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script), installed
+from Browse Plugins, is the Script Editor: a TypeScript-subset language kept as a file inside
 the map (`scmjs\triggers.ts`, with a build manifest in `scmjs\triggers.json`) and compiled
 into a block of the trigger list. It used to be part of the editor and was moved out so
 the editor no longer carries Monaco and a second TypeScript; the plugin fetches both from

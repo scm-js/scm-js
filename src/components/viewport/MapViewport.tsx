@@ -48,7 +48,7 @@ import {
   zoomAtom,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
-import { gridLookAtom } from "../../atoms/preferencesAtoms";
+import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, START_LOCATION_UNIT, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
@@ -184,6 +184,8 @@ export default function MapViewport() {
   const zoom = useAtomValue(zoomAtom);
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const flags = useAtomValue(viewFlagsAtom);
+  const waterSpeed = useAtomValue(animateWaterSpeedAtom);
+  const unitSpeed = useAtomValue(animateUnitsSpeedAtom);
   const gridSize = useAtomValue(gridSizeAtom);
   const gridLook = useAtomValue(gridLookAtom);
   const layer = useAtomValue(activeLayerAtom);
@@ -1198,18 +1200,20 @@ export default function MapViewport() {
     const units = flags.animateUnits && (flags.units || flags.sprites) && animator?.enabled ? animator : null;
     if (!scenario || (!anim && !units)) return;
     let raf = 0;
-    let lastFrame = Math.floor(performance.now() / GAME_FRAME_MS);
+    // Both speeds are multiples of the game's own rate (Preferences ▸ Display); moving a
+    // slider re-runs this effect, so the frame counter starts again at the new rate.
+    let lastFrame = Math.floor((performance.now() * unitSpeed) / GAME_FRAME_MS);
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const now = performance.now();
       let repaint = false;
       // Palette rotations follow the wall clock, so the phase survives re-mounts and
       // stays in step with the tile browser. Only repaint when something on screen cycles.
-      if (anim && tilesetAssets && setAtlasStep(tilesetAssets.atlas, tilesetAssets.tileset, cycleStepAt(now, anim.length)) && animatedInViewRef.current) repaint = true;
+      if (anim && tilesetAssets && setAtlasStep(tilesetAssets.atlas, tilesetAssets.tileset, cycleStepAt(now, anim.length, waterSpeed)) && animatedInViewRef.current) repaint = true;
       if (units) {
         // Unit scripts advance once per game frame; after a stall (a hidden tab) catch up
         // by a few frames rather than replaying the whole gap.
-        const frame = Math.floor(now / GAME_FRAME_MS);
+        const frame = Math.floor((now * unitSpeed) / GAME_FRAME_MS);
         const steps = Math.min(4, frame - lastFrame);
         lastFrame = frame;
         for (let i = 0; i < steps; i++) if (units.tick()) repaint = true;
@@ -1219,7 +1223,7 @@ export default function MapViewport() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [flags.animateWater, flags.animateUnits, flags.units, flags.sprites, tilesetAssets, scenario, animator]);
+  }, [flags.animateWater, flags.animateUnits, flags.units, flags.sprites, tilesetAssets, scenario, animator, waterSpeed, unitSpeed]);
 
   /* minimap-driven recentring */
   useEffect(() => {

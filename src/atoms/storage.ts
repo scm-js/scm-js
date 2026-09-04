@@ -1,5 +1,7 @@
 /**
- * The editor's one corner of browser storage: every key it writes starts with `scmjs.`
+ * The editor's one corner of the browser's storage (the desktop build's too — it is a
+ * Chromium window, and `editor/platform.ts` has the word the chrome should use for it):
+ * every key it writes starts with `scmjs.`
  * (`scmjs.prefs`, `scmjs.grid`, `scmjs.plugins`, `scmjs.plugin-manifests`, and
  * `scmjs.plugin.<id>.…` for whatever a plugin keeps through `api.storage`).
  *
@@ -9,8 +11,25 @@
  * which one is in use, for the chrome to be honest about it.
  */
 
+import { createJSONStorage } from "jotai/utils";
+
 /** Every key the editor writes begins with this. */
 export const STORAGE_PREFIX = "scmjs.";
+
+/**
+ * `atomWithStorage`'s storage for a settings *object*: stored values are merged over the
+ * defaults, so a field added later still has one when an older entry is read back.
+ */
+export function mergedStorage<T extends object>(defaults: T) {
+  const json = createJSONStorage<T>(browserStorage);
+  return {
+    ...json,
+    getItem: (key: string, initial: T): T => {
+      const stored = json.getItem(key, initial);
+      return stored && typeof stored === "object" ? { ...defaults, ...stored } : initial;
+    },
+  };
+}
 
 const memory = new Map<string, string>();
 const memoryStorage: Storage = {
@@ -61,19 +80,46 @@ export function storedSize(key: string): number {
   }
 }
 
+/** The value under one key, for the dialog to show what is actually being kept. */
+export function storedValue(key: string): string | null {
+  try {
+    return browserStorage().getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** The editor's keys under a prefix, sorted — `scmjs.plugin.paint.` and the like. */
+export function storedKeysUnder(prefix: string): string[] {
+  return storedKeys().filter((key) => key.startsWith(prefix));
+}
+
+/**
+ * Remove the given keys and return the ones that were actually there. Anything outside the
+ * editor's prefix is refused, so a caller cannot sweep the origin's other storage by
+ * accident. Atoms holding the same values are *not* reset — `clearStoredKeysAtom` in
+ * `preferencesAtoms.ts` does both.
+ */
+export function removeStoredKeys(keys: Iterable<string>): string[] {
+  const store = browserStorage();
+  const gone: string[] = [];
+  for (const key of keys) {
+    if (!key.startsWith(STORAGE_PREFIX)) continue;
+    try {
+      if (store.getItem(key) === null) continue;
+      store.removeItem(key);
+      gone.push(key);
+    } catch {
+      // Ignore a key we cannot remove; the rest still go.
+    }
+  }
+  return gone.sort();
+}
+
 /**
  * Remove every `scmjs.` key and return the ones removed. Atoms holding the same values are
  * *not* reset — `clearStoredDataAtom` in `preferencesAtoms.ts` does both.
  */
 export function clearStoredData(): string[] {
-  const store = browserStorage();
-  const keys = storedKeys();
-  for (const key of keys) {
-    try {
-      store.removeItem(key);
-    } catch {
-      // Ignore a key we cannot remove; the rest still go.
-    }
-  }
-  return keys;
+  return removeStoredKeys(storedKeys());
 }

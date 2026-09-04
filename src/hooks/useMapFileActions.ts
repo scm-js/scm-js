@@ -13,6 +13,7 @@ import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
 import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 import { openMapFile, saveBytes, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
 import { buildMapFile, defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
+import { hostTerms } from "../editor/platform";
 
 export interface NewMapOptions {
   width: number;
@@ -236,11 +237,12 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       store.set(pushRecentAtom, { name: outcome.fileName, handle: outcome.handle ?? (outcome.route === "file" ? req.handle : null) });
     }
     if (outcome.route === "download") {
+      const host = hostTerms();
       store.set(statusMessageAtom, `Downloaded ${outcome.fileName} — ${size}`);
       store.set(pushToastAtom, {
         kind: "ok",
         title: req.copy ? "Copy downloaded" : "Downloaded",
-        detail: `${outcome.fileName} (${size}) is in the browser's downloads folder. This browser cannot write a file back in place, so every save is a new download.`,
+        detail: `${outcome.fileName} (${size}) is in ${host.downloads}. ${host.Here} cannot write a file back in place, so every save is a new download.`,
       });
     } else {
       store.set(statusMessageAtom, `Saved ${outcome.fileName} — ${size}`);

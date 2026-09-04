@@ -6,6 +6,7 @@ import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { retryTilesetParts } from "../../formats/tileset/load";
 import { retryFailedParts } from "../../formats/units/load";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
+import { hostTerms } from "../../editor/platform";
 import {
   ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromZipUrl, pickArchives, type InstallProgress,
 } from "../../gamedata/install";
@@ -109,7 +110,7 @@ export function GameDataDialog({ entry }: DialogProps) {
   };
 
   const installed = (copy: Awaited<ReturnType<typeof installFromFiles>>, from: string) =>
-    adopted(adoptStoredCopy(copy), `Installed ${copy.summary} from ${from}.${copy.where === "memory" ? " This browser keeps no site data, so the copy lasts until the tab closes." : ""}`);
+    adopted(adoptStoredCopy(copy), `Installed ${copy.summary} from ${from}.${copy.where === "memory" ? ` ${hostTerms().Here} keeps no site data, so the copy lasts until the tab closes.` : ""}`);
 
   const fromBlizzard = () => run(async () => {
     installed(await installFromZipUrl(BLIZZARD_ZIP_URL, progress), "Blizzard's StarEdit download");
@@ -218,7 +219,7 @@ export function GameDataDialog({ entry }: DialogProps) {
               </div>
               <p className="hint" style={{ marginTop: 4 }}>
                 Blizzard offers the StarCraft map editor as a free download, and it carries the two archives the graphics come from.
-                The files are extracted here and kept in this browser, so this happens once.
+                The files are extracted here and kept in {hostTerms().here}, so this happens once.
               </p>
             </Group>
 

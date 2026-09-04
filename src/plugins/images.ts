@@ -4,6 +4,7 @@
  * `looksLikeImageUrl`, which `tests/plugins.test.ts` runs in Node.
  */
 import type { DialogTransfer } from "./api";
+import { hostTerms } from "../editor/platform";
 
 /** The files and plain text a `DataTransfer` (paste or drop) carries. */
 export function transferOf(dt: DataTransfer | null | undefined): DialogTransfer {
@@ -38,7 +39,7 @@ async function bitmapOf(blob: Blob): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(blob);
   } catch {
-    throw new Error("The file is not an image the browser can decode.");
+    throw new Error(`The file is not an image the ${hostTerms().noun} can decode.`);
   }
 }
 

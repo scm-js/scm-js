@@ -185,7 +185,7 @@ function DoodadPalette() {
       </div>
       <div className="placement-options" title="Placement options">
         {option("placeAnywhere", "Place anywhere", "Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground.")}
-        {option("snapToGrid", "Snap to grid", "Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for.")}
+        {option("snapToGrid", "Snap to grid", "Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for. This is not the View ▸ Grid Settings spacing — it is always two tiles.")}
       </div>
       <div className="palette-scroll">
         {!loaded && (
@@ -286,7 +286,7 @@ function UnitPalette() {
       <div className="placement-options" title="Placement checks">
         {option("checkCollision", "No overlap", "Refuse to place or drop a ground unit or building on top of another")}
         {option("checkTerrain", "Check terrain", "Refuse unwalkable ground for units and unbuildable tiles for buildings")}
-        {option("snapToGrid", "Snap to grid", "Buildings snap their placement box to the tile grid, as StarEdit always does; off, they land exactly at the pointer")}
+        {option("snapToGrid", "Snap to grid", "Buildings snap their placement box to the tile grid, as StarEdit always does, and everything else snaps its centre to the nearest tile centre. Off, both land exactly at the pointer. View ▸ Grid Settings has the doodad and location snaps.")}
       </div>
       <div className="palette-scroll tree">
         {races.map((race) => {

@@ -11,7 +11,7 @@ import type { SpriteKind } from "../editor/sprites";
 import type { SymmetryMode } from "../editor/symmetry";
 import type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { browserStorage } from "./storage";
+import { browserStorage, mergedStorage } from "./storage";
 import { DEFAULT_CLIP_PARTS, type Clip, type ClipParts, type PasteMode } from "../editor/clipboard";
 import type { Rect } from "../editor/terrain";
 
@@ -51,8 +51,8 @@ export const selectedUnitsAtom = atom<number[]>([]);
  * arms it; Escape or a right-click disarms it, leaving plain select mode.
  */
 export const unitPlacingAtom = atom<boolean>(false);
-/** The Units layer's placement checks (see editor/placement.ts). */
-export const placementOptionsAtom = atom<PlacementOptions>(DEFAULT_PLACEMENT);
+/** The Units layer's placement checks (see editor/placement.ts), remembered (`scmjs.placement`). */
+export const placementOptionsAtom = atomWithStorage<PlacementOptions>("scmjs.placement", DEFAULT_PLACEMENT, mergedStorage(DEFAULT_PLACEMENT), { getOnInit: true });
 
 /* ── Doodads layer (see editor/doodads.ts) ──────────────── */
 
@@ -64,8 +64,8 @@ export const doodadCategoryAtom = atom<string>("");
 export const doodadPlacingAtom = atom<boolean>(false);
 /** Indices into `scenario.doodads` of the selected doodads; cleared whenever the list is edited under it. */
 export const selectedDoodadsAtom = atom<number[]>([]);
-/** "Place anywhere" (off) and "Snap to grid" (on) — StarEdit's defaults. */
-export const doodadPlacementAtom = atom<DoodadPlacementOptions>(DEFAULT_DOODAD_PLACEMENT);
+/** "Place anywhere" (off) and "Snap to grid" (on) — StarEdit's defaults, remembered (`scmjs.doodadPlacement`). */
+export const doodadPlacementAtom = atomWithStorage<DoodadPlacementOptions>("scmjs.doodadPlacement", DEFAULT_DOODAD_PLACEMENT, mergedStorage(DEFAULT_DOODAD_PLACEMENT), { getOnInit: true });
 
 /* ── Sprites layer (see editor/sprites.ts) ──────────────── */
 

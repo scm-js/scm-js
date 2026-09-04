@@ -21,6 +21,7 @@
  * browser.
  */
 import { desktopBridge, type DesktopBridge } from "./desktop";
+import { hostTerms } from "../editor/platform";
 import { readStored, storedCopy, type StoredCopy } from "./store";
 
 export type SourceKind = "bundled" | "stored" | "none";
@@ -50,7 +51,7 @@ export interface LocateDeps {
 }
 
 const describeStored = (copy: StoredCopy) =>
-  copy.where === "opfs" ? `Copy kept in this browser (${megabytes(copy.bytes)}, from ${copy.from})` : `Copy held for this session (${megabytes(copy.bytes)}, from ${copy.from})`;
+  copy.where === "opfs" ? `Copy kept in ${hostTerms().here} (${megabytes(copy.bytes)}, from ${copy.from})` : `Copy held for this session (${megabytes(copy.bytes)}, from ${copy.from})`;
 
 export function megabytes(bytes: number): string {
   return `${(bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0)} MB`;
@@ -69,7 +70,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
   // 2. A copy an earlier install left here.
   const copy = await deps.stored().catch(() => null);
   if (copy) return { kind: "stored", label: describeStored(copy), tried, stored: copy };
-  tried.push("No copy kept in the browser");
+  tried.push(`No copy kept in ${hostTerms().here}`);
 
   // 3. The desktop app: the disk, then the files are served as bundled. Silent when it
   //    works — a user whose StarCraft folder is where the game puts it never hears about

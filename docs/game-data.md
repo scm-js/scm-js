@@ -183,7 +183,9 @@ to, so `teamColor.ts` synthesises a ramp for them.
 
 Placed units run their in-game idle animations (View ▸ Animate Units). The viewport
 steps every unit's iscript once per game frame (42 ms, "Fastest"), the same rAF loop
-that drives water cycling.
+that drives water cycling. Preferences ▸ Display scales either rate on its own
+(0.25× to 4×), so a slow machine — or a preference for a calmer map — can turn one
+down without turning it off.
 
 Each unit is a stack of images (shadow, main graphic, overlays), each with its own
 script. Buildings play their `Built` animation; tanks and Goliaths play

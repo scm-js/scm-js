@@ -186,6 +186,8 @@ export interface PluginApi {
   readonly text: TextApi;
   readonly query: QueryApi;
   readonly data: DataApi;
+  /** Bit masks, special unit ids and the pixels-per-tile every record is written in. */
+  readonly consts: ConstsApi;
   readonly graphics: GraphicsApi;
   readonly view: ViewApi;
   readonly ui: UiApi;
@@ -1095,6 +1097,69 @@ export interface DataApi {
   race(unitId: number): Race;
   /** The GRP path an image id draws from, relative to `unit\`. */
   imagePath(imageId: number): string | null;
+}
+
+/* ── The numbers a record is written in ─────────────────── */
+
+/**
+ * The constants a plugin needs to *write* a record rather than read one: the bit masks in
+ * a UNIT / THG2 / MRGN record, the few unit ids the game itself treats specially, and the
+ * one conversion — 32 pixels to a tile — every object position goes through.
+ *
+ * They are the editor's own (`sections/objects.ts`, `editor/units.ts`) and they arrive
+ * here at run time rather than in the typings on purpose: `@scm-js/plugin-api` is erased
+ * before the loader ever sees the specifier, so a *value* imported from that package
+ * type-checks and is then undefined. Anything a plugin needs while it runs has to come
+ * off `api`. Without this a plugin writes the hex itself, which is how a sprite's kind
+ * came to be read as `flags & 0x1000` in three places.
+ */
+export interface ConstsApi {
+  /** Map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. */
+  readonly tile: 32;
+  readonly unit: UnitConsts;
+  readonly sprite: SpriteConsts;
+  readonly location: LocationConsts;
+  /** Whether a unit type is a mineral field or a vespene geyser. */
+  isResource(unitId: number): boolean;
+}
+
+export interface UnitConsts {
+  /** The units.dat id of the Start Location marker. */
+  readonly startLocation: 214;
+  /** The three mineral field types — a mineral line uses all three so it is not one sprite repeated. */
+  readonly mineralFields: readonly [176, 177, 178];
+  readonly vespeneGeyser: 188;
+  /** What a fresh resource is worth, as StarEdit writes it. */
+  readonly defaultMinerals: 1500;
+  readonly defaultGas: 5000;
+  /** `validProperties` (offset 0x0C): which special-property fields the game reads. */
+  readonly valid: { readonly Cloak: 1; readonly Burrow: 2; readonly InTransit: 4; readonly Hallucinated: 8; readonly Invincible: 16 };
+  /** `validStates` (offset 0x0E): which of the record's fields are set at all. */
+  readonly used: { readonly Owner: 1; readonly HitPoints: 2; readonly Shields: 4; readonly Energy: 8; readonly Resources: 16; readonly Hangar: 32; readonly State: 64 };
+  /** `stateFlags` (offset 0x18): the special properties themselves. */
+  readonly state: { readonly Cloaked: 1; readonly Burrowed: 2; readonly InTransit: 4; readonly Hallucinated: 8; readonly Invincible: 16 };
+  /** `relationType` (offset 0x0A): how `relatedSerial` is linked. */
+  readonly relation: { readonly NydusLink: 0x200; readonly Addon: 0x400 };
+}
+
+export interface SpriteConsts {
+  /**
+   * THG2 `flags`. `PureSprite` is what `spriteKind` reads: with it the id is a sprites.dat
+   * one and the game only draws it, without it the id is a units.dat one and the game
+   * creates the unit (Installation doors and traps).
+   */
+  readonly flags: { readonly PureSprite: 0x1000; readonly Flipped: 0x4000; readonly Disabled: 0x8000 };
+}
+
+export interface LocationConsts {
+  /** The MRGN slot that is Anywhere. The editor protects it; nothing else may write it. */
+  readonly anywhere: 63;
+  /**
+   * `elevationFlags`. A *set* bit **excludes** that elevation — the game tests a unit
+   * against the location only on the elevations whose bit is clear — so 0 means
+   * everywhere, and StarEdit's ticked "Low ground" box is bit 0 clear.
+   */
+  readonly elevation: { readonly LowGround: 1; readonly MediumGround: 2; readonly HighGround: 4; readonly LowAir: 8; readonly MediumAir: 16; readonly HighAir: 32 };
 }
 
 /* ── Terrain and tileset ────────────────────────────────── */

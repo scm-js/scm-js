@@ -645,6 +645,34 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 | `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
 | `claim(spec)` | Tell the editor that a run of the trigger list is *generated* by this plugin. The Trigger Editor badges those rows (`spec.badge`, the plugin's id by default), locks them and shows `spec.describe(index, list)` with a button that calls `spec.open(index, list)` (`spec.openLabel`, `Open <plugin name>` by default) in place of the form; the Text Trigger Editor fences them in comments; Import Triggers says what a replace would remove. The run is found by content: `spec.locate(list)` is asked with whatever list an editor holds — the map's, or a working copy with local inserts in it — and answers `{ start, count }` or null when the records are not there (edited by hand, or gone), so keep a hash of what you generated and look for it, as the Trigger Script plugin does. `spec.label` is the words a sentence uses (`"the trigger script"`). The handle has `refresh()` (after a rebuild, so editors ask `locate` again) and `remove()`; the claim leaves with the plugin. |
 
+**Generating triggers.** There is no fluent builder here on purpose: `tx.triggers.fromText`
+already is one, and it is a better one. A record is 16 conditions and 64 actions of bare numbers,
+so building one field by field means knowing which field each argument lives in
+(`defs.action(type).args` will tell you, but you have to ask); writing the trigger in the
+text format instead means writing what the map maker would read in the Text Trigger
+Editor, and getting the names resolved against the open map for free.
+
+```ts
+const source = `
+Trigger("Player 1"){
+Conditions:
+  Bring("Current Player", "Any unit", "Beacon Alpha", At least, 1);
+Actions:
+  Display Text Message(Always Display, "You found it!");
+  Preserve Trigger();
+}`;
+api.document.update("Add the beacon trigger", (tx) => {
+  tx.triggers.fromText(source);      // throws with the line number when it does not parse
+});
+```
+
+`fromText` is the whole of it — it parses, interns the strings the text names, resolves
+`"Beacon Alpha"` against the map's own locations, and appends (or replaces the list with
+`{ replace: true }`). `triggers.text.parse` is the same parse without the write, for a
+plugin that wants the records first; `text.print` goes back the other way, so a plugin can
+read what it wrote. Reach for `newTrigger` / `newCondition` / `newAction` when you are
+editing one field of an existing record, not when you are producing a run of them.
+
 ### `api.query`
 
 Reading the open map: what is where, and the analyses the editor already does. Nothing
@@ -689,6 +717,27 @@ flags, the sprite and image each unit draws through. `ready()`, `load()`, then `
 `weapons()`, `upgrades()`, `techs()`, `sprites()`, `flingy()`, `images()`, plus
 `race(unitId)` and `imagePath(imageId)`. Everything is null until the tables are loaded,
 and stays null when the game data was never extracted — degrade, do not throw.
+
+### `api.consts`
+
+The numbers a record is *written* in, so a plugin does not carry the hex itself. These are
+the editor's own tables (`sections/objects.ts`, `editor/units.ts`), handed over at run time.
+
+| | |
+| --- | --- |
+| `tile` | 32 — map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. |
+| `unit.startLocation` | 214, the Start Location marker. |
+| `unit.mineralFields` / `unit.vespeneGeyser` | `[176, 177, 178]` and 188. `isResource(unitId)` is either. |
+| `unit.defaultMinerals` / `unit.defaultGas` | 1500 and 5000, what StarEdit writes on a fresh resource. |
+| `unit.valid` / `unit.used` / `unit.state` / `unit.relation` | The four UNIT bit masks: `validProperties` (which special-property fields the game reads), `validStates` (which of the record's fields are set at all), `stateFlags` (the properties themselves), `relationType` (`NydusLink`, `Addon`). |
+| `sprite.flags` | THG2's `PureSprite` / `Flipped` / `Disabled`. `PureSprite` is the one that decides whether `spriteId` is a sprites.dat id the game only draws, or a units.dat id it creates the unit for. |
+| `location.anywhere` | 63. That slot is Anywhere and the editor protects it everywhere — no builder returns it, `locationAt` never picks it, the viewport draws no box for it. `tx.restoreAnywhere()` is what puts it back. |
+| `location.elevation` | `elevationFlags`. A **set** bit *excludes* that elevation, so 0 means everywhere. |
+
+Why this is on `api` and not in the npm package: `@scm-js/plugin-api` is types only, and
+`import type` is erased before the loader sees the specifier — which is exactly what lets
+a plugin depend on a package at all. A *value* imported from it type-checks and is then
+undefined at run time. Anything you need while the plugin runs has to arrive on `api`.
 
 ### `api.graphics`
 

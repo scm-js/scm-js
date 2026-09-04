@@ -65,7 +65,7 @@ import { validateScenario } from "../editor/validate";
 import { mapStatistics } from "../editor/statistics";
 import { findInScenario } from "../editor/find";
 import { unitRace } from "../formats/dat/dat";
-import { ANYWHERE_INDEX, isLocationUsed, type SpriteRecord } from "../formats/chk/sections/objects";
+import { ANYWHERE_INDEX, Elevation, isLocationUsed, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid, type SpriteRecord } from "../formats/chk/sections/objects";
 import { START_LOCATION } from "../data/units";
 import {
   combinedSection, currentChk, defaultSectionBytes, editRaw, insertSection, knownSections, moveSection, parseRaw, rebuildSections, removeSection, renameSection,
@@ -85,7 +85,7 @@ import {
   applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
 import { hasEdits } from "../editor/history";
-import { addUnits, applyUnitChanges, makeUnit, nextSerial, removeUnits, snapPlacement, unitAt, unitBox, unitGeometry, updateUnits, type UnitChange } from "../editor/units";
+import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, makeUnit, MINERAL_FIELD_IDS, nextSerial, removeUnits, snapPlacement, TILE_PX, unitAt, unitBox, unitGeometry, updateUnits, VESPENE_GEYSER, type UnitChange } from "../editor/units";
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
 } from "../editor/sprites";
@@ -1387,6 +1387,26 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     query: queryApi(store),
     view: viewApi(store),
     data: dataApi(),
+
+    // Handed over rather than published in the typings: the package is types only, so a
+    // value imported from it is undefined at run time (see `ConstsApi`).
+    consts: {
+      tile: TILE_PX,
+      unit: {
+        startLocation: START_LOCATION,
+        mineralFields: MINERAL_FIELD_IDS,
+        vespeneGeyser: VESPENE_GEYSER,
+        defaultMinerals: DEFAULT_MINERALS,
+        defaultGas: DEFAULT_GAS,
+        valid: UnitValid,
+        used: UnitUsed,
+        state: UnitState,
+        relation: UnitRelation,
+      },
+      sprite: { flags: SpriteFlag },
+      location: { anywhere: ANYWHERE_INDEX, elevation: Elevation },
+      isResource,
+    },
     graphics: createGraphicsApi(store, bag),
 
     names: {

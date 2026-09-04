@@ -808,7 +808,15 @@ views without a transaction; `document.resize` is `resizeDocumentAtom` (history 
 (hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,
 `findInScenario`, `stringUsages`), `api.view` (`zoomAtom`, `viewportRectAtom`, `centerViewOnAtom`,
 `viewFlagsAtom`, and `goTo` taking the same shape `Issue.target` carries, so a linter can scroll to
-what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), `api.graphics`
+what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), **`api.consts`**
+(the numbers a record is *written* in: `TILE_PX`, the special unit ids and default resource amounts
+from `editor/units.ts`, and the `UnitValid` / `UnitUsed` / `UnitState` / `UnitRelation` / `SpriteFlag`
+/ `Elevation` bit masks and `ANYWHERE_INDEX` from `sections/objects.ts`, handed over by identity —
+`tests/plugins.test.ts` pins that they are the editor's own objects and not a second copy. They are on
+`api` rather than in `@scm-js/plugin-api` because that package is types only: `import type` is erased
+before the loader sees the specifier, which is what lets a plugin depend on a package at all, so a
+*value* imported from it type-checks and is then undefined. Anything a plugin needs at run time has to
+arrive on `api`), `api.graphics`
 (`plugins/graphics.ts`: the viewport's own sprite and atlas caches, plus `renderRect`, which is why
 `MapImageOptions` grew a `rect` — `renderMapImage` clamps its terrain loop to it and translates the
 context, everything else already drew in map coordinates) and `api.commands`
@@ -1163,7 +1171,8 @@ frames range from 8² to 256²; evicted canvases are zero-sized so the bitmap go
 The special ids have one home each and nothing else may spell them out: `data/units.ts#START_LOCATION`
 is 214 (`editor/placement.ts`, `documentAtoms`'s `START_LOCATION_UNIT` and the bare ids in
 `services/preload.ts` / `editor/statistics.ts` were four more copies of it) and `editor/units.ts` owns
-`MINERAL_FIELD_IDS` / `VESPENE_GEYSER` / `DEFAULT_MINERALS` / `DEFAULT_GAS` beside `isResource`.
+`MINERAL_FIELD_IDS` / `VESPENE_GEYSER` / `DEFAULT_MINERALS` / `DEFAULT_GAS` beside `isResource`. Plugins
+get the lot through `api.consts` rather than writing the numbers again.
 
 Edits are `UnitChange { index, before, after }` lists (insert / remove / replace, removals highest index
 first) carried in `HistoryEntry.units`; `applyUnitChanges` marks `UNIT` dirty. `unitsRevisionAtom` is the

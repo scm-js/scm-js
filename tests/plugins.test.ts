@@ -16,6 +16,8 @@ import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
 import { ActionType, ConditionType, PlayerGroup } from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
+import { Elevation, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid } from "../src/formats/chk/sections/objects";
+import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, MINERAL_FIELD_IDS, TILE_PX, VESPENE_GEYSER } from "../src/editor/units";
 import {
   activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom,
 } from "../src/atoms/editorAtoms";
@@ -293,6 +295,47 @@ describe("plugin api", () => {
     expect(store.get(terrainModeAtom)).toBe("tile");
     expect(api.terrain.active().tile).toBe(0x55);
     expect(() => api.events.on("nope" as never, () => {})).toThrow(/Unknown plugin event/);
+  });
+
+  // The point of the group is that a plugin stops writing the hex itself, so what it is
+  // handed has to be the editor's own tables and not a second copy that can drift.
+  it("hands over the record constants the editor writes records with", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const c = api.consts;
+    expect(c.tile).toBe(TILE_PX);
+    expect(c.unit.valid).toBe(UnitValid);
+    expect(c.unit.used).toBe(UnitUsed);
+    expect(c.unit.state).toBe(UnitState);
+    expect(c.unit.relation).toBe(UnitRelation);
+    expect(c.sprite.flags).toBe(SpriteFlag);
+    expect(c.location.elevation).toBe(Elevation);
+    expect(c.location.anywhere).toBe(ANYWHERE_INDEX);
+    expect(c.unit.startLocation).toBe(START_LOCATION);
+    expect(c.unit.mineralFields).toEqual(MINERAL_FIELD_IDS);
+    expect(c.unit.vespeneGeyser).toBe(VESPENE_GEYSER);
+    expect(c.unit.defaultMinerals).toBe(DEFAULT_MINERALS);
+    expect(c.unit.defaultGas).toBe(DEFAULT_GAS);
+    expect([c.isResource(c.unit.mineralFields[0]), c.isResource(c.unit.vespeneGeyser), c.isResource(0)])
+      .toEqual([isResource(176), true, false]);
+  });
+
+  // What the group is for, end to end: a record the plugin builds itself reads back the
+  // way the editor reads it, with no literal in the plugin.
+  it("is enough to write a unit and a sprite record without a hex literal", () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const c = api.consts;
+    api.document.edit("place", (tx) => {
+      tx.placeUnit(c.unit.mineralFields[0], 0, 2 * c.tile, 2 * c.tile);
+      tx.placeSprite("pure", 1, 3 * c.tile, 3 * c.tile);
+    });
+    const scn = store.get(scenarioAtom)!;
+    const unit = scn.units[scn.units.length - 1]!;
+    expect(unit.validStates & c.unit.used.Resources).toBeTruthy();
+    expect(unit.resourceAmount).toBe(c.unit.defaultMinerals);
+    const sprite = scn.sprites[scn.sprites.length - 1]!;
+    expect(sprite.flags & c.sprite.flags.PureSprite).toBeTruthy();
   });
 
   it("opens a dialog through the dialog stack and closes it from the handle", () => {

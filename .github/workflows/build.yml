@@ -1,10 +1,38 @@
-# Two channels, nothing else:
+# Three channels, and the release list only grows when a version is cut:
 #
-#   latest   every push to main — the web bundle deployed to GitHub Pages, and one rolling
-#            prerelease named `latest` whose assets (installers for Windows, macOS, Linux
-#            and a zip of the web bundle) are replaced each time
-#   vX.Y.Z   a pushed tag — a proper release with the same assets, notes generated from
-#            the commits since the previous tag
+#   ci        every push to main — lint, tests, the web bundle, and the GitHub Pages
+#             deploy. No installers, no release. `tsc -b` covers desktop/ through
+#             tsconfig.desktop.json, so a main-process type error is caught here; only
+#             the packaging step waits for the nightly.
+#   nightly   a daily cron (and manual dispatch) — installers for Windows, macOS and
+#             Linux plus a zip of the web bundle, on ONE rolling prerelease whose tag
+#             `nightly` is force-moved to the commit it was built from and whose assets
+#             are replaced in place. It is never deleted and never recreated, so the
+#             download counts survive and nobody watching releases is re-notified. The
+#             cron exits early when main has not moved since the last one.
+#   vX.Y.Z    a tag — a permanent release with the same assets and generated notes. These
+#             are the only ones that accumulate, which is the point. `release.yml` is what
+#             cuts one: it tags, dispatches this workflow on the tag, and moves
+#             package.json on to the next version so the nightlies keep sorting above it.
+#
+# Download links for scmjs.dev. GitHub redirects `/releases/latest/download/<asset>` to
+# the newest release that is NOT a prerelease or a draft, so the stable buttons are plain
+# hrefs that never need updating and never touch the API:
+#
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-windows-x64-setup.exe
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-x86_64.AppImage
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-amd64.deb
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-arm64.dmg
+#   https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
+#
+# That is why `electron-builder.yml` names the assets without the version in them: the
+# redirect can only work against a fixed file name. The version is in the release title,
+# the notes and `latest*.yml`. To un-promote a bad stable release, tick "This is a
+# pre-release" on it and the redirect falls back to the one before it — no new tag.
+#
+# The web build deployed to Pages is main's, not the newest tag's: the hosted editor is
+# the "try it now" instance. Serve the tag instead by moving the `pages` job's condition
+# from `channel == ci` to `channel == stable`.
 #
 # The hosted web build gets its base path from the PAGES_BASE repository variable
 # (Settings ▸ Variables; default: the repository name, set "/" for a custom domain). No
@@ -14,14 +42,25 @@
 #
 # Code signing: none yet. Windows shows SmartScreen's "unrecognized app" screen, and macOS
 # refuses an unsigned app until the user runs `xattr -d com.apple.quarantine`; the Linux
-# builds and the web build have no such friction.
+# builds and the web build have no such friction. In-app updates (electron-updater reads
+# the `latest*.yml` these jobs upload) work unsigned on Windows and AppImage; macOS needs
+# a real identity before Squirrel.Mac will install anything.
 name: Build
 
 on:
-  # push:
-  #   branches: [main]
-  #   tags: ["v*"]
+  push:
+    branches: [main]
+    tags: ["v*"]
+  schedule:
+    # 07:17 UTC. Scheduled workflows run on the default branch only, and GitHub disables
+    # them after 60 days with no repository activity.
+    - cron: "17 7 * * *"
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: Build installers and publish the nightly prerelease
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,39 +79,66 @@ jobs:
     name: Channel
     runs-on: ubuntu-latest
     outputs:
-      name: ${{ steps.pick.outputs.name }}
+      channel: ${{ steps.pick.outputs.channel }}
       version: ${{ steps.pick.outputs.version }}
-      tagged: ${{ steps.pick.outputs.tagged }}
+      tag: ${{ steps.pick.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
+          # scripts/next-version.mjs reads the release tags.
           fetch-depth: 0
       - id: pick
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_NIGHTLY: ${{ inputs.nightly }}
         run: |
-          # package.json is the version everything else follows: the web jobs stamp it into
-          # the bundle (vite.config.ts → `__APP_VERSION__`) and electron-builder names the
-          # installers after it. A tag says which version it is; main says which one is
-          # being worked towards.
+          set -euo pipefail
+          # package.json records the LAST released version; nothing has to remember to move
+          # it on. What a nightly is called is worked out from the release tags by
+          # scripts/next-version.mjs (a patch bump of the newest one), which is the only
+          # choice that can never sort above the release that comes next.
           pkg=$(node -p "require('./package.json').version")
+          emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            tag=${GITHUB_REF#refs/tags/v}
-            if [[ "$tag" != "$pkg" ]]; then
-              echo "::warning::tag v$tag does not match package.json ($pkg); building as $tag"
+            tag=${GITHUB_REF#refs/tags/}
+            if [[ "${tag#v}" != "$pkg" ]]; then
+              echo "::warning::tag $tag does not match package.json ($pkg); building as ${tag#v}"
             fi
-            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-            echo "version=$tag" >> "$GITHUB_OUTPUT"
-            echo "tagged=true" >> "$GITHUB_OUTPUT"
-          else
-            # A prerelease of the version in development: 0.1.0-latest.20260902.abc1234
-            echo "name=latest" >> "$GITHUB_OUTPUT"
-            echo "version=${pkg%%-*}-latest.$(date -u +%Y%m%d).$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            emit channel stable
+            emit tag "$tag"
+            emit version "${tag#v}"
+            exit 0
           fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$DISPATCH_NIGHTLY" == "true" ]]; then
+            # Nothing to build if main has not moved since the nightly tag was placed.
+            if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+              at=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/nightly" -q .object.sha 2>/dev/null || true)
+              if [[ "$at" == "$GITHUB_SHA" ]]; then
+                echo "nightly is already at ${GITHUB_SHA:0:7}"
+                emit channel skip; emit tag ""; emit version "$pkg"
+                exit 0
+              fi
+            fi
+            # A prerelease of the version being worked towards, ordered by run number so two
+            # nightlies on the same day still compare correctly (a short SHA would not:
+            # semver compares alphanumeric identifiers lexically).
+            emit channel nightly
+            emit tag nightly
+            emit version "$(node scripts/next-version.mjs)-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+            exit 0
+          fi
+
+          emit channel ci
+          emit tag ""
+          emit version "$(node scripts/next-version.mjs)-dev.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
 
   web:
     name: Web
     needs: channel
+    if: needs.channel.outputs.channel != 'skip'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,30 +152,36 @@ jobs:
       - run: npm test
       # The bundle that goes on the release: served from the root of wherever it is put.
       - name: Build (release zip)
+        if: needs.channel.outputs.channel != 'ci'
         run: npm run build
         env:
           SCMJS_BASE: /
-      - run: cd dist && zip -qr "../scmjs-web-${{ needs.channel.outputs.version }}.zip" .
+      - name: Zip
+        if: needs.channel.outputs.channel != 'ci'
+        run: cd dist && zip -qr ../scmJS-web.zip .
       - uses: actions/upload-artifact@v4
+        if: needs.channel.outputs.channel != 'ci'
         with:
           name: web-zip
-          path: scmjs-web-*.zip
+          path: scmJS-web.zip
           if-no-files-found: error
       # The same, under the path GitHub Pages serves this repository from.
       - name: Build (Pages)
-        if: needs.channel.outputs.tagged == 'false'
+        if: needs.channel.outputs.channel == 'ci'
         run: npm run build
         env:
           SCMJS_BASE: ${{ vars.PAGES_BASE || format('/{0}/', github.event.repository.name) }}
       - uses: actions/upload-pages-artifact@v3
-        if: needs.channel.outputs.tagged == 'false'
+        if: needs.channel.outputs.channel == 'ci'
         with:
           path: dist
 
   pages:
     name: Deploy Pages
     needs: [channel, web]
-    if: needs.channel.outputs.tagged == 'false' && github.event_name != 'workflow_dispatch'
+    # Not restricted to a push: `release.yml` dispatches this on main after its two
+    # commits, which — being pushed with GITHUB_TOKEN — start no run of their own.
+    if: needs.channel.outputs.channel == 'ci'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -121,6 +193,7 @@ jobs:
   desktop:
     name: Desktop (${{ matrix.os }})
     needs: channel
+    if: needs.channel.outputs.channel == 'nightly' || needs.channel.outputs.channel == 'stable'
     strategy:
       fail-fast: false
       matrix:
@@ -142,17 +215,23 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
+          # latest*.yml is electron-updater's feed (a few hundred bytes) and the .blockmap
+          # files are what let it download only the changed parts of an installer. Neither
+          # is used yet; both are the whole preparation for in-app updates.
           path: |
             release/*.exe
             release/*.zip
             release/*.dmg
             release/*.AppImage
             release/*.deb
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error
 
   release:
-    name: Release (${{ needs.channel.outputs.name }})
+    name: Release (${{ needs.channel.outputs.tag }})
     needs: [channel, web, desktop]
+    if: needs.channel.outputs.channel == 'nightly' || needs.channel.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -167,23 +246,34 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          NAME: ${{ needs.channel.outputs.name }}
+          CHANNEL: ${{ needs.channel.outputs.channel }}
+          TAG: ${{ needs.channel.outputs.tag }}
           VERSION: ${{ needs.channel.outputs.version }}
-          TAGGED: ${{ needs.channel.outputs.tagged }}
         run: |
           set -euo pipefail
-          if [[ "$TAGGED" == "true" ]]; then
-            gh release create "$NAME" assets/* \
+          if [[ "$CHANNEL" == "stable" ]]; then
+            gh release create "$TAG" assets/* \
               --title "scmJS $VERSION" \
               --generate-notes \
               --verify-tag
+            exit 0
+          fi
+
+          # One rolling prerelease, updated in place. Deleting and recreating it would
+          # reset the download counts and re-notify everyone watching releases; only the
+          # tag moves.
+          git tag -f nightly "$GITHUB_SHA"
+          git push -f origin refs/tags/nightly
+          # printf, not a multi-line string literal: this block is indented inside the
+          # YAML, and the leading spaces would reach the notes and make GitHub render the
+          # second paragraph as a code block.
+          notes=$(printf '%s\n\n%s' \
+            "Built from main at ${GITHUB_SHA:0:7} on $(date -u +%Y-%m-%d)." \
+            "Replaced by the next nightly. For a version that stays put, take a numbered release.")
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release upload nightly assets/* --clobber
+            gh release edit nightly --title "Nightly ($VERSION)" --notes "$notes" --prerelease --latest=false
           else
-            # One rolling prerelease: recreate it on the current commit so old assets do not pile up.
-            gh release delete latest --yes --cleanup-tag || true
-            git tag -f latest "$GITHUB_SHA"
-            git push -f origin refs/tags/latest
-            gh release create latest assets/* \
-              --title "Latest ($VERSION)" \
-              --prerelease \
-              --notes "Built from main at ${GITHUB_SHA:0:7}. Replaced on every push; for a fixed version take a numbered release."
+            gh release create nightly assets/* \
+              --title "Nightly ($VERSION)" --notes "$notes" --prerelease --latest=false
           fi

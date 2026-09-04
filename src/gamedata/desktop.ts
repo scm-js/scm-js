@@ -29,6 +29,37 @@ export interface DesktopTestResult {
   message?: string;
 }
 
+/** What this build can do about updates — see `desktop/updater.ts` for the table behind it. */
+export interface UpdateSupport {
+  /** Whether the feed can be asked at all (false in an unpackaged development build). */
+  check: boolean;
+  /**
+   * Whether a downloaded update could actually be applied. False on macOS until there is a
+   * signing identity, on a Linux package install (only the AppImage updates itself), and in
+   * development. The dialog offers the release page instead of a progress bar.
+   */
+  install: boolean;
+  /** Why `install` is false, in words for the dialog. */
+  reason?: string;
+  releasesUrl: string;
+}
+
+export type UpdateAvailability =
+  | { status: "available"; current: string; support: UpdateSupport; version: string; notes?: string; date?: string; bytes?: number }
+  | { status: "current"; current: string; support: UpdateSupport }
+  /** The feed cannot be asked at all; `support.reason` says why. */
+  | { status: "unsupported"; current: string; support: UpdateSupport }
+  /** Offline, or the feed answered something unusable. An ordinary state, not a crash. */
+  | { status: "error"; current: string; support: UpdateSupport; message: string };
+
+export interface UpdateProgress {
+  /** 0–100. */
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 export interface DesktopBridge {
   platform: string;
   version: string;
@@ -64,6 +95,25 @@ export interface DesktopBridge {
   files: {
     /** A file arrived; open it the way File ▸ Open does. Fires for the file the app was started with once the editor listens. */
     onOpen(listener: (file: { name: string; bytes: Uint8Array }) => void): () => void;
+  };
+  /**
+   * In-app updates (`desktop/updater.ts`). Everything here answers rather than throws —
+   * a failed check is a state the dialog shows, not an exception.
+   */
+  updates: {
+    /** What this build can do, without asking the network. */
+    support(): Promise<UpdateSupport>;
+    /** Ask the feed. `allowPrerelease` is the Preferences tick for nightly builds. */
+    check(allowPrerelease: boolean): Promise<UpdateAvailability>;
+    /** Download the update the last check found; progress arrives on `onProgress`. */
+    download(): Promise<{ ok: boolean; message?: string }>;
+    /** Quit and apply what was downloaded. The caller has already asked about unsaved changes. */
+    install(): Promise<void>;
+    /** Open the releases page in the browser — every case that cannot install. */
+    openReleases(url?: string): Promise<void>;
+    onProgress(listener: (progress: UpdateProgress) => void): () => void;
+    onDownloaded(listener: () => void): () => void;
+    onError(listener: (message: string) => void): () => void;
   };
   /** Tools ▸ Test Map: hand the map to the installed game. */
   game: {

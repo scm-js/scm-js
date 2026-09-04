@@ -25,7 +25,7 @@ import {
 } from "../../atoms/editorAtoms";
 import { peekTileset } from "../../formats/tileset/load";
 import { desktopBridge } from "../../gamedata/desktop";
-import { hostTerms } from "../../editor/platform";
+import { hostTerms, isDesktop } from "../../editor/platform";
 import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
@@ -464,6 +464,28 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     window.
                   </p>
                 </Group>
+                {isDesktop() && (
+                  <Group title="Updates">
+                    <div className="col" style={{ gap: 2 }}>
+                      <Check
+                        label="Check for updates when scmJS starts"
+                        checked={local.updates.checkOnStart}
+                        onChange={(e) => patch({ updates: { ...local.updates, checkOnStart: e.target.checked } })}
+                      />
+                      <Check
+                        label="Include nightly builds"
+                        checked={local.updates.nightly}
+                        onChange={(e) => patch({ updates: { ...local.updates, nightly: e.target.checked } })}
+                      />
+                    </div>
+                    <p className="hint" style={{ marginTop: 4 }}>
+                      A new version is offered in a notice, never installed on its own.
+                      Nightly builds come from the latest commit and are untested; going back
+                      to a numbered release means downloading it by hand, since the updater
+                      will not offer an older version.
+                    </p>
+                  </Group>
+                )}
                 <Group title="New scenario defaults">
                   <div className="form wide">
                     <Field label="Tileset">
@@ -1005,7 +1027,7 @@ export function AboutDialog({ entry }: DialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const projectPage = (path: string) =>
     window.open(
-      `https://github.com/jeany55/scm-js${path}`,
+      `https://github.com/scm-js/scm-js${path}`,
       "_blank",
       "noopener,noreferrer",
     );

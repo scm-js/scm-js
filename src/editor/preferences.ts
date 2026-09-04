@@ -27,6 +27,15 @@ export interface Preferences {
    * browser's folder is a handle in IndexedDB (`services/handleStore.ts`), not here.
    */
   testMap: { launch: boolean; dir: string };
+  /**
+   * The desktop build's in-app updates (`editor/updates.ts`, `desktop/updater.ts`); the
+   * browser build shows none of this, having nothing to update. `checkOnStart` asks GitHub
+   * for a newer version a few seconds after launch and raises a toast when there is one.
+   * `nightly` follows the nightly channel instead of the numbered releases — one-way in
+   * practice, since going back to a stable release is a downgrade the updater will not
+   * offer.
+   */
+  updates: { checkOnStart: boolean; nightly: boolean };
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -38,6 +47,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   animateWaterSpeed: 1,
   animateUnitsSpeed: 1,
   testMap: { launch: true, dir: "" },
+  updates: { checkOnStart: true, nightly: false },
 };
 
 /** The speeds the Preferences sliders offer, slowest first. */

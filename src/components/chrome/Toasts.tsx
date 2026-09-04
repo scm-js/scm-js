@@ -31,6 +31,15 @@ function ToastView({ toast }: { toast: Toast }) {
         <div className="toast-title">{toast.title}</div>
         {toast.detail && <div className="toast-detail">{toast.detail}</div>}
       </div>
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => { dismiss(toast.id); toast.action?.run(); }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => dismiss(toast.id)}><X size={12} /></button>
     </div>
   );

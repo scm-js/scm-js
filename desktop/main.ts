@@ -20,6 +20,7 @@ import { pathToFileURL } from "node:url";
 import { openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData } from "../src/gamedata/extract";
 import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
+import { updaterIpc } from "./updater";
 
 const SCHEME = "app";
 const HOST = "scmjs";
@@ -622,6 +623,10 @@ app.whenReady().then(() => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win && pendingOpen) { sendOpen(win, pendingOpen); pendingOpen = null; }
   });
+  // In-app updates. Nothing loads `electron-updater` until the renderer asks, so a
+  // launch that never checks pays nothing for this.
+  updaterIpc(() => BrowserWindow.getAllWindows()[0] ?? null);
+
   ipcMain.handle("game:info", (_e, dir: string | null) => gameInfo(dir));
   ipcMain.handle("game:pickFolder", async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);

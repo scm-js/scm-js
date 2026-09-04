@@ -4,7 +4,7 @@
  * Node beyond `process.argv` and `process.platform`.
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { DesktopBridge } from "../src/gamedata/desktop";
+import type { DesktopBridge, UpdateProgress } from "../src/gamedata/desktop";
 
 const version = process.argv.find((a) => a.startsWith("--scmjs-version="))?.slice("--scmjs-version=".length) ?? "";
 
@@ -39,6 +39,28 @@ const bridge: DesktopBridge = {
       // Ask for what the app was started with; the main process answers on the same channel.
       ipcRenderer.send("file:ready");
       return () => { ipcRenderer.off("file:open", handler); };
+    },
+  },
+  updates: {
+    support: () => ipcRenderer.invoke("update:support"),
+    check: (allowPrerelease) => ipcRenderer.invoke("update:check", allowPrerelease),
+    download: () => ipcRenderer.invoke("update:download"),
+    install: () => ipcRenderer.invoke("update:install"),
+    openReleases: (url) => ipcRenderer.invoke("update:openReleases", url),
+    onProgress: (listener) => {
+      const handler = (_e: IpcRendererEvent, progress: UpdateProgress) => listener(progress);
+      ipcRenderer.on("update:progress", handler);
+      return () => { ipcRenderer.off("update:progress", handler); };
+    },
+    onDownloaded: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("update:downloaded", handler);
+      return () => { ipcRenderer.off("update:downloaded", handler); };
+    },
+    onError: (listener) => {
+      const handler = (_e: IpcRendererEvent, message: string) => listener(message);
+      ipcRenderer.on("update:error", handler);
+      return () => { ipcRenderer.off("update:error", handler); };
     },
   },
   game: {

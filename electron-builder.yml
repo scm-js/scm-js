@@ -22,11 +22,26 @@ asar: true
 # and the few strings Chromium itself shows (context menus, file pickers) read fine in English.
 electronLanguages:
   - en-US
-artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+# No version in the asset names, on purpose: GitHub's
+# `/releases/latest/download/<asset>` redirect — what the download buttons on scmjs.dev
+# are — can only resolve a fixed file name, and it ignores prereleases, so it always
+# lands on the newest numbered release and never on the nightly. The version is in the
+# release title, the notes and latest*.yml. The cost is that two downloaded versions
+# share a file name in the browser's downloads folder.
+artifactName: ${productName}-${os}-${arch}.${ext}
+# Where the in-app updater looks. electron-builder writes latest.yml / latest-mac.yml /
+# latest-linux.yml beside the installers and bakes app-update.yml into the asar from
+# this; without it neither exists. It does not publish anything — `npm run build:desktop`
+# passes `--publish never` and the workflow uploads the assets itself with `gh`.
+publish:
+  provider: github
+  owner: scm-js
+  repo: scm-js
 win:
   # One 1024² PNG for every platform — the app mark in public/, which the web build also
   # serves as its icon; electron-builder makes the .ico / .icns from it.
   icon: public/icon.png
+  artifactName: ${productName}-windows-${arch}.${ext}
   # A zip rather than electron-builder's `portable` target: that one is a 7-Zip SFX whose
   # NSIS template does `RMDir /r $INSTDIR` and re-extracts the whole app into `%TEMP%` on
   # *every* launch (there is no cache, `unpackDirName` or not), and the only thing it offers
@@ -38,12 +53,18 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-${version}-setup.${ext}
+  artifactName: ${productName}-windows-${arch}-setup.${ext}
 mac:
   icon: public/icon.png
   category: public.app-category.developer-tools
+  artifactName: ${productName}-macos-${arch}.${ext}
+  # The dmg is what a person downloads; the zip is what electron-updater installs from —
+  # Squirrel.Mac cannot read a dmg. It stays unusable until there is a signing identity
+  # (macOS refuses to install an unsigned update), but it costs nothing to ship now.
   target:
     - target: dmg
+      arch: [x64, arm64]
+    - target: zip
       arch: [x64, arm64]
   # Unsigned until there is an Apple Developer identity; CI sets CSC_IDENTITY_AUTO_DISCOVERY=false.
   identity: null

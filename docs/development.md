@@ -100,19 +100,171 @@ kept per document in `saveOptionsAtom` and reused by Ctrl+S.
 
 ## Releases
 
-`.github/workflows/build.yml` has two channels: every push to `main` deploys the web
-bundle to GitHub Pages and recreates the rolling `latest` prerelease (installers for
-Windows, macOS x64/arm64, Linux AppImage/deb, and a zip of the web bundle); a pushed
-`vX.Y.Z` tag makes a numbered release with the same assets and generated notes. The
-version comes from the tag, or `<package.json version>-latest.<date>.<sha>` on `main`
-(the workflow warns when a tag and `package.json` disagree); both jobs `npm version` it
-into `package.json` before building, and `vite.config.ts` injects that as
-`__APP_VERSION__` — `src/version.ts` is where the splash and the About dialog read it,
-and electron-builder names the installers after it. Bumping the app's version means
-editing `package.json` and nothing else. There is one repository
-variable, `PAGES_BASE` (`/` for a custom domain; default is the repository name) — no
-build carries game data or an address to fetch it from. CI has no game data, so the
-real-data test suites skip there.
+`.github/workflows/build.yml` has three channels, and the release list only grows when
+a version is cut:
+
+| channel | trigger | what lands |
+| --- | --- | --- |
+| `ci` | every push to `main` | lint, tests, the web bundle, the GitHub Pages deploy. No installers, no release. |
+| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets and generated notes. |
+
+`tsc -b` covers `desktop/` through `tsconfig.desktop.json`, so a main-process type error
+fails a push to `main`; only the packaging step waits for the nightly. The cron exits
+early when `main` has not moved since the last one, so an idle week produces no builds.
+
+The nightly is **updated in place**: the `nightly` tag is force-moved to the commit and
+the assets are replaced with `gh release upload --clobber`. It is never deleted and
+recreated — that would reset the download counts and re-notify everyone watching
+releases. So there is one prerelease in the list, permanently, however many nights run.
+
+### Download links
+
+GitHub redirects `/releases/latest/download/<asset>` to the newest release that is *not*
+a prerelease or a draft. The download buttons on the site are therefore plain `<a href>`s
+that never need updating, never touch the API (and so cannot be rate-limited), and never
+resolve to a nightly:
+
+```
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-windows-x64-setup.exe
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-windows-x64.zip
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-arm64.dmg
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-x64.dmg
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-x86_64.AppImage
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-amd64.deb
+https://github.com/scm-js/scm-js/releases/latest/download/scmJS-web.zip
+```
+
+and the nightly's own, on its fixed tag:
+
+```
+https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
+```
+
+That redirect can only resolve a fixed file name, which is why `electron-builder.yml`'s
+`artifactName` carries no version. The cost is that two downloaded versions share a name
+in the browser's downloads folder; the version is in the release title, the notes and
+`latest*.yml`. To un-promote a bad stable release, tick "This is a pre-release" on it and
+the redirect falls back to the one before — no new tag, no rebuild.
+
+### Cutting a release
+
+Run the **Release** workflow (`.github/workflows/release.yml`) from the Actions tab. It
+takes the version to release — `0.3`, `1.0` and `1` are accepted and padded to three
+parts, and blank promotes the line the nightlies have already been building, so what
+people have been testing is what ships — and a `dry_run` tick that does everything except
+push.
+
+It refuses to run anywhere but `main`, refuses a version whose tag exists, refuses one
+that is not newer than the last release (going backwards would offer nobody an update and
+would still take over the `/releases/latest` redirect, since GitHub calls the most
+recently *published* release the latest), and runs the same lint, tests and build the
+Build workflow does **before** writing anything — a workflow that stops before tagging
+costs nothing, while a tag pointing at a failing commit has to be deleted by hand. Then:
+
+1. `package.json` and the lock go to the released version and are committed. The whole
+   diff is `"version"`, in the two files. Before the very first release there is nothing
+   to commit and the tag goes on the commit that is already there.
+2. `vX.Y.Z` (annotated) tags that commit.
+
+There is no third step moving `package.json` on, and that is the point of
+`scripts/next-version.mjs`. A nightly is named `<base>-nightly.<date>.<run number>`, and
+the base is a **patch bump of the newest release tag** — worked out, never recorded. So
+`package.json` on `main` means something true and self-maintaining: *the version that was
+last released*.
+
+Why a patch bump and not a guess at the next real version: a nightly has to sort above the
+release it follows (or the in-app updater offers nightly users a downgrade it cannot
+install) and below the release that comes next (or it offers them nothing until that
+version finally ships). A patch bump is the only choice that can never be too high —
+after `v0.8.0` the nightlies are `0.8.1-nightly.…`, which is below `0.8.1`, `0.9.0` and
+`1.0.0` alike. Nothing has to be decided in advance about what comes next: cut `1.0.0`
+whenever the breaking change lands and every nightly user is offered it. The two edges,
+both tested in `tests/next-version.test.ts`: with no release tags nothing has shipped, so
+`package.json`'s own version is used as it stands, and a prerelease tag (`v1.0.0-beta.1`)
+answers with its release version, since `1.0.0-nightly.…` sorts above `1.0.0-beta.1` and
+below `1.0.0`.
+
+The Build workflow is then **dispatched on the tag** rather than left to the tag push,
+because a push made with the repository's own `GITHUB_TOKEN` starts no further workflow
+run (GitHub's recursion guard) — `workflow_dispatch` through the API is the documented
+exception, and dispatching on `refs/tags/vX.Y.Z` puts Build in exactly the state the push
+would have. Build is dispatched on `main` too, so Pages is not left on the previous commit
+for the same reason. (A PAT in a secret would make the tag push trigger Build directly;
+this needs no secret.)
+
+### Versions
+
+The version comes from the tag, or `scripts/next-version.mjs` plus
+`-nightly.<date>.<run number>` on `main`; the workflow warns when a tag and `package.json`
+disagree. Every job `npm version`s it into `package.json` before building,
+`vite.config.ts` injects that as `__APP_VERSION__`, `src/version.ts` is where the splash
+and the About dialog read it, and electron-builder writes it into `latest*.yml`. The run
+number rather than the short SHA orders same-day nightlies, since semver compares
+alphanumeric prerelease identifiers lexically. `package.json` in the repository is only
+ever set by the Release workflow, so a clean checkout builds as the last released version
+rather than as a number nobody chose.
+
+There is one repository variable, `PAGES_BASE` (`/` for a custom domain; default is the
+repository name) — no build carries game data or an address to fetch it from. CI has no
+game data, so the real-data test suites skip there. The web build deployed to Pages is
+`main`'s, not the newest tag's: the hosted editor is the "try it now" instance. To serve
+the tag instead, move the `pages` job's condition from `channel == 'ci'` to
+`channel == 'stable'`.
+
+### In-app updates
+
+`desktop/updater.ts` (main process, `electron-updater`), `src/editor/updates.ts` (the pure
+state machine and every string it shows), `src/atoms/updateAtoms.ts`,
+`src/hooks/useUpdateCheck.ts` (the startup check and the one event subscription) and
+`components/dialogs/UpdateDialog.tsx`. `tests/updates.test.ts`.
+
+The feed is the `latest.yml` / `latest-mac.yml` / `latest-linux.yml` the desktop job
+uploads; `electron-builder.yml`'s `publish:` block is what makes electron-builder write
+them and bake `app-update.yml` into the asar. Version comparison is the `version` field
+inside those files rather than the git tag, so the moving `nightly` tag is not a problem,
+and the version-free asset names mean the download URL under that tag is always current.
+`electron-updater` derives `allowPrerelease` from whether the *running* version has a
+prerelease component, so a nightly build follows nightlies and a stable build follows
+stable on their own; the Preferences tick (`updates.nightly`) overrides it so a stable
+install can opt in. `electron-updater` is required lazily — Rollup keeps it behind a
+memoised factory in `main.cjs` — because `desktop/main.ts` is on the critical path to the
+first painted frame.
+
+**Finding an update raises a toast, not a dialog.** The check lands seconds after launch,
+by which time the user has started doing something, and two dialogs already open
+themselves at startup (Game Data when there is none, the Repair plugin on a map that needs
+it) — a third would queue behind them. The toast carries a Download button
+(`Toast.action`, the only button a toast may have) that opens the same dialog Help ▸ Check
+for Updates… opens, and it has no `ttl`, so it waits to be answered rather than expiring
+behind the splash.
+
+Nothing downloads or installs unasked: `autoDownload` is false, and installing goes
+through `guardedAction(store, …, "quit")` — the same unsaved-changes gate as the window's
+close button — before `quitAndInstall`. `autoInstallOnAppQuit` stays true so "Later" on a
+downloaded update means "next time I quit".
+
+Two things `UpdateSupport` exists to keep honest:
+
+- **Checking and installing are separate questions.** `support.check` is the updater's own
+  `isUpdaterActive()`, not a guess from `process.platform`, because `AppImageUpdater` — the
+  implementation chosen for *any* Linux build with no `package-type` file — refuses when
+  `APPIMAGE` is not in the environment, and then `checkForUpdates()` resolves **null**
+  instead of throwing. Reading that null as "up to date" told the user they were current
+  when nothing had been fetched; `check()` maps it to `unsupported`. `support.install` is
+  false only on macOS, where Squirrel.Mac verifies the code signature and an unsigned build
+  cannot apply what it downloaded. Windows (NSIS), the AppImage and the `.deb` (through
+  dpkg or apt, asking for privileges) all install. Where `install` is false the dialog
+  offers the release page, never a progress bar that would fail at the end.
+- **electron-updater's errors carry the whole HTTP response**, response headers and
+  `Set-Cookie` included. `message()` keeps the first line, names the cases worth naming
+  (404, 403, 5xx, the socket errors) and caps the rest, so a failed check is one sentence
+  and no session cookie reaches the screen.
+
+Verified against a packaged Linux build: an unpacked-folder run reports that it cannot
+check; the AppImage reaches GitHub (a 404 on a repository with no releases reads as "No
+release was found for this build"); and against a local `generic` feed the whole path runs
+— toast, dialog, download, "ready to install".
 
 ## Plugin typings
 

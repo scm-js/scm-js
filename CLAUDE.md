@@ -921,13 +921,68 @@ it used to blank the game-data address) + the main bundle + electron-builder, wh
 step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
 electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
-is what CI runs. The workflow has exactly two channels — `latest` (every push to main:
-Pages + a recreated rolling prerelease) and `v*` tags (numbered releases) — with `PAGES_BASE` the one
-repository variable; there is deliberately no nightly. The version is
+is what CI runs. The workflow has three channels — `ci` (every push to main: lint, tests, Pages;
+**no installers and no release**), `nightly` (a daily cron, skipped when main has not moved: the
+installers on ONE rolling prerelease whose `nightly` tag is force-moved and whose assets are
+replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
+numbered releases, the only ones that accumulate) — with `PAGES_BASE` the one repository variable.
+The download buttons on the site are plain hrefs to
+`/releases/latest/download/<asset>`, which GitHub redirects to the newest **non-prerelease**
+release — so the nightly is invisible to them and nothing needs updating when a version ships;
+that redirect resolves a fixed file name, which is why `electron-builder.yml`'s `artifactName`
+carries no version (`scmJS-windows-x64-setup.exe`, `scmJS-linux-x86_64.AppImage`, …). Its
+`publish:` block is what makes electron-builder write `latest*.yml` beside the installers and
+bake `app-update.yml` into the asar — the feed the in-app updater reads; `--publish never` still
+means it uploads nothing itself. The version is
 `package.json`'s and nothing hardcodes it: `vite.config.ts` defines `__APP_VERSION__`,
 `src/version.ts` is what the splash and the About dialog read, CI `npm version`s the field
-from the tag (or `<package.json version>-latest.<date>.<sha>` on main) before building, and
-electron-builder names the installers after it.
+from the tag (or `<package.json version>-nightly.<date>.<run number>` on main — the run number,
+not the SHA, because semver compares alphanumeric identifiers lexically) before building, and
+electron-builder writes it into `latest*.yml`. A release is cut by the **Release** workflow
+(`.github/workflows/release.yml`, manual dispatch), never by hand: it refuses to run off main,
+over an existing tag, or backwards past the last release, runs lint/tests/build *before*
+writing anything, then commits the release version (the whole diff is `"version"` in
+package.json and the lock; skipped when it already says it) and annotates `vX.Y.Z` on that
+commit. It then **dispatches** build.yml on the tag (and on main, for Pages), because a push
+made with `GITHUB_TOKEN` starts no workflow run while `workflow_dispatch` through the API is
+the exception.
+
+There is deliberately **no** step moving package.json on to the next version:
+`scripts/next-version.mjs` derives what a nightly is called from the release tags instead — a
+patch bump of the newest one (`tests/next-version.test.ts`; no tags means nothing has shipped,
+so package.json stands; a prerelease tag answers with its release version). A nightly must
+sort above the release it follows, or the updater offers a downgrade it cannot install, and
+below the release that comes next, or it offers nothing until that version ships; a patch bump
+is the only choice that can never be too high, so nothing has to be decided in advance about
+whether the next release is 0.9.0 or 1.0.0. That leaves package.json meaning the **last
+released version**, which is true without anyone maintaining it.
+
+### In-app updates (`desktop/updater.ts`, `src/editor/updates.ts`)
+
+Desktop only. `desktop/updater.ts` is `electron-updater` over the releases the workflow publishes
+(required lazily — Rollup keeps it behind a memoised factory — since `main.ts` is on the critical
+path to the first frame); `editor/updates.ts` is the pure state machine and every string shown
+(`stateFrom`, `headline`, `canDownload`, `shouldCheckOnStart`, `tests/updates.test.ts`);
+`atoms/updateAtoms.ts` holds one answer for the whole app; `hooks/useUpdateCheck.ts` is the startup
+check and the single subscription to the updater's progress/downloaded/error events;
+`UpdateDialog.tsx` is Help ▸ Check for Updates…. `Preferences.updates` is `{ checkOnStart, nightly }`,
+the row shown only when `isDesktop()`.
+
+Finding an update raises a **toast**, not a dialog — the check lands seconds after launch and two
+dialogs already open themselves then (Game Data, the Repair plugin), so a third would queue behind
+them. `Toast.action` (the one button a toast may carry) opens the same dialog the Help item does, and
+the toast has no `ttl` so it waits rather than expiring behind the splash. `autoDownload` is false
+and installing goes through `guardedAction(store, …, "quit")` — the window close button's gate —
+before `quitAndInstall`.
+
+`UpdateSupport` keeps *checking* and *installing* apart, and both answers come from the updater
+rather than from `process.platform`: `support.check` is `isUpdaterActive()`, because `AppImageUpdater`
+(chosen for any Linux build with no `package-type` file) refuses when `APPIMAGE` is unset and then
+`checkForUpdates()` resolves **null** instead of throwing — reading that as "up to date" is the lie
+`check()` maps to `unsupported`. `support.install` is false only on macOS (Squirrel.Mac verifies the
+code signature; unsigned cannot apply an update), where the dialog offers the release page instead of
+a progress bar. `message()` trims electron-updater's errors, which otherwise carry the whole HTTP
+response — headers and `Set-Cookie` — into the dialog.
 
 ### Tileset graphics (`src/formats/tileset/`)
 

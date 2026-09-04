@@ -7,6 +7,7 @@ import { useApplyPreferences } from "./hooks/useApplyPreferences";
 import { useMapFileActions } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
+import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { useWindowTitle } from "./hooks/useWindowTitle";
@@ -45,6 +46,7 @@ export default function App() {
   useWindowTitle();
   useCloseGuard();
   useDesktopFiles();
+  useUpdateCheck();
 
   useEffect(() => {
     if (chrome) return;

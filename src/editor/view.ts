@@ -48,4 +48,9 @@ export interface Toast {
   detail?: string;
   /** Milliseconds before it leaves on its own; 0 keeps it until dismissed. */
   ttl: number;
+  /**
+   * One button beside the text, for a notice that is really a question — the update
+   * check's "Download". Pressing it dismisses the toast as well as running this.
+   */
+  action?: { label: string; run: () => void };
 }

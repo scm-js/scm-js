@@ -1,0 +1,184 @@
+# Cutting a numbered release: one commit and a tag.
+#
+#   1. package.json (and the lock) go to the version being released, committed.
+#   2. `vX.Y.Z` tags THAT commit — the one whose package.json says X.Y.Z.
+#
+# There is deliberately no third step moving package.json on to the next version. It used
+# to need one, because a nightly was named after package.json and a prerelease sorts BELOW
+# the release of the same version — leave package.json at 0.1.0 after shipping v0.1.0 and
+# every nightly is `0.1.0-nightly.…`, older than the 0.1.0 people already have, so the
+# in-app updater offers nightly users a downgrade it will not install and the channel looks
+# frozen. Naming the next version by hand fixed that and introduced a worse mistake: aim
+# too high (bump to 1.0.0, then ship 0.9.0) and nightly users are stranded until that
+# version finally arrives.
+#
+# `scripts/next-version.mjs` removes the guess. A nightly is a patch bump of the newest
+# release tag, which can never sort above whatever is released next, so package.json is
+# free to mean something true instead: the version that was last released. It changes here
+# and nowhere else.
+#
+# Everything is checked before anything is written: this runs the same lint, tests and
+# build the Build workflow does, because a tag that points at a failing commit has to be
+# deleted by hand, while a workflow that stops before tagging costs nothing.
+#
+# Why Build is dispatched rather than left to the tag push: a push made with the
+# repository's own GITHUB_TOKEN does not start another workflow run (GitHub's recursion
+# guard), so the `v*` trigger in build.yml would never fire for a tag this workflow pushed.
+# `workflow_dispatch` through the API is the documented exception, and dispatching Build
+# *on the tag ref* puts it in exactly the state the tag push would have: `github.ref` is
+# `refs/tags/vX.Y.Z`, so its channel job picks `stable`. (With a PAT in a secret the tag
+# push would trigger it directly; this needs no secret.)
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.3 or 1.0. Blank promotes the line the nightlies are already building (a patch bump of the newest tag)."
+        type: string
+        required: false
+      dry_run:
+        description: "Do everything except push and dispatch."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  # Dispatching build.yml.
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut ${{ inputs.version || 'the current nightly line' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse anywhere but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases are cut from main; this ran on ${GITHUB_REF#refs/heads/}."
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Work out the versions
+        id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Blank means "release the line the nightlies have been building" — the same
+          # number build.yml has been stamping into them, so what people have been testing
+          # is what ships. Anything else (0.2.0, 1.0.0) is typed in.
+          version="${{ inputs.version }}"
+          version="${version:-$(node scripts/next-version.mjs)}"
+          version="${version#v}"
+          # "0.3" and "1" are how people say it; semver wants all three parts. Only the
+          # bare numeric forms are padded, so "1.0.0-beta.1" is left exactly as typed.
+          if [[ "$version" =~ ^[0-9]+$ ]]; then version="$version.0.0"
+          elif [[ "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then version="$version.0"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            echo "::error::\"$version\" is not a version number."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "::error::v$version already exists. Pick another version, or delete the tag first."
+            exit 1
+          fi
+          # A release has to be newer than the last one. Going backwards would offer nobody
+          # an update, and would still take over the /releases/latest redirect the download
+          # buttons use, since GitHub calls the most recently published release the latest.
+          # `sort -V` rather than semver: node_modules is not installed yet at this point.
+          previous=$(node scripts/next-version.mjs --tag || true)
+          if [[ -n "$previous" ]]; then
+            newest=$(printf '%s\n%s\n' "${previous#v}" "$version" | sort -V | tail -1)
+            if [[ "$newest" != "$version" ]]; then
+              echo "::error::v$version is not newer than the last release, $previous."
+              exit 1
+            fi
+          fi
+          echo "Releasing v$version${previous:+, after $previous}."
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+
+      # Everything the Build workflow would do, before a tag exists to clean up.
+      - run: npm ci
+      - run: npm version --no-git-tag-version --allow-same-version "${{ steps.v.outputs.version }}"
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          SCMJS_BASE: /
+
+      - name: Commit and tag
+        id: tag
+        shell: bash
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # The release commit and the tag on it. `version` changes from the last release to
+          # this one — nothing else in the tree moves. Before the very first release there is
+          # nothing to commit (package.json already says it) and an empty commit would say
+          # nothing the tag does not, so the tag goes on the commit that is already there.
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "package.json already says $VERSION; tagging the commit that is there."
+          else
+            git commit -m "Release v$VERSION"
+          fi
+          git tag -a "v$VERSION" -m "scmJS $VERSION"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          if [[ "$DRY" == "true" ]]; then
+            echo "::notice::Dry run — nothing pushed."
+            git --no-pager log --oneline -2
+            git --no-pager show --stat --oneline HEAD | tail -n +2
+            exit 0
+          fi
+          # The tag first: it must exist before Build is dispatched on it, and if the branch
+          # push is refused (a protected main) the release is still tagged and buildable.
+          git push origin "refs/tags/v$VERSION"
+          git push origin HEAD:main
+
+      - name: Build the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --ref "v${{ steps.v.outputs.version }}"
+
+      - name: Redeploy Pages from main
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The two commits above were pushed with GITHUB_TOKEN, so they started no run of
+        # their own and the hosted editor would otherwise sit on the previous commit.
+        run: gh workflow run build.yml --ref main
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### scmJS ${{ steps.v.outputs.version }}"
+            echo
+            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              echo "Dry run — nothing was pushed."
+            else
+              echo "- Tagged \`v${{ steps.v.outputs.version }}\` at \`${{ steps.tag.outputs.sha }}\`"
+              echo "- Nightlies from here are \`$(node scripts/next-version.mjs)-nightly.…\`"
+              echo "- Build dispatched on the tag; the release appears when it finishes"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -360,6 +360,19 @@
 .toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .toast-title { font-weight: 600; }
 .toast-detail { color: var(--text-dim); overflow-wrap: anywhere; }
+/* The one button a toast may carry — the update check's "Download". */
+.toast-action {
+  flex: none;
+  align-self: center;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+.toast-action:hover { background: var(--bg-4); border-color: var(--border-strong, var(--border)); }
 .toast-close {
   flex: none;
   display: inline-flex;

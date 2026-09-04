@@ -18,9 +18,12 @@ Three ways to run it:
 - **In the browser.** Every push to `main` deploys the editor to GitHub Pages. It asks
   for StarCraft's graphics on first use and can fetch them from Blizzard in one click.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
-  macOS and Linux, and a Windows zip to unpack and run without installing (`latest`
-  follows `main`; the numbered releases are the tagged versions). On first start the app looks for a StarCraft installation and extracts
-  what it needs; two archives dropped next to the app are found too.
+  macOS and Linux, and a Windows zip to unpack and run without installing (the numbered
+  releases are the tagged versions; `nightly` is one rolling prerelease built from `main`).
+  On first start the app looks for a StarCraft installation and extracts
+  what it needs; two archives dropped next to the app are found too. It checks for a newer
+  version at startup and offers it in a notice — never installing on its own — and
+  **Help ▸ Check for Updates…** asks whenever you like.
 - **From source**, below.
 
 The editor draws terrain and units with graphics out of StarCraft's own archives.
@@ -106,6 +109,7 @@ The options confirmed in the dialog are what Ctrl+S reuses for that map from the
 | Change a map's tileset | Yes, in Map Properties: ERA changes and the terrain is laid again with the new tileset's terrain (tile numbers mean something else in every tileset; the doodads go with them, everything else stays), or keep the tile numbers as SCMDraft does. Clears the undo history. |
 | Open Recent | Yes. In Chrome, Edge and the desktop app a recent map reopens from disk (the file handle is kept in the browser; it asks once before reading). Firefox and Safari keep the names and reopen through File ▸ Open. |
 | Open a map from the file manager | Yes, in the desktop app: double-click, "Open with", or a path on the command line, into the running window. |
+| In-app updates | Yes, in the desktop app. It checks GitHub at startup (a preference, on by default) and offers what it finds in a notice; Help ▸ Check for Updates… asks on demand. Nothing downloads or installs without being asked. Windows, the Linux AppImage and the `.deb` apply the update themselves; macOS can see one but not install it until the app is code-signed, so it offers the download page instead. |
 | More than one map open at once | No. One map per tab or window; open the editor twice. |
 
 ### Terrain
@@ -715,7 +719,8 @@ Preferences (Ctrl+,) persist in the browser: the splash screen, whether to confi
 before replacing a modified map — the same tick decides whether closing the tab or
 quitting the desktop app asks about unsaved changes — defaults for new maps, whether
 water and units animate at startup and how fast each runs (0.25× to 4× the game's own
-speed), and Test Map's folder and launch tick. The grid,
+speed), Test Map's folder and launch tick, and — in the desktop app — whether to check
+for updates at startup and whether to follow the nightly builds. The grid,
 the location snap, the Units and Doodads palettes' placement options, which panels are
 shown and how wide they are, and the recent files are remembered too. Its Browser storage
 box (Application storage in the desktop app) lists everything the editor keeps, one row per

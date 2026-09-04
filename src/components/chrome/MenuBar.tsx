@@ -3,6 +3,7 @@ import { Menubar } from "radix-ui";
 import { Check, ChevronRight, Dot } from "lucide-react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import AppLogo from "../ui/AppLogo";
+import { isDesktop } from "../../editor/platform";
 import {
   activeLayerAtom,
   brushSizeAtom,
@@ -32,7 +33,7 @@ import { clearRecents, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 
-const REPO_URL = "https://github.com/jeany55/scm-js";
+const REPO_URL = "https://github.com/scm-js/scm-js";
 
 /* ── Menu model ─────────────────────────────────────────── */
 
@@ -390,6 +391,8 @@ function useMenus(): Menu[] {
       items: [
         dlg("Keyboard Shortcuts…", "shortcuts", "F1"),
         dlg("Game Data…", "gameData"),
+        // Desktop only: the web build has nothing to update.
+        ...(isDesktop() ? [dlg("Check for Updates…", "update")] : []),
         link("Documentation", `${REPO_URL}#readme`),
         link("Report an Issue…", `${REPO_URL}/issues/new`),
         sep,

@@ -22,3 +22,6 @@ fixtures/
 
 # Plugin API declarations (regenerate with `npm run build:plugin-types`)
 /plugin-api/
+
+# Default plugins vendored into the desktop build (regenerate with `npm run vendor:plugins`)
+/plugins/

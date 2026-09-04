@@ -30,9 +30,9 @@ npm run build:desktop   # web build in desktop mode + main bundle + electron-bui
 npm run desktop         # bundle the main process and run Electron against dist/
 ```
 
-`scripts/build-desktop.mjs` is those three steps, and its arguments say what the packaging
-step builds — with none it is this OS and the targets `electron-builder.yml` lists for it,
-which is what CI runs:
+`scripts/build-desktop.mjs` is those steps, and its arguments say what the packaging step
+builds — with none it is this OS and the targets `electron-builder.yml` lists for it, which
+is what CI runs:
 
 ```sh
 npm run build:desktop -- win                 # Windows: nsis + zip
@@ -41,7 +41,28 @@ npm run build:desktop -- linux AppImage x64 arm64
 npm run build:desktop -- mac dmg arm64
 npm run build:desktop -- --dir               # unpacked app, no installer — the fast check
 npm run build:desktop -- win --skip-web      # repackage the dist/ already on disk
+npm run build:desktop -- --skip-plugins      # leave plugins/ alone (no vendoring fetch)
 ```
+
+Before the bundle it runs `scripts/vendor-plugins.mjs` — as `npm run dev` and
+`npm run build` do, in their `predev` / `prebuild` hooks — which writes each default
+plugin's own source, at the tag `src/plugins/defaults.ts` pins, into the gitignored
+`plugins/`, where `src/plugins/builtin.ts` globs it into the build. See
+[docs/plugins.md](plugins.md) for why: the short version is 890 KB gzipped off a first
+visit, and an installed app or a container that starts with all five plugins and no
+network.
+
+It only fetches what is not already there at the pinned version, so the first build after
+a clone needs a connection and every one after it is offline and instant. `--force`
+re-fetches, `--clean` removes the directory, `--list` prints the specs, and
+`SCMJS_SKIP_VENDOR=1` skips the step for a build with no network and no copy yet — that
+bundle then fetches its defaults at startup, the way the editor did before. `GITHUB_TOKEN`,
+if set, keeps the one file-list request per plugin off the anonymous rate limit; CI sets it.
+`--skip-plugins` is the same skip for `build:desktop` alone.
+
+A directory in `plugins/` carries a `vendored.json` naming the spec it came from, which is
+how the script knows which copies are its own: those it brings up to date or removes when
+they stop being defaults, and one you put there by hand it leaves alone.
 
 Platforms are `win` / `mac` / `linux`, architectures `x64` / `ia32` / `arm64` / `armv7l` /
 `universal`, and any electron-builder target name (`nsis`, `dmg`, `zip`,

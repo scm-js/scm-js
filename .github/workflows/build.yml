@@ -177,12 +177,24 @@ jobs:
       - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
       - run: npm run lint
       - run: npm test
+      # The default plugins are compiled into the bundle rather than fetched at startup
+      # (`scripts/vendor-plugins.mjs`, run by `prebuild`), which is worth 890 KB gzipped
+      # off a first visit but takes the remote loading path off the path everyone walks.
+      # This is what still walks it: one plugin fetched, transpiled and imported for real.
+      # It needs GitHub, which the build below needs anyway, so it adds no new dependency.
+      - name: Test (network)
+        run: npx vitest run tests/plugin-network.test.ts
+        env:
+          SCMJS_NETWORK_TESTS: "1"
       # The bundle that goes on the release: served from the root of wherever it is put.
       - name: Build (release zip)
         if: needs.channel.outputs.channel != 'ci'
         run: npm run build
         env:
           SCMJS_BASE: /
+          # For `prebuild`'s vendoring step: one file-list request per plugin, off the
+          # anonymous rate limit runners share.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Zip
         if: needs.channel.outputs.channel != 'ci'
         run: cd dist && zip -qr ../scmJS-web.zip .
@@ -198,6 +210,7 @@ jobs:
         run: npm run build
         env:
           SCMJS_BASE: ${{ vars.PAGES_BASE || format('/{0}/', github.event.repository.name) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-pages-artifact@v3
         if: needs.channel.outputs.channel == 'ci'
         with:
@@ -234,9 +247,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      # The first step of this is `scripts/vendor-plugins.mjs`, which fetches the default
+      # plugins at the versions `src/plugins/defaults.ts` pins and writes them into
+      # `plugins/` for the bundler: an installed application should not need the network
+      # to have Repair check the map it just opened. The token is only to keep the one
+      # file-list request per plugin off the anonymous rate limit runners share.
       - run: npm run build:desktop
         env:
           SCMJS_BASE: /
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # No signing identity yet; without this electron-builder's discovery fails the macOS build.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - uses: actions/upload-artifact@v4

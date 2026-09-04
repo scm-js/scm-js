@@ -536,15 +536,62 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-`github:scm-js/plugin-scm-scx`, `github:scm-js/plugin-image-to-terrain`, `github:scm-js/plugin-repair`
-`github:scm-js/plugin-walkability` and `github:scm-js/plugin-paint`, all on; Melee Wizard,
+`github:scm-js/plugin-scm-scx@v1.0.0`, `github:scm-js/plugin-image-to-terrain@v1.0.0`,
+`github:scm-js/plugin-repair@v1.0.0`, `github:scm-js/plugin-walkability@v1.1.0` and
+`github:scm-js/plugin-paint@v1.0.0`, all on; Melee Wizard,
 Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
-an ordinary spec fetched over the network on every start; the Manage Plugins row badges it `default`
+an ordinary spec; the Manage Plugins row badges it `default`
 and hides its Remove button (what the user pastes is canonicalised through `canonicalSpec(parseSpec(...))`,
 so pasting the default's own github.com URL is recognised as it rather than duplicating it).
+Every default names a **tag, not a branch**, and that one change is what the rest hangs off.
+An unpinned default meant a push to a plugin repository changed every editor already in use
+and no released version could be rebuilt as it shipped; moving one forward is now a commit
+in `defaults.ts` that ships with the next release. `isPinned` therefore counts any explicit
+ref that is not a branch name (`MOVING_REFS`) and `unpin` strips any ref, and identity moved
+off the spec string: `loader.ts#pluginIdentity` is the repository whatever version follows
+it, and `defaults.ts#pluginKey` is that with a *bundled* copy answering for the spec it was
+built from. `effectiveInstalls` folds a stored row onto the default with the same key (an
+older editor's unpinned spec, or the desktop's `builtin:` copy) instead of listing — and
+running — the plugin twice; the default's own spec wins unless the stored one `isPinned`,
+which is a version the user chose through the Update button. Browse's `installOf` matches on
+the same key.
+`scripts/vendor-plugins.mjs` (`npm run vendor:plugins`, run by **`predev` / `prebuild`**
+and again by `scripts/build-desktop.mjs` unless `--skip-plugins`) is the other half: it
+reads the pinned specs straight out of `defaults.ts` with a regex (importing it would pull
+in `builtin.ts`'s Vite-only `import.meta.glob`), fetches each plugin's runtime source at
+that tag — the manifest, the icon, every `.ts`/`.js` outside `plugin-api/`, `tests/`,
+`.github/`, plus the LICENSE; `plugin-api/` is imported with `import type` and erased
+before the bundler sees it — and writes it into the gitignored `plugins/<name>/` with a
+`vendored.json` naming the spec, which `builtin.ts` reads into `BUILTIN_REPLACES` and the
+script itself reads to know which copies are its own (it brings those up to date and
+removes ones that stopped being defaults; a hand-made directory is left alone). A copy
+already at the pinned spec is skipped, so only the first build after a clone touches the
+network and `SCMJS_SKIP_VENDOR=1` opts out entirely (that bundle fetches its defaults at
+startup, as before).
+**Every** build bundles them, not just the desktop. The reason is the cold path: a `.ts`
+plugin must be transpiled before the browser will import it, one transpile starts
+`transpile.worker.ts`, and TypeScript is *inlined into that worker* — so five remote `.ts`
+defaults dragged 3.4 MB (975 KB gzipped) of compiler onto a first visit. Measured on the
+production build with a logging static server, a cold visit went from 1235 KB gzipped / 20
+cross-origin requests to 344 KB / none. It is all or nothing: one remote `.ts` default
+starts the worker and costs the lot. The rest follows — an installed app and a container on
+an intranet start with all five, and nothing third-party is fetched at startup.
+What it costs is that the remote loading path is no longer walked by simply opening the
+editor. `tests/plugin-network.test.ts` is the deliberate replacement (real fetch, transpile
+and `import()` through `data:` URLs in Node; `describe.skipIf` unless
+`SCMJS_NETWORK_TESTS=1`), run by build.yml's Web job and release.yml's pre-flight — neither
+of which gains a dependency, since the build already needs GitHub to vendor.
+`tests/vendor-plugins.test.ts` pins the parse, the file filter and the rule that no default
+may be unpinned.
+A failed activation is no longer silent: `plugins/failures.ts` is pure (`pluginFailures`
+over the runtimes, `failureToast` with `ttl: 0` so it outlives the splash and a *Plugins…*
+button that opens Manage Plugins) and `usePlugins` awaits the pass and reports once per spec
+per session. For that to work `activatePlugin` returns the load **in flight** for a spec that
+is already loading rather than a resolved promise — React's double mount otherwise had the
+second pass reading the runtimes before a single fetch had finished.
 Adding a plugin goes through a confirmation first: `PluginsDialog`'s Add canonicalises
 the spec (`loader.ts#canonicalSpec`), runs `host.ts#inspectPlugin` → `loader.ts#previewPlugin` —
 `resolveCommit` (GitHub's commits API, one request, no token) then

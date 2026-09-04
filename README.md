@@ -33,7 +33,7 @@ Four ways to run it:
 
   It is nginx serving the release's own web bundle, so it behaves like the hosted editor:
   everything lives in the browser you open it from, and it asks for the graphics on first
-  use. `:latest` is the newest numbered release (never a nightly); `:0.2.1`, `:0.2` and
+  use. `:latest` is the newest numbered release (never a nightly); `:0.1.0`, `:0.1` and
   `:0` pin as far as you like.
 - **From source**, below.
 
@@ -552,12 +552,20 @@ removing it; Reload fetches one again from its address and replaces any stored c
 [docs/plugins.md](docs/plugins.md) has the API.
 
 Plugins marked *default* are the ones the editor lists from the start. They are ordinary
-plugins loaded from their own repositories over the network — nothing about them is built
-in — so they can be switched on and off but not removed from the list, and they need a
-working connection on the first load of a session. scmscx.com, Terrain from Image, Repair,
-Walkability and Paint are the defaults, and all five start on. Melee Wizard, Trigger Script
-and Section Explorer are not in that list: install them from Plugins ▸ Browse Plugins… like
-any other.
+plugins from their own repositories, each **pinned to the version this release was tested
+with** — the badge on the row says *pinned* — so a new push by an author does not change
+the editor under you, and every copy of a given version runs the same code. Moving one
+forward is part of the next release. They can be switched on and off but not removed from
+the list. scmscx.com, Terrain from Image, Repair, Walkability and Paint are the defaults,
+and all five start on. Melee Wizard, Trigger Script and Section Explorer are not in that
+list: install them from Plugins ▸ Browse Plugins… like any other.
+
+All five are **built into the editor** — the same pinned versions, taken from the same
+repositories when the editor was built — so they need no connection to start and nothing
+is fetched from anywhere else when you open the page. That is what makes the desktop app
+work offline and the container image work on a network that cannot reach GitHub. Plugins
+you add yourself are fetched from their addresses as before, and if one does not load, a
+notice says so rather than leaving you to find a menu item missing.
 
 **Terrain from Image**
 ([scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain)) is

@@ -81,9 +81,42 @@ exceptions to it.
 Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
 activated at startup by `usePlugins`. The *default* plugins (`src/plugins/defaults.ts`)
 are merged over that list, so they are always shown and can be turned on or off but not
-removed; each says whether it starts on (scmscx.com, Terrain from Image, Repair and
-Walkability are the defaults today, and all four start on). Being a default buys a plugin
-nothing else — it is fetched and loaded by the steps above like any other.
+removed; each says whether it starts on (scmscx.com, Terrain from Image, Repair,
+Walkability and Paint are the defaults today, and all five start on). Being a default buys
+a plugin nothing else — it is fetched and loaded by the steps above like any other.
+
+Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.0`. A moving
+spec meant a push to a plugin repository changed every editor already in use and no
+released version could be rebuilt as it shipped, so moving a default forward is now a
+commit in `defaults.ts` that goes out with the next release.
+
+Two things follow from the pin. Every build runs `scripts/vendor-plugins.mjs` first
+(`prebuild`, and `scripts/build-desktop.mjs` for its own bundle), which writes each
+default's own source at that tag into `plugins/` for `builtin.ts` to glob, so the defaults
+are **compiled in rather than fetched** — the same code, since the version is fixed. It is
+worth more than it sounds: a `.ts` plugin has to be transpiled before the browser will
+import it, one transpile starts the compile worker, and TypeScript is inlined into that
+worker, so five remote `.ts` defaults put 3.4 MB (975 KB gzipped) of compiler on the cold
+path. Measured on the production build, a first visit went from 1235 KB gzipped to 344 KB.
+It is all or nothing — one remote `.ts` default starts the worker and costs the lot — and
+the fetching path is still there for a build that skips the vendoring
+(`SCMJS_SKIP_VENDOR=1`) and for every plugin the user adds.
+
+And a plugin is now identified by `pluginKey(spec)` (the repository, whatever version
+follows it, with a bundled copy answering for the spec it was built from) rather than by
+the spec string, which is what keeps `effectiveInstalls` from listing — and running — the
+same plugin twice across those forms.
+
+Compiling the defaults in costs the one thing worth naming: the remote loading path used
+to be exercised by simply opening the editor, on every machine, every day.
+`tests/plugin-network.test.ts` is the deliberate replacement — a real plugin fetched,
+transpiled and imported over the network — off unless `SCMJS_NETWORK_TESTS=1`, and run by
+CI on the job that vendors and by the release pre-flight.
+
+An activation that fails is no longer silent: `plugins/failures.ts` turns whatever the pass
+left in `pluginRuntimesAtom` into one toast naming what did not load, with a button to
+Manage Plugins. `activatePlugin` returns the load in flight for a spec that is already
+loading, so a caller can await the pass and see the result.
 
 ### Browsing a registry
 

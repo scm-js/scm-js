@@ -457,17 +457,47 @@ export function canonicalSpec(source: PluginSource): string {
   return source.kind === "builtin" ? `builtin:${source.name}` : source.display;
 }
 
-/** True when a spec names an exact commit, so what it loads cannot change under it. */
-export const isPinned = (spec: string): boolean => /^github:[^/@\s]+\/[^/@\s]+@[0-9a-f]{40}(?:\/|$)/i.test(spec);
+/** A GitHub spec taken apart: owner, repo, the ref it names (if any) and the sub-directory. */
+const GITHUB_SPEC = /^github:([^/@\s]+)\/([^/@\s]+)(?:@([^/\s]+))?(?:\/(.*))?$/i;
+
+/** Refs that are branches by convention: naming one of them is not pinning. */
+const MOVING_REFS = new Set(["head", "main", "master", "trunk", "default"]);
 
 /**
- * A pinned spec with its commit taken off, so it can be previewed again and pinned to
+ * True when a spec names a version rather than a moving branch — an exact commit
+ * (`@0123abc…`) or a tag (`@v1.2.0`). Either way what it loads does not change under the
+ * user on its own, which is the only thing the badge and the Update button mean by
+ * *pinned*; a tag someone moves is a promise broken by its author, not by the editor.
+ */
+export const isPinned = (spec: string): boolean => {
+  const m = GITHUB_SPEC.exec(spec.trim());
+  return m !== null && m[3] !== undefined && !MOVING_REFS.has(m[3].toLowerCase());
+};
+
+/**
+ * A pinned spec with its ref taken off, so it can be previewed again and pinned to
  * whatever the branch holds now. This is what the Update button on a pinned row asks
  * about; anything else comes back unchanged.
  */
 export function unpin(spec: string): string {
-  const m = /^github:([^/@\s]+)\/([^/@\s]+)@[0-9a-f]{40}(?:\/(.*))?$/i.exec(spec.trim());
-  return m ? `github:${m[1]}/${m[2]}${m[3] ? `/${m[3]}` : ""}` : spec;
+  const m = GITHUB_SPEC.exec(spec.trim());
+  return m ? `github:${m[1]}/${m[2]}${m[4] ? `/${m[4]}` : ""}` : spec;
+}
+
+/**
+ * What makes two specs *the same plugin* even when they name different versions of it.
+ *
+ * `github:scm-js/plugin-paint`, `…@v1.0.0` and `…@0123abc…` are one plugin at three
+ * versions, and every list that has to answer "is this one already here?" means the
+ * plugin, not the version: the installed list folding a stored row onto the default it
+ * belongs to (`effectiveInstalls`), and Browse deciding between *Install* and *Manage*.
+ * Anything that is not a GitHub repository has no version to strip, so it is its own
+ * identity, and case is ignored because GitHub ignores it in owner and repository names.
+ */
+export function pluginIdentity(spec: string): string {
+  const bare = unpin(spec.trim());
+  // Only the GitHub form is case-folded: a URL's path is the server's business.
+  return GITHUB_SPEC.test(bare) ? bare.toLowerCase() : bare;
 }
 
 /**

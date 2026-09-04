@@ -1,8 +1,13 @@
 /**
- * `npm run build:desktop [-- <platform|arch|target|option>…]`: the three steps a desktop
- * build is — the web bundle in desktop mode, the main process bundled by
- * `desktop/vite.config.ts`, and electron-builder over the two — with
- * the packaging step's platform, architecture and targets picked on the command line.
+ * `npm run build:desktop [-- <platform|arch|target|option>…]`: the steps a desktop build
+ * is — the default plugins vendored into `plugins/`, the web bundle in desktop mode, the
+ * main process bundled by `desktop/vite.config.ts`, and electron-builder over the two —
+ * with the packaging step's platform, architecture and targets picked on the command line.
+ *
+ * The vendoring is what `npm run build` does in its `prebuild` hook too; it is repeated
+ * here because this script runs tsc and vite directly rather than through that script.
+ * It only fetches what is not already there at the pinned version, so after the first
+ * run it is offline and instant; `--skip-plugins` leaves `plugins/` exactly as it is.
  *
  * With no arguments it is what it always was: this OS, the targets `electron-builder.yml`
  * lists for it, `--publish never`.
@@ -50,6 +55,7 @@ const usage = `usage: npm run build:desktop -- [platform…] [arch…] [target�
   --dir              unpacked app only, no installer
   --skip-web         reuse the existing dist/ (skip tsc + vite)
   --skip-main        reuse the existing desktop/dist/
+  --skip-plugins     leave plugins/ as it is (skip vendoring the defaults)
   --publish <mode>   electron-builder's --publish (default: never)
   --                 pass everything after it to electron-builder verbatim`;
 
@@ -60,6 +66,7 @@ const passthrough = [];
 let dir = false;
 let skipWeb = false;
 let skipMain = false;
+let skipPlugins = false;
 let publish = "never";
 
 const argv = process.argv.slice(2);
@@ -70,6 +77,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (arg === "--dir" || arg === "-d") dir = true;
   else if (arg === "--skip-web") skipWeb = true;
   else if (arg === "--skip-main") skipMain = true;
+  else if (arg === "--skip-plugins") skipPlugins = true;
   else if (arg === "--publish") publish = argv[++i] ?? "never";
   else if (arg.startsWith("--publish=")) publish = arg.slice("--publish=".length);
   else {
@@ -108,6 +116,11 @@ function run(label, entry, args) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
+
+// Before the bundle: `builtin.ts` globs `plugins/` at build time, so this has to land
+// first. It brings the directory to exactly the pinned defaults — fetching only what is
+// missing, and dropping a copy that stopped being one — so no stale plugin rides along.
+if (!skipPlugins && !skipWeb) run("default plugins", "scripts/vendor-plugins.mjs", []);
 
 if (!skipWeb) {
   // What `npm run build` is, plus the asset check its prebuild hook runs.

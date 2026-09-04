@@ -10,9 +10,10 @@
  * The user can turn a default off (the `enabled: false` is persisted) but not remove
  * it from the list, which is why `effectiveInstalls` merges these in rather than
  * seeding the stored list once. Anything bundled into the build (`builtin.ts`) is a
- * default too; today nothing is.
+ * default too, and stands in for the remote spec it was built from — see `pluginKey`.
  */
-import { BUILTIN_PLUGINS } from "./builtin";
+import { BUILTIN_PLUGINS, BUILTIN_REPLACES } from "./builtin";
+import { pluginIdentity } from "./loader";
 
 /** A default: its spec, and whether it runs before the user has said anything. */
 export interface DefaultPlugin {
@@ -21,16 +22,36 @@ export interface DefaultPlugin {
 }
 
 /**
- * Plugins loaded from their own repositories, pinned to no ref so Reload takes the latest.
- * One that starts off is still listed (badged *default*, no Remove button); ticking it on
- * is remembered like any other change.
+ * Plugins loaded from their own repositories, **pinned to the version this editor was
+ * released with**.
+ *
+ * They used to name no ref, which meant a push to any of these repositories changed
+ * every copy of the editor already in use, and no released version could be rebuilt to
+ * behave as it did when it shipped. A tag is what makes a release a release: the editor
+ * loads the code this version was tested against, and moving a default forward is a
+ * commit here that goes out with the next version, reviewable like any other change.
+ *
+ * Keep the tags real ones from the plugin's own repository — `resolvePlugin` fetches
+ * `raw.githubusercontent.com/<owner>/<repo>/<ref>/plugin.json` verbatim, so a ref that
+ * does not exist is a plugin that does not load, and `tests/plugin-network.test.ts` reads
+ * every one of them over the network for exactly that reason.
+ *
+ * Every build compiles these exact versions in rather than fetching them
+ * (`scripts/vendor-plugins.mjs`, run by `prebuild` — 890 KB gzipped off a first visit,
+ * and no third-party request at startup), which is only sound because they are pinned:
+ * bundled and fetched are then the same code. A build that skipped the vendoring
+ * (`SCMJS_SKIP_VENDOR=1`, or a fork that does not run it) falls back to fetching them at
+ * startup, which still works and is the path these specs describe.
+ *
+ * One that starts off is still listed (badged *default*, no Remove button); ticking it
+ * on is remembered like any other change.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
-  { spec: "github:scm-js/plugin-scm-scx", enabled: true },
-  { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
-  { spec: "github:scm-js/plugin-repair", enabled: true },
-  { spec: "github:scm-js/plugin-walkability", enabled: true },
-  { spec: "github:scm-js/plugin-paint", enabled: true },
+  { spec: "github:scm-js/plugin-scm-scx@v1.0.0", enabled: true },
+  { spec: "github:scm-js/plugin-image-to-terrain@v1.0.0", enabled: true },
+  { spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true },
+  { spec: "github:scm-js/plugin-walkability@v1.1.0", enabled: true },
+  { spec: "github:scm-js/plugin-paint@v1.0.0", enabled: true },
 ];
 
 /**
@@ -44,11 +65,43 @@ export const DEFAULT_REGISTRIES: readonly string[] = [
   "https://raw.githubusercontent.com/scm-js/registry/main/index.json",
 ];
 
-/** Every default: the built-ins (on), then the remotes. */
-export const defaultPlugins = (): DefaultPlugin[] => [
-  ...Object.keys(BUILTIN_PLUGINS).map((name) => ({ spec: `builtin:${name}`, enabled: true })),
-  ...DEFAULT_REMOTE_PLUGINS,
-];
+/**
+ * What makes two specs the same plugin *here*: `pluginIdentity` (the repository behind
+ * any version of it), with a bundled copy answering for the spec it was built from.
+ *
+ * It is the answer to every "is this one already here?" the editor asks — the installed
+ * list folding a stored row onto the default it belongs to, Browse choosing between
+ * *Install* and *Manage*, and the desktop's `builtin:repair` standing where the web
+ * build's `github:scm-js/plugin-repair@v1.0.0` stands, so neither build shows the same
+ * plugin twice.
+ */
+export function pluginKey(spec: string): string {
+  const builtin = /^builtin:([\w-]+)$/i.exec(spec.trim());
+  const replaced = builtin ? BUILTIN_REPLACES[builtin[1]] : undefined;
+  return pluginIdentity(replaced ?? spec);
+}
+
+/**
+ * Every default, in the order they are listed above.
+ *
+ * A bundled plugin takes the place of the remote default it was built from — same
+ * plugin, same version, no fetch — rather than appearing beside it, so the list reads
+ * the same and in the same order whether this build fetches its defaults (every web
+ * build) or has them compiled in (the desktop). Anything else in `BUILTIN_PLUGINS` is a
+ * plugin a fork put there and follows at the end.
+ */
+export const defaultPlugins = (): DefaultPlugin[] => {
+  const bundled = new Map(Object.keys(BUILTIN_PLUGINS).map((name) => [pluginKey(`builtin:${name}`), `builtin:${name}`]));
+  const out = DEFAULT_REMOTE_PLUGINS.map((d) => {
+    const spec = bundled.get(pluginKey(d.spec));
+    if (spec !== undefined) bundled.delete(pluginKey(d.spec));
+    // A bundled copy inherits the answer the remote default gave, so bundling a plugin
+    // never turns one on that was meant to start off.
+    return { spec: spec ?? d.spec, enabled: d.enabled };
+  });
+  for (const spec of bundled.values()) out.push({ spec, enabled: true });
+  return out;
+};
 
 /** The defaults' specs, for telling a default row from one the user added. */
 export const defaultPluginSpecs = (): string[] => defaultPlugins().map((d) => d.spec);

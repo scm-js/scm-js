@@ -158,9 +158,18 @@ jobs:
       - run: npm version --no-git-tag-version --allow-same-version "${{ steps.v.outputs.version }}"
       - run: npm run lint
       - run: npm test
+      # The remote plugin loader, over the real network — the check that replaced the one
+      # every session used to perform before the defaults were compiled in (build.yml).
+      - name: Test (network)
+        run: npx vitest run tests/plugin-network.test.ts
+        env:
+          SCMJS_NETWORK_TESTS: "1"
       - run: npm run build
         env:
           SCMJS_BASE: /
+          # `prebuild` vendors the pinned default plugins into the bundle; the token only
+          # keeps its one file-list request per plugin off the anonymous rate limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # The container image the Build workflow pushes to GHCR, built and actually served
       # here — before a tag exists — because `latest` in a registry is what someone's

@@ -7,7 +7,7 @@ import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
-import { defaultPlugins, defaultPluginSpecs } from "../../plugins/defaults";
+import { defaultPlugins, defaultPluginSpecs, pluginKey } from "../../plugins/defaults";
 import {
   addRegistry, entryIcon, groupByInstall, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry,
   type InstallState, type Registry, type RegistryEntry,
@@ -560,9 +560,11 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   // usually free and the pane is painted from storage.
   useEffect(() => { void loadRegistries(store); }, [store]);
 
-  // A pinned install carries a commit the registry's spec does not, so both forms are
-  // matched unpinned — otherwise updating a plugin would make it look uninstalled.
-  const installOf = (spec: string) => effectiveInstalls(installed, defaultPlugins()).find((p) => unpin(p.spec) === spec);
+  // A registry names a plugin, an install names a version of it — a pinned commit, a
+  // tag, the bundled copy — so the two are matched on `pluginKey`. Comparing the specs
+  // would make every pinned or bundled plugin look uninstalled and offer Install for
+  // something already running.
+  const installOf = (spec: string) => effectiveInstalls(installed, defaultPlugins()).find((p) => pluginKey(p.spec) === pluginKey(spec));
   const state = (spec: string): InstallState => {
     const found = installOf(spec);
     return !found ? "new" : found.enabled ? "installed" : "disabled";
@@ -848,7 +850,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
       <div className="listbox plugin-list" role="list" ref={listRef}>
         {list.map((p) => {
           const rt = runtimes[p.spec];
-          const isDefault = defaults.includes(p.spec);
+          const isDefault = defaults.some((d) => pluginKey(d) === pluginKey(p.spec));
           const pinnedSpec = isPinned(p.spec);
           const copy = snapshots[p.spec];
           const builtinPlugin = p.spec.startsWith("builtin:");

@@ -29,8 +29,8 @@ import {
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
-  addressesOf, blankLiterals, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, previewPlugin, resolveIcon,
-  resolvePlugin, unpin, validateManifest, type LoaderDeps,
+  addressesOf, blankLiterals, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, pluginIdentity, previewPlugin,
+  resolveIcon, resolvePlugin, unpin, validateManifest, type LoaderDeps,
 } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
@@ -38,7 +38,8 @@ import {
   reloadPlugin, resolveActivate, runTransaction, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
-import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs } from "../src/plugins/defaults";
+import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey } from "../src/plugins/defaults";
+import { failureToast, pluginFailures } from "../src/plugins/failures";
 import {
   addRegistry, cachedRegistries, entryIcon, groupByInstall, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
   RegistryError, removeRegistry, searchRegistry, type InstallState, type RegistryEntry,
@@ -860,33 +861,113 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Terrain from Image, Repair, Walkability and Paint on, as remote defaults", () => {
+  it("ships scmscx.com, Terrain from Image, Repair, Walkability and Paint on, pinned to a version", () => {
     expect(DEFAULT_REMOTE_PLUGINS).toEqual([
-      { spec: "github:scm-js/plugin-scm-scx", enabled: true },
-      { spec: "github:scm-js/plugin-image-to-terrain", enabled: true },
-      { spec: "github:scm-js/plugin-repair", enabled: true },
-      { spec: "github:scm-js/plugin-walkability", enabled: true },
-      { spec: "github:scm-js/plugin-paint", enabled: true },
+      { spec: "github:scm-js/plugin-scm-scx@v1.0.0", enabled: true },
+      { spec: "github:scm-js/plugin-image-to-terrain@v1.0.0", enabled: true },
+      { spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true },
+      { spec: "github:scm-js/plugin-walkability@v1.1.0", enabled: true },
+      { spec: "github:scm-js/plugin-paint@v1.0.0", enabled: true },
     ]);
-    // A default is an ordinary spec: it resolves to a fetchable manifest like any other.
+    // The point of the pin: a released editor loads the code it was tested against, and
+    // the desktop build can compile that exact version in. A default on a moving branch
+    // would change under everyone who already has the editor.
+    for (const d of DEFAULT_REMOTE_PLUGINS) expect(isPinned(d.spec)).toBe(true);
+    // A default is an ordinary spec: it resolves to a fetchable manifest like any other,
+    // at the tag it names.
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
-      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/HEAD/plugin.json",
+      manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/v1.0.0/plugin.json",
     });
-    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/HEAD/plugin.json" });
-    expect(defaultPlugins()).toEqual(expect.arrayContaining([...DEFAULT_REMOTE_PLUGINS]));
+    expect(parseSpec(DEFAULT_REMOTE_PLUGINS[1].spec)).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-image-to-terrain/v1.0.0/plugin.json" });
+    // Whether this build bundled them (`scripts/vendor-plugins.mjs`, which the desktop
+    // build runs) or fetches them, every default is in the list exactly once and under
+    // the same identity — that is what stops a bundled copy appearing beside its remote.
+    expect(defaultPlugins().map((d) => pluginKey(d.spec))).toEqual(DEFAULT_REMOTE_PLUGINS.map((d) => pluginKey(d.spec)));
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
-    // A fresh editor runs Walkability with the rest.
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-walkability", enabled: true });
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-paint", enabled: true });
+    // A fresh editor runs all five, Walkability and Paint with the rest.
+    const fresh = effectiveInstalls([]).map((p) => pluginKey(p.spec));
+    expect(fresh).toContain("github:scm-js/plugin-walkability");
+    expect(fresh).toContain("github:scm-js/plugin-paint");
+    // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
+    expect(fresh).toContain("github:scm-js/plugin-scm-scx");
+    expect(effectiveInstalls([]).every((p) => p.enabled)).toBe(true);
     // Melee Wizard, Trigger Script and Section Explorer are not defaults: they are found and
     // installed through Browse Plugins.
-    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-melee-wizard");
-    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-trigger-script");
-    expect(defaultPluginSpecs()).not.toContain("github:scm-js/plugin-section-explorer");
-    // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
-    expect(effectiveInstalls([])).toContainEqual({ spec: "github:scm-js/plugin-scm-scx", enabled: true });
-    expect(parseSpec("github:scm-js/plugin-scm-scx")).toMatchObject({ manifestUrl: "https://raw.githubusercontent.com/scm-js/plugin-scm-scx/HEAD/plugin.json" });
+    for (const spec of ["plugin-melee-wizard", "plugin-trigger-script", "plugin-section-explorer"]) {
+      expect(defaultPluginSpecs().some((s) => s.includes(spec))).toBe(false);
+    }
+  });
+
+  it("folds a stored row onto the default it belongs to, whatever version either names", () => {
+    const defaults = [{ spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true }];
+    // The spec an older editor stored, before the defaults were pinned. Matching on the
+    // string would list Repair twice and run it twice — two dialogs on every map opened.
+    expect(effectiveInstalls([{ spec: "github:scm-js/plugin-repair", enabled: false }], defaults))
+      .toEqual([{ spec: "github:scm-js/plugin-repair@v1.0.0", enabled: false }]);
+    // A version the user pinned deliberately (the Update button) is kept: the default's
+    // spec wins only over one that was never a choice.
+    const sha = "a".repeat(40);
+    expect(effectiveInstalls([{ spec: `github:scm-js/plugin-repair@${sha}`, enabled: true }], defaults))
+      .toEqual([{ spec: `github:scm-js/plugin-repair@${sha}`, enabled: true }]);
+    // A bundled copy stands in the same place, and the stored row folds onto it too.
+    expect(pluginKey("github:scm-js/plugin-repair@v1.0.0")).toBe("github:scm-js/plugin-repair");
+    // Something else entirely still follows the defaults, in the order it was added.
+    expect(effectiveInstalls([{ spec: "https://x/p/", enabled: true }], defaults))
+      .toEqual([{ spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true }, { spec: "https://x/p/", enabled: true }]);
+  });
+
+  it("says so when a plugin nobody asked for does not load", () => {
+    const rt = (spec: string, error: string, name?: string) => ({
+      [spec]: { spec, status: "error" as const, manifest: name ? ({ name } as never) : null, icon: null, error, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } },
+    });
+    const offline = "Failed to fetch.";
+    const wanted = [
+      { spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true },
+      { spec: "github:scm-js/plugin-paint@v1.0.0", enabled: true },
+      { spec: "github:scm-js/plugin-off@v1", enabled: false },
+    ];
+    const runtimes = { ...rt(wanted[0].spec, offline), ...rt(wanted[1].spec, offline), ...rt(wanted[2].spec, offline) };
+    const failures = pluginFailures(wanted, runtimes);
+    // The one that is switched off did not fail; it was never tried.
+    expect(failures.map((f) => f.name)).toEqual(["repair", "paint"]);
+    let opened = 0;
+    const toast = failureToast(failures, () => { opened++; });
+    expect(toast).toMatchObject({ kind: "warn", title: "repair and paint did not load", ttl: 0 });
+    // The message, and where they came from — which is the part that says what to do.
+    expect(toast!.detail).toBe("repair: Failed to fetch. They are fetched from their repositories when the editor starts. Everything else in the editor works.");
+    toast!.action!.run();
+    expect(opened).toBe(1);
+    // Beyond a pair they are counted: five failures offline is one problem, not five.
+    const many = ["a", "b", "c", "d", "e"].map((n) => ({ spec: `github:o/plugin-${n}@v1`, enabled: true }));
+    const manyRt = Object.assign({}, ...many.map((p) => rt(p.spec, offline)));
+    expect(failureToast(pluginFailures(many, manyRt), () => {})!.title).toBe("5 plugins did not load");
+    // A manifest that was read names the plugin properly; so does one an earlier session cached.
+    expect(pluginFailures([wanted[0]], rt(wanted[0].spec, offline, "Repair"))[0].name).toBe("Repair");
+    expect(pluginFailures([wanted[0]], rt(wanted[0].spec, offline), { [wanted[0].spec]: { manifest: { name: "Repair" }, icon: null, at: 0 } } as never)[0].name).toBe("Repair");
+    // One that is compiled in was not fetched from anywhere, so it is not explained as if it had been.
+    const builtin = [{ spec: "builtin:repair", enabled: true }];
+    expect(failureToast(pluginFailures(builtin, rt("builtin:repair", "boom")), () => {})!.detail).toBe("boom. Everything else in the editor works.");
+    // Nothing wrong, nothing said.
+    expect(pluginFailures(wanted, {})).toEqual([]);
+    expect(failureToast([], () => {})).toBeNull();
+  });
+
+  it("tells a version from a branch, and one plugin from another", () => {
+    const sha = "0".repeat(40);
+    expect(isPinned(`github:o/p@${sha}`)).toBe(true);
+    expect(isPinned("github:o/p@v1.2.0")).toBe(true);
+    expect(isPinned("github:o/p")).toBe(false);
+    // Naming a branch is not pinning, however explicitly it is named.
+    expect(isPinned("github:o/p@main")).toBe(false);
+    expect(isPinned("github:o/p@HEAD")).toBe(false);
+    expect(isPinned("https://x/p/")).toBe(false);
+    expect(unpin("github:o/p@v1.2.0/sub")).toBe("github:o/p/sub");
+    // The identity is the repository, whatever version is named — and only the GitHub
+    // form is case-folded, since a URL's path is the server's business.
+    expect(pluginIdentity("github:O/P@v1.2.0")).toBe("github:o/p");
+    expect(pluginIdentity(`github:o/p@${sha}`)).toBe(pluginIdentity("github:o/p"));
+    expect(pluginIdentity("https://x/P/")).toBe("https://x/P/");
   });
 });
 

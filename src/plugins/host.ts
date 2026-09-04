@@ -100,10 +100,10 @@ import {
   type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
 } from "./api";
-import { loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
+import { isPinned, loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
-import { defaultPlugins, type DefaultPlugin } from "./defaults";
+import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "./transpileClient";
 import { askDialog, closeMapIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { defaultSaveOptions } from "../editor/save";
@@ -1740,6 +1740,8 @@ interface Active {
   token: number;
   bag: Contributions;
   deactivate?: Deactivate;
+  /** The load in flight, so a second caller awaits the first rather than a resolved promise. */
+  promise?: Promise<void>;
 }
 
 const actives = new WeakMap<Store, Map<string, Active>>();
@@ -1837,14 +1839,29 @@ export function forgetSnapshot(store: Store, spec: string) {
   store.set(pluginCodeAtom, next);
 }
 
-/** Load and activate a plugin; a no-op when it is already active or loading. */
-export async function activatePlugin(store: Store, spec: string, deps: LoaderDeps = browserLoaderDeps()): Promise<void> {
+/**
+ * Load and activate a plugin; a no-op when it is already active or loading.
+ *
+ * "No-op" still answers with the load that is in flight, not an immediately resolved
+ * promise: React mounts this hook's effect twice in development, so the second pass finds
+ * every spec already loading, and a caller that awaited *that* would read the runtimes
+ * before a single fetch had finished — which is what made the notice for a plugin that
+ * failed to load never appear (`hooks/usePlugins.ts`).
+ */
+export function activatePlugin(store: Store, spec: string, deps: LoaderDeps = browserLoaderDeps()): Promise<void> {
   const map = activeMap(store);
-  if (map.has(spec)) return;
-  const token = ++activationSeq;
-  const bag = new Contributions();
-  const entry: Active = { token, bag };
+  const already = map.get(spec);
+  if (already) return already.promise ?? Promise.resolve();
+  const entry: Active = { token: ++activationSeq, bag: new Contributions() };
   map.set(spec, entry);
+  entry.promise = loadAndRun(store, spec, deps, entry);
+  return entry.promise;
+}
+
+/** The activation itself, once the slot in the active map is taken. */
+async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: Active): Promise<void> {
+  const map = activeMap(store);
+  const { bag } = entry;
   setRuntime(store, spec, { status: "loading", error: null });
   const stillWanted = () => map.get(spec) === entry;
   const local = loadDepsFor(store, spec, deps);
@@ -1995,13 +2012,26 @@ export const builtinSpec = (name: string) => `builtin:${name}`;
  * default is a spec like any other — the remote ones are fetched over the network on
  * every start — so the only thing being a default buys it is a place in the list and a
  * Remove button it does not get; see `defaults.ts`.
+ *
+ * Stored rows are matched to defaults by `pluginKey`, not by the spec, because the spec
+ * of a default moves: an editor that fetched `github:scm-js/plugin-repair` last week
+ * pins `…@v1.0.0` today and bundles it as `builtin:repair` on the desktop, and all three
+ * are one plugin whose *enabled* the user may have answered. Matching on the string
+ * would list it twice and run it twice — two Repair dialogs on every open. The default's
+ * own spec wins, so a version the project moved forward reaches everyone, unless the
+ * stored one is pinned: that is a version the user chose deliberately (the Update button
+ * on a pinned row), and taking it away silently is the one thing this must not do.
  */
 export function effectiveInstalls(stored: readonly PluginInstall[], defaults: readonly DefaultPlugin[] = defaultPlugins()): PluginInstall[] {
+  const claimed = new Set<string>();
   const out: PluginInstall[] = defaults.map((d) => {
-    const said = stored.find((p) => p.spec === d.spec);
-    return { spec: d.spec, enabled: said?.enabled ?? d.enabled, ...(said?.local ? { local: true } : {}) };
+    const key = pluginKey(d.spec);
+    const said = stored.find((p) => pluginKey(p.spec) === key);
+    if (said) claimed.add(key);
+    const spec = said && isPinned(said.spec) ? said.spec : d.spec;
+    return { spec, enabled: said?.enabled ?? d.enabled, ...(said?.local ? { local: true } : {}) };
   });
-  for (const p of stored) if (!defaults.some((d) => d.spec === p.spec)) out.push(p);
+  for (const p of stored) if (!claimed.has(pluginKey(p.spec))) out.push(p);
   return out;
 }
 

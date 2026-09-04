@@ -237,7 +237,9 @@ jobs:
   # separate because the tarball needs the @scm-js scope to exist and npm's trusted
   # publishing (or NPM_TOKEN) to be configured for it, and an npm version, once published,
   # cannot be taken back. `--provenance` comes from the `id-token: write` above, so the
-  # package page names this workflow run and the commit it was built from.
+  # package page names this workflow run and the commit it was built from; the same
+  # `id-token` is what OIDC authenticates the publish with, so with trusted publishing
+  # configured there is no NPM_TOKEN to hold at all.
   plugin-api:
     name: Plugin API types
     needs: [channel, web]
@@ -266,6 +268,11 @@ jobs:
             exit 0
           fi
           if [ "$TO_NPM" = "true" ]; then
+            # Trusted publishing over OIDC needs npm 11.5.1 or newer, and the runner's
+            # Node 22 ships npm 10.x — without this the publish falls back to looking for
+            # a token that trusted publishing exists precisely so as not to have.
+            npm install -g npm@latest
+            npm --version
             node scripts/publish-plugin-api.mjs --push --npm
           else
             echo "::notice::the PUBLISH_PLUGIN_API variable is not 'true'; pushing the repository without publishing to npm."

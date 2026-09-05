@@ -47,7 +47,7 @@ export interface DefaultPlugin {
  * on is remembered like any other change.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
-  { spec: "github:scm-js/plugin-scm-scx@v1.1.1", enabled: true },
+  { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.1.1", enabled: true },
   { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },

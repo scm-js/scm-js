@@ -16,7 +16,7 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -1335,7 +1335,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         if (!scn) return null;
         const remembered = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
         const format = options.format ?? remembered.format;
-        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom), options: { ...remembered, ...options.saveOptions } });
+        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom), options: { ...remembered, ...options.saveOptions } });
         const name = options.fileName ?? store.get(mapFilePathAtom) ?? `${scenarioName(scn) || "Untitled Scenario"}.${format}`;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
       },

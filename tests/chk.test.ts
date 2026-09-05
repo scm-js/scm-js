@@ -95,6 +95,42 @@ describe("chk container", () => {
     expect(file.sections.at(-1)!.name).toBe("TRIG");
     expect(file.trailing).toBeDefined();
   });
+
+  it("writes a malformed header back as it was rather than the bytes it found", () => {
+    // A length past the end of the file, and a negative one: both are what protected maps
+    // carry, and a Save with no edits must not straighten either out.
+    const truncated = concat(sampleChk(), section("TRIG", new Uint8Array(100)).subarray(0, 40));
+    expect(serializeChk(parseChk(truncated))).toEqual(truncated);
+
+    const w = new Writer(16);
+    for (const c of "ZZZZ") w.u8(c.charCodeAt(0));
+    w.i32(-4);
+    const negative = concat(sampleChk(), w.finish(), new Uint8Array([42, 43]));
+    expect(serializeChk(parseChk(negative))).toEqual(negative);
+
+    const base = serializeScenario(createScenario({ width: 32, height: 32, era: 0 }));
+
+    // A section an edit adds goes in front of a malformed tail, never behind it.
+    const noSwnm = parseScenario(concat(base, w.finish(), new Uint8Array([42, 43])));
+    noSwnm.chk.sections = noSwnm.chk.sections.filter((s) => s.name !== "SWNM");
+    noSwnm.switchNames = Array.from({ length: 256 }, () => 0);
+    markDirty(noSwnm, "SWNM");
+    const names = parseChk(serializeScenario(noSwnm)).sections.map((s) => s.name);
+    expect(names.indexOf("SWNM")).toBeGreaterThan(-1);
+    expect(names.at(-1)).toBe("ZZZZ");
+
+    // Through the scenario model too: nothing dirty, nothing changed.
+    for (const declared of [100, -4]) {
+      const bytes = new Uint8Array(base.length + 10);
+      bytes.set(base);
+      bytes.set(new TextEncoder().encode("ZZZZ"), base.length);
+      new DataView(bytes.buffer).setInt32(base.length + 4, declared, true);
+      bytes.set([42, 43], base.length + 8);
+      const scn = parseScenario(bytes);
+      expect(scn.dirty.size).toBe(0);
+      expect(serializeScenario(scn)).toEqual(bytes);
+    }
+  });
 });
 
 describe("string table", () => {

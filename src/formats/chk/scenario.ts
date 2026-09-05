@@ -221,7 +221,8 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const warnings: string[] = [];
 
   for (const s of chk.sections) {
-    if (s.truncated) warnings.push(`Section ${s.name.trim()} declares ${s.declaredSize} bytes but the file ends early.`);
+    if (s.declaredSize < 0) warnings.push(`Section ${s.name.trim()} declares a negative length (${s.declaredSize}); the game seeks backwards there, and nothing after it is read as a section.`);
+    else if (s.truncated) warnings.push(`Section ${s.name.trim()} declares ${s.declaredSize} bytes but the file ends early.`);
   }
 
   const take = (name: string, dim = { width: 0, height: 0 }) => {
@@ -473,8 +474,14 @@ const appendRank = (name: string) => { const i = APPEND_ORDER.indexOf(name); ret
  * than after whatever the file happens to end with, and nothing already there moves.
  */
 function insertionPoint(sections: readonly ChkSection[], name: string): number {
+  // A section the reader could not take whole (a length past the end of the file, or a
+  // negative one) is written back with its header as it was, so it must stay the last
+  // thing in the file: a section placed after it would sit inside the bytes that header
+  // claims, and the game would never see it.
+  const tail = sections.findIndex((s) => s.truncated);
+  const limit = tail < 0 ? sections.length : tail;
   const rank = appendRank(name);
-  for (let i = sections.length - 1; i >= 0; i--) {
+  for (let i = limit - 1; i >= 0; i--) {
     if (appendRank(sections[i].name) <= rank) return i + 1;
   }
   return 0;

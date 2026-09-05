@@ -1,4 +1,4 @@
-import { Archive, Creator, MpqError, type CompressionMethod } from "mopaq";
+import { Archive, Creator, MpqError, type CompressionMethod, type HashEntry, type StoredMember } from "mopaq";
 
 /** Where StarCraft keeps the scenario inside the archive. */
 export const SCENARIO_PATH = "staredit\\scenario.chk";
@@ -89,12 +89,31 @@ export function memberInfo(archive: Archive, name: string): MemberInfo | null {
   return { compression, encrypted: info.encrypted, storedSize: info.compressedSize, size: info.uncompressedSize, sectorSize: archive.sectorSize };
 }
 
+/**
+ * The members of the opened archive the editor could not read by name — carried across a
+ * save exactly as stored, through mopaq's `addStored`, with the hash table they were found
+ * in so the writer can lay the new one out over it (`readMembers`).
+ */
+export interface StoredMembers {
+  hashTable: HashEntry[];
+  /** The sector size those members were written for; the saved archive must use it. */
+  sectorSize: number;
+  members: StoredMember[];
+  /** Named members among them, kept as stored because their bytes could not be decoded. */
+  unreadable: string[];
+}
+
 export interface SaveOptions {
   /**
    * Extra archive members to carry across, name → bytes. Typically the non-scenario
    * files read out of the map that was opened.
    */
   extras?: Map<string, Uint8Array>;
+  /**
+   * Members carried as stored (`readMembers`). Forces `sectorSize` to theirs and lays the
+   * hash table out over the one they came from.
+   */
+  stored?: StoredMembers | null;
   /**
    * How every member is compressed. `pkware` is what StarEdit writes and the one method
    * every StarCraft build reads; `zlib` is smaller but needs 1.16.1 or Remastered; `none`
@@ -122,11 +141,14 @@ export const STAREDIT_SECTOR_SIZE = 4096;
 export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promise<Uint8Array> {
   const method: CompressionMethod | false = options.compress === "zlib" || options.compress === "pkware" ? options.compress : false;
   const encrypt = options.encrypt ?? false;
+  const stored = options.stored && options.stored.members.length > 0 ? options.stored : null;
   const creator = new Creator({
-    sectorSize: options.sectorSize ?? STAREDIT_SECTOR_SIZE,
+    sectorSize: stored ? stored.sectorSize : options.sectorSize ?? STAREDIT_SECTOR_SIZE,
     listfile: options.listfile ?? true,
     listfileCompress: method || "zlib",
+    ...(stored ? { hashTable: stored.hashTable } : {}),
   });
+  for (const m of stored?.members ?? []) creator.addStored(m);
   creator.addFile(SCENARIO_PATH, chk, { compress: method, encrypt });
   for (const [name, data] of options.extras ?? []) {
     if (normalize(name) === normalize(SCENARIO_PATH)) continue;
@@ -136,25 +158,68 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
   return creator.writeAsync();
 }
 
+/** The sector size a save with these stored members has to use, else the caller's choice. */
+export function requiredSectorSize(stored: StoredMembers | null | undefined, wanted: number): number {
+  return stored && stored.members.length > 0 ? stored.sectorSize : wanted;
+}
+
+export interface ArchiveMembers {
+  /** Members read by name: the (listfile)'s and the ones the scenario refers to. */
+  extras: Map<string, Uint8Array>;
+  /** Everything else the archive holds, carried as stored; null when there is nothing. */
+  stored: StoredMembers | null;
+}
+
 /**
- * Pull every listed member except scenario.chk out of an opened archive. A member that
- * cannot be read (a compression this build has no decoder for, a corrupt sector) is
- * skipped rather than fatal — and named in `problems`, since Save writes the archive from
- * what was read and the member would be gone from the file.
+ * Pull every member except scenario.chk out of an opened archive, by name where a name is
+ * known and as stored bytes where none is.
+ *
+ * Names come from the (listfile) and from `hints` — the paths the scenario itself refers
+ * to (its WAV table, the plugin members), probed with `fileInfo` — so a map whose listfile
+ * a protector removed still gets its sounds read, listed and editable. A member with no
+ * name, or one whose bytes cannot be decoded (a compression this build has no decoder for,
+ * a corrupt sector), is kept as stored and written back where it was, which is the only
+ * way to carry a member whose key depends on a name nobody has; `problems` gets a line
+ * for the unreadable ones. Nothing the archive holds is dropped.
  */
-export async function readExtras(archive: Archive, files: string[] | null, problems?: string[]): Promise<Map<string, Uint8Array>> {
+export async function readMembers(archive: Archive, files: string[] | null, hints: Iterable<string> = [], problems?: string[]): Promise<ArchiveMembers> {
   const extras = new Map<string, Uint8Array>();
-  if (!files) return extras;
-  for (const name of files) {
+  const taken = new Set<number>();
+  const unreadable: string[] = [];
+  const scenarioSlot = archive.slotOf(SCENARIO_PATH);
+  if (scenarioSlot !== null) taken.add(scenarioSlot);
+  const listSlot = archive.slotOf("(listfile)");
+  if (listSlot !== null) taken.add(listSlot);
+
+  const seen = new Set<string>();
+  const names = [...(files ?? []), ...hints].filter((name) => {
     const key = normalize(name);
-    if (key === normalize(SCENARIO_PATH) || key === "(listfile)") continue;
+    if (seen.has(key) || key === normalize(SCENARIO_PATH) || key === "(listfile)") return false;
+    seen.add(key);
+    return true;
+  });
+  const keepStored = new Set<number>();
+  for (const name of names) {
+    const slot = archive.slotOf(name);
+    if (slot === null || taken.has(slot)) continue; // a listed name the archive lacks, or one already read under another spelling
+    taken.add(slot);
     try {
       extras.set(name, await archive.readFileAsync(name));
     } catch (err) {
-      problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it will not be in a saved copy.`);
+      unreadable.push(name);
+      keepStored.add(slot);
+      problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it is kept in a saved copy as it is.`);
     }
   }
-  return extras;
+
+  const members = archive.members().filter((m) => !taken.has(m.slot) || keepStored.has(m.slot));
+  const stored: StoredMembers | null = members.length === 0 ? null : { hashTable: archive.hashEntries(), sectorSize: archive.sectorSize, members, unreadable };
+  return { extras, stored };
+}
+
+/** The members read by name alone — `readMembers(...).extras`. */
+export async function readExtras(archive: Archive, files: string[] | null, problems?: string[], hints: Iterable<string> = []): Promise<Map<string, Uint8Array>> {
+  return (await readMembers(archive, files, hints, problems)).extras;
 }
 
 function normalize(name: string) {

@@ -71,6 +71,12 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
 - `reader.ts` parses the CHK container into `ChkFile` — **every** section in file order, repeats kept.
   `sections/registry.ts` declares each section's `CombineMode` (`last` / `overlay` / `append`) and fixed
   size; this mirrors how the game itself resolves duplicated sections (protected maps depend on it).
+  `serializeChk` writes each header's **declared** size, not `data.length`: the two differ only for a
+  section the reader could not take whole (a length past the end of the file, or a negative one — a
+  protection trick the game acts on), and a plain Save must leave such a header as it found it. So
+  `serializeChk(parseChk(bytes))` is `bytes` for any input, `insertionPoint` never places a new
+  section behind such a tail, and straightening a bad header out is the Repair plugin's job. Everything
+  that re-encodes a section sets `declaredSize` to the new length.
 - `scenario.ts` decodes only the sections the editor models into typed fields on `Scenario`
   (`tiles`, `isom`, `units`, `locations`, `strings`, players, forces…). Section codecs live in
   `sections/{terrain,objects,players,strings}.ts`.
@@ -94,10 +100,21 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   what Check Map tests a file against.
   `scenario.isom` is `null` only when the *file* had no `ISOM`; `encodeSection` then omits the section
   rather than writing a zeroed one; the same holds for `mask`, `wavs` and the settings tables.
-- `mpq/scm.ts` wraps `mopaq` (≥ 1.3.0, the user's own library at `github.com/jeany55/mopaq`, published
+- `mpq/scm.ts` wraps `mopaq` (≥ 1.4.0, the user's own library at `github.com/jeany55/mopaq`, published
   to npm from a `v*` tag): `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
-  Non-scenario archive members are kept in `archiveExtrasAtom` and written back on save so custom
-  sounds/graphics survive. `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
+  Non-scenario archive members are read by `readMembers`: by name where a name is known — the
+  `(listfile)` plus `editor/sounds.ts#referencedMembers` (the WAV table, every `wav` action
+  argument, the Trigger Script members), probed with `slotOf`, since protectors strip the listfile
+  and the sounds are then only findable by the names the scenario carries — into
+  `archiveExtrasAtom`, and everything else (no name, or bytes this build cannot decode) as
+  `StoredMembers` into `archiveStoredAtom`: mopaq's `members()` / `hashEntries()`, written back
+  through `Creator.addStored` pinned at the same offset and hash slot, which is what keeps a
+  member encrypted with the offset-adjusted key (StarEdit's extras all are) readable without its
+  name. That forces the saved archive's sector size to the source's (`requiredSectorSize`) and
+  the hash table to its old size; `planSave`'s fourth argument carries them (`SavePlan.stored`, a
+  warning in words) and `buildMapFile`'s fifth hands them to `saveMap`. Before this, a map with no
+  listfile lost every extra member on save with no warning — the first outside review found it.
+  `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
   StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
   game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib

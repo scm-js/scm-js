@@ -1,5 +1,6 @@
 import { parseScenario, type Scenario } from "../formats/chk/scenario";
-import { loadMap, readExtras } from "../formats/mpq/scm";
+import { loadMap, readMembers, type StoredMembers } from "../formats/mpq/scm";
+import { referencedMembers } from "../editor/sounds";
 import type { LoadedDocument } from "../atoms/documentAtoms";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, type MapFormat, type SaveOptions } from "../editor/save";
 
@@ -26,20 +27,28 @@ export async function openMapFile(file: File, handle: MapFileHandle | null = nul
   const bytes = new Uint8Array(await file.arrayBuffer());
   const loaded = await loadMap(bytes);
   const scenario = parseScenario(loaded.chk);
-  const extras = loaded.archive ? await readExtras(loaded.archive, loaded.files, scenario.warnings) : new Map<string, Uint8Array>();
-  return { scenario, extras, fileName: file.name, handle, origin: loaded.scenarioInfo };
+  const { extras, stored } = loaded.archive
+    ? await readMembers(loaded.archive, loaded.files, referencedMembers(scenario), scenario.warnings)
+    : { extras: new Map<string, Uint8Array>(), stored: null };
+  if (stored) {
+    const n = stored.members.length - stored.unreadable.length;
+    if (n > 0) scenario.warnings.push(`${n} archive member${n === 1 ? " has" : "s have"} no name the editor knows${loaded.files ? "" : " (the archive has no file list)"}; ${n === 1 ? "it is" : "they are"} kept in a saved copy exactly as stored.`);
+  }
+  return { scenario, extras, stored, fileName: file.name, handle, origin: loaded.scenarioInfo };
 }
 
 export interface WriteOptions {
   format: MapFormat;
   extras?: Map<string, Uint8Array>;
+  /** Members carried as stored, from the archive the map was opened from. */
+  stored?: StoredMembers | null;
   /** Compression, stripping and the rest; everything kept and uncompressed when omitted. */
   options?: Partial<Omit<SaveOptions, "format">>;
 }
 
 /** Serialise the scenario to the bytes that belong in the target file. */
 export async function writeMapBytes(scenario: Scenario, options: WriteOptions): Promise<Uint8Array> {
-  return buildMapFile(scenario, options.extras ?? new Map(), { ...DEFAULT_SAVE_OPTIONS, ...options.options, format: options.format });
+  return buildMapFile(scenario, options.extras ?? new Map(), { ...DEFAULT_SAVE_OPTIONS, ...options.options, format: options.format }, undefined, options.stored ?? null);
 }
 
 export interface PickedMapFile {

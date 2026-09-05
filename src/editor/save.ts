@@ -20,7 +20,7 @@
 import { combine, serializeChk, type ChkFile, type ChkSection } from "../formats/chk/reader";
 import { SECTION_SPECS, sizeOf, specFor } from "../formats/chk/sections/registry";
 import type { Scenario } from "../formats/chk/scenario";
-import { saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo } from "../formats/mpq/scm";
+import { requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
 
 /**
  * The archive members the Trigger Script plugin keeps its source and build manifest in
@@ -132,11 +132,23 @@ export interface PlannedExtra {
   kept: boolean;
 }
 
+/** The members carried as stored — the ones with no name the editor knows — and what happens to them. */
+export interface PlannedStored {
+  members: StoredMembers;
+  count: number;
+  /** Bytes they occupy in the archive. */
+  size: number;
+  /** False for a bare .chk, the one format that cannot carry them. */
+  kept: boolean;
+}
+
 export interface SavePlan {
   /** The CHK as it will be written. */
   file: ChkFile;
   sections: PlannedSection[];
   extras: PlannedExtra[];
+  /** Null when the archive had nothing the editor could not name. */
+  stored: PlannedStored | null;
   /** Bytes of the CHK before and after the options. */
   chkSizeBefore: number;
   chkSize: number;
@@ -159,7 +171,7 @@ export function extraKind(name: string): ExtraKind {
  * The section list is `currentChk` — the bytes Save would emit with dirty sections
  * re-encoded — so a section the editor is about to rewrite is judged on its new size.
  */
-export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options: SaveOptions): SavePlan {
+export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options: SaveOptions, storedMembers: StoredMembers | null = null): SavePlan {
   const source = currentChk(scn);
   const dim = { width: scn.width, height: scn.height };
   const occurrences = new Map<string, number>();
@@ -211,6 +223,10 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
     name, size: data.length, kind: extraKind(name), kept: options.format !== "chk" && !omitted.has(name.toLowerCase()),
   }));
 
+  const stored: PlannedStored | null = storedMembers && storedMembers.members.length > 0
+    ? { members: storedMembers, count: storedMembers.members.length, size: storedMembers.members.reduce((n, m) => n + m.data.length, 0), kept: options.format !== "chk" }
+    : null;
+
   const warnings: string[] = [];
   if (options.stripTerrainEditing && counts.terrainEditing > 0) {
     warnings.push("Without ISOM, TILE and DD2 the isometric brush and the Doodads layer have nothing to work with when the file is opened in an editor again. The map plays the same.");
@@ -221,8 +237,12 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
   if (options.stripUnknown && counts.unknown > 0) {
     warnings.push(`${counts.unknown} section${counts.unknown === 1 ? "" : "s"} with names the format reference does not know are left out. Another editor or a protector may have put them there.`);
   }
-  if (options.format === "chk" && extras.size > 0) {
+  if (options.format === "chk" && (extras.size > 0 || stored)) {
     warnings.push("A bare .chk is the scenario alone: the archive's other files are not written.");
+  }
+  if (stored?.kept) {
+    const n = stored.count;
+    warnings.push(`${n} archive member${n === 1 ? " has" : "s have"} no name the editor knows${stored.members.unreadable.length > 0 ? ", or could not be decoded" : ""}; ${n === 1 ? "it is" : "they are"} written back exactly as stored, and the archive keeps its ${stored.members.sectorSize}-byte sectors${options.compression === "zlib" && stored.members.sectorSize !== 0x10000 ? " (zlib would otherwise use 64 KB ones)" : ""}.`);
   }
   const sounds = planned.filter((e) => e.kind === "sound" && !e.kept && options.format !== "chk").length;
   if (sounds > 0) warnings.push(`${sounds} sound file${sounds === 1 ? "" : "s"} left out will not play.`);
@@ -235,7 +255,7 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
 
   const chkSize = out.reduce((n, s) => n + 8 + s.data.length, 0) + (file.trailing?.length ?? 0);
   const chkSizeBefore = source.sections.reduce((n, s) => n + 8 + s.data.length, 0) + (source.trailing?.length ?? 0);
-  return { file, sections, extras: planned, chkSizeBefore, chkSize, counts, warnings };
+  return { file, sections, extras: planned, stored, chkSizeBefore, chkSize, counts, warnings };
 }
 
 /** The scenario bytes the plan describes. */
@@ -258,14 +278,17 @@ export function keptExtras(plan: SavePlan, extras: Map<string, Uint8Array>): Map
  * with big sectors; PKWARE and uncompressed use StarEdit's 4 KB, the layout the game's own
  * maps carry.
  */
-export async function buildMapFile(scn: Scenario, extras: Map<string, Uint8Array>, options: SaveOptions, plan = planSave(scn, extras, options)): Promise<Uint8Array> {
+export async function buildMapFile(scn: Scenario, extras: Map<string, Uint8Array>, options: SaveOptions, plan?: SavePlan, stored: StoredMembers | null = null): Promise<Uint8Array> {
+  plan ??= planSave(scn, extras, options, stored);
   const chk = buildChk(plan);
   if (options.format === "chk") return chk;
+  const kept = plan.stored?.kept ? plan.stored.members : null;
   return saveMap(chk, {
     extras: keptExtras(plan, extras),
+    stored: kept,
     compress: options.compression,
     encrypt: options.encrypt,
-    sectorSize: options.compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE,
+    sectorSize: requiredSectorSize(kept, options.compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),
   });
 }
 

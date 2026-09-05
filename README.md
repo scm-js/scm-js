@@ -5,7 +5,8 @@ StarEdit, SCMDraft 2 and StarForge.
 
 It opens the game's own `.scm` and `.scx` maps (and a bare `.chk` scenario), draws them
 with the game's terrain and unit graphics, and saves maps the game plays. Whatever it
-does not understand in a file is copied through untouched, so a map only loses what you
+does not understand in a file is copied through untouched — an unknown section, a
+malformed one, an archive member it cannot name — so a map only loses what you
 deliberately change.
 
 ![The editor with Big Game Hunters open on the Terrain layer](docs/images/editor-plain.webp)
@@ -592,7 +593,9 @@ The Save dialog is where the file's shape is decided:
   Remastered; none is the largest and readable by anything. A map keeps the compression
   it was opened with. StarEdit's encryption is a tick beside it.
 - **Other files in the archive**: the sounds and the files plugins keep there, each with
-  a tick, so a copy for release can leave them out.
+  a tick, so a copy for release can leave them out. A member the editor cannot name — a
+  protected map's archive often has no file list — is kept exactly as stored, and the
+  dialog says how many there are.
 - **Sections**: the parts of the file only an editor reads (the isometric record, the
   editor's copies of the player table and so on) can be left out to make a smaller file
   — the dialog says what each costs an editor later, and *Smallest that plays* ticks

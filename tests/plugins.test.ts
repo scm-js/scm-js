@@ -1304,7 +1304,10 @@ describe("plugin sections: defaults, rebuild, trailing, required", () => {
     api.events.on("document", () => { events++; });
     const r = sections.rebuild(["DIM ", "ERA", "TILE", "ISOM", "VCOD", "CRGB", "ZZZZ"]);
     // Modelled names with a model come back; VCOD is raw, CRGB has no model on this map, ZZZZ is nothing.
-    expect(r).toEqual({ warnings: [], rebuilt: ["DIM ", "ERA ", "TILE", "ISOM"] });
+    // The junk header keeps its negative length through the rebuild (Save writes a header it did not
+    // model as it found it), so the fresh parse warns about it again.
+    expect(r.rebuilt).toEqual(["DIM ", "ERA ", "TILE", "ISOM"]);
+    expect(r.warnings).toEqual([expect.stringMatching(/JUNK .*negative/)]);
     expect(events).toBe(1);
     const list = sections.list();
     expect(list.filter((s) => s.name === "DIM ")).toHaveLength(1);

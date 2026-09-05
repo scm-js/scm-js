@@ -61,6 +61,16 @@ export function parseChk(bytes: Uint8Array): ChkFile {
   return pos < bytes.length ? { sections, trailing: bytes.subarray(pos) } : { sections };
 }
 
+/**
+ * The inverse of `parseChk`: `serializeChk(parseChk(bytes))` is `bytes`, malformed input
+ * included. The length written is the section's *declared* size, not `data.length` — the
+ * two differ only for a section the reader could not take whole (a length past the end of
+ * the file, or a negative one), and a plain Save must leave such a header exactly as it
+ * found it: a negative length is a protection trick the game acts on, and writing the
+ * bytes actually present instead would change what it parses without any edit having been
+ * made. Everything that re-encodes a section sets `declaredSize` to the new length; the
+ * Repair plugin is where a bad header gets straightened out on purpose.
+ */
 export function serializeChk(file: ChkFile): Uint8Array {
   let total = 0;
   for (const s of file.sections) total += 8 + s.data.length;
@@ -71,7 +81,7 @@ export function serializeChk(file: ChkFile): Uint8Array {
   let pos = 0;
   for (const s of file.sections) {
     for (let i = 0; i < 4; i++) out[pos + i] = s.name.charCodeAt(i) & 0xff;
-    view.setInt32(pos + 4, s.data.length, true);
+    view.setInt32(pos + 4, s.declaredSize, true);
     pos += 8;
     out.set(s.data, pos);
     pos += s.data.length;

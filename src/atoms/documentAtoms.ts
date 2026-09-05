@@ -1,5 +1,5 @@
 import type { MapFileHandle } from "../services/mapIo";
-import type { MemberInfo } from "../formats/mpq/scm";
+import type { MemberInfo, StoredMembers } from "../formats/mpq/scm";
 import { atom, type Getter, type Setter } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { blankFillAtom } from "./gameDataAtoms";
@@ -37,6 +37,12 @@ export const scenarioAtom = atom<Scenario | null>(null);
 
 /** Non-scenario archive members, carried across on save so custom assets survive. */
 export const archiveExtrasAtom = atom<Map<string, Uint8Array>>(new Map());
+/**
+ * The opened archive's members that have no name the editor knows (or could not be
+ * decoded), carried across a save exactly as stored. Null when there are none; not
+ * editable, since nothing about them can be read.
+ */
+export const archiveStoredAtom = atom<StoredMembers | null>(null);
 
 
 /**
@@ -205,6 +211,8 @@ export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
 export interface LoadedDocument {
   scenario: Scenario;
   extras: Map<string, Uint8Array>;
+  /** Members carried as stored (`readMembers`); none when omitted. */
+  stored?: StoredMembers | null;
   fileName: string | null;
   /** A handle Save can write straight back to, when the browser gave one. */
   handle?: MapFileHandle | null;
@@ -234,6 +242,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
   set(documentChangeAtom, { reason: doc.reason ?? "open", scenario });
   set(scenarioAtom, scenario);
   set(archiveExtrasAtom, doc.extras);
+  set(archiveStoredAtom, doc.stored ?? null);
   set(mapFilePathAtom, doc.fileName);
   set(mapFileHandleAtom, doc.handle ?? null);
   set(mapOriginAtom, doc.origin ?? null);
@@ -280,7 +289,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
   set(loadDocumentAtom, {
-    scenario, extras: get(archiveExtrasAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
+    scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
   });
   set(mapModifiedAtom, true);
 });
@@ -289,6 +298,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(documentChangeAtom, { reason: "close", scenario: null });
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());
+  set(archiveStoredAtom, null);
   set(mapFilePathAtom, null);
   set(mapFileHandleAtom, null);
   set(mapOriginAtom, null);

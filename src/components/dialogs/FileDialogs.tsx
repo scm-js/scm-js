@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
 import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
-import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
+import { archiveExtrasAtom, archiveStoredAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { closeDialogAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_START_PLACEMENT, idealStarts } from "../../editor/startLocations";
@@ -291,6 +291,7 @@ export function SaveMapDialog({ entry }: DialogProps) {
   const store = useStore();
   const scenario = useAtomValue(scenarioAtom);
   const extras = useAtomValue(archiveExtrasAtom);
+  const storedMembers = useAtomValue(archiveStoredAtom);
   const path = useAtomValue(mapFilePathAtom);
   const origin = useAtomValue(mapOriginAtom);
   const stored = useAtomValue(saveOptionsAtom);
@@ -304,7 +305,7 @@ export function SaveMapDialog({ entry }: DialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [built, setBuilt] = useState<{ options: SaveOptions; bytes: Uint8Array } | null>(null);
 
-  const plan = useMemo(() => (scenario ? planSave(scenario, extras, opts) : null), [scenario, extras, opts]);
+  const plan = useMemo(() => (scenario ? planSave(scenario, extras, opts, storedMembers) : null), [scenario, extras, opts, storedMembers]);
   const issues = useMemo(() => (scenario ? issueCounts(validateScenario(scenario, { extras })) : null), [scenario, extras]);
 
   // The real bytes, for the size: built a moment after the last change, off the click path.
@@ -312,13 +313,13 @@ export function SaveMapDialog({ entry }: DialogProps) {
     if (!scenario || !plan) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      buildMapFile(scenario, extras, opts, plan).then(
+      buildMapFile(scenario, extras, opts, plan, storedMembers).then(
         (bytes) => { if (!cancelled) setBuilt({ options: opts, bytes }); },
         () => { if (!cancelled) setBuilt(null); },
       );
     }, 150);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [scenario, extras, opts, plan]);
+  }, [scenario, extras, opts, plan, storedMembers]);
 
   const set = <K extends keyof SaveOptions>(key: K, value: SaveOptions[K]) => setOpts((o) => ({ ...o, [key]: value }));
   const keepExtra = (n: string, keep: boolean) => set("omitExtras", keep ? opts.omitExtras.filter((x) => x !== n) : [...opts.omitExtras, n]);
@@ -419,6 +420,11 @@ export function SaveMapDialog({ entry }: DialogProps) {
                   </div>
                 </>
               )}
+              {plan.stored && (
+                <p className="hint" style={{ marginTop: 6 }}>
+                  {plan.stored.count} more member{plan.stored.count === 1 ? "" : "s"} ({formatBytes(plan.stored.size)}) {plan.stored.count === 1 ? "has" : "have"} no name the editor knows{plan.stored.members.unreadable.length > 0 ? ", or could not be decoded" : ""}; {archive ? "kept exactly as stored" : "not written to a bare .chk"}.
+                </p>
+              )}
             </Group>
 
             <Group title="Sections">
@@ -471,10 +477,10 @@ export function SaveMapDialog({ entry }: DialogProps) {
                 <>
                   <span className="k">Archive</span>
                   <span className="v">{ready ? `${formatBytes(ready.length)} · ${compression.value === "none" ? "uncompressed" : compression.value}${opts.encrypt ? ", encrypted" : ""}` : "…"}</span>
-                  {plan.extras.length > 0 && (
+                  {(plan.extras.length > 0 || plan.stored) && (
                     <>
                       <span className="k">Other files</span>
-                      <span className="v">{keptExtras} of {plan.extras.length}</span>
+                      <span className="v">{keptExtras} of {plan.extras.length}{plan.stored ? `, ${plan.stored.count} kept as stored` : ""}</span>
                     </>
                   )}
                 </>

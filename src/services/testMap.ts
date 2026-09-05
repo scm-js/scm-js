@@ -10,7 +10,7 @@
  * bare `.chk` becomes an `.scx`, since the game only opens archives.
  */
 import type { createStore } from "jotai";
-import { archiveExtrasAtom, scenarioAtom } from "../atoms/documentAtoms";
+import { archiveExtrasAtom, archiveStoredAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapOriginAtom, saveOptionsAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { buildMapFile, defaultSaveOptions } from "../editor/save";
@@ -56,7 +56,7 @@ export async function testMapBytes(store: Store): Promise<Uint8Array | null> {
   if (!scn) return null;
   const options = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
   const format = options.format === "chk" ? "scx" : options.format;
-  return buildMapFile(scn, store.get(archiveExtrasAtom), { ...options, format });
+  return buildMapFile(scn, store.get(archiveExtrasAtom), { ...options, format }, undefined, store.get(archiveStoredAtom));
 }
 
 /** Whether this browser can ask for a folder (Chromium); else the browser route is a download. */

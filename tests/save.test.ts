@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createScenario, requiredSections } from "../src/formats/chk/create";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
-import { loadMap, readExtras, SCENARIO_PATH } from "../src/formats/mpq/scm";
+import { loadMap, readExtras, readMembers, saveMap, SCENARIO_PATH } from "../src/formats/mpq/scm";
 import {
   BOOKKEEPING_SECTIONS, buildChk, buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, editorOnlySections, extraKind, formatBytes, formatOf,
   MANIFEST_MEMBER, planSave, SAVE_PRESETS, SCRIPT_MEMBER, TERRAIN_EDITING_SECTIONS, type SaveOptions,
@@ -113,6 +113,27 @@ describe("save options", () => {
     expect(chk.extras.every((e) => !e.kept)).toBe(true);
     expect(chk.warnings.join(" ")).toMatch(/bare \.chk/);
     expect(await buildMapFile(scn, extras, opts({ format: "chk" }))).toEqual(serializeScenario(scn));
+  });
+
+  it("plans and keeps the members it cannot name", async () => {
+    const scn = fresh();
+    const nameless = new Uint8Array([5, 5, 5]);
+    const loaded = await loadMap(await saveMap(serializeScenario(scn), { extras: new Map([["x\\nameless.bin", nameless]]), listfile: false }));
+    const members = await readMembers(loaded.archive!, loaded.files);
+    expect(members.extras.size).toBe(0);
+    expect(members.stored!.members).toHaveLength(1);
+
+    const plan = planSave(scn, members.extras, opts({ compression: "zlib" }), members.stored);
+    expect(plan.stored).toMatchObject({ count: 1, size: 3, kept: true });
+    expect(plan.warnings.join(" ")).toMatch(/1 archive member has no name .* 4096-byte sectors \(zlib would otherwise use 64 KB ones\)/);
+    const out = await loadMap(await buildMapFile(scn, members.extras, opts({ compression: "zlib" }), plan, members.stored));
+    expect(out.archive!.sectorSize).toBe(4096);
+    expect(await out.archive!.readFileAsync("x\\nameless.bin")).toEqual(nameless);
+
+    const chk = planSave(scn, members.extras, opts({ format: "chk" }), members.stored);
+    expect(chk.stored!.kept).toBe(false);
+    expect(chk.warnings.join(" ")).toMatch(/bare \.chk/);
+    expect(planSave(scn, members.extras, opts()).stored).toBeNull();
   });
 
   it("round-trips every compression and the StarEdit-style encryption", async () => {

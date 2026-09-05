@@ -8,8 +8,8 @@ document explains the file it writes.
 
 The short version: the editor opens `.scm`, `.scx` and bare `.chk` files, rewrites only
 the parts of the scenario you changed, and copies everything else through byte for byte,
-including things it does not understand. A map loses nothing by passing through the
-editor unless you ask for it in the Save dialog.
+including things it does not understand and things it cannot even name. A map loses
+nothing by passing through the editor unless you ask for it in the Save dialog.
 
 ## The archive
 
@@ -20,6 +20,16 @@ graphics, files another editor or a plugin put there. The editor keeps those mem
 writes them back on save, so a map with its own sound files comes out of the editor with
 them still inside. A bare `.chk` file, the scenario with no archive around it, opens too;
 some tools pass scenarios around that way.
+
+An archive names its members in a `(listfile)`, and protectors often remove it. The
+editor then finds the members the scenario itself refers to — its sound table, the
+trigger script members — by asking for them by name, so a protected map's sounds are
+still listed and editable. Anything left that it cannot name is carried across a save
+exactly as stored, at the same place in the archive, so the game finds it as before;
+the Save dialog says how many such members there are. Two things follow from
+carrying them that way: the archive keeps the sector size it came with (zlib's larger
+sectors are not used), and a bare `.chk` cannot hold them. A member the editor can name
+but not decode is kept the same way.
 
 The Save dialog decides how the scenario is stored in the archive:
 

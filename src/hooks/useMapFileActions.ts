@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { archiveExtrasAtom, closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, terrainRevisionAtom, type RecentEntry } from "../atoms/documentAtoms";
+import { archiveExtrasAtom, archiveStoredAtom, closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, terrainRevisionAtom, type RecentEntry } from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
 import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
@@ -254,7 +254,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   if (!scenario) { store.set(statusMessageAtom, "Nothing to save — open or create a map first."); return false; }
   const what = req.copy ? "copy" : "map";
   try {
-    const bytes = req.bytes ?? await buildMapFile(scenario, store.get(archiveExtrasAtom), req.options);
+    const bytes = req.bytes ?? await buildMapFile(scenario, store.get(archiveExtrasAtom), req.options, undefined, store.get(archiveStoredAtom));
     const outcome = await write(bytes, req.fileName, req.handle);
     if (!outcome) return false;
     const size = formatBytes(bytes.length);

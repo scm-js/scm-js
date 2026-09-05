@@ -1126,8 +1126,8 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Repair, Walkability, Terrain from Image and Paint on, pinned to a version", () => {
-    // Which five, in which order, and all on — the versions deliberately not, since every
+  it("ships scmscx.com, Repair, Walkability, Terrain from Image, Paint and scmjs.dev on, pinned to a version", () => {
+    // Which six, in which order, and all on — the versions deliberately not, since every
     // plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-scm-scx",
@@ -1135,6 +1135,7 @@ describe("plugin lifecycle", () => {
       "github:scm-js/plugin-walkability",
       "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
+      "github:scm-js/plugin-scmjs-dev",
     ]);
     expect(DEFAULT_REMOTE_PLUGINS.every((d) => d.enabled)).toBe(true);
     // The point of the pin: a released editor loads the code it was tested against, and

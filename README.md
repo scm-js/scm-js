@@ -649,7 +649,7 @@ and the addresses it will fetch from.
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | Triggers ▸ Script Editor… | A TypeScript file kept inside the map and compiled into a block of the trigger list — `if`, loops and variables included. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
-| [AI](https://github.com/scm-js/plugin-ai) | Tools ▸ AI | Generates and reviews maps, writes triggers and briefings, rewrites strings, and an assistant panel that edits the map from a description. Needs a server to talk to, or your own Anthropic key. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: sign in from the Account menu or the status bar, keep maps on your account with revisions and notes. And the AI: a whole scenario from a sentence, a map from a description, an area redone, triggers written and explained, names and briefings, a review, string rewrites, and an assistant beside the map that reads and edits it with you. The first AI request starts a free trial with no sign-in; a tick turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](docs/images/walkability.webp)
 

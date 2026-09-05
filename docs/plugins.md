@@ -850,7 +850,7 @@ were activated in.
 // The provider (the scmjs.dev plugin):
 api.services.provide("account", accountService);
 
-// A consumer (the AI plugin):
+// A consumer (another plugin that talks to scmjs.dev):
 api.services.watch("scmjs-dev.account", (account) => {
   if (account) useSessionFrom(account);
   else useOwnSignIn();
@@ -1260,5 +1260,4 @@ above. Read the one nearest to what you are writing.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
 | [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | `triggers.claim`, a dialog that keeps Escape for its own editor, files kept with the map through `document.extras`, and commands published for other plugins. |
-| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins, a top-level menu of the plugin's own (`"Account"`), a status-bar cell, and map storage through `document.export` / `document.open`. |
-| [AI](https://github.com/scm-js/plugin-ai) | The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for its phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Also consuming another plugin's service (`services.watch` for the scmjs.dev sign-in) and calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |

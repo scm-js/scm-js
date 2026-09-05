@@ -406,7 +406,7 @@ menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
 into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
-Repair, Walkability, Terrain from Image and Paint are default plugins, all on
+Repair, Walkability, Terrain from Image, Paint and scmjs.dev are default plugins, all on
 (`src/plugins/defaults.ts`); Melee Wizard, Trigger Script and Section Explorer are installed from
 Browse Plugins.
 `zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
@@ -559,7 +559,7 @@ here is generic:
   them. `commitTriggersAtom` no longer relocates anything: the plugin listens to `"triggers"` and
   rewrites its manifest itself. `tests/plugins.test.ts` covers locate/clamp/throw/refresh/dispose.
 - The `"commands"` event (`EVENT_ATOMS.commands` = `pluginCommandsAtom`) is how a plugin that calls
-  another's commands by id (the AI plugin → `trigger-script.compile` / `.build` / `.declarations` /
+  another's commands by id (the scmjs.dev plugin's AI → `trigger-script.compile` / `.build` / `.declarations` /
   `.state` / `.print` / `.simulate` / `.triggerAtLine` / `.open`) learns they arrived — there is
   deliberately no plugin ordering, so `commands.has` at call time is the contract.
 - `api.services` (`pluginServicesAtom`, `host.ts`, the `"services"` event) is the stateful counterpart
@@ -567,8 +567,9 @@ here is generic:
   and consumers `get` / `has` / `watch` it — `watch` fires at once with what is there and on every
   change of provider, so activation order does not matter, as with `"commands"`. The editor never
   reads the object; its shape is a `contract.d.ts` in the provider's repository. The scmjs.dev plugin
-  (`github.com/scm-js/plugin-scmjs-dev`) provides `scmjs-dev.account` and the AI plugin consumes it
-  (below). A plugin item whose top menu does not exist gets a top-level menu of its own before Help
+  (`github.com/scm-js/plugin-scmjs-dev`) provides `scmjs-dev.account`; since the AI features moved
+  into that plugin (below) nothing in the organisation consumes it, and it stays provided for a
+  third party's plugin. A plugin item whose top menu does not exist gets a top-level menu of its own before Help
   (`withPluginItems`; `MenuPath` accepts any string for it) — it used to fall back to Plugins.
 - `DialogSpec.keepOpenOnEscape(target)` lets a plugin dialog keep Escape for something inside it
   (Monaco's popups); `PluginDialog` routes it to `DialogFrame.onEscapeKeyDown`.
@@ -661,7 +662,7 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-scmscx.com, Repair, Walkability, Terrain from Image and Paint, each pinned to a tag and
+scmscx.com, Repair, Walkability, Terrain from Image, Paint and scmjs.dev, each pinned to a tag and
 all on; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard,
 Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
@@ -1037,10 +1038,10 @@ and a plugin repository picks the addition up with `npm update @scm-js/plugin-ap
 The 2026-09-05 pass moved every plugin onto the kit — each had been drawing its own ring,
 bar, veil and skeleton with a scoped `@keyframes` and its own reduced-motion rule — and
 two things the plugins needed came back into the contract: `statusLine.cancel(stop, label)`
-takes the button's word (the AI plugin's is *Stop*, since Cancel in a dialog means leaving
+takes the button's word (the AI assistant's is *Stop*, since Cancel in a dialog means leaving
 it) and `statusLine.set` takes a `Node` in place of the text (a failure line that carries
 a link to the settings that would fix it). scmscx.com is the worked example for the kit;
-the AI plugin's `Runner` (`ui.ts` there) is a status line with an elapsed clock and a
+the scmjs.dev plugin's `Runner` (`ai/ui.ts` there) is a status line with an elapsed clock and a
 reasoning fold around it. `base.css` gained `[hidden] { display: none !important }` in
 the same pass: `.btn` is `inline-flex`, an author rule that beat the browser's own
 `[hidden]`, so the status line's Cancel — and every plugin button hidden with
@@ -1078,41 +1079,59 @@ automatically*, on by default at four players) runs `placeStartLocations` over t
 there is no history entry to undo them from. `tests/new-map.test.ts`. A menu path whose last segment names no submenu makes one for the
 plugin (`withPluginItems`: `"Tools/AI"` → an AI submenu at the end of Tools, after a separator; `separator: true`
 on an item draws one above it, never doubled); a missing *top* menu still falls back to Plugins. Smaller
-conveniences the AI plugin asked for: `document.history()` peeks at both stacks' labels and depths,
+conveniences the AI features asked for: `document.history()` peeks at both stacks' labels and depths,
 `terrain.terrainAt(tx, ty)` answers a terrain id for any tile (flat group, else the ISOM diamond via
 `isom.ts#isomTerrainAt`, which resolves a cliff row to a joined terrain through its soft links), and
 `PlacementVerdict.reason` (`placement.ts#placementReason`, shared with the Units layer's status line) says the
 problem in words.
 
-**AI** (`github.com/scm-js/plugin-ai`, not a default) and its server (`github.com/scm-js/ai-server`, Fastify +
-Caddy + Postgres, one image on GHCR) are the LLM tooling: the server holds the Anthropic key, the prompt recipes, the
-access rules (tokens, per-IP and per-token budgets, bring-your-own-key, and *accounts*: a free trial session per
-browser, Discord sign-in through a provider interface, roles with a weekly allowance or `unlimited`, purchased credit
-through Stripe Checkout, an account page, and `/v1/admin/*` for the site — the plugin's default access mode talks to
-`api.scmjs.dev` and needs no setup) and never any game data; the plugin gathers facts
-(terrain vocabulary, statistics, a `renderImage` PNG, the Trigger Script plugin's `declarations` command) and applies what comes back
-through the ordinary API — a map plan is a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's
-base geometry (`layout.ts` vendored there), triggers come back as script and go through the Trigger Script
-plugin's `compile` → repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
-wire contract, kept identical in both repositories. The editor knows nothing of it beyond the three host additions
-above. Its sign-in is the **scmjs.dev** plugin's when that one is installed (`github.com/scm-js/plugin-scmjs-dev`,
-not a default yet): it provides the `scmjs-dev.account` service — `contract.d.ts` there; the AI plugin carries a
-copy of the interface in `scmjsdev.ts` and matches by shape — and `AccountManager.setProvider` in the AI plugin
-delegates the session, the server address, sign-in/out and the balance to it while the access mode is `account`,
-with the AI Settings' access select and server field locked and a line saying so. The scmjs.dev plugin also owns the
-**Account** top-level menu, a status-bar cell, the Account dialog (balance, ledger, storage, top-up) and map
-storage over the server's `/v1/maps` (`ai-server/src/maps/`: maps with numbered revisions and notes, bytes keyed by
-account + sha256 in an `ObjectStore` — memory / directory / GCS through a dependency-free JSON-API client — a
-per-role `storageMb` cap over `maps.capMb`, checked in a transaction that locks the user row). The 2026-09-05 pass made it the worked example for the "built-in feel" surfaces (`dock: "right"`,
-`ui.statusItem`, `ui.dialogSlot`, `view.flash`, plus an `ui.overlay` for a running tool call's footprint —
-`intent.ts` there), streamed the `agent` recipe (text `delta`s and a `tool_use` event the moment the model names a
-tool; the server's system blocks moved to the one-hour cache in `claude.ts#systemBlocks`), and added the Scenario
-workflow: an `ums-design` recipe (the design document, checked server-side against the toolkit catalogue the
-request carries) executed by `dialogs/scenario.ts` through `map-plan`, the players/forces update, the plugin's
-**toolkit** (`ums.ts`: ~20 trigger-system kinds — hyper, spawn, kill-to-cash, waves, lives, shop, last-standing… —
-built by code into text triggers the editor parses; the assistant reaches it through `ums_build` and the genre
-guides in `guides.ts` through `guide`) and the `triggers` recipe for `custom` systems. Check Map's scenario checks
-(`validate.ts#umsIssues`) are the editor-side half.
+**scmjs.dev** (`github.com/scm-js/plugin-scmjs-dev`, a default that starts on) is the account and the
+AI in one plugin, and its server (`github.com/scm-js/ai-server`, Fastify + Caddy + Postgres, one image on
+GHCR) is a service the project runs at `api.scmjs.dev`. It used to be two plugins — scmjs.dev (account,
+map storage, the `scmjs-dev.account` service) and AI (`github.com/scm-js/plugin-ai`, now archived with
+a notice), the AI following the other's sign-in through `api.services` — and was merged on 2026-09-05
+because the split only ever described the split: a shape-matched copy of the contract, a provider
+delegation, two Settings dialogs, two status cells and an activation-order dance for one relationship
+with one service. The rules that came with the merge: the plugin has **no field for a server, a token
+or a key** (the server keeps `access.byok` and `access.tokens` for an operator's own tools and forks,
+`byok` now off by default and its README says so); the one way to point a development build at a
+local server is the `?scmjs-server=` query on the editor's address (`account.ts#serverOverride`,
+stored, cleared by `?scmjs-server=` empty, shown in the Account dialog only while in use); with **no
+session stored the plugin makes no request at startup** (a session from last time is refreshed so the
+status bar shows the balance — a default that phoned home was the thing the game-data resolver was
+cleaned of); *Use the AI features* (`Settings.ai`, in the Account dialog's settings and at the top of
+Tools ▸ AI ▸ Options…) puts the whole AI group in and takes it out again — `ai/install.ts` keeps every
+`Disposable` and returns the cleanup, `slots.ts` likewise — leaving the account and the maps; the
+model/effort knobs became one **Quality** choice (`quick` / `standard` / `thorough` → effort `low` /
+the server's per-recipe default / `high`, `ai/ui.ts#QUALITY_EFFORT`) and **no model id is shown
+anywhere**, the runner says "Asking scmjs.dev…"; a failed request links to the Account dialog (sign in
+/ top up), never to a settings screen. The server holds the Anthropic key, the prompt recipes, the
+access rules (per-IP and per-session budgets, and *accounts*: a free trial session per browser,
+Discord sign-in through a provider interface, roles with a weekly allowance or `unlimited`, purchased
+credit through Stripe Checkout, an account page, `/v1/admin/*` for the site) and never any game data;
+the plugin gathers facts (terrain vocabulary, statistics, a `renderImage` PNG, the Trigger Script
+plugin's `declarations` command) and applies what comes back through the ordinary API — a map plan is
+a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's base geometry (`ai/layout.ts`
+vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
+repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
+assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the wire contract,
+kept identical in both repositories. The editor knows nothing of it beyond the host additions above.
+The plugin also owns the **Account** top-level menu, a status-bar cell, the Account dialog (balance,
+ledger, storage, top-up, the two ticks) and map storage over the server's `/v1/maps`
+(`ai-server/src/maps/`: maps with numbered revisions and notes, bytes keyed by account + sha256 in an
+`ObjectStore` — memory / directory / GCS through a dependency-free JSON-API client — a per-role
+`storageMb` cap over `maps.capMb`, checked in a transaction that locks the user row). It is the worked
+example for the "built-in feel" surfaces (`dock: "right"`, `ui.statusItem`, `ui.dialogSlot`,
+`view.flash`, plus an `ui.overlay` for a running tool call's footprint — `ai/intent.ts` there) and for
+a contribution group put in and taken out by a setting. The server streams the `agent` recipe (text
+`delta`s and a `tool_use` event the moment the model names a tool; the system blocks are on the
+one-hour cache in `claude.ts#systemBlocks`), and the Scenario workflow is an `ums-design` recipe (the
+design document, checked server-side against the toolkit catalogue the request carries) executed by
+`ai/dialogs/scenario.ts` through `map-plan`, the players/forces update, the plugin's **toolkit**
+(`ai/ums.ts`: ~20 trigger-system kinds — hyper, spawn, kill-to-cash, waves, lives, shop,
+last-standing… — built by code into text triggers the editor parses; the assistant reaches it through
+`ums_build` and the genre guides in `ai/guides.ts` through `guide`) and the `triggers` recipe for
+`custom` systems. Check Map's scenario checks (`validate.ts#umsIssues`) are the editor-side half.
 
 **Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /

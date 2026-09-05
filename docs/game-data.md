@@ -1,74 +1,118 @@
 # Game data
 
-A map file stores tile *indices* and unit *type ids*. The pixels live in StarCraft's
-own archives, which are Blizzard data, not covered by this project's MIT license and
-not redistributable. None of them are in this repository. A clone generates them from
-an installation you are entitled to use.
+A map file holds numbers: a tile id per cell, a unit type per placed unit. The pictures
+those numbers refer to are in StarCraft's own archives, `StarDat.mpq` and `BrooDat.mpq`.
+That is Blizzard's data, not covered by this project's MIT license and not
+redistributable, so none of it ships with the editor. The editor gets it from a copy of
+the game you are entitled to use, extracts what it needs once, and keeps the result.
 
-Attribution is not permission: see
-[ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data) before publishing a
-fork or a hosted build.
+This document is for anyone who wants to know where the graphics come from, what is kept
+where, how a mod's files can be used in place of the game's, and how the pictures are
+drawn. The [user guide](../README.md#the-graphics) covers the first-run dialog itself;
+building the editor from source, which needs the same files on disk, is in
+[Extracting for a source build](#extracting-for-a-source-build).
 
-## Where the editor gets it
+Attribution is not permission. Before publishing a fork or hosting a build, read
+[ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
 
-Every game-data file is fetched through one resolver (`src/gamedata/source.ts`), which
-settles the session's source once, in this order:
+## What the editor needs
 
-1. **Bundled**: the build's own `public/` (a clone that ran `npm run extract`, or the
-   desktop app's copy, which its protocol serves under the same base). The probe is
-   `tileset/manifest.json` or `unit/manifest.json` answering JSON.
-2. **Stored**: a copy an earlier upload or download left in the browser's private file
-   storage (`src/gamedata/store.ts`, the Origin Private File System, about 27 MB; a
-   browser without it holds the files for the session).
-3. **Desktop**: the desktop app searches the disk (next to the app, its data folder,
-   `$SCM_DATA_DIR`, the usual install locations) and extracts from the first folder
-   with the archives; the result is then step 1.
-4. **None**: flat colours and markers, and Help ▸ Game Data… opens.
+Two archives from a classic (1.16) installation, `StarDat.mpq` and `BrooDat.mpq`. Brood
+War's is required: its unit table is the layout the editor reads, and the Ice, Desert and
+Twilight tilesets exist only there. A `patch_rt.mpq` beside them is applied over both,
+as the game applies it. Remastered installations carry none of these files; the download
+route below is for them.
 
-When a data set other than the game's own is chosen (below), its stored copy is asked
-for before any of that, and when it is not there the chain notes it and goes on with
-the game's own — removing a mod's copy never leaves the editor without data.
+Out of the archives come about 930 files, 30 MB in all:
 
-There used to be a fifth step between 3 and 4 — a web address, from a
-`VITE_GAME_DATA_URL` build default or a preference over it, serving either an extracted
-tree or the two archives. It is gone. Nothing is fetched from an address the user did not
-name; when the chain runs out, the editor asks.
+| Files | For |
+| --- | --- |
+| `tileset/<name>.cv5`, `.vx4`, `.vr4`, `.vf4`, `.wpe` | the terrain of each tileset: tile groups, megatiles, minitile pixels, walkability and height flags, the palette |
+| `tileset/<name>.ofire.pcx` and the other three remaps, `<name>.dddata.bin`, `stat_txt.tbl` | the fire and explosion colours, the doodad placement table, the doodad and unit names |
+| `arr/units.dat`, `flingy.dat`, `sprites.dat`, `images.dat`, `images.tbl` | the chain from a unit type to its picture |
+| `arr/weapons.dat`, `upgrades.dat`, `techdata.dat` | the defaults the Unit, Upgrade and Technology Settings dialogs show |
+| `game/tunit.pcx` | the team colour rows |
+| `scripts/iscript.bin` | the animation scripts |
+| `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |
+
+The eight tilesets, in the order the map file numbers them, are Badlands, Space
+Platform, Installation, Ashworld, Jungle, Desert, Ice and Twilight.
+
+Without any of this the editor still runs. Terrain is drawn in flat colours, one per
+tileset, units and sprites as coloured markers, and everything else works: every layer,
+every dialog, opening and saving. The palette that would need the graphics says so.
+
+## Where it looks
+
+The editor settles on one source of game data when it starts, in this order:
+
+1. **A data set you chose.** When a [data set](#data-sets) other than the game's own is
+   selected, its stored copy is asked for first. If that copy is gone, the editor says so
+   and continues with the game's own files.
+2. **Bundled with the build.** A clone that ran `npm run extract` serves the files from
+   its `public/` folder. The desktop app serves its own extraction the same way.
+3. **A copy kept in the browser.** An earlier download or upload left the extracted files
+   in the browser's private storage for this site. The copy survives reloads and browser
+   restarts and is about 30 MB; Help ▸ Game Data… shows it and removes it. A browser
+   with no such storage holds the files for the session only.
+4. **The desktop app's search.** The desktop app looks for the two archives next to the
+   app (an AppImage's folder, the install folder, an unzipped folder, so two files dropped
+   beside the app are found), in its own data folder, in `SCM_DATA_DIR` or
+   `STARCRAFT_DIR` from the environment, in the platform's usual install locations
+   (`C:\Program Files (x86)\StarCraft`, `/Applications/StarCraft`, a Wine prefix on
+   Linux), and in `~/StarCraft` and `~/Games/StarCraft`. The first folder with the
+   archives is extracted into the app's data folder, which is then step 2. Someone whose
+   game is where the installer put it never sees a dialog.
+5. **Nothing.** The editor runs without graphics and opens Help ▸ Game Data… to offer
+   the routes below.
+
+Nothing is ever fetched from an address you did not name. Earlier versions could take a
+web address to load the files from; that route was removed once Blizzard's own package
+became installable in one click, because a chain that runs out and asks is easier to
+understand than a silent fetch.
+
+The browser's private storage is per site, so [editor.scmjs.dev](https://editor.scmjs.dev)
+and [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) each keep their own copy
+and each ask once.
 
 ## Getting the files
 
-Help ▸ Game Data… shows the current source, and when there is none, the ways to get one:
+Help ▸ Game Data… shows the current source and, when there is none, the two ways to get
+one.
 
-- **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
-  free download, and it carries both archives. The two are the trimmed StarEdit
-  distribution rather than the game's own, which matters only in that they are enough:
-  they extract to the same files a 1.16 install does, byte for byte. Note that the
-  `patch_rt.mpq` in the same package is deliberately not applied — folding it in changes
-  seven tables (`units.dat`, `weapons.dat`, `upgrades.dat`, `techdata.dat`, `flingy.dat`,
-  `iscript.bin`, `stat_txt.tbl`) and would diverge from every other route.
+**Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
+free download, and the package carries both archives. They are the trimmed StarEdit
+distribution rather than the game's own, which matters only in that they are enough:
+they extract to the same files a 1.16 installation produces. The package is a 101 MB zip
+of which only the two archives are wanted, so the editor reads the zip's own directory
+and fetches just those members, 82 MB, using HTTP range requests, then inflates them in
+the browser. The package's `patch_rt.mpq` is left alone.
 
-  The zip is 101 MB and only two of its 152 members are wanted, so `src/gamedata/zip.ts`
-  reads the archive's own directory over HTTP `Range` requests and inflates just those two
-  with `DecompressionStream("deflate-raw")` — 82 MB transferred, no zip library. It goes
-  through a Cloudflare Worker
-  ([scm-js/cloudflare-blizzard-forwarder](https://github.com/scm-js/cloudflare-blizzard-forwarder))
-  for one reason: `download.blizzard.com` answers with a certificate for
-  `*.cloudfront.net`, plain HTTP is mixed content on an HTTPS page, and no route there
-  sends `Access-Control-Allow-Origin`. The worker adds the header and forwards ranges;
-  it holds nothing and redistributes nothing. The desktop build uses the same address —
-  its renderer is an ordinary page and enforces CORS like any other.
+The download goes through a small forwarder at `gamedata.scmjs.dev`
+([scm-js/cloudflare-blizzard-forwarder](https://github.com/scm-js/cloudflare-blizzard-forwarder))
+rather than straight to Blizzard, because a web page cannot read Blizzard's download
+server directly: its HTTPS certificate is for a different name, plain HTTP is blocked on
+an HTTPS page, and it sends no cross-origin header. The forwarder adds that header and
+passes the range requests through. It stores nothing and serves nothing of its own. The
+desktop app uses the same address, since its window is an ordinary web page with the same
+rules.
 
-- **Use your own StarCraft files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder
-  holding them; on the desktop, search the computer or point at the StarCraft folder.
-  Remastered installs have neither archive, so a Remastered-only user wants the download.
+**Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
+them. The desktop app can also search the computer, or take the StarCraft folder you
+point it at. A `patch_rt.mpq` in the folder is applied over the two, as it is in the
+game.
 
-Either way the extraction runs here and the result is kept, so it happens once. The dialog
-also removes a copy, which puts the chain back to where it was.
+Either way the extraction runs on your machine, in a background thread in the browser
+and in the app's own process on the desktop, and the result is kept so it happens once.
+Open maps pick the graphics up as they arrive. The same dialog removes a copy, which puts
+the editor back to whatever step of the search it would have reached without it.
 
-The container image (`docker/Dockerfile`) carries no game data — Blizzard's files are not
-redistributable, so `.dockerignore` cuts the extracted trees out of the build context and
-the image's nginx answers 404 for all five of them. A container therefore starts on step 4
-and asks, like the hosted build. To serve your own instead, mount an extracted tree over
-the paths step 1 probes:
+### The container image
+
+The container image at `ghcr.io/scm-js/scm-js` carries no game data and refuses to
+serve the paths the files would be at, so a container starts at step 5 and asks, like
+the hosted editor. To serve your own extraction to your own browser instead, mount an
+extracted tree over those paths:
 
 ```sh
 docker run --rm -p 8080:80 \
@@ -80,210 +124,184 @@ docker run --rm -p 8080:80 \
   ghcr.io/scm-js/scm-js:latest
 ```
 
-That is a copy on your own machine served to your own browser. Publishing such an image,
-or serving one from a public address, is redistributing Blizzard's data — see
-[ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
-
-One thing follows an install. The blank map the editor opens on was laid out before there
-was a tileset, and `flatTerrain` needs the CV5 to choose between a terrain's variations —
-with none it takes variation 0 for every pair, which is invisible under flat colours and
-becomes one megatile repeated across the whole map the moment the graphics arrive.
-`relayBlankTerrain` (`src/hooks/useMapFileActions.ts`) lays that map again with the real
-variations, and only that map: it does nothing once the map has been edited or came from a
-file (`src/atoms/gameDataAtoms.ts#blankFillAtom` remembers which fill needs it,
-`tests/blank-fill.test.ts`).
-
-Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
-`ReadMember` over the archives in, a map of paths to bytes out), `scripts/extract-*.mjs`
-wrap it for Node, `src/gamedata/extract.worker.ts` runs it in a browser worker, and
-`desktop/main.ts` runs it in the desktop app's main process.
+That is a copy on your own machine served to your own browser. Publishing an image with
+the files inside, or serving one from a public address, is redistributing Blizzard's
+data; see [ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
 
 ## Data sets
 
-The editor draws from one set of game files at a time, and a *data set*
-(`src/gamedata/profiles.ts`, a `GameDataProfile` — an id and a name) says which. The
-default is the game's own. Any other is a mod's: the same files in the same formats
-with some of them replaced — its own `units.dat`, graphics, sounds, `stat_txt.tbl` —
-installed under an id of its own and switched to from Help ▸ Game Data…, where the
-*Data sets* list appears once there is a second one. The choice is remembered
-(`scmjs.gameData`, listed in Preferences ▸ Browser storage like every other key).
+The editor draws from one set of game files at a time, and a *data set* names one. The
+default is the game's own. Any other is a mod's: the same files in the same formats with
+some of them replaced, its own `units.dat`, graphics, sounds or `stat_txt.tbl`. Help ▸
+Game Data… installs one beside the game's files and switches between them; the *Data
+sets* list appears once there is a second one, and the choice is remembered.
 
-Installing one is the ordinary extraction over more inputs: the game's two archives are
-required every time, because a mod replaces files rather than bringing the rest, and
-the mod's own archives and loose files are laid over them the way its loader lays them
-(`src/gamedata/archives.ts#readerFor` reads an overlay of loose members before any
-archive; `install.ts#installDataSet` takes both, and `splitPickedFiles` turns a picked
-folder into them — every `.mpq` an archive, every file under an `arr`, `unit`,
-`tileset`, `game`, `scripts` or `rez` folder a member, anything else ignored). The copy
-goes to `gamedata-profiles/<id>/` in the browser's private file storage, beside the
-game's own under `gamedata/`, so removing one leaves the others alone
-(`store.ts#profileDir`, `listStoredCopies`). The desktop app's own extraction is always
-the game's; a mod's copy lives in the renderer's storage there as in a browser.
+To add one, give it a name and pick a folder. The folder has to hold the game's two
+archives, because a mod replaces files rather than bringing the rest, together with the
+mod's own files: any `.mpq` archives, and loose files under `arr`, `unit`, `tileset`,
+`game`, `scripts` or `rez` folders, the way the mod's own loader lays them over the game.
+Anything else in the folder is ignored. The copy is stored under its own name beside the
+game's, so removing one leaves the others alone. On the desktop the app's own extraction
+is always the game's; a mod's copy lives in the browser-style storage there as anywhere
+else.
 
-Switching is the one thing the rest of the editor was not built for: every decoded
-tileset, table, GRP and cached frame describes the previous files, and the ids they are
-keyed by mean something else now. `src/services/gameData.ts#switchDataSet` drops the
-lot (`resetUnitAssets`, `releaseAllTilesets`, `clearFrameCache`, the plugin graphics
-cache), runs the chain again and bumps `gameDataRevisionAtom`, on which `useTileset`
-and `useUnitAssets` reload and the viewport repaints; an open map stays open and picks
-the new graphics up as they arrive. Plugins reach the same operations through
-`api.gameData` and hear about them on the `"gameData"` event.
+Switching drops everything decoded from the previous files, since the same ids now mean
+different pictures, and loads again from the new ones; an open map stays open and picks
+the new graphics up as they arrive. Plugins see the switch through `api.gameData`.
 
 A data set is a name over files in the game's formats, nothing more. The table sizes
 (228 unit types, 130 weapons, 61 upgrades, 44 technologies), the tileset formats and the
-map file's own fixed-width sections are the game's, so a mod that extends them — more
-unit types, an extended `.dat` layout, extended tilesets — is not a data set and is not
-covered; it would need the codecs themselves to change.
+map file's own fixed-width sections are the game's, so a mod that extends them, with more
+unit types, a longer `.dat` layout or extended tilesets, is not a data set and is not
+supported.
 
 ### Names
 
-The game names things in `stat_txt.tbl`: entries 0–227 are the unit types
-(`Name`, `Subname`, `Category`, NUL-separated — "Terran Siege Tank", "Tank Mode"), and
-`weapons.dat`, `upgrades.dat` and `techdata.dat` each carry a `label` column pointing
-into the same table. The editor's own tables (`src/data/units.ts`, `weapons.ts`) are
-StarEdit's names, which read better than the game's in about fifty places ("Cargo Ship
-(Unused)" where the game says "Unused", "Edmund Duke Turret (Tank Mode)" for "Duke
-Turret") and are the vocabulary the text trigger format and the other editors share.
-Both are wanted, so the rule (`src/data/gameNames.ts`) is per entry: **the data's name
-shows where it differs from what the game's own data says for that id, and StarEdit's
-stands everywhere else.** With Blizzard's files nothing changes; with a mod's, what it
-renamed shows its new name and the rest keep StarEdit's. The `GAME_*` tables there are
-what Blizzard's files say where that differs from StarEdit's table, generated from the
-real files and pinned against them in `tests/names.test.ts`; `unitName`, `weaponName`,
-`upgradeName` and `techName` read the loaded names first, so every list and dialog
-follows without being told, and the text trigger parser accepts the loaded names as well
-as StarEdit's so a trigger printed under a mod parses back.
+The game names things in `stat_txt.tbl`: entries 0 to 227 are the unit types, and the
+weapon, upgrade and technology tables each point into the same file. The editor's own
+name tables are StarEdit's, which read better in about fifty places ("Cargo Ship
+(Unused)" where the game says "Unused") and are the vocabulary the text trigger format
+and other editors share.
 
-(Reading the labels is also what showed the upgrade table had Plasma Shields at id 7
-where `upgrades.dat` puts it at 15, shifting eight names by one. `UPGRADE_NAMES` and
-`UPGRADE_RACE` now follow the file.)
+The rule is per entry: where the loaded data's name differs from what the game's own data
+says for that id, the loaded name shows; everywhere else, StarEdit's stands. With
+Blizzard's files nothing changes. With a mod's, whatever it renamed shows the new name in
+every palette, list and dialog, and the text trigger parser accepts both names, so a
+trigger printed under a mod reads back.
 
-## The game itself
+## Testing a map in the game
 
-Tools ▸ Test Map needs the *installed* game rather than its data: the desktop build's
-main process looks in the same places the archive search does for `StarCraft.exe`
-(`x86_64\` and `x86\` for Remastered, the folder itself for 1.16) and for a `Maps` folder,
-writes the map into `Maps\scmJS\` and starts the executable (`open -a` on macOS, Wine on
-Linux); a folder picked in the dialog is searched first and remembered in Preferences. A
-browser has no such reach: Chrome and Edge write into a folder picked once through the
-File System Access API, whose handle is kept in IndexedDB (`services/handleStore.ts`,
-shared with Open Recent), and other browsers download the file.
+Tools ▸ Test Map needs the installed game rather than its data. Neither version of
+StarCraft opens a map handed to it from outside, so the editor writes the map into a
+`scmJS` folder under the game's `Maps` folder, where Single Player ▸ Custom Game lists
+it. The desktop app finds the installation in the same places the archive search looks,
+takes a folder you pick and remembers it, and starts the game: the executable itself on
+Windows, `open -a` on macOS, Wine elsewhere. A browser has no such reach. Chrome and Edge
+write into a folder you pick once and remember; other browsers download the file.
 
-## Extracting
+## Extracting for a source build
+
+A clone has no game data until it is extracted. The script finds the archives on its own
+or takes them as arguments:
 
 ```sh
-npm run extract                                              # auto-detect
-npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"
-npm run extract -- path/to/StarDat.mpq path/to/BrooDat.mpq
-SCM_DATA_DIR=~/games/sc npm run extract
+npm run extract                                                     # look for an installation
+npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"     # a folder
+npm run extract -- path/to/StarDat.mpq path/to/BrooDat.mpq           # the archives themselves
+SCM_DATA_DIR=~/games/sc npm run extract                              # from the environment
 ```
 
-With no arguments the script looks for `StarDat.mpq` and `BrooDat.mpq` (and
-`patch_rt.mpq`, which wins over both) in `$SCM_DATA_DIR`, then in `fixtures/data/`,
-then in the usual install locations, including the Windows drives a WSL session sees
-under `/mnt`.
-
-Brood War's archive is required. Its `units.dat` is the layout the decoder expects,
-and the Ice, Desert and Twilight tilesets only exist there.
-
-Everything lands in `public/` ([inventory](../public/README.md)), which is gitignored.
-The run takes a few seconds and is idempotent, so re-run it after a patch or after
-changing what the scripts extract.
+With no arguments it looks in `SCM_DATA_DIR` or `STARCRAFT_DIR`, then in the
+repository's own `fixtures/data/`, then in the usual install locations for the platform,
+including the Windows drives a WSL session sees under `/mnt`. A `patch_rt.mpq` found with
+the two is applied over them.
 
 | Command | Does |
 | --- | --- |
 | `npm run extract` | everything |
-| `npm run extract:tilesets` | tileset graphics only |
-| `npm run extract:units` | unit tables, sprites and scripts only |
-| `npm run check:assets` | report what is on disk, touching no archives |
+| `npm run extract:tilesets` | the tileset graphics only |
+| `npm run extract:units` | the unit tables, sprites and scripts only |
+| `npm run check:assets` | report what is on disk without opening any archive |
 
-`npm run dev` and `npm run build` warn when the data is missing but do not fail. The
-app degrades instead of crashing: flat tileset colours instead of terrain, coloured
-markers instead of unit sprites, with a note in the relevant palette. A green test
-run and a working dev server therefore do not prove extraction still works. Run it.
+Everything lands in `public/` (its [README](../public/README.md) is the inventory),
+which is gitignored along with `fixtures/`. The run takes a few seconds and can be
+repeated at any time; repeat it after a game patch or after changing what the scripts
+take. `npm run dev` and `npm run build` warn when the files are missing and carry on,
+because the editor degrades rather than crashing without them. That also means a green
+test run and a working dev server prove nothing about the extraction; run it.
 
-`scripts/extract-assets.mjs` is the front end; archive discovery lives in
-`scripts/lib/archives.mjs`.
+## How terrain is drawn
 
-## Tileset graphics
-
-`public/tileset/<name>.{cv5,vf4,vr4,vx4,wpe}` is what the app fetches on demand and
-rasterises into one megatile atlas per tileset (`src/formats/tileset/`).
+Each tileset is five files. A tile id in the map file leads through them to pixels:
 
 ```
 MTXM tile id ──(id >> 4)──▶ CV5 group ──(id & 15)──▶ VX4 megatile
-VX4 megatile ──▶ 16 minitile refs (bit 0 = h-flip) ──▶ VR4 8×8 bitmaps ──▶ WPE palette
+VX4 megatile ──▶ 16 minitile refs (bit 0 = flipped) ──▶ VR4 8×8 bitmaps ──▶ WPE palette
 ```
 
-`load.ts` fetches and caches per tileset, `decode.ts` parses the five files,
-`atlas.ts` rasterises the atlas the viewport blits from, `terrain.ts` derives the
-terrain-type catalogue and its variations from the CV5, and `palette.ts` holds the
-terrain names (from Chkdraft's tables, checked against real files in
-`tests/palette.test.ts`).
+A tile is a 32×32 megatile made of sixteen 8×8 minitiles, each an index into the
+tileset's 256-colour palette. The CV5 groups megatiles into terrain types with their
+variations and edge pieces, which is where the terrain palette's list of terrains comes
+from. The VF4 holds each minitile's walkability and height, which the elevation and
+buildability overlays, the placement checks and the Walkability plugin all read.
 
-### Water animation
+The editor rasterises each tileset once into one large image, the *atlas*, and draws the
+map by copying tiles out of it. Only the tileset the open map uses is decoded; the others
+are fetched into the browser's cache in the background so a later map opens faster, but
+not decoded, since a decoded tileset is about 20 MB of pixels.
 
-The graphics are 8-bit indexed, and StarCraft animates water and lava by rotating a
-few short bands of the WPE palette every 8 game frames, about 336 ms on Fastest. The
-band tables per tileset are the game's own; Space Platform and Installation have
-none.
+### Water and lava
 
-The atlas keeps a second small canvas holding just the megatiles that touch those
-bands, and `setAtlasStep` re-rasterises it on each step. Always blit through
-`atlasSource(atlas, megatile)` rather than indexing `atlas.image` directly. Averages
-used by the minimap and far zoom stay at step 0.
+The graphics are indexed colour, and StarCraft animates water and lava by rotating a few
+short bands of the palette every eight game frames, about a third of a second at the
+Fastest speed. The band tables per tileset are the game's own; Space Platform and
+Installation have none. The editor keeps a second small atlas of just the megatiles that
+touch those bands and redraws it on each step. View ▸ Animate Water turns it on, and
+Preferences ▸ Display sets the speed from a quarter to four times the game's. The minimap
+and the far zoom levels, which draw average tile colours, do not animate.
 
-## Unit graphics
+## How units are drawn
 
-`npm run extract:units` mirrors the part of the MPQ tree that leads from a unit type
-to its picture:
-
-| Files | For |
-| --- | --- |
-| `arr/{units,flingy,sprites,images}.dat`, `arr/images.tbl` | the lookup chain |
-| `arr/{weapons,upgrades,techdata}.dat` | defaults the settings dialogs show |
-| `game/tunit.pcx` | team colour rows |
-| `scripts/iscript.bin` | animation bytecode |
-| `unit/**/*.grp`, `unit/**/*.lo?` | sprite sheets and overlay positions |
+A unit type leads to its picture through four tables:
 
 ```
 units.dat[id].flingy ─▶ flingy.dat.sprite ─▶ sprites.dat.image ─▶ images.dat.grp
    ─▶ images.tbl ─▶ unit\…\*.grp
-GRP palette indices 8–15 ─▶ tunit.pcx row for the player's colour ─▶ tileset WPE palette
-images.dat.iscript ─▶ iscript.bin header ─▶ Init / Built / StarEditInit ─▶ frames, overlays, turns
 ```
 
-The GRP walk is seeded from the 228 unit types *and* all 517 `sprites.dat` entries, so
-pure sprites and doodad overlays have graphics too. That is about 750 GRPs and 12 MB
-in the current manifest. GRPs and overlay files are fetched lazily the first time
-they are needed, so a melee map only pulls minerals, geysers and start locations.
+A GRP is a sprite sheet: a set of frames in the tileset's palette, with one frame per
+facing for anything that turns. The extraction walks this chain from all 228 unit types
+and from all 517 entries of the sprite table, so pure sprites and doodad overlays have
+graphics as well. Sprite sheets are fetched the first time something needs them, so a
+melee map pulls minerals, geysers and start locations and nothing else.
 
-Team colour comes from the `tunit.pcx` row for the player's colour, remapping palette
-indices 8–15, painted through the *tileset* palette. Sprites therefore need the
-tileset loaded as well. Pink and the custom Remastered colours have no row to remap
-to, so `teamColor.ts` synthesises a ramp for them.
+Team colour is palette indices 8 to 15 of a GRP, remapped through the row of
+`tunit.pcx` for the owning player's colour and painted through the tileset's palette.
+Sprites therefore need the tileset loaded as well. Pink and the custom RGB colours a
+Remastered map can set have no row to remap to, so the editor synthesises a ramp for
+them.
 
 ### Animation
 
-Placed units run their in-game idle animations (View ▸ Animate Units). The viewport
-steps every unit's iscript once per game frame (42 ms, "Fastest"), the same rAF loop
-that drives water cycling. Preferences ▸ Display scales either rate on its own
-(0.25× to 4×), so a slow machine — or a preference for a calmer map — can turn one
-down without turning it off.
+Placed units run their idle animations when View ▸ Animate Units is on. Every unit's
+script is stepped once per game frame, 42 ms at Fastest, on the same clock as the water,
+and Preferences ▸ Display scales the rate on its own.
 
-Each unit is a stack of images (shadow, main graphic, overlays), each with its own
-script. Buildings play their `Built` animation; tanks and Goliaths play
-`StarEditInit`, StarEdit's own hook, which adds the turret overlay. That gives
-turning turrets, pulsing Hatcheries, marines looking around, the Nexus glow, Starport
-lights and refinery smoke.
+Each unit is a stack of images, shadow, body and overlays, each with its own script.
+Buildings play their *Built* animation; tanks and Goliaths play *StarEditInit*,
+StarEdit's own hook, which adds the turret. That is what gives turning turrets, pulsing
+Hatcheries, marines looking around, the Nexus glow, Starport lights and refinery smoke.
 
-Damage overlays are re-evaluated from hit points: a building below two thirds burns
-(Terran), sparks (Protoss) or bleeds (Zerg) at the positions its `.lo` file gives,
-more of them the lower the HP, with the large effect below one third. Fire draws
-through the tileset's `ofire`/`gfire`/`bfire`/`bexpl` remap tables, extracted
-alongside the tileset files, blended additively as a stand-in for the game's
-palette-index lookup. Cloaked units draw half transparent.
+Damage overlays follow hit points: a building below two thirds burns (Terran), sparks
+(Protoss) or bleeds (Zerg) at the positions its `.lo` file gives, with more of them the
+lower the hit points and the large effect below one third. Fire draws through the
+tileset's own remap tables, extracted beside its graphics. Cloaked units draw half
+transparent. Anything that needs the running game, attacks, sounds, projectiles and
+condition jumps, is skipped.
 
-Anything that needs the running game (attacks, sounds, projectiles, condition jumps)
-is a no-op. `src/formats/dat/iscript.ts` is dependency-free so the extraction script
-can import it under Node's type stripping and walk the scripts for reachable images.
+## In the source
+
+For developers. The extraction is one module shared by every route, and the drawing is
+under `src/formats/`:
+
+| File | Does |
+| --- | --- |
+| `src/gamedata/source.ts` | The search order above, as a chain over injected probes so `tests/gamedata.test.ts` can pin it without a browser. |
+| `src/gamedata/store.ts` | The browser's copies, in the Origin Private File System: `gamedata/` for the game's own, `gamedata-profiles/<id>/` per data set, a stamp file written last so a half-written copy counts as nothing. |
+| `src/gamedata/install.ts`, `zip.ts` | The two install routes. `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
+| `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only `iscript.ts`, so Node runs it without a build step. |
+| `src/gamedata/extract.worker.ts`, `scripts/extract-*.mjs`, `desktop/main.ts` | The three places it runs: a browser worker, the Node scripts, the desktop's main process (which also holds the disk search and Test Map). |
+| `src/gamedata/archives.ts`, `scripts/lib/archives.mjs` | Opening the archives with [mopaq](https://github.com/jeany55/mopaq), later archives winning, with a mod's loose files as an overlay; and finding them on disk. |
+| `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
+| `src/data/gameNames.ts` | The per-entry naming rule; `tests/names.test.ts` pins the differences against the real files. |
+| `src/formats/tileset/` | `decode.ts` for the five files, `atlas.ts` for the atlas, `terrain.ts` for the terrain catalogue read from the CV5, `palette.ts` for the terrain names, `cycle.ts` for the palette bands, `doodads.ts` for `dddata.bin`, `load.ts` for fetching and the per-tileset cache. |
+| `src/formats/dat/` | Decoders for the `.dat` tables, `.tbl`, GRP, PCX, `.lo` and the iscript bytecode. |
+| `src/formats/units/` | The unit tables and lazy sprite loading, the per-frame canvas cache with its byte budget, team colours, and the animator. |
+| `src/services/testMap.ts` | Test Map's browser half. |
+
+Two things to know before changing any of it. The manifests the extraction writes are
+what the loaders probe for, so changing what is extracted means re-running it and
+checking the app against the result, not only the tests. And `tests/dat.test.ts`,
+`tests/iscript.test.ts`, `tests/animate.test.ts`, `tests/palette.test.ts` and
+`tests/tileset.test.ts` run against the real files in `public/` and skip when they are
+absent, so a green run on a clone without them has not exercised the decoders.

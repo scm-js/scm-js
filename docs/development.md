@@ -1,150 +1,455 @@
 # Development
 
-Node.js 22.18 or newer. The unit extraction script imports TypeScript directly and
-depends on Node's built-in type stripping.
+How to run scmJS from source, how it is built and released, and what to know before
+changing it. This is for anyone running the editor locally, building the desktop app or
+the container, or contributing. The [user guide](../README.md) says what the editor does;
+[file-formats.md](file-formats.md) and [game-data.md](game-data.md) explain the map file
+and the game data; [plugins.md](plugins.md) is for plugin authors. Per-subsystem notes for
+someone working deep in one area are in [CLAUDE.md](../CLAUDE.md), which is written for
+an AI assistant but is the most detailed description of the code there is.
+
+## Getting started
+
+You need Node.js 22.18 or newer (the extraction scripts import TypeScript directly and
+rely on Node's built-in type stripping) and git. A StarCraft installation is optional: the
+editor runs without the game's graphics, and the first run offers to download them.
 
 ```sh
+git clone https://github.com/scm-js/scm-js
+cd scm-js
 npm install
-npm run extract   # one-time: see docs/game-data.md
-npm run dev       # http://localhost:5173
-npm run build     # tsc -b (type-check) + vite build
-npm run lint      # oxlint
-npm test          # vitest run, node environment, ~2s
+npm run extract        # optional: the game's graphics, from an installation you own
+npm run dev            # http://localhost:5173
 ```
 
-`npm run build` is the type-check; `npm run lint` does not type-check.
-`tsconfig.app.json` sets `noUnusedLocals`, `noUnusedParameters`,
-`verbatimModuleSyntax` (so `import type`) and `erasableSyntaxOnly` (so no enums and no
-parameter properties).
+The first `npm run dev` or `npm run build` needs a network connection: a `predev` /
+`prebuild` hook fetches the five default plugins at their pinned versions into the
+gitignored `plugins/` folder, where the build compiles them in (see
+[Defaults and vendoring](#defaults-and-vendoring)). After that it is offline. The same
+hook reports what game data is on disk and warns, rather than fails, when there is none.
+
+`npm run extract` looks for `StarDat.mpq` and `BrooDat.mpq` on its own or takes a path;
+the details and what comes out are in [game-data.md](game-data.md#extracting-for-a-source-build).
+Without it terrain is flat colours and units are markers, and everything else works.
+
+### Everyday commands
+
+```sh
+npm run dev            # Vite dev server
+npm run build          # tsc -b (the type-check) + vite build → dist/
+npm run preview        # serve dist/ locally
+npm run lint           # oxlint; does not type-check
+npm test               # vitest, a few seconds, no browser
+npm run test:watch
+npx vitest run tests/chk.test.ts      # one file
+npx vitest run -t "flood fill"        # tests matching a name
+npm run check:assets   # what game data is on disk
+```
+
+`npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
+main process (`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`). The
+app config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax` (so
+`import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
+parameter properties). Lint and build both run on every push, so run them before one.
+
+### Dev deep-links
+
+Query parameters jump straight to a UI state, which is the fastest way to iterate on a
+screen or take a screenshot:
+
+```
+/?nosplash                        skip the splash
+/?nosplash&layer=units            select a layer: terrain, doodads, units, sprites, locations, fog, clipboard
+/?nosplash&dialog=playerSettings  open a dialog by id; repeatable
+/?nosplash&zoom=0.5&tileset=ice   zoom level and tileset
+/?nosplash&mode=tile              terrain palette mode: isom, rect, tile
+/?nosplash&layer=fog&fogPlayer=3  view and paint one player's fog
+```
+
+An unknown dialog id is reported in the console with the list of valid ones.
+
+In development, React 19's "Components" performance track is switched off, because it
+serialises every render's props and turned mounting the chrome into seconds of blocked
+main thread. Set `VITE_REACT_TRACKS=1` to have it back when profiling renders.
+
+## Repository layout
+
+```
+src/
+  atoms/        Jotai state: the document and its undo history, UI state, the dialog stack, preferences
+  editor/       The edits: invertible change lists per layer, placement checks, settings transactions,
+                save planning, validation, find, statistics
+  data/         Reference tables (tilesets, players, units, upgrades, techs, trigger definitions) and
+                the names read out of the loaded game data
+  gamedata/     Where the game files come from: the resolver, the browser's stored copies, extraction,
+                the desktop bridge's types, data sets
+  formats/
+    chk/        The scenario: container reader, section registry, typed section codecs, new maps
+    mpq/        .scm/.scx open and save on top of mopaq
+    tileset/    Tileset decoding, the megatile atlas, the terrain catalogue, palette cycling
+    dat/        units/flingy/sprites/images.dat, .tbl, GRP, PCX, .lo and iscript decoders
+    units/      Unit tables, lazy sprite loading, the frame cache, team colours, the animator
+    triggers/   The text trigger format (TrigEdit syntax)
+  plugins/      The plugin API (the contract), host, loader, defaults, registry
+  services/     File pickers and saving, image export, the startup preload, Test Map, data-set switching
+  hooks/        The React side of the tools, file actions, hotkeys, plugins, updates
+  components/
+    chrome/     Menu bar, toolbar, status bar, toasts
+    panels/     Left dock (layers and palettes), right dock (minimap, layers, properties), plugin panels
+    viewport/   The map canvas, rulers, hover ghosts, context menu
+    dialogs/    Every dialog, and the registry that lazy-loads them
+    splash/     The splash screen
+    ui/         Primitives: buttons, inputs, lists, tabs, the dialog frame
+  styles/       Plain CSS, imported in order: tokens → base → ui → chrome → panels → viewport → dialogs → splash
+desktop/        The Electron shell: main process, preload bridge, updater
+scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
+tests/          vitest suites
+docs/           These documents, the release notes, the guide's pictures
+docker/         The container image
+plugins/        Generated: the default plugins' source at their pinned versions (gitignored)
+public/         Generated: the extracted game data (gitignored except its README and the icons)
+fixtures/       Blizzard maps and archives used by tests (gitignored)
+plugin-api/     Generated: the bundled plugin typings (gitignored)
+```
+
+## How the editor is put together
+
+The conventions that everything else follows. Each is explained in more depth in
+[CLAUDE.md](../CLAUDE.md), and the source comments say why.
+
+**State is Jotai, and there is one store.** No context providers, no Redux. Persisted
+settings are `atomWithStorage` atoms under keys starting with `scmjs.`, listed in
+Preferences ▸ Browser storage; every such key has to be registered in the reset table in
+`src/atoms/preferencesAtoms.ts`, and a test fails when one is not.
+
+**The scenario is mutated in place.** `scenarioAtom` holds the parsed `Scenario` that is
+written to disk, and edits change it directly rather than replacing it. React therefore
+does not see an edit on its own: each area has a revision counter (`terrainRevisionAtom`
+and its siblings) that is bumped after every edit, undo and load, and the viewport and
+panels subscribe to those. A second set of atoms mirrors the fields the chrome displays
+(map name, size, tileset); change one side and you have to change the other.
+
+**Only changed sections are written.** `Scenario.dirty` is the set of section names to
+re-encode on save; everything else goes out byte for byte. Any code that mutates the
+scenario must mark every section it touched, or the change is silently lost on save.
+[file-formats.md](file-formats.md#in-the-source) has the rest.
+
+**Edits are invertible change lists.** A brush, a placement or a paste produces a list of
+`{ before, after }` changes per layer, applied by one function in one fixed order and
+reversed for undo. A stroke is one history entry (200 levels). The settings dialogs, the
+trigger editors, resize, and the tileset change are transactions outside the undo model,
+as in StarEdit: each is its own OK / Apply / Cancel.
+
+**Dialogs are lazy.** Adding one means a `DialogId` in `src/components/dialogs/ids.ts`
+and an entry in the registry in `DialogHost.tsx`, which loads each dialog module on
+first use. Nothing on the startup path may import a dialog module statically, or Vite
+folds it back into the main chunk.
+
+**Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract; the
+host builds it over the store with no React and no atoms exposed. A plugin's edit goes
+through the same transaction and history as a brush stroke. See
+[The plugin host](#the-plugin-host).
+
+## Tests
+
+Tests are `tests/*.test.ts` (and any `src/**/*.test.ts`), run by vitest in Node with no
+browser. The whole suite takes a few seconds.
+
+Some suites need real Blizzard files: maps in `fixtures/maps/*.scx` and extracted data in
+`public/`. Those use `describe.skipIf(...)` and skip silently when the files are absent,
+so a green run on a fresh clone has not exercised them. CI has no game data and always
+skips them; run them locally before touching a codec, a decoder or the isometric brush.
+`fixtures/` and the generated `public/` trees are gitignored, and nothing in them may be
+committed.
+
+Two suites are worth knowing about:
+
+- `tests/plugin-network.test.ts` fetches, transpiles and imports the real default plugins
+  from GitHub. It is off unless `SCMJS_NETWORK_TESTS=1`, and CI runs it in the web build
+  and the release pre-flight, since opening the editor no longer walks that path.
+- `tests/docs.test.ts` checks these documents: the split into site pages, every relative
+  link, every picture, and that the plugin guide names only calls the API declares.
+
+## Game data
+
+The editor draws with StarCraft's own graphics, which are not redistributable and are
+never committed. A clone extracts them from an installation with `npm run extract`; a
+build without them falls back to flat colours and asks the user through
+Help ▸ Game Data…. No build, container image or hosted site carries the data or an
+address to fetch it from. [game-data.md](game-data.md) covers where the editor looks,
+the download route and the extraction; [ATTRIBUTION.md](../ATTRIBUTION.md) the terms.
 
 ## Desktop build
 
-`desktop/` is an Electron shell around the same web bundle: `main.ts` serves `dist/`
-under `app://scmjs/` and answers the game-data IPC (search the disk, extract, pick a
-folder), `preload.ts` exposes it as `window.scmjsDesktop` (typed in
-`src/gamedata/desktop.ts`). Extracted files go to the user data directory and are served
-under the same base, so the renderer finds them as bundled.
+`desktop/` is an Electron shell around the same web bundle. `main.ts` serves `dist/`
+under `app://scmjs/`, searches the disk for the game archives and extracts them into the
+app's data folder, opens maps handed over by the file manager, guards the window's close
+while a map has unsaved changes, and holds the updater. `preload.ts` exposes that to the
+page as `window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
 
 ```sh
-npm run build:desktop   # web build in desktop mode + main bundle + electron-builder for this OS
-npm run desktop         # bundle the main process and run Electron against dist/
+npm run desktop                 # bundle the main process and run Electron against dist/
+SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against the dev server instead
+npm run build:desktop           # web build + main bundle + electron-builder for this OS
 ```
 
-`scripts/build-desktop.mjs` is those steps, and its arguments say what the packaging step
-builds — with none it is this OS and the targets `electron-builder.yml` lists for it, which
-is what CI runs:
+`npm run build:desktop` takes the packaging step's platform, architectures and targets
+on the command line; with none it builds this OS with the targets `electron-builder.yml`
+lists, which is what CI does:
 
 ```sh
 npm run build:desktop -- win                 # Windows: nsis + zip
 npm run build:desktop -- win nsis            # just the installer
 npm run build:desktop -- linux AppImage x64 arm64
 npm run build:desktop -- mac dmg arm64
-npm run build:desktop -- --dir               # unpacked app, no installer — the fast check
+npm run build:desktop -- --dir               # unpacked app, no installer: the fast check
 npm run build:desktop -- win --skip-web      # repackage the dist/ already on disk
 npm run build:desktop -- --skip-plugins      # leave plugins/ alone (no vendoring fetch)
 ```
 
-Before the bundle it runs `scripts/vendor-plugins.mjs` — as `npm run dev` and
-`npm run build` do, in their `predev` / `prebuild` hooks — which writes each default
-plugin's own source, at the tag `src/plugins/defaults.ts` pins, into the gitignored
-`plugins/`, where `src/plugins/builtin.ts` globs it into the build. See
-[docs/plugins.md](plugins.md) for why: the short version is 890 KB gzipped off a first
-visit, and an installed app or a container that starts with all five plugins and no
-network.
+Platforms are `win`, `mac` and `linux`; architectures `x64`, `ia32`, `arm64`, `armv7l`
+and `universal`; any electron-builder target name (`nsis`, `dmg`, `zip`, `AppImage`,
+`deb`, …) applies to every platform named. `--skip-web` and `--skip-main` reuse the
+bundles on disk, `--publish <mode>` and anything after a bare `--` go to electron-builder
+as they are. Cross-building is electron-builder's business: the script warns about
+combinations that need tooling the machine may lack (a macOS installer off a Mac, an
+NSIS installer without Wine) and runs them anyway; `--dir` and `zip` cross-build with
+nothing installed. Output lands in `release/`.
 
-It only fetches what is not already there at the pinned version, so the first build after
-a clone needs a connection and every one after it is offline and instant. `--force`
-re-fetches, `--clean` removes the directory, `--list` prints the specs, and
-`SCMJS_SKIP_VENDOR=1` skips the step for a build with no network and no copy yet — that
-bundle then fetches its defaults at startup, the way the editor did before. `GITHUB_TOKEN`,
-if set, keeps the one file-list request per plugin off the anonymous rate limit; CI sets it.
-`--skip-plugins` is the same skip for `build:desktop` alone.
+The build also writes `THIRD-PARTY-NOTICES.txt` into `dist/`: the license text of every
+runtime dependency and of the compiled-in plugins, generated by `scripts/lib/notices.mjs`
+from `package.json` rather than from a list, so it rides in the web zip, the installers
+and the container image without anyone maintaining it.
 
-A directory in `plugins/` carries a `vendored.json` naming the spec it came from, which is
-how the script knows which copies are its own: those it brings up to date or removes when
-they stop being defaults, and one you put there by hand it leaves alone.
+What ships is decided by `electron-builder.yml`: `dist/` and `desktop/dist/` only, never
+`node_modules` (Vite bundles everything, mopaq and the extraction included) and never the
+game data a developer's `public/` may hold. Windows gets an NSIS installer and a zip
+(not electron-builder's `portable` target, which re-extracts the whole app on every
+launch), macOS a dmg per architecture, Linux an AppImage and a `.deb`. The installers
+register `.scm`, `.scx` and `.chk`. Asset names carry no version, for the reason under
+[Download links](#download-links). Only `en-US` of Chromium's locales is included, since
+the editor has no translations. Builds are unsigned: Windows shows SmartScreen's
+"unrecognized app" screen, and macOS refuses an unsigned app until the user clears the
+quarantine attribute.
 
-Platforms are `win` / `mac` / `linux`, architectures `x64` / `ia32` / `arm64` / `armv7l` /
-`universal`, and any electron-builder target name (`nsis`, `dmg`, `zip`,
-`AppImage`, `deb`, …) applies to every platform named; `--publish <mode>` and anything after
-a bare `--` go to electron-builder as they are. `--skip-web` and `--skip-main` reuse the
-bundles on disk when only the packaging is being changed. Cross-building is electron-builder's
-business: the script warns about the combinations that need tooling the machine may not have
-(a macOS installer anywhere but on a Mac, an NSIS one without wine) and runs them anyway —
-`--dir` and `zip` cross-build with nothing installed.
+The app's data folder is the platform's usual one for an app named `scm-js`
+(`%APPDATA%\scm-js` on Windows, `~/.config/scm-js` on Linux,
+`~/Library/Application Support/scm-js` on macOS). It holds the extracted game data, the
+remembered window geometry in `window.json`, and `startup.log`, the milestones of the
+last launch (process start, main script, window created, `dom-ready`, which signal showed
+the window, and the window geometry at each step). `SCMJS_TRACE=1` echoes the same to
+the terminal. When a launch "hangs and then opens", that log is what tells a slow disk, a
+virus scanner reading the binaries, and a slow first paint apart.
 
-Windows gets an NSIS installer and a **zip**, not electron-builder's `portable` target.
-That target is a 7-Zip SFX, and its NSIS template (`app-builder-lib/templates/nsis/portable.nsi`)
-does `RMDir /r $INSTDIR` and then re-extracts the whole app into `%TEMP%` on *every* launch —
-there is no cache, whether or not `unpackDirName` is pinned — so it pays a multi-hundred-megabyte
-unpack each time, before any of our code exists to say so. The one thing it offers to cover that
-wait is `portable.splashImage`, a single `.bmp` handed to the NSIS BgImage plugin, which paints a
-backdrop over the whole desktop; it cannot animate, and the boot splash in `index.html` cannot
-help because Electron has not started. A zip is unpacked once by the user and every launch after
-it is the ordinary one measured above.
+The launch itself is arranged so that something is on screen early: the window is
+created hidden and shown on the renderer's first paint, `index.html` carries a boot
+splash in plain markup so that paint needs no stylesheet or bundle, and the app mounts
+its chrome two frames after the splash. The saved maximized state is applied after the
+window is shown. The reasons, and the measurements behind them, are in the comments in
+`desktop/main.ts` and `src/App.tsx`.
 
-`electron-builder.yml` packages `dist/` and `desktop/dist/` only — never `node_modules`
-(everything is bundled by Vite) and never the game data a developer's `public/` holds.
-Builds are unsigned for now.
+### Running the Windows build from WSL
 
-What the download weighs is almost all Electron. The Windows zip is about 158 MB, of which the
-Electron executable is 103 MB compressed and the app's own asar 5 MB (20 MB unpacked, 14 MB of it
-TypeScript shipped twice: the transpile worker the plugin loader runs `.ts` plugins through,
-and its main-thread fallback). `electronLanguages: [en-US]` drops Chromium's other 54 UI locales, which were 50 MB
-unpacked and 12 MB of the zip; the editor has no translations, so nothing is lost. The DirectX and
-Vulkan DLLs (`dxcompiler.dll`, `dxil.dll`, `vk_swiftshader.dll`; 38 MB unpacked, 15 MB zipped)
-are Chromium's WebGPU and software-Vulkan back ends, which a canvas-2D editor never reaches — they
-could go in an `afterPack` hook, but that needs a run on real Windows first and has not been done. The first run opens maximized (1400 × 900 is what restoring it
-down gives back); after that the window comes back the size, position and maximized state it
-was left at, kept in `window.json` in the user data directory and saved half a second after
-the last move or resize as well as on close, so a session that ends in a crash or a kill still
-remembers. A position that no longer lands on any attached screen is dropped and the platform
-places the window. Closing the window (or quitting) while the open map has unsaved changes is
-held back in the main process and handed to the editor, which asks with its own Close Scenario
-dialog — Save goes through the ordinary File ▸ Save path (which, with a file handle from the
-open or save picker, writes in place; see below); in a browser tab the same preference
-arms `beforeunload`, where all the page can do is make the browser ask its own generic question
-(`src/hooks/useCloseGuard.ts`). The icon comes from `public/icon.png`, the same file electron-builder
-turns into the `.ico` / `.icns`. `SCMJS_DEV_URL=http://localhost:5173 npm run desktop`
-points the window at the dev server.
+The desktop build cross-builds from WSL, but where the packaged app is run from changes
+the launch more than anything in the code: `\\wsl.localhost\…` is a network share, and
+Chromium loading its binaries and then every asset through it takes minutes. The same
+build, launched from the WSL filesystem and from `C:`:
 
-Saving (`src/hooks/useMapFileActions.ts#saveDocument`, `src/services/mapIo.ts`) keeps the File
-System Access handle a Chromium browser or Electron gives for a file — from `showOpenFilePicker`,
-a drop's `getAsFileSystemHandle()` (requested inside the drop event) or `showSaveFilePicker` —
-in `mapFileHandleAtom`, so Ctrl+S writes in place after one permission prompt; without a handle it
-goes through the save picker, and without the API (Firefox, Safari) it downloads, and the toast
-says which happened (`pushToastAtom`, `components/chrome/Toasts.tsx`). The Save dialog
-(`SaveMapDialog`, `payload.copy` for Save Copy As) previews `editor/save.ts#planSave` and hands
-the built bytes to `saveDocument`; `askDialog` lets a caller — Close Scenario's Save — await its
-answer the way `guardedAction` awaits the close confirmation. The options confirmed there are
-kept per document in `saveOptionsAtom` and reused by Ctrl+S.
+| milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
+| --- | --- | --- |
+| main script evaluated | 47 ms | 628 ms |
+| window created | 142 ms | 963 ms |
+| `dom-ready` | 215 ms | not within 25 s |
+
+So copy it over first:
+
+```sh
+npm run build:desktop -- win --dir          # release/win-unpacked
+cp -r release/win-unpacked /mnt/c/Users/<you>/scmjs-test
+SCMJS_TRACE=1 WSLENV=SCMJS_TRACE /mnt/c/Users/<you>/scmjs-test/scmJS.exe
+```
+
+`WSLENV` forwards the variable into the Windows process. From WSL, the app's data folder
+is `/mnt/c/Users/<you>/AppData/Roaming/scm-js`.
+
+### In-app updates
+
+The desktop app checks GitHub releases at startup (a preference, on by default) and
+through Help ▸ Check for Updates…, using electron-updater over the `latest*.yml` feed
+files the release workflow uploads beside the installers. Finding one raises a toast with
+a Download button rather than a dialog; nothing downloads or installs unasked, and
+installing goes through the same unsaved-changes gate as closing the window. A nightly
+build follows the nightlies and a stable build follows stable releases; a preference lets
+a stable install opt into nightlies.
+
+Windows, the AppImage and the `.deb` install updates themselves. macOS can see one but
+not install it until the app is code-signed, so the dialog offers the release page there.
+A development run (`npm run desktop`) and an unpacked Linux folder report that they
+cannot check, since the updater has nothing it could replace. `desktop/updater.ts` is the main-process side,
+`src/editor/updates.ts` the state machine and every string, `tests/updates.test.ts` the
+cases.
+
+## The plugin host
+
+[plugins.md](plugins.md) is written for someone who has the npm package and none of this
+repository. This is the editor's half: where the plugin system lives and how a plugin
+gets from an address to a running `activate`.
+
+| File | |
+| --- | --- |
+| `src/plugins/api.ts` | The public types, and the only place the contract is written. `PLUGIN_API_VERSION` bumps for a change that is not backward compatible; additions leave it alone. |
+| `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the store, with a `Contributions` bag that `dispose()` empties. `activatePlugin` / `deactivatePlugin` drive the lifecycle; `inspectPlugin` / `installPlugin` are the confirm-then-add pair. |
+| `src/plugins/loader.ts` | Spec parsing, the manifest fetch, and the fetch / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the callbacks it takes, so the tests run it in Node. |
+| `src/plugins/defaults.ts` | The plugins a fresh editor starts with, each pinned to a tag. |
+| `src/plugins/registry.ts` | Browse Plugins: parsing, searching and caching the JSON indexes. |
+| `src/plugins/claims.ts` | The trigger-list claims the trigger editors read. |
+| `src/plugins/images.ts` | Image loading, clipboard images, and drop / paste transfers for plugin dialogs. |
+| `src/plugins/failures.ts` | The toast a failed activation raises. |
+| `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/`, where the vendored defaults land. |
+| `src/plugins/transpile.worker.ts` | TypeScript in a worker, for a `.ts` plugin loaded from source. |
+| `src/atoms/pluginAtoms.ts` | The installed list, the stored code copies, the runtimes, the contribution registries, and the one-at-a-time requests the viewport serves: picks, map tools, overlays, panels, claims. |
+| `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps the runtimes in step with the list. |
+| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, Browse, the Add / Update confirmation, and the frame a plugin's dialog mounts into. |
+| `src/components/panels/PluginPanels.tsx` | The floating frames a plugin's panel mounts into. |
+
+The chrome reads the registries: the menu bar merges plugin menu items into its model,
+the viewport and the terrain palette append the matching context items, and the hotkey
+hook checks plugin combos first. The viewport also serves the requests: a pick ahead of
+every layer, then a running map tool, then the overlays at their slots in the paint pass,
+each with a guarded `finish` so its promise settles exactly once however it ends.
+
+A plugin's `document.edit` wraps the scenario in a transaction whose operations apply as
+they are called and accumulate change lists, then commits one history entry through the
+same path a brush stroke takes, stranded-object pass included. `document.update` is the
+settings-and-triggers equivalent, committing through the settings and triggers commits.
+`document.sections` rewrites the file and installs the re-parsed scenario, which is why
+it drops the history.
+
+### The loading pipeline
+
+1. The spec is parsed into a base URL. `builtin:<name>` is a plugin compiled in from
+   `plugins/<name>/`; a `github:` spec or a github.com URL resolves to
+   `raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`; any other URL is a
+   manifest, an entry file (a manifest is synthesised from its name) or a directory
+   holding `plugin.json`.
+2. The manifest is fetched and validated; only `name` is required.
+3. The file to import is the manifest's `build` when it has one (a committed bundle, one
+   fetch, no transpile), else its `entry`.
+4. That file is fetched as text and, if it is TypeScript, transpiled in the worker.
+   Fetching as text matters: `raw.githubusercontent.com` serves `text/plain`, which a
+   browser refuses to import as a module.
+5. Relative imports are followed depth first, and each file becomes a `blob:` module URL
+   with its specifiers rewritten. An extensionless specifier is tried as `.ts`, `.tsx`,
+   `.mts`, `.js`, `.mjs` and then as that directory's `index.*`; `./x.js` falls back to
+   `./x.ts`. Cycles and bare package names are errors naming the file.
+6. The module is imported and its default export (or a named `activate`) is called with
+   the API. Whatever it returns is kept for deactivation.
+
+### Adding one
+
+Pressing **Add** in Manage Plugins installs nothing. The editor canonicalises the
+address, asks GitHub which commit the ref points at, and reads the `plugin.json` at that
+commit. No entry file is fetched, nothing is transpiled and nothing is imported; probing
+for `plugin.ts` would mean fetching code the user has not agreed to. The confirmation
+opens only once a manifest came back; an address with nothing behind it is reported under
+the Add field instead.
+
+The install is the only writer past the dialog. Its three ticks are *Enable it now*,
+*Pin to this version* (the stored spec becomes `github:owner/repo@<sha>`) and *Load from
+a copy saved here* (below). The **Update** button on a pinned row previews the branch and,
+when it holds a different commit, reopens the same dialog with the old commit marked to be
+replaced.
+
+A listed plugin that is not running is still described: the manifest alone is fetched to
+fill in name, version, description and icon, and the answers are cached in browser
+storage so the next visit renders from them while the refresh runs. Browse Plugins reads
+the registry indexes the same way and hands a chosen entry to the same Add path, so a
+registry decides what is listed and never what is trusted.
+
+### Loading from a copy
+
+*Load from a copy saved here* means "prefer the copy". With no copy yet, the load records
+every fetched file into browser storage (capped; a larger plugin stays remote with a
+console warning). With a copy, the load has no network path at all and errors on a file
+the copy lacks, so a plugin that grew a file since the copy was made says so rather than
+fetching it. Reload drops the copy and fetches again; turning the option off drops it too.
+
+### Defaults and vendoring
+
+The five default plugins (scmscx.com, Repair, Walkability, Terrain from Image and Paint)
+are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
+to a **tag**, never a branch, so that a push to a plugin repository cannot change every
+editor already in use and any release can be rebuilt as it shipped. Moving a default
+forward is a commit that changes the tag there. A plugin's identity is its repository,
+whatever version follows, which is what keeps an older editor's unpinned spec, the
+compiled-in copy and the pinned default from being listed and run as three plugins.
+
+`scripts/vendor-plugins.mjs` writes each default's source at its tag into the gitignored
+`plugins/`, where `builtin.ts` compiles it into the bundle. It runs from `predev`,
+`prebuild` and the desktop build, fetches only what is not already there at the pinned
+version, and honours `GITHUB_TOKEN` to stay off the anonymous rate limit (CI sets it).
+A directory it wrote carries a `vendored.json`; one you put there by hand is left alone.
+
+```sh
+npm run vendor:plugins             # bring plugins/ up to date
+npm run vendor:plugins -- --force  # fetch again even where the spec matches
+npm run vendor:plugins -- --clean  # remove the directory
+npm run vendor:plugins -- --list   # print the pinned specs
+SCMJS_SKIP_VENDOR=1 npm run build  # skip it: that bundle fetches its defaults at startup
+```
+
+Every build compiles them in, not only the desktop, because of the cold path: one remote
+`.ts` plugin starts the transpile worker, and TypeScript is inlined into that worker, so
+five remote defaults put 3.4 MB (975 KB gzipped) of compiler onto a first visit. Measured
+on the production build, a cold visit went from 1235 KB gzipped and 20 cross-origin
+requests to 344 KB and none. `tests/vendor-plugins.test.ts` pins the script's parsing and
+the rule that no default may be unpinned.
+
+## Plugin typings
+
+Plugin repositories compile against `@scm-js/plugin-api`, an npm package holding one
+generated `index.d.ts` bundled from `src/plugins/api.ts`.
+
+```sh
+npm run build:plugin-types      # → plugin-api/index.d.ts + package.json (gitignored)
+npm run publish:plugin-types    # publish to npm and push to github.com/scm-js/plugin-api
+```
+
+The build refuses a bundle that still carries an import, since a file naming `jotai` or
+`react` is one a plugin repository cannot compile with alone. The version is the API's,
+not the editor's: the major is `PLUGIN_API_VERSION`, the minor moves when the
+declarations do, and a build that did not move the contract publishes nothing. The
+`plugin-api` job in the Build workflow runs it on every build; the git push needs the
+`PLUGIN_API_PAT` organisation secret (it reports rather than fails without it) and the
+npm publish is behind the `PUBLISH_PLUGIN_API` repository variable, authenticating by
+OIDC through npm's trusted publishing with `--provenance`. Setting that up is in
+`scripts/publish-plugin-api.mjs` and the job's comments. `tests/plugin-api-package.test.ts`
+pins the version rule and the no-imports rule.
+
+The shared workflow each plugin repository calls, `scm-js/.github`'s `plugin-ci.yml`,
+type-checks, tests, rebuilds and commits the plugin's `dist/plugin.js` on its main branch,
+and at a tag checks that the committed bundle is what the source builds to.
 
 ## Releases
 
-`.github/workflows/build.yml` has three channels, and the release list only grows when
-a version is cut:
+`.github/workflows/build.yml` has three channels, and the release list only grows when a
+version is cut:
 
 | channel | trigger | what lands |
 | --- | --- | --- |
-| `ci` | every push to `main` | lint, tests, and the web bundle built and thrown away. Nothing is deployed and nothing is released. |
-| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS x64/arm64 and Linux AppImage/deb, a zip of the web bundle, and electron-updater's `latest*.yml`, all on one rolling prerelease — plus that same zip unpacked onto `nightly.editor.scmjs.dev`. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes (see below), the container image on GHCR, and the Pages deploy of `editor.scmjs.dev`. |
+| `ci` | every push to `main` | lint, tests and the web bundle, built and thrown away. Nothing is deployed and nothing is released. |
+| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus that zip unpacked onto `nightly.editor.scmjs.dev`. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `editor.scmjs.dev`, and the docs site. |
 
-`tsc -b` covers `desktop/` through `tsconfig.desktop.json`, so a main-process type error
-fails a push to `main`; only the packaging step waits for the nightly. The cron exits
-early when `main` has not moved since the last one, so an idle week produces no builds.
-
-The nightly is **updated in place**: the `nightly` tag is force-moved to the commit and
-the assets are replaced with `gh release upload --clobber`. It is never deleted and
-recreated — that would reset the download counts and re-notify everyone watching
-releases. So there is one prerelease in the list, permanently, however many nights run.
+The cron exits early when `main` has not moved since the last nightly. The nightly is
+updated in place: its `nightly` tag is force-moved and its assets replaced, never deleted
+and recreated, so there is one prerelease in the list however many nights run.
 
 ### Download links
 
-GitHub redirects `/releases/latest/download/<asset>` to the newest release that is *not*
-a prerelease or a draft. The download buttons on the site are therefore plain `<a href>`s
-that never need updating, never touch the API (and so cannot be rate-limited), and never
-resolve to a nightly:
+GitHub redirects `/releases/latest/download/<asset>` to the newest release that is not a
+prerelease or a draft, so the download buttons on the site are plain links that never
+need updating and never resolve to a nightly:
 
 ```
 https://github.com/scm-js/scm-js/releases/latest/download/scmJS-windows-x64-setup.exe
@@ -154,465 +459,181 @@ https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-x64.dmg
 https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-x86_64.AppImage
 https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-amd64.deb
 https://github.com/scm-js/scm-js/releases/latest/download/scmJS-web.zip
-```
-
-and the nightly's own, on its fixed tag:
-
-```
 https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
 ```
 
-That redirect can only resolve a fixed file name, which is why `electron-builder.yml`'s
-`artifactName` carries no version. The cost is that two downloaded versions share a name
-in the browser's downloads folder; the version is in the release title, the notes and
-`latest*.yml`. To un-promote a bad stable release, tick "This is a pre-release" on it and
-the redirect falls back to the one before — no new tag, no rebuild.
+That redirect can only resolve a fixed file name, which is why the asset names carry no
+version; the version is in the release title, the notes and `latest*.yml`. To un-promote
+a bad release, tick "This is a pre-release" on it and the redirect falls back to the one
+before.
 
 ### The container image
 
-`docker/Dockerfile` is nginx with the built web bundle in it, pushed to
-`ghcr.io/scm-js/scm-js` by the `image` job on a tagged release only:
+`docker/Dockerfile` is nginx with the built web bundle, pushed to `ghcr.io/scm-js/scm-js`
+by the `image` job on a tagged release only, as `latest`, the full version, and the
+moving `X.Y` and `X`. A nightly publishes no image, because `latest` is what a
+`docker run` picks up without asking.
 
 ```sh
 docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest   # http://localhost:8080
+npm run build:image                                       # build it locally, tagged scmjs
 ```
 
-The tags are `latest`, the full version and the moving `X.Y` and `X`
-(`docker/metadata-action` reads them off the tag the run is on). A nightly publishes no
-image: an installer is something you choose and can roll back by keeping the old file,
-while `latest` in a registry is what a `docker run` picks up without asking, so only a
-version cut on purpose goes there.
-
-Two decisions are worth knowing:
-
-- **It copies a bundle rather than building one.** The `web` job has already built,
-  linted and tested the zip the release carries; the image job downloads that artifact
-  and unzips it, so the image cannot differ from the download. It also makes
-  `--platform linux/amd64,linux/arm64` free — with no `RUN` step there is nothing to
-  emulate, and the files are the same bytes on either architecture, so buildx writes one
-  manifest list and needs no QEMU. A node build stage would have cost minutes per
-  architecture to produce identical output.
-- **It carries no game data.** `vite build` copies `public/` into `dist/`, so a clone
-  that ran `npm run extract` has Blizzard's extracted trees sitting in the bundle;
-  `.dockerignore` cuts them back out of the build context rather than trusting them to be
-  absent, and the nginx config answers 404 for those five paths so the manifest probe
-  gets an honest answer. A container starts at step 4 of the resolver and asks through
-  Help ▸ Game Data…, exactly like the hosted build. Mounting your own tree over those
-  paths is in [game-data.md](game-data.md#getting-the-files).
-
-Locally, `npm run build:image` builds the bundle and the image (tagged `scmjs`). The
-Release workflow builds and *serves* the image before it tags anything — a request for
-the page, one hashed asset and a check that `/tileset/manifest.json` 404s — so a broken
-Dockerfile stops the release instead of landing on `latest`.
+The image copies the release's own web zip rather than building one, so it cannot differ
+from the download, and with no `RUN` step one buildx manifest covers `linux/amd64` and
+`linux/arm64` without emulation. It carries no game data: `.dockerignore` cuts the
+extracted trees out of the build context and `docker/nginx.conf` answers 404 for those
+paths, so a container asks through Help ▸ Game Data… like the hosted build. Mounting an
+extracted tree over those paths is in [game-data.md](game-data.md#the-container-image).
 
 ### Cutting a release
 
 Run the **Release** workflow (`.github/workflows/release.yml`) from the Actions tab. It
-takes the version to release — `0.3`, `1.0` and `1` are accepted and padded to three
-parts, and blank promotes the line the nightlies have already been building, so what
-people have been testing is what ships — an optional `notes` box (below), and a `dry_run`
-tick that does everything except push.
+takes the version (`0.3`, `1.0` and `1` are padded to three parts; blank promotes the
+line the nightlies have been building), an optional `notes` box, and a `dry_run` tick
+that does everything except push.
 
 It refuses to run anywhere but `main`, refuses a version whose tag exists, refuses one
-that is not newer than the last release (going backwards would offer nobody an update and
-would still take over the `/releases/latest` redirect, since GitHub calls the most
-recently *published* release the latest), and runs the same lint, tests and build the
-Build workflow does **before** writing anything — a workflow that stops before tagging
-costs nothing, while a tag pointing at a failing commit has to be deleted by hand. Then:
+that is not newer than the last release, and runs lint, tests (the network suite
+included), the build and a check of the container image before writing anything. Then it
+commits the version into `package.json` and the lock file, tags that commit `vX.Y.Z`, and
+dispatches the Build workflow on the tag. The dispatch is necessary because a push made
+with the repository's own token starts no further workflow run; that one dispatch is the
+whole release, the hosted editor and the docs site included.
 
-1. `package.json` and the lock go to the released version and are committed. The whole
-   diff is `"version"`, in the two files. Before the very first release there is nothing
-   to commit and the tag goes on the commit that is already there.
-2. `vX.Y.Z` (annotated) tags that commit.
-
-There is no third step moving `package.json` on, and that is the point of
-`scripts/next-version.mjs`. A nightly is named `<base>-nightly.<date>.<run number>`, and
-the base is a **patch bump of the newest release tag** — worked out, never recorded. So
-`package.json` on `main` means something true and self-maintaining: *the version that was
-last released*.
-
-Why a patch bump and not a guess at the next real version: a nightly has to sort above the
-release it follows (or the in-app updater offers nightly users a downgrade it cannot
-install) and below the release that comes next (or it offers them nothing until that
-version finally ships). A patch bump is the only choice that can never be too high —
-after `v0.8.0` the nightlies are `0.8.1-nightly.…`, which is below `0.8.1`, `0.9.0` and
-`1.0.0` alike. Nothing has to be decided in advance about what comes next: cut `1.0.0`
-whenever the breaking change lands and every nightly user is offered it. The two edges,
-both tested in `tests/next-version.test.ts`: with no release tags nothing has shipped, so
-`package.json`'s own version is used as it stands, and a prerelease tag (`v1.0.0-beta.1`)
-answers with its release version, since `1.0.0-nightly.…` sorts above `1.0.0-beta.1` and
-below `1.0.0`.
+There is no step moving `package.json` on to a next version. A nightly is named
+`<base>-nightly.<date>.<run number>` where the base is a patch bump of the newest release
+tag, worked out by `scripts/next-version.mjs`. A patch bump is the one choice that sorts
+above the release it follows and below whatever comes next, whether that is a patch, a
+minor or a major, so the updater is never offered a downgrade and never starved. It also
+leaves `package.json` on `main` meaning something true: the last released version.
 
 ### Release notes
 
-A tagged release's body is what someone wrote, followed by GitHub's generated list of
-commits and pull requests. What someone wrote comes from one of two places:
-
-- `docs/releases/<version>.md`, committed to `main` before the release is cut and read by
-  the Build workflow out of the **tag's own tree**. The name is the full three-part
-  version, so cutting `0.3` reads `docs/releases/0.3.0.md`. This is the normal way: the
-  notes are reviewed like any other change and stay with the commit they describe.
-- The Release workflow's `notes` input, for a one-off not worth committing. It wins over
-  the file and is handed to Build as a dispatch input, so it lives only in the release —
-  re-running Build on that tag by hand falls back to the file.
-
-Neither is required. With nothing written the release carries the generated list alone, as
-every release did before; the Release workflow says so as a notice in its pre-flight,
-where it also prints the notes it found, so a dry run shows exactly what the release will
-read like. `docs/releases/README.md` is the convention.
-
-The Build workflow is then **dispatched on the tag** rather than left to the tag push,
-because a push made with the repository's own `GITHUB_TOKEN` starts no further workflow
-run (GitHub's recursion guard) — `workflow_dispatch` through the API is the documented
-exception, and dispatching on `refs/tags/vX.Y.Z` puts Build in exactly the state the push
-would have — and that one dispatch is the whole release, the hosted editor included, since
-Pages now serves the tag. (A PAT in a secret would make the tag push trigger Build
-directly; this needs no secret.)
+The hand-written part of a release comes from `docs/releases/<version>.md`, committed to
+`main` before the release is cut and read from the tag's own tree (the full three-part
+name: cutting `0.3` reads `0.3.0.md`), or from the Release workflow's `notes` input, which
+wins over the file and lives only in the release. Either goes above GitHub's generated
+list of commits; with neither, the release carries that list alone. The pre-flight prints
+what it found, so a dry run shows the body. `docs/releases/README.md` is the convention.
 
 ### Versions
 
-The version comes from the tag, or `scripts/next-version.mjs` plus
-`-nightly.<date>.<run number>` on `main`; the workflow warns when a tag and `package.json`
-disagree. Every job `npm version`s it into `package.json` before building,
-`vite.config.ts` injects that as `__APP_VERSION__`, `src/version.ts` is where the splash
-and the About dialog read it, and electron-builder writes it into `latest*.yml`. The run
-number rather than the short SHA orders same-day nightlies, since semver compares
-alphanumeric prerelease identifiers lexically. `package.json` in the repository is only
-ever set by the Release workflow, so a clean checkout builds as the last released version
-rather than as a number nobody chose.
-
-No build carries game data or an address to fetch it from, and CI has no game data, so the
-real-data test suites skip there.
+The version is the tag's, or the nightly name on `main`. Every job writes it into
+`package.json` before building; `vite.config.ts` injects it as `__APP_VERSION__`,
+`src/version.ts` is where the splash and About read it, the boot splash in `index.html`
+gets it through a small Vite plugin, and electron-builder writes it into `latest*.yml`.
+The run number rather than a commit hash orders same-day nightlies, since semver compares
+prerelease identifiers as strings.
 
 ### The two hosted builds
 
-`editor.scmjs.dev` is the newest tag and `nightly.editor.scmjs.dev` is `main` as of the
-last nightly. The point of the split is that everything the project ships is now a version
-you can name: the hosted editor, the installers, the container image and the release notes
-are one build, so "it's broken on the website" has an answer.
-
 | | deployed by | from |
 | --- | --- | --- |
-| `editor.scmjs.dev` | the `pages` job, on the `stable` channel | GitHub Pages on this repository |
-| `nightly.editor.scmjs.dev` | the `nightly-site` job, on the `nightly` channel | one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch |
+| `editor.scmjs.dev` | the `pages` job, on a tag | GitHub Pages on this repository |
+| `nightly.editor.scmjs.dev` | the `nightly-site` job, each nightly | one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch, carrying `CNAME` |
+| `docs.scmjs.dev` | the `docs` job, on a tag | the same shape, on `scm-js/docs` |
 
-The nightly site is the release's own web zip unpacked, never a second build, the way the
-container image is. The push is a single orphan commit each time, so that repository stays
-the size of one bundle instead of growing by 5 MB a night, and it carries `CNAME` (where a
-branch-served Pages site keeps its custom domain, so it has to be in every push) and
-`.nojekyll`.
+The hosted editor is a release like every other way of running the editor: the site, the
+installers, the image and the notes are one tag. The nightly site is the nightly's own
+web zip unpacked, never a second build. To put `editor.scmjs.dev` back on an older
+version, dispatch Build on that tag; the deploy is the only thing a re-run rewrites.
 
-They are **separate origins**, which is deliberate and not free. The extracted game data
-lives in OPFS and every `scmjs.` setting in `localStorage`, both scoped to the origin, so
-the nightly asks for the game data again and keeps its own preferences, recents, installed
-plugins and plugin code snapshots. What that buys is a nightly that cannot write a stored
-shape the stable build then reads back — worth more than the second download, for a channel
-whose whole job is to be ahead of the stable one.
+The two editors are separate origins on purpose. The extracted game data lives in the
+browser's private file storage and every setting in `localStorage`, both per origin, so
+the nightly asks for the game data again and keeps its own preferences, recents and
+plugins rather than writing a stored shape the stable build then reads back.
 
-To put `editor.scmjs.dev` back on an older version, dispatch Build on that tag: the deploy
-is the only thing a re-run rewrites. Un-promoting a release (ticking "This is a
-pre-release") moves the download redirect but not the site.
+### Variables and secrets
 
-Three repository variables and one secret, none of them required — a fork builds and
-releases without any of them:
+None of these is required: a fork builds and releases without any of them, and each
+deploy that lacks its own is skipped with a notice.
 
-| | |
-| --- | --- |
-| `PAGES_BASE` | the hosted build's base path; `/` for a custom domain, and the default is the repository name. When it is not `/` the `web` job builds the bundle a second time, since the release zip is always rooted. |
-| `NIGHTLY_DOMAIN` | the domain written into the nightly site's `CNAME`. Unset, the deploy is skipped. |
-| `NIGHTLY_PAT` (secret) | a fine-grained token whose only permission is Contents: write on `<owner>/nightly`, because a repository's own `GITHUB_TOKEN` cannot write to another repository. A **repository** secret on this repository, not an organisation one like `PLUGIN_API_PAT`: only `build.yml` reads it, and an org secret is readable by every workflow in every repository it is shared with. Unset, the deploy is skipped with a notice rather than failing the nightly. |
-
-### In-app updates
-
-`desktop/updater.ts` (main process, `electron-updater`), `src/editor/updates.ts` (the pure
-state machine and every string it shows), `src/atoms/updateAtoms.ts`,
-`src/hooks/useUpdateCheck.ts` (the startup check and the one event subscription) and
-`components/dialogs/UpdateDialog.tsx`. `tests/updates.test.ts`.
-
-The feed is the `latest.yml` / `latest-mac.yml` / `latest-linux.yml` the desktop job
-uploads; `electron-builder.yml`'s `publish:` block is what makes electron-builder write
-them and bake `app-update.yml` into the asar. Version comparison is the `version` field
-inside those files rather than the git tag, so the moving `nightly` tag is not a problem,
-and the version-free asset names mean the download URL under that tag is always current.
-`electron-updater` derives `allowPrerelease` from whether the *running* version has a
-prerelease component, so a nightly build follows nightlies and a stable build follows
-stable on their own; the Preferences tick (`updates.nightly`) overrides it so a stable
-install can opt in. `electron-updater` is required lazily — Rollup keeps it behind a
-memoised factory in `main.cjs` — because `desktop/main.ts` is on the critical path to the
-first painted frame.
-
-**Finding an update raises a toast, not a dialog.** The check lands seconds after launch,
-by which time the user has started doing something, and two dialogs already open
-themselves at startup (Game Data when there is none, the Repair plugin on a map that needs
-it) — a third would queue behind them. The toast carries a Download button
-(`Toast.action`, the only button a toast may have) that opens the same dialog Help ▸ Check
-for Updates… opens, and it has no `ttl`, so it waits to be answered rather than expiring
-behind the splash.
-
-Nothing downloads or installs unasked: `autoDownload` is false, and installing goes
-through `guardedAction(store, …, "quit")` — the same unsaved-changes gate as the window's
-close button — before `quitAndInstall`. `autoInstallOnAppQuit` stays true so "Later" on a
-downloaded update means "next time I quit".
-
-Two things `UpdateSupport` exists to keep honest:
-
-- **Checking and installing are separate questions.** `support.check` is the updater's own
-  `isUpdaterActive()`, not a guess from `process.platform`, because `AppImageUpdater` — the
-  implementation chosen for *any* Linux build with no `package-type` file — refuses when
-  `APPIMAGE` is not in the environment, and then `checkForUpdates()` resolves **null**
-  instead of throwing. Reading that null as "up to date" told the user they were current
-  when nothing had been fetched; `check()` maps it to `unsupported`. `support.install` is
-  false only on macOS, where Squirrel.Mac verifies the code signature and an unsigned build
-  cannot apply what it downloaded. Windows (NSIS), the AppImage and the `.deb` (through
-  dpkg or apt, asking for privileges) all install. Where `install` is false the dialog
-  offers the release page, never a progress bar that would fail at the end.
-- **electron-updater's errors carry the whole HTTP response**, response headers and
-  `Set-Cookie` included. `message()` keeps the first line, names the cases worth naming
-  (404, 403, 5xx, the socket errors) and caps the rest, so a failed check is one sentence
-  and no session cookie reaches the screen.
-
-Verified against a packaged Linux build: an unpacked-folder run reports that it cannot
-check; the AppImage reaches GitHub (a 404 on a repository with no releases reads as "No
-release was found for this build"); and against a local `generic` feed the whole path runs
-— toast, dialog, download, "ready to install".
-
-## Plugin typings
-
-`npm run build:plugin-types` (`scripts/build-plugin-types.mjs`) rolls the contract into
-**one** `plugin-api/index.d.ts` with `dts-bundle-generator` over `src/plugins/api.ts`,
-plus a `package.json`. `npm run publish:plugin-types` (`scripts/publish-plugin-api.mjs`)
-publishes those two files as **`@scm-js/plugin-api`** on npm and commits and tags them at
-[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) — the registry is what plugin
-repositories depend on (`^1`), the repository is the audit trail behind the tarball. Each
-of them used to carry a hand-refreshed copy of the 61-file, 480 KB emitted tree.
-
-The version is the **API's**: major is `PLUGIN_API_VERSION`, the minor moves when the
-declarations do, and the editor's own version is deliberately not in it — editor 0.1.0 to
-0.2.0 is an ordinary release that semver would read as a break, and an npm version cannot
-be republished once it is wrong. `nextVersion` asks the registry what is published and
-bumps from that; a build that did not move the contract publishes nothing, tags nothing and
-commits nothing. `tsc` emits one declaration per
-module the entry reaches, which is why the bundling step exists at all; the build refuses
-a bundle that still carries an import, since one that names `jotai` or `react` (or a file
-the bundler missed) is a plugin repository that cannot compile with the file alone.
-
-build.yml's `plugin-api` job runs on every build, since a contract that moved on main is
-one plugin authors can have today. The git push uses the `PLUGIN_API_PAT` organisation
-secret and reports rather than fails when it is absent; the npm publish is behind the
-`PUBLISH_PLUGIN_API` repository variable, because a tarball needs the scope and npm's
-trusted publishing set up and cannot be taken back once it is out. It goes out with
-`--provenance`, so the package page names the workflow run and the commit. Authentication
-is OIDC alone — there is no npm token, which is why the job's `setup-node` has no
-`registry-url` (that writes an `.npmrc` holding an empty `_authToken` for npm to present
-instead of exchanging its OIDC one). The trusted publisher on npmjs.com names this
-repository and `build.yml`, leaves Environment blank, and must have **Allowed actions**
-permitting a *direct* publish — staging is always allowed and direct is opt-in, and
-without it a correct publisher still answers `403 OIDC permission denied for this action`. The plain types
-the contract shares with the chrome — `EditorLayer`,
-`TerrainMode`, `ViewFlags`, `Toast` (`editor/view.ts`), `Preferences`
-(`editor/preferences.ts`), `DialogId` (`components/dialogs/ids.ts`) — live outside the
-atom modules for that reason. Two external names remain, `mopaq` and `typescript`,
-reached through type-only imports; a plugin repository compiles with `skipLibCheck`
-and needs neither installed.
-
-## Tests
-
-Tests live in `tests/*.test.ts`, and `src/**/*.test.ts` is picked up too.
-
-```sh
-npx vitest run tests/chk.test.ts     # one file
-npx vitest run -t "flood fill"       # by name
-npm run test:watch
-```
-
-Suites that need real map files (`fixtures/maps/*.scx`) or real tileset files
-(`public/tileset/*.cv5`) use `describe.skipIf(...)` and skip in silence when those are
-absent. A green run does not by itself mean the real-data suites ran. `fixtures/` and
-the generated `public/{tileset,arr,game,scripts,unit}/` are gitignored, and nothing in
-those trees may be committed.
-
-## Repository layout
-
-```
-src/
-  atoms/        Jotai state: editor/document atoms (incl. undo history), UI + dialog stack
-  editor/       Invertible edits and placement checks for every map layer
-  data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger definitions), and
-                the names read out of the loaded game data in front of them (gameNames.ts)
-  gamedata/     Where the game files come from: the resolver chain, the stored copies (one per data set),
-                the extraction and its worker, the desktop bridge's types, data-set profiles
-  formats/
-    chk/        CHK container, section registry, typed section codecs
-    mpq/        .scm/.scx open + save on top of mopaq
-    tileset/    cv5/vf4/vr4/vx4/wpe decoding, megatile atlas, terrain catalogue, palette
-    dat/        units/flingy/sprites/images.dat, .tbl, GRP, PCX, .lo and iscript.bin decoders
-    units/      Unit data, lazy GRP/.lo/remap loading, frame cache, the iscript animator
-    triggers/   TrigEdit-syntax printer and parser
-  plugins/      Plugin API (the contract), host, loader, built-in registry
-  services/     Map open/save pickers, PNG export, startup preload, game data switching
-  components/
-    chrome/     MenuBar (Radix Menubar), ToolBar, StatusBar
-    panels/     Left dock (layer rail + palettes), right dock (Minimap, Layers, Properties), plugin panels
-    viewport/   Canvas map view with rulers, hover brush, context menu
-    dialogs/    All scenario dialogs + DialogHost registry
-    splash/     Splash card that fades over the editor
-    ui/         Primitives: Button, inputs, Check, Group, ListBox, Tabs, Tip, DialogFrame
-  styles/       tokens → base → ui → chrome → panels → viewport → dialogs → splash
-plugins/        Built-in plugins (plugin.json + plugin.ts each), bundled by Vite, loaded like remote ones
-```
-
-State is all Jotai, with no context or provider layering beyond the default store.
-CSS is plain, layered in that import order, with design tokens as CSS variables in
-`tokens.css`.
-
-Two deliberate sources of truth: `scenarioAtom` holds the parsed `Scenario` that gets
-written to disk and is mutated in place, while the older atoms in `editorAtoms.ts`
-(`mapNameAtom`, `mapWidthAtom`, …) are what the chrome displays. Change one and you
-have to change the other. Because the scenario is mutated rather than replaced, React
-does not see terrain edits; `terrainRevisionAtom` and its siblings are counters bumped
-after every edit, and the viewport subscribes to them.
-
-Adding a dialog means touching two places: the `DialogId` union in
-`src/atoms/uiAtoms.ts` and the `REGISTRY` in
-`src/components/dialogs/DialogHost.tsx`.
-
-`CLAUDE.md` goes into more detail on each subsystem than this file does.
-
-## Dev deep-links
-
-Query params jump straight to a UI state, which is the fastest way to iterate on a
-screen. See `src/hooks/useDevDeepLinks.ts`.
-
-```
-/?nosplash                       skip the splash
-/?nosplash&layer=units           select a layer (terrain|doodads|units|sprites|locations|fog|clipboard)
-/?nosplash&dialog=playerSettings open a dialog (any DialogId; repeatable)
-/?nosplash&zoom=0.5&tileset=ice  zoom level and tileset
-/?nosplash&mode=tile             terrain palette mode (isom|rect|tile)
-/?nosplash&layer=fog&fogPlayer=3 view and paint one player's fog
-```
-
-## Startup
-
-`src/services/preload.ts` runs an ordered list of tasks that actually await the work
-the editor needs to be warm: the startup tileset, the unit tables, the GRPs a blank
-map draws, then the startup document. The splash shows real progress and leaves when
-the tasks are done. Do not add a task that is not awaiting something, because the
-bar reaching the end is the promise that the editor is ready.
-
-Every task is best-effort. A failure is logged as "unavailable" and stepped over,
-since missing game data is a normal state everywhere else.
-
-### The first frame
-
-The desktop shell keeps its window hidden until the renderer's first paint
-(`desktop/main.ts`), so whatever paints first is how soon the app appears at all.
-Two things keep that early:
-
-- `index.html` carries a **boot splash** — the splash card as plain markup with its
-  own inline styles, painting before the stylesheet arrives and long before the
-  bundle evaluates. It is a copy of `styles/splash.css` in its initial state, so
-  change both together; `SplashScreen` drops it in a layout effect once it has
-  mounted (`splash/bootSplash.ts`), and `App` drops it on the `?nosplash` path.
-- `App` **defers the chrome by two frames**. Mounting the menu bar, toolbar, docks,
-  viewport and dialog host is one commit of well over a thousand renders, and doing
-  it in the first commit blocked the first paint behind it. The splash paints alone,
-  the chrome follows. The veil is opaque (`.splash-veil.solid`) until it is there,
-  since there is nothing behind it to see through yet.
-
-The saved **maximized state is applied when the window is shown, not when it is created**.
-On Windows `maximize()` is a `ShowWindow` call: maximizing a `show: false` window shows it.
-Doing it up front defeated the whole arrangement — the window appeared black at 140 ms and
-stayed that way until the renderer painted, and every signal below found it visible already
-and did nothing.
-
-But neither Windows nor an X11 window manager applies that maximize synchronously, so the
-first composited frame could still be the window at its created size in a corner, jumping to
-full screen a moment later. A window that is going to be maximized is therefore **created at
-the work area** of the display it will open on (`openingBounds`), which makes that frame the
-right size and place. The rectangle the user actually left behind is no longer the window's
-own idea of its restored size, so `keepRestoreBounds` holds it: it is what gets saved while
-the window is still maximized, and where the first "restore down" puts the window.
-
-The maximize is then applied `MAXIMIZE_AFTER_MS` (60 ms) *after* the window is on screen, not
-as part of showing it: a maximize landing in the same frame resizes the renderer at the moment
-the window appears, and what is on screen until the next frame arrives is the one painted for
-the old size — the app in a small rectangle in the corner of a window that is already big.
-The window is created at the size the maximize is going to give it, so the delay costs nothing
-visible. `startup.log` carries the geometry of each step (`traceBounds`: created, shown,
-maximized) and the renderer's own `innerWidth`/`innerHeight` a second later, which is what
-tells a window that is the wrong size apart from a renderer that never got the resize.
-
-`ready-to-show` is the frame the shell wants, but it is not a promise: a window that is
-not on screen is not guaranteed to be composited, and on Windows one that never announced
-a paint meant seconds of no window at all, followed by an editor whose splash had already
-run, animated and dismissed itself where nobody could see it. So `showWhenReady` in
-`desktop/main.ts` takes three signals — the paint, then `dom-ready` plus
-`SHOW_AFTER_DOM_MS` (the boot splash is made of that markup, and the window's own
-`backgroundColor` is its backdrop, so the worst case is a frame or two of flat dark), then
-`SHOW_LATEST_MS` regardless.
-
-The renderer no longer depends on any of that being quick. `SplashScreen` counts both its
-minimum and maximum dwell **from the moment the page is visible**, not from mount — a page
-in a hidden window neither animates (the card is a `requestAnimationFrame` loop, and those
-do not run in one) nor is seen — so a launch that takes a while to put the window up still
-shows the splash instead of skipping it. `App`'s two-frame chrome deferral has a timer
-behind it for the same reason.
-
-### Running the Windows build from WSL
-
-The desktop build cross-builds from WSL, and where the packaged app is *run from* changes
-the launch more than anything in the code: `\\wsl.localhost\…` is a 9p share, and Chromium
-loading 380 MB of binaries and then every asset through it is minutes, not milliseconds. A
-measured comparison of the same build, from the WSL filesystem and from `C:`:
-
-| milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
+| | Kind | For |
 | --- | --- | --- |
-| main script evaluated | 47 ms | 628 ms |
-| window created | 142 ms | 963 ms |
-| `dom-ready` | 215 ms | not within 25 s |
+| `PAGES_BASE` | variable | The hosted editor's base path: `/` for a custom domain, the repository name by default. When it is not `/`, the `web` job builds a second bundle for Pages, since the release zip is always rooted. |
+| `NIGHTLY_DOMAIN` | variable | The domain written into the nightly site's `CNAME`. |
+| `NIGHTLY_PAT` | repository secret | A fine-grained token with Contents: write on `<owner>/nightly`, since a repository's own token cannot write to another repository. |
+| `DOCS_DOMAIN`, `DOCS_PAT` | variable, repository secret | The same pair for the docs site on `<owner>/docs`. |
+| `PLUGIN_API_PAT` | organisation secret | Pushes the plugin typings to `scm-js/plugin-api`. |
+| `PUBLISH_PLUGIN_API` | variable | Turns on the npm publish of `@scm-js/plugin-api`. |
 
-So copy it over first, and launch it from there:
+## The documentation site
+
+[docs.scmjs.dev](https://docs.scmjs.dev) is `npm run build:docs`, deployed by the `docs`
+job on a tag so the site, the hosted editor and the installers are one version. It has
+two halves. The guides are `README.md` and `docs/*.md`, split at their `##` headings into
+pages with the `###` beneath as each page's contents; nothing on the site is prose a
+generator wrote, and these files stay where it is maintained. The reference is generated
+from the bundled plugin typings, so a doc comment in `src/plugins/api.ts` is a paragraph
+on the site and a member with none shows as a bare signature.
 
 ```sh
-npm run build:desktop -- win --dir          # release/win-unpacked
-cp -r release/win-unpacked /mnt/c/Users/<you>/scmjs-test
-SCMJS_TRACE=1 WSLENV=SCMJS_TRACE /mnt/c/Users/<you>/scmjs-test/scmJS.exe
+npm run build:docs                                  # → docs-site/ (gitignored)
+node scripts/build-docs.mjs --out /some/dir
 ```
 
-`WSLENV` is what forwards an environment variable into a Windows process; `SCMJS_TRACE=1`
-then echoes the trace to the terminal as well as the file. Note that the app's user data is
-`%APPDATA%\scm-js` — Electron takes the folder from `package.json`'s `name`, not from
-electron-builder's `productName` — which from WSL is
-`/mnt/c/Users/<you>/AppData/Roaming/scm-js`.
+The guides are written to be read on GitHub as well; the site's link rewriter turns a
+relative link to one of the five documents into a page and anything else in the
+repository into a link back to GitHub, and `tests/docs.test.ts` checks every link and
+picture.
 
-`SCMJS_TRACE=1` writes the launch's milestones — process creation, main script, app ready,
-window created, `dom-ready`, `did-finish-load`, and which signal showed the window — to
-`<userData>/startup.log` (always — the file holds the last launch). "It hung for a few seconds and then opened" has several possible
-causes on one machine (a virus scanner reading 380 MB of binaries, the main bundle, the
-first paint) and only the timings tell them apart.
+### Guide screenshots
 
-`src/devReactTracks.ts` disables React 19's dev-only Components performance track,
-which serialises props for every render and turned mounting the chrome into about
-seven seconds of blocked main thread. Set `VITE_REACT_TRACKS=1` to keep it when you
-want to profile renders. Production builds never had the problem.
+The pictures in the user guide are `docs/images/*.webp`, made by
+`scripts/guide-screenshots.mjs` against the dev server and the fixture maps: it drives a
+headless Chromium through Playwright, opens the maps, paints and places what each picture
+shows, and writes WebP files, lossless for a dialog and lossy for a window of terrain.
+Re-run it after a change to the chrome and commit the pictures that changed.
+
+```sh
+npm run dev                                   # in one terminal
+npm i --no-save playwright sharp              # not dependencies: only this script needs them
+npx playwright install chromium               # once
+node scripts/guide-screenshots.mjs            # → docs/images/
+node scripts/guide-screenshots.mjs --only units,fog
+```
+
+It needs the game data extracted and Big Game Hunters, Binary Burghs, Crescent Moon and
+Ground Zero from the game's own Maps folder in `fixtures/maps/`. Never commit a picture
+that shows anything but the editor.
+
+## Contributing
+
+- **Keep the documents current.** `README.md`, `docs/file-formats.md`, `docs/game-data.md`,
+  `docs/plugins.md` and this file are the documentation site; a behaviour change that is
+  not in them is undocumented. `CLAUDE.md` carries the implementation detail and is kept in
+  step with the code too.
+- **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not
+  the fixture maps. `.gitignore` covers the generated trees; check before adding a test
+  fixture.
+- **Record where adapted code comes from.** The rule is in
+  [ATTRIBUTION.md](../ATTRIBUTION.md#maintenance-rule): a provenance comment beside
+  adapted algorithms and tables, an entry there naming the source and license, and the
+  original notice kept.
+- **Run what CI runs**: `npm run lint`, `npm test` and `npm run build`. With the game data
+  and fixture maps on disk, the real-data suites run too, and that is the run that counts
+  for anything under `src/formats/`.
+- **Plugin API changes are additive.** `PLUGIN_API_VERSION` stays where it is for an
+  addition; document the addition in `docs/plugins.md` and with a doc comment in
+  `src/plugins/api.ts`, which is what the reference is generated from. The example plugin
+  at [scm-js/plugin-hello-world](https://github.com/scm-js/plugin-hello-world) should
+  keep building.
+- **The plugins are separate repositories** under [github.com/scm-js](https://github.com/scm-js).
+  A change to the editor that a default plugin needs is released by moving that plugin's
+  tag in `src/plugins/defaults.ts`.
 
 ## Where things are documented
 
-All of it is published as [docs.scmjs.dev](https://docs.scmjs.dev), built by
-`npm run build:docs` (`scripts/build-docs.mjs`) and deployed by build.yml's `docs` job on
-a tag, like the hosted editor. Two halves: these documents split at their `##` headings
-into pages, and the plugin API reference generated from the bundled `plugin-api/index.d.ts`
-— so a doc comment in `src/plugins/api.ts` is a paragraph on the site, and a member with
-none shows as a bare signature. Nothing on the site is prose a generator wrote, and these
-files stay where all of it is maintained.
-
-| Topic | File |
+| Topic | Where |
 | --- | --- |
-| What the editor does, for map makers | [../README.md](../README.md) |
-| CHK and MPQ handling, section coverage | [file-formats.md](file-formats.md) |
-| Extracting and using Blizzard data | [game-data.md](game-data.md) |
+| What the editor does, for map makers | [README.md](../README.md) |
+| What is in a map file and what the editor does with it | [file-formats.md](file-formats.md) |
+| Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
+| Using, installing and writing plugins, the plugin API | [plugins.md](plugins.md), and the generated reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
 | The trigger scripting language | the [Trigger Script plugin](https://github.com/scm-js/plugin-trigger-script)'s README |
-| Writing and installing plugins, the plugin API | [plugins.md](plugins.md) |
-| Per-subsystem implementation notes | [../CLAUDE.md](../CLAUDE.md) |
-| Provenance of adapted code and data | [../ATTRIBUTION.md](../ATTRIBUTION.md) |
+| Each plugin's internals | its own repository's README |
+| Running, building, releasing, contributing | this file |
+| Per-subsystem implementation notes | [CLAUDE.md](../CLAUDE.md) |
+| Provenance of adapted code and data | [ATTRIBUTION.md](../ATTRIBUTION.md) |
+| Release notes | [docs/releases/](releases/README.md) |

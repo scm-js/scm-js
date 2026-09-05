@@ -13,6 +13,14 @@ import { headingsIn, slug, splitPages } from "./markdown.mjs";
 export const REPO_URL = "https://github.com/scm-js/scm-js";
 
 /**
+ * The guides' pictures. `docs/images/` is copied onto the site whole, so a
+ * `![...](docs/images/units.webp)` written for GitHub is served from `/images/` here
+ * rather than sent back to a blob page, which would show the picture's *page* in place
+ * of the picture.
+ */
+export const IMAGES_DIR = "docs/images";
+
+/**
  * The site's sections, in nav order. `file` is repository-relative, which is also the
  * key a cross-document link resolves against.
  */
@@ -27,7 +35,7 @@ export const SOURCES = [
     id: "plugins",
     file: "docs/plugins.md",
     title: "Plugins",
-    blurb: "Writing one, the shape of the API, and a tour of the plugins the editor ships with.",
+    blurb: "Installing plugins and what they may do, writing one, and a tour of the API.",
   },
   {
     id: "map-files",
@@ -117,6 +125,7 @@ export function linkResolver(guides, { repoUrl = REPO_URL } = {}) {
     }
     const { path, above } = resolvePath(fromFile, target);
     if (above > 0) return `${repoUrl}/${path}`;
+    if (path.startsWith(`${IMAGES_DIR}/`)) return `/images/${path.slice(IMAGES_DIR.length + 1)}`;
     const doc = index.get(path);
     if (doc) {
       const at = fragment ? doc.per.get(slug(fragment)) : null;

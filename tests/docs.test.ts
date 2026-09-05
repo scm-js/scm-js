@@ -87,14 +87,31 @@ describe("links", () => {
   });
 
   it("sends a `#fragment` to whichever page that heading ended up on", () => {
-    const at = resolve("README.md", "#keyboard");
-    expect(at).toBe("/guide/keyboard/");
+    const at = resolve("README.md", "#keyboard-and-preferences");
+    expect(at).toBe("/guide/keyboard-and-preferences/");
   });
 
   it("sends everything else in the repository back to GitHub, and leaves absolute links alone", () => {
     expect(resolve("README.md", "LICENSE")).toBe("https://github.com/scm-js/scm-js/blob/main/LICENSE");
     expect(resolve("docs/development.md", "../../releases")).toBe("https://github.com/scm-js/scm-js/releases");
     expect(resolve("README.md", "https://editor.scmjs.dev")).toBe("https://editor.scmjs.dev");
+  });
+
+  it("serves the guides' pictures from the site rather than sending them to a blob page", () => {
+    expect(resolve("README.md", "docs/images/units.webp")).toBe("/images/units.webp");
+    expect(resolve("docs/plugins.md", "images/paint.webp")).toBe("/images/paint.webp");
+    const html = renderMarkdown("![The Units layer](docs/images/units.webp)", { rewriteLink: (h: string) => resolve("README.md", h) });
+    expect(html).toContain('src="/images/units.webp"');
+  });
+
+  it("names no picture that is not in docs/images", () => {
+    for (const guide of guides) {
+      const text = read(guide.file);
+      for (const m of text.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+        const { path } = resolvePath(guide.file, m[1]);
+        expect(existsSync(join(root, path)), `${guide.file}: ${m[1]}`).toBe(true);
+      }
+    }
   });
 
   it("leaves no relative link in any guide pointing at a file the site does not serve", () => {
@@ -170,14 +187,13 @@ describe("doc comments", () => {
  * as well as fenced blocks, since the wrong ones found by hand (`api.on` for
  * `api.events.on`) were all in prose.
  *
- * And it can drift **off-audience**: the document is split at *Host side (for editor
- * developers)*, and everything above it is written for somebody who has the npm package
- * and none of this repository. A Jotai atom or a `src/` path above that line is a fact
- * they cannot act on, so it belongs below it.
+ * And it can drift **off-audience**: the whole document is written for somebody who has
+ * the npm package and none of this repository (the editor's half is
+ * `docs/development.md#the-plugin-host`). A Jotai atom or a `src/` path in it is a fact
+ * they cannot act on, so it belongs over there.
  */
 describe.skipIf(!haveTypes)("the plugin guide", () => {
   const guide = read("docs/plugins.md");
-  const authorHalf = guide.slice(0, guide.indexOf("## Host side"));
   const reference = haveTypes ? buildReference(readFileSync(DTS, "utf8")) : null;
 
   it("names no call the API does not declare", () => {
@@ -195,14 +211,46 @@ describe.skipIf(!haveTypes)("the plugin guide", () => {
   });
 
   it("documents every group of the API", () => {
-    const tour = guide.slice(guide.indexOf("## The API, group by group"), guide.indexOf("## Host side"));
+    const tour = guide.slice(guide.indexOf("## The API, group by group"), guide.indexOf("## Plugins to read"));
     const missing = reference!.groups.filter((g: { property: string }) => !tour.includes(`api.${g.property}`));
     expect(missing.map((g: { property: string }) => g.property)).toEqual([]);
   });
 
-  it("keeps the editor's internals out of the author's half", () => {
+  it("keeps the editor's internals out of it", () => {
     const internals = /\b(\w+Atom|src\/[\w./-]+|host\.ts|loader\.ts|builtin\.ts|MapViewport|MenuBar|usePlugins|Jotai)\b/g;
-    expect([...new Set([...authorHalf.matchAll(internals)].map((m) => m[0]))]).toEqual([]);
+    expect([...new Set([...guide.matchAll(internals)].map((m) => m[0]))]).toEqual([]);
+  });
+});
+
+/**
+ * `docs/file-formats.md` and `docs/game-data.md` are written for readers — map makers,
+ * developers, anyone curious about the format — and not as implementation notes (those
+ * are `CLAUDE.md` and the source's own comments). Each ends with one "In the source"
+ * section that points a developer at the modules; that section is the only place a `src/`
+ * path belongs, and an atom or hook name belongs nowhere in them.
+ */
+describe("the map files and game data guides", () => {
+  const GUIDES = ["docs/file-formats.md", "docs/game-data.md"];
+  const MARKER = "## In the source";
+
+  it("end with the one section that names the source", () => {
+    for (const file of GUIDES) {
+      const text = read(file);
+      const at = text.indexOf(MARKER);
+      expect(at, file).toBeGreaterThan(0);
+      expect(text.indexOf("\n## ", at + 1), `${file}: a section after ${MARKER}`).toBe(-1);
+    }
+  });
+
+  it("keep the editor's internals out of the prose", () => {
+    for (const file of GUIDES) {
+      const text = read(file);
+      const prose = text.slice(0, text.indexOf(MARKER));
+      const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);
+      expect(paths, file).toEqual([]);
+      const names = [...text.matchAll(/\b(\w+Atom|use[A-Z]\w+|Jotai)\b/g)].map((m) => m[0]);
+      expect(names, file).toEqual([]);
+    }
   });
 });
 

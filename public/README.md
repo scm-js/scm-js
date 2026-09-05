@@ -33,7 +33,7 @@ redistribution rights.
 Tileset names, in ERA order: badlands, platform, install, ashworld, jungle, desert, ice,
 twilight. The last three are Brood War and only exist in `BrooDat.mpq`.
 
-Without these files the app still runs: it looks for a copy kept in the browser, the
-desktop app's extraction, or a configured web address, and otherwise falls back to flat
-per-tileset colours and player-coloured markers and opens Help ▸ Game Data… (see
-`docs/game-data.md`). `npm run check:assets` reports what is present here.
+Without these files the app still runs: it looks for a copy kept in the browser or the
+desktop app's own extraction, and otherwise falls back to flat per-tileset colours and
+player-coloured markers and opens Help ▸ Game Data… (see `docs/game-data.md`).
+`npm run check:assets` reports what is present here.

@@ -28,7 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import { assignTypes, buildReference, slugOf } from "./lib/docs/api.mjs";
 import { headingsIn, renderMarkdown } from "./lib/docs/markdown.mjs";
 import { codeBlock, escapeHtml, memberHtml, navHtml, page, tocHtml, typeHtml } from "./lib/docs/render.mjs";
-import { buildGuide, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
+import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const EDITOR_URL = "https://editor.scmjs.dev";
@@ -36,12 +36,13 @@ const API_DTS = join(root, "plugin-api/index.d.ts");
 
 /**
  * The plugin repositories, as worked examples. Each is a real plugin that leans on the
- * groups named — the tour in `docs/plugins.md` is the prose version — so a reader who
+ * groups named — `docs/plugins.md` ends with the same list in prose — so a reader who
  * wants more than a signature has somewhere to go that is guaranteed to compile against
  * the version being documented. Written down here rather than derived: which plugin best
  * *demonstrates* a group is a judgement, not a fact in the code.
  */
 export const EXAMPLE_PLUGINS = [
+  { repo: "plugin-hello-world", name: "Hello World", groups: ["menu", "ui"], of: "the smallest complete plugin: one menu item and one dialog, to copy from" },
   { repo: "plugin-paint", name: "Paint", groups: ["ui", "palette", "document"], of: "map tools, a floating panel, and painting with the active layer's brush" },
   { repo: "plugin-walkability", name: "Walkability", groups: ["ui", "tileset", "query", "view"], of: "a read-only overlay drawn over the map" },
   { repo: "plugin-section-explorer", name: "Section Explorer", groups: ["document", "names"], of: "raw section bytes, re-parsed into the open map" },
@@ -235,6 +236,7 @@ ${api.shared.map((t) => typeHtml(t, codeOpts)).join("\n")}`,
 
   /* ── assets ── */
   cpSync(join(root, "scripts/lib/docs/assets"), out, { recursive: true });
+  cpSync(join(root, IMAGES_DIR), join(out, "images"), { recursive: true });
   writeFileSync(join(out, "search.json"), JSON.stringify(index));
   writeFileSync(join(out, ".nojekyll"), "");
   if (domain) writeFileSync(join(out, "CNAME"), `${domain}\n`);
@@ -294,9 +296,10 @@ ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(
 </ul>
 <h2 id="start">Where to start</h2>
 <ul>
-<li>New to the editor: <a href="${base}/guide/getting-started/">Getting started</a>, then <a href="${base}/guide/working-in-the-editor/">Working in the editor</a>.</li>
+<li>New to the editor: <a href="${base}/guide/getting-started/">Getting started</a>, then <a href="${base}/guide/your-first-map/">Your first map</a>.</li>
 <li>Wondering whether it does the thing you need: <a href="${base}/guide/what-works-and-what-does-not/">What works, and what does not</a>.</li>
-<li>Writing a plugin: <a href="${base}/plugins/writing-a-plugin/">Writing a plugin</a>, then the <a href="${base}/api/">API reference</a>.</li>
+<li>Installing a plugin, or wondering what one may do: <a href="${base}/plugins/using-plugins/">Using plugins</a>.</li>
+<li>Writing a plugin: <a href="${base}/plugins/writing-a-plugin/">Writing a plugin</a>, then the <a href="${base}/api/">API reference</a>; <a href="https://github.com/scm-js/plugin-hello-world">Hello World</a> is the repository to copy.</li>
 <li>Working on the editor itself: <a href="${base}/development/">Development</a> and <a href="${base}/map-files/">Map files</a>.</li>
 </ul>`;
 }
@@ -327,7 +330,7 @@ ${plain}
 <li><code>api.plugin</code> — the manifest of the plugin this <code>api</code> belongs to (<a href="${base}/api/types/#plugininfo"><code>PluginInfo</code></a>).</li>
 </ul>
 <h2 id="examples">Plugins to read</h2>
-<p>Every plugin the editor ships is a repository of its own, compiled against these declarations, and the tour of them is in <a href="${base}/plugins/">Plugins</a>.</p>
+<p>Every plugin the editor ships is a repository of its own, compiled against these declarations; <a href="${base}/plugins/plugins-to-read/">Plugins to read</a> says what each one demonstrates.</p>
 <ul class="cards">
 ${EXAMPLE_PLUGINS.map((p) => `<li><a class="card" href="${REPO_URL.replace("/scm-js/scm-js", "/scm-js")}/${p.repo}"><b>${escapeHtml(p.name)}</b><span>${escapeHtml(p.of)}</span></a></li>`).join("\n")}
 </ul>`;

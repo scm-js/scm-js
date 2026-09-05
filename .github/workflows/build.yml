@@ -18,8 +18,9 @@
 #             the `notes` dispatch input, which wins) above GitHub's generated list of
 #             commits, and the generated list alone when neither is there. These are the
 #             only releases that accumulate, which is the point. `release.yml` is what
-#             cuts one: it tags, dispatches this workflow on the tag, and moves
-#             package.json on to the next version so the nightlies keep sorting above it.
+#             cuts one: it commits the version, tags, and dispatches this workflow on
+#             the tag. Nothing moves package.json on afterwards: a nightly's version is
+#             a patch bump of the newest tag, worked out by scripts/next-version.mjs.
 #
 # The container image (`docker/Dockerfile`, pushed by the `image` job to
 # `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip

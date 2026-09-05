@@ -528,7 +528,11 @@ here is generic:
 
 ### Plugins (`src/plugins/`, `src/atoms/pluginAtoms.ts`, `plugins/*/`)
 
-`docs/plugins.md` is the author's guide and API tour; keep it in step with `src/plugins/api.ts`,
+`docs/plugins.md` is the guide for plugin users and authors (installing, trust, the API tour, and a
+"Plugins to read" table pointing at each repository); the host side is `docs/development.md#the-plugin-host`.
+`github.com/scm-js/plugin-hello-world` (in the registry, not a default) is the example plugin the guide,
+the README and the docs site's home page send a new author to copy; keep it building against the contract.
+Keep the tour in step with `src/plugins/api.ts`,
 which is the contract (types only, `PLUGIN_API_VERSION` bumps on an incompatible change). A plugin
 is `activate(api)` in a `plugin.ts`/`.js` next to a `plugin.json`; `host.ts#createPluginApi` builds
 its `PluginApi` over the Jotai store — no React, no atoms exposed — and a `Contributions` bag every
@@ -917,8 +921,8 @@ above.
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /
 `icon.svg`, `@scm-js/plugin-api` as a devDependency so it type-checks alone, and
 `tests/convert.test.ts` under its own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
-plugin the editor ships is loaded by the ordinary path, and its internals are documented there and
-in `docs/plugins.md`. Changing `src/plugins/api.ts` reaches it through
+plugin the editor ships is loaded by the ordinary path, and its internals are documented there
+(`docs/plugins.md` only points at it). Changing `src/plugins/api.ts` reaches it through
 `github.com/scm-js/plugin-api`, which build.yml republishes on every push to main. `tests/plugins.test.ts` covers the host side
 (loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
 list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
@@ -928,8 +932,9 @@ real-tileset suite via `primeTileset`).
 `ui.mapTool`, `ui.panel` and `api.palette`: `plugin.ts` is the panel, the per-tool gestures and
 the transaction, `shapes.ts` / `font.ts` the pure geometry with `tests/shapes.test.ts`. Its brush
 is the active layer's palette pick, so it paints on the Terrain (flat pairs or the Tile brush's
-tile), Doodads, Units, Sprites and Fog of War layers alike. `docs/plugins.md` ends with a tour of
-both plugins.
+tile), Doodads, Units, Sprites and Fog of War layers alike. `docs/plugins.md` no longer describes the
+plugins one by one: each repository's README does, and the guide ends with a table saying which
+part of the API each one is the worked example for.
 
 **scmscx.com** (`github.com/scm-js/plugin-scm-scx`, a default that starts on) searches scmscx.com,
 the StarCraft map archive, and opens the picked map through `document.open`. There is no documented
@@ -1215,6 +1220,35 @@ group that can reach it — transitively, so `IsomReport` and `Diamond` both lan
 only place the reference is written: a group with no doc comment reads as a bare interface
 name on the site (`tests/docs.test.ts` fails when one does), and an `@example` there shows
 up as a code block *and* in a plugin author's editor tooltip.
+
+`docs/file-formats.md` and `docs/game-data.md` are written for *readers* — map makers
+deciding what to strip from a file, people repairing a protected map, mod makers,
+developers meeting the format — and not as implementation notes: those are this file
+and the source's own comments. Each ends with one `## In the source` table pointing a
+developer at the modules, and that table is the only place a `src/` path may appear;
+`tests/docs.test.ts` fails on a `src/` path anywhere else in them, on an atom or hook
+name anywhere in them, and on a section after that one. When behaviour changes, update
+the prose in the reader's terms and this file in the code's. `docs/development.md` is the
+contributor's guide (running, building, releasing, the plugin host, the conventions) and
+may name files, but the *reasons* and the measurements behind a decision stay here and in
+the source comments; it points at this file for them.
+
+The guide's pictures are `docs/images/*.webp`, referenced from `README.md` by that path
+so they render on GitHub; `site.mjs#linkResolver` sends `docs/images/…` to `/images/…`
+(the directory is copied whole) rather than to a blob page, and `tests/docs.test.ts`
+fails on a picture the guide names that is not on disk. `scripts/guide-screenshots.mjs`
+regenerates them against the dev server and the fixture maps (Playwright and sharp,
+installed ad hoc, not dependencies — `docs/development.md#guide-screenshots`); re-run it
+when the chrome changes, and never commit a picture that shows anything but the editor.
+
+`ATTRIBUTION.md` is the provenance record (audited 2026-09-04) and `scripts/lib/notices.mjs`
+its mechanical half: the `scmjs-notices` plugin in `vite.config.ts` emits
+`dist/THIRD-PARTY-NOTICES.txt` from `package.json`'s runtime `dependencies` plus the
+vendored `plugins/*/LICENSE`, failing the build on a dependency with no license file, so
+the web zip, the installers and the image carry every bundled license (TypeScript's
+Apache-2.0 text above all). Adding a runtime dependency needs no edit there; adding an
+*adapted* algorithm or table needs an entry in `ATTRIBUTION.md` and a provenance comment
+(`tests/notices.test.ts`).
 
 `render.mjs` is the HTML and a small TypeScript colouriser whose real job is the links —
 every declared name in a signature links to where it is documented. The site is plain

@@ -1,144 +1,124 @@
 # Plugins
 
-scmJS loads third-party code — a *plugin* — from a public Git repository or any URL, and
-lets it add menu items, context-menu entries, hotkeys, dialogs, floating panels, map tools
-and overlays, read the open map and edit it through the same undo model the built-in tools
-use. This document is the plugin author's guide; **Host side (for editor developers)** near
-the end is the editor's half of it, and every call is also generated into a page at
-[docs.scmjs.dev/api](https://docs.scmjs.dev/api/).
+A plugin is a small program the editor loads from a public Git repository or a web
+address. Once loaded it can add menu items, context-menu entries, hotkeys, dialogs,
+floating panels, map tools and overlays, and it can read and change the open map through
+the same undo model the built-in tools use. Some of what the user guide describes is a
+plugin: Walkability, Paint, Repair, Terrain from Image and the scmscx.com search are
+installed from the start, and Melee Wizard, Trigger Script, Section Explorer and AI are a
+click away in Plugins ▸ Browse Plugins…. The [user guide](../README.md#plugins) lists
+them with what each one does.
 
-Nine plugins are written against exactly this API, each in its own repository, and they are
-the worked examples for everything below — there is a section on each at the end. Nothing
-about them is privileged: the versions that ship are pinned and compiled into the build, so
-a fresh install needs no network, but a plugin you write takes the same path through the
-same loader.
+This document is in three parts, for two readers:
 
-## How a plugin works
+- **Using plugins** is for anyone who uses the editor: how to install a plugin, what a
+  plugin is allowed to do, and how to update or remove one.
+- **Writing a plugin** and **The API, group by group** are for someone writing one. The
+  complete reference, one page per API group, is generated from the editor's own
+  declarations at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/); the tour here says
+  what each group is for and how the pieces fit.
 
-A plugin is one TypeScript (or JavaScript) file with an `activate(api)` export, sitting in
-a public repository next to a `plugin.json`. Nothing has to be installed and there is no
-build step to start with: the editor fetches your source, transpiles it in the browser and
-calls `activate` with the whole API. **Writing a plugin** below is the file itself; this is
-what the editor does around it, and what it promises while your code runs.
+How the editor loads plugins on the inside, for someone working on the editor itself, is
+in [docs/development.md](development.md#the-plugin-host).
 
-### What the editor does for you
+## Using plugins
 
-- **Every edit is one undo entry.** You never touch scenario internals. `api.document.edit`
-  takes a label and a builder, applies your operations as you call them, and commits the
-  lot as a single `HistoryEntry` — the same path a brush stroke takes, so the right CHK
-  sections are marked dirty, the canvas repaints, and doodads or units your terrain edit
-  stranded are lifted in the same entry. `api.document.update` is the same shape for the
-  tables that live outside the undo model (triggers, strings, the settings dialogs' data),
-  and `api.document.sections` for raw bytes. See **The three kinds of write**.
-- **Everything you add is taken back for you.** A menu item, hotkey, context-menu entry,
-  dialog, panel, overlay, map tool or event listener each hand you a `Disposable`, and the
-  editor keeps its own list of them besides. Turning your plugin off, reloading it or
-  removing it sweeps the lot whether or not you cleaned up. What `activate` returns —
-  nothing, a cleanup function, or a `Disposable` — is for the things the editor cannot see:
-  your timers, your `AbortController`, your worker.
-- **Reading the map is always safe.** Every method that reads answers `null`, `[]` or
-  `false` when no map is open, rather than throwing. You do not have to guard the empty
-  editor.
-- **The graphics may not be there.** The user may not have installed Blizzard's data, and
-  the editor works without it. Anything that needs the tileset degrades — a terrain
-  operation writes nothing and leaves a note on the result rather than failing — so check
-  what you get back rather than assuming.
+### Finding and installing one
 
-### The contract
+Plugins ▸ **Browse Plugins…** lists the plugins the project publishes. Press **Install**
+on one and the editor shows where the code comes from and asks before it adds anything.
+Plugins ▸ **Manage Plugins…** lists what is installed, turns each plugin on or off, and
+takes the address of any plugin that is not on the list.
 
-`npm i -D @scm-js/plugin-api` is the whole toolchain — one generated `index.d.ts`, types
-only, nothing to configure (**Writing a plugin** has the file that uses it).
+Five plugins are *defaults*. They are on the list from the start and compiled into the
+editor, so a fresh install has them without touching the network. They are ordinary
+plugins from their own repositories and can be turned off, but not removed.
 
-The package's **major is the API version** and its minor moves when the declarations do, so
-`^1` is a range you can write and mean. Your manifest's `"api": N` is the version you
-*need*; a host offering an older one refuses to load you rather than failing halfway
-through `activate`. It is 1 today, and additions do not move it — a new call appearing on
-`api` never breaks a plugin that does not use it, so `PLUGIN_API_VERSION` is reserved for
-a change that would.
+An address can take any of these forms:
 
-### What you write in
-
-- **The DOM, not React.** `api.ui.dialog` and `api.ui.panel` hand you an element to fill
-  (`mount(el)`). `api.ui.el` and `api.ui.widgets` build that content in the editor's own
-  classes, so a plain-DOM dialog looks like a built-in one without you copying any CSS. If
-  you would rather have a framework, bundle one into that element — it is your element.
-- **Relative imports, with or without the extension.** `./convert`, `./convert.js`
-  (resolving to `convert.ts` the way a TypeScript project means it), or a directory with an
-  `index.ts` — the loader tries all of those. A cycle is an error naming the file.
-- **No bare package names on the source path.** `import x from "some-package"` is refused
-  when the editor loads your source: there is no module resolver behind a `fetch`. An
-  `import type` from `@scm-js/plugin-api` is fine, because the compiler erases it before
-  the loader ever sees a specifier. If you need a real dependency, ship a bundle and name
-  it in the manifest's `build` — see **Building**.
-
-### What your users are told about you
-
-A plugin runs in the page with the page's privileges. It can read and change the open map,
-read and write the files stored in the map archive, read and write the editor's own browser
-storage, and make network requests. **There is no sandbox**, the install screen says so in
-those words, and it is the same trust a browser extension asks for. Three things follow
-that are worth writing for:
-
-- **They see your manifest before any of your code is fetched.** The Add screen shows the
-  name, version, author, description and icon out of `plugin.json`, links to the repository
-  and homepage, and the addresses your code will come from — and that is all it fetches.
-  It is the only thing a user has to judge you by, so fill it in.
-- **They are pinned to a commit, and never auto-updated.** Installing stores the exact
-  commit your ref pointed at, so a push of yours does not reach anyone already running the
-  plugin. They move forward with the **Update** button, which shows them the new version's
-  manifest before anything changes. Tag your releases: a tag is what the registry lists and
-  what a considered version looks like from the outside.
-- **They may be running a copy saved in their browser**, if they ticked *Load from a copy
-  saved here*. That copy is only replaced when they press Reload.
-
-For the same reason, ship your `dist/plugin.js` unminified. What the confirmation dialog
-offers a user is your repository, and a plugin they cannot read is a plugin they cannot
-judge.
-
-### How the editor finds your code
-
-The *spec* is the address a user pastes into Manage Plugins, or that a registry lists:
-
-| Spec | |
+| Address | What it points at |
 | --- | --- |
-| `github:owner/repo` | The default branch — fine for a private experiment, but see the pinning note above. |
-| `github:owner/repo@v1.2` | A tag, a branch or a commit. This is what a registry lists and what a default names. |
+| `github:owner/repo` | A GitHub repository, at its default branch. |
+| `github:owner/repo@v1.2` | A tag, a branch or a commit of it. |
 | `github:owner/repo@v1.2/plugins/mine` | A folder inside a repository, for several plugins in one. |
-| `https://github.com/owner/repo/tree/v1.2/plugins/mine` | The same, as the URL a user copies out of their address bar. |
-| `https://…/plugin.json` | A manifest anywhere — GitLab, your own host, a gist. |
-| `https://…/plugin.ts` | An entry file with no manifest; one is synthesised from the file name. |
-| `http://localhost:3000/` | A directory holding `plugin.json`. This is how you develop one: serve your working copy and add it. |
+| `https://github.com/owner/repo/tree/v1.2/plugins/mine` | The same, as the URL copied from the browser's address bar. |
+| `https://…/plugin.json` | A plugin's manifest anywhere: GitLab, a gist, your own server. |
+| `https://…/plugin.ts` | A single plugin file with no manifest. |
+| `http://localhost:3000/` | A folder holding `plugin.json`, served from your own machine. This is how a plugin is developed. |
 
-What loads is the manifest's **`build`** when it has one, and its `entry` otherwise. A
-build ends the story in one fetch — no compiler, no walking your imports — and is the only
-way to use an npm dependency; the source path is the shortest way to start. `entry` stays
-in the manifest either way, because it is what a person reads and what loads for a
-repository that publishes no build.
+### What you are trusting
 
-### Getting yours listed
+**There is no sandbox.** A plugin runs with the same access as the editor itself: it can
+read and change the map you have open, read and write the files stored in the map archive,
+read and write the editor's own browser storage, and make network requests. That is the
+same trust a browser extension asks for. Only add plugins you trust, and prefer ones whose
+source you can read.
 
-Plugins ▸ **Browse Plugins…** reads *registries*: one JSON file holding an entry per
-plugin — the spec to install, plus the fields that plugin's own `plugin.json` carries, so a
-whole list arrives in one request. The project's own is
-[`scm-js/registry`](https://github.com/scm-js/registry), generated from the organisation
-itself: every repository named `plugin-…` **or** carrying both the `scmjs` and `plugin`
-topics, described by the `plugin.json` at its newest version tag (an untagged repository
-falls back to its default branch), refreshed hourly and within about a minute of a plugin
-repository saying it changed. Listing there is opt-out.
+Before any code is fetched, the Add screen shows what the plugin says about itself: its
+name, version, author, description and icon out of its `plugin.json`, links to the
+repository and homepage, and the addresses the code will be fetched from. Nothing else has
+been downloaded or run at that point, so this is your chance to check the repository.
 
-For a plugin outside the organisation, open a pull request against that repository's
-`plugins.json`; its README has the shape of an entry. Nothing about being listed is
-privileged — any URL serving a file of that shape is a registry, and a user can add one
-under **Sources**. A registry decides what is *offered*, never what is trusted: installing
-from a Browse row goes through exactly the same confirmation, the same manifest fetch and
-the same pinning as an address pasted by hand.
+The Add screen has three ticks:
 
-Five plugins are **defaults** — the editor lists them from the start and they are compiled
-into the build, so a fresh install has them with no network at all. They are ordinary
-plugins from their own repositories, each pinned to a tag; being a default buys nothing
-else. Which five, and how that works, is under **Host side**.
+| Tick | Default | What it does |
+| --- | --- | --- |
+| Enable it now | on | Start the plugin as soon as it is added. Off adds it to the list and leaves it for later. |
+| Pin to this version | on | Store the exact commit the address points at today, so the plugin never changes under you. See the next section. |
+| Load from a copy saved here | off | Keep a copy of the plugin's files in this browser and load from that copy, never from the address, until you press Reload. |
+
+### Keeping a plugin up to date
+
+A pinned plugin never changes on its own. A push to its repository reaches nobody who has
+it installed. When a newer version exists, the **Update** button on its row in Manage
+Plugins shows the new version's manifest and asks before anything changes, the same way
+the Add screen did.
+
+**Reload** fetches the plugin again from its address and replaces any copy saved in the
+browser. For a pinned plugin that is the same commit again, so Update is the way forward
+and Reload is for a plugin you are writing.
+
+Turning a plugin off takes back everything it added: menu items, hotkeys, dialogs, panels,
+overlays and its event listeners. **Remove** takes it off the list as well. A default
+cannot be removed, only turned off.
+
+A plugin that fails to load says so: a notice appears with a button to Manage Plugins,
+where the row shows the error.
+
+### Where a plugin keeps its data
+
+A plugin can keep settings in the browser. Preferences ▸ General ▸ Browser storage lists
+them as one row under the plugin's id, with a button to clear them, and Clear all data
+sweeps them with the rest.
+
+A plugin can also keep files inside the map archive, next to the scenario itself. The
+Trigger Script plugin stores its script there, so the script travels with the map. The
+Save dialog lists those files and can leave them out.
+
+### Sources
+
+Browse Plugins reads *registries*: JSON files, each listing plugins with the address to
+install them from. The project's own is
+[`scm-js/registry`](https://github.com/scm-js/registry). The **Sources** button shows the
+lists being searched and takes the address of another. A registry decides only what is
+*offered*. Installing from a Browse row goes through the same Add screen, the same manifest
+fetch and the same pinning as an address you pasted by hand.
 
 ## Writing a plugin
+
+A plugin is one TypeScript or JavaScript file that exports an `activate(api)` function,
+sitting next to a `plugin.json` in a public repository. There is nothing to install and no
+build step to start with: the editor fetches your source, transpiles it in the browser and
+calls `activate` with the whole API.
+
+The place to start is [Hello World](https://github.com/scm-js/plugin-hello-world), a
+complete plugin kept as small as it can be: one Tools menu item that opens a pane saying
+hello with the name of the open map. It is in Browse Plugins if you want to see it run,
+and its repository is the one to copy: `plugin.ts` is about sixty lines, most of them
+comments, and the typings, the type-check, the build and the CI workflow described below
+are all set up in it. What follows explains the same pieces one at a time.
+
+### The two files
 
 `plugin.json`:
 
@@ -148,37 +128,15 @@ else. Which five, and how that works, is under **Host side**.
   "version": "1.0.0",
   "description": "Says hello from the Tools menu.",
   "entry": "plugin.ts",
-  "build": "dist/plugin.js",
   "icon": "icon.svg",
   "api": 1
 }
 ```
 
-`name` is the only required field; `id` (a slug for storage keys and log prefixes) is
-derived from the name when absent, and `entry` defaults to `plugin.ts`, then `plugin.js`.
-
-`build` names a JavaScript bundle to load in place of `entry` — see **Building** below.
-Leave it out and the editor fetches your source and transpiles it, which is the shortest
-way to start.
-
-### The icon
-
-`icon` is the plugin's face in Manage Plugins and in the title bar of every dialog
-`api.ui.dialog` opens. Four forms are understood:
-
-| `icon` | What it means |
-| --- | --- |
-| `"icon.svg"`, `"art/mark.png"` | An image file beside the manifest (`.png .svg .jpg .gif .webp .avif .ico`). |
-| `"https://…/mark.png"` | An image anywhere; it is fetched by the browser when the dialog shows. |
-| `"data:image/svg+xml,…"` | An image inline in the manifest — nothing extra to fetch. |
-| `"🗺️"` | Up to four characters, drawn as text: an emoji is the cheapest icon there is. |
-
-Anything else — another URL scheme, a longer string — is ignored, and the plugin shows
-the editor's default plugin mark, as it does when it declares no icon at all or the
-image fails to load. Draw for a 30 px square (it is also shown at 14 px in a dialog
-title), on nothing: the editor draws no frame or plate behind it, and an icon that is
-itself a bordered square reads as a second control next to the row's tick box.
-Terrain from Image's `icon.svg` is the worked example.
+`name` is the only required field. `id`, used for storage keys and log prefixes, is
+derived from the name when absent. `entry` defaults to `plugin.ts`, then `plugin.js`.
+`api` is the API version the plugin needs (see **The typings**). Two optional fields are
+covered below: `icon` and `build`.
 
 `plugin.ts`:
 
@@ -194,44 +152,119 @@ export default function activate(api: PluginApi) {
 }
 ```
 
-The `import type` line is erased before the file runs, so the package only matters for
-editing and checking:
+Everything `add` and `on` return is a `Disposable`. Keep the ones you need to drop early
+and forget the rest: turning the plugin off disposes them all. A function returned from
+`activate` runs at deactivation too, for anything the API does not know about, such as
+timers or sockets.
+
+### Developing locally
+
+Serve the folder and add it to the editor:
+
+```sh
+npx serve --cors .
+```
+
+Then paste `http://localhost:3000/` into Plugins ▸ Manage Plugins… and press **Reload**
+on its row after each change.
+
+### The typings
 
 ```sh
 npm i -D @scm-js/plugin-api
 ```
 
-`npm outdated` and `npm update` say what you would expect (the versioning rule is under
-**The contract**), and the same files are committed and tagged at
-[`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) if you would rather read them
-there or depend on a git ref.
+That package is the whole toolchain: one generated `index.d.ts`, types only, nothing to
+configure. The `import type` line in `plugin.ts` is erased before the file runs, so the
+package matters only while editing and type-checking. The same files are committed and
+tagged at [`scm-js/plugin-api`](https://github.com/scm-js/plugin-api) if you would rather
+depend on a git ref.
 
-Everything `add`/`on` returns is a `Disposable`; keep the ones you need to drop early
-and forget the rest — deactivation disposes them all. Returning a function from
-`activate` runs it at deactivation too, for anything outside the API (timers, sockets).
+The package's **major version is the API version**, and its minor version moves when the
+declarations do, so `^1` in your `package.json` means what it says. Your manifest's
+`"api": 1` is the version you *need*: an editor offering an older one refuses to load the
+plugin rather than failing halfway through `activate`. Additions to the API do not move the
+version, because a new call appearing on `api` breaks nothing that does not use it. The
+version is reserved for a change that would.
 
-To develop: serve the folder (`npx serve --cors .`), add `http://localhost:3000/`
-in Plugins ▸ Manage Plugins…, and press **Reload** after each change.
+### What the editor does for you
+
+- **Every edit is one undo entry.** You never touch the scenario's internals.
+  `api.document.edit` takes a label and a builder, applies your operations as you call
+  them, and commits them as a single history entry. It is the path a brush stroke takes,
+  so the right file sections are marked dirty, the canvas repaints, and doodads or units
+  your terrain edit stranded are lifted in the same entry. `api.document.update` is the
+  same shape for the tables that live outside the undo model, and
+  `api.document.sections` for raw bytes. See **The three kinds of write**.
+- **Everything you add is taken back for you.** A menu item, hotkey, context-menu entry,
+  dialog, panel, overlay, map tool or event listener each hand you a `Disposable`, and the
+  editor keeps its own list of them besides. Turning your plugin off, reloading it or
+  removing it sweeps the lot whether or not you cleaned up.
+- **Reading the map is always safe.** Every method that reads answers `null`, `[]` or
+  `false` when no map is open, rather than throwing. You do not have to guard the empty
+  editor.
+- **The graphics may not be there.** The user may not have installed Blizzard's data, and
+  the editor works without it. Anything that needs the tileset degrades instead of
+  failing: a terrain operation writes nothing and leaves a note on its result. Check what
+  you get back rather than assuming.
+
+### Imports and dependencies
+
+- **Write plain DOM, not React.** `api.ui.dialog` and `api.ui.panel` hand you an element
+  to fill. `api.ui.el` and `api.ui.widgets` build content in the editor's own styles, so a
+  plain-DOM dialog looks like a built-in one without copying any CSS. If you want a
+  framework, bundle one into that element; it is yours.
+- **Relative imports work, with or without the extension.** `./convert`, `./convert.js`
+  (resolving to `convert.ts`, the way a TypeScript project means it), or a folder with an
+  `index.ts` are all tried. A cycle is an error naming the file.
+- **Bare package names do not work on the source path.** `import x from "some-package"`
+  is refused when the editor loads your source, because there is no module resolver
+  behind a `fetch`. An `import type` from `@scm-js/plugin-api` is fine: the compiler
+  erases it before the loader sees the name. For a real dependency, ship a bundle and
+  name it in the manifest's `build` (see **Building**).
+
+### The icon
+
+`icon` is the plugin's face in Manage Plugins and in the title bar of every dialog the
+plugin opens. Four forms are understood:
+
+| `icon` | What it means |
+| --- | --- |
+| `"icon.svg"`, `"art/mark.png"` | An image file beside the manifest (`.png .svg .jpg .gif .webp .avif .ico`). |
+| `"https://…/mark.png"` | An image anywhere, fetched by the browser when the dialog shows. |
+| `"data:image/svg+xml,…"` | An image inline in the manifest, nothing extra to fetch. |
+| `"🗺️"` | Up to four characters, drawn as text. An emoji is the cheapest icon there is. |
+
+Anything else is ignored and the plugin shows the editor's default plugin mark, as it does
+with no icon at all or one that fails to load. Draw for a 30 px square (it is also shown at
+14 px in a dialog title) on nothing: the editor draws no frame behind it, and an icon that
+is itself a bordered square reads as a second control next to the row's tick box. Terrain
+from Image's `icon.svg` is a worked example.
 
 ### Building
 
-A plugin can ship a built bundle and name it in the manifest's `build`. It is worth doing
-for anything bigger than a single file: the editor fetches one JavaScript file and imports
-it, instead of fetching your source, starting the TypeScript compiler in a worker and
-walking your imports one file at a time — and only a built plugin can use an npm
-dependency, since the source path has no resolver behind its `fetch`.
+A plugin can ship a built bundle and name it in the manifest:
 
-The organisation's plugins all do it the same way, with one esbuild call in a `build`
-script:
+```json
+"build": "dist/plugin.js"
+```
+
+The editor then fetches that one file and imports it, in place of fetching your source,
+starting the TypeScript compiler in a worker and walking your imports one file at a time.
+It is worth doing for anything bigger than a single file, and it is the only way to use an
+npm dependency. `entry` stays in the manifest either way: it is what a person reads, and
+what loads for a repository that publishes no build.
+
+The organisation's plugins all build the same way, with one esbuild call:
 
 ```json
 "build": "esbuild plugin.ts --bundle --format=esm --target=es2022 --platform=browser --outfile=dist/plugin.js",
 "dev": "npm run build -- --watch"
 ```
 
-and `dist/plugin.js` is committed, because the editor loads it straight from the
-repository at whatever ref the spec names. The shared workflow in
-[`scm-js/.github`](https://github.com/scm-js/.github) does the rest — a plugin repository
+`dist/plugin.js` is committed, because the editor loads it straight from the repository at
+whatever version the address names. The shared workflow in
+[`scm-js/.github`](https://github.com/scm-js/.github) does the rest. A plugin repository
 calls it in six lines:
 
 ```yaml
@@ -246,35 +279,64 @@ jobs:
     uses: scm-js/.github/.github/workflows/plugin-ci.yml@main
 ```
 
-It type-checks, tests, rebuilds the bundle and commits it on a push to `main`; at a `v*`
+It type-checks, tests, rebuilds the bundle and commits it on a push to `main`. At a `v*`
 tag it rebuilds and *checks* instead, so the bundle a pinned plugin runs is provably what
 its source builds to (esbuild's output is deterministic, and the bundle carries no commit
-hash or date for that reason). The scheduled run type-checks against the newest
-`@scm-js/plugin-api`, so a contract that moved under the plugin turns a check red rather
-than going unnoticed.
+hash or date for that reason). The weekly run type-checks against the newest
+`@scm-js/plugin-api`, so a change in the contract turns a check red instead of going
+unnoticed.
 
-The bundle is not minified. What the confirmation dialog offers to show a user is the
-repository, and a plugin they cannot read is a plugin they cannot judge.
+Ship the bundle unminified. What the Add screen offers a user is your repository, and a
+plugin they cannot read is a plugin they cannot judge.
+
+### What your users see
+
+Three things follow from **What you are trusting** above and are worth writing for:
+
+- **Your manifest is all they see before deciding.** Fill in the name, version, author,
+  description, icon, repository and homepage. It is the only thing a user has to judge
+  you by.
+- **They are pinned to a commit and never auto-updated.** Installing stores the commit
+  your address pointed at, so a push of yours reaches nobody already running the plugin.
+  They move forward with the Update button, which shows them the new manifest first. Tag
+  your releases: a tag is what the registry lists, and what a considered version looks
+  like from the outside.
+- **They may be running a copy saved in their browser.** That copy is replaced only when
+  they press Reload.
+
+### Getting listed
+
+The project's registry, [`scm-js/registry`](https://github.com/scm-js/registry), is
+generated from the organisation itself: every repository named `plugin-…`, or carrying
+both the `scmjs` and `plugin` topics, is listed with the `plugin.json` at its newest
+version tag (an untagged repository falls back to its default branch). It refreshes hourly
+and within about a minute of a plugin repository saying it changed.
+
+For a plugin outside the organisation, open a pull request against that repository's
+`plugins.json`; its README has the shape of an entry. Any URL serving a file of that shape
+is a registry, and a user can add one under Sources.
 
 ## The API, group by group
 
-The complete typings are the package's own `index.d.ts`, and every one of them is generated into
-a page at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/); this is the tour. Every
-method that reads the map returns `null` / `[]` / `false` when no map is open rather than
+The complete typings are the package's own `index.d.ts`, and every call has a page at
+[docs.scmjs.dev/api](https://docs.scmjs.dev/api/). This part is the tour: what each group
+is for, how the pieces fit together, and the rules a signature does not show. Every method
+that reads the map answers `null`, `[]` or `false` when no map is open, rather than
 throwing.
 
-### Promises, and the one thing that is synchronous
+### Asynchronous calls, and the one synchronous builder
 
-**Everything asynchronous is a promise.** There is no completion callback and no
-`(err, result)` anywhere in the API: `await` it and read the answer, or check it for
-`null`. That covers opening, saving, exporting and rendering a map
-(`document.open` / `create` / `save` / `saveAs` / `close` / `export` / `renderImage` /
-`changeTileset`), loading game data (`tileset.load`, `data.load`, `graphics.load`,
-`terrain.checkIsom`, and installing, switching and removing a data set through
-`gameData`), and everything that waits for the user (`ui.pickArea`, `pickTile`,
-`pickFiles`, `saveFile`, `loadImage`, `readClipboardImage`, `confirm`, `alert`, `prompt`,
-`ask`). A user who dismisses something resolves the promise with `null` or `false`
-rather than rejecting, so the ordinary path needs no `try`:
+**Everything asynchronous returns a promise.** There is no completion callback and no
+`(err, result)` pair anywhere in the API. `await` the call and read the answer. When the
+user dismisses something (Esc, Cancel, a right-click, the ×), the promise resolves with
+`null` or `false` rather than rejecting, so the ordinary path needs no `try`. That covers:
+
+- opening, saving, exporting and rendering a map: `document.open`, `create`, `save`,
+  `saveAs`, `close`, `export`, `renderImage`, `changeTileset`;
+- loading game data: `tileset.load`, `data.load`, `graphics.load`, `terrain.checkIsom`,
+  and installing, switching and removing a data set through `gameData`;
+- everything that waits for the user: `ui.pickArea`, `pickTile`, `pickFiles`, `saveFile`,
+  `loadImage`, `readClipboardImage`, `confirm`, `alert`, `prompt`, `ask`.
 
 ```ts
 const rect = await api.ui.pickArea({ prompt: "Pick an area to flatten" });
@@ -283,23 +345,23 @@ await api.tileset.load();                // the graphics the fill needs
 api.document.edit("Flatten", tx => tx.stampTerrain(rect, terrainId));
 ```
 
-`activate` itself may be `async` — the host awaits it before the plugin counts as
-loaded — and so may a dialog button's `run`, which keeps the dialog open until it
-settles and closes it on anything but `false`.
+`activate` itself may be `async`; the editor awaits it before the plugin counts as loaded.
+So may a dialog button's `run`, which keeps the dialog open until it settles and closes it
+on anything but `false`.
 
-The callbacks that remain are the ones that are genuinely callbacks rather than a
-deferred answer: event listeners (`api.events.on(…)`), the DOM handlers of `ui.widgets`, a
-dialog's or panel's `mount`, and the pointer and `draw` hooks of `ui.mapTool` and
-`ui.overlay`. Every one of them returns a `Disposable` or a cleanup function, so there
-is no `off()` to pair up and nothing to unregister at deactivation.
+The callbacks that remain are real callbacks rather than deferred answers: event
+listeners (`api.events.on`), the DOM handlers of `ui.widgets`, a dialog's or panel's
+`mount`, and the pointer and `draw` hooks of `ui.mapTool` and `ui.overlay`. Each returns
+a `Disposable` or a cleanup function, so there is no `off()` to pair up and nothing to
+unregister at deactivation.
 
-The **one** exception is a transaction's builder. `document.edit(label, build)` and
-`document.update(label, build)` take a **synchronous** `build`: its operations apply as
-they are called and the commit closes the transaction the moment it returns. An `async`
-builder would therefore commit whatever ran before its first `await` and let the rest
-mutate the map outside that entry, where undo cannot reach it. TypeScript refuses one,
-and the host also catches it at runtime — the result's `notes` and the console say so —
-for a plugin written in plain JavaScript.
+**The one exception is a transaction's builder.** `document.edit(label, build)` and
+`document.update(label, build)` take a *synchronous* `build`. Its operations apply as they
+are called, and the transaction commits the moment `build` returns. An `async` builder
+would commit whatever ran before its first `await` and let the rest change the map
+outside that entry, where undo cannot reach it. TypeScript refuses one, and the editor
+also catches it at runtime for a plugin written in plain JavaScript: the result's `notes`
+and the console say so.
 
 ```ts
 // Wrong: commits at the await, and the placement lands outside the undo entry.
@@ -313,9 +375,9 @@ await api.data.load();
 api.document.edit("Place", tx => tx.placeUnit(0, 0, 128, 128));
 ```
 
-Long work of your own gets a progress panel that does not block the editor;
-`handle.cancelled()` is the poll and `handle.signal` the same answer as an
-`AbortSignal`, so anything that takes one stops with the panel:
+Long work of your own gets a progress panel that does not block the editor.
+`handle.cancelled()` is the poll and `handle.signal` is an `AbortSignal` with the same
+answer, so anything that takes one stops with the panel:
 
 ```ts
 const job = api.ui.progress("Converting", { cancellable: true });
@@ -332,129 +394,127 @@ try {
 
 ### The three kinds of write
 
-Everything a plugin can change about the open map goes through one of three, and they
-differ in what they cost:
+Everything a plugin can change about the open map goes through one of three calls. They
+are the editor's own three ways of writing (a brush stroke, a dialog's OK, a raw file
+edit) and they differ in what they cost:
 
-| | what it covers | undo |
+| | What it covers | Undo |
 | --- | --- | --- |
-| `document.edit(label, build)` | terrain and objects — tiles, ISOM, units, sprites, doodads, locations, fog | one history entry, like a brush stroke |
-| `document.update(label, build)` | the tables and settings — triggers, briefing, the string table, switch names, the scenario's name and description, players, forces and colours, unit / upgrade / technology settings, sounds, the map revision | none: a settings-dialog transaction, as in StarEdit |
-| `document.sections.*` | the file's own bytes, any section, modelled or not | none, and the history is dropped (as Resize) |
+| `document.edit(label, build)` | Terrain and objects: tiles, ISOM, units, sprites, doodads, locations, fog. | One history entry, like a brush stroke. |
+| `document.update(label, build)` | The tables and settings: triggers, briefing, the string table, switch names, the scenario's name and description, players, forces and colours, unit / upgrade / technology settings, sounds, the map revision. | None. It is a settings-dialog transaction, as in StarEdit. |
+| `document.sections.*` | The file's own bytes, any section, modelled by the editor or not. | None, and the undo history is dropped, as after Resize. |
 
-They are the editor's own three: a stroke, a dialog's OK, and a raw file edit. Both
-transactions apply their operations **as they are called**, so later ones see earlier
-ones' results, and both commit once at the end — which is why the builder is
-synchronous (above).
+Both transactions apply their operations **as they are called**, so a later operation
+sees the result of an earlier one, and both commit once at the end. That is why the
+builder is synchronous.
 
 ### `api.document`
+
+The open map as a whole: opening, saving and closing it, its properties, and the entry
+points to the three kinds of write.
 
 | | |
 | --- | --- |
 | `isOpen()` | Whether a scenario is loaded. |
 | `info()` | `{ name, description, width, height, tileset, era, version, fileName, modified }`. |
-| `scenario()` | The live `Scenario` object, for **reading**. Mutating it directly bypasses undo and dirty tracking. |
+| `scenario()` | The live `Scenario` object, for **reading**. Changing it directly bypasses undo and dirty tracking. |
 | `edit(label, build)` | Run `build(tx)` and record what it did as one undo entry named `label`. Returns an `EditResult` with counts per list. |
-| `update(label, build)` | The tables and settings, as one settings-style transaction — triggers, strings, switch names, the scenario's properties, and everything the Scenario menu's dialogs write (see `UpdateTransaction`). Not in the undo model. Returns an `UpdateResult`. |
+| `update(label, build)` | The tables and settings as one settings-style transaction (see `UpdateTransaction`). Not in the undo model. Returns an `UpdateResult`. |
 | `undo()` / `redo()` | The Edit menu's. |
-| `history()` | `{ undo, redo, undoDepth, redoDepth }`: the labels the Edit menu shows and how deep each stack is, without moving anything — so a plugin can tell whether its own edit is still the top entry before undoing it. |
-| `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx` / `.scm` / `.chk`) in place of the current one, the way File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
-| `create({ width, height, tileset, name?, description?, terrainId?, startLocations?, startLayout? })` | A blank map in place of the current one, the way File ▸ New makes one — flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every section a fresh map needs — through the same unsaved-changes gate as `open`. `startLocations` lays one down for each of players 1..N as `tx.placeStartLocations` would (`"ring"` unless `startLayout` says `"corners"`); they are part of making the map, so a fresh scenario has no history to undo them from. Resolves true once the new map is the open document, false when the user kept the current one. |
-| `export({ format?, fileName?, saveOptions? })` | The open map as a `File`, as Save writes it — the save options last confirmed for this map (or their defaults: PKWARE and encryption for a new map, the way it was opened for an opened one), archive extras included — `scx` / `scm` / a bare `chk`; `saveOptions` overrides compression, encryption and what is left out. Null with no map. Hand it to a `FormData` and it uploads. |
-| `save({ copy? })` / `saveAs({ copy? })` | File ▸ Save and Save As. `save` writes back where the map came from with its remembered options — into the file when the browser gave a handle, else through the browser's save dialog or as a download — and a map with no file yet goes through the Save dialog; `saveAs` always opens it; `copy` writes a copy and leaves the document's name and clean state alone. Resolve true once written, false when the user dismissed a dialog or the write failed. |
-| `close()` | File ▸ Close, through the same unsaved-changes gate as `open`; true once the map is gone. |
-| `changeTileset({ tileset, terrainId?, keepTiles? })` | Map Properties' tileset change: ERA moves and the terrain is laid again with `terrainId` (the new tileset's default when omitted) after the new graphics load, the doodads go, everything else stays; `keepTiles` changes only ERA. A transaction outside the undo model that drops both history stacks, like `resize`. |
-| `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it; 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics (null without them or without a map). |
-| `resize({ width, height, anchor?, terrainId?, clampLocations? })` | Scenario ▸ Resize / Crop Map: content keeps its place relative to the anchor (a 3 × 3 grid, 4 = centre), the new ground is `terrainId` or the tileset's default, objects outside the new bounds are dropped and locations clamped. A transaction outside the undo model that **drops both history stacks**, as the dialog does. Returns the `ResizeResult` (what was dropped), null with no map. |
-| `extras` | The files stored in the archive next to `staredit\scenario.chk` — custom sounds, and anything a plugin wants to keep with the map: `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` / `remove` mark the map modified; the members are written on the next Save. |
-| `sections` | The scenario at the byte level — see the next section. |
+| `history()` | `{ undo, redo, undoDepth, redoDepth }`: the labels the Edit menu shows and how deep each stack is, without moving anything. A plugin can tell whether its own edit is still the top entry before undoing it. |
+| `open(file, fileName?)` | Open a map file (`File`, `Blob` or bytes; `.scx`, `.scm` or `.chk`) in place of the current one, as File ▸ Open does. A modified map goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the open document, `false` when the user kept the current map or the file could not be read (the status bar says which). |
+| `create({ width, height, tileset, name?, description?, terrainId?, startLocations?, startLayout? })` | A blank map in place of the current one, as File ▸ New makes one: flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, and every section a fresh map needs. Goes through the same unsaved-changes gate as `open`. `startLocations` lays one down for each of players 1..N as `tx.placeStartLocations` would (`"ring"` unless `startLayout` says `"corners"`); they are part of making the map, so there is no history entry to undo them from. |
+| `export({ format?, fileName?, saveOptions? })` | The open map as a `File`, as Save writes it: the save options last confirmed for this map (or their defaults), archive extras included, as `scx`, `scm` or a bare `chk`. `saveOptions` overrides compression, encryption and what is left out. Null with no map. Hand it to a `FormData` and it uploads. |
+| `save({ copy? })` / `saveAs({ copy? })` | File ▸ Save and Save As. `save` writes back where the map came from with its remembered options, and a map with no file yet goes through the Save dialog; `saveAs` always opens it. `copy` writes a copy and leaves the document's name and clean state alone. Resolve `true` once written, `false` when the user dismissed a dialog or the write failed. |
+| `close()` | File ▸ Close, through the same unsaved-changes gate as `open`. `true` once the map is gone. |
+| `changeTileset({ tileset, terrainId?, keepTiles? })` | Map Properties' tileset change: the terrain is laid again with `terrainId` (the new tileset's default when omitted) after the new graphics load, the doodads go, and everything else stays. `keepTiles` changes only the tileset id. Outside the undo model; drops both history stacks, like `resize`. |
+| `renderImage({ pixelsPerTile?, … })` | A PNG `Blob` of the map as File ▸ Export ▸ Image draws it. 32 pixels per tile is the game's art, 1 is a minimap. Needs the tileset graphics; null without them or without a map. |
+| `resize({ width, height, anchor?, terrainId?, clampLocations? })` | Scenario ▸ Resize / Crop Map: content keeps its place relative to the anchor (a 3 × 3 grid, 4 = centre), new ground is `terrainId` or the tileset's default, objects outside the new bounds are dropped and locations clamped. Outside the undo model; **drops both history stacks**, as the dialog does. Returns the `ResizeResult` (what was dropped), null with no map. |
+| `extras` | The files stored in the archive next to `staredit\scenario.chk`: custom sounds, and anything a plugin wants to keep with the map. `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` and `remove` mark the map modified, and the members are written on the next Save. |
+| `sections` | The scenario at the byte level. See the next section. |
 
 ### `api.document.sections`
 
-The CHK as a list of sections, the way the game reads it and Save writes it, with unsaved
-edits already encoded: `list()` gives every occurrence in file order as a `SectionInfo`
-(`index`, the four-character `name`, `offset`, `size`, `declaredSize` / `truncated` for a
-file that ended early, `occurrence` / `occurrences` for a repeated name, `dirty` when the
-editor holds changes it will encode there, and `spec` — what the registry knows: `what`,
-the combine `mode` on repeat, the fixed `size` the game reads for this map or null, the
-record `stride` of a list, and `modelled`, whether the editor decodes it). `bytes(index)`
-is a copy of one occurrence's payload, `combined(name)` the bytes the game acts on with
-repeats folded the way the registry says, `file()` the whole CHK, `spec(name)` / `known()`
-the registry.
+The map file as a list of sections, the way the game reads it and Save writes it, with
+unsaved edits already encoded. Section Explorer is built on the reads and writes; Repair
+on the helpers.
 
-The writes — `write(index, bytes)`, `rename(index, name)`, `insert(index, name, bytes)`,
-`remove(index)`, `move(from, to)` and `replaceFile(bytes)` — are a different kind of
-transaction from `edit`: the edited file is parsed again from scratch and installed as
-the open document, so the change reaches every part of the editor
-whether or not it models the section, and, as with Resize, the undo history is dropped
-and every selection cleared. The map is marked modified and `"document"` fires. Each
-returns `{ warnings }`, what the parser said of the result; a bad index or a name longer
-than four characters throws, and so does any write without a map. Indices shift when a
-section is inserted or removed before them, so take a fresh `list()` after every edit.
-Section Explorer is the worked example.
+**Reading.** `list()` gives every occurrence in file order as a `SectionInfo`: `index`,
+the four-character `name`, `offset`, `size`, `declaredSize` and `truncated` for a file
+that ended early, `occurrence` / `occurrences` for a repeated name, `dirty` when the
+editor holds changes it will encode there, and `spec`, which is what the editor knows
+about that name (`what`, the combine `mode` on repeat, the fixed `size` the game reads for
+this map or null, the record `stride` of a list, and `modelled`, whether the editor
+decodes it). `bytes(index)` is a copy of one occurrence's payload, `combined(name)` the
+bytes the game acts on with repeats folded the way the game folds them, `file()` the whole
+file, and `spec(name)` / `known()` the section table.
 
-Around them, what a repair needs: `trailing()` is the bytes after the last chunk the
-reader could act on (what follows a header with a negative length, say — Save writes
-them back as they are; a `replaceFile` without them drops them), `required()` the names
-a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in
-place of `STR ` on a Remastered file), `defaults(name)` the bytes File ▸ New would write
-for a section on a map of this size, tileset and revision (StarEdit's defaults for a
-settings table, the fixed VCOD, an empty list, null terrain; null for a name the editor
-cannot produce), and `rebuild(names?)` re-encodes sections from the editor's model the
-way Save writes a dirty one and installs the result like any other raw edit — repeated
-occurrences collapse into one, a truncated or oversized section comes back at the size
-the model encodes to, a string table whose offsets point nowhere is rewritten with every
-string the editor could read. Names the editor does not model, and modelled ones whose
-model is absent (no ISOM, no settings table), are left alone and missing from the
-result's `rebuilt`; omit `names` for every modelled section the map has a model for.
-Repair is the worked example for these.
+**Writing.** `write(index, bytes)`, `rename(index, name)`, `insert(index, name, bytes)`,
+`remove(index)`, `move(from, to)` and `replaceFile(bytes)` are a different kind of
+transaction from `edit`. The edited file is parsed again from scratch and installed as the
+open document, so the change reaches every part of the editor whether or not it models the
+section. As with Resize, the undo history is dropped and every selection cleared; the map
+is marked modified and the `"document"` event fires with reason `"replace"`. Each returns
+`{ warnings }`, what the parser said of the result. A bad index or a name longer than four
+characters throws, and so does any write without a map. Indices shift when a section is
+inserted or removed before them, so take a fresh `list()` after every edit.
+
+**Helpers for a repair.**
+
+| | |
+| --- | --- |
+| `trailing()` | The bytes after the last chunk the reader could act on (what follows a header with a negative length, say). Save writes them back as they are; a `replaceFile` without them drops them. |
+| `required()` | The section names a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in place of `STR ` on a Remastered file). |
+| `defaults(name)` | The bytes File ▸ New would write for that section on a map of this size, tileset and revision: StarEdit's defaults for a settings table, the fixed VCOD, an empty list, null terrain. Null for a name the editor cannot produce. |
+| `rebuild(names?)` | Re-encode sections from the editor's model, the way Save writes a dirty one, and install the result like any other raw edit. Repeated occurrences collapse into one, a truncated or oversized section comes back at the size the model encodes to, and a string table whose offsets point nowhere is rewritten with every string the editor could read. Names the editor does not model, and modelled ones whose model is absent (no ISOM, no settings table), are left alone and missing from the result's `rebuilt`. Omit `names` for every modelled section the map has a model for. |
 
 ### `EditTransaction`
 
-`tx` applies each operation immediately, so a later operation sees the state the
-previous one left (a `tileAt` after a `setTile` reads the new tile). When `build`
-returns, the transaction lifts doodads the terrain edit broke, removes units the new
-ground cannot hold (when *Remove stranded units* is on, as for a stroke), commits, and
-repaints.
+What `document.edit` hands its builder. `tx` applies each operation immediately, so a
+later operation sees the state the previous one left: a `tileAt` after a `setTile` reads
+the new tile. When `build` returns, the transaction lifts the doodads the terrain edit
+broke, removes the units the new ground cannot hold (when *Remove stranded units* is on,
+as for a stroke), commits, and repaints.
 
 | Terrain | |
 | --- | --- |
 | `tileAt(x, y)` / `groundAt(x, y)` | MTXM / TILE at a cell. |
 | `setTile(x, y, id)` | One tile, both sections. |
-| `setTiles(cells, id)` | Many; `cells` is a `Rect` or cell indices (`y * width + x`). |
+| `setTiles(cells, id)` | Many. `cells` is a `Rect` or cell indices (`y * width + x`). |
 | `stampTerrain(cells, terrainId, variation?)` | The Rect brush: flat pairs by column parity, one random variation per pair. Needs the tileset graphics. Returns tiles changed. |
 | `fillFlat(rect, terrainId)` | Lay terrain the way a new map is laid, ISOM lattice included. |
-| `rebuildIsom()` | Reconstruct the ISOM from the tiles — for a map that arrived without one, or whose lattice no longer matches after Rect / Tile edits: exact for terrain laid down isometrically, a best guess under doodads and for hand-placed tiles. A missing or wrongly sized ISOM is created (undo removes it again); an existing one gets only the diamonds that differ. Needs the tileset graphics; null without them, else `{ created, changed, diamonds, unresolved }`. |
-| `paintIsom(diamond, terrainId, extent = 1)` | The isometric brush on one diamond: sets the ISOM and generates the cliff/shore tiles around it. Needs ISOM and the tileset. |
-| `tilesFromIsom()` | The reverse of `rebuildIsom`: every tile regenerated from the lattice, what StarEdit does after an isometric edit. Needs ISOM and the tileset; tiles changed, or null. |
-| `replaceTerrain(from, to, rect?)` | Tools ▸ Replace Terrain: every tile matching `from` — `{ kind: "terrain", id }` for a flat terrain by ISOM id, `{ kind: "tile", id }` for one exact tile — becomes `to`, over `rect` or the whole map, pairs laid as the Rect brush lays them. Returns tiles changed. |
-| `fillArea(x, y, { terrainId } \| { tileId }, match?)` | The bucket fill: the connected area of the same terrain type (`"terrain"`, the Rect fill's reading — needs the graphics) or the same exact tile (`"tile"`), mirrored under the symmetry mode, laid with a terrain or set to a tile. |
-| `placeBlend(x, y, side, id)` | The Blend brush: `id` on the cell beside the anchor on `side`; `terrain.blendCandidates` says what fits. |
+| `rebuildIsom()` | Reconstruct the ISOM from the tiles, for a map that arrived without one or whose lattice no longer matches after Rect / Tile edits. Exact for terrain laid down isometrically, a best guess under doodads and for hand-placed tiles. A missing or wrongly sized ISOM is created (undo removes it again); an existing one gets only the diamonds that differ. Needs the tileset graphics; null without them, else `{ created, changed, diamonds, unresolved }`. |
+| `paintIsom(diamond, terrainId, extent = 1)` | The isometric brush on one diamond: sets the ISOM and generates the cliff and shore tiles around it. Needs ISOM and the tileset. |
+| `tilesFromIsom()` | The reverse of `rebuildIsom`: every tile regenerated from the lattice, what StarEdit does after an isometric edit. Needs ISOM and the tileset. Tiles changed, or null. |
+| `replaceTerrain(from, to, rect?)` | Tools ▸ Replace Terrain: every tile matching `from` (`{ kind: "terrain", id }` for a flat terrain by ISOM id, `{ kind: "tile", id }` for one exact tile) becomes `to`, over `rect` or the whole map, pairs laid as the Rect brush lays them. Returns tiles changed. |
+| `fillArea(x, y, { terrainId } \| { tileId }, match?)` | The bucket fill: the connected area of the same terrain type (`"terrain"`, the Rect fill's reading; needs the graphics) or the same exact tile (`"tile"`), mirrored under the symmetry mode, laid with a terrain or set to a tile. |
+| `placeBlend(x, y, side, id)` | The Blend brush: `id` on the cell beside the anchor on `side`. `terrain.blendCandidates` says what fits. |
 | `mirror(cells)` / `mirrorPoint(px, py)` | The cells' (or the pixel's) images under Tools ▸ Symmetry, the way the built-in brushes and palettes take them. |
 
 | Objects | |
 | --- | --- |
 | `makeUnit(unitId, owner, x, y)` | A StarEdit-style record (serial, masks) at map pixels. |
 | `addUnits(records)` / `removeUnits(indices)` / `updateUnits(indices, patch)` | |
-| `moveUnits(indices, dx, dy, snap?)` | Shift by a pixel delta. With `snap` (the palette's option by default) the *destination* is snapped — a building to the tile grid by its placement box, anything else to the nearest tile centre — so a unit that sits off the grid is brought onto it. |
-| `placeStartLocations({ players, layout?, margin?, replace? })` | Tools ▸ Auto-place Start Locations: one per player (from 1) on a `"ring"` or in the `"corners"`, each moved to the nearest spot the placement checks accept; `replace` removes the existing ones first. Returns `{ changes, placed, removed }`, `placed` null for a player nothing within reach fit. |
-| `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: with its *Snap to grid* on, a building's placement box goes on the tile grid and anything else on the nearest tile centre; nothing leaves the map. Returns the index. No checks — |
-| `canPlaceUnit(unitId, x, y)` | — ask this first if you want them: the palette's collision and terrain checks with its current options. |
-| `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map; returns the index. |
-| `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position — in place, so indices hold. |
-| `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` / `updateDoodads(indices, { owner?, disabled? })` | Doodads stamp MTXM and may carry an overlay sprite; all three keep the tiles, the record and the overlay together. |
-| `addLocation(bounds, name?, elevationFlags?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) and unused slots are refused by `editLocation`; `addLocation` also puts Anywhere back if it was missing. |
-| `restoreAnywhere()` | Anywhere back to the whole map; true when it had to move. |
-| `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask; creates MASK on first use. |
+| `moveUnits(indices, dx, dy, snap?)` | Shift by a pixel delta. With `snap` (the palette's option by default) the *destination* is snapped: a building to the tile grid by its placement box, anything else to the nearest tile centre. A unit that sits off the grid is brought onto it. |
+| `placeStartLocations({ players, layout?, margin?, replace? })` | Tools ▸ Auto-place Start Locations: one per player (from 1) on a `"ring"` or in the `"corners"`, each moved to the nearest spot the placement checks accept. `replace` removes the existing ones first. Returns `{ changes, placed, removed }`; `placed` is null for a player nothing within reach fit. |
+| `placeUnit(unitId, owner, x, y)` | A unit the way the Units palette places one: with its *Snap to grid* on, a building's placement box goes on the tile grid and anything else on the nearest tile centre; nothing leaves the map. Returns the index. Makes no checks. |
+| `canPlaceUnit(unitId, x, y)` | The palette's collision and terrain checks with its current options. Ask this before `placeUnit` if you want them. |
+| `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map. Returns the index. |
+| `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position, in place, so indices hold. |
+| `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` / `updateDoodads(indices, { owner?, disabled? })` | Doodads stamp tiles and may carry an overlay sprite. All three keep the tiles, the record and the overlay together. |
+| `addLocation(bounds, name?, elevationFlags?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) and unused slots are refused by `editLocation`. `addLocation` also puts Anywhere back if it was missing. |
+| `restoreAnywhere()` | Anywhere back to the whole map. `true` when it had to move. |
+| `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask. Creates MASK on first use. |
 | `invertFog(players)` / `copyFog(from, toMask)` / `floodFog(x, y, player, players, mode)` | The Fog palette's other three: flip the bits, copy one player's fog onto the players in a mask, fill the connected area that shares one player's state. |
 | `note(text)` | A line for the status bar, alongside the label. |
 
 ### `UpdateTransaction`
 
-The second kind of write. Operations apply immediately — a string interned on one line is
-in the table for the trigger added on the next — and the commit at the end marks the map
-modified and tells the chrome to re-read. The result is
-`{ changed, sections, notes }`: which CHK sections were actually touched (`["TRIG", "STR "]`),
-so `changed` is false when every operation was a no-op.
+What `document.update` hands its builder: the second kind of write. Operations apply
+immediately (a string interned on one line is in the table for the trigger added on the
+next), and the commit at the end marks the map modified and tells the chrome to re-read.
+The result is `{ changed, sections, notes }`: `sections` lists the file sections actually
+touched (`["TRIG", "STR "]`), so `changed` is false when every operation was a no-op.
 
 | Triggers | |
 | --- | --- |
@@ -463,25 +523,25 @@ so `changed` is false when every operation was a no-op.
 
 | Tables | |
 | --- | --- |
-| `tx.strings` | `list()`, `intern(text)` (an identical entry, else a new one; **never** overwrites, because the old index may be shared with a trigger), `set(index, text)` (overwrite one slot — everything pointing at it sees the new text; slot 0 is refused), `apply(list)` (a whole table; unreferenced trailing blanks are dropped, every other index keeps its place), `import(text)` (File ▸ Import ▸ Strings' `index<TAB>text` form, see `api.exchange`). |
-| `tx.switches` | `names()` (256, `""` where a switch has none) and `setName(index, name)`; creates SWNM on the first name. |
-| `tx.properties({ name?, description? })` | SPRP. `""` restores the file-name default. |
+| `tx.strings` | `list()`; `intern(text)` (an identical entry, else a new one; it **never** overwrites, because the old index may be shared with a trigger); `set(index, text)` (overwrite one slot, so everything pointing at it sees the new text; slot 0 is refused); `apply(list)` (a whole table; unreferenced trailing blanks are dropped, every other index keeps its place); `import(text)` (File ▸ Import ▸ Strings' `index<TAB>text` form, see `api.exchange`). |
+| `tx.switches` | `names()` (256 entries, `""` where a switch has none) and `setName(index, name)`. Creates SWNM on the first name. |
+| `tx.properties({ name?, description? })` | The scenario's name and description. `""` restores the file-name default. |
 | `tx.note(text)` | A line for the status bar. |
 
 | Settings | |
 | --- | --- |
-| `tx.players` | `list()` — the 12 slots as `PlayerSlotView`s (0-based `slot`, `type` / `typeName`, `race` / `raceName`, and for the eight playable slots `color` (COLR index), `colorHex`, `rgb` (the CRGB custom colour in effect, else null), `force` (0-based) / `forceName`) — and `set(slot, { type?, race?, color?, rgb?, force? })`. `rgb: [r, g, b]` sets a Remastered custom colour, `rgb: null` puts the slot back on its palette colour; CRGB is dropped again when every slot is. OWNR is always written with IOWN. |
-| `tx.forces` | `list()` — four `ForceView`s (`name`, `flags` and the `allied` / `alliedVictory` / `sharedVision` / `randomStart` booleans, `players`: the 0-based slots in the force) — and `set(force, { name?, allied?, alliedVictory?, sharedVision?, randomStart?, flags?, players? })`; `players` moves those slots into the force. |
-| `tx.unitTypes` | `get(unitId)` — a `UnitTypeView` with the *effective* numbers (units.dat's where the type is on "use default"; hit points in whole points), the type's weapons with their effective damage, `defaults` (the dat's numbers, null without the game data) and `availability` (PUNI: `defaultAvailable` and per player `true` / `false` / `"default"`) — and `set(unitId, patch)`. Setting any number turns "use default" off for the type and seeds its untouched columns from the dat, as the dialog does; `useDefault: true` puts it back; `name` is the custom name (`""` restores the default, the string is interned); `weapons: [{ id, damage?, bonus? }]`; `available: [{ player: 0-based or "default", value: true / false / "default" }]`. Which of UNIS / UNIx is written follows the file's revision. |
-| `tx.upgrades` | `get(upgradeId)` — an `UpgradeView` (effective costs and factors, `defaults`, `levels`: the default start and cap and each player's effective `{ start, max, usesDefault }`) — and `set(upgradeId, { useDefault?, mineralCost?, mineralFactor?, gasCost?, gasFactor?, timeCost?, timeFactor?, levels? })` with `levels: [{ player: 0-based or "default", start?, max?, useDefault? }]`. |
-| `tx.techs` | `get(techId)` — a `TechView` (effective costs, `defaults`, `state`: the default column and each player's effective `{ available, researched, usesDefault }`) — and `set(techId, { useDefault?, mineralCost?, gasCost?, researchTime?, energyCost?, state? })` with `state: [{ player, available?, researched?, useDefault? }]`. |
-| `tx.sounds` | `list()` — the WAV slots in use as `SoundRow`s (`slot`, `path`, `present`, `size`, `usedBy`) — `add(path, bytes?)` (the first free slot, or the slot the path already has; with `bytes` the file goes into the archive under `staredit\wav\`) and `remove(slot, deleteFile?)`. |
-| `tx.cuwp` | Triggers ▸ Unit Properties Slots: `list()` / `get(index)` — `CuwpSlotView`s (0-based `index`; `hitPointsPercent`, `shieldsPercent`, `energyPercent`, `resources`, `hangar` as numbers or null where the created units keep the type's default; `cloaked` … `invincible` as booleans or null; `used`, `references`, `summary`) — `set(index, patch, used?)` (a number sets the field and its "applied" bit, null clears it; a boolean forces a state, null leaves it) and `clear(index)`. The *Create Unit with Properties* action stores the slot 1-based in `target`. |
-| `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"` — VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered. |
+| `tx.players` | `list()` gives the 12 slots as `PlayerSlotView`s: 0-based `slot`, `type` / `typeName`, `race` / `raceName`, and for the eight playable slots `color` (COLR index), `colorHex`, `rgb` (the Remastered custom colour in effect, else null), `force` (0-based) / `forceName`. `set(slot, { type?, race?, color?, rgb?, force? })` writes one. `rgb: [r, g, b]` sets a custom colour, `rgb: null` puts the slot back on its palette colour; the custom-colour section is dropped again when every slot is back. OWNR is always written with IOWN. |
+| `tx.forces` | `list()` gives four `ForceView`s (`name`, `flags` and the `allied` / `alliedVictory` / `sharedVision` / `randomStart` booleans, `players`: the 0-based slots in the force). `set(force, { name?, allied?, alliedVictory?, sharedVision?, randomStart?, flags?, players? })`; `players` moves those slots into the force. |
+| `tx.unitTypes` | `get(unitId)` gives a `UnitTypeView` with the *effective* numbers (units.dat's where the type is on "use default"; hit points in whole points), the type's weapons with their effective damage, `defaults` (the dat's numbers, null without the game data) and `availability` (`defaultAvailable` and per player `true` / `false` / `"default"`). `set(unitId, patch)`: setting any number turns "use default" off for the type and seeds its untouched columns from the dat, as the dialog does; `useDefault: true` puts it back; `name` is the custom name (`""` restores the default; the string is interned); `weapons: [{ id, damage?, bonus? }]`; `available: [{ player: 0-based or "default", value: true / false / "default" }]`. Which of UNIS / UNIx is written follows the file's revision. |
+| `tx.upgrades` | `get(upgradeId)` gives an `UpgradeView` (effective costs and factors, `defaults`, `levels`: the default start and cap and each player's effective `{ start, max, usesDefault }`). `set(upgradeId, { useDefault?, mineralCost?, mineralFactor?, gasCost?, gasFactor?, timeCost?, timeFactor?, levels? })` with `levels: [{ player: 0-based or "default", start?, max?, useDefault? }]`. |
+| `tx.techs` | `get(techId)` gives a `TechView` (effective costs, `defaults`, `state`: the default column and each player's effective `{ available, researched, usesDefault }`). `set(techId, { useDefault?, mineralCost?, gasCost?, researchTime?, energyCost?, state? })` with `state: [{ player, available?, researched?, useDefault? }]`. |
+| `tx.sounds` | `list()` gives the WAV slots in use as `SoundRow`s (`slot`, `path`, `present`, `size`, `usedBy`). `add(path, bytes?)` takes the first free slot, or the slot the path already has; with `bytes` the file goes into the archive under `staredit\wav\`. `remove(slot, deleteFile?)`. |
+| `tx.cuwp` | Triggers ▸ Unit Properties Slots. `list()` / `get(index)` give `CuwpSlotView`s: 0-based `index`; `hitPointsPercent`, `shieldsPercent`, `energyPercent`, `resources`, `hangar` as numbers, or null where the created units keep the type's default; `cloaked` … `invincible` as booleans or null; `used`, `references`, `summary`. `set(index, patch, used?)`: a number sets the field and its "applied" bit, null clears it; a boolean forces a state, null leaves it. `clear(index)`. The *Create Unit with Properties* action stores the slot 1-based in `target`. |
+| `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"`. Sets VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered. |
 
-Ids are the game's: units.dat ids for `unitTypes`, upgrades.dat / techdata.dat ids for
-the other two (`api.names.units()` / `upgrades()` / `techs()` list them with their
-names). Players are 0-based here, as in the records; the chrome shows `slot + 1`.
+Ids are the game's: units.dat ids for `unitTypes`, upgrades.dat and techdata.dat ids for
+the other two (`api.names.units()` / `upgrades()` / `techs()` list them with their names).
+Players are 0-based here, as in the records; the chrome shows `slot + 1`.
 
 ```js
 const { condition, action, comparison, player } = api.consts.triggers;
@@ -501,17 +561,18 @@ api.document.update("Add a countdown", (tx) => {
 });
 ```
 
-There is no undo entry, so a plugin that wants one keeps its own copy of what it replaced
-(`api.triggers.list()` before, `tx.triggers.set(...)` to put it back).
+There is no undo entry, so a plugin that wants one keeps its own copy of what it replaced:
+`api.triggers.list()` before, `tx.triggers.set(...)` to put it back.
 
 ### `api.settings`
 
-The same views without a transaction, for reading: `players()` / `player(slot)`,
-`forces()`, `unitType(id)` / `unitTypes()` (every type with a name), `upgrade(id)` /
-`upgrades()`, `tech(id)` / `techs()`, `sounds()`, `unitAvailable(player, unitId)` (PUNI
-resolved against its default), `cuwpSlots()` / `cuwpSlot(index)`, `version()`
-(`{ version, label, fileVersion, type, extendedStrings, extension }`). Empty lists and
-nulls with no map. Writing goes through `document.update`.
+The same views as `tx.players`, `tx.forces` and the rest, for reading without a
+transaction: `players()` / `player(slot)`, `forces()`, `unitType(id)` / `unitTypes()`
+(every type with a name), `upgrade(id)` / `upgrades()`, `tech(id)` / `techs()`,
+`sounds()`, `unitAvailable(player, unitId)` (resolved against its default), `cuwpSlots()`
+/ `cuwpSlot(index)`, and `version()` (`{ version, label, fileVersion, type,
+extendedStrings, extension }`). Empty lists and nulls with no map. Writing goes through
+`document.update`.
 
 ### `api.triggers`
 
@@ -519,8 +580,8 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 
 | | |
 | --- | --- |
-| `list()` / `briefing()` | TRIG / MBRF, cloned. A record is 16 conditions and 64 actions of plain numbers — the editor's codec knows no types. |
-| `defs` | What each type means: `conditions()`, `condition(type)`, `actions(briefing?)`, `action(type, briefing?)`. Each def carries `args`, the argument list in the order StarEdit's TrigEdit shows it, each `{ kind, field, label }` — which record field holds it and what kind of value it is. This is the table the editor's own trigger dialogs and the text printer read; a plugin that wants to render an editable trigger reads the same one. |
+| `list()` / `briefing()` | TRIG / MBRF, cloned. A record is 16 conditions and 64 actions of plain numbers; the editor's codec knows no types. |
+| `defs` | What each type means: `conditions()`, `condition(type)`, `actions(briefing?)`, `action(type, briefing?)`. Each def carries `args`, the argument list in the order StarEdit's TrigEdit shows it, each `{ kind, field, label }`: which record field holds the argument and what kind of value it is. The editor's own trigger dialogs and the text printer read this same table. |
 | `defs.choices(kind)` / `choiceLabel(kind, value)` / `choiceValue(kind, text)` | The values an enumerated argument can take (comparisons, switch states, resource types, orders …), with their labels and aliases. |
 | `text.print(list, { briefing? })` / `text.one(trigger)` / `text.parse(source)` | The text trigger format, resolved against the open map's names. `parse` throws a `TriggerTextError` carrying the line. |
 | `names()` | The `TriggerNames` context those use: the map's locations, units, switches and strings, by name and by number. |
@@ -530,14 +591,14 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 | `summarize(t, briefing?)` | The three lines the trigger list shows: players, conditions, actions. |
 | `comment(t)` | A trigger's `Comment` action text, if it has one. |
 | `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
-| `claim(spec)` | Tell the editor that a run of the trigger list is *generated* by this plugin. The Trigger Editor badges those rows (`spec.badge`, the plugin's id by default), locks them and shows `spec.describe(index, list)` with a button that calls `spec.open(index, list)` (`spec.openLabel`, `Open <plugin name>` by default) in place of the form; the Text Trigger Editor fences them in comments; Import Triggers says what a replace would remove. The run is found by content: `spec.locate(list)` is asked with whatever list an editor holds — the map's, or a working copy with local inserts in it — and answers `{ start, count }` or null when the records are not there (edited by hand, or gone), so keep a hash of what you generated and look for it, as the Trigger Script plugin does. `spec.label` is the words a sentence uses (`"the trigger script"`). The handle has `refresh()` (after a rebuild, so editors ask `locate` again) and `remove()`; the claim leaves with the plugin. |
+| `claim(spec)` | Mark a run of the trigger list as *generated* by this plugin. See below. |
 
-**Generating triggers.** There is no fluent builder here on purpose: `tx.triggers.fromText`
-already is one, and it is a better one. A record is 16 conditions and 64 actions of bare numbers,
-so building one field by field means knowing which field each argument lives in
-(`defs.action(type).args` will tell you, but you have to ask); writing the trigger in the
-text format instead means writing what the map maker would read in the Text Trigger
-Editor, and getting the names resolved against the open map for free.
+**Generating triggers.** There is no fluent builder here on purpose, because
+`tx.triggers.fromText` already is one, and a better one. A record is 16 conditions and 64
+actions of bare numbers, so building one field by field means knowing which field each
+argument lives in (`defs.action(type).args` will tell you, but you have to ask). Writing
+the trigger in the text format instead means writing what the map maker would read in the
+Text Trigger Editor, with the names resolved against the open map for free.
 
 ```ts
 const source = `
@@ -553,33 +614,45 @@ api.document.update("Add the beacon trigger", (tx) => {
 });
 ```
 
-`fromText` is the whole of it — it parses, interns the strings the text names, resolves
-`"Beacon Alpha"` against the map's own locations, and appends (or replaces the list with
-`{ replace: true }`). `triggers.text.parse` is the same parse without the write, for a
-plugin that wants the records first; `text.print` goes back the other way, so a plugin can
-read what it wrote. Reach for `newTrigger` / `newCondition` / `newAction` when you are
-editing one field of an existing record, not when you are producing a run of them.
+`fromText` parses, interns the strings the text names, resolves `"Beacon Alpha"` against
+the map's own locations, and appends (or replaces the list with `{ replace: true }`).
+`triggers.text.parse` is the same parse without the write, for a plugin that wants the
+records first, and `text.print` goes the other way, so a plugin can read what it wrote.
+Reach for `newTrigger` / `newCondition` / `newAction` when editing one field of an
+existing record, not when producing a run of them.
+
+**Claiming generated triggers.** `claim(spec)` tells the editor that a run of the trigger
+list is generated by this plugin. The Trigger Editor badges those rows (`spec.badge`, the
+plugin's id by default), locks them, and shows `spec.describe(index, list)` with a button
+that calls `spec.open(index, list)` (`spec.openLabel`, "Open <plugin name>" by default) in
+place of the form. The Text Trigger Editor fences the run in comments, and Import Triggers
+says what a replace would remove. The run is found by content: `spec.locate(list)` is asked
+with whatever list an editor holds (the map's, or a working copy with local inserts in
+it) and answers `{ start, count }`, or null when the records are not there because they
+were edited by hand or removed. So keep a hash of what you generated and look for it, as
+the Trigger Script plugin does. `spec.label` is the words a sentence uses ("the trigger
+script"). The handle has `refresh()`, for after a rebuild so editors ask `locate` again,
+and `remove()`. The claim leaves with the plugin.
 
 ### `api.query`
 
 Reading the open map: what is where, and the analyses the editor already does. Nothing
-here writes, and everything answers empty without a map.
+here writes, and everything answers empty without a map. A linter plugin is `validate()`
+plus `find()` plus `view.goTo` and nothing else.
 
 | | |
 | --- | --- |
-| `unitAt(px, py)` / `spriteAt(px, py)` / `doodadAt(tx, ty)` / `locationAt(px, py)` | The topmost thing under a point, or -1 — the same hit-testing the layers use (a sprite's box comes from its loaded GRP, a unit's from units.dat). `locationAt` never picks Anywhere. |
+| `unitAt(px, py)` / `spriteAt(px, py)` / `doodadAt(tx, ty)` / `locationAt(px, py)` | The topmost thing under a point, or -1. The same hit-testing the layers use: a sprite's box comes from its loaded graphic, a unit's from units.dat. `locationAt` never picks Anywhere. |
 | `unitsIn(rect)` / `spritesIn(rect)` / `locationsIn(rect)` | Units and sprites whose centre is in a tile rect; locations wholly inside it. |
 | `unitsOf(owner)` | Every unit a player owns (0-based). |
 | `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
-| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }` — `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. Null with no map. |
+| `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }`. `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. Null with no map. |
 | `fogAt(tx, ty)` | The MASK bits at a tile (bit n = player n + 1 starts fogged; every bit when the map has no MASK). |
 | `strings()` | The string table as it stands. |
-| `validate()` | Check Map's `Issue[]` — `{ level, text, where, target? }`, and `target` is what `view.goTo` takes. |
+| `validate()` | Check Map's `Issue[]`: `{ level, text, where, target? }`, where `target` is what `view.goTo` takes. |
 | `statistics()` | Tools ▸ Statistics: tile, terrain, unit, resource and per-player counts, the briefing's too. |
 | `find(options)` | The Ctrl+F search: `{ kind: "units" \| "locations" \| "sprites" \| "doodads" \| "strings" \| "triggers" \| "briefing", query, matchCase?, limit? }` → `{ kind, index, label, detail, x?, y? }[]`. |
 | `stringUsage()` / `unusedStrings()` | Which records refer to each string index, and which slots nothing refers to. |
-
-A linter plugin is `validate()` plus `find()` plus `view.goTo` and nothing else.
 
 ### `api.view`
 
@@ -591,70 +664,72 @@ where it is.
 | `zoom()` / `setZoom(z)` | Clamped to 0.05…8 (the zoom control's own steps run 0.25…4). |
 | `visible()` | The tiles on screen, as a `Rect`. |
 | `center(x, y)` | Scroll so a tile is in the middle. |
-| `goTo(target)` | `{ kind: "tile", x, y }`, or `{ kind: "unit" \| "sprite" \| "location", index }` — scrolls there and selects the object. An `Issue.target` from `query.validate()` is one of these. |
+| `goTo(target)` | `{ kind: "tile", x, y }`, or `{ kind: "unit" \| "sprite" \| "location", index }`: scrolls there and selects the object. An `Issue.target` from `query.validate()` is one of these. |
 | `cursorTile()` | The tile under the pointer, as the status bar shows it. |
 | `flags()` / `setFlags(patch)` | The View menu's ticks: `grid`, `locations`, `locationNames`, `units`, `sprites`, `doodads`, `fog`, `elevation`, `buildability`, `startLocations`, `animateWater`, `animateUnits`. |
 | `gridSize()` / `setGridSize(8 \| 16 \| 32 \| 64 \| 128)` | Grid spacing in map pixels. |
 
 ### `api.data`
 
-The game's own tables as the editor decoded them — `units.dat` and its neighbours — for
+The game's own tables as the editor decoded them (`units.dat` and its neighbours), for
 the numbers `api.names` only labels: hit points, costs, build times, armour, weapons,
-flags, the sprite and image each unit draws through. `ready()`, `load()`, then `units()`,
-`weapons()`, `upgrades()`, `techs()`, `sprites()`, `flingy()`, `images()`, plus
-`race(unitId)` and `imagePath(imageId)`. Everything is null until the tables are loaded,
-and stays null when the game data was never extracted — degrade, do not throw.
+flags, and the sprite and image each unit draws through. `ready()`, `load()`, then
+`units()`, `weapons()`, `upgrades()`, `techs()`, `sprites()`, `flingy()`, `images()`,
+plus `race(unitId)` and `imagePath(imageId)`. Everything is null until the tables are
+loaded, and stays null when the game data was never extracted. Degrade, do not throw.
 
 ### `api.gameData`
 
-Which set of game files the editor draws from — the game's own, or a mod's that replaces
-them in the same formats — and installing, switching and removing sets: the plugin side
-of Help ▸ Game Data…. `source()` is where the files come from (`kind`, a `label`, the
-`profile` they belong to, `desktop` when the app extracted them; null while startup is
-still resolving), `profile()` the data set in use, `profiles()` every set with a copy
-here (the game's own first), `install(profile, files, progress?)` extracts a set from
-its files and switches to it, `select(id)` switches (dropping everything decoded from
-the previous set and redrawing; a set with no copy falls back to the game's own), and
-`remove(id)` drops a copy. The `"gameData"` event fires on any of them.
+Which set of game files the editor draws from (the game's own, or a mod's that replaces
+them in the same formats), and installing, switching and removing sets. This is the
+plugin side of Help ▸ Game Data….
 
-`files` is `{ archives, files? }`: the archives with `StarDat.mpq` and `BrooDat.mpq`
-among them (a mod replaces files, it does not bring the rest; the game's own are read
-first, then the others in the order given, later winning), and loose files by member
-path (`arr/units.dat`), read before any archive. A `File` from `ui.pickFiles` or a
-`Uint8Array` both serve.
+| | |
+| --- | --- |
+| `source()` | Where the files come from: `kind`, a `label`, the `profile` they belong to, `desktop` when the app extracted them. Null while startup is still resolving. |
+| `profile()` / `profiles()` | The data set in use, and every set with a copy here (the game's own first). |
+| `install(profile, files, progress?)` | Extract a set from its files and switch to it. |
+| `select(id)` | Switch sets, dropping everything decoded from the previous one and redrawing. A set with no copy falls back to the game's own. |
+| `remove(id)` | Drop a copy. |
+
+The `"gameData"` event fires on any of them. `files` is `{ archives, files? }`: the
+archives, with `StarDat.mpq` and `BrooDat.mpq` among them (a mod replaces files, it does
+not bring the rest; the game's own are read first, then the others in the order given,
+later winning), and loose files by member path (`arr/units.dat`), read before any archive.
+A `File` from `ui.pickFiles` or a `Uint8Array` both serve.
 
 A data set is a name over files in the game's own formats. The table sizes, the tileset
 formats and the map file's fixed-width sections are the game's, so a mod that extends
-them past 228 unit types or into an extended `.dat` layout is not covered — the codecs
-themselves would have to change. What *is* covered follows on its own: `data` decodes
-the set's tables, `tileset` and `graphics` draw its files, and `names` shows what it
-renamed (see below). A plugin written for the game's own data can read `profile().id`
-— `"starcraft"` is the game's — and grey itself out under any other.
+them past 228 unit types or into an extended `.dat` layout is not covered. What *is*
+covered follows on its own: `data` decodes the set's tables, `tileset` and `graphics`
+draw its files, and `names` shows what it renamed. A plugin written for the game's own
+data can read `profile().id` (`"starcraft"` is the game's) and grey itself out under any
+other.
 
 ### `api.consts`
 
 The numbers a record is *written* in, so a plugin does not carry the hex itself. These are
-the editor's own tables — the very objects its codec encodes with, handed over at run time,
-not copies that can drift from them.
+the editor's own tables, the very objects its codec encodes with, handed over at run time
+rather than copied.
 
 | | |
 | --- | --- |
-| `tile` | 32 — map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. |
+| `tile` | 32, map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. |
 | `unit.startLocation` | 214, the Start Location marker. |
 | `unit.mineralFields` / `unit.vespeneGeyser` | `[176, 177, 178]` and 188. `isResource(unitId)` is either. |
 | `unit.defaultMinerals` / `unit.defaultGas` | 1500 and 5000, what StarEdit writes on a fresh resource. |
 | `unit.valid` / `unit.used` / `unit.state` / `unit.relation` | The four UNIT bit masks: `validProperties` (which special-property fields the game reads), `validStates` (which of the record's fields are set at all), `stateFlags` (the properties themselves), `relationType` (`NydusLink`, `Addon`). |
-| `sprite.flags` | THG2's `PureSprite` / `Flipped` / `Disabled`. `PureSprite` is the one that decides whether `spriteId` is a sprites.dat id the game only draws, or a units.dat id it creates the unit for. |
-| `location.anywhere` | 63. That slot is Anywhere and the editor protects it everywhere — no builder returns it, `locationAt` never picks it, the viewport draws no box for it. `tx.restoreAnywhere()` is what puts it back. |
+| `sprite.flags` | THG2's `PureSprite` / `Flipped` / `Disabled`. `PureSprite` decides whether `spriteId` is a sprites.dat id the game only draws, or a units.dat id it creates the unit for. |
+| `location.anywhere` | 63. That slot is Anywhere, and the editor protects it everywhere: no builder returns it, `locationAt` never picks it, the viewport draws no box for it. `tx.restoreAnywhere()` puts it back. |
 | `location.elevation` | `elevationFlags`. A **set** bit *excludes* that elevation, so 0 means everywhere. |
-| `triggers` | The numbers a TRIG / MBRF record is written in — see below. |
+| `triggers` | The numbers a TRIG / MBRF record is written in. See below. |
 
 **`consts.triggers`.** A trigger record is sixteen conditions and sixty-four actions of
 plain numbers, and `triggers.defs` only says which *field* each argument lives in. This
-says what to put in it: `condition` and `action` (and `briefingAction`, where the same
-byte means something else) are the type numbers, `player` the 27 player-group values —
-which are also the indices of a trigger's own `players` array — and the rest are the
-enumerated arguments: `comparison`, `switchState`, `switchAction`, `modifier`,
+says what to put in it. `condition` and `action` (and `briefingAction`, where the same
+byte means something else) are the type numbers; `player` holds the 27 player-group
+values, which are also the indices of a trigger's own `players` array; and the rest are
+the enumerated arguments: `comparison`, `switchState`, `switchAction`, `modifier`,
 `unitState` (Set Doodad State / Set Invincibility), `order`, `alliance`, `resource`,
 `score`, and `unitClass` for the four ids past units.dat (*Any unit*, *Men*, *Buildings*,
 *Factories*). `conditionFlags`, `actionFlags` and `triggerFlags` are the flag bits, and
@@ -669,14 +744,14 @@ const arg = api.triggers.defs.action(record.type).args[0];
 const values = api.consts.triggers[arg.kind];      // e.g. { AtLeast: 0, AtMost: 1, Exactly: 10 }
 ```
 
-For *generating* a run of triggers, `tx.triggers.fromText` is still the better tool — it
+For *generating* a run of triggers, `tx.triggers.fromText` is still the better tool: it
 resolves location and unit names against the open map, which no constant can. These are
 for editing a field of an existing record, and for reading one back
 (`record.type === api.consts.triggers.condition.Bring`).
 
 Why this is on `api` and not in the npm package: `@scm-js/plugin-api` is types only, and
-`import type` is erased before the loader sees the specifier — which is exactly what lets
-a plugin depend on a package at all. A *value* imported from it type-checks and is then
+`import type` is erased before the loader sees the specifier, which is exactly what lets a
+plugin depend on a package at all. A *value* imported from it type-checks and is then
 undefined at run time. Anything you need while the plugin runs has to arrive on `api`.
 
 ### `api.graphics`
@@ -687,18 +762,18 @@ from, so listing five hundred units costs about what the Units palette costs.
 
 | | |
 | --- | --- |
-| `ready()` / `load()` | `{ tileset, units }` — whether the graphics and the tables are in memory, and a fetch for both. |
+| `ready()` / `load()` | `{ tileset, units }`: whether the graphics and the tables are in memory, and a fetch for both. |
 | `unitImage(unitId, { owner? })` | A `{ image, width, height }` canvas in the player's colours, in the unit's editor pose. |
 | `spriteImage(kind, id, { owner?, flipped? })` | The same for a THG2 sprite. |
 | `tileImage(tileId)` | One 32 × 32 megatile of the open map's tileset. |
 | `doodadImage(doodadId)` | A doodad drawn from the tiles it stamps. |
 | `renderRect(rect, options?)` | Part of the map as File ▸ Export ▸ Image draws it, cropped to a tile rect, as a PNG `Blob`. `pixelsPerTile` defaults to 8 here. |
 | `playerColor(owner)` | `#rrggbb`. |
-| `requestUnit(id)` / `requestSprite(kind, id)` / `onImageLoaded(fn)` | GRPs load lazily, so the first `unitImage` for a type is often null: ask for it, redraw on `onImageLoaded`, and the list fills in. |
+| `requestUnit(id)` / `requestSprite(kind, id)` / `onImageLoaded(fn)` | Graphics load lazily, so the first `unitImage` for a type is often null. Ask for it, redraw on `onImageLoaded`, and the list fills in. |
 
 ### `api.commands`
 
-Named things a plugin can do, so a menu item, a hotkey, a context entry and another
+Named things a plugin can do, so that a menu item, a hotkey, a context entry and another
 plugin all reach the same one.
 
 ```js
@@ -707,7 +782,7 @@ api.menu.add("Tools", { label: "Convert Image…", command: "convert" });
 api.hotkeys.add("Ctrl+Shift+I", { command: "convert" });
 ```
 
-`register(spec)` returns a `Disposable`; `run(id, ...args)` runs one, whoever registered
+`register(spec)` returns a `Disposable`. `run(id, ...args)` runs one, whoever registered
 it (`undefined` when there is no such command or its `enabled()` says no); `has(id)` and
 `list()` (`{ id, title, pluginId, enabled }[]`) see every plugin's. An id without a dot is
 namespaced under the plugin (`"convert"` → `"image-to-terrain.convert"`); one with a dot
@@ -715,74 +790,77 @@ is taken as it is, so a plugin can publish a stable name for others to call.
 
 ### `api.terrain`
 
-Read-only helpers over the current tileset: `types()` (paintable flat terrains with
-name, group, height, buildable), `isomTypes()` (ids the isometric brush can paint),
-`hasIsom()`, `tileInfo(id)`; `terrainAt(tx, ty)` — the terrain id (as `types()` lists them) a tile belongs to: its own group when it is flat ground, else what the ISOM lattice says there (under a cliff, one of the two terrains it joins), null when neither tells, `color(tileId)` (the atlas average, `0xRRGGBB`),
-`terrainColor(terrainId)` (mean of the pair's common variations), `heightOf(terrainId)`
-(0 low / 1 high / 2 higher, null for anything that is not a flat terrain), `diamondAt(px, py)`,
-`isDiamond(d)`, `diamondsIn(rect)` (every lattice diamond whose centre tile is in the
-rect), `floodRegion(x, y, match?)` (the bucket fill's area, by terrain type or exact
-tile), `blendCandidates(anchorTileId, side, options?)` (the Blend palette's ranked list,
-with the pixel distance of each seam), `flatGroupOf(terrainId)` (the even CV5 group of a
-flat pair), `active()` / `setActive(...)` for the palette's brush, terrain, tile, size and
-Rect variation, and the symmetry mode: `symmetry()` / `setSymmetry(mode)` (`"none"`,
-`"h"`, `"v"`, `"hv"`, `"rot180"`, `"rot90"`, `"diag"`, `"adiag"`),
-`symmetryAvailable(mode)` (the last three need a square map), `mirror(cells)` and
-`mirrorPoint(px, py)` — the images the built-in brushes paint and the palettes place on,
-so a plugin edit can honour the user's setting the way `tx.fillArea` does by itself.
-`checkIsom()` is asynchronous: it waits for the tileset graphics (rejecting when they are
-missing) and resolves with how well the ISOM describes the tiles — `rects` measured,
-`mismatched` among them, `stale` when the share is past what the palette warns at — or
-null when the map has no ISOM or no map is open.
+Read-only helpers over the current tileset, plus the Terrain palette's own pick and the
+symmetry mode.
+
+| | |
+| --- | --- |
+| `types()` | The paintable flat terrains, with name, group, height and buildable. |
+| `isomTypes()` / `hasIsom()` | The ids the isometric brush can paint, and whether the map has an ISOM section. |
+| `tileInfo(id)` | What the tileset says about one tile. |
+| `terrainAt(tx, ty)` | The terrain id (as `types()` lists them) a tile belongs to: its own group when it is flat ground, else what the ISOM lattice says there (under a cliff, one of the two terrains it joins). Null when neither tells. |
+| `color(tileId)` / `terrainColor(terrainId)` | The tile's average colour (`0xRRGGBB`), and the mean of a terrain's common variations. |
+| `heightOf(terrainId)` | 0 low, 1 high, 2 higher. Null for anything that is not a flat terrain. |
+| `flatGroupOf(terrainId)` | The even CV5 group of a flat pair. |
+| `diamondAt(px, py)` / `isDiamond(d)` / `diamondsIn(rect)` | The ISOM lattice: the diamond under a pixel, whether a value is one, and every diamond whose centre tile is in the rect. |
+| `floodRegion(x, y, match?)` | The bucket fill's area, by terrain type or exact tile. |
+| `blendCandidates(anchorTileId, side, options?)` | The Blend palette's ranked list, with the pixel distance of each seam. |
+| `active()` / `setActive(...)` | The palette's brush, terrain, tile, size and Rect variation. |
+| `symmetry()` / `setSymmetry(mode)` | Tools ▸ Symmetry: `"none"`, `"h"`, `"v"`, `"hv"`, `"rot180"`, `"rot90"`, `"diag"`, `"adiag"`. |
+| `symmetryAvailable(mode)` | The last three need a square map. |
+| `mirror(cells)` / `mirrorPoint(px, py)` | The images the built-in brushes paint and the palettes place on, so a plugin edit can honour the user's setting the way `tx.fillArea` does by itself. |
+| `checkIsom()` | Asynchronous. Waits for the tileset graphics (rejecting when they are missing) and resolves with how well the ISOM describes the tiles: `rects` measured, `mismatched` among them, `stale` when the share is past what the palette warns at. Null when the map has no ISOM or no map is open. |
 
 ### `api.tileset`
 
 `id()`, `name()`, `isLoaded()`, `load()` (resolves `false` when the graphics were never
-extracted — that is a normal state, degrade), `raw()` for the decoded `LoadedTileset`.
+extracted; that is a normal state, so degrade), and `raw()` for the decoded
+`LoadedTileset`.
 
 ### `api.selection`
 
-`markedArea()` / `markArea(rect | null)` — the Cut / Copy / Paste layer's marked
-rectangle, the editor's one "region" concept; `units()`, `sprites()`, `doodads()`,
-`locations()` (indices, copied — sort yours freely), each with a setter
-(`setUnits`, `setSprites`, `setDoodads`, `setLocations`); `layer()` /
-`setLayer()`; `lockedLayers()` / `setLayerLocked(layer, on)` for the Layers panel's
-padlocks (a locked layer's tools refuse to change the map).
+`markedArea()` / `markArea(rect | null)` is the Cut / Copy / Paste layer's marked
+rectangle, the editor's one "region" concept. `units()`, `sprites()`, `doodads()` and
+`locations()` are indices, copied, so sort yours freely; each has a setter (`setUnits`,
+`setSprites`, `setDoodads`, `setLocations`). `layer()` / `setLayer()` is the active
+layer, and `lockedLayers()` / `setLayerLocked(layer, on)` the Layers panel's padlocks (a
+locked layer's tools refuse to change the map).
 
 ### `api.clipboard`
 
-The Cut / Copy / Paste layer, sharing the user's own clip: `clip()` / `setClip(clip |
-null)`; `copy(source?)` and `cut(source?)`, where `source` is `{ rect }` for a tile rect
-or `{ units?, sprites?, doodads?, locations? }` for objects by index — omitted, they take
-what Ctrl+C would: the object layer's selection, else the marked area — with the parts
-ticked in `parts()`; `paste(tx, ty, { parts?, mode? })`, the clip's top-left at a tile, one
-undo step, the pasted area marked afterwards, returning the `PasteResult` (counts per
-list, notes for what was skipped); `parts()` / `setParts(patch)`, `mode()` / `setMode("merge"
-| "replace")`, `pasting()` / `setPasting(on)` (arm the layer so the next click stamps),
-and `summary(clip)`. A `Clip` is self-contained — it outlives the map it came from and
-pastes into another, with terrain and doodads refused across tilesets.
+The Cut / Copy / Paste layer, sharing the user's own clip.
+
+| | |
+| --- | --- |
+| `clip()` / `setClip(clip \| null)` | What is on the clipboard. A `Clip` is self-contained: it outlives the map it came from and pastes into another, with terrain and doodads refused across tilesets. |
+| `copy(source?)` / `cut(source?)` | `source` is `{ rect }` for a tile rect or `{ units?, sprites?, doodads?, locations? }` for objects by index. Omitted, they take what Ctrl+C would: the object layer's selection, else the marked area, with the parts ticked in `parts()`. |
+| `paste(tx, ty, { parts?, mode? })` | The clip's top-left at a tile, as one undo step, with the pasted area marked afterwards. Returns the `PasteResult`: counts per list, and notes for what was skipped. |
+| `parts()` / `setParts(patch)` | Which parts a copy takes and a paste lays down. |
+| `mode()` / `setMode("merge" \| "replace")` | Whether a paste clears the area first. |
+| `pasting()` / `setPasting(on)` | Arm the layer so the next click stamps. |
+| `summary(clip)` | The clip in words. |
 
 ### `api.exchange`
 
-The file formats behind File ▸ Import / Export: `encodeTrg(triggers)` / `decodeTrg(bytes)`
-for SCMDraft's raw `.trg` (2400-byte records; string indices are the map's own), and
-`formatStrings()` / `parseStrings(text)` for the `index<TAB>text` strings file (control
-bytes as `<XX>`), which `tx.strings.import` applies.
+The file formats behind File ▸ Import / Export. `encodeTrg(triggers)` / `decodeTrg(bytes)`
+are SCMDraft's raw `.trg` (2400-byte records; string indices are the map's own), and
+`formatStrings()` / `parseStrings(text)` the `index<TAB>text` strings file (control bytes
+as `<XX>`), which `tx.strings.import` applies.
 
 ### `api.palette`
 
-What the Units, Sprites, Doodads and Fog of War palettes have picked, and what they list —
-so a plugin can paint "whatever the user chose" without a picker of its own (Paint does
-exactly this: switch layers and its brush follows). The Terrain palette's pick is
+What the Units, Sprites, Doodads and Fog of War palettes have picked, and what they list,
+so a plugin can paint "whatever the user chose" without a picker of its own. Paint does
+exactly this: switch layers and its brush follows. The Terrain palette's pick is
 `terrain.active()`.
 
 | | |
 | --- | --- |
 | `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1), `fogMode` and `fogViewPlayer` (whose fog the viewport draws). |
-| `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules — `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded` — which govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. Remembered in the browser (`scmjs.placement`), so a change outlives the session. |
-| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid` (the two-tile isometric grid, never View ▸ Grid Settings' spacing). Remembered in the browser (`scmjs.doodadPlacement`). |
+| `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules: `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded`. They govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. Remembered in the browser, so a change outlives the session. |
+| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid` (the two-tile isometric grid, not the View menu's grid spacing). Remembered in the browser. |
 | `locationSnap()` / `setLocationSnap(step)` | The Locations layer's snap step in pixels (0 off, 8, 16, 32, 64). |
-| `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb` — Remastered custom colours included. |
+| `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb`, Remastered custom colours included. |
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
 | `spriteGroups()` / `spriteName(kind, id)` | The Sprites palette's groups (empty until the unit tables are loaded) and names. |
 | `doodadCategories()` / `doodadInfo(id)` | The open map's doodads by category, each with its footprint in tiles (empty without the tileset graphics). |
@@ -790,75 +868,134 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 ### `api.names`
 
 The names behind the numbers a map stores, so a plugin that shows raw values need not
-carry the game's tables: `unit(id)` / `units()` (StarEdit's names, plus *Any unit*, *Men*,
-*Buildings*, *Factories* for the trigger classes 228–231; under a mod's data set, the
-mod's own name for anything it renamed — the rule is in
-[docs/game-data.md](game-data.md#names)), `upgrade` / `upgrades`, `tech`
-/ `techs`, `weapon` / `weapons`, `playerType` / `playerTypes` (OWNR controllers), `race` /
-`races` (SIDE), `playerGroup` / `playerGroups` (the 27 trigger groups), `condition` /
-`conditions` and `action(type, briefing?)` / `actions(briefing?)` (trigger and briefing
-types), `aiScript(code)`. The list forms return `{ value, label }[]` for a drop-down. The
-per-map ones read the open scenario and answer a placeholder without one: `string(index)`
-(null for 0 or out of range), `location(index)` (0-based slot; 63 is Anywhere),
-`switch(index)`, `player(slot)`, and `tile(id)` — the terrain a MTXM id belongs to, null
-without the tileset graphics.
+carry the game's tables.
+
+- The game's tables: `unit(id)` / `units()` (StarEdit's names, plus *Any unit*, *Men*,
+  *Buildings*, *Factories* for the trigger classes 228–231; under a mod's data set, the
+  mod's own name for anything it renamed, by the rule in
+  [docs/game-data.md](game-data.md#names)), `upgrade` / `upgrades`, `tech` / `techs`,
+  `weapon` / `weapons`, `playerType` / `playerTypes` (OWNR controllers), `race` / `races`
+  (SIDE), `playerGroup` / `playerGroups` (the 27 trigger groups), `condition` /
+  `conditions` and `action(type, briefing?)` / `actions(briefing?)` (trigger and
+  briefing types), and `aiScript(code)`. The list forms return `{ value, label }[]` for a
+  drop-down.
+- The open map's: `string(index)` (null for 0 or out of range), `location(index)`
+  (0-based slot; 63 is Anywhere), `switch(index)`, `player(slot)`, and `tile(id)`, the
+  terrain a tile id belongs to (null without the tileset graphics). Each answers a
+  placeholder without a map.
 
 ### `api.text`
 
-StarCraft's `<XX>` text control codes — bytes 0x01–0x1F in a string, which set the colour,
+StarCraft's `<XX>` text control codes: bytes 0x01–0x1F in a string, which set the colour,
 move the text or hide it. This is the editor's own table, the one the String Editor's
 buttons and preview are drawn from, so a plugin that shows or rewrites map text carries no
-copy of its own. Worth using rather than reimplementing: the numbering is easy to get
-wrong, and the editor's own table was wrong from 0x12 up until it was checked against the
+copy of its own. Use it rather than reimplementing it: the numbering is easy to get wrong,
+and the editor's own table was wrong from 0x12 up until it was checked against the
 classic player palette.
 
 | | |
 | --- | --- |
-| `codes()` / `code(byte)` | Every byte the game gives a meaning, in order, or one of them (null for a byte it ignores). A `TextCode` is `{ byte, code, label, effect, rgb, player? }` — `effect` is `"color"`, `"mimic"`, `"invisible"`, `"align"`, `"clip"`, `"nothing"` or `"space"`, and `rgb` is `#rrggbb` for the colours and null for the rest. The twelve that are a player colour carry `player`. |
+| `codes()` / `code(byte)` | Every byte the game gives a meaning, in order, or one of them (null for a byte it ignores). A `TextCode` is `{ byte, code, label, effect, rgb, player? }`. `effect` is `"color"`, `"mimic"`, `"invisible"`, `"align"`, `"clip"`, `"nothing"` or `"space"`; `rgb` is `#rrggbb` for the colours and null for the rest; the twelve that are a player colour carry `player`. |
 | `insertable()` | The codes worth offering as buttons: everything but tab, the newlines and the byte that does nothing. |
 | `defaultColor()` | What the game starts a string in. |
 | `escape(byte)` | `<0E>`, the way every StarCraft editor writes a control byte. |
 | `runs(text, options?)` | The string split into lines of coloured runs, the way the game draws it: `TextLine { runs, align }`, `TextRun { text, color, invisible, clipped }`. `invisible` marks what an `<0B>` / `<14>` hides rather than dropping it, `clipped` what an `<0C>` cut off, and `align` reads `<12>` / `<13>`. |
-| `plain(text)` | The text with every control byte removed — what the string actually says. |
+| `plain(text)` | The text with every control byte removed: what the string actually says. |
 | `bleedingLines(text)` / `fixBleeding(text)` | See below. |
 
 **The Remastered newline change.** StarCraft 1.16.1 reset the text colour at every line
 break; Remastered carries it onto the next line of the same string. So a multi-line string
-written before the remaster — most map descriptions, objectives and briefing text — can be
+written before the remaster (most map descriptions, objectives and briefing text) can be
 drawn today in colours its author never chose. `runs` models Remastered's rule; pass
 `{ resetPerLine: true }` to see the old rendering. `bleedingLines(text)` returns the lines
 that differ (`{ line, carried }`, `carried` being the whole `TextCode` inherited), and
 `fixBleeding(text)` writes the default colour at the head of each of them so both games
-draw the string alike — idempotent, and it never changes what the string says. The Repair
-plugin's string finding is exactly these two functions over `api.query.strings()`.
+draw the string alike. It is idempotent and never changes what the string says. The
+Repair plugin's string finding is exactly these two functions over `api.query.strings()`.
 
-Text *stacking* — the 1.16.1 trick of drawing lines on top of each other — is a different
-thing, and there is nothing here for it: Remastered does not render the overlap at all, and
-the intended picture *was* the overlap, so there is nothing to restore it to.
+Text *stacking*, the 1.16.1 trick of drawing lines on top of each other, is a different
+thing, and there is nothing here for it: Remastered does not render the overlap at all,
+and the intended picture *was* the overlap, so there is nothing to restore it to.
 
 ### `api.ui`
+
+Everything a plugin shows: the status bar and toasts, dialogs and floating panels, the
+two ways to draw on the map, and the pickers.
 
 | | |
 | --- | --- |
 | `status(text)` / `statusText()` | The status bar. |
-| `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself — how Save reports (`"ok"`, `"info"`, `"warn"`, `"error"`; `ttl` 0 keeps it until dismissed). |
+| `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself, the way Save reports. `kind` is `"ok"`, `"info"`, `"warn"` or `"error"`; `ttl` 0 keeps it until dismissed. |
 | `saveFile(data, fileName)` | Write bytes or a `Blob` to disk the way the editor's own exports do: through the browser's save dialog where it has one, else as a download. Resolves `{ route, fileName }`, or null when dismissed. |
-| `dialog(spec)` | Opens a dialog in the editor's chrome. `spec.mount(body, handle)` is called with an empty `<div>` inside the dialog body; return a cleanup function if you need one. `spec.buttons` draws the footer (`{ label, primary?, run?(handle), closes? }`); default is a single Close. `spec.onPaste(transfer, handle)` fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of your own text fields is left alone unless it carries files), `spec.onDrop` for a drop on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog unless `spec.keepOpenOnEscape(target)` answers true for the element the key landed on — for something inside that handles Escape itself, such as a code editor dismissing its own popups. Returns a handle with `close()`, `isOpen()` and `setTitle(text)`. |
-| `panel(spec)` | A panel that floats over the map and blocks nothing: the user keeps drawing, scrolling and using hotkeys while it is open (except while typing in one of its fields). `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS pixels (260 by default) and the panel is as tall as its content; `onClose` fires however it closes. The user drags it by its title bar and closes it with the ×; it opens at the top-right of the map and remembers where it was left for the session. The handle has `close()`, `isOpen()`, `setTitle()`. Open as many as you like; they all close with the plugin. |
-| `mapTool(spec)` | Take over the pointer on the map. The viewport hands the tool every press, move and release ahead of the active layer's own tools (`onDown` / `onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and the modifier keys — kept inside the map while a button is held, as the built-in brushes do), hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls `draw(ctx, view)` last on every repaint so the tool can preview what it will do (`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`, `view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a right-click calls `onCancel` — return `true` to keep running (you dropped a gesture of your own), otherwise the tool stops — and `onStop(reason)` is told once whichever way it ends: `"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed), `"replaced"` (another tool started; one runs at a time), `"disabled"`. A `pickArea` / `pickTile` in progress is served first. Paint is the worked example. |
-| `overlay(spec)` | A picture over the map the user can switch on and off, and that stays while they work on any layer: it is listed under View (after the built-in overlays) and in the Layers panel with an eye of its own. `draw(ctx, view)` runs at every repaint while visible, at the slot `above` names — `"terrain"` (under doodad footprints, units, sprites and locations; the default), `"objects"` (under fog of war) or `"everything"` (under a running map tool's drawing only) — with the same `MapView` a map tool gets. `onHover(p)` hears the pointer on every layer, and while a map tool runs, with `null` once when it leaves the map; the overlay never takes the pointer, so clicks go to the active layer's tools. `onToggle(visible)` fires whichever way it was switched. The handle has `show()`, `hide()`, `toggle()`, `isVisible()`, `redraw()` and `remove()`. `visible` is the starting state (true by default); what the user last set an overlay of that name to wins for the session, so a reloaded plugin comes back as it was left. Register at activation and keep the handle; the overlay leaves with the plugin. Walkability is the worked example. |
+| `dialog(spec)` | A dialog in the editor's chrome. See below. |
+| `panel(spec)` | A panel that floats over the map and blocks nothing. See below. |
+| `mapTool(spec)` | Take over the pointer on the map. See below. |
+| `overlay(spec)` | A picture drawn over the map that the user can switch on and off. See below. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
-| `pickArea({ prompt })` | The user drags a rectangle on the map: the viewport shows a crosshair and a teal marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc / right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time — starting another cancels the first. A dialog is modal and covers the map, so close yours before picking and reopen it with the result (Terrain from Image does exactly this: *Pick on Map…*). |
-| `pickTile({ prompt })` | The same for a single click; resolves with `{ x, y }`. |
+| `pickArea({ prompt })` | The user drags a rectangle on the map. The viewport shows a crosshair and a marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc or a right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time; starting another cancels the first. |
+| `pickTile({ prompt })` | The same for a single click. Resolves with `{ x, y }`. |
 | `loadImage(source)` | Decode a `File` / `Blob`, a `data:` URL or an `http(s)` URL into an `ImageBitmap`. A remote URL is fetched with CORS and, failing that, loaded through an `<img crossOrigin>`; a site that allows neither rejects with a message that says to save the picture and choose the file. |
-| `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use `onPaste` instead — it needs no permission. |
+| `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use a dialog's `onPaste` instead, which needs no permission. |
 | `confirm(message, opts?)` / `alert(message, opts?)` / `prompt(message, opts?)` | A yes/no, a note, and a line of text, as dialogs in the editor's chrome rather than the browser's blocking boxes. `confirm` resolves `false` and `prompt` `null` on Cancel, Escape or the ×. Options: `title`, `confirmLabel`, `cancelLabel`, `danger` (a destructive primary button), and for `prompt` also `value`, `placeholder`, `multiline`. |
-| `progress(label, { title?, cancellable? })` | A progress panel over the map for long work — it blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `signal` (the same answer as an `AbortSignal`, for `fetch` and anything else that takes one), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
+| `progress(label, { title?, cancellable? })` | A progress panel over the map for long work. It blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `signal` (an `AbortSignal` with the same answer), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
 | `el(tag, props?, ...children)` | The DOM helper the widgets are built from: `style` takes an object, `on*` keys take listeners, everything else is a property or an attribute. |
 | `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, onClick })`, `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`. Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
 | `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …), fire and forget. |
-| `ask(dialogId, payload?)` | A built-in dialog that answers — `"saveAs"`, `"confirmClose"`, `"newMap"` — resolving true when it went through, false when it was dismissed. |
-| `repaint()` | Redraw the viewport when you changed something the transaction did not cover (an overlay's picture, say). Raises no event. |
+| `ask(dialogId, payload?)` | A built-in dialog that answers (`"saveAs"`, `"confirmClose"`, `"newMap"`), resolving `true` when it went through and `false` when it was dismissed. |
+| `repaint()` | Redraw the viewport when you changed something a transaction did not cover, such as an overlay's picture. Raises no event. |
+
+**Dialogs.** `dialog(spec)` opens a dialog in the editor's chrome. `spec.mount(body,
+handle)` is called with an empty `<div>` inside the dialog body; return a cleanup
+function if you need one. `spec.buttons` draws the footer (`{ label, primary?,
+run?(handle), closes? }`); the default is a single Close. `spec.onPaste(transfer, handle)`
+fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of
+your own text fields is left alone unless it carries files), and `spec.onDrop` for a drop
+on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog unless
+`spec.keepOpenOnEscape(target)` answers true for the element the key landed on, which is
+for something inside that handles Escape itself, such as a code editor dismissing its
+own popups. The handle has `close()`, `isOpen()` and `setTitle(text)`.
+
+A dialog is modal and covers the map. To pick something on the map from a dialog, close
+the dialog, pick, and reopen it with the result. Terrain from Image does exactly this
+with its *Pick on Map…* button.
+
+**Panels.** `panel(spec)` floats over the map and blocks nothing: the user keeps drawing,
+scrolling and using hotkeys while it is open (except while typing in one of its fields).
+`spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS
+pixels (260 by default) and the panel is as tall as its content; `onClose` fires however
+it closes. The user drags it by its title bar and closes it with the ×. It opens at the
+top-right of the map and remembers where it was left for the session. The handle has
+`close()`, `isOpen()` and `setTitle()`. Open as many as you like; they all close with the
+plugin.
+
+**Map tools.** `mapTool(spec)` takes over the pointer on the map. The viewport hands the
+tool every press, move and release ahead of the active layer's own tools (`onDown` /
+`onMove` / `onUp`, each with a `MapPointer`: map pixels, the tile, `inMap`, `down`, and
+the modifier keys, kept inside the map while a button is held, as the built-in brushes
+do). It hides the layer's brush ghost, shows `name` and `hint` in the HUD, and calls
+`draw(ctx, view)` last on every repaint so the tool can preview what it will do
+(`view.x(px)` / `view.y(py)` map to canvas pixels; `view.tilePx`, `view.zoom`,
+`view.visible`). `handle.redraw()` repaints now; call it from `onMove`. Esc or a
+right-click calls `onCancel`: return `true` to keep running (you dropped a gesture of your
+own), otherwise the tool stops. `onStop(reason)` is told once, whichever way it ends:
+`"stopped"` (your `stop()`), `"cancelled"`, `"document"` (the map closed or changed),
+`"replaced"` (another tool started; one runs at a time) or `"disabled"`. A `pickArea` /
+`pickTile` in progress is served first. Paint is the worked example.
+
+**Overlays.** `overlay(spec)` is a picture over the map that the user can switch on and
+off, and that stays while they work on any layer. It is listed under View (after the
+built-in overlays) and in the Layers panel with an eye of its own. `draw(ctx, view)` runs
+at every repaint while visible, at the slot `above` names: `"terrain"` (under doodad
+footprints, units, sprites and locations; the default), `"objects"` (under fog of war) or
+`"everything"` (under a running map tool's drawing only), with the same `MapView` a map
+tool gets. `onHover(p)` hears the pointer on every layer, and while a map tool runs, with
+`null` once when it leaves the map. The overlay never takes the pointer, so clicks go to
+the active layer's tools. `onToggle(visible)` fires whichever way it was switched. The
+handle has `show()`, `hide()`, `toggle()`, `isVisible()`, `redraw()` and `remove()`.
+`visible` is the starting state (true by default); what the user last set an overlay of
+that name to wins for the session, so a reloaded plugin comes back as it was left.
+Register at activation and keep the handle; the overlay leaves with the plugin.
+Walkability is the worked example.
 
 ### `api.menu` / `api.contextMenu` / `api.hotkeys`
 
@@ -868,12 +1005,12 @@ the intended picture *was* the overlap, so there is nothing to restore it to.
   menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
   which case the item sits directly under it. A last segment that names no submenu gets
   one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
-  items can keep them together; `separator: true` on an item draws a line above it (never
-  two in a row). `item` is
-  `{ label, shortcut?, icon?, after?, enabled?(), run() }`. `icon` puts a mark in front
-  of the label: `"plugin"` for the plugin's own icon (the manifest's), or any
-  `PluginIcon` — use it for items that do something no built-in does, such as reaching
-  a server, so the user can tell at a glance which entries are the plugin's.
+  items can keep them together; `separator: true` on an item draws a line above it
+  (never two in a row). `item` is `{ label, shortcut?, icon?, after?, enabled?(), run() }`.
+  `icon` puts a mark in front of the label: `"plugin"` for the plugin's own icon (the
+  manifest's), or any `PluginIcon`. Use it for items that do something no built-in does,
+  such as reaching a server, so the user can tell at a glance which entries are the
+  plugin's.
 - `contextMenu.add(surface, item)`: surfaces are `"viewport"` (the map) and
   `"terrainPalette"`. `run(ctx)`, `enabled?(ctx)` and `visible?(ctx)` get a
   `ContextMenuContext`: the tile and pixel under the pointer (viewport), the active
@@ -882,582 +1019,67 @@ the intended picture *was* the overlap, so there is nothing to restore it to.
   hotkeys are checked before the built-ins and never while typing in a field or while a
   dialog is open.
 - All three take `{ command: "id" }` (or `command:` on the item) instead of a `run` of
-  their own — see `api.commands`. A context item's command is called with the
+  their own; see `api.commands`. A context item's command is called with the
   `ContextMenuContext` as its argument.
 
 ### `api.events`
 
-`on(event, fn)` for `"document"` (opened, closed, replaced), `"terrain"` (every committed
-edit, stroke, undo and redo bumps it, terrain or not — fog edits included — so it is the
-"something changed on the map" event), `"units"`, `"sprites"` (the doodads revision,
-which THG2 records ride on), `"doodads"`, `"locations"`, `"settings"` (every settings
-dialog's OK, Map Properties included), `"triggers"`, `"layer"`, `"selection"`,
-`"clipboard"` (the marked area or the clip), `"view"` (scrolled, zoomed, a View tick
-moved, or an overlay registered or toggled), `"tool"` (a map tool or pick started or
-stopped), `"modified"` (the unsaved-changes flag), `"palette"` (a palette's pick
-changed: terrain brush, unit and owner, sprite, doodad, fog players), `"options"` (an
-editing option moved: symmetry, placement and doodad rules, location snap, the fog view
-player, clip parts and paste mode, locked layers, the grid look, Preferences), `"file"`
-(the document's name or handle after a Save, its save options, the archive extras, the
-recent list), `"commands"` (a plugin registered or removed a command — how a plugin
-that calls another's by id learns it has arrived, since plugins activate in no fixed
-order; check `commands.has` in the listener) and `"gameData"` (the game data source
-changed: installed, switched to another data set, or a copy removed — `gameData.source()`
-says what it is now, and everything drawn or named from the data is worth redoing).
+`on(event, fn)` returns a `Disposable`. Listeners are notifications, not a pipeline: they
+run after the change, in the order the plugins were activated, and cannot veto, delay or
+reorder one another. There is no plugin ordering and none is planned. A listener that
+rewrites the map in response (Repair does, through `document.sections`) raises a fresh
+`"document"` event with reason `"replace"`, which every other listener sees in turn, so
+whatever a plugin computed from the earlier state is recomputed from the later one.
 
-The `"document"` listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open,
-a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included),
-`"close"`, or `"replace"` (the open map parsed again from edited bytes — a
-`document.sections` write, by any plugin, yours included), and `fileName` is the file's
-name or null. A plugin that acts on maps as they open listens for `"open"` and lets the
-rest pass; the other events carry nothing.
-
-Listeners are notifications, not a pipeline: they run after the change, in the order the
-plugins were activated, and cannot veto, delay or reorder one another. There is no plugin
-ordering and none is planned — a listener that rewrites the map in response (Repair does,
-through `document.sections`) simply raises a fresh `"document"` event with reason
-`"replace"`, which every other listener sees in turn, so whatever a plugin computed from
-the earlier state is recomputed from the later one.
+| Event | When |
+| --- | --- |
+| `"document"` | A map was opened, closed or replaced. The listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open, a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included), `"close"`, or `"replace"` (the open map parsed again from edited bytes, by a `document.sections` write from any plugin, yours included), and `fileName` is the file's name or null. A plugin that acts on maps as they open listens for `"open"` and lets the rest pass. Every other event carries nothing. |
+| `"terrain"` | Every committed edit, stroke, undo and redo, terrain or not, fog edits included. It is the "something changed on the map" event. |
+| `"units"`, `"doodads"`, `"locations"` | Those lists changed. |
+| `"sprites"` | The sprites changed (they share the doodads' revision, since a doodad's overlay sprite is one). |
+| `"settings"` | Every settings dialog's OK, Map Properties included. |
+| `"triggers"` | The trigger or briefing list changed. |
+| `"layer"`, `"selection"` | The active layer, or what is selected on it. |
+| `"clipboard"` | The marked area or the clip changed. |
+| `"view"` | Scrolled, zoomed, a View tick moved, or an overlay registered or toggled. |
+| `"tool"` | A map tool or a pick started or stopped. |
+| `"modified"` | The unsaved-changes flag. |
+| `"palette"` | A palette's pick changed: terrain brush, unit and owner, sprite, doodad, fog players. |
+| `"options"` | An editing option moved: symmetry, placement and doodad rules, location snap, the fog view player, clip parts and paste mode, locked layers, the grid look, Preferences. |
+| `"file"` | The document's name or handle after a Save, its save options, the archive extras, or the recent list. |
+| `"commands"` | A plugin registered or removed a command. This is how a plugin that calls another's by id learns it has arrived, since plugins activate in no fixed order; check `commands.has` in the listener. |
+| `"gameData"` | The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now, and everything drawn or named from the data is worth redoing. |
 
 ### `api.storage`
 
-`get(key, fallback)`, `set(key, value)`, `remove(key)`: JSON in localStorage under a
-per-plugin prefix (`scmjs.plugin.<id>.`). Safe when storage is unavailable (falls back to
-memory). The user can see and throw it away — Preferences ▸ General ▸ Browser storage lists
-your keys as one row under your plugin's id, opening onto the values, with a Clear button of
-its own, and Clear all data sweeps every `scmjs.` key — so treat what you store as a
-convenience, never as the only copy of something, and keep it small and readable.
+`get(key, fallback)`, `set(key, value)` and `remove(key)` keep JSON in the browser's
+storage under a per-plugin prefix (`scmjs.plugin.<id>.`), falling back to memory when
+storage is unavailable. The user can see and throw it away: Preferences ▸ General ▸
+Browser storage lists your keys as one row under your plugin's id, opening onto the
+values, with a Clear button of its own, and Clear all data sweeps every key the editor
+owns. So treat what you store as a convenience, never as the only copy of something, and
+keep it small and readable.
 
 ### `api.plugin`, `api.apiVersion`, `api.log(...)`
 
-Who you are (`id`, `name`, `source`), which API you got, and a console logger with the
-plugin's name prefixed.
+Who you are (`id`, `name`, `source`), which API version you got, and a console logger
+with the plugin's name prefixed.
 
-## Host side (for editor developers)
+## Plugins to read
 
-| File | |
+Every plugin the editor ships is a repository of its own, compiled against the same
+declarations, with a README of its own. Each is the worked example for part of the API
+above. Read the one nearest to what you are writing.
+
+| Plugin | Read it for |
 | --- | --- |
-| `src/plugins/api.ts` | The public types. Changing them is an API change: bump `PLUGIN_API_VERSION` for anything not backward compatible. |
-| `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the Jotai store and a `Contributions` bag that `dispose()` empties; `activatePlugin` / `deactivatePlugin` drive the lifecycle and write `pluginRuntimesAtom`; `inspectPlugin` / `installPlugin` are the confirm-then-add pair, and `rememberManifest` is the manifest cache both it and `describePlugin` write. |
-| `src/plugins/loader.ts` | Spec parsing, manifest fetch, the fetch-as-text / transpile / rewrite-imports / blob-URL pipeline, and `previewPlugin` (`canonicalSpec` + the manifest, no code) behind the Add Plugin confirmation. Pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it takes, so `tests/plugins.test.ts` runs it in Node. |
-| `src/plugins/claims.ts` | `locateClaims(claims, list)` asks every `api.triggers.claim` where its run is in a given list (a `locate` that throws is a skipped claim, answers are clamped), plus `claimAt`, `claimBadge` and `claimDescription` — what the Trigger Editor, the Text Trigger Editor and Import Triggers read. |
-| `src/plugins/images.ts` | `loadImage` / `readClipboardImage` behind `api.ui`, and `transferOf` (a `DataTransfer` → `{ files, text }`) that `PluginDialog` uses for `onPaste` / `onDrop`. |
-| `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/plugin.{ts,json}` — empty, since nothing ships in the bundle. |
-| `src/plugins/defaults.ts` | The plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS`, each with whether it starts on, plus any built-in), merged over the stored list by `effectiveInstalls`. |
-| `src/atoms/pluginAtoms.ts` | `installedPluginsAtom` (persisted, with `local` per plugin), `pluginCodeAtom` (the stored copies), `pluginRuntimesAtom`, the contribution registries `pluginMenuItemsAtom`, `pluginContextItemsAtom`, `pluginHotkeysAtom`, `mapPickAtom` — the `pickArea` / `pickTile` request the viewport is serving (`cancelMapPickAtom` is what Esc and a right-click write) — and its siblings `mapToolAtom` (the running `ui.mapTool`, with `cancelMapToolAtom` and `mapToolRevisionAtom` for `redraw`), `pluginOverlaysAtom` (the registered `ui.overlay`s with their visibility — `setOverlayVisibleAtom` is the one writer, `pluginOverlayRevisionAtom` their `redraw`, `overlayVisibilityMemory` what the user last chose per plugin and name) `pluginPanelsAtom` (the open `ui.panel`s) and `pluginTriggerClaimsAtom` (the live `api.triggers.claim`s, each with a revision the handle's `refresh` bumps). |
-| `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps runtime in step with the installed list. |
-| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, `ConfirmPluginDialog` (the Add Plugin confirmation), and `PluginDialog` — the frame a plugin's `ui.dialog` mounts into. |
-| `src/components/panels/PluginPanels.tsx` | The floating frames `ui.panel` mounts into, rendered inside the viewport: a draggable title strip, a close button, positions remembered per plugin and title for the session. |
-
-Contribution points read the registries: `MenuBar` merges `pluginMenuItemsAtom` into
-its menu model (`withPluginItems`), `MapViewport` and `TerrainPalette` append the
-matching `pluginContextItemsAtom` entries to their context menus, `useHotkeys` checks
-`pluginHotkeysAtom` first. A `Plugins` menu (Manage Plugins… plus anything registered
-under `"Plugins"`) sits between Tools and Help.
-
-`api.ui.pickArea` / `pickTile` are `pickOnMap` in `host.ts`: one `MapPickRequest` at a
-time goes into `mapPickAtom`, and `MapViewport` serves it ahead of every layer — crosshair
-cursor, a teal marquee with its size, a HUD chip with the prompt — calling the request's
-`finish` on mouse-up; `finish` clears the atom itself and is guarded against running twice.
-The host also finishes it with `null` when the scenario atom changes, when the plugin's
-`Contributions` are disposed, or when a newer pick starts; `useHotkeys` (Esc) and the
-viewport's right-click write `cancelMapPickAtom`.
-
-`api.ui.mapTool` is `startMapTool` there: one `MapToolRequest` in `mapToolAtom`, which
-`MapViewport` serves after a pick and ahead of every layer — its `onDown` captures the
-pointer and forwards the gesture as `MapPointer`s, `onLeave` sends one `inMap: false`
-move, the layer's hover ghost and "placing" chips stay hidden, the surface takes the
-tool's cursor, and the tool's `draw` runs at the end of the paint pass with a `MapView`
-built from the current scroll and zoom. `finish(reason)` is guarded like a pick's and
-clears the atom; `cancelMapToolAtom` (Esc, right-click) asks the spec's `onCancel` first
-and only finishes when it does not keep the tool.
-
-`api.ui.overlay` is `registerOverlay` there: one `PluginOverlayEntry` in
-`pluginOverlaysAtom`. `MapViewport` runs each visible entry's `draw` at its slot — after
-the grid, after the locations and start locations, or after the hover ghost and before a
-map tool's own drawing — inside a `save` / `restore`, and its `onMove` / `onLeave` forward
-a `MapPointer` (or `null`) to every visible entry with an `onHover` before doing anything
-else, so overlays hear the pointer on every layer and during a tool. The View menu and the
-Layers panel list the entries and write `setOverlayVisibleAtom`, which the handle's
-`show` / `hide` / `toggle` also go through, so the spec's `onToggle` fires once per change
-however it came; the atom also records the choice in `overlayVisibilityMemory`, which
-`registerOverlay` consults before the spec's `visible`. `remove()` (and the plugin's
-`Contributions` disposal) takes the entry out of the list.
-
-`api.document.edit` is `runTransaction` in `host.ts`: it wraps the scenario in an
-`EditTransaction` whose operations apply immediately and accumulate change lists in
-`applyEntry` order, then hands the entry to `commitTerrainAtom` (the stranded-doodad /
-stranded-unit pass that used to live only inside `useTerrainTools`) so a plugin edit
-behaves exactly like a stroke. `tx.rebuildIsom` is `rebuildIsomFromTiles` from
-`editor/isom.ts`: over an existing lattice of the right size it diffs into the entry's
-`isom` list, otherwise it sets `scenario.isom` and records the section as the entry's
-`createdIsom` (undo puts `null` back; `commitEditAtom` bumps `isomRevisionAtom` for it, so
-the palette re-measures). The editor has no rebuild button of its own any more — the
-Repair plugin is where the user reaches this.
-
-The `"document"` event's payload is `documentEvent` in `host.ts`, read off
-`documentChangeAtom` (`atoms/documentAtoms.ts`): `loadDocumentAtom` records the
-`reason` the caller passed (`"open"` by default, `"new"` from File ▸ New,
-`"replace"` from `replaceScenarioAtom`) together with the scenario object it applies to,
-and `closeDocumentAtom` records `"close"`; a scenario installed some other way (a test
-setting the atom directly) is reported as an open or a close by what is there. The
-sections calls Repair relies on live in `editor/sections.ts`: `defaultSectionBytes`
-(a fresh `createScenario` on the map's size, tileset and revision, one section marked
-dirty, encoded and picked out — the raw created sections for IVE2 / VCOD / UPRP / UPUS),
-`rebuildSections` (the given names added to a copy's dirty set, `serializeScenario`,
-`parseScenario`) and `requiredSectionNames` (`requiredSections` with `STRx` substituted
-on an extended-strings file).
-
-
-### The loading pipeline
-
-`loader.ts` is pure apart from the `fetch`, `transpile` and `createModuleUrl` callbacks it
-takes, so `tests/plugins.test.ts` runs the whole of this in Node.
-
-1. The spec the user typed is parsed (`parseSpec`) into a base URL. `builtin:<name>` is a
-   plugin compiled into the editor from `plugins/<name>/`; a `github:` spec or a
-   github.com URL resolves to
-   `https://raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`; any other URL is a
-   manifest, an entry file (a manifest is synthesised from its name) or a directory holding
-   `plugin.json`. The forms are tabulated for authors under **How the editor finds your
-   code**.
-2. The manifest is fetched and validated (`PluginManifest`; only `name` is required).
-3. The file to import is the manifest's `build` when it has one, else its `entry`.
-   `ResolvedPlugin.built` / `PluginAddresses.built` carry which happened, so
-   `ConfirmPluginDialog` can name the bundle *and* the source it was built from.
-4. That file is fetched **as text** and, if it is TypeScript, transpiled in the transpile
-   worker (`ts.transpileModule`; TypeScript is in the editor's bundle for this alone).
-   Fetching as text matters: `raw.githubusercontent.com` serves `text/plain`, which a
-   browser refuses to `import()` as a module.
-5. Relative imports are followed the same way, depth first, and each file becomes a `blob:`
-   module URL with the specifiers rewritten to those URLs. There is no resolver behind a
-   `fetch`, so the loader supplies one (`candidateUrls`): a specifier naming no extension —
-   `"./convert"`, how TypeScript is normally written — is tried as `.ts`, `.tsx`, `.mts`,
-   `.js`, `.mjs` and then as that directory's `index.*`, and `"./convert.js"` falls back to
-   `convert.ts`. The bundled built-in never needed this because Vite resolved for it, and
-   the first remote load of Terrain from Image 404ed on `./convert`. Circular imports and
-   bare package names are errors naming the file.
-6. The module is `import()`ed and its default export (or a named `activate`) called with the
-   `PluginApi`. Whatever it returns is kept for deactivation.
-
-An activation that fails is not silent: `plugins/failures.ts` turns whatever the pass left
-in `pluginRuntimesAtom` into one toast naming what did not load, with a button to Manage
-Plugins (`ttl: 0`, so it outlives the splash). For that to work `activatePlugin` returns
-the load **in flight** for a spec that is already loading rather than a resolved promise —
-React's double mount otherwise had the second pass reading the runtimes before a single
-fetch had finished.
-
-### Defaults, pinning and vendoring
-
-Installed plugins live in localStorage (`scmjs.plugins`: spec + enabled flag) and are
-activated at startup by `usePlugins`. The defaults (`src/plugins/defaults.ts`) are merged
-over that list by `effectiveInstalls`, so they are always shown and can be turned on or off
-but not removed; each says whether it starts on. Being a default buys a plugin nothing
-else — it is fetched and loaded by the steps above like any other.
-
-Each default names a **tag**, not a branch: `github:scm-js/plugin-repair@v1.0.1`. A moving
-spec meant a push to a plugin repository changed every editor already in use and no
-released version could be rebuilt as it shipped, so moving a default forward is now a
-commit in `defaults.ts` that goes out with the next release. `isPinned` therefore counts
-any explicit ref that is not a branch name (`MOVING_REFS`), and identity moved off the spec
-string: `pluginKey(spec)` is the repository whatever version follows it, with a bundled copy
-answering for the spec it was built from, which is what keeps `effectiveInstalls` from
-listing — and running — the same plugin twice across those forms.
-
-Every build runs `scripts/vendor-plugins.mjs` first (`prebuild`, and
-`scripts/build-desktop.mjs` for its own bundle), which writes each default's own source at
-that tag into `plugins/` for `builtin.ts` to glob, so the defaults are **compiled in rather
-than fetched** — the same code, since the version is fixed. It is worth more than it
-sounds: a `.ts` plugin has to be transpiled before the browser will import it, one
-transpile starts the compile worker, and TypeScript is inlined into that worker, so five
-remote `.ts` defaults put 3.4 MB (975 KB gzipped) of compiler on the cold path. Measured on
-the production build, a first visit went from 1235 KB gzipped and 20 cross-origin requests
-to 344 KB and none. It is all or nothing — one remote `.ts` default starts the worker and
-costs the lot — and the fetching path is still there for a build that skips the vendoring
-(`SCMJS_SKIP_VENDOR=1`) and for every plugin the user adds.
-
-That costs the one thing worth naming: the remote loading path used to be exercised by
-simply opening the editor, on every machine, every day. `tests/plugin-network.test.ts` is
-the deliberate replacement — a real plugin fetched, transpiled and imported over the
-network — off unless `SCMJS_NETWORK_TESTS=1`, and run by CI on the job that vendors and by
-the release pre-flight.
-
-### The registry, on the host side
-
-`plugins/registry.ts` is the whole host side of Browse Plugins and is pure apart from the
-fetching. What a registry *is*, and how a plugin gets listed, is under **Getting yours
-listed**.
-
-| | |
-| --- | --- |
-| `parseRegistry(raw, url)` | Checks the file's shape, canonicalises each entry's spec (`canonicalSpec(parseSpec(...))`, so rows match the installed list), drops entries it cannot use and counts them in `skipped`. One bad row never empties a list. |
-| `entryIcon(entry)` | `resolveIcon` against the *plugin's* base, so a manifest's `icon: "icon.svg"` can be copied into the index verbatim. |
-| `searchRegistry(entries, query)` | Every word has to match something; name beats tag beats description beats author beats spec. |
-| `groupByInstall(entries, stateOf)` | Splits the results into what the editor does not have and what it already lists (turned off counts as installed), each group keeping its order — the Browse pane's grouping and its filter counts. |
-| `mergeRegistries(list)` | Entries of every registry, the first to list a spec winning. |
-| `loadRegistry(store, url, opts)` | Fetch into `registryCacheAtom` unless the cached copy is younger than `REGISTRY_MAX_AGE` (an hour) or `force` was asked for. A failure records `registryStateAtom` and **keeps** the cached list — the browser shows the last list it had rather than emptying itself because the network blinked. |
-| `addRegistry` / `removeRegistry` | The user's list (`userRegistriesAtom`); a default cannot be removed. |
-
-Almost everything a registry lists is a plugin the editor already has — the defaults are
-published from the same repositories — so a flat list of rows reads as a copy of the
-Installed tab. The pane splits it instead: `groupByInstall` over the search results, the
-group that can be installed first under its own heading, and a filter (All / Not installed
-/ Installed) carrying the count of each. A row says which it is by an accent down its left
-edge, by the one action that fits it (**Install**, **Turn on**, or **Manage**, which
-switches to the Installed tab and flashes the row) and by a line naming the state in words.
-
-An entry is not a way in. Install hands the entry's `spec` to the same
-`inspectPlugin` → `ConfirmPluginDialog` → `installPlugin` path a pasted address takes, so
-the manifest is read from the plugin itself and the commit resolved and pinned at install
-time rather than taken from the index.
-
-### Adding one
-
-Pressing **Add** in Manage Plugins does not install anything. `previewPlugin` canonicalises
-the spec, asks GitHub which commit the spec's ref points at (`resolveCommit`, the public
-commits API, one request and no token), and reads the `plugin.json` at that commit through
-steps 1–2 of the pipeline and no further (`resolvePlugin(..., { entry: false })`). No entry
-file is fetched, nothing is transpiled and nothing is imported.
-
-The confirmation opens only if that found a manifest. An address that answers with no
-plugin behind it is reported under the Add field — a details screen with no details on it
-reads as a broken dialog rather than a wrong address — and the preview travels to the
-dialog in its payload rather than being fetched again.
-
-`ConfirmPluginDialog` shows what came back: the manifest's name, version, author,
-description and icon, links to the repository (`PluginSource.webUrl`, which `parseSpec`
-derives for a GitHub spec) and homepage, the addresses for the version being installed
-(`addressesOf`), and the warning that a plugin has the editor's own access and no sandbox.
-The entry is named only when the manifest names one; probing for `plugin.ts` / `plugin.js`
-would mean fetching code, which has not been agreed to yet.
-
-Three ticks are read straight into `installPlugin`, which is the only writer past this
-point — it seeds the manifest through `rememberManifest`, then `setInstalled` and
-`activatePlugin`:
-
-| Tick | Default | Effect |
-| --- | --- | --- |
-| Enable it now | on | `activatePlugin` after the install; off just lists it. |
-| Pin to this version | on, when a commit resolved | Stores `github:owner/repo@<sha>` (`PluginPreview.pin`) instead of the moving spec. `isPinned` recognises one. |
-| Load from a copy saved here | off | Stores `PluginInstall.local`; see below. |
-
-The addresses on screen follow the pin tick, since pinning changes which commit every one
-of them names. A spec that carries a ref already (`@v1.2`) is resolved the same way: the pin
-names the commit that tag points at today. The label and the explanation under the third
-tick read the same whether it is on or off — one that swapped between describing the copy
-and describing the fetch read as two different options — so the only state-dependent part
-is the size of the copy, shown next to it.
-
-Reload re-fetches whatever the spec names, so for a pinned plugin it re-fetches the same
-commit. Moving to a newer one is the **Update** button on the row: it previews
-`unpin(spec)`, and when the branch now holds a different commit it opens this same dialog
-with `replaces` set. The install goes through `installPlugin` again with the old spec named,
-which deactivates it, drops it from the list and drops its stored copy, because the two
-commits are different specs as far as everything else here is concerned. The ticks start
-from the old install's own settings.
-
-A manifest that could not be fetched or parsed (`PluginPreview.problem`) stops the add: the
-Manage Plugins field says so, with the address that refused underneath, and if the dialog is
-reached with one anyway it says the same and disables Add. An unusable *spec* fails earlier
-still, before anything is fetched. A manifest asking for a newer `api` than the host
-provides is flagged on the dialog (`needsApi`) rather than only failing on load, and
-`pinProblem` says why there is no pin (not a GitHub plugin, or GitHub did not answer).
-
-### Loading from a copy in the browser
-
-`PluginInstall.local` means "prefer the copy". `loadDepsFor` in `host.ts` decides what one
-activation uses:
-
-- no copy yet: the ordinary deps wrapped in `recordingDeps`, which keeps every fetched
-  file. `storeSnapshot` writes them to `pluginCodeAtom` (`scmjs.plugin-code`, keyed by
-  spec) when the load succeeds. A snapshot over `MAX_SNAPSHOT` is skipped with a console
-  warning and the plugin stays remote.
-- a copy: `storedDeps`, which answers out of the snapshot and has no network path at all.
-  A URL the snapshot does not hold is an error naming it, so a plugin that grew a file
-  since the copy was made says so instead of quietly fetching it. `describePlugin` uses the
-  copy too, so the plugin's address is never touched while the option is on.
-
-`PluginRuntime.loadedFrom` records which of the two happened, and the Manage Plugins row
-badges it. `reloadPlugin` drops the copy first, so Reload is how both a pinned plugin and a
-stored one are moved forward. Turning the option off (`setInstalled`, the row's disk button)
-drops the copy as well: turning it on again fetches the plugin rather than reviving
-something months old.
-
-A plugin that is listed but **not running** — one you turned off, a default included — is
-still described in Manage Plugins: `describePlugin` does steps 1–2 only
-(`resolvePlugin(..., { entry: false })`), so the name, version, description and icon come
-out of one `plugin.json` fetch with no code fetched and nothing executed. One attempt per
-spec per store (`forgetDescription`, which `reloadPlugin` calls, asks again); the dialog
-triggers it for every row with no manifest, and the answer is kept in
-`scmjs.plugin-manifests` (built-ins excluded — nothing to fetch, and their icon URLs are
-build-hashed), so the next visit renders from storage while the refresh runs behind it.
-`PluginRuntime.describing` and `status: "loading"` both spin the row's badge, since a row
-that silently rewrites itself when a fetch lands reads as a glitch. A description that
-cannot be fetched changes nothing: the plugin is *off*, not failed.
-
-## Terrain from Image
-
-[scm-js/plugin-image-to-terrain](https://github.com/scm-js/plugin-image-to-terrain), installed
-by default — File ▸ Import ▸ Terrain from Image…, and on the terrain
-palette's and the map's context menus *Terrain from Image…* (into the marked area when the
-Cut / Copy / Paste layer has one) and *Terrain from Image into Area…*, which first has you
-drag the target rectangle on the map (`api.ui.pickArea`) and then opens the dialog with it
-selected. In the dialog, *Pick on Map…* does the same round trip — the dialog closes, you
-drag, it reopens with the picture and every setting kept (the state lives in a `Session`
-object outside the dialog for exactly this reason).
-
-The picture can come from a file, Ctrl+V or *Paste* (a screenshot on the clipboard), a
-drop onto the dialog, or a URL (`api.ui.loadImage`). *Fit* places it — stretched, fitted
-inside (uncovered cells are left alone) or covering the area — with flips and smooth or
-nearest sampling (one pixel per tile for pixel art). *Adjust* is brightness, contrast,
-saturation, hue, gamma, auto-levels and invert, applied before matching and shown in the
-*Source* preview. Every terrain in the list has a **key colour** — what in the picture it
-should match; by default its own tiles' average, changed with the swatch or the eyedropper
-(arm it on a row, click the source preview), remembered per tileset.
-
-`convert.ts` is the pure part and that repository's `tests/convert.test.ts` pins it: resample
-to one sample per target cell, `adjustSamples`, `boxBlur`, then match every cell in OKLab
-(`makeMatcher`) — *Adaptive* fits the picture's lightness and chroma ranges onto the
-palette's (gain capped so a flat picture is not stretched into noise) and rescales hue so
-the murky tile averages' hue spread counts as much as their lightness spread; *Exact* is
-plain distance to the key colours; *Brightness bands* makes the ticked terrains, in order,
-equal bands from the picture's darkest to its brightest cell (a heightmap). The *Weigh*
-slider moves between lightness and hue. Clean-up follows: `majorityFilter` (despeckle) and
-`removeSmallRegions` (islands below a size join their commonest neighbour). `plugin.ts`
-is the dialog and the transaction: **Isometric** paints each lattice diamond in the target
-with `tx.paintIsom` — the diamond's terrain is the majority of the four cells around its
-centre (`diamondTerrain`), and terrains are painted low ground first, rare ones last
-(`paintOrder`), so the brush's one-diamond bleed eats into common ground rather than thin
-features — and cliffs and shorelines are generated at every boundary; **Tiles** stamps flat
-pairs with `tx.stampTerrain` and leaves the ISOM alone (Tools ▸ Repair Map… afterwards
-rebuilds it, if you want the isometric brush back). One undo entry either way.
-
-## Paint
-
-[scm-js/plugin-paint](https://github.com/scm-js/plugin-paint), a default — Tools ▸ Paint…,
-`Ctrl+Shift+P`, or *Paint…* on
-the map's right-click menu then opens a panel that floats
-over the map (`api.ui.panel`). Pick a tool in it — freehand, line, rectangle, ellipse,
-polygon, star, spray, text, eraser — and draw on the map; the *brush* is whatever the
-active layer's palette has picked (`api.palette.active()` and `api.terrain.active()`,
-refreshed on the `"palette"` and `"layer"` events): flat terrain or a tile, a doodad, a
-unit for a player, a sprite, or fog for some players. Closed shapes can be filled (grid,
-staggered grid, random), objects are spaced along the outline (auto = their own size) and
-can be jittered, units and sprites can cycle through players 1–8 or take random ones, and
-units can skip the spots the Units palette's placement checks refuse (`tx.canPlaceUnit`).
-Every stroke is one `api.document.edit`.
-
-`shapes.ts` is the pure part and that repository's `tests/shapes.test.ts` pins it: a tool's
-drag becomes an outline `Path` (`linePath`, `rectPath`, `ellipsePath`, `starPath`, with
-`constrainSquare` / `constrainAngle` for Shift and `boxFromCenter` for Alt); objects come
-from `samplePath` (arc length, so corners are not doubled) plus `fillPoints` inside a
-closed shape, then `jitterPoints` and `dedupePoints`; tiles and fog cells come from
-`strokeCells` (a Bresenham walk dilated by a round brush of the panel's width) plus
-`fillCells` (cells whose centre is inside); `textCells` lays a 5 × 7 dot font (`font.ts`)
-out as cells, which become one object per dot or `width × width` tiles per dot. A
-deterministic generator seeded on mouse-down makes the preview and the commit scatter the
-same way. `plugin.ts` is the panel, the running `api.ui.mapTool` (the gesture per tool,
-`onCancel` returning `true` to drop a shape and keep painting, `draw` for the dashed
-outline, the per-point boxes in player colour, the eraser's crosses and the count), and
-the transaction: `stampTerrain` / `setTiles` / `setFog` for cells, `placeUnit` /
-`placeSprite` / `placeDoodad` for points, `removeUnits` / `removeSprites` / `removeDoodads`
-for the eraser.
-
-## scmscx.com
-
-[scm-js/plugin-scm-scx](https://github.com/scm-js/plugin-scm-scx), a default that starts
-on, is the editor's one network plugin: File ▸ Find on scmscx.com… searches the
-StarCraft map archive at scmscx.com and opens the map you pick through `document.open`,
-and Plugins ▸ scmscx.com Settings… holds an optional forwarder address. It shows the
-other side of `document.open`: the bytes come from a third party's server, under the
-file name that server knows the map by, and the editor's own Close Scenario question
-still comes first. scmscx.com has no documented API — its About page says the routes
-its front end uses are open and may change — so `client.ts` there mirrors those routes
-(`/api/uiv2/search`, `/api/uiv2/map_info`, `/api/maps/{mpq_hash}`) and leaves every
-default parameter out of the query string exactly as the site does, so the URLs match
-the ones the site makes for itself.
-
-The site sends no CORS headers, which is a constraint worth knowing about before writing
-a plugin against any third-party API: a browser lets a page read a cross-origin answer
-only when the server says so, and an `<img>` is the one thing exempt from that. The
-plugin therefore tries the site first (`ScmscxClient.connect()` probes each base with
-the newest-uploads search and takes the first that answers JSON), then a forwarder if
-one is set, and when nothing answers the dialog says why, links to the site's search
-page for the query, and reminds the user that a downloaded map can be dropped onto the
-editor. The minimaps still show either way. The editor itself runs no forwarder.
-
-## Section Explorer
-
-[scm-js/plugin-section-explorer](https://github.com/scm-js/plugin-section-explorer),
-installed from Plugins ▸ Browse Plugins…, is the worked example for `api.document.sections` and
-`api.names`: Tools ▸ Section Explorer… (`Ctrl+Shift+H`) is a hex editor that knows the map
-file. The left pane is `sections.list()` with badges for what the registry and the buffer
-say (raw, unknown, unsaved, edited, repeated, wrong size, cut short); the middle is a hex
-view of `sections.bytes(index)` drawn only for the rows on screen, coloured by the field
-each byte belongs to; the right is the inspector — the section's description, find and
-go-to, the field under the cursor with its path, value, meaning and an editing control,
-the raw readings in every width, and a structure tree that pages long arrays and follows
-the cursor.
-
-`layout.ts` there is the node model: a *schema* (a struct of fields, an array of records,
-a primitive) is instantiated at an offset into a `Node` tree whose children are built on
-demand, so a terrain section of 32,768 tiles costs nothing until a row of it is looked
-at; `pathAt` / `leafAt` descend by arithmetic through fixed-stride arrays, `leavesIn`
-walks a byte range for the hex view's colours, and a leaf's `Semantic` says how its value
-is shown (`describe`, with the record's sibling values, so an action's `target` reads as
-a location, an amount or an AI script depending on the type byte) and edited (a number,
-a drop-down from `api.names`, flag ticks, text). `layouts.ts` is every section: the
-record shapes of UNIT / THG2 / DD2 / MRGN / TRIG / MBRF with one-line summaries, the
-fixed tables (VCOD, the settings and restriction tables per revision, PUNI, FORC, CRGB,
-…), the per-cell terrain and fog sections, and the string table, whose layout is read
-off its own offsets (one leaf per distinct blob, however many indices share it). A
-section longer than its layout gets a trailing-bytes leaf; a name with no layout is
-shown as plain bytes. `buffer.ts` is the edit buffer — overwrite, insert, remove, resize,
-with its own undo that merges a run of typing into one step — and Apply writes every
-changed buffer through `sections.write`, which is what makes the editor parse the file
-again. Both pure modules have tests in that repository.
-
-## Walkability
-
-[scm-js/plugin-walkability](https://github.com/scm-js/plugin-walkability), a default that
-starts on, is the worked example for a read-only analysis drawn over
-the map: Tools ▸ Walkability… (`Ctrl+Shift+W`) reads every tile's sixteen VF4 words
-through `api.tileset.raw()` (`groups[id >> 4].megatiles[id & 15]` → `megatileFlags`),
-marks the ground under every building and resource (`api.data.units()` extents, or
-`api.palette.unitSize` without the tables) and hands the grid to `analysis.ts`, the pure
-part with that repository's tests: an exact Euclidean distance transform for clearance,
-4-connected components for islands, a BWEM-style watershed over the clearance map for
-areas and the chokes between them (where two areas first touch is the widest point of
-the narrowest passage; too small an area, or a meeting point nearly as wide as the area
-itself, means they were one), seams (open cells at different heights touching with no
-ramp), and per start-location pair the ground distance (Dial's algorithm, no corner
-cutting) and the widest route (a flood by descending bottleneck) whose narrowest point
-is measured with `passageWidth`. `api.query.startLocations()` and
-`api.query.placement(106, …)` (a Command Center's footprint) give the start rows and the
-"hall spot not buildable" problem.
-
-The result is an `api.ui.overlay` registered at activation (`above: "objects"`, off
-until switched on) — View ▸ Walkability, the Layers panel, `Ctrl+Shift+W` or the panel's
-tick — whose `draw` blits one `ImageData` per view mode (areas, islands, clearance,
-height, walkable) scaled from minitiles to canvas pixels with smoothing off, then rings,
-labels and markers in canvas coordinates through `view.x` / `view.y`; `onHover` writes
-the cell under the pointer into the panel. Because an overlay never takes the pointer,
-the picture stays up while units and doodads are placed on it, and the analysis follows
-every edit (the `"terrain"`, `"units"`, `"doodads"`, `"settings"` and `"document"`
-events, debounced) while it is showing or the panel is open. Picking an area is a
-`pickTile`. The panel (`api.ui.panel`) holds the settings, the readout and the problems;
-*Details…* opens a second panel with every start location, pair, island, area and choke,
-with `api.view.center` / `api.view.goTo` behind each row; *Copy report* is the text
-summary. The plugin never writes to the map.
-
-## Melee Wizard
-
-[scm-js/plugin-melee-wizard](https://github.com/scm-js/plugin-melee-wizard), installed from
-Browse Plugins, is the worked example for `placeUnit` / `canPlaceUnit` /
-`updateUnits` inside one `document.edit`, and for a map tool whose press-and-drag is
-previewed with `draw`: Tools ▸ Melee Wizard… (`Ctrl+Shift+M`). `layout.ts` there is the
-pure geometry with its tests: `ringPositions` enumerates the tile positions of a
-footprint at exactly the game's three-tile gap from the 4 × 3 hall (Chebyshev, the rule
-the game applies to resource depots), `layoutBase` grows the mineral line along that
-ring from the position nearest the pointed direction, wrapping round the hall's corner,
-and puts the geyser on its own ring past the end of the line; `symmetryImages` gives the
-point maps of the nine layouts (identity first, the across-the-map image second, so a
-2-of-4 game still faces players), `rectImages` maps a footprint and snaps it back, and
-`baseImages` lays a base out again for an image that swaps the axes (a rotation by 90°
-or a diagonal mirror), since a 2 × 1 patch cannot turn on its side. `symmetryGaps` and
-`summarizeBases` are the checks.
-
-`plugin.ts` runs three tools on `api.ui.mapTool`: start locations (hover shows the hall
-and its images with player labels, a click places them, replacing the players' old ones
-when the option says so), base (press for the hall spot — inside an existing start
-location's footprint snaps to it — drag for the direction, every footprint of every
-image previewed with `api.query.placement` colouring the refused ones red, release to
-place through `placeUnit` with `updateUnits` setting the amount), and the blocking
-patch. *Bases at every start location* mirrors one layout when the starts follow the
-symmetry (`api.query.startLocations()` against the images, within a tile) and lays each
-out otherwise. *Mirror selected units* maps `api.selection.units()` through the images,
-resolving each image's player by composing the maps, and *Check symmetry* selects what
-`symmetryGaps` reports through `api.selection.setUnits`.
-
-## Repair
-
-[scm-js/plugin-repair](https://github.com/scm-js/plugin-repair), a default that starts
-on, is the worked example for the `"document"` event's payload, `document.sections`'s
-`defaults` / `rebuild` / `trailing` / `required`, and `tx.rebuildIsom`. When a map opens
-it reads the file the way the game does and, when something is wrong, lists it in a
-dialog with a tick per finding; Tools ▸ Repair Map… runs the same check by hand, and
-*Check maps when they open* in the dialog's footer turns the automatic one off.
-
-`chk.ts` there is the container reader (the editor's own rules: a chunk whose length runs
-past the file keeps what is there and is marked truncated, a negative length stops the
-read and leaves the rest as trailing bytes), `analyze.ts` turns a chunk list plus what the
-editor knows (`sections.known()`, `sections.required()`, `sections.defaults("VCOD")`,
-`terrain.checkIsom()`) into findings — each with a level, a title, a note saying what the
-game does with the file as it is, a `Repair` and whether it is ticked by default — and
-`repair.ts` applies the byte-level repairs to a chunk list, resolving indices to chunk
-objects first so removals never shift a later one. All three are pure and tested. The
-findings cover the container (negative and truncated lengths, junk names, trailing bytes
-— which are recovered as sections when that is what they are — repeats, sizes off the
-registry's, stray record bytes), the sections a file of the revision must carry (a missing
-MTXM is restored from TILE and a missing TILE copied from MTXM, everything else on
-`defaults`), the header values (DIM, ERA's high bits, VER, TYPE, OWNR and SIDE), the
-string table's offsets, unit records the game cannot place, a VCOD that is not StarEdit's,
-the order of the sections, a blank TILE, and the ISOM (missing, wrongly sized or stale —
-`rebuild-isom`). `plugin.ts` gathers the inputs, shows the dialog, and applies a repair in
-three steps: the byte-level ones as one `replaceFile`, then `sections.rebuild` for the
-names that asked for it, then one `document.edit` with `tx.rebuildIsom`. The bytes as the
-map came in are kept in memory until the next map opens, and *Restore original* puts them
-back through `replaceFile`.
-
-## Trigger Script
-
-[scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script), installed
-from Browse Plugins, is the Script Editor: a TypeScript-subset language kept as a file inside
-the map (`scmjs\triggers.ts`, with a build manifest in `scmjs\triggers.json`) and compiled
-into a block of the trigger list. It used to be part of the editor and was moved out so
-the editor no longer carries Monaco and a second TypeScript; the plugin fetches both from
-a CDN when the dialog first opens (Monaco as jsDelivr's bundled ESM build, TypeScript into
-a blob worker with a main-thread fallback). It is the worked example for
-`api.triggers.claim` — the manifest holds a hash of the generated records, `locate` looks
-for them at the recorded start and then anywhere in the list, so the Trigger Editor badges
-and locks the block wherever local edits moved it, and a hand edit *inside* it makes the
-block stale (ordinary triggers again; the next Build appends a fresh one) — and for a
-plugin publishing commands for other plugins: `trigger-script.state`, `.declarations`,
-`.compile`, `.build`, `.print`, `.simulate`, `.triggerAtLine` and `.open`, which the AI
-plugin calls through `api.commands.run` after checking `commands.has`, listening to the
-`"commands"` event since plugins activate in no fixed order. Its source keeps the
-compiler out of the browser-specific parts (`compiler/` is pure, tested under vitest with
-the real `typescript` package, and vendors the trigger tables it reads), which is what
-lets the same modules run in the worker.
-
-## AI
-
-[scm-js/plugin-ai](https://github.com/scm-js/plugin-ai), not a default, is the worked
-example for calling another plugin's commands, `api.document.create` and a plugin's own submenu, and the
-first plugin that needs a server: [scm-js/ai-server](https://github.com/scm-js/ai-server)
-holds the Anthropic key, the prompt recipes, the access rules and the budgets, and
-never any game data. The split is deliberate — the editor already has everything that
-makes a map a map, so the model never emits tiles. Each recipe takes the facts the
-plugin gathered (the tileset's terrain vocabulary, statistics, a rendered picture, the
-script's declarations) and answers with a *plan* or *text* the plugin applies through
-the ordinary API: a map plan is a coarse grid of legend characters the plugin turns into
-isometric brush strokes (so cliffs and shores draw themselves), bases laid with the
-Melee Wizard's geometry, doodads scattered by category; a trigger request answers in the
-Trigger Script plugin's language, is compiled through that plugin's `trigger-script.compile`
-command, repaired against the diagnostics, and built with `trigger-script.build` (so it
-needs that plugin on, and says so when it is not); a review sends `document.renderImage`;
-the assistant panel is a tool-use loop whose tools — reads, screenshots, and one
-undoable write (or one settings transaction) each — are defined and run in the plugin,
-with the server adding the system prompt and the caching. The assistant is the reason
-`document.update` grew the settings family, `api.settings` and `document.resize`: its
-sixty-odd tools reach everything the editor's dialogs write. With every message it sends
-the map's facts (players, counts, what is selected, where the view is, the top of the
-undo stack) and, once per map, a *reference* block built from `api.terrain.types()`,
-`api.palette.doodadCategories()`, `api.settings.unitTypes()`, `api.triggers.defs` and
-the text format — the server keeps it as a cached system block, and puts a cache
-breakpoint on the conversation, so a long session with screenshots is read from the
-cache rather than re-billed each round. `protocol.ts`, kept identical in both
-repositories, is the contract.
-Tools ▸ AI holds the whole of it; Settings there takes the server's address, an access
-token the operator issued, or your own Anthropic key, which is forwarded and never
-stored on the server.
+| [Hello World](https://github.com/scm-js/plugin-hello-world) | The smallest complete plugin: a manifest, one `menu.add`, one `ui.dialog`, and the toolchain around them. Copy it to start your own. |
+| [Paint](https://github.com/scm-js/plugin-paint) | `ui.mapTool` and `ui.panel`: a tool that owns the pointer, previews with `draw`, and commits one `document.edit` per stroke; a brush that follows the active layer's pick through `api.palette` and `api.terrain`. |
+| [Walkability](https://github.com/scm-js/plugin-walkability) | `ui.overlay`: a read-only analysis drawn over the map, re-run on the editing events, with a panel for the readout. Reads the tileset through `tileset.raw()` and never writes. |
+| [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | A dialog with `ui.widgets`, `onPaste` / `onDrop`, `ui.loadImage`, the close-pick-reopen round trip with `ui.pickArea`, and a whole picture painted in one `document.edit` with `tx.paintIsom`. |
+| [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | `placeUnit` / `canPlaceUnit` / `updateUnits` in one transaction, `query.placement` colouring a preview, and `terrain.symmetry` honoured by a plugin's own geometry. |
+| [Repair](https://github.com/scm-js/plugin-repair) | The `"document"` event's payload, `document.sections` (`defaults`, `rebuild`, `trailing`, `required`, `replaceFile`), `tx.rebuildIsom`, and `api.text` for the Remastered newline finding. |
+| [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
+| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, and what a site with no CORS headers means for a plugin. |
+| [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | `triggers.claim`, a dialog that keeps Escape for its own editor, files kept with the map through `document.extras`, and commands published for other plugins. |
+| [AI](https://github.com/scm-js/plugin-ai) | Calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |

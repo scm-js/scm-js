@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+// @ts-expect-error - a plain .mjs module, shared with the tests.
+import { buildNotices } from './scripts/lib/notices.mjs'
 
 // The app's version is package.json's, injected as `__APP_VERSION__` (src/version.ts) so the
 // splash, the About dialog and the packaged installers all say the same thing. CI rewrites
@@ -29,6 +32,19 @@ export default defineConfig(() => ({
       // than imported, since this config is its own TypeScript project. Change both.
       transformIndexHtml: (html: string) =>
         html.replace(/%APP_VERSION_SHORT%/g, shortVersion(version)),
+    },
+    // The license texts of everything compiled in, at the root of the bundle so the web
+    // zip, the installers and the container image all carry them (scripts/lib/notices.mjs).
+    {
+      name: 'scmjs-notices',
+      apply: 'build' as const,
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'THIRD-PARTY-NOTICES.txt',
+          source: buildNotices(fileURLToPath(new URL('.', import.meta.url))),
+        })
+      },
     },
   ],
   // Where the site is served from: GitHub Pages under a repository path needs `/scm-js/`,

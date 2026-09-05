@@ -54,6 +54,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
       size="lg"
       onOk={apply}
       showApply
+      slot={{ dialog: "playerSettings" }}
       footerLeft={<div className="row"><Button size="sm" onClick={() => open("playerColors")}><Palette size={12} /> Player Colors…</Button><Button size="sm" onClick={() => open("forceSettings")}><Shield size={12} /> Forces…</Button></div>}
     >
       <div className="listbox" style={{ maxHeight: 420 }}>

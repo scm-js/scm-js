@@ -9,6 +9,7 @@ import PalettePanel from "./PalettePanel";
 import MinimapPanel from "./MinimapPanel";
 import LayersPanel from "./LayersPanel";
 import PropertiesPanel from "./PropertiesPanel";
+import { DockedPluginPanels } from "./PluginPanels";
 
 function PanelHead({ title, right }: { title: React.ReactNode; right?: React.ReactNode }) {
   return (
@@ -65,6 +66,7 @@ export function RightDock() {
           </div>
         </div>
       )}
+      <DockedPluginPanels />
     </aside>
   );
 }

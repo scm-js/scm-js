@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX } from "../src/formats/chk/sections/objects";
 import { PlayerType } from "../src/formats/chk/sections/players";
-import { ActionType, ConditionType, SwitchAction, TriggerFlag } from "../src/formats/chk/sections/triggers";
+import { ActionType, ConditionType, PlayerGroup, SwitchAction, TriggerFlag } from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
 import { makeUnit } from "../src/editor/units";
 import { newAction, newCondition, newTrigger } from "../src/editor/triggers";
@@ -123,7 +123,8 @@ describe("validateScenario", () => {
     expect(ok.some((x) => x.includes("not in the archive"))).toBe(false);
     const only = triggerIssues(validateScenario(scn, { extras: new Map() }));
     expect(only.every((i) => i.where === "Triggers")).toBe(true);
-    expect(only.length).toBe(5);
+    // The five about these triggers, plus the scenario checks (no Victory, no Defeat, no objectives) a map with triggers earns.
+    expect(only.length).toBe(8);
     expect(only.find((i) => i.text.startsWith("Trigger 2"))?.target).toEqual({ kind: "trigger", index: 1 });
   });
 
@@ -132,5 +133,47 @@ describe("validateScenario", () => {
     expect(texts(scn, { isom: { kind: "missing" } }).some((t) => t.includes("no ISOM section"))).toBe(true);
     expect(texts(scn, { isom: { kind: "ready", stale: true, check: { rects: 100, mismatched: 25 } } })).toContain("warn: ISOM disagrees with the tiles on 25% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).");
     expect(texts(scn, { isom: { kind: "ready", stale: false, check: { rects: 100, mismatched: 0 } } }).some((t) => t.includes("ISOM"))).toBe(false);
+  });
+});
+
+describe("scenario (UMS) checks", () => {
+  const running = (groups: number[]) => { const players = Array.from({ length: 27 }, () => 0); for (const g of groups) players[g] = 1; return players; };
+  const action = (type: number, extra: Partial<ReturnType<typeof newAction>> = {}) => ({ ...newAction(), type, ...extra });
+  const trigger = (groups: number[], actions: ReturnType<typeof newAction>[], conditions = [newCondition()]) => ({ ...newTrigger(), players: running(groups), conditions, actions });
+
+  it("says nothing about a map with no triggers", () => {
+    expect(texts(fresh()).some((t) => /Victory|Defeat|Objectives/.test(t))).toBe(false);
+  });
+
+  it("wants a Victory, a Defeat and objectives for every human player, through the groups", () => {
+    const scn = fresh();
+    scn.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Victory)]));
+    let out = texts(scn);
+    expect(out).toContain("warn: No trigger gives Player 2 Victory; in a scenario a player wins only when a trigger says so.");
+    expect(out.some((t) => t.startsWith("warn: No trigger gives Player 1, Player 2 Defeat"))).toBe(true);
+    expect(out.some((t) => t.startsWith("info: No Set Mission Objectives for Player 1, Player 2"))).toBe(true);
+    // All Players covers everyone; a force covers its members.
+    scn.triggers.push(trigger([PlayerGroup.AllPlayers], [action(ActionType.Defeat)]));
+    scn.forces.playerForce[1] = 2;
+    scn.triggers.push(trigger([PlayerGroup.Force3], [action(ActionType.Victory), action(ActionType.SetMissionObjectives, { text: 1 })]));
+    scn.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.SetMissionObjectives, { text: 1 })]));
+    out = texts(scn);
+    expect(out.some((t) => /Victory|Defeat|Objectives/.test(t))).toBe(false);
+  });
+
+  it("recognises hyper triggers and warns about a Wait in a preserved trigger beside them", () => {
+    const scn = fresh();
+    const hyper = trigger([PlayerGroup.AllPlayers], [...Array.from({ length: 62 }, () => action(ActionType.Wait, { time: 0 })), action(ActionType.PreserveTrigger)], [{ ...newCondition(), type: ConditionType.Always }]);
+    scn.triggers.push(trigger([PlayerGroup.AllPlayers], [action(ActionType.Victory), action(ActionType.Defeat), action(ActionType.SetMissionObjectives, { text: 1 })]));
+    scn.triggers.push(hyper);
+    scn.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Wait, { time: 2000 }), action(ActionType.PreserveTrigger)]));
+    const out = texts(scn);
+    expect(out).toContain("info: Hyper triggers present (1 trigger): every other trigger fires about twelve times a second instead of once every two.");
+    expect(out.some((t) => t.startsWith("warn: Trigger 3 has a Wait and Preserve Trigger"))).toBe(true);
+    const issues = validateScenario(scn);
+    expect(issues.find((i) => i.text.startsWith("Hyper triggers"))?.target).toEqual({ kind: "trigger", index: 1 });
+    // Without hyper triggers a preserved Wait is an ordinary timer.
+    scn.triggers.splice(1, 1);
+    expect(texts(scn).some((t) => /Wait and Preserve/.test(t))).toBe(false);
   });
 });

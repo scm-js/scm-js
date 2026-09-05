@@ -812,3 +812,21 @@
   padding: 10px 12px;
   font-size: var(--fs-sm);
 }
+
+/* A plugin panel docked at the right (`api.ui.panel` with `dock: "right"`): a `.panel` like the built-in ones. */
+.panel.plugin-docked {
+  min-height: 120px;
+}
+.panel.plugin-docked .panel-head .icon-lead {
+  display: inline-flex;
+  color: var(--teal);
+}
+.panel.plugin-docked .panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 10px;
+}
+.panel.plugin-docked.grow .panel-body {
+  flex: 1;
+}

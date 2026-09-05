@@ -1323,3 +1323,13 @@
 }
 .gd-alt-head > svg { flex: none; color: var(--text-faint); }
 .gd-alt p { margin: 0; }
+
+/* The row a plugin adds to a built-in dialog (`api.ui.dialogSlot`), at the left of the footer. */
+.dlg-footer .left .dlg-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dlg-footer .left .dlg-slot:empty {
+  display: none;
+}

@@ -668,6 +668,7 @@ where it is.
 | `cursorTile()` | The tile under the pointer, as the status bar shows it. |
 | `flags()` / `setFlags(patch)` | The View menu's ticks: `grid`, `locations`, `locationNames`, `units`, `sprites`, `doodads`, `fog`, `elevation`, `buildability`, `startLocations`, `animateWater`, `animateUnits`. |
 | `gridSize()` / `setGridSize(8 \| 16 \| 32 \| 64 \| 128)` | Grid spacing in map pixels. |
+| `flash(target)` | Highlight something on the map for a moment: `{ rect }` (tiles), `{ units: [i…] }`, `{ locations: [i…] }` or `{ tiles: [{ x, y }…] }`, each with an optional `kind` (`"change"`, gold, the default, or `"attention"`, teal) and `ms` (600). It swells a little and fades by itself, several may run at once, and it never takes the pointer. The shared way to say "this just changed" or "look here", so every plugin's flash looks the same. |
 
 ### `api.data`
 
@@ -928,7 +929,9 @@ two ways to draw on the map, and the pickers.
 | `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself, the way Save reports. `kind` is `"ok"`, `"info"`, `"warn"` or `"error"`; `ttl` 0 keeps it until dismissed. |
 | `saveFile(data, fileName)` | Write bytes or a `Blob` to disk the way the editor's own exports do: through the browser's save dialog where it has one, else as a download. Resolves `{ route, fileName }`, or null when dismissed. |
 | `dialog(spec)` | A dialog in the editor's chrome. See below. |
-| `panel(spec)` | A panel that floats over the map and blocks nothing. See below. |
+| `panel(spec)` | A panel that floats over the map and blocks nothing, or one docked at the right beside the built-in panels. See below. |
+| `statusItem(spec)` | A cell of your own in the status bar: text, the plugin's icon, a spinner while `busy`, a click. See below. |
+| `dialogSlot(dialogId, spec)` | Add a button or a row to a built-in dialog. See below. |
 | `mapTool(spec)` | Take over the pointer on the map. See below. |
 | `overlay(spec)` | A picture drawn over the map that the user can switch on and off. See below. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
@@ -966,6 +969,40 @@ pixels (260 by default) and the panel is as tall as its content; `onClose` fires
 it closes. The user drags it by its title bar and closes it with the ×. It opens at the
 top-right of the map and remembers where it was left for the session. The handle has
 `close()`, `isOpen()` and `setTitle()`. Open as many as you like; they all close with the
+plugin.
+
+`dock: "right"` puts the panel in the right dock instead, under Minimap, Layers and
+Properties, with the same head and hide button the built-in panels have — the plugin's
+icon, the title, and the hide button as its close. That is the choice for anything the
+user keeps open while working: an assistant, a readout, a list they go back to. A docked
+panel keeps the dock on screen even when every built-in panel in it is hidden. `grow: true`
+lets it take the dock's spare height (a transcript wants that; a short readout does not).
+`width` is ignored when docked, since the dock has its own width.
+
+**Status items.** `statusItem({ text, title?, busy?, warn?, onClick? })` is a cell in the
+status bar with the plugin's icon, for a plugin that works in the background and should
+stay visible without a panel — "AI · working 12 s", "3 problems", "Synced". `busy` swaps
+the icon for a spinner, `warn` paints the cell as a warning, `onClick` makes it a button.
+Keep the handle and `set(patch)` it as things move; `remove()` takes it away, and so does
+disabling the plugin.
+
+**Dialog slots.** `dialogSlot(dialogId, { mount })` adds to a built-in dialog. Each time
+that dialog opens, `mount(body, host)` runs with an empty `<span>` at the left of the
+dialog's footer; fill it with the widgets and it reads as part of the dialog. `host` says
+which dialog (`host.dialog`), what it was opened with (`host.payload`), and lends the
+dialog's **working copy** as `host.fields` — the values in the form, not yet applied to
+the map — so a button can fill a field in and leave OK to the person. The dialogs and
+the fields each one lends:
+
+| Dialog id | Fields |
+| --- | --- |
+| `mapProperties` | `name`, `description` |
+| `textTriggerEditor` | `text` (the whole editor); `payload.briefing` says which list is shown |
+| `triggerEditor`, `stringEditor`, `playerSettings`, `missionBriefing` | none — a slot only |
+
+A field is `{ get(), set(value) }`, read live: a slot mounted once sees every keystroke.
+`host.close()` closes the dialog. Return a cleanup from `mount` if you started anything;
+it runs when the dialog closes, and the registration itself leaves with `dispose()` or the
 plugin.
 
 **Map tools.** `mapTool(spec)` takes over the pointer on the map. The viewport hands the
@@ -1082,4 +1119,4 @@ above. Read the one nearest to what you are writing.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, and what a site with no CORS headers means for a plugin. |
 | [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | `triggers.claim`, a dialog that keeps Escape for its own editor, files kept with the map through `document.extras`, and commands published for other plugins. |
-| [AI](https://github.com/scm-js/plugin-ai) | Calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |
+| [AI](https://github.com/scm-js/plugin-ai) | The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for its phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Also calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |

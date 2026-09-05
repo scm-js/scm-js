@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAtomValue } from "jotai";
 import { screenAtom } from "./atoms/editorAtoms";
 import { panelsAtom } from "./atoms/uiAtoms";
+import { pluginPanelsAtom } from "./atoms/pluginAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useApplyPreferences } from "./hooks/useApplyPreferences";
 import { useMapFileActions } from "./hooks/useMapFileActions";
@@ -41,6 +42,8 @@ function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boo
 export default function App() {
   const screen = useAtomValue(screenAtom);
   const panels = useAtomValue(panelsAtom);
+  // A plugin's docked panel (`api.ui.panel` with `dock: "right"`) keeps the dock on screen even with every built-in panel hidden.
+  const dockedPanels = useAtomValue(pluginPanelsAtom).some((p) => p.spec.dock === "right");
   const { guard } = useMapFileActions();
   const [dropTarget, setDropTarget] = useState(false);
   // Mounting the chrome is one big commit (menu bar, toolbar, both docks, the viewport and
@@ -103,7 +106,7 @@ export default function App() {
     return () => { document.removeEventListener("dragover", over); document.removeEventListener("drop", drop); };
   }, [guard]);
 
-  const rightVisible = panels.minimap || panels.layers || panels.properties;
+  const rightVisible = panels.minimap || panels.layers || panels.properties || dockedPanels;
 
   // Dropping a map anywhere in the window opens it — the dialog's own drop zone is
   // just the discoverable version of the same thing.

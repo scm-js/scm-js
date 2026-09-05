@@ -53,7 +53,7 @@ import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
 import { pluginContextRows } from "../../plugins/contextMenu";
@@ -245,6 +245,9 @@ export default function MapViewport() {
   // Plugin overlays (`api.ui.overlay`): drawn at their slot while visible, told the pointer, never given it.
   const overlays = useAtomValue(pluginOverlaysAtom);
   const overlayRevision = useAtomValue(pluginOverlayRevisionAtom);
+  // `api.view.flash`: boxes fading over the map; an effect below keeps repainting while any live and sweeps them after.
+  const flashes = useAtomValue(viewFlashesAtom);
+  const setFlashes = useSetAtom(viewFlashesAtom);
   const pastingClip = useAtomValue(clipPastingAtom);
   const fogTools = useFogTools();
   const fogMode = useAtomValue(fogModeAtom);
@@ -1095,6 +1098,25 @@ export default function MapViewport() {
 
     drawOverlays("everything");
 
+    // Flashes (`api.view.flash`): a box that swells a little and fades, gold for a change, teal for attention.
+    if (flashes.length > 0) {
+      const now = Date.now();
+      for (const f of flashes) {
+        const t = Math.min(1, Math.max(0, (now - f.start) / f.ms));
+        if (t >= 1) continue;
+        const a = 1 - t;
+        const grow = 2 + 6 * t;
+        const [r, g, b] = f.kind === "attention" ? [79, 209, 197] : [230, 185, 92];
+        const left = view.x(f.box.left) - grow, top = view.y(f.box.top) - grow;
+        const w = (f.box.right - f.box.left) * zoom + grow * 2, h = (f.box.bottom - f.box.top) * zoom + grow * 2;
+        ctx.fillStyle = `rgba(${r},${g},${b},${(0.22 * a).toFixed(3)})`;
+        ctx.fillRect(left, top, w, h);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${a.toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w) - 1, Math.round(h) - 1);
+      }
+    }
+
     // A plugin's map tool draws last, over everything, in canvas pixels through the view it is given.
     if (tooling && mapTool) {
       ctx.save();
@@ -1157,7 +1179,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry, repaintRequest]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry, repaintRequest, flashes]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —
@@ -1188,6 +1210,21 @@ export default function MapViewport() {
     drawRaf.current = 0;
     drawPending.current = false;
   }, []);
+
+  // While any flash is live, paint every frame; once the last one has faded, sweep the list (which repaints once more, clean).
+  useEffect(() => {
+    if (flashes.length === 0) return;
+    let raf = 0;
+    const tick = () => {
+      const now = Date.now();
+      const live = flashes.filter((f) => f.start + f.ms > now);
+      if (live.length !== flashes.length) { setFlashes(live); return; }
+      scheduleDraw();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [flashes, scheduleDraw, setFlashes]);
 
   /* ── the fog and locations layers show their overlays ── */
   useAutoShow(layer === "fog", "fog", setFlags);

@@ -24,8 +24,8 @@ import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, status
 import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
-  pluginRuntimesAtom, setOverlayVisibleAtom,
+  pluginCommandsAtom, pluginContextItemsAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
@@ -105,6 +105,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1063,7 +1064,88 @@ export function viewApi(store: Store): ViewApi {
     setFlags: (patch) => store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), ...patch }),
     gridSize: () => store.get(gridSizeAtom),
     setGridSize: (size) => store.set(gridSizeAtom, size),
+    flash: (target) => flashOnMap(store, target),
   };
+}
+
+/** How long a flash lasts unless the target says. */
+export const FLASH_MS = 600;
+
+/**
+ * `api.view.flash`: turn the target into boxes in map pixels now — a unit's placement box,
+ * a location's bounds, a rect's tiles — and put them on `viewFlashesAtom`, where the
+ * viewport paints them fading and sweeps them once they are over. Resolved at call time
+ * on purpose: the units it names may move or go before the flash ends, and the flash is
+ * about where the change *was*.
+ */
+export function flashOnMap(store: Store, target: FlashTarget): void {
+  const scn = store.get(scenarioAtom);
+  if (!scn) return;
+  const kind = target.kind ?? "change";
+  const ms = Math.max(50, Math.min(10_000, target.ms ?? FLASH_MS));
+  const boxes: ViewFlash["box"][] = [];
+  if ("rect" in target) {
+    const r = target.rect;
+    const x0 = Math.max(0, Math.min(r.x0, r.x1)), x1 = Math.min(scn.width, Math.max(r.x0, r.x1));
+    const y0 = Math.max(0, Math.min(r.y0, r.y1)), y1 = Math.min(scn.height, Math.max(r.y0, r.y1));
+    if (x1 > x0 && y1 > y0) boxes.push({ left: x0 * TILE_PX, top: y0 * TILE_PX, right: x1 * TILE_PX, bottom: y1 * TILE_PX });
+  } else if ("units" in target) {
+    const tables = peekUnitAssets()?.units ?? null;
+    for (const i of target.units) {
+      const u = scn.units[i];
+      if (!u) continue;
+      const b = unitBox(unitGeometry(tables, u.unitId), u.x, u.y);
+      boxes.push({ left: b.left, top: b.top, right: b.right, bottom: b.bottom });
+    }
+  } else if ("locations" in target) {
+    for (const i of target.locations) {
+      const l = scn.locations[i];
+      if (!l || i === ANYWHERE_INDEX || !isLocationUsed(l)) continue;
+      const b = boundsOf(l);
+      boxes.push({ left: b.left, top: b.top, right: b.right, bottom: b.bottom });
+    }
+  } else if ("tiles" in target) {
+    for (const t of target.tiles) {
+      if (t.x < 0 || t.y < 0 || t.x >= scn.width || t.y >= scn.height) continue;
+      boxes.push({ left: t.x * TILE_PX, top: t.y * TILE_PX, right: (t.x + 1) * TILE_PX, bottom: (t.y + 1) * TILE_PX });
+    }
+  }
+  if (boxes.length === 0) return;
+  const start = Date.now();
+  const live = store.get(viewFlashesAtom).filter((f) => f.start + f.ms > start);
+  store.set(viewFlashesAtom, [...live, ...boxes.map((box) => ({ key: nextContributionKey(), box, kind, start, ms }))]);
+}
+
+/** Drop the flashes that have run their course; the viewport calls this as it paints. */
+export function sweepFlashes(store: Store, now = Date.now()): void {
+  const list = store.get(viewFlashesAtom);
+  if (list.length === 0) return;
+  const live = list.filter((f) => f.start + f.ms > now);
+  if (live.length !== list.length) store.set(viewFlashesAtom, live);
+}
+
+/** `api.ui.statusItem`: one cell in the status bar, kept on `pluginStatusItemsAtom` until removed or the plugin goes. */
+export function addStatusItem(store: Store, bag: Contributions, info: PluginInfo, spec: StatusItemSpec): StatusItemHandle {
+  const key = nextContributionKey();
+  let shown = true;
+  const write = (next: StatusItemSpec) => store.set(pluginStatusItemsAtom, store.get(pluginStatusItemsAtom).map((e) => (e.key === key ? { ...e, spec: next } : e)));
+  const handle: StatusItemHandle = {
+    set: (patch) => {
+      if (!shown) return;
+      const cur = store.get(pluginStatusItemsAtom).find((e) => e.key === key)?.spec ?? spec;
+      write({ ...cur, ...patch });
+    },
+    remove: () => {
+      if (!shown) return;
+      shown = false;
+      store.set(pluginStatusItemsAtom, store.get(pluginStatusItemsAtom).filter((e) => e.key !== key));
+    },
+    isShown: () => shown,
+  };
+  store.set(pluginStatusItemsAtom, [...store.get(pluginStatusItemsAtom), { key, plugin: info, spec: { ...spec } }]);
+  const sweep = bag.add(() => handle.remove());
+  const unsub = store.sub(pluginStatusItemsAtom, () => { if (!shown) { unsub(); sweep.dispose(); } });
+  return handle;
 }
 
 /* ── Game data ──────────────────────────────────────────── */
@@ -1724,6 +1806,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const sweep = bag.add(() => handle.close());
         const unsub = store.sub(pluginPanelsAtom, () => { if (closed) { unsub(); sweep.dispose(); } });
         return handle;
+      },
+      statusItem: (spec) => addStatusItem(store, bag, info, spec),
+      dialogSlot: (dialog, spec) => {
+        const key = nextContributionKey();
+        store.set(pluginDialogSlotsAtom, [...store.get(pluginDialogSlotsAtom), { key, plugin: info, dialog, spec }]);
+        return bag.add(() => store.set(pluginDialogSlotsAtom, store.get(pluginDialogSlotsAtom).filter((e) => e.key !== key)));
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),

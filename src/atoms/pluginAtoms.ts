@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest, TriggerClaimSpec } from "../plugins/api";
+  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest, SlottedDialogId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import { browserStorage } from "./storage";
@@ -327,6 +327,46 @@ export interface PluginPanelEntry {
 }
 
 export const pluginPanelsAtom = atom<PluginPanelEntry[]>([]);
+
+/* ── Status bar items ───────────────────────────────────── */
+
+/** One `api.ui.statusItem`, a cell `StatusBar` renders after the message; `spec` is replaced whole by the handle's `set`. */
+export interface PluginStatusItemEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: StatusItemSpec;
+}
+
+export const pluginStatusItemsAtom = atom<PluginStatusItemEntry[]>([]);
+
+/* ── Dialog slots ───────────────────────────────────────── */
+
+/** One `api.ui.dialogSlot`: `DialogSlots` mounts every entry for its dialog when that dialog opens. */
+export interface PluginDialogSlotEntry {
+  key: number;
+  plugin: PluginInfo;
+  dialog: SlottedDialogId;
+  spec: DialogSlotSpec;
+}
+
+export const pluginDialogSlotsAtom = atom<PluginDialogSlotEntry[]>([]);
+
+/* ── View flashes ───────────────────────────────────────── */
+
+/**
+ * One `api.view.flash`: a box in map pixels the viewport paints fading from `start` over
+ * `ms`. The list is swept as entries expire; the viewport keeps repainting while any live.
+ */
+export interface ViewFlash {
+  key: number;
+  /** Map pixels, left/top inclusive, right/bottom exclusive. */
+  box: { left: number; top: number; right: number; bottom: number };
+  kind: FlashKind;
+  start: number;
+  ms: number;
+}
+
+export const viewFlashesAtom = atom<ViewFlash[]>([]);
 
 /* ── Trigger claims ─────────────────────────────────────── */
 

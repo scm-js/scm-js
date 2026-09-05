@@ -560,7 +560,11 @@ moved Anywhere, triggers pointing at unused locations or strings past the end of
 table, unit and player values the game does not have, AI scripts it does not ship, Play
 WAV actions with no file in the archive, switches tested but never set, and the file's
 own health — missing sections, player types where StarEdit's copy disagrees with the
-game's, the isometric record. Double-click an issue to go to it. The same check runs
+game's, the isometric record. A map with triggers is a scenario, and gets the scenario
+checks too: a human player no trigger ever gives Victory or Defeat (in a scenario nobody
+wins or loses unless a trigger says so), a missing Set Mission Objectives, and — when
+hyper triggers are present — a Wait in another preserved trigger, which stalls that
+player's whole trigger queue. Double-click an issue to go to it. The same check runs
 inside the Save dialog.
 
 ### Test Map

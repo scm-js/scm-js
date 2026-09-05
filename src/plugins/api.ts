@@ -1043,6 +1043,16 @@ export interface ViewApi {
   /** Grid spacing in map pixels (32 = one tile). */
   gridSize(): number;
   setGridSize(size: 8 | 16 | 32 | 64 | 128): void;
+  /**
+   * Highlight something on the map for a moment: the rect an edit filled, the units it
+   * placed, the location it moved. Fades by itself; several may run at once. Nothing to
+   * clean up.
+   *
+   * @example
+   * const r = api.document.edit("Fill", (tx) => tx.fillFlat(rect, terrain));
+   * if (r.changed) api.view.flash({ rect });
+   */
+  flash(target: FlashTarget): void;
 }
 
 /* ── Commands ───────────────────────────────────────────── */
@@ -1753,8 +1763,19 @@ export interface DialogHandle {
  */
 export interface PanelSpec {
   title: string;
-  /** In CSS pixels; 260 by default. The panel is as tall as its content, up to the map's height. */
+  /** In CSS pixels; 260 by default. The panel is as tall as its content, up to the map's height. Ignored when docked. */
   width?: number;
+  /**
+   * Where the panel lives. `"float"` (the default) is a frame over the map the user drags
+   * about. `"right"` puts it in the right dock as a panel of its own, under Minimap, Layers
+   * and Properties, with the same head and hide button the built-in panels have — the
+   * choice for anything the user keeps open while working, such as an assistant or a
+   * readout. A docked panel shows the dock even when the user has hidden every built-in
+   * panel in it.
+   */
+  dock?: "float" | "right";
+  /** A docked panel that takes the dock's spare height (a transcript, a long list); off by default. */
+  grow?: boolean;
   /** Fill `body` (an empty `<div>` inside the panel); return a cleanup if you need one. */
   mount(body: HTMLElement, panel: PanelHandle): void | (() => void);
   /** The panel closed, whichever way. */
@@ -1766,6 +1787,78 @@ export interface PanelHandle {
   isOpen(): boolean;
   setTitle(title: string): void;
 }
+
+/**
+ * One cell in the status bar (`ui.statusItem`): a line of text with the plugin's icon,
+ * a spinner while `busy`, and a click. It is how a plugin that works in the background
+ * stays visible without a panel — "AI · working 12 s", "3 problems", "Synced".
+ */
+export interface StatusItemSpec {
+  text: string;
+  /** The tooltip. */
+  title?: string;
+  /** Show a spinner in the cell. */
+  busy?: boolean;
+  /** Paint the cell as a warning. */
+  warn?: boolean;
+  onClick?: () => void;
+}
+
+export interface StatusItemHandle {
+  /** Change any of the fields; the cell redraws. */
+  set(patch: Partial<StatusItemSpec>): void;
+  remove(): void;
+  isShown(): boolean;
+}
+
+/**
+ * The dialogs a plugin may add to (`ui.dialogSlot`), and the fields each one exposes to
+ * the slot. A field is the dialog's *working copy* — what the person sees in the form,
+ * not yet applied to the map — so a slot's button can fill it in and leave OK to them.
+ *
+ * - `mapProperties`: `name`, `description`.
+ * - `textTriggerEditor`: `text` (the whole editor); `payload.briefing` says which list.
+ * - `triggerEditor`, `stringEditor`, `playerSettings`, `missionBriefing`: no fields, a slot only.
+ */
+export type SlottedDialogId = "mapProperties" | "textTriggerEditor" | "triggerEditor" | "stringEditor" | "playerSettings" | "missionBriefing";
+
+/** A form field a dialog lends to a slot: read it, set it, hear it change. */
+export interface DialogField {
+  get(): string;
+  set(value: string): void;
+}
+
+/** What a slot's `mount` is handed: which dialog, its payload, its fields, and a way to close it. */
+export interface DialogSlotHost {
+  readonly dialog: SlottedDialogId;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly fields: Readonly<Record<string, DialogField>>;
+  close(): void;
+}
+
+/**
+ * Something a plugin mounts *inside* a built-in dialog — a button in Map Properties
+ * that suggests a name, one in the Text Trigger Editor that explains the text. The slot
+ * is a row at the left of the dialog's footer; fill it with the widgets, and it looks like
+ * part of the dialog. `mount` runs every time the dialog opens, with a cleanup on close.
+ */
+export interface DialogSlotSpec {
+  mount(body: HTMLElement, host: DialogSlotHost): void | (() => void);
+}
+
+/**
+ * What `view.flash` highlights: a tile rect, or units / locations by index. The
+ * highlight fades over `ms` (600 by default) and never blocks or takes the pointer; it is
+ * the shared way to say "this just changed" or "look here", so every plugin's flash looks
+ * the same. `kind` picks the colour: `"change"` (gold, the default) or `"attention"` (teal).
+ */
+export type FlashTarget =
+  | { rect: Rect; kind?: FlashKind; ms?: number }
+  | { units: number[]; kind?: FlashKind; ms?: number }
+  | { locations: number[]; kind?: FlashKind; ms?: number }
+  | { tiles: { x: number; y: number }[]; kind?: FlashKind; ms?: number };
+
+export type FlashKind = "change" | "attention";
 
 /** The pointer over the map, in the map's own units. A tile is 32 × 32 pixels. */
 export interface MapPointer {
@@ -1912,8 +2005,33 @@ export interface UiApi {
    */
   saveFile(data: Blob | Uint8Array, fileName: string): Promise<{ route: "picker" | "download"; fileName: string } | null>;
   dialog(spec: DialogSpec): DialogHandle;
-  /** Open a floating panel over the map. As many as you like; each closes with the plugin. */
+  /**
+   * Open a panel: floating over the map, or docked at the right with the built-in panels
+   * (`spec.dock`). As many as you like; each closes with the plugin.
+   */
   panel(spec: PanelSpec): PanelHandle;
+  /**
+   * A cell of your own in the status bar. One line of text beside the plugin's icon, a
+   * spinner while `busy`, a click. Keep the handle and `set` it as things move; it
+   * leaves with `remove()` or the plugin.
+   */
+  statusItem(spec: StatusItemSpec): StatusItemHandle;
+  /**
+   * Add to a built-in dialog. `mount` runs in a row at the left of the dialog's footer each
+   * time that dialog opens, with the dialog's working-copy fields to read and fill
+   * (`SlottedDialogId` lists which dialogs and fields). Returns the registration; it
+   * leaves with `dispose()` or the plugin.
+   *
+   * @example
+   * api.ui.dialogSlot("mapProperties", {
+   *   mount(body, dlg) {
+   *     body.append(api.ui.widgets.button("Suggest a name", { onClick: async () => {
+   *       dlg.fields.name.set(await suggestName(dlg.fields.description.get()));
+   *     } }));
+   *   },
+   * });
+   */
+  dialogSlot(dialog: SlottedDialogId, spec: DialogSlotSpec): Disposable;
   /**
    * Take over the pointer on the map until `stop()`, Esc, a right-click, a map change
    * or another tool. One tool runs at a time — starting one stops the previous — and a

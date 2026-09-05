@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useSetAtom } from "jotai";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { Button } from "./index";
+import DialogSlots, { type DialogSlotProps } from "./DialogSlots";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
 
@@ -27,6 +28,11 @@ export interface DialogFrameProps {
   showApply?: boolean;
   /** Called before Escape closes the dialog; `preventDefault()` keeps it open (an embedded editor wants Escape for itself). */
   onEscapeKeyDown?: (e: KeyboardEvent) => void;
+  /**
+   * Let plugins add to this dialog (`api.ui.dialogSlot`): which id they register for, and
+   * the working-copy fields lent to them. Rendered at the left of the footer, before `footerLeft`.
+   */
+  slot?: DialogSlotProps;
 }
 
 /** Classic dialog chrome: title strip, scrollable body, button row. */
@@ -47,6 +53,7 @@ export default function DialogFrame({
   okDisabled,
   showApply,
   onEscapeKeyDown,
+  slot,
 }: DialogFrameProps) {
   const close = useSetAtom(closeDialogAtom);
   const dismiss = () => close(dialogKey);
@@ -85,7 +92,10 @@ export default function DialogFrame({
           </div>
           {footer !== null && (
             <div className="dlg-footer">
-              <div className="left">{footerLeft}</div>
+              <div className="left">
+                {slot && <DialogSlots dialogKey={dialogKey} dialog={slot.dialog} fields={slot.fields} payload={slot.payload} />}
+                {footerLeft}
+              </div>
               {footer ?? (
                 <>
                   <Button variant="primary" disabled={okDisabled} onClick={() => { onOk?.(); dismiss(); }}>

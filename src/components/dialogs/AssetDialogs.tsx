@@ -93,6 +93,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      slot={{ dialog: "stringEditor" }}
       footerLeft={<span className={count > capacity ? "error-text" : ""}>{count} strings · {unused} unused{empty > 0 ? ` · ${empty} empty` : ""} · capacity {capacity.toLocaleString()} ({scenario.strings.extended ? "STRx" : "STR"})</span>}
     >
       <div className="row">

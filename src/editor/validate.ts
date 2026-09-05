@@ -9,7 +9,7 @@ import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { PlayerType } from "../formats/chk/sections/players";
 import { getString } from "../formats/chk/sections/strings";
-import { ActionFlag, ActionType, ConditionFlag, ConditionType, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
+import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitName } from "../data/units";
 import { UnitClass } from "../formats/chk/sections/triggers";
@@ -183,6 +183,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   for (const s of [...tested].sort((a, b) => a - b)) {
     if (!set.has(s)) add("warn", `Switch ${s + 1} is tested by a condition but no action ever sets it.`, "Triggers", { kind: "dialog", id: "switches" });
   }
+  for (const i of umsIssues(scn)) add(i.level, i.text, i.where, i.target);
 
   // ── Terrain ──
   if (ctx.isom?.kind === "missing") add("warn", "The map has no ISOM section: the isometric brush needs one (the Repair plugin rebuilds it: Tools ▸ Repair Map…).", "Terrain");
@@ -193,6 +194,70 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
 
   const order: Record<IssueLevel, number> = { error: 0, warn: 1, info: 2 };
   return issues.sort((a, b) => order[a.level] - order[b.level]);
+}
+
+/* ── Scenario (UMS) checks ──────────────────────────────── */
+
+/** A trigger's player list as the set of slots 0–7 it runs for, through the groups (All Players, a force, Player N). */
+export function triggerRunsFor(t: TriggerRecord, scn: Pick<Scenario, "forces" | "playerTypes">): Set<number> {
+  const out = new Set<number>();
+  const players = t.players;
+  for (let p = 0; p < 8; p++) {
+    if (players[p]) out.add(p);
+    if (players[PlayerGroup.AllPlayers]) out.add(p);
+    const force = scn.forces.playerForce[p];
+    if (force !== undefined && players[PlayerGroup.Force1 + force]) out.add(p);
+  }
+  return out;
+}
+
+/** Whether a trigger looks like one of the community's hyper triggers: preserved, unconditional, mostly Wait 0. */
+export function isHyperTrigger(t: TriggerRecord): boolean {
+  const live = t.actions.filter((a) => a.type !== ActionType.None && !(a.flags & ActionFlag.Disabled));
+  const waits = live.filter((a) => a.type === ActionType.Wait && a.time <= 1);
+  const preserved = live.some((a) => a.type === ActionType.PreserveTrigger);
+  const alwaysOnly = t.conditions.every((c) => c.type === ConditionType.None || c.type === ConditionType.Always || (c.flags & ConditionFlag.Disabled));
+  return preserved && alwaysOnly && waits.length >= 8 && waits.length >= live.length - 2;
+}
+
+/**
+ * What a scenario (a map with triggers) needs that a melee map does not: a way for every
+ * human player to win and to lose, objectives to read, and Waits that do not fight the
+ * hyper triggers. A map with no triggers is melee and gets none of these.
+ */
+export function umsIssues(scn: Scenario): Issue[] {
+  const issues: Issue[] = [];
+  const live = scn.triggers.filter((t) => !(t.flags & TriggerFlag.Disabled));
+  if (live.length === 0) return issues;
+  const humans = scn.playerTypes.map((t, p) => (t === PlayerType.Human ? p : -1)).filter((p) => p >= 0 && p < 8);
+  const actionsOf = (t: TriggerRecord) => t.actions.filter((a) => a.type !== ActionType.None && !(a.flags & ActionFlag.Disabled));
+  const has = (type: number) => (t: TriggerRecord) => actionsOf(t).some((a) => a.type === type);
+  const reach = (type: number) => {
+    const set = new Set<number>();
+    for (const t of live.filter(has(type))) for (const p of triggerRunsFor(t, scn)) set.add(p);
+    return set;
+  };
+  const victory = reach(ActionType.Victory), defeat = reach(ActionType.Defeat), objectives = reach(ActionType.SetMissionObjectives);
+  const noVictory = humans.filter((p) => !victory.has(p));
+  const noDefeat = humans.filter((p) => !defeat.has(p));
+  const noObjectives = humans.filter((p) => !objectives.has(p));
+  const list = (ps: number[]) => ps.map((p) => `Player ${p + 1}`).join(", ");
+  if (noVictory.length > 0) issues.push({ level: "warn", text: `No trigger gives ${list(noVictory)} Victory; in a scenario a player wins only when a trigger says so.`, where: "Triggers", target: { kind: "dialog", id: "triggerEditor" } });
+  if (noDefeat.length > 0) issues.push({ level: "warn", text: `No trigger gives ${list(noDefeat)} Defeat; without one that player can never lose (a scenario does not end when their units are gone).`, where: "Triggers", target: { kind: "dialog", id: "triggerEditor" } });
+  if (noObjectives.length > 0) issues.push({ level: "info", text: `No Set Mission Objectives for ${list(noObjectives)}; the objectives box will show the melee text.`, where: "Triggers", target: { kind: "dialog", id: "triggerEditor" } });
+  const hypers = live.map((t, i) => ({ t, i })).filter(({ t }) => isHyperTrigger(t));
+  if (hypers.length > 0) {
+    issues.push({ level: "info", text: `Hyper triggers present (${hypers.length} trigger${hypers.length === 1 ? "" : "s"}): every other trigger fires about twelve times a second instead of once every two.`, where: "Triggers", target: { kind: "trigger", index: scn.triggers.indexOf(hypers[0].t) } });
+    live.forEach((t) => {
+      if (isHyperTrigger(t)) return;
+      const acts = actionsOf(t);
+      if (acts.some((a) => a.type === ActionType.Wait) && acts.some((a) => a.type === ActionType.PreserveTrigger)) {
+        const index = scn.triggers.indexOf(t);
+        issues.push({ level: "warn", text: `Trigger ${index + 1} has a Wait and Preserve Trigger: with hyper triggers on, a Wait stalls that player's whole trigger queue (the hyper triggers included). Use a death counter as the timer instead.`, where: "Triggers", target: { kind: "trigger", index } });
+      }
+    });
+  }
+  return issues;
 }
 
 /** Only the issues about triggers, briefings and switches — Triggers ▸ Validate Triggers. */

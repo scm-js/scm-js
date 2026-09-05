@@ -78,7 +78,15 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Map Properties" icon={<FileText size={14} />} size="md" onOk={apply} showApply>
+    <DialogFrame
+      dialogKey={entry.key}
+      title="Map Properties"
+      icon={<FileText size={14} />}
+      size="md"
+      onOk={apply}
+      showApply
+      slot={{ dialog: "mapProperties", fields: { name: { get: () => localName, set: setLocalName }, description: { get: () => localDesc, set: setLocalDesc } } }}
+    >
       <Group title="Scenario">
         <div className="form wide">
           <Field label="Name" hint="Up to 128 characters. Control bytes show as <XX> while the field has focus, and may be typed that way.">

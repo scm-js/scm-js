@@ -537,6 +537,7 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
+      slot={{ dialog: "triggerEditor" }}
       footerLeft={<span>{local.length} trigger{local.length === 1 ? "" : "s"}</span>}
     >
       <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} claims={claims} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
@@ -564,6 +565,7 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
+      slot={{ dialog: "missionBriefing" }}
       footerLeft={<span>{local.length} briefing{local.length === 1 ? "" : "s"} · one per player, played before the map starts</span>}
     >
       <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
@@ -646,6 +648,7 @@ export function TextTriggerEditorDialog({ entry }: DialogProps) {
       title="Text Trigger Editor"
       icon={<Braces size={14} />}
       size="full"
+      slot={{ dialog: "textTriggerEditor", payload: { briefing }, fields: { text: { get: () => form.text, set: (text) => setForm({ ...form, text, error: null, status: "" }) } } }}
       footerLeft={
         form.error
           ? <span className="trig-error">{form.error.message}</span>

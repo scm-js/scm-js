@@ -33,6 +33,7 @@ import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
+  pluginDialogSlotsAtom, pluginStatusItemsAtom, viewFlashesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -2005,6 +2006,85 @@ describe("plugin overlays", () => {
     o.hide();
     expect(views).toBe(before + 1);
     bag.dispose();
+  });
+});
+
+describe("docked panels, status items, dialog slots and flashes", () => {
+  it("keeps a docked panel in the same registry, marked by its spec", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const docked = api.ui.panel({ title: "Assistant", dock: "right", grow: true, mount: () => {} });
+    api.ui.panel({ title: "Float", mount: () => {} });
+    expect(store.get(pluginPanelsAtom).map((p) => [p.spec.title, p.spec.dock ?? "float"])).toEqual([["Assistant", "right"], ["Float", "float"]]);
+    docked.close();
+    expect(store.get(pluginPanelsAtom).map((p) => p.spec.title)).toEqual(["Float"]);
+    bag.dispose();
+    expect(store.get(pluginPanelsAtom)).toEqual([]);
+  });
+
+  it("adds a status bar cell, patches it through the handle, and removes it with the plugin", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const item = api.ui.statusItem({ text: "AI · idle" });
+    expect(store.get(pluginStatusItemsAtom).map((e) => [e.plugin.id, e.spec.text, e.spec.busy])).toEqual([["t", "AI · idle", undefined]]);
+    item.set({ text: "AI · working", busy: true });
+    expect(store.get(pluginStatusItemsAtom)[0].spec).toEqual({ text: "AI · working", busy: true });
+    item.set({ busy: false });
+    expect(store.get(pluginStatusItemsAtom)[0].spec).toEqual({ text: "AI · working", busy: false });
+    expect(item.isShown()).toBe(true);
+    const other = api.ui.statusItem({ text: "2" });
+    item.remove();
+    item.remove();
+    item.set({ text: "gone" });
+    expect(store.get(pluginStatusItemsAtom).map((e) => e.spec.text)).toEqual(["2"]);
+    expect(item.isShown()).toBe(false);
+    bag.dispose();
+    expect(other.isShown()).toBe(false);
+    expect(store.get(pluginStatusItemsAtom)).toEqual([]);
+  });
+
+  it("registers a dialog slot per dialog id and takes it back on dispose", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const a = api.ui.dialogSlot("mapProperties", { mount: () => {} });
+    api.ui.dialogSlot("textTriggerEditor", { mount: () => {} });
+    expect(store.get(pluginDialogSlotsAtom).map((e) => [e.plugin.id, e.dialog])).toEqual([["t", "mapProperties"], ["t", "textTriggerEditor"]]);
+    a.dispose();
+    expect(store.get(pluginDialogSlotsAtom).map((e) => e.dialog)).toEqual(["textTriggerEditor"]);
+    bag.dispose();
+    expect(store.get(pluginDialogSlotsAtom)).toEqual([]);
+  });
+
+  it("turns a flash target into boxes in map pixels, clamped, and forgets expired ones", () => {
+    const { store, scn } = blankStore(8, 6);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    api.view.flash({ rect: { x0: -2, y0: 1, x1: 3, y1: 99 } });
+    let list = store.get(viewFlashesAtom);
+    expect(list.map((f) => [f.box, f.kind, f.ms])).toEqual([[{ left: 0, top: 32, right: 96, bottom: 192 }, "change", 600]]);
+    // Units by index: the placement box round the unit; a missing index is skipped.
+    api.document.edit("unit", (tx) => { tx.addUnits([tx.makeUnit(0, 0, 100, 100)]); });
+    expect(scn.units.length).toBe(1);
+    api.view.flash({ units: [0, 7], kind: "attention", ms: 100 });
+    list = store.get(viewFlashesAtom);
+    expect(list.length).toBe(2);
+    expect(list[1].kind).toBe("attention");
+    expect(list[1].box.left).toBeLessThan(100);
+    expect(list[1].box.right).toBeGreaterThan(100);
+    // Locations: slot 63 (Anywhere) and unused slots are skipped; tiles are one box each.
+    api.view.flash({ locations: [63, 5] });
+    expect(store.get(viewFlashesAtom).length).toBe(2);
+    api.view.flash({ tiles: [{ x: 1, y: 1 }, { x: 99, y: 0 }] });
+    expect(store.get(viewFlashesAtom).at(-1)?.box).toEqual({ left: 32, top: 32, right: 64, bottom: 64 });
+    // A new flash sweeps the expired ones; nothing to flash writes nothing.
+    const stale = store.get(viewFlashesAtom).map((f) => ({ ...f, start: f.start - 10_000 }));
+    store.set(viewFlashesAtom, stale);
+    api.view.flash({ rect: { x0: 0, y0: 0, x1: 1, y1: 1 } });
+    expect(store.get(viewFlashesAtom).length).toBe(1);
+    api.view.flash({ rect: { x0: 5, y0: 5, x1: 5, y1: 5 } });
+    expect(store.get(viewFlashesAtom).length).toBe(1);
   });
 });
 

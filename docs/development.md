@@ -310,11 +310,16 @@ gets from an address to a running `activate`.
 | `src/atoms/pluginAtoms.ts` | The installed list, the stored code copies, the runtimes, the contribution registries, and the one-at-a-time requests the viewport serves: picks, map tools, overlays, panels, claims. |
 | `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps the runtimes in step with the list. |
 | `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, Browse, the Add / Update confirmation, and the frame a plugin's dialog mounts into. |
-| `src/components/panels/PluginPanels.tsx` | The floating frames a plugin's panel mounts into. |
+| `src/components/panels/PluginPanels.tsx` | The floating frames a plugin's panel mounts into, and `DockedPluginPanels`, the `.panel`s the right dock renders for `dock: "right"`. |
+| `src/components/ui/DialogSlots.tsx` | The footer row a plugin's `dialogSlot` mounts into; a dialog opts in by passing `slot` to `DialogFrame`, naming its id and lending its working-copy fields. |
 
 The chrome reads the registries: the menu bar merges plugin menu items into its model,
-the viewport and the terrain palette append the matching context items, and the hotkey
-hook checks plugin combos first. The viewport also serves the requests: a pick ahead of
+the viewport and the terrain palette append the matching context items, the status bar
+renders the plugin status items after its message cell, the right dock renders the docked
+panels after Properties (and stays on screen for them), `DialogFrame` mounts the slots
+registered for its dialog, and the hotkey hook checks plugin combos first. `view.flash`
+puts boxes in map pixels on `viewFlashesAtom`; the viewport paints them fading at the end
+of its pass and repaints every frame until the last one is over. The viewport also serves the requests: a pick ahead of
 every layer, then a running map tool, then the overlays at their slots in the paint pass,
 each with a guarded `finish` so its promise settles exactly once however it ends.
 

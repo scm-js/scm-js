@@ -2,6 +2,8 @@ import { useAtomValue } from "jotai";
 import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, zoomAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
+import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
+import { PluginIconView } from "../ui/PluginIconView";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { hexTile } from "../../formats/tileset/palette";
 import { tileGroup, tileSubIndex } from "../../formats/chk/sections/terrain";
@@ -22,6 +24,7 @@ export default function StatusBar() {
   const version = useAtomValue(mapVersionAtom);
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
+  const pluginItems = useAtomValue(pluginStatusItemsAtom);
   useAtomValue(terrainRevisionAtom);
   const tileId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
@@ -61,6 +64,20 @@ export default function StatusBar() {
         </span>
       )}
       <span className="status-cell grow msg">{msg}</span>
+      {pluginItems.map((item) => (
+        <span
+          key={item.key}
+          className={`status-cell plugin-status${item.spec.warn ? " warn" : ""}${item.spec.onClick ? " clickable" : ""}`}
+          title={item.spec.title ?? item.plugin.name}
+          role={item.spec.onClick ? "button" : undefined}
+          tabIndex={item.spec.onClick ? 0 : undefined}
+          onClick={item.spec.onClick}
+          onKeyDown={item.spec.onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); item.spec.onClick?.(); } } : undefined}
+        >
+          {item.spec.busy ? <span className="status-spinner" aria-label="working" /> : <PluginIconView icon={item.plugin.icon} size={11} />}
+          <span>{item.spec.text}</span>
+        </span>
+      ))}
       <span className="status-cell" title="Map revision">
         <span className="badge gold">{VERSION_LABEL[version]}</span>
       </span>

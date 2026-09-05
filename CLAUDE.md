@@ -331,6 +331,13 @@ the section choice per revision and byte-for-byte re-encoding against the fixtur
 
 ### Resize, validation, find, preferences (`src/editor/resize.ts`, `validate.ts`, `find.ts`, `src/atoms/preferencesAtoms.ts`)
 
+`validate.ts#umsIssues` is the scenario half of Check Map, run only when the map has a live
+trigger (a map without triggers is melee): through `triggerRunsFor` (a trigger's 27 player
+bytes resolved to slots 0–7 via All Players and the forces) it warns on a human player no
+trigger gives Victory or Defeat and notes a missing Set Mission Objectives; `isHyperTrigger`
+recognises the community's hyper triggers (preserved, unconditional, ≥ 8 Wait 0s that are
+nearly all of the actions) and, when they are present, warns on any other preserved trigger
+carrying a Wait, since that stalls the player's queue. `tests/validate.test.ts`.
 `resizeScenario` is a transaction outside the undo model, applied through `resizeDocumentAtom`
 (drops both stacks, bumps every revision, mirrors width/height into the display atoms). `dx` is
 forced even so left/right tile pairs keep their columns; ISOM is `rebuildIsomFromTiles` when a
@@ -824,7 +831,22 @@ goes through `setOverlayVisibleAtom` so `onToggle` fires once per change and
 `api.ui.panel` is a floating, non-modal frame over the map (`pluginPanelsAtom`,
 `components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
 positions kept per plugin + title for the session, opens top-right) — hotkeys keep working since
-it is not in the dialog stack. `api.palette` reads and sets the object palettes' picks
+it is not in the dialog stack. `PanelSpec.dock: "right"` puts the same entry in the right dock
+instead (`DockedPluginPanels` in the same file, rendered by `Docks.tsx` after Properties as a
+`.panel.plugin-docked` with the built-in panel head; `App.tsx`'s `rightVisible` counts them, so
+the dock stays up with every built-in panel hidden; `grow` gives it the spare height). The other
+"built-in feel" surfaces added with it: `api.ui.statusItem` (`pluginStatusItemsAtom`,
+`host.ts#addStatusItem`; `StatusBar.tsx` renders the cells after the message with the plugin
+icon or a `.status-spinner` while `busy`), `api.ui.dialogSlot` (`pluginDialogSlotsAtom`; a
+dialog opts in by passing `slot={{ dialog, fields, payload }}` to `DialogFrame`, which renders
+`components/ui/DialogSlots.tsx` at the left of the footer — one `<span>` per registration,
+`mount`ed with a `DialogSlotHost` whose `fields` read the dialog's working copy live through a
+ref; `SlottedDialogId` in `api.ts` is the list of dialogs that pass it and the fields each lends,
+keep it in step when adding one) and `api.view.flash` (`host.ts#flashOnMap` resolves the target
+to boxes in map pixels *at call time* onto `viewFlashesAtom`; `MapViewport` paints them after
+the `"everything"` overlays, gold for `change` and teal for `attention`, and an effect repaints
+every frame while any is live, sweeping the list when the last expires). All additive;
+`PLUGIN_API_VERSION` stays 1. `api.palette` reads and sets the object palettes' picks
 (`activeUnitAtom`, `unitOwnerAtom`, the sprite and doodad atoms, `fogPlayersAtom` / `fogModeAtom`)
 and answers names, groups, `unitSize` (placement box) and `doodadInfo`; the `"palette"` event
 covers those atoms plus the terrain brush. `tx.placeUnit` snaps through `snapPlacement` with the
@@ -932,7 +954,16 @@ through the ordinary API — a map plan is a coarse legend grid turned into `pai
 base geometry (`layout.ts` vendored there), triggers come back as script and go through the Trigger Script
 plugin's `compile` → repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
 wire contract, kept identical in both repositories. The editor knows nothing of it beyond the three host additions
-above.
+above. The 2026-09-05 pass made it the worked example for the "built-in feel" surfaces (`dock: "right"`,
+`ui.statusItem`, `ui.dialogSlot`, `view.flash`, plus an `ui.overlay` for a running tool call's footprint —
+`intent.ts` there), streamed the `agent` recipe (text `delta`s and a `tool_use` event the moment the model names a
+tool; the server's system blocks moved to the one-hour cache in `claude.ts#systemBlocks`), and added the Scenario
+workflow: an `ums-design` recipe (the design document, checked server-side against the toolkit catalogue the
+request carries) executed by `dialogs/scenario.ts` through `map-plan`, the players/forces update, the plugin's
+**toolkit** (`ums.ts`: ~20 trigger-system kinds — hyper, spawn, kill-to-cash, waves, lives, shop, last-standing… —
+built by code into text triggers the editor parses; the assistant reaches it through `ums_build` and the genre
+guides in `guides.ts` through `guide`) and the `triggers` recipe for `custom` systems. Check Map's scenario checks
+(`validate.ts#umsIssues`) are the editor-side half.
 
 **Terrain from Image** is the first worked example and lives in its own repository,
 `github.com/scm-js/plugin-image-to-terrain` (`plugin.json` / `plugin.ts` / `convert.ts` /

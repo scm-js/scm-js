@@ -37,8 +37,8 @@ import {
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
-  addressesOf, blankLiterals, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, loadPlugin, parseSpec, PluginLoadError, pluginIdentity, previewPlugin,
-  resolveIcon, resolvePlugin, unpin, validateManifest, type LoaderDeps,
+  addressesOf, blankLiterals, bundleModule, candidateUrls, canonicalSpec, findImports, isPinned, listTags, loadPlugin, newestTag, parseSpec, PluginLoadError, pluginIdentity, previewPlugin,
+  resolveIcon, resolvePlugin, tagVersion, unpin, validateManifest, type LoaderDeps,
 } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
@@ -1566,7 +1566,15 @@ function githubFiles(owner: string, repo: string, sha: string, manifest: object,
   };
 }
 
+/** The `/tags` answer for a repository, newest-release-first order deliberately not assumed. */
+function taggedFiles(owner: string, repo: string, tags: [string, string][]) {
+  return {
+    [`https://api.github.com/repos/${owner}/${repo}/tags?per_page=100`]: JSON.stringify(tags.map(([name, sha]) => ({ name, commit: { sha } }))),
+  };
+}
+
 const SHA = "0123456789abcdef0123456789abcdef01234567";
+const OLDER = "1111111111111111111111111111111111111111";
 
 describe("plugin previews", () => {
   it("reads one plugin.json at the commit the ref points at, and names every address", async () => {
@@ -1630,6 +1638,75 @@ describe("plugin previews", () => {
     const check = await checkForUpdate("github:o/preview@v9", deps);
     // Erring towards offering the update rather than hiding one.
     expect(check).toMatchObject({ current: null, newer: true });
+  });
+
+  it("ranks release tags itself, since GitHub's tag order is not version order", () => {
+    expect(tagVersion("v1.2.3")).toEqual([1, 2, 3]);
+    expect(tagVersion("1.2")).toEqual([1, 2, 0]);
+    // A release candidate is not a release: an update check offers what the author published.
+    expect(tagVersion("v1.2.3-rc.1")).toBeNull();
+    expect(tagVersion("nightly")).toBeNull();
+    const tag = (name: string) => ({ name, ref: name });
+    expect(newestTag([tag("v1.9.0"), tag("v1.10.0"), tag("v1.2.0")])?.name).toBe("v1.10.0");
+    expect(newestTag([tag("v2.0.0-rc.1"), tag("v1.4.2")])?.name).toBe("v1.4.2");
+    expect(newestTag([tag("nightly"), tag("latest")])).toBeNull();
+    expect(newestTag([])).toBeNull();
+  });
+
+  it("reads the tags of a repository, and steps over anything that is not one", async () => {
+    const url = "https://api.github.com/repos/o/preview/tags?per_page=100";
+    const { deps } = servedDeps({ [url]: JSON.stringify([
+      { name: "v1.1.0", commit: { sha: SHA } },
+      { name: "broken", commit: {} },
+      { nope: true },
+    ]) });
+    expect(await listTags({ owner: "o", repo: "preview" }, deps.fetchText)).toEqual([{ name: "v1.1.0", ref: SHA }]);
+    // A repository that will not answer is "no releases to compare", never a failed check.
+    const { deps: empty } = servedDeps({});
+    await expect(listTags({ owner: "o", repo: "preview" }, empty.fetchText)).rejects.toThrow(PluginLoadError);
+  });
+
+  it("asks the newest release, not the branch, so a commit landing after the tag is not an update", async () => {
+    // The state that made every editor offer an update to the code it was already running:
+    // the pinned tag is the newest release, but main has a documentation commit on top.
+    const moved = "2222222222222222222222222222222222222222";
+    const { deps, asked } = servedDeps({
+      ...taggedFiles("o", "preview", [["v1.1.2", SHA], ["v1.1.1", OLDER]]),
+      ...githubFiles("o", "preview", moved, { name: "Preview", version: "1.1.2" }),
+      [`https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`]: JSON.stringify({ name: "Preview", version: "1.1.2" }),
+    });
+
+    const check = await checkForUpdate("github:o/preview@v1.1.2", deps);
+    expect(check).toMatchObject({ tag: "v1.1.2", current: SHA, newer: false });
+    expect(check.preview.manifest?.version).toBe("1.1.2");
+    // The branch was never asked, and neither was the tag: the tag list carried both commits.
+    expect(asked.filter((u) => u.includes("/commits/"))).toEqual([]);
+  });
+
+  it("offers a release that really is newer, and names it by its tag", async () => {
+    const { deps } = servedDeps({
+      // Out of order on purpose: the API's order is not the ranking.
+      ...taggedFiles("o", "preview", [["v1.1.2", OLDER], ["v1.2.0", SHA]]),
+      [`https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`]: JSON.stringify({ name: "Preview", version: "1.2.0" }),
+    });
+    const check = await checkForUpdate("github:o/preview@v1.1.2", deps, { version: "1.1.2" });
+    expect(check).toMatchObject({ tag: "v1.2.0", current: OLDER, newer: true });
+    // What a confirmation would install, and the tag it would show for it.
+    expect(check.preview.spec).toBe("github:o/preview@v1.2.0");
+    expect(check.preview.pin?.spec).toBe(`github:o/preview@${SHA}`);
+  });
+
+  it("takes the running version as the last word on whether a release is a new one", async () => {
+    // A retagged release: a different commit under a version already installed. Offering it
+    // would print "Update to v1.1.2" on a row reading v1.1.2, which is no answer at all.
+    const { deps } = servedDeps({
+      ...taggedFiles("o", "preview", [["v1.1.2", SHA]]),
+      [`https://raw.githubusercontent.com/o/preview/${SHA}/plugin.json`]: JSON.stringify({ name: "Preview", version: "1.1.2" }),
+    });
+    const spec = `github:o/preview@${OLDER}`;
+    expect(await checkForUpdate(spec, deps, { version: "1.1.2" })).toMatchObject({ newer: false });
+    // Without it the commits still disagree, which is what the backstop is behind.
+    expect(await checkForUpdate(spec, deps)).toMatchObject({ newer: true });
   });
 
   it("has an address to check for every default, bundled or not", () => {

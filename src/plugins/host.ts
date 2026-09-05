@@ -111,7 +111,7 @@ import {
   type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
 } from "./api";
-import { isPinned, loadPlugin, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview } from "./loader";
+import { canonicalSpec, githubSource, HASH_REF, isPinned, listTags, loadPlugin, newestTag, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview, type RepoTag } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
@@ -2225,41 +2225,72 @@ export function effectiveInstalls(stored: readonly PluginInstall[], defaults: re
   return out;
 }
 
-/** What an update check found: what the address holds now, and whether that is other code. */
+/** What an update check found: the newest release the address holds, and whether it is other code. */
 export interface UpdateCheck {
-  /** The address previewed — the plugin at whatever its branch holds now. */
+  /** The plugin at its newest release — or, for a repository with none, at its branch tip. */
   preview: PluginPreview;
   /** The commit the installed version resolves to, when it could be worked out. */
   current: string | null;
-  /** True when the address holds a different commit from the installed one. */
+  /** The release the check compared against, null when the repository had none to offer. */
+  tag: string | null;
+  /** True when there is a newer release than the one installed. */
   newer: boolean;
 }
 
 /**
- * Ask a plugin's address whether it has moved past the version installed. One or two
- * GitHub requests and one `plugin.json`; no plugin code is fetched, transpiled or run,
- * and nothing is asked until the user presses the button.
+ * Ask a plugin's address whether it has released a version past the one installed. Two
+ * GitHub requests at most and one `plugin.json`; no plugin code is fetched, transpiled or
+ * run, and nothing is asked until the user presses the button.
  *
- * It compares **commits, not specs**. Comparing the spec strings said "newer" for every
- * tag-pinned install for ever, since a tag is never spelt like the commit hash a check
- * resolves — which would have made all five bundled defaults offer an update to the code
- * they were already running. A spec pinned to a hash needs no request to answer for
- * itself; a tag costs one more. If the installed ref cannot be resolved at all the spec
- * comparison is the fallback, which errs towards offering the update rather than hiding
- * one.
+ * It asks about the newest **release tag**, not the branch tip. Asking the branch made
+ * every plugin look out of date the moment anything landed on it after its tag — a
+ * documentation commit, a rebuilt `dist/plugin.js` — and the "update" it then offered was
+ * an untagged commit whose `plugin.json` carried the version already running. See
+ * `newestTag`. A repository with no release tags has only its branch to compare, which is
+ * what it falls back to.
+ *
+ * The comparison itself is by **commit, not spec**. Comparing the spec strings said
+ * "newer" for every tag-pinned install for ever, since a tag is never spelt like the
+ * commit hash a check resolves. The installed tag's commit usually comes out of the same
+ * tag list, a hash-pinned spec answers for itself, and only a ref in neither camp costs a
+ * request; if it cannot be resolved at all the spec comparison is the fallback, which
+ * errs towards offering the update rather than hiding one.
+ *
+ * `installed.version` is the version the plugin is *running* (its loaded manifest), and
+ * it is the last word: a release naming that version is the release already installed,
+ * whatever the commits say. It is what stops "Update to v1.1.2" appearing on a row that
+ * reads v1.1.2 — the one answer a check must never give. The cost is that a plugin
+ * republished under an unchanged version is not offered, which is the author saying it
+ * is not a new release.
  */
-export async function checkForUpdate(spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins"> = browserLoaderDeps()): Promise<UpdateCheck> {
-  const preview = await previewPlugin(unpin(spec), deps);
+export async function checkForUpdate(
+  spec: string,
+  deps: Pick<LoaderDeps, "fetchText" | "builtins"> = browserLoaderDeps(),
+  installed: { version?: string | null } = {},
+): Promise<UpdateCheck> {
   const source = parseSpec(spec);
   const gh = source.kind === "remote" ? source.github : null;
+  // A refusal here (no tags, rate limited, not GitHub) is ordinary: it leaves the branch
+  // as the only thing to compare, which is what this used to do for everything.
+  const tags = gh ? await listTags(gh, deps.fetchText).catch(() => [] as RepoTag[]) : [];
+  const release = newestTag(tags);
+  const address = gh && release ? canonicalSpec(githubSource(gh.owner, gh.repo, release.name, gh.dir)) : unpin(spec);
+  const preview = await previewPlugin(address, deps, release ? { commit: release.ref } : {});
+
   let current: string | null = null;
   if (gh?.ref) {
-    current = /^[0-9a-f]{40}$/i.test(gh.ref)
+    current = HASH_REF.test(gh.ref)
       ? gh.ref.toLowerCase()
-      : await resolveCommit(gh, deps.fetchText).catch(() => null);
+      : tags.find((t) => t.name === gh.ref)?.ref ?? await resolveCommit(gh, deps.fetchText).catch(() => null);
   }
-  const newer = preview.pin !== null && (current === null ? preview.pin.spec !== spec : preview.pin.ref !== current);
-  return { preview, current, newer };
+  // Three ways of saying "this is what is already installed", any one of which is enough:
+  // the release is the ref the spec names, the release carries the running version, or it
+  // resolves to the commit installed.
+  const sameTag = release !== null && gh?.ref === release.name;
+  const sameVersion = installed.version != null && preview.manifest?.version === installed.version;
+  const sameCommit = preview.pin !== null && (current === null ? preview.pin.spec === spec : preview.pin.ref === current);
+  const newer = preview.pin !== null && !sameTag && !sameVersion && !sameCommit;
+  return { preview, current, tag: release?.name ?? null, newer };
 }
 
 /**

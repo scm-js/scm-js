@@ -685,7 +685,9 @@ F1 lists every shortcut. The ones worth knowing up front:
 Preferences (Ctrl+,) are kept in the browser: the splash screen, whether to ask before
 replacing a modified map (the same tick decides whether closing the tab or quitting the
 desktop app asks about unsaved changes), the tileset and size a new map starts with,
-whether water and units animate and how fast, Test Map's folder, and — in the desktop app
+whether water and units animate and how fast, Test Map's folder, what to do when an
+installed plugin has a newer version (a notice, nothing, or install it — see
+[docs/plugins.md](docs/plugins.md#keeping-a-plugin-up-to-date)), and — in the desktop app
 — whether to check for updates at startup. The grid, the snaps, the placement options,
 the panels and the recent files are remembered too. Its *Browser storage* box lists
 everything the editor keeps, one row per setting or cache, with a plugin's own data under

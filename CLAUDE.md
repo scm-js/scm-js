@@ -767,27 +767,67 @@ and re-fetches — the way both a pinned and a stored plugin are moved forward �
 `setInstalled` drops it whenever `local` goes false or the plugin is removed;
 `clearStoredDataAtom` `RESET`s the atom with the others. Reload re-fetches whatever the
 spec names, so a pinned plugin moves forward through the row's **Check for update** button
-instead: it previews `unpin(spec)` and, when the branch holds a different commit, reopens the
-confirmation with `replaces` set, which makes `installPlugin` deactivate, unlist and
-un-copy the old commit before installing the new one.
+instead: it previews the repository's newest release and, when that is a different version,
+reopens the confirmation with `replaces` set, which makes `installPlugin` deactivate, unlist
+and un-copy the old commit before installing the new one.
 That button is on every row with an address to ask, whether or not anything is newer, so
 most presses can only answer "nothing is" — it used to say **Update** and put that answer in
 one dim line at the top of the pane, which for a button near the bottom of a scrolling list
 read as the press doing nothing at all. The answer is a `CheckAnswer` per spec now
 (`InstalledPane`'s `checked`): *Up to date* or *Could not check* on the row itself, a toast
-beside it, and for a newer commit the button becomes `Update to v…` holding the preview it
-was found with, so cancelling the confirmation neither loses the answer nor asks GitHub twice.
+beside it (worded with the release it found — "the newest commit" answered a question nobody
+asked), and for a newer release the button becomes `Update to v…` holding the preview it was
+found with, so cancelling the confirmation neither loses the answer nor asks GitHub twice.
 Which rows get it is `defaults.ts#updateAddress`, not `isPinned`: vendoring swaps a default's
 spec for `builtin:paint`, which is not pinned, so the one button that moves a plugin forward
 appeared on every row **except** the ones the editor ships — and only in builds that skipped
 vendoring, making the button's presence a fact about the packaging rather than the plugin.
 `BUILTIN_REPLACES` holds the spec each bundled copy was built from, which is the address to
-ask; a bundled plugin is still asked for nothing until the press. The comparison is by
-**commit** (`host.ts#checkForUpdate`), because comparing spec strings called every
-tag-pinned install out of date for ever — a tag is never spelt like the hash a check
-resolves — which would have had all five defaults offering an update to the code they were
-already running; a hash-pinned spec answers for itself, a tag costs one more request, and an
-unresolvable ref falls back to the spec comparison. Updating a bundled default installs the
+ask; a bundled plugin is still asked for nothing until the press. What it asks about is the
+newest **release tag** (`loader.ts#listTags` / `newestTag`, ranked here because the API's tag
+order is not version order), not the branch tip: `checkForUpdate` used to preview
+`unpin(spec)`, which called a plugin out of date the moment anything landed on main after
+its tag — a docs commit, a CI-rebuilt `dist/plugin.js` — and the update it then offered was
+an untagged commit whose `plugin.json` carried the version already installed, so the button
+read `Update to v1.1.2` on a row reading v1.1.2 and taking it stored a commit no release
+names. A prerelease tag is not a release for this. A repository with no release tags still
+falls back to the branch, which is all it has.
+The comparison itself is by **commit** (`host.ts#checkForUpdate`), because comparing spec
+strings called every tag-pinned install out of date for ever — a tag is never spelt like the
+hash a check resolves — which would have had all five defaults offering an update to the code
+they were already running; the installed tag's commit usually comes out of the same tag list
+(so the common check is two requests, one fewer than before, and `previewPlugin` takes the
+newest release's commit as `opts.commit` rather than asking again), a hash-pinned spec answers
+for itself, and an unresolvable ref falls back to the spec comparison. Over that sits the
+backstop: `installed.version` is what the plugin is *running* (the row passes
+`rt.manifest.version`) and a release naming that version is the release already installed,
+whatever the commits say — a retagged or force-pushed release is the author saying nothing new
+shipped.
+**Unasked** is `plugins/updates.ts` and `Preferences.plugins.updates` (`notify` /
+`manual` / `auto`, a Select in Preferences ▸ Plugins): `usePlugins` runs
+`runUpdatePass` once per session, `UPDATE_CHECK_DELAY_MS` after the activation pass,
+when `shouldCheckPlugins` says one is due (`pluginUpdateCheckAtom`, `scmjs.plugin-updates`,
+`RECHECK_MS` from `editor/updates.ts`). It reads the **registries**, not the rows'
+addresses: `checkForUpdate` is two or three unauthenticated GitHub requests against a
+limit of sixty an hour per address, and six plugins on every launch plus a dev reload
+would spend it and then fail the button itself, while the registry index already carries
+each listed plugin's version at its newest tag and is cached for an hour.
+`updatesFromRegistries` compares that with `runningVersion` (the loaded manifest, else the
+cached one) through `compareVersions`; a listed plugin with no version to compare is
+skipped, not asked, and only a plugin no registry lists goes to `checkForUpdate`. What is
+found lands in `pluginUpdatesAtom` (`PluginUpdateAnswer`, which also replaced
+`InstalledPane`'s local `checked` state), so `updateToast`'s *Plugins…* button opens the
+pane with *Update to v…* already on the rows — a registry answer has `preview: null` and
+the press makes the check that fetches one, then the ordinary confirmation. `auto`
+installs through `installPlugin({ replaces, pin: true, local: false })` after a real
+address check (the registry may be an hour stale), and `autoUpdateBlock` keeps it off a
+default (they move with the editor's releases — turning one into a startup fetch is
+what vendoring exists to prevent, and the desktop works offline), a plugin turned off, one
+on a saved copy, and a release whose `needsApi` is past `PLUGIN_API_VERSION`;
+`autoUpdateToast` says what was installed, what failed and what was left and why. *Check
+all for updates* above the list runs the row checks in sequence. `tests/plugin-updates.test.ts`
+drives the pass with `UpdateDeps` stand-ins.
+Updating a bundled default installs the
 remote pinned spec, which `effectiveInstalls` folds over the default and lets win (that rule
 was always there and had no button to reach it), at the cost of the plugin becoming an
 ordinary fetch at startup — which `ConfirmPluginDialog` says in place of its "replacing

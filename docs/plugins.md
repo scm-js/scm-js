@@ -70,11 +70,16 @@ The Add screen has three ticks:
 ### Keeping a plugin up to date
 
 A pinned plugin never changes on its own. A push to its repository reaches nobody who has
-it installed. **Check for update** on its row in Manage Plugins asks the repository what it
-holds now. When that is a newer commit the button becomes *Update to …*, which shows the
-new version's manifest and asks before anything changes, the same way the Add screen did;
-when it is not, the row says *Up to date*. Nothing of the plugin is fetched or run by the
-check itself.
+it installed. **Check for update** on its row in Manage Plugins asks the repository for its
+newest released version. When that is newer than the one installed the button becomes
+*Update to …*, which shows the new version's manifest and asks before anything changes, the
+same way the Add screen did; when it is not, the row says *Up to date*. Nothing of the
+plugin is fetched or run by the check itself.
+
+It asks about *releases*, not about what the author has pushed since. Work landing on a
+plugin's main branch after its newest version — a change to its documentation, a rebuilt
+bundle — is not an update and is not offered as one; the next version its author publishes
+is.
 
 The defaults have the button too, including in the builds that compile them in. A bundled
 plugin is asked for nothing — not at startup, not when the list is drawn — until you press
@@ -82,6 +87,20 @@ it. Updating one turns it into an ordinary plugin fetched from its repository, e
 the editor starts; the confirmation says so, *Load from a copy saved here* is the nearest
 way back to how it behaved, and **Revert** on the row returns it to the version this
 editor ships.
+
+You need not press the button to find out. Preferences ▸ Plugins has one choice, **Plugin
+updates**:
+
+| Choice | What happens |
+| --- | --- |
+| Tell me (the default) | A few seconds after the plugins start, the editor reads the plugin index it browses from and raises a notice naming what is newer. Its *Plugins…* button opens Manage Plugins with *Update to …* already on those rows; each still shows the new version before anything changes. |
+| Do nothing | Nothing is asked until you press a row's button. |
+| Install them | What is newer is installed, for the plugins you added yourself. A default moves with the editor's own releases — each release carries the versions it was tested with — so it is named in the notice and left to its button, as is a plugin loading from a saved copy, one turned off, or a version built for a newer plugin API than this editor has. The notice says what was installed and what was left. |
+
+The check reads the index rather than asking each plugin's repository, so it costs one
+request however many plugins are installed; only a plugin no index lists is asked at its
+own address. It runs at most once every six hours. **Check all for updates** above the
+list asks every row's repository in turn, which is the thorough version.
 
 **Reload** fetches the plugin again from its address and replaces any copy saved in the
 browser. For a pinned plugin that is the same commit again, so the update check is the way

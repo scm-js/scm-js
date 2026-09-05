@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ArrowUp, Blocks, CircleCheck, CircleSlash, Clock, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, RotateCcw, Search, Settings2, ShieldAlert, Trash2, TriangleAlert, User } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
-import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
+import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, pluginUpdatesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime, type PluginUpdateAnswer } from "../../atoms/pluginAtoms";
 import { activatePlugin, checkForUpdate, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
 import { defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../../plugins/defaults";
 import {
@@ -752,16 +752,6 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
 
 /* ── Managing what is installed ─────────────────────────── */
 
-/**
- * What a row's update check last answered. A newer commit keeps the preview it was found
- * with, so the row can go on offering it — and reopen the confirmation — without asking
- * GitHub a second time, and cancelling that confirmation does not throw the answer away.
- */
-type CheckAnswer =
-  | { kind: "newer"; preview: PluginPreview }
-  | { kind: "current"; text: string }
-  | { kind: "problem"; text: string };
-
 /** The version a spec names, as the confirmation prints it: the tag, or a short commit. */
 function replacedVersion(spec: string): string {
   const at = spec.lastIndexOf("@");
@@ -883,9 +873,15 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   // — the channel the rest of the editor answers in — and, when there *is* a newer commit,
   // by the button itself becoming the offer, so cancelling the confirmation does not lose
   // what the check found.
+  //
+  // The answers live in `pluginUpdatesAtom` rather than here: the startup check
+  // (`plugins/updates.ts`) writes the rows it found newer versions for, so the notice's
+  // button opens this pane with *Update to v…* already on them, and closing the dialog
+  // does not throw a check away.
   const [checking, setChecking] = useState<string | null>(null);
-  const [checked, setChecked] = useState<Record<string, CheckAnswer>>({});
-  const answer = (s: string, a: CheckAnswer) => {
+  const [checked, setCheckedAll] = useAtom(pluginUpdatesAtom);
+  const setChecked = (fn: (c: Record<string, PluginUpdateAnswer>) => Record<string, PluginUpdateAnswer>) => setCheckedAll(fn);
+  const answer = (s: string, a: PluginUpdateAnswer) => {
     setChecked((c) => ({ ...c, [s]: a }));
     if (a.kind === "current") store.set(pushToastAtom, { kind: "info", title: "No update", detail: a.text });
     else if (a.kind === "problem") store.set(pushToastAtom, { kind: "warn", title: "Could not check for an update", detail: a.text });
@@ -894,19 +890,23 @@ function InstalledPane({ focus }: { focus?: string | null }) {
     store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, replaces: s, preview });
   };
   // `s` is the row (what gets replaced); `address` is what to ask, which for a bundled
-  // plugin is the remote spec it was vendored from.
-  const update = async (s: string, address: string) => {
+  // plugin is the remote spec it was vendored from. `version` is what the row is running,
+  // which the check uses as its last word on whether a release is a new one at all.
+  const update = async (s: string, address: string, version?: string) => {
     setChecking(s);
     setChecked((c) => { const next = { ...c }; delete next[s]; return next; });
     try {
-      const { preview, newer } = await checkForUpdate(address);
+      const { preview, newer, tag } = await checkForUpdate(address, undefined, { version });
       if (!preview.manifest) {
         answer(s, { kind: "problem", text: `${NOT_FOUND} ${preview.problem ?? ""}`.trim() });
       } else if (newer && preview.pin) {
-        setChecked((c) => ({ ...c, [s]: { kind: "newer", preview } }));
+        setChecked((c) => ({ ...c, [s]: { kind: "newer", version: preview.manifest?.version ?? tag, preview } }));
         offer(s, preview);
       } else if (preview.pin) {
-        answer(s, { kind: "current", text: `${preview.manifest.name} is already on the newest commit.` });
+        // Naming the version is the whole answer: "the newest commit" said nothing about
+        // whether the plugin had been released since, which is what was actually asked.
+        const at = tag ?? (preview.manifest.version ? `v${preview.manifest.version}` : preview.pin.short);
+        answer(s, { kind: "current", text: `${preview.manifest.name} ${at} is the newest version there is.` });
       } else {
         answer(s, { kind: "problem", text: preview.pinProblem ?? "Could not ask for a newer version." });
       }
@@ -915,6 +915,14 @@ function InstalledPane({ focus }: { focus?: string | null }) {
     } finally {
       setChecking(null);
     }
+  };
+
+  // The rows a check can be made for, in list order; `checkAll` runs them one after
+  // another rather than at once, since every check is a GitHub request or two from the
+  // same address.
+  const checkable = list.flatMap((p) => { const a = updateAddress(p.spec); return a ? [{ spec: p.spec, address: a, version: runtimes[p.spec]?.manifest?.version }] : []; });
+  const checkAll = async () => {
+    for (const c of checkable) await update(c.spec, c.address, c.version);
   };
 
   return (
@@ -961,7 +969,19 @@ function InstalledPane({ focus }: { focus?: string | null }) {
             </>
           )}
       </div>
-      <span className="pane-label">Installed</span>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <span className="pane-label">Installed</span>
+        {checkable.length > 0 && (
+          <Button
+            size="sm"
+            title="Ask every plugin's repository for its newest release, one after another. Nothing is downloaded by the check."
+            disabled={checking !== null}
+            onClick={() => { void checkAll(); }}
+          >
+            {checking !== null ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Check all for updates
+          </Button>
+        )}
+      </div>
       <div className="listbox plugin-list" role="list" ref={listRef}>
         {list.map((p) => {
           const rt = runtimes[p.spec];
@@ -1002,12 +1022,20 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                 <div className="row" style={{ gap: 4 }}>
                   {address !== null && (answered?.kind === "newer"
                     ? (
-                      <Button size="sm" variant="primary" title="Show what is in the newer version before switching to it" onClick={() => offer(p.spec, answered.preview)}>
-                        <ArrowUp size={11} /> Update to {offeredVersion(answered.preview)}
+                      // A startup answer names a version and carries no preview yet: the press
+                      // makes the same check the button below does and then offers it.
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        title="Show what is in the newer version before switching to it"
+                        disabled={checking === p.spec}
+                        onClick={() => { if (answered.preview) offer(p.spec, answered.preview); else void update(p.spec, address, rt?.manifest?.version); }}
+                      >
+                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Update to {answered.preview ? offeredVersion(answered.preview) : `v${answered.version ?? "?"}`}
                       </Button>
                     )
                     : (
-                      <Button size="sm" title={`Ask ${addressLabel(address)} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.`} disabled={checking === p.spec} onClick={() => { void update(p.spec, address); }}>
+                      <Button size="sm" title={`Ask ${addressLabel(address)} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.`} disabled={checking === p.spec} onClick={() => { void update(p.spec, address, rt?.manifest?.version); }}>
                         {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Check for update
                       </Button>
                     ))}
@@ -1076,9 +1104,10 @@ function InstalledPane({ focus }: { focus?: string | null }) {
 export function PluginsDialog({ entry }: DialogProps) {
   const store = useStore();
   const [tab, setTab] = useState((entry.payload?.tab as string) ?? "installed");
-  // A row Browse asked the Installed tab to show; cleared again on leaving it, so coming
-  // back later does not flash a row nobody asked about.
-  const [focus, setFocus] = useState<string | null>(null);
+  // A row Browse asked the Installed tab to show — or the one the update notice's button
+  // was pressed for (`payload.focus`); cleared again on leaving the tab, so coming back
+  // later does not flash a row nobody asked about.
+  const [focus, setFocus] = useState<string | null>((entry.payload?.focus as string | undefined) ?? null);
   return (
     <DialogFrame
       dialogKey={entry.key}

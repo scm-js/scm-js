@@ -30,6 +30,7 @@ import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
+import type { PluginUpdateMode } from "../../editor/preferences";
 import {
   archiveExtrasAtom,
   doodadsRevisionAtom,
@@ -124,6 +125,7 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.plugin-manifests": "Plugin manifests",
   "scmjs.plugin-registries": "Plugin sources",
   "scmjs.plugin-registry": "Browse Plugins cache",
+  "scmjs.plugin-updates": "Last plugin update check",
 };
 
 /**
@@ -488,6 +490,31 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     </p>
                   </Group>
                 )}
+                <Group title="Plugins">
+                  <div className="form wide">
+                    <Field label="Plugin updates">
+                      <Select
+                        value={local.plugins.updates}
+                        onChange={(e) => patch({ plugins: { ...local.plugins, updates: e.target.value as PluginUpdateMode } })}
+                        options={[
+                          { value: "notify", label: "Tell me" },
+                          { value: "manual", label: "Do nothing" },
+                          { value: "auto", label: "Install them" },
+                        ]}
+                      />
+                    </Field>
+                  </div>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    What to do when an installed plugin has a newer version.{" "}
+                    <em>Tell me</em> looks a few seconds after the plugins start and raises a
+                    notice with a button to the rows offering the update.{" "}
+                    <em>Do nothing</em> asks only when you press <em>Check for update</em> on a row.{" "}
+                    <em>Install them</em> installs what it finds, for the plugins you added;
+                    a default moves with scmJS's own releases and is only named in the
+                    notice. Whatever the choice, an update pressed on a row shows what it
+                    is before anything changes.
+                  </p>
+                </Group>
                 <Group title="New scenario defaults">
                   <div className="form wide">
                     <Field label="Tileset">

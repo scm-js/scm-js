@@ -471,6 +471,9 @@ export function canonicalSpec(source: PluginSource): string {
 /** A GitHub spec taken apart: owner, repo, the ref it names (if any) and the sub-directory. */
 const GITHUB_SPEC = /^github:([^/@\s]+)\/([^/@\s]+)(?:@([^/\s]+))?(?:\/(.*))?$/i;
 
+/** A ref that is already a commit: it answers for itself, so nothing need be asked. */
+export const HASH_REF = /^[0-9a-f]{40}$/i;
+
 /** Refs that are branches by convention: naming one of them is not pinning. */
 const MOVING_REFS = new Set(["head", "main", "master", "trunk", "default"]);
 
@@ -533,6 +536,93 @@ export async function resolveCommit(
   return sha.toLowerCase();
 }
 
+/** A tag on a GitHub repository: the name it was pushed under, and the commit it names. */
+export interface RepoTag {
+  name: string;
+  /** The full commit hash. */
+  ref: string;
+}
+
+/** `v1.2.3`, or `v1.2`. Anything else — a prerelease above all — is not a release here. */
+const RELEASE_TAG = /^v?(\d+)\.(\d+)(?:\.(\d+))?$/;
+
+/**
+ * The version a tag names, or null when it names none.
+ *
+ * A prerelease (`v1.2.3-rc.1`) deliberately does not count: an update check offers what
+ * the author released, and a release candidate is not that. A repository that tags
+ * nothing this shape simply has no release for a check to find, and the check falls back
+ * to the branch.
+ */
+export function tagVersion(name: string): [number, number, number] | null {
+  const m = RELEASE_TAG.exec(name.trim());
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)] : null;
+}
+
+/**
+ * A repository's tags, through the public tags API. One request, no token — the same
+ * rate limit and the same "a refusal is ordinary" contract as `resolveCommit`, so the
+ * caller treats a throw as "no tags to compare against" rather than as a failure.
+ *
+ * Each tag arrives with the commit it points at, which is why this is asked for rather
+ * than one `commits/<tag>`: the check needs the newest tag's commit *and*, usually, the
+ * installed tag's, and both are in this one answer. A hundred is as far back as it
+ * looks; the tags past that are older than anything a check is looking for.
+ */
+export async function listTags(
+  gh: { owner: string; repo: string },
+  fetchText: LoaderDeps["fetchText"],
+): Promise<RepoTag[]> {
+  const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/tags?per_page=100`;
+  let text: string;
+  try {
+    text = await fetchText(url);
+  } catch (err) {
+    throw new PluginLoadError(`Could not ask GitHub which versions ${gh.owner}/${gh.repo} has: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch { throw new PluginLoadError(`${url} did not answer with JSON.`); }
+  if (!Array.isArray(raw)) throw new PluginLoadError(`${url} did not answer with a list of tags.`);
+  const out: RepoTag[] = [];
+  for (const entry of raw as { name?: unknown; commit?: { sha?: unknown } }[]) {
+    const sha = entry?.commit?.sha;
+    if (typeof entry?.name === "string" && typeof sha === "string" && HASH_REF.test(sha)) {
+      out.push({ name: entry.name, ref: sha.toLowerCase() });
+    }
+  }
+  return out;
+}
+
+/**
+ * The newest release among a repository's tags — the version an update check offers, and
+ * the reason it does not simply ask what the branch holds.
+ *
+ * Asking the branch made every plugin look out of date the moment anything landed on it
+ * after the release tag: a documentation commit, a rebuilt `dist/plugin.js`, a bumped
+ * dependency. The editor then offered an "update" whose `plugin.json` carried the *same*
+ * version as the pin — `Update to v1.1.2` on a row already reading v1.1.2 — and taking it
+ * stored an untagged commit, which is not a version anyone can go back to. A release is
+ * what a plugin's author decided to publish, so a release is what a check compares to.
+ *
+ * The API's own tag order is not semantic-version order, so the list is ranked here.
+ */
+export function newestTag(tags: readonly RepoTag[]): RepoTag | null {
+  let best: RepoTag | null = null;
+  let bestVersion: [number, number, number] | null = null;
+  for (const tag of tags) {
+    const version = tagVersion(tag.name);
+    if (!version) continue;
+    if (bestVersion === null || compareVersions(version, bestVersion) > 0) { best = tag; bestVersion = version; }
+  }
+  return best;
+}
+
+/** Major, then minor, then patch; negative when `a` is the older. */
+function compareVersions(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return 0;
+}
+
 /**
  * Everything the Add Plugin confirmation shows, at the cost of **one `plugin.json`** and,
  * for a GitHub plugin, one commit lookup: who wrote the plugin, what it says it does, the
@@ -545,8 +635,16 @@ export async function resolveCommit(
  * what a pinned install will run. A manifest that cannot be read is not fatal (`problem`
  * is set and the addresses are still named): the plugin may be behind a dev server that
  * is not up yet, and the user is allowed to add it anyway.
+ *
+ * `opts.commit` is the commit the spec's ref is already known to point at — an update
+ * check has just read the tag list and holds it — which saves the lookup. A ref that is
+ * itself a full hash is the same case and needs no telling.
  */
-export async function previewPlugin(spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins">): Promise<PluginPreview> {
+export async function previewPlugin(
+  spec: string,
+  deps: Pick<LoaderDeps, "fetchText" | "builtins">,
+  opts: { commit?: string } = {},
+): Promise<PluginPreview> {
   const source = parseSpec(spec);
   const gh = source.kind === "remote" ? source.github : undefined;
   const preview: PluginPreview = {
@@ -561,8 +659,9 @@ export async function previewPlugin(spec: string, deps: Pick<LoaderDeps, "fetchT
     needsApi: null,
   };
   if (gh) {
+    const known = opts.commit ?? (HASH_REF.test(gh.ref ?? "") ? gh.ref! : null);
     try {
-      const ref = await resolveCommit(gh, deps.fetchText);
+      const ref = (known ?? await resolveCommit(gh, deps.fetchText)).toLowerCase();
       const pinnedSource = githubSource(gh.owner, gh.repo, ref, gh.dir);
       preview.pin = { spec: canonicalSpec(pinnedSource), source: pinnedSource, ref, short: ref.slice(0, 7) };
     } catch (err) {

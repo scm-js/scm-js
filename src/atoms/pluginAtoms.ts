@@ -11,9 +11,34 @@ import type {
   ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest, SlottedDialogId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
+import type { PluginPreview } from "../plugins/loader";
 import { browserStorage } from "./storage";
 
 /* ── Installed (persisted) ──────────────────────────────── */
+
+/**
+ * What the last update check said about a spec — one entry per row of Manage Plugins,
+ * kept for the session so the dialog can be closed and reopened without asking again.
+ * The startup check (`plugins/updates.ts`) writes `newer` entries with the version the
+ * registry named and no preview; the row's button then reads *Update to v…* and fetches
+ * the preview when pressed. A press on **Check for update** writes all three kinds and
+ * carries the preview it found, so cancelling the confirmation does not lose it.
+ */
+export type PluginUpdateAnswer =
+  | { kind: "newer"; version: string | null; preview: PluginPreview | null }
+  | { kind: "current"; text: string }
+  | { kind: "problem"; text: string };
+
+export const pluginUpdatesAtom = atom<Record<string, PluginUpdateAnswer>>({});
+
+/**
+ * When the startup update check last ran (ms), so a reload in development or a second
+ * window does not ask the registries — and, for a plugin no registry lists, GitHub —
+ * again within `RECHECK_MS`. The answers themselves are session state above.
+ */
+export const pluginUpdateCheckAtom = atomWithStorage<{ at: number }>(
+  "scmjs.plugin-updates", { at: 0 }, createJSONStorage(browserStorage), { getOnInit: true },
+);
 
 export interface PluginInstall {
   /** `builtin:<name>`, `github:owner/repo[@ref][/dir]`, or a URL — see `plugins/loader.ts`. */

@@ -43,7 +43,19 @@ export interface Preferences {
    * offer.
    */
   updates: { checkOnStart: boolean; nightly: boolean };
+  /**
+   * What to do when an installed plugin has a newer release than the one running
+   * (`plugins/updates.ts`). `notify` looks a few seconds after the plugins start and
+   * raises a notice with a button to the rows offering the update; `manual` asks nothing
+   * until **Check for update** is pressed on a row; `auto` installs what it finds, for the
+   * plugins the user added — a default moves with the editor's own releases and is only
+   * ever named in the notice. Every mode leaves the confirmation on a row's button alone.
+   */
+  plugins: { updates: PluginUpdateMode };
 }
+
+/** See `Preferences.plugins.updates`. */
+export type PluginUpdateMode = "notify" | "manual" | "auto";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   splash: true,
@@ -56,6 +68,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   classicText: false,
   testMap: { launch: true, dir: "" },
   updates: { checkOnStart: true, nightly: false },
+  plugins: { updates: "notify" },
 };
 
 /** The speeds the Preferences sliders offer, slowest first. */

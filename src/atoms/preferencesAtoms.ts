@@ -10,7 +10,7 @@
 import { atom, type Setter } from "jotai";
 import { atomWithStorage, RESET } from "jotai/utils";
 import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
-import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
+import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, mergedStorage, removeStoredKeys, storedKeys } from "./storage";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
 import { dockWidthsAtom, panelsAtom } from "./uiAtoms";
@@ -87,6 +87,7 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.plugin-code": (set) => set(pluginCodeAtom, RESET),
   "scmjs.plugin-registries": (set) => set(userRegistriesAtom, RESET),
   "scmjs.plugin-registry": (set) => set(registryCacheAtom, RESET),
+  "scmjs.plugin-updates": (set) => set(pluginUpdateCheckAtom, RESET),
   // The choice only; the copies themselves are in the origin's file storage, which Game Data… removes.
   "scmjs.gameData": (set) => set(gameDataProfileAtom, RESET),
 };

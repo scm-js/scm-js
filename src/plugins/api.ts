@@ -2272,14 +2272,22 @@ export interface StatusLineOptions extends WidgetOptions {
  * download: the bar's own movement is not announced).
  */
 export type StatusLineElement = HTMLElement & {
-  /** A finished line. `kind` colours it; nothing means plain. */
-  set(text: string, kind?: "ok" | "warn" | "error"): void;
+  /**
+   * A finished line. `kind` colours it; nothing means plain. A `Node` in place of the
+   * text is for a line that carries more than words — a failure with a link to the
+   * settings that would fix it.
+   */
+  set(text: string | Node, kind?: "ok" | "warn" | "error"): void;
   /** Waiting, with no idea how long: a ring and the text. */
   busy(text: string): void;
   /** Waiting with a share done (0…1), or null for the sliding bar. */
   progress(text: string, value: number | null): void;
-  /** A Cancel beside the line that calls `stop`; null takes it away. */
-  cancel(stop: (() => void) | null): void;
+  /**
+   * A Cancel beside the line that calls `stop`; null takes it away. `label` is the
+   * button's word — "Stop" for a request that is running, since Cancel in a dialog
+   * means leaving it.
+   */
+  cancel(stop: (() => void) | null, label?: string): void;
   /** Back to an empty line. */
   clear(): void;
 };

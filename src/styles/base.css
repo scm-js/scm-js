@@ -6,6 +6,12 @@
   padding: 0;
 }
 
+/* The `hidden` attribute wins over any display rule, as a plugin's plain DOM assumes
+   (`button.hidden = true` on a `.btn`, an `inline-flex`, used to leave it on screen). */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 #root {

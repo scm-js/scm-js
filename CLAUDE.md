@@ -951,6 +951,19 @@ styles are the Waiting block at the end of `styles/ui.css`; the reduced-motion r
 so nothing animates in JavaScript. `ui.progress` stays what it was: a panel over the *map*, for
 work that runs while the user carries on editing, which a modal dialog covers. All of it is additive — `PLUGIN_API_VERSION` stays 1 —
 and a plugin repository picks the addition up with `npm update @scm-js/plugin-api`.
+The 2026-09-05 pass moved every plugin onto the kit — each had been drawing its own ring,
+bar, veil and skeleton with a scoped `@keyframes` and its own reduced-motion rule — and
+two things the plugins needed came back into the contract: `statusLine.cancel(stop, label)`
+takes the button's word (the AI plugin's is *Stop*, since Cancel in a dialog means leaving
+it) and `statusLine.set` takes a `Node` in place of the text (a failure line that carries
+a link to the settings that would fix it). scmscx.com is the worked example for the kit;
+the AI plugin's `Runner` (`ui.ts` there) is a status line with an elapsed clock and a
+reasoning fold around it. `base.css` gained `[hidden] { display: none !important }` in
+the same pass: `.btn` is `inline-flex`, an author rule that beat the browser's own
+`[hidden]`, so the status line's Cancel — and every plugin button hidden with
+`el.hidden = true`, which is what plain DOM reaches for — stayed on screen after the
+work ended. Nothing here tests the widgets' DOM: the test environment is node, and a
+DOM test runner is a dependency the repository does not carry.
 
 The beta pass added the rest of what the editor itself does to the contract — read `api.ts` and
 `docs/plugins.md` for the list: `document.save` / `saveAs` / `close` / `changeTileset` (`export`

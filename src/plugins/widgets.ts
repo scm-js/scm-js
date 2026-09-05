@@ -227,9 +227,10 @@ export function createWidgets(): WidgetsApi {
       track.hidden = true;
       cancelBtn.hidden = true;
 
-      const paint = (message: string, kind: string, spin: boolean, value: number | null) => {
+      const paint = (message: string | Node, kind: string, spin: boolean, value: number | null) => {
         line.className = classes("status-line", kind, options.className);
-        if (text.textContent !== message) text.textContent = message;
+        if (typeof message !== "string") text.replaceChildren(message);
+        else if (text.textContent !== message || text.firstElementChild) text.textContent = message;
         ring.hidden = !spin;
         track.hidden = value === null;
         if (value !== null) {
@@ -247,7 +248,7 @@ export function createWidgets(): WidgetsApi {
       node.busy = (message) => paint(message, "", true, null);
       node.progress = (message, value) => paint(message, "", true, value);
       node.clear = () => paint("", "", false, null);
-      node.cancel = (stop) => { stopper = stop; cancelBtn.hidden = !stop; };
+      node.cancel = (stop, label) => { stopper = stop; cancelBtn.hidden = !stop; cancelBtn.textContent = label ?? "Cancel"; };
       return node;
     },
 

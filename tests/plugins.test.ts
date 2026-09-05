@@ -47,6 +47,7 @@ import {
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../src/plugins/defaults";
+import { BUILTIN_REPLACES } from "../src/plugins/builtin";
 import { failureToast, pluginFailures } from "../src/plugins/failures";
 import {
   addRegistry, cachedRegistries, entryIcon, groupByInstall, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
@@ -1068,6 +1069,12 @@ describe("plugin lifecycle", () => {
       .toEqual([{ spec: `github:scm-js/plugin-repair@${sha}`, enabled: true }]);
     // A bundled copy stands in the same place, and the stored row folds onto it too.
     expect(pluginKey("github:scm-js/plugin-repair@v1.0.0")).toBe("github:scm-js/plugin-repair");
+    // That is `BUILTIN_REPLACES`, which `scripts/vendor-plugins.mjs` fills in: every copy
+    // this build bundled answers for the spec it was built from. The loop is empty until
+    // the vendoring has run, so this is the one place a test may read it.
+    for (const [name, spec] of Object.entries(BUILTIN_REPLACES)) {
+      expect(pluginKey(`builtin:${name}`), name).toBe(pluginKey(spec));
+    }
     // Something else entirely still follows the defaults, in the order it was added.
     expect(effectiveInstalls([{ spec: "https://x/p/", enabled: true }], defaults))
       .toEqual([{ spec: "github:scm-js/plugin-repair@v1.0.0", enabled: true }, { spec: "https://x/p/", enabled: true }]);
@@ -2425,6 +2432,12 @@ describe("plugin registries", () => {
       { spec: "github:scm-js/plugin-paint", name: "Paint", version: "1.0.1" },
       { spec: "github:scm-js/plugin-repair", name: "Repair" },
     ];
+    // `pluginKey` folds a bundled copy onto the spec it was vendored from by reading the
+    // generated `plugins/` tree, which a fresh clone has not got — and neither has CI,
+    // where the tests run before the build vendors anything. `unlistedInstalls` takes the
+    // key function rather than importing it for exactly that reason, so this stands in for
+    // a build that bundled Repair and the test says the same thing either way.
+    const key = (spec: string) => pluginKey(spec === "builtin:repair" ? "github:scm-js/plugin-repair" : spec);
     // The identity a spec is matched on: the plugin, not the version of it that is installed.
     const rows = unlistedInstalls(
       [
@@ -2437,7 +2450,7 @@ describe("plugin registries", () => {
         { spec: "github:scm-js/plugin-ai@0000000", name: "AI" },
       ],
       listed,
-      pluginKey,
+      key,
     );
     expect(rows.map((e) => e.name)).toEqual(["AI", "Mine"]);
     expect(rows.every((e) => e.unlisted)).toBe(true);
@@ -2451,9 +2464,9 @@ describe("plugin registries", () => {
     expect(searchRegistry([...listed, ...rows], "language").map((e) => e.name)).toEqual(["AI"]);
     expect(searchRegistry([...listed, ...rows], "ai")[0].name).toBe("AI");
     // Nothing installed, or everything already listed: no extra rows.
-    expect(unlistedInstalls([], listed, pluginKey)).toEqual([]);
+    expect(unlistedInstalls([], listed, key)).toEqual([]);
     // A plugin with no manifest read yet still gets a row, named by its spec.
-    expect(unlistedInstalls([{ spec: "https://x/p/plugin.json" }], [], pluginKey))
+    expect(unlistedInstalls([{ spec: "https://x/p/plugin.json" }], [], key))
       .toEqual([{ spec: "https://x/p/plugin.json", name: "https://x/p/plugin.json", unlisted: true }]);
   });
 

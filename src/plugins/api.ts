@@ -225,6 +225,8 @@ export interface PluginApi {
   /** Key combinations, tried before the editor's own and never while a text field has focus. */
   readonly hotkeys: HotkeyApi;
   readonly commands: CommandsApi;
+  /** Live objects one plugin holds out for others to use, found by name and watched for arriving. */
+  readonly services: ServicesApi;
   readonly events: EventsApi;
   /**
    * A small key-value store of the plugin's own, kept in the browser's local storage under
@@ -1089,6 +1091,51 @@ export interface CommandsApi {
   has(id: string): boolean;
   /** Every command registered by every plugin. */
   list(): CommandInfo[];
+}
+
+/* ── Services ───────────────────────────────────────────── */
+
+export interface ServiceInfo {
+  id: string;
+  pluginId: string;
+  version: number;
+}
+
+export interface ServiceOptions {
+  /** The provider's version of the contract, 1 by default; a consumer that needs a newer one checks `ServiceInfo.version`. */
+  version?: number;
+}
+
+/**
+ * A command is one thing to do; a service is a thing to *hold* — an account another
+ * plugin signs in through, a connection, a catalogue. A plugin provides one live object
+ * under a name and every other plugin reaches it by that name, whatever order they were
+ * activated in: `watch` answers at once with what is there and again whenever the
+ * provider arrives or goes.
+ *
+ * The object's shape is the provider's to publish (a `contract.d.ts` in its repository,
+ * taken as a dev dependency and imported with `import type`, which is erased before the
+ * loader sees it); the editor never reads it. A name without a dot is namespaced under
+ * the plugin (`"account"` → `"scmjs-dev.account"`); one with a dot is taken as it is.
+ *
+ * @example
+ * // The provider:
+ * api.services.provide("account", accountService);
+ * // A consumer:
+ * api.services.watch<AccountService>("scmjs-dev.account", (account) => {
+ *   if (account) useSessionFrom(account); else useOwnSignIn();
+ * });
+ */
+export interface ServicesApi {
+  /** Hold an object out under a name. Providing the same name again replaces it; the Disposable withdraws it. */
+  provide<T extends object>(id: string, service: T, options?: ServiceOptions): Disposable;
+  /** The object under a name, or null when no plugin provides it. */
+  get<T extends object>(id: string): T | null;
+  has(id: string): boolean;
+  /** Called at once with the current object (or null) and again on every change of provider. */
+  watch<T extends object>(id: string, listener: (service: T | null, info: ServiceInfo | null) => void): Disposable;
+  /** Every service provided by every plugin. */
+  list(): ServiceInfo[];
 }
 
 /* ── Graphics ───────────────────────────────────────────── */
@@ -2381,9 +2428,11 @@ export type TopMenu = "File" | "Edit" | "View" | "Layer" | "Scenario" | "Trigger
 
 /**
  * A top-level menu, or a submenu by label: `"File/Import"`. A last segment that names no
- * submenu gets one of the plugin's own, at the end of the menu (`"Tools/AI"`).
+ * submenu gets one of the plugin's own, at the end of the menu (`"Tools/AI"`), and a
+ * first segment that names no top-level menu gets one made for the plugin, placed before
+ * Help (`"Account"`).
  */
-export type MenuPath = TopMenu | `${TopMenu}/${string}`;
+export type MenuPath = TopMenu | `${TopMenu}/${string}` | (string & {});
 
 export interface MenuItemSpec {
   label: string;
@@ -2496,6 +2545,8 @@ export type PluginEvent =
   | "file"
   /** A plugin registered or removed a command — how a plugin learns that one it calls by id has arrived. */
   | "commands"
+  /** A plugin provided or withdrew a service — `services.watch` is the usual way to hear this for one name. */
+  | "services"
   /** The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now. */
   | "gameData";
 

@@ -24,7 +24,7 @@ import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, status
 import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginCommandsAtom, pluginContextItemsAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -104,7 +104,7 @@ import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
-  type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
+  type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type ServiceInfo,
   type FlashTarget, type StatusItemHandle, type StatusItemSpec,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
@@ -1199,6 +1199,14 @@ export function qualifyCommand(pluginId: string, id: string): string {
   return trimmed.includes(".") ? trimmed : `${pluginId}.${trimmed}`;
 }
 
+function findService(store: Store, id: string) {
+  return store.get(pluginServicesAtom).find((s) => s.id === id) ?? null;
+}
+
+function serviceInfo(s: { id: string; pluginId: string; version: number }): ServiceInfo {
+  return { id: s.id, pluginId: s.pluginId, version: s.version };
+}
+
 export function runCommand(store: Store, id: string, args: unknown[] = []): unknown {
   const command = store.get(pluginCommandsAtom).find((c) => c.id === id);
   if (!command) {
@@ -1314,6 +1322,7 @@ const EVENT_ATOMS = {
   options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
   commands: [pluginCommandsAtom],
+  services: [pluginServicesAtom],
   gameData: [gameDataSourceAtom, gameDataRevisionAtom],
 } as const;
 
@@ -1887,6 +1896,38 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       run: (id, ...args) => runCommand(store, qualifyCommand(info.id, id), args),
       has: (id) => store.get(pluginCommandsAtom).some((c) => c.id === qualifyCommand(info.id, id)),
       list: (): CommandInfo[] => store.get(pluginCommandsAtom).map((c) => ({ id: c.id, title: c.title, pluginId: c.pluginId, enabled: c.enabled ? c.enabled() : true })),
+    },
+
+    services: {
+      provide: (id, service, options) => {
+        const key = nextContributionKey();
+        const name = qualifyCommand(info.id, id);
+        if (store.get(pluginServicesAtom).some((s) => s.id === name)) console.warn(`[plugins] service ${name} is already provided; the newer one wins`);
+        store.set(pluginServicesAtom, [...store.get(pluginServicesAtom).filter((s) => s.id !== name), { key, pluginId: info.id, id: name, version: options?.version ?? 1, service }]);
+        return bag.add(() => store.set(pluginServicesAtom, store.get(pluginServicesAtom).filter((s) => s.key !== key)));
+      },
+      get: <T extends object>(id: string) => (findService(store, qualifyCommand(info.id, id))?.service as T | undefined) ?? null,
+      has: (id) => findService(store, qualifyCommand(info.id, id)) !== null,
+      watch: <T extends object>(id: string, listener: (service: T | null, info: ServiceInfo | null) => void) => {
+        const name = qualifyCommand(info.id, id);
+        let last: object | null = null;
+        const tell = (entry: ReturnType<typeof findService>) => {
+          try { listener((entry?.service as T | undefined) ?? null, entry ? serviceInfo(entry) : null); } catch (err) { console.error(`[${info.name}] service watcher failed`, err); }
+        };
+        const check = () => {
+          const entry = findService(store, name);
+          const now = entry?.service ?? null;
+          if (now === last) return;
+          last = now;
+          tell(entry);
+        };
+        const first = findService(store, name);
+        last = first?.service ?? null;
+        tell(first);
+        const unsub = store.sub(pluginServicesAtom, check);
+        return bag.add(unsub, "events");
+      },
+      list: () => store.get(pluginServicesAtom).map(serviceInfo),
     },
 
     events: {

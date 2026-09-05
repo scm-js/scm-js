@@ -823,6 +823,41 @@ it (`undefined` when there is no such command or its `enabled()` says no); `has(
 namespaced under the plugin (`"convert"` → `"image-to-terrain.convert"`); one with a dot
 is taken as it is, so a plugin can publish a stable name for others to call.
 
+### `api.services`
+
+A command is one thing to do; a service is a thing to *hold*: an account another plugin
+signs in through, a connection to a server, a catalogue. A plugin provides one live
+object under a name, and every other plugin reaches it by that name whatever order they
+were activated in.
+
+```js
+// The provider (the scmjs.dev plugin):
+api.services.provide("account", accountService);
+
+// A consumer (the AI plugin):
+api.services.watch("scmjs-dev.account", (account) => {
+  if (account) useSessionFrom(account);
+  else useOwnSignIn();
+});
+```
+
+`provide(name, object, { version? })` returns a `Disposable`; providing the same name
+again replaces the object, and the plugin's own deactivation withdraws it. `get(name)`
+answers the object or null, `has(name)` whether there is one, `list()` every service as
+`{ id, pluginId, version }`. `watch(name, fn)` calls `fn(object | null, info | null)` at
+once with what is there and again on every change of provider, so a consumer activated
+first still sees the provider arrive. Names follow the command rule: one without a dot is
+namespaced under the plugin (`"account"` → `"scmjs-dev.account"`), one with a dot is taken
+as it is.
+
+The object's shape is the provider's to publish and the editor never reads it: put a
+`contract.d.ts` in the provider's repository, let consumers take the repository as a dev
+dependency and import the types with `import type`, which is erased before the loader
+sees the specifier. `version` is the provider's version of that contract, for a consumer
+that needs a newer one. There is no sandbox between plugins here any more than
+elsewhere: a service is an ordinary object, and what a consumer does with it is up to
+the consumer.
+
 ### `api.terrain`
 
 Read-only helpers over the current tileset, plus the Terrain palette's own pick and the
@@ -1130,8 +1165,9 @@ Walkability is the worked example.
   menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
   which case the item sits directly under it. A last segment that names no submenu gets
   one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
-  items can keep them together; `separator: true` on an item draws a line above it
-  (never two in a row). `item` is `{ label, shortcut?, icon?, after?, enabled?(), run() }`.
+  items can keep them together, and a first segment that names no top-level menu gets
+  one made for the plugin, placed before Help (`"Account"`); `separator: true` on an
+  item draws a line above it (never two in a row). `item` is `{ label, shortcut?, icon?, after?, enabled?(), run() }`.
   `icon` puts a mark in front of the label: `"plugin"` for the plugin's own icon (the
   manifest's), or any `PluginIcon`. Use it for items that do something no built-in does,
   such as reaching a server, so the user can tell at a glance which entries are the
@@ -1173,6 +1209,7 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 | `"options"` | An editing option moved: symmetry, placement and doodad rules, location snap, the fog view player, clip parts and paste mode, locked layers, the grid look, Preferences. |
 | `"file"` | The document's name or handle after a Save, its save options, the archive extras, or the recent list. |
 | `"commands"` | A plugin registered or removed a command. This is how a plugin that calls another's by id learns it has arrived, since plugins activate in no fixed order; check `commands.has` in the listener. |
+| `"services"` | A plugin provided or withdrew a service. `services.watch(name, fn)` is the usual way to hear this for one name. |
 | `"gameData"` | The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now, and everything drawn or named from the data is worth redoing. |
 
 ### `api.storage`
@@ -1207,4 +1244,5 @@ above. Read the one nearest to what you are writing.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
 | [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | `triggers.claim`, a dialog that keeps Escape for its own editor, files kept with the map through `document.extras`, and commands published for other plugins. |
-| [AI](https://github.com/scm-js/plugin-ai) | The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for its phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Also calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins, a top-level menu of the plugin's own (`"Account"`), a status-bar cell, and map storage through `document.export` / `document.open`. |
+| [AI](https://github.com/scm-js/plugin-ai) | The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for its phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Also consuming another plugin's service (`services.watch` for the scmjs.dev sign-in) and calling another plugin's commands after the `"commands"` event, `document.create`, a submenu of the plugin's own, and the settings family of `document.update`. |

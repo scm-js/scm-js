@@ -57,8 +57,9 @@ export interface Menu {
  * top-level menu or submenu its path names (`"File/Import"`), after one separator — or,
  * when `after` names an item or submenu in that menu, directly under it. A path whose
  * last segment names no submenu gets one made for it (`"Tools/AI"` — a submenu of the
- * plugin's own, at the end of Tools); a top-level menu that does not exist falls back to
- * the Plugins menu. Pure, so it is testable.
+ * plugin's own, at the end of Tools); a top-level menu that does not exist is made for
+ * the plugin, before Help (`"Account"`), holding only what plugins put there. Pure, so it
+ * is testable.
  */
 export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]): Menu[] {
   if (plugin.length === 0) return menus;
@@ -78,7 +79,14 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
   for (const p of plugin) {
     const [top, ...rest] = p.path.split("/");
     let target: Item[] | null = null;
-    const menu = out.find((m) => m.label === top) ?? out.find((m) => m.label === "Plugins") ?? null;
+    let menu = out.find((m) => m.label === top) ?? null;
+    if (!menu && top.trim()) {
+      // A top-level menu of the plugin's own, before Help so the built-in order stays readable.
+      menu = { label: top, items: [] };
+      separated.add(menu.items);
+      const help = out.findIndex((m) => m.label === "Help");
+      out.splice(help >= 0 ? help : out.length, 0, menu);
+    }
     if (menu) {
       target = menu.items;
       for (const label of rest) {

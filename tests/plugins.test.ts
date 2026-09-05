@@ -1881,7 +1881,10 @@ describe("plugin surfaces", () => {
     // A submenu that does not exist is made for the plugin, at the end after a separator.
     expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind === "sub" ? `sub:${i.label}` : i.kind))).toEqual(["New", "sub:Import", "sep", "sub:Nope"]);
     expect((merged[0].items[3] as Extract<Menu["items"][number], { kind: "sub" }>).items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Deep"]);
-    expect(merged[1].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Manage Plugins…", "sep", "Lost"]);
+    // A top-level menu that does not exist is made for the plugin, before Help (here: at the end).
+    expect(merged.map((m) => m.label)).toEqual(["File", "Plugins", "Nowhere"]);
+    expect(merged[1].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Manage Plugins…"]);
+    expect(merged[2].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Lost"]);
     // The caller's model is untouched.
     expect(menus[0].items).toHaveLength(2);
     expect((menus[0].items[1] as { items: unknown[] }).items).toHaveLength(1);
@@ -2628,6 +2631,59 @@ describe("plugin registries", () => {
 
 /* ── Script and create ──────────────────────────────────── */
 
+describe("plugin services", () => {
+  it("holds an object out under a namespaced name that other plugins get, watch and outlive", () => {
+    const { store } = blankStore(16, 16);
+    const providerBag = new Contributions();
+    const provider = createPluginApi(store, { id: "scmjs-dev", name: "scmjs.dev", source: "s" }, providerBag);
+    const consumer = createPluginApi(store, { id: "ai", name: "AI", source: "s" }, new Contributions());
+    const seen: (string | null)[] = [];
+    const infos: unknown[] = [];
+    consumer.services.watch<{ who: string }>("scmjs-dev.account", (svc, info) => { seen.push(svc?.who ?? null); infos.push(info); });
+    expect(seen).toEqual([null]);
+    expect(consumer.services.get("scmjs-dev.account")).toBeNull();
+    expect(consumer.services.has("scmjs-dev.account")).toBe(false);
+
+    const account = { who: "jeany" };
+    const handle = provider.services.provide("account", account, { version: 2 });
+    expect(provider.services.has("account")).toBe(true);
+    expect(consumer.services.get<{ who: string }>("scmjs-dev.account")).toBe(account);
+    expect(consumer.services.list()).toEqual([{ id: "scmjs-dev.account", pluginId: "scmjs-dev", version: 2 }]);
+    expect(seen).toEqual([null, "jeany"]);
+    expect(infos[1]).toEqual({ id: "scmjs-dev.account", pluginId: "scmjs-dev", version: 2 });
+
+    // Another plugin's service does not wake this watcher.
+    consumer.services.provide("other", {});
+    expect(seen).toEqual([null, "jeany"]);
+
+    // Replacing under the same name is one change; withdrawing is another.
+    const next = { who: "jeany2" };
+    provider.services.provide("account", next);
+    expect(seen).toEqual([null, "jeany", "jeany2"]);
+    handle.dispose();
+    // The first handle's key is gone already (replaced), so disposing it withdraws nothing.
+    expect(consumer.services.get("scmjs-dev.account")).toBe(next);
+    providerBag.dispose();
+    expect(consumer.services.get("scmjs-dev.account")).toBeNull();
+    expect(seen).toEqual([null, "jeany", "jeany2", null]);
+  });
+
+  it("raises the services event and survives a watcher that throws", () => {
+    const { store } = blankStore(16, 16);
+    const provider = createPluginApi(store, { id: "p", name: "P", source: "s" }, new Contributions());
+    const consumer = createPluginApi(store, { id: "c", name: "C", source: "s" }, new Contributions());
+    let events = 0;
+    consumer.events.on("services", () => { events++; });
+    const stop = consumer.services.watch("p.thing", () => { throw new Error("boom"); });
+    const d = provider.services.provide("thing", { a: 1 });
+    expect(events).toBe(1);
+    stop.dispose();
+    d.dispose();
+    expect(events).toBe(2);
+    expect(consumer.services.list()).toEqual([]);
+  });
+});
+
 describe("plugin trigger claims and commands", () => {
   it("claims a run of triggers by content, describes it, refreshes and removes it", () => {
     const { store, scn } = blankStore();
@@ -2747,6 +2803,18 @@ describe("plugin api conveniences", () => {
     expect(sub.items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Generate…", "Review…", "sep", "Assistant", "sep", "Settings…"]);
     // The first plugin item in a built-in menu already gets one separator; `separator` does not add a second.
     expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Statistics…", "sep", "Top", "sub"]);
+  });
+
+  it("makes a top-level menu of the plugin's own before Help", () => {
+    const menus: Menu[] = [{ label: "File", items: [{ kind: "item", label: "Open…" }] }, { label: "Help", items: [{ kind: "item", label: "About" }] }];
+    const merged = withPluginItems(menus, [
+      { key: 1, pluginId: "p", path: "Account", label: "Sign in…", run: () => {} },
+      { key: 2, pluginId: "p", path: "Account", label: "Sign out", separator: true, run: () => {} },
+      { key: 3, pluginId: "p", path: "Account/Maps", label: "Open…", run: () => {} },
+    ]);
+    expect(merged.map((m) => m.label)).toEqual(["File", "Account", "Help"]);
+    expect(merged[1].items.map((i) => (i.kind === "item" ? i.label : i.kind === "sub" ? `sub:${i.label}` : i.kind))).toEqual(["Sign in…", "sep", "Sign out", "sub:Maps"]);
+    expect(menus.map((m) => m.label)).toEqual(["File", "Help"]);
   });
 
   it("tells a placement verdict's reason in words", () => {

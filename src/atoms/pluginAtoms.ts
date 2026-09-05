@@ -186,6 +186,23 @@ export interface PluginCommand {
 
 export const pluginCommandsAtom = atom<PluginCommand[]>([]);
 
+/**
+ * A service a plugin provided: a live object other plugins reach by name
+ * (`services.get`) and watch for (`services.watch`) — an account, a connection, a
+ * catalogue — where a command is one thing to do and this is a thing to hold.
+ */
+export interface PluginService {
+  key: number;
+  pluginId: string;
+  /** Namespaced under the plugin unless the plugin gave a dotted name of its own. */
+  id: string;
+  /** The provider's own version of the contract, for a consumer that needs to know. */
+  version: number;
+  service: object;
+}
+
+export const pluginServicesAtom = atom<PluginService[]>([]);
+
 export interface PluginHotkey {
   key: number;
   pluginId: string;

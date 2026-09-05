@@ -562,6 +562,14 @@ here is generic:
   another's commands by id (the AI plugin → `trigger-script.compile` / `.build` / `.declarations` /
   `.state` / `.print` / `.simulate` / `.triggerAtLine` / `.open`) learns they arrived — there is
   deliberately no plugin ordering, so `commands.has` at call time is the contract.
+- `api.services` (`pluginServicesAtom`, `host.ts`, the `"services"` event) is the stateful counterpart
+  of commands: a plugin `provide`s one live object under a namespaced name (`qualifyCommand` rules)
+  and consumers `get` / `has` / `watch` it — `watch` fires at once with what is there and on every
+  change of provider, so activation order does not matter, as with `"commands"`. The editor never
+  reads the object; its shape is a `contract.d.ts` in the provider's repository. The scmjs.dev plugin
+  (`github.com/scm-js/plugin-scmjs-dev`) provides `scmjs-dev.account` and the AI plugin consumes it
+  (below). A plugin item whose top menu does not exist gets a top-level menu of its own before Help
+  (`withPluginItems`; `MenuPath` accepts any string for it) — it used to fall back to Plugins.
 - `DialogSpec.keepOpenOnEscape(target)` lets a plugin dialog keep Escape for something inside it
   (Monaco's popups); `PluginDialog` routes it to `DialogFrame.onEscapeKeyDown`.
 - `editor/save.ts` keeps `SCRIPT_MEMBER` / `MANIFEST_MEMBER` (`scmjs\\triggers.ts` / `.json`) only so
@@ -1068,7 +1076,15 @@ through the ordinary API — a map plan is a coarse legend grid turned into `pai
 base geometry (`layout.ts` vendored there), triggers come back as script and go through the Trigger Script
 plugin's `compile` → repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the
 wire contract, kept identical in both repositories. The editor knows nothing of it beyond the three host additions
-above. The 2026-09-05 pass made it the worked example for the "built-in feel" surfaces (`dock: "right"`,
+above. Its sign-in is the **scmjs.dev** plugin's when that one is installed (`github.com/scm-js/plugin-scmjs-dev`,
+not a default yet): it provides the `scmjs-dev.account` service — `contract.d.ts` there; the AI plugin carries a
+copy of the interface in `scmjsdev.ts` and matches by shape — and `AccountManager.setProvider` in the AI plugin
+delegates the session, the server address, sign-in/out and the balance to it while the access mode is `account`,
+with the AI Settings' access select and server field locked and a line saying so. The scmjs.dev plugin also owns the
+**Account** top-level menu, a status-bar cell, the Account dialog (balance, ledger, storage, top-up) and map
+storage over the server's `/v1/maps` (`ai-server/src/maps/`: maps with numbered revisions and notes, bytes keyed by
+account + sha256 in an `ObjectStore` — memory / directory / GCS through a dependency-free JSON-API client — a
+per-role `storageMb` cap over `maps.capMb`, checked in a transaction that locks the user row). The 2026-09-05 pass made it the worked example for the "built-in feel" surfaces (`dock: "right"`,
 `ui.statusItem`, `ui.dialogSlot`, `view.flash`, plus an `ui.overlay` for a running tool call's footprint —
 `intent.ts` there), streamed the `agent` recipe (text `delta`s and a `tool_use` event the moment the model names a
 tool; the server's system blocks moved to the one-hour cache in `claude.ts#systemBlocks`), and added the Scenario

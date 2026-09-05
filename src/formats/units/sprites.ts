@@ -37,6 +37,15 @@ export function frameCacheUsage(): { frames: number; bytes: number; budget: numb
   return { frames: cache.size, bytes: cache.used, budget: cache.budget };
 }
 
+/**
+ * Drop every cached frame. The keys are image ids and palette *names*, not the objects
+ * behind them, so after a switch to another data set (whose image 0 may be a different
+ * picture) the cache would answer with the old set's pixels — this is what a switch calls.
+ */
+export function clearFrameCache(): void {
+  cache.clear();
+}
+
 const luts = new Map<string, Uint8Array>();
 const teamPalettes = new Map<string, Uint8Array>();
 const remapPalettes = new Map<string, Uint8Array>();

@@ -437,7 +437,10 @@ those trees may be committed.
 src/
   atoms/        Jotai state: editor/document atoms (incl. undo history), UI + dialog stack
   editor/       Invertible edits and placement checks for every map layer
-  data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger definitions)
+  data/         Reference tables (tilesets, players/colours, units, upgrades, techs, trigger definitions), and
+                the names read out of the loaded game data in front of them (gameNames.ts)
+  gamedata/     Where the game files come from: the resolver chain, the stored copies (one per data set),
+                the extraction and its worker, the desktop bridge's types, data-set profiles
   formats/
     chk/        CHK container, section registry, typed section codecs
     mpq/        .scm/.scx open + save on top of mopaq
@@ -446,7 +449,7 @@ src/
     units/      Unit data, lazy GRP/.lo/remap loading, frame cache, the iscript animator
     triggers/   TrigEdit-syntax printer and parser
   plugins/      Plugin API (the contract), host, loader, built-in registry
-  services/     Map open/save pickers, PNG export, startup preload
+  services/     Map open/save pickers, PNG export, startup preload, game data switching
   components/
     chrome/     MenuBar (Radix Menubar), ToolBar, StatusBar
     panels/     Left dock (layer rail + palettes), right dock (Minimap, Layers, Properties), plugin panels

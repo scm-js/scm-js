@@ -58,6 +58,8 @@ export function triggerNames(scn: Scenario): TriggerNames {
       if (cls) return cls.value;
       const byDefault = UNIT_NAMES.findIndex((n) => lower(n) === key);
       if (byDefault >= 0) return byDefault;
+      // The loaded data set's own names (a mod's): what `unit` printed, so text round-trips.
+      for (let id = 0; id < UNIT_NAMES.length; id++) if (lower(unitName(id)) === key) return id;
       if (scn.unitSettings) {
         for (let id = 0; id < UNIT_NAMES.length; id++) {
           const custom = unitCustomName(scn, id);

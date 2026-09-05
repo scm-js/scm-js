@@ -7,9 +7,11 @@ import { decodeGrp, type Grp } from "../dat/grp";
 import { decodeIscript, type IscriptBin } from "../dat/iscript";
 import { decodeLo, type LoFile } from "../dat/lo";
 import { decodePcx } from "../dat/pcx";
-import { decodeTbl } from "../dat/tbl";
+import { decodeTbl, decodeTblEntries } from "../dat/tbl";
 import { TEAM_COLOR_ROWS, TEAM_SLOT_COUNT } from "./teamColor";
 import { fetchAsset } from "../../gamedata/source";
+import { installNames } from "../../data/units";
+import { namesFromAssets } from "../../data/gameNames";
 
 /**
  * The unit data tables, fetched once from `arr/` + `game/` (mirroring the MPQ tree; see
@@ -33,6 +35,13 @@ export interface UnitAssets {
   /** upgrades.dat / techdata.dat, or null likewise (Upgrade / Technology Settings then show defaults as 0). */
   upgrades: UpgradesDat | null;
   techs: TechdataDat | null;
+  /**
+   * `stat_txt.tbl` as NUL-separated parts per entry — the game's own names for units (entries
+   * 0–227), weapons, upgrades and technologies (through the dat files' `label` columns) — or
+   * null when the extraction did not carry it. `data/gameNames.ts` turns it into the names
+   * the editor shows; it is the one file the tileset half of the extraction and this share.
+   */
+  statTxt: string[][] | null;
 }
 
 export class UnitAssetsMissingError extends Error {
@@ -58,7 +67,7 @@ export function getUnitAssets(): Promise<UnitAssets> {
   if (assetsPromise) return assetsPromise;
   assetsPromise = (async () => {
     try {
-      const [units, flingy, sprites, images, tbl, pcx, iscript, weapons, upgrades, techs] = await Promise.all([
+      const [units, flingy, sprites, images, tbl, pcx, iscript, weapons, upgrades, techs, statTxt] = await Promise.all([
         fetchPart("arr/units.dat", (d) => d.length === UNITS_DAT_SIZE || d.length === UNITS_DAT_SIZE_LEGACY),
         fetchPart("arr/flingy.dat", (d) => d.length === FLINGY_DAT_SIZE),
         fetchPart("arr/sprites.dat", (d) => d.length === SPRITES_DAT_SIZE),
@@ -82,6 +91,8 @@ export function getUnitAssets(): Promise<UnitAssets> {
           console.warn("arr/techdata.dat is not installed; Technology Settings will show no defaults", err);
           return null;
         }),
+        // Optional too: without it the names are the editor's own tables, which is right for Blizzard's data.
+        fetchPart("tileset/stat_txt.tbl", (d) => d.length > 2 && (d[0] | (d[1] << 8)) > 0).catch(() => null),
       ]);
       const teamColors = decodePcx(pcx).pixels;
       if (teamColors.length < TEAM_COLOR_ROWS * TEAM_SLOT_COUNT) throw new Error("tunit.pcx: too small");
@@ -96,8 +107,10 @@ export function getUnitAssets(): Promise<UnitAssets> {
         weapons: weapons ? decodeWeaponsDat(weapons) : null,
         upgrades: upgrades ? decodeUpgradesDat(upgrades) : null,
         techs: techs ? decodeTechdataDat(techs) : null,
+        statTxt: statTxt ? decodeTblEntries(statTxt) : null,
       };
       assetsReady = assets;
+      installNames(namesFromAssets(assets));
       return assets;
     } catch (err) {
       assetsPromise = null; // let a later attempt retry after the files are installed
@@ -163,6 +176,13 @@ class LazyFiles<T> {
     for (const [path, value] of this.ready) if (value === null) this.ready.delete(path);
   }
 
+  /** Drop everything, failed or not: the files behind these paths are a different data set's now. */
+  clear(): void {
+    this.ready.clear();
+    // A fetch still in flight lands in `ready` when it settles; nothing can be done about
+    // that here, so `pending` is left alone rather than lying about it.
+  }
+
   get(path: string): T | null | undefined {
     if (this.ready.has(path)) return this.ready.get(path);
     if (!this.pending.has(path)) {
@@ -196,6 +216,22 @@ export function retryFailedParts(): void {
   grps.forgetFailed();
   los.forgetFailed();
   remaps.forgetFailed();
+  for (const l of listeners) l();
+}
+
+/**
+ * The game data source changed to a *different* set of files (Help ▸ Game Data… switched
+ * data sets): every table, GRP, overlay and remap in memory describes the old one, so all
+ * of it goes, the names go back to the editor's tables, and the next `getUnitAssets` /
+ * `requestGrp` fetches afresh. The canvases are told, as after any part arrives.
+ */
+export function resetUnitAssets(): void {
+  assetsPromise = null;
+  assetsReady = null;
+  installNames(null);
+  grps.clear();
+  los.clear();
+  remaps.clear();
   for (const l of listeners) l();
 }
 

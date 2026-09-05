@@ -40,6 +40,7 @@ import {
   unitsRevisionAtom,
 } from "../../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
+import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import {
   ANIMATION_SPEEDS,
   animationSpeedIndex,
@@ -324,14 +325,15 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
   );
 }
 
-/** Preferences ▸ Game data: the address the resolver falls back to, and the way to the dialog. */
+/** Preferences ▸ Game data: where the files come from, which data set, and the way to the dialog. */
 function GameDataSection() {
   const open = useSetAtom(openDialogAtom);
   const source = useAtomValue(gameDataSourceAtom);
+  const set = source && source.profile.id !== DEFAULT_PROFILE.id ? `${source.profile.name} · ` : "";
   return (
     <Group title="Game data">
       <div className="row" style={{ alignItems: "baseline" }}>
-        <span className="grow dim">{source?.label ?? "Locating…"}</span>
+        <span className="grow dim">{source ? `${set}${source.label}` : "Locating…"}</span>
         <Button size="sm" onClick={() => open("gameData")}>
           <HardDrive size={11} /> Game Data…
         </Button>

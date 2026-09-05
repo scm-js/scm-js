@@ -247,17 +247,19 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
 }
 
 export interface WeaponsDat {
+  /** The weapon's name: a 1-based `stat_txt.tbl` index, 0 for none. */
+  label: Uint16Array;
   damage: Uint16Array;
   /** Added per upgrade level. */
   bonus: Uint16Array;
 }
 
-/** Only the two columns Unit Settings shows as defaults; the layout is 42 bytes per weapon, struct of arrays. */
+/** The label and the two columns Unit Settings shows as defaults; the layout is 42 bytes per weapon, struct of arrays. */
 export function decodeWeaponsDat(data: Uint8Array): WeaponsDat {
   expectSize("weapons.dat", data, WEAPONS_DAT_SIZE);
   const n = WEAPON_TYPES;
   const f = new Fields(data);
-  f.skip(n * 2); // label
+  const label = f.u16(n);
   f.skip(n * 4); // graphics
   f.skip(n); // explosion
   f.skip(n * 2); // target flags
@@ -266,7 +268,7 @@ export function decodeWeaponsDat(data: Uint8Array): WeaponsDat {
   f.skip(n * 2 * 3); // inner / medium / outer splash
   const damage = f.u16(n);
   const bonus = f.u16(n);
-  return { damage, bonus };
+  return { label, damage, bonus };
 }
 
 export type Race = "zerg" | "terran" | "protoss" | null;
@@ -326,9 +328,11 @@ export interface UpgradesDat {
   maxRepeats: Uint8Array;
   /** 1 for upgrades only Brood War has. */
   broodWar: Uint8Array;
+  /** The upgrade's name: a 1-based `stat_txt.tbl` index, 0 for none. */
+  label: Uint16Array;
 }
 
-/** Struct of arrays: six u16 columns of cost, then unknown / icon / label u16s, then race, max repeats and the Brood War flag. */
+/** Struct of arrays: six u16 columns of cost, then requirements / icon / label u16s, then race, max repeats and the Brood War flag. */
 export function decodeUpgradesDat(data: Uint8Array): UpgradesDat {
   expectSize("upgrades.dat", data, UPGRADES_DAT_SIZE);
   const n = UPGRADE_TYPES;
@@ -339,11 +343,12 @@ export function decodeUpgradesDat(data: Uint8Array): UpgradesDat {
   const vespeneFactor = f.u16(n);
   const timeCost = f.u16(n);
   const timeFactor = f.u16(n);
-  f.skip(n * 2 * 3); // requirements, icon, label
+  f.skip(n * 2 * 2); // requirements, icon
+  const label = f.u16(n);
   f.skip(n); // race
   const maxRepeats = f.u8(n);
   const broodWar = f.u8(n);
-  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar };
+  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar, label };
 }
 
 /** The columns Technology Settings shows as defaults. */
@@ -355,6 +360,8 @@ export interface TechdataDat {
   energyCost: Uint16Array;
   /** 1 for abilities only Brood War has. */
   broodWar: Uint8Array;
+  /** The technology's name: a 1-based `stat_txt.tbl` index, 0 for none. */
+  label: Uint16Array;
 }
 
 /** Struct of arrays: four u16 cost columns, then research / use requirements, icon and label u16s, race, an unused byte and the Brood War flag. */
@@ -366,8 +373,9 @@ export function decodeTechdataDat(data: Uint8Array): TechdataDat {
   const vespeneCost = f.u16(n);
   const researchTime = f.u16(n);
   const energyCost = f.u16(n);
-  f.skip(n * 2 * 4); // research requirements, use requirements, icon, label
+  f.skip(n * 2 * 3); // research requirements, use requirements, icon
+  const label = f.u16(n);
   f.skip(n * 2); // race, unused
   const broodWar = f.u8(n);
-  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar };
+  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar, label };
 }

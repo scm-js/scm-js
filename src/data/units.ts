@@ -56,8 +56,34 @@ export const UNIT_TYPE_COUNT = UNIT_NAMES.length;
 
 export const START_LOCATION = 214;
 
+/**
+ * Names read out of the loaded game data (`data/gameNames.ts#namesFromAssets`), one slot per
+ * id, `null` where the built-in table applies. Installed by the unit loader when the tables
+ * arrive and cleared when they are dropped, so `unitName` and its siblings follow whatever
+ * data set is in use without every caller being told.
+ */
+export interface LoadedNames {
+  units: readonly (string | null)[];
+  weapons: readonly (string | null)[];
+  upgrades: readonly (string | null)[];
+  techs: readonly (string | null)[];
+}
+
+let loadedNames: LoadedNames | null = null;
+
+/** Put the names the data gives in front of the tables here (`null` goes back to the tables alone). */
+export function installNames(names: LoadedNames | null): void {
+  loadedNames = names;
+}
+
+/** The names currently in front of the tables, or null when the data's are the game's own or nothing is loaded. */
+export function currentLoadedNames(): LoadedNames | null {
+  return loadedNames;
+}
+
+/** A unit type's display name: the loaded data's where it differs from the game's own, else StarEdit's. */
 export function unitName(id: number): string {
-  return UNIT_NAMES[id] ?? `Unit #${id}`;
+  return loadedNames?.units[id] ?? UNIT_NAMES[id] ?? `Unit #${id}`;
 }
 
 export interface UnitGroup {
@@ -105,12 +131,17 @@ export const RACE_LABEL: Record<RaceKey, string> = {
   neutral: "Neutral",
 };
 
-/** StarEdit's upgrade names by upgrades.dat id (0–60); 46 exist in the original game, Brood War added the rest. */
+/**
+ * StarEdit's upgrade names by upgrades.dat id (0–60); 46 exist in the original game, Brood War
+ * added the rest. The order is the game's (`upgrades.dat`'s `label` column, pinned against the
+ * real file in `tests/names.test.ts`): the armour upgrades first, then the weapons, then Plasma
+ * Shields at 15 — an earlier table had Plasma Shields at 7, which shifted ids 7–15 by one.
+ */
 export const UPGRADE_NAMES: readonly string[] = [
   "Terran Infantry Armor", "Terran Vehicle Plating", "Terran Ship Plating", "Zerg Carapace", "Zerg Flyer Carapace",
-  "Protoss Ground Armor", "Protoss Air Armor", "Protoss Plasma Shields", "Terran Infantry Weapons", "Terran Vehicle Weapons",
-  "Terran Ship Weapons", "Zerg Melee Attacks", "Zerg Missile Attacks", "Zerg Flyer Attacks", "Protoss Ground Weapons",
-  "Protoss Air Weapons", "U-238 Shells", "Ion Thrusters", "Burst Lasers (Unused)", "Titan Reactor",
+  "Protoss Ground Armor", "Protoss Air Armor", "Terran Infantry Weapons", "Terran Vehicle Weapons", "Terran Ship Weapons",
+  "Zerg Melee Attacks", "Zerg Missile Attacks", "Zerg Flyer Attacks", "Protoss Ground Weapons", "Protoss Air Weapons",
+  "Protoss Plasma Shields", "U-238 Shells", "Ion Thrusters", "Burst Lasers (Unused)", "Titan Reactor",
   "Ocular Implants", "Moebius Reactor", "Apollo Reactor", "Colossus Reactor", "Ventral Sacs",
   "Antennae", "Pneumatized Carapace", "Metabolic Boost", "Adrenal Glands", "Muscular Augments",
   "Grooved Spines", "Gamete Meiosis", "Metasynaptic Node", "Singularity Charge", "Leg Enhancements",
@@ -131,13 +162,13 @@ export const TECH_NAMES: readonly string[] = [
   "Unused (35)", "Unused (36)", "Unused (37)", "Unused (38)", "Unused (39)", "Unused (40)", "Unused (41)", "Unused (42)", "Unused (43)",
 ];
 
-export const upgradeName = (id: number) => UPGRADE_NAMES[id] ?? `Upgrade #${id}`;
-export const techName = (id: number) => TECH_NAMES[id] ?? `Technology #${id}`;
+export const upgradeName = (id: number) => loadedNames?.upgrades[id] ?? UPGRADE_NAMES[id] ?? `Upgrade #${id}`;
+export const techName = (id: number) => loadedNames?.techs[id] ?? TECH_NAMES[id] ?? `Technology #${id}`;
 
 const T = "terran", Z = "zerg", P = "protoss";
 /** Which race researches each upgrade, for grouping the list; null for the unused slots. */
 export const UPGRADE_RACE: readonly (RaceKey | null)[] = [
-  T, T, T, Z, Z, P, P, P, T, T, T, Z, Z, Z, P, P, T, T, T, T, T, T, T, T, Z, Z, Z, Z, Z, Z, Z, Z, Z, P, P, P, P, P, P, P, P, P, P, P, P,
+  T, T, T, Z, Z, P, P, T, T, T, Z, Z, Z, P, P, P, T, T, T, T, T, T, T, T, Z, Z, Z, Z, Z, Z, Z, Z, Z, P, P, P, P, P, P, P, P, P, P, P, P,
   null, null, P, null, P, null, T, Z, Z, T, null, null, null, null, null, null,
 ];
 export const TECH_RACE: readonly (RaceKey | null)[] = [

@@ -21,7 +21,7 @@ import {
   ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
 } from "../../data/triggerDefs";
-import { UNIT_NAMES } from "../../data/units";
+import { UNIT_NAMES, unitName } from "../../data/units";
 import type { Scenario } from "../../formats/chk/scenario";
 import {
   ActionFlag, ConditionFlag, ConditionType, MAX_ACTIONS, MAX_CONDITIONS, PlayerGroup, SWITCH_COUNT, cloneTrigger,
@@ -142,7 +142,7 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
         ...UNIT_CLASS_CHOICES,
         // An `<option>` cannot carry the colours, so a custom name's codes show escaped
         // rather than as the raw bytes the browser draws as tofu.
-        ...UNIT_NAMES.map((n, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || n) })),
+        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitName(id)) })),
       ];
       return <ChoiceSelect value={value} onChange={onChange} options={options} width={260} />;
     }

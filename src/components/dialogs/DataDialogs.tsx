@@ -4,7 +4,7 @@ import { FlaskConical, RotateCcw, Search, Swords, TrendingUp } from "lucide-reac
 import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { displayColorHex } from "../../data/players";
 import {
-  RACE_LABEL, TECH_NAMES, TECH_RACE, UNIT_GROUPS, unitName, UPGRADE_NAMES, UPGRADE_RACE, type RaceKey,
+  RACE_LABEL, TECH_NAMES, TECH_RACE, techName, UNIT_GROUPS, unitName, UPGRADE_NAMES, UPGRADE_RACE, upgradeName, type RaceKey,
 } from "../../data/units";
 import { weaponName } from "../../data/weapons";
 import { NO_UNIT, NO_WEAPON } from "../../formats/dat/dat";
@@ -93,14 +93,17 @@ const FRAMES_HINT = "Game frames: 15 per second on Fastest.";
 
 interface UnitItem { id: number; name: string; group: string }
 
-/** Every unit type in palette order, with its group for the list's section labels. */
-const UNIT_ITEMS: UnitItem[] = UNIT_GROUPS.flatMap((g) => g.units.map((id) => ({ id, name: unitName(id), group: g.label })));
+/**
+ * Every unit type in palette order, with its group for the list's section labels. Built
+ * when asked rather than once at import, because the names follow the loaded data set.
+ */
+const unitItems = (): UnitItem[] => UNIT_GROUPS.flatMap((g) => g.units.map((id) => ({ id, name: unitName(id), group: g.label })));
 
 function UnitList({ selected, onSelect }: { selected: number; onSelect: (id: number) => void }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return UNIT_ITEMS.filter((u) => !needle || u.name.toLowerCase().includes(needle) || String(u.id) === needle);
+    return unitItems().filter((u) => !needle || u.name.toLowerCase().includes(needle) || String(u.id) === needle);
   }, [q]);
   return (
     <div className="col" style={{ minHeight: 0, height: "100%" }}>
@@ -212,7 +215,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
     commit();
   };
 
-  const item = UNIT_ITEMS.find((u) => u.id === sel);
+  const item = unitItems().find((u) => u.id === sel);
   const race = UNIT_GROUPS.find((g) => g.label === item?.group)?.race;
   const sections = [...unitSettingsSections(scenario), "PUNI"].map((n) => n.trim()).join(" + ");
 
@@ -304,7 +307,8 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
 
 /* ── Upgrade Settings ───────────────────────────────────── */
 
-const UPGRADE_ITEMS: CatalogueItem[] = UPGRADE_NAMES.map((name, id) => ({ id, name, race: UPGRADE_RACE[id] }));
+/** Built per render: the names follow the loaded data set. */
+const upgradeItems = (): CatalogueItem[] => UPGRADE_NAMES.map((_, id) => ({ id, name: upgradeName(id), race: UPGRADE_RACE[id] }));
 const UPGRADE_COST_ROWS = [
   { label: "Minerals", base: "mineralCost", factor: "mineralFactor", datBase: "mineralCost", datFactor: "mineralFactor" },
   { label: "Vespene gas", base: "gasCost", factor: "gasFactor", datBase: "vespeneCost", datFactor: "vespeneFactor" },
@@ -394,11 +398,11 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title="Every upgrade back to its dat costs, every player back to the default levels"><RotateCcw size={11} /> Reset all to defaults</Button><span className="mono hint">writes {sections}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
-        <CatalogueList items={UPGRADE_ITEMS} selected={sel} onSelect={setSel} placeholder="Find upgrade… (name or id)" />
+        <CatalogueList items={upgradeItems()} selected={sel} onSelect={setSel} placeholder="Find upgrade… (name or id)" />
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="col" style={{ gap: 2, flex: 1 }}>
-              <span className="title">{UPGRADE_NAMES[sel]}</span>
+              <span className="title">{upgradeName(sel)}</span>
               <span className="hint">id {sel} · {raceOf(UPGRADE_RACE[sel])}{dat && dat.broodWar[sel] ? " · Brood War" : ""}{dat ? ` · ${dat.maxRepeats[sel]} level${dat.maxRepeats[sel] === 1 ? "" : "s"} in the game` : ""}</span>
             </div>
             <Check label="Use default upgrade settings" checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
@@ -455,7 +459,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
 
 /* ── Technology Settings ────────────────────────────────── */
 
-const TECH_ITEMS: CatalogueItem[] = TECH_NAMES.map((name, id) => ({ id, name, race: TECH_RACE[id] }));
+const techItems = (): CatalogueItem[] => TECH_NAMES.map((_, id) => ({ id, name: techName(id), race: TECH_RACE[id] }));
 const TECH_COST_ROWS = [
   { label: "Minerals", key: "mineralCost", dat: "mineralCost" },
   { label: "Vespene gas", key: "gasCost", dat: "vespeneCost" },
@@ -533,7 +537,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title="Every ability back to its dat costs, every player back to the default availability"><RotateCcw size={11} /> Reset all to defaults</Button><span className="mono hint">writes {sections}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
-        <CatalogueList items={TECH_ITEMS} selected={sel} onSelect={setSel} placeholder="Find technology… (name or id)" />
+        <CatalogueList items={techItems()} selected={sel} onSelect={setSel} placeholder="Find technology… (name or id)" />
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="col" style={{ gap: 2, flex: 1 }}>

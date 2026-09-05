@@ -37,6 +37,10 @@ import { NO_DOODADS } from "../formats/tileset/doodads";
 import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { getUnitAssets, imageGrpPath, peekUnitAssets, requestGrp } from "../formats/units/load";
+import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { DEFAULT_PROFILE } from "../gamedata/profiles";
+import { currentAssetSource, type AssetSource } from "../gamedata/source";
+import { installDataSetInto, listDataSets, removeDataSet, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
 import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
@@ -99,8 +103,8 @@ import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, l
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
-  type Cells, type CommandInfo, type DataApi, type Deactivate, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
-  type MapToolSpec, type MapToolStopReason, type NamedValue, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
+  type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
+  type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -673,7 +677,6 @@ export function sectionsApi(store: Store): SectionsApi {
   };
 }
 
-const named = (labels: readonly string[]): NamedValue[] => labels.map((label, value) => ({ value, label }));
 
 /* ── Update transactions: tables and settings ───────────── */
 
@@ -1085,6 +1088,20 @@ export function dataApi(): DataApi {
   };
 }
 
+/** `api.gameData`: the source and the data sets, over `services/gameData.ts`. */
+export function gameDataApi(store: Store): GameDataApi {
+  const publish = (s: AssetSource): GameDataSource => ({ kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true });
+  const source = () => store.get(gameDataSourceAtom) ?? currentAssetSource();
+  return {
+    source: () => { const s = source(); return s ? publish(s) : null; },
+    profile: () => ({ ...(source()?.profile ?? DEFAULT_PROFILE) }),
+    profiles: listDataSets,
+    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name }, files, progress)),
+    select: async (id) => publish(await switchDataSet(store, id)),
+    remove: (id) => removeDataSet(store, id),
+  };
+}
+
 /* ── Commands ───────────────────────────────────────────── */
 
 /**
@@ -1212,6 +1229,7 @@ const EVENT_ATOMS = {
   options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
   commands: [pluginCommandsAtom],
+  gameData: [gameDataSourceAtom, gameDataRevisionAtom],
 } as const;
 
 /**
@@ -1392,6 +1410,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     query: queryApi(store),
     view: viewApi(store),
     data: dataApi(),
+    gameData: gameDataApi(store),
 
     // Handed over rather than published in the typings: the package is types only, so a
     // value imported from it is undefined at run time (see `ConstsApi`).
@@ -1439,13 +1458,13 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
 
     names: {
       unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? unitName(id),
-      units: () => [...named(UNIT_NAMES), ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
+      units: () => [...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
       upgrade: upgradeName,
-      upgrades: () => named(UPGRADE_NAMES),
+      upgrades: () => UPGRADE_NAMES.map((_, id) => ({ value: id, label: upgradeName(id) })),
       tech: techName,
-      techs: () => named(TECH_NAMES),
+      techs: () => TECH_NAMES.map((_, id) => ({ value: id, label: techName(id) })),
       weapon: weaponName,
-      weapons: () => named(WEAPON_NAMES),
+      weapons: () => WEAPON_NAMES.map((_, id) => ({ value: id, label: weaponName(id) })),
       playerType: playerTypeLabel,
       playerTypes: () => PLAYER_TYPES.map((t) => ({ value: t.value, label: t.label })),
       race: playerRaceLabel,

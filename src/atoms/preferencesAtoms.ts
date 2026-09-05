@@ -16,6 +16,7 @@ import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAt
 import { dockWidthsAtom, panelsAtom } from "./uiAtoms";
 import { clearHandles } from "../services/handleStore";
 import { recentFilesAtom } from "./documentAtoms";
+import { gameDataProfileAtom } from "./gameDataAtoms";
 
 export type { Preferences } from "../editor/preferences";
 export { ANIMATION_SPEEDS, animationSpeedIndex, DEFAULT_PREFERENCES } from "../editor/preferences";
@@ -86,6 +87,8 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.plugin-code": (set) => set(pluginCodeAtom, RESET),
   "scmjs.plugin-registries": (set) => set(userRegistriesAtom, RESET),
   "scmjs.plugin-registry": (set) => set(registryCacheAtom, RESET),
+  // The choice only; the copies themselves are in the origin's file storage, which Game Data… removes.
+  "scmjs.gameData": (set) => set(gameDataProfileAtom, RESET),
 };
 
 /** The keys an atom owns — everything Preferences can clear *and* put back live. */

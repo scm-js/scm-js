@@ -1356,6 +1356,26 @@ describe("plugin document events", () => {
   });
 });
 
+describe("plugin game data", () => {
+  it("answers the game's own set with nothing resolved, and switches through the chain", async () => {
+    const { store } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.gameData.source()).toBeNull();
+    expect(api.gameData.profile()).toEqual({ id: "starcraft", name: "StarCraft: Brood War" });
+    expect(await api.gameData.profiles()).toEqual([{ id: "starcraft", name: "StarCraft: Brood War" }]);
+    await expect(api.gameData.select("Not An Id")).rejects.toThrow(/not a data set id/);
+    let events = 0;
+    api.events.on("gameData", () => events++);
+    // Under Node the chain finds nothing: the switch still lands, with the set falling back to the game's own.
+    const source = await api.gameData.select("some-mod");
+    expect(source.kind).toBe("none");
+    expect(source.profile.id).toBe("starcraft");
+    expect(api.gameData.source()).toEqual(source);
+    expect(events).toBeGreaterThan(0);
+    expect(await api.gameData.remove("some-mod")).toBe(false);
+  });
+});
+
 describe("plugin names", () => {
   it("answers from the editor's tables and the open map", () => {
     const { store, scn } = blankStore();

@@ -57,6 +57,17 @@ none of those answers it opens **Help ▸ Game Data…**, which offers two ways 
 
 Either way the extraction runs in the browser and the result is kept for next time.
 
+The same dialog holds **data sets**. The game's own files are one; a mod that replaces
+them in the game's own formats — its own units, graphics, sounds and names over the
+same ids — can be installed beside them as another and switched to, and the editor then
+draws, names and lists what that mod's data says. *Add a data set…* takes a name and a
+folder holding the mod's files (loose, or as `.mpq` archives) together with `StarDat.mpq`
+and `BrooDat.mpq`, which the mod's files are laid over. A unit, weapon, upgrade or
+technology the mod renamed shows its new name everywhere the editor names one; the rest
+keep StarEdit's. What a data set cannot be is a mod that *extends* the tables past the
+game's sizes — more than 228 unit types, say — since the map format itself has no room
+for those; see [docs/game-data.md](docs/game-data.md#data-sets).
+
 ```sh
 npm install
 npm run extract   # finds StarDat.mpq / BrooDat.mpq, writes public/

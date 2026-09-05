@@ -1,19 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { AlertTriangle, Download, FolderOpen, HardDrive, Search, Trash2 } from "lucide-react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { AlertTriangle, Download, FolderOpen, HardDrive, Layers, Search, Trash2 } from "lucide-react";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
-import { retryTilesetParts } from "../../formats/tileset/load";
-import { retryFailedParts } from "../../formats/units/load";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
 import { hostTerms } from "../../editor/platform";
 import {
-  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromZipUrl, pickArchives, type InstallProgress,
+  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromZipUrl, pickArchives, splitPickedFiles, type InstallProgress,
 } from "../../gamedata/install";
+import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
 import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../../gamedata/source";
-import { clearStoredCopy } from "../../gamedata/store";
-import { relayBlankTerrain } from "../../hooks/useMapFileActions";
-import { Button, Group } from "../ui";
+import { adoptSource, installDataSetInto, listDataSets, removeDataSet, sameFiles, switchDataSet } from "../../services/gameData";
+import { Button, Check, Group, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 
@@ -40,6 +38,13 @@ import type { DialogProps } from "./DialogHost";
  * It opens on its own after the splash when the preload found nothing (`payload.auto`), and
  * in that case closes itself once something has been installed — the whole of it is then a
  * prompt, a button, a progress bar, and the editor drawing real terrain behind it.
+ *
+ * Under that is *Data sets* (`gamedata/profiles.ts`): the game's own files and any mod's
+ * installed beside them, one in use at a time. The list only appears once there is a
+ * second set or the user asks to add one, so a user with the game's data alone never sees
+ * it; adding one is a name and a folder — the mod's files with the game's two archives
+ * among them — and the rest goes through `services/gameData.ts`, as a plugin's
+ * `api.gameData.install` does.
  */
 
 interface Busy {
@@ -61,8 +66,7 @@ export function GameDataDialog({ entry }: DialogProps) {
   const store = useStore();
   const close = useSetAtom(closeDialogAtom);
   const toast = useSetAtom(pushToastAtom);
-  const [source, setSource] = useAtom(gameDataSourceAtom);
-  const bump = useSetAtom(gameDataRevisionAtom);
+  const source = useAtomValue(gameDataSourceAtom);
   const revision = useAtomValue(gameDataRevisionAtom);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -83,17 +87,22 @@ export function GameDataDialog({ entry }: DialogProps) {
     desktop.gameData.status().then(setDesktopCopy, () => {});
   }, [desktop, source]);
 
+  // The data sets with a copy here, the game's own first; refreshed whenever the source moves.
+  const [sets, setSets] = useState<GameDataProfile[]>([DEFAULT_PROFILE]);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const setFolderInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listDataSets().then((list) => { if (!cancelled) setSets(list); }, () => {});
+    return () => { cancelled = true; };
+  }, [source, revision]);
+
   const progress: InstallProgress = (fraction, label) => setBusy({ fraction, label });
 
-  /** A new source is in place: repaint everything that gave up on the old one. */
-  const adopted = (next: AssetSource, text: string) => {
-    retryFailedParts();
-    retryTilesetParts();
-    setSource(next);
-    bump((n) => n + 1);
-    // A blank map made before the graphics were here is one megatile repeated; now that
-    // there is a CV5 to pick variations from, lay it again.
-    void relayBlankTerrain(store);
+  /** A new source is in place: repaint everything that gave up on the old one (or, after a switch, everything). */
+  const adopted = (next: AssetSource, text: string, switched = !sameFiles(source, next)) => {
+    adoptSource(store, next, switched);
     setMessage({ text });
     toast({ kind: "ok", title: "Game data ready", detail: text });
     // The dialog that opened itself because there was nothing has nothing left to say once
@@ -117,8 +126,10 @@ export function GameDataDialog({ entry }: DialogProps) {
     }
   };
 
+  const kept = (where: "opfs" | "memory") => (where === "memory" ? ` ${hostTerms().Here} keeps no site data, so the copy lasts until the tab closes.` : "");
+  // A copy replacing a copy is different files under the same ids, so that one is a switch.
   const installed = (copy: Awaited<ReturnType<typeof installFromFiles>>, from: string) =>
-    adopted(adoptStoredCopy(copy), `Installed ${copy.summary} from ${from}.${copy.where === "memory" ? ` ${hostTerms().Here} keeps no site data, so the copy lasts until the tab closes.` : ""}`);
+    adopted(adoptStoredCopy(copy), `Installed ${copy.summary} from ${from}.${kept(copy.where)}`, source?.kind === "stored" || !sameFiles(source, adoptStoredCopy(copy)));
 
   const fromBlizzard = () => run(async () => {
     installed(await installFromZipUrl(BLIZZARD_ZIP_URL, progress), "Blizzard's StarEdit download");
@@ -168,13 +179,32 @@ export function GameDataDialog({ entry }: DialogProps) {
   const desktopFolder = () => run(async () => desktopResult(await desktop!.gameData.pickFolder()));
 
   const remove = () => run(async () => {
-    await clearStoredCopy();
-    if (desktop) await desktop.gameData.clear();
-    resetAssetSource();
-    const next = await resolveAssetSource(undefined, { search: false });
-    setSource(next);
-    bump((n) => n + 1);
-    setMessage({ text: "Removed. " + explain(next) });
+    const id = source?.profile.id ?? DEFAULT_PROFILE.id;
+    if (desktop && isDefaultProfile(id)) await desktop.gameData.clear();
+    await removeDataSet(store, id);
+    setMessage({ text: "Removed. " + explain(store.get(gameDataSourceAtom)) });
+  });
+
+  /** Data sets: switch to one, remove one, add one from a folder. */
+  const choose = (id: string) => run(async () => {
+    const next = await switchDataSet(store, id);
+    const name = sets.find((p) => p.id === id)?.name ?? id;
+    setMessage({ text: next.profile.id === id ? `Now drawing from ${name}.` : `${name} has no copy here any more; drawing from the game's own data.` });
+  });
+  const removeSet = (p: GameDataProfile) => run(async () => {
+    await removeDataSet(store, p.id);
+    setMessage({ text: `Removed ${p.name}.` });
+  });
+  const addFromFolder = (files: File[]) => run(async () => {
+    const name = newName.trim();
+    const id = profileIdFrom(name);
+    if (!id) throw new Error("Give the data set a name first.");
+    if (sets.some((p) => p.id === id)) throw new Error(`There is already a data set called ${name}.`);
+    const next = await installDataSetInto(store, { id, name }, splitPickedFiles(files), progress);
+    setAdding(false);
+    setNewName("");
+    setMessage({ text: `Installed ${name}: ${next.stored?.summary ?? next.label}.${kept(next.stored?.where ?? "opfs")}` });
+    toast({ kind: "ok", title: "Data set ready", detail: `Now drawing from ${name}.` });
   });
 
   useEffect(() => {
@@ -185,6 +215,8 @@ export function GameDataDialog({ entry }: DialogProps) {
   useEffect(() => () => { if (leaving.current) window.clearTimeout(leaving.current); }, []);
 
   const removable = source?.kind === "stored" || source?.desktop === true;
+  const active = source?.profile.id ?? DEFAULT_PROFILE.id;
+  const showSets = have && (sets.length > 1 || adding || !isDefaultProfile(active));
 
   return (
     <DialogFrame
@@ -202,6 +234,7 @@ export function GameDataDialog({ entry }: DialogProps) {
               {removable && <Button size="sm" variant="danger" disabled={!!busy} onClick={remove}><Trash2 size={11} /> Remove copy</Button>}
             </div>
             <p className="hint" style={{ marginTop: 4 }}>{explain(source)}</p>
+            {source && !isDefaultProfile(source.profile.id) && <p className="hint" style={{ marginTop: 4 }}>Data set: <strong>{source.profile.name}</strong>. Units, weapons, upgrades and technologies it renamed show its names.</p>}
             {revision > 0 && <p className="hint" style={{ marginTop: 4 }}>Open maps pick the graphics up as they arrive.</p>}
           </Group>
         ) : (
@@ -227,6 +260,43 @@ export function GameDataDialog({ entry }: DialogProps) {
           </div>
         )}
         {message && <p className={message.error ? "hint error" : "hint"} style={{ color: message.error ? "var(--danger, #e66)" : undefined }}>{message.text}</p>}
+
+        {have && (
+          <Group title="Data sets">
+            {showSets ? (
+              <div className="col" style={{ gap: 4 }}>
+                {sets.map((p) => (
+                  <div key={p.id} className="row" style={{ alignItems: "center", gap: 8 }}>
+                    <Check radio name="gd-set" label={p.name} checked={p.id === active} disabled={!!busy} onChange={() => { if (p.id !== active) void choose(p.id); }} />
+                    <span className="grow" />
+                    {!isDefaultProfile(p.id) && <Button size="sm" variant="danger" disabled={!!busy} onClick={() => removeSet(p)}><Trash2 size={11} /> Remove</Button>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">The game's own files. A mod that replaces them in the same formats can be installed beside them and switched to here.</p>
+            )}
+            {adding ? (
+              <div className="col" style={{ gap: 6, marginTop: 6 }}>
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <TextInput placeholder="Name of the data set (the mod's name)" value={newName} onChange={(e) => setNewName(e.target.value)} disabled={!!busy} style={{ flex: 1 }} />
+                  <Button size="sm" disabled={!!busy || !profileIdFrom(newName)} onClick={() => setFolderInput.current?.click()}><FolderOpen size={11} /> Choose the folder…</Button>
+                  <Button size="sm" disabled={!!busy} onClick={() => { setAdding(false); setNewName(""); }}>Cancel</Button>
+                </div>
+                <input ref={setFolderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void addFromFolder(f); }} />
+                <p className="hint">
+                  A folder holding the mod's files — <span className="mono">arr</span>, <span className="mono">unit</span>, <span className="mono">tileset</span> and the rest as loose
+                  files or as <span className="mono">.mpq</span> archives — together with <span className="mono">{ARCHIVE_NAMES[0]}</span> and <span className="mono">{ARCHIVE_NAMES[1]}</span>,
+                  which the mod's files are laid over. Anything else in the folder is left alone.
+                </p>
+              </div>
+            ) : (
+              <div className="row" style={{ marginTop: 6 }}>
+                <Button size="sm" disabled={!!busy} onClick={() => setAdding(true)}><Layers size={11} /> Add a data set…</Button>
+              </div>
+            )}
+          </Group>
+        )}
 
         {!have && (
           <>

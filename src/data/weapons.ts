@@ -1,3 +1,5 @@
+import { currentLoadedNames } from "./units";
+
 /** weapons.dat ids → StarEdit's names (stat_txt.tbl order), for the Unit Settings weapon rows. */
 export const WEAPON_NAMES: readonly string[] = [
   "Gauss Rifle", "Gauss Rifle (Jim Raynor)", "C-10 Canister Rifle", "C-10 Canister Rifle (Sarah Kerrigan)", "Fragmentation Grenade",
@@ -29,5 +31,5 @@ export const WEAPON_NAMES: readonly string[] = [
 ];
 
 export function weaponName(id: number): string {
-  return WEAPON_NAMES[id] ?? `Weapon #${id}`;
+  return currentLoadedNames()?.weapons[id] ?? WEAPON_NAMES[id] ?? `Weapon #${id}`;
 }

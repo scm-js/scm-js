@@ -1,13 +1,25 @@
 import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { DEFAULT_PROFILE } from "../gamedata/profiles";
 import type { AssetSource } from "../gamedata/source";
+import { mergedStorage } from "./storage";
 
 /**
  * The session's game data source as the chrome sees it (`gamedata/source.ts` is the
- * truth; `useGameData` mirrors it here), and a counter the tileset / unit hooks watch so
- * an install from Help ▸ Game Data… makes the viewport ask for the graphics again.
+ * truth; `usePreload` mirrors it here), and a counter the tileset / unit hooks watch so
+ * an install from Help ▸ Game Data… makes the viewport ask for the graphics again — or,
+ * after a switch to another data set, drop what they hold and ask afresh.
  */
 export const gameDataSourceAtom = atom<AssetSource | null>(null);
 export const gameDataRevisionAtom = atom(0);
+
+/**
+ * The data set the user chose (`gamedata/profiles.ts`), persisted under `scmjs.gameData` —
+ * the literal `PROFILE_KEY` there, written out here so `tests/storage.test.ts` finds it.
+ * The resolver reads the same key itself (`activeProfileId`), since it runs outside the
+ * store; `services/gameData.ts#switchDataSet` is the one writer, and it re-resolves.
+ */
+export const gameDataProfileAtom = atomWithStorage<{ profile: string }>("scmjs.gameData", { profile: DEFAULT_PROFILE.id }, mergedStorage({ profile: DEFAULT_PROFILE.id }), { getOnInit: true });
 
 /**
  * Set while the open map's terrain was laid without the graphics: `flatTerrain` has no

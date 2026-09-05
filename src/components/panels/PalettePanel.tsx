@@ -47,6 +47,7 @@ import {
   viewFlagsAtom,
   type EditorLayer,
 } from "../../atoms/editorAtoms";
+import { gameDataRevisionAtom } from "../../atoms/gameDataAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { locationsAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
@@ -258,13 +259,15 @@ function UnitPalette() {
   const colors = scenario?.playerColors;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({ "Terran Units": true, "Special": true });
+  const dataRevision = useAtomValue(gameDataRevisionAtom);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     return UNIT_GROUPS
       .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitName(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
       .filter((g) => g.units.length > 0);
-  }, [query]);
+    // The revision is a dependency for the names: they follow the loaded data set.
+  }, [query, dataRevision]);
 
   const races: RaceKey[] = ["terran", "zerg", "protoss", "neutral"];
 
@@ -387,7 +390,8 @@ function SpritePalette() {
     const cat = spriteCatalogue(assets);
     return cat.groups.map((g) => ({ label: g.label, items: g.ids.map((id) => ({ id, label: cat.entries[id].label })) }));
   }, [assets]);
-  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitName(id) })) })), []);
+  // `assets` for the names, which follow the loaded data set.
+  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitName(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
   const activeId = kind === "pure" ? active : activeUnit;

@@ -35,6 +35,11 @@ const TILE = 32;
 /** Composed pictures (a tile, a doodad) by tileset and id; the upstream caches cover the rest. */
 const composed = new Map<string, PluginImage | null>();
 
+/** Drop the composed pictures: the keys are tileset *names*, which another data set draws differently. */
+export function clearComposedImages(): void {
+  composed.clear();
+}
+
 function canvasOf(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");

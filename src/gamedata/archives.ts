@@ -40,9 +40,21 @@ export function openArchives(inputs: { name: string; bytes: Uint8Array }[]): { a
   return { archives, problems };
 }
 
-/** A `ReadMember` over the archives: the last one that has the member answers. */
-export function readerFor(archives: OpenedArchive[]): ReadMember {
+/** A member path as the overlay keys it: lower case, backslashes, no leading separator. */
+export const memberKey = (path: string) => path.replaceAll("/", "\\").replace(/^\\+/, "").toLowerCase();
+
+/**
+ * A `ReadMember` over the archives: the last one that has the member answers. `overlay`
+ * is loose files by member path (`arr\units.dat`, in any case or slash), read before any
+ * archive — how a mod that ships its data as a folder over the game's archives is layered,
+ * the way its loader layers it.
+ */
+export function readerFor(archives: OpenedArchive[], overlay?: ReadonlyMap<string, Uint8Array>): ReadMember {
   return (member) => {
+    if (overlay) {
+      const hit = overlay.get(memberKey(member));
+      if (hit) return hit;
+    }
     for (let i = archives.length - 1; i >= 0; i--) {
       try {
         return archives[i].archive.readFile(member);

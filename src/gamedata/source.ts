@@ -9,6 +9,11 @@
  *   3. desktop — the desktop app searches the disk and extracts, then it is 1 again
  *   4. none    — the editor runs with flat colours and marker units, and asks
  *
+ * A data set other than the game's own (`profiles.ts`) comes before all of that: it only
+ * ever exists as a stored copy under its id, so the chain asks for that first and, when it
+ * is not there, says so and goes on with the game's own — the editor never runs without
+ * data because a mod's copy was removed.
+ *
  * There is deliberately no fifth step. The editor used to also carry a configured web
  * address (a `VITE_GAME_DATA_URL` build default and a preference over it) serving either
  * an extracted tree or the two archives; it was dropped once Blizzard's own free StarEdit
@@ -22,12 +27,15 @@
  */
 import { desktopBridge, type DesktopBridge } from "./desktop";
 import { hostTerms } from "../editor/platform";
-import { readStored, storedCopy, type StoredCopy } from "./store";
+import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfile } from "./profiles";
+import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
 
 export type SourceKind = "bundled" | "stored" | "none";
 
 export interface AssetSource {
   kind: SourceKind;
+  /** The data set the files belong to — the game's own unless a stored copy of another answered. */
+  profile: GameDataProfile;
   /** URL prefix the files are fetched under (bundled), ending in `/`. */
   base?: string;
   /** One line for the dialog and the status bar. */
@@ -46,8 +54,11 @@ export interface LocateDeps {
   bundledBase: string;
   /** True when a GET of `url` answers JSON — the manifest probe. A dev server answers index.html for anything, so a 200 alone means nothing. */
   probeManifest(url: string): Promise<boolean>;
-  stored(): Promise<StoredCopy | null>;
+  /** The stored copy of a data set (the game's own without an id). */
+  stored(profileId?: string): Promise<StoredCopy | null>;
   desktop: DesktopBridge | null;
+  /** The data set the user chose (`profiles.ts#activeProfileId`); the game's own when absent. */
+  profile?: string;
 }
 
 const describeStored = (copy: StoredCopy) =>
@@ -62,14 +73,23 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
   const tried: string[] = [];
   const bundled = async () =>
     (await deps.probeManifest(`${deps.bundledBase}tileset/manifest.json`)) || (await deps.probeManifest(`${deps.bundledBase}unit/manifest.json`));
+  const profile = DEFAULT_PROFILE;
+
+  // 0. The data set the user chose, when it is not the game's own: it can only be a stored copy.
+  const chosen = deps.profile ?? DEFAULT_PROFILE.id;
+  if (!isDefaultProfile(chosen)) {
+    const copy = await deps.stored(chosen).catch(() => null);
+    if (copy) return { kind: "stored", profile: profileOf(copy), label: describeStored(copy), tried, stored: copy };
+    tried.push(`The "${chosen}" data set has no copy in ${hostTerms().here} — using the game's own`);
+  }
 
   // 1. This build's own files.
-  if (await bundled()) return { kind: "bundled", base: deps.bundledBase, label: "Bundled with this build", tried };
+  if (await bundled()) return { kind: "bundled", profile, base: deps.bundledBase, label: "Bundled with this build", tried };
   tried.push("Nothing bundled with this build");
 
   // 2. A copy an earlier install left here.
   const copy = await deps.stored().catch(() => null);
-  if (copy) return { kind: "stored", label: describeStored(copy), tried, stored: copy };
+  if (copy) return { kind: "stored", profile: profileOf(copy), label: describeStored(copy), tried, stored: copy };
   tried.push(`No copy kept in ${hostTerms().here}`);
 
   // 3. The desktop app: the disk, then the files are served as bundled. Silent when it
@@ -80,7 +100,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
     const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, label));
     try {
       const found = await deps.desktop.gameData.locate();
-      if (found.status === "ready") return { kind: "bundled", base: deps.bundledBase, label: `Extracted from ${found.from}`, tried, desktop: true };
+      if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: `Extracted from ${found.from}`, tried, desktop: true };
       tried.push(found.status === "missing" ? `No StarCraft archives in ${found.searched.length} places on this computer` : `Extraction failed: ${found.message}`);
     } catch (err) {
       tried.push(`Desktop search failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -89,7 +109,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
     }
   }
 
-  return { kind: "none", label: "No game data", tried };
+  return { kind: "none", profile, label: "No game data", tried };
 }
 
 /** `install.ts`'s progress shape, repeated so this module does not import it. */
@@ -97,7 +117,7 @@ type InstallProgressLike = (fraction: number, label: string) => void;
 
 /** A stored copy just written by the dialog, made the session's source. */
 export function adoptStoredCopy(copy: StoredCopy): AssetSource {
-  const source: AssetSource = { kind: "stored", label: describeStored(copy), tried: [], stored: copy };
+  const source: AssetSource = { kind: "stored", profile: profileOf(copy), label: describeStored(copy), tried: [], stored: copy };
   setAssetSource(source);
   return source;
 }
@@ -121,6 +141,7 @@ function defaultDeps(options: ResolveOptions = {}): LocateDeps {
     probeManifest,
     stored: storedCopy,
     desktop: options.search === false ? null : desktopBridge(),
+    profile: activeProfileId(),
   };
 }
 
@@ -190,7 +211,7 @@ export async function fetchAsset(path: string, init?: RequestInit): Promise<Resp
     case "bundled":
       return fetch(source.base + path, init);
     case "stored": {
-      const blob = await readStored(path);
+      const blob = await readStored(path, source.profile.id);
       if (!blob) return new Response(null, { status: 404, statusText: "Not in the stored copy" });
       return new Response(blob, { status: 200, headers: { "content-length": String(blob.size) } });
     }

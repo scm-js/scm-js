@@ -154,6 +154,7 @@ describe.skipIf(!haveUnitData)("real unit data (public/arr, public/unit)", () =>
     const weapons = decodeWeaponsDat(read("arr/weapons.dat"));
     expect(read("arr/weapons.dat")).toHaveLength(WEAPONS_DAT_SIZE);
     expect([weapons.damage[0], weapons.bonus[0]]).toEqual([6, 1]); // Gauss Rifle
+    expect(weapons.label[0]).toBeGreaterThan(228); // a stat_txt index past the unit entries
     expect([weapons.damage[11], weapons.bonus[11]]).toEqual([30, 3]); // Arclite Cannon
     expect([weapons.damage[30], weapons.bonus[30]]).toEqual([260, 0]); // Yamato Gun
     expect(WEAPON_NAMES).toHaveLength(130);

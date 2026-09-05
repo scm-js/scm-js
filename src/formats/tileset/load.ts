@@ -240,6 +240,21 @@ export function retryTilesetParts(): void {
   statTxt = null;
 }
 
+/**
+ * Forget every decoded tileset and the shared names file: the source now serves a
+ * different data set, whose files may draw the same ids differently. A load in flight is
+ * dropped from the cache too, so a reader that asked before the switch gets the old set
+ * once and every later ask starts over. `useTileset` reloads on the revision bump that
+ * follows. Returns how many were held.
+ */
+export function releaseAllTilesets(): number {
+  const held = ready.size;
+  ready.clear();
+  cache.clear();
+  statTxt = null;
+  return held;
+}
+
 /** Install an already-decoded tileset as if it had been fetched (tests, or a loader that read the files itself). */
 export function primeTileset(loaded: LoadedTileset) {
   cache.set(loaded.name, Promise.resolve(loaded));

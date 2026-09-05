@@ -1,11 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { openArchives, readerFor } from "../src/gamedata/archives";
+import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { pickArchives } from "../src/gamedata/install";
+import { isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
+import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
-import type { StoredCopy } from "../src/gamedata/store";
+import { clearStoredCopy, keepInMemory, listStoredCopies, profileDir, profileOf, readStored, storedCopy, type StoredCopy } from "../src/gamedata/store";
+import { browserStorage } from "../src/atoms/storage";
 
 const DATA = join(__dirname, "..", "fixtures", "data");
 const PUBLIC = join(__dirname, "..", "public");
@@ -187,5 +189,110 @@ describe("locateGameData", () => {
     const source = await locateGameData(deps({ desktop: bridge({ locate: async () => { throw new Error("bridge gone"); } }) }));
     expect(source.kind).toBe("none");
     expect(source.tried.at(-1)).toBe("Desktop search failed: bridge gone");
+  });
+});
+
+/* ── Data sets ──────────────────────────────────────────── */
+
+describe("profiles", () => {
+  it("checks ids, derives one from a name, and normalises what is stored", () => {
+    expect(isProfileId("cosmonarchy-bw")).toBe(true);
+    expect(isProfileId("Cosmonarchy")).toBe(false);
+    expect(isProfileId("-x")).toBe(false);
+    expect(isProfileId("a".repeat(41))).toBe(false);
+    expect(profileIdFrom("Cosmonarchy BW!")).toBe("cosmonarchy-bw");
+    expect(profileIdFrom("  ")).toBe("");
+    expect(normalizeProfile({ id: "mod", name: "  " })).toEqual({ id: "mod", name: "mod" });
+    expect(normalizeProfile({ id: "Bad Id", name: "x" })).toBeNull();
+  });
+
+  it("reads the chosen id off storage and falls back to the game's own", () => {
+    const store = browserStorage();
+    store.removeItem(PROFILE_KEY);
+    expect(activeProfileId()).toBe(DEFAULT_PROFILE.id);
+    store.setItem(PROFILE_KEY, JSON.stringify({ profile: "cosmonarchy" }));
+    expect(activeProfileId()).toBe("cosmonarchy");
+    store.setItem(PROFILE_KEY, "not json");
+    expect(activeProfileId()).toBe(DEFAULT_PROFILE.id);
+    store.setItem(PROFILE_KEY, JSON.stringify({ profile: "Not An Id" }));
+    expect(activeProfileId()).toBe(DEFAULT_PROFILE.id);
+    store.removeItem(PROFILE_KEY);
+  });
+
+  it("keeps the game's copy where it always was and the others beside it", () => {
+    expect(profileDir(DEFAULT_PROFILE.id)).toEqual(["gamedata"]);
+    expect(profileDir("cosmonarchy")).toEqual(["gamedata-profiles", "cosmonarchy"]);
+    expect(profileOf(copy)).toBe(DEFAULT_PROFILE);
+    expect(profileOf({ ...copy, profile: { id: "m", name: "M" } })).toEqual({ id: "m", name: "M" });
+  });
+
+  it("holds one memory copy per data set and lists them", async () => {
+    const mod = { id: "mod", name: "A Mod" };
+    keepInMemory(new Map([["arr/units.dat", new Uint8Array([1])]]), { ...copy, profile: mod }, "mod");
+    keepInMemory(new Map([["arr/units.dat", new Uint8Array([2])]]), copy);
+    expect((await storedCopy("mod"))?.profile).toEqual(mod);
+    expect((await storedCopy())?.profile).toBeUndefined();
+    expect(new Uint8Array(await (await readStored("arr/units.dat", "mod"))!.arrayBuffer())).toEqual(new Uint8Array([1]));
+    expect(new Uint8Array(await (await readStored("arr/units.dat"))!.arrayBuffer())).toEqual(new Uint8Array([2]));
+    expect(await readStored("arr/units.dat", "other")).toBeNull();
+    expect((await listStoredCopies()).map((c) => profileOf(c).id).sort()).toEqual(["mod", DEFAULT_PROFILE.id].sort());
+    await clearStoredCopy("mod");
+    expect(await storedCopy("mod")).toBeNull();
+    expect(await storedCopy()).not.toBeNull();
+    await clearStoredCopy();
+    expect(await listStoredCopies()).toEqual([]);
+  });
+});
+
+describe("locateGameData with a data set chosen", () => {
+  const modCopy: StoredCopy = { ...copy, profile: { id: "mod", name: "A Mod" }, from: "mod folder" };
+
+  it("takes the chosen set's copy before anything else", async () => {
+    const d = deps({ answers: ["/tileset/manifest.json"], stored: async (id) => (id === "mod" ? modCopy : null), profile: "mod" });
+    const source = await locateGameData(d);
+    expect(source.kind).toBe("stored");
+    expect(source.profile).toEqual({ id: "mod", name: "A Mod" });
+    expect(d.calls).toEqual([]);
+  });
+
+  it("falls back to the game's own when the set has no copy, and says so", async () => {
+    const d = deps({ answers: ["/tileset/manifest.json"], profile: "mod" });
+    const source = await locateGameData(d);
+    expect(source.kind).toBe("bundled");
+    expect(source.profile).toBe(DEFAULT_PROFILE);
+    expect(source.tried[0]).toMatch(/"mod" data set has no copy/);
+  });
+
+  it("labels every source with the game's own set otherwise", async () => {
+    expect((await locateGameData(deps({ stored: async () => copy }))).profile).toBe(DEFAULT_PROFILE);
+    expect((await locateGameData(deps())).profile).toBe(DEFAULT_PROFILE);
+  });
+});
+
+describe("installing a data set from files", () => {
+  it("normalises member paths and reads the overlay before any archive", () => {
+    expect(memberKey("arr/units.dat")).toBe("arr\\units.dat");
+    expect(memberKey("/ARR\\Units.DAT")).toBe("arr\\units.dat");
+    const overlay = new Map([[memberKey("arr/units.dat"), new Uint8Array([7])]]);
+    const read = readerFor([], overlay);
+    expect(read("arr\\units.dat")).toEqual(new Uint8Array([7]));
+    expect(read("arr\\weapons.dat")).toBeNull();
+  });
+
+  it("knows which loose files could be members", () => {
+    expect(isMemberPath("arr/units.dat")).toBe(true);
+    expect(isMemberPath("unit\\terran\\marine.grp")).toBe(true);
+    expect(isMemberPath("readme.txt")).toBe(false);
+    expect(isMemberPath("plugins/gptp.qdp")).toBe(false);
+  });
+
+  it("splits a picked folder into archives and members, dropping the folder's own name", () => {
+    const file = (rel: string) => { const f = new File([], rel.split("/").pop()!); Object.defineProperty(f, "webkitRelativePath", { value: rel }); return f; };
+    const split = splitPickedFiles([
+      file("Cosmonarchy/StarDat.mpq"), file("Cosmonarchy/BrooDat.mpq"), file("Cosmonarchy/mpq/arr/units.dat"),
+      file("Cosmonarchy/mpq/unit/terran/marine.grp"), file("Cosmonarchy/README.md"), file("Cosmonarchy/plugins/gptp.qdp"),
+    ]);
+    expect(split.archives.map((a) => a.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
+    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp"]);
   });
 });

@@ -4,9 +4,14 @@
  * store them. Two ways in, and they are the two the Game Data dialog offers: Blizzard's own
  * StarEdit package, read member by member out of the zip (`installFromZipUrl`), or the two
  * archives the user picked off their own disk (`installFromFiles`).
+ *
+ * A third is a *data set* of its own (`profiles.ts`): the same extraction over the game's
+ * archives plus whatever a mod adds — more archives, or loose files by member path laid
+ * over them (`installDataSet`) — stored under the set's id rather than as the game's own.
  */
-import { isGameArchive, sortArchives } from "./archives";
+import { isGameArchive, memberKey, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
+import { DEFAULT_PROFILE, isDefaultProfile, normalizeProfile, type GameDataProfile } from "./profiles";
 import { keepInMemory, type StoredCopy } from "./store";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 
@@ -53,13 +58,100 @@ export function pickArchives(files: readonly File[]): File[] {
   return archives;
 }
 
-/** Extract from the archives and store the result. Resolves with the copy's stamp. */
+/** Extract from the archives and store the result as the game's own data. Resolves with the copy's stamp. */
 export async function installFromFiles(files: readonly File[], progress?: InstallProgress): Promise<StoredCopy> {
   const archives = pickArchives(files);
   progress?.(0, "Reading the archives");
   const inputs: ExtractRequest["archives"] = [];
   for (const file of archives) inputs.push({ name: file.name, bytes: await file.arrayBuffer() });
   return runWorker(inputs, archives.map((f) => f.name).join(" + "), progress);
+}
+
+/* ── Data sets ──────────────────────────────────────────── */
+
+/** Bytes for the worker: a `File` / `Blob`, or already an array. */
+export type InstallBytes = Blob | Uint8Array;
+
+/** What a data set is made of. */
+export interface GameDataFiles {
+  /**
+   * The archives, `StarDat.mpq` and `BrooDat.mpq` among them (a mod replaces files, it
+   * does not bring the rest); the game's own are read first and any other after them in
+   * the order given, later ones winning as in the game.
+   */
+  archives: readonly { name: string; data: InstallBytes }[];
+  /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`), read before any archive. */
+  files?: readonly { path: string; data: InstallBytes }[];
+}
+
+/** The member prefixes an extraction ever asks for: anything else in a picked folder is not sent to the worker. */
+const MEMBER_PREFIXES = ["arr\\", "tileset\\", "unit\\", "game\\", "scripts\\", "rez\\"];
+
+/** Whether a loose file could be a game data member: its path starts with one of the folders the extraction reads. */
+export function isMemberPath(path: string): boolean {
+  const key = memberKey(path);
+  return MEMBER_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+/**
+ * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and every other file whose
+ * path (relative to the picked folder) starts with a game data folder is a loose member.
+ * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
+ * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
+ */
+export function splitPickedFiles(files: readonly File[]): GameDataFiles {
+  const archives: { name: string; data: InstallBytes }[] = [];
+  const loose: { path: string; data: InstallBytes }[] = [];
+  for (const file of files) {
+    const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+    const segments = rel.split(/[\\/]/).filter(Boolean);
+    if (/\.mpq$/i.test(file.name)) {
+      archives.push({ name: file.name, data: file });
+      continue;
+    }
+    // Drop the picked folder's name, then look for a member path; a mod folder named
+    // `mpq` or a StarCraft folder both put the game folders one level down.
+    for (let skip = 0; skip < Math.min(3, segments.length - 1); skip++) {
+      const path = segments.slice(skip).join("/");
+      if (isMemberPath(path)) {
+        loose.push({ path, data: file });
+        break;
+      }
+    }
+  }
+  return { archives, files: loose };
+}
+
+/** The archives in the game's order: `StarDat`, `BrooDat`, then the rest as given. */
+function orderArchives<T extends { name: string }>(archives: readonly T[]): T[] {
+  const known = sortArchives(archives.filter((a) => isGameArchive(a.name)));
+  const rest = archives.filter((a) => !isGameArchive(a.name));
+  return [...known, ...rest];
+}
+
+const bytesOf = async (data: InstallBytes): Promise<ArrayBuffer> =>
+  data instanceof Uint8Array ? (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer) : await data.arrayBuffer();
+
+/**
+ * Extract a data set and store it under its id. The game's own archives must be among
+ * `input.archives` (the same rule as `pickArchives`); a mod's archives and loose files are
+ * laid over them. Installing under the default id is `installFromFiles` with extras.
+ */
+export async function installDataSet(profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<StoredCopy> {
+  const normalized = normalizeProfile(profile);
+  if (!normalized) throw new InstallError(`"${profile.id}" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
+  const names = input.archives.map((a) => ({ name: a.name }));
+  pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
+  progress?.(0, "Reading the archives");
+  const archives: ExtractRequest["archives"] = [];
+  for (const a of orderArchives(input.archives)) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
+  const overlay: NonNullable<ExtractRequest["overlay"]> = [];
+  for (const f of input.files ?? []) {
+    if (!isMemberPath(f.path)) continue;
+    overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
+  }
+  const from = [...archives.map((a) => a.name), ...(overlay.length ? [`${overlay.length} loose file${overlay.length === 1 ? "" : "s"}`] : [])].join(" + ");
+  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay);
 }
 
 /**
@@ -98,7 +190,13 @@ export async function installFromZipUrl(url: string, progress?: InstallProgress)
   return runWorker(inputs, url, (f, label) => progress?.(0.5 + f * 0.5, label));
 }
 
-function runWorker(archives: ExtractRequest["archives"], from: string, progress?: InstallProgress): Promise<StoredCopy> {
+function runWorker(
+  archives: ExtractRequest["archives"],
+  from: string,
+  progress?: InstallProgress,
+  profile?: GameDataProfile,
+  overlay: NonNullable<ExtractRequest["overlay"]> = [],
+): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
     try {
@@ -124,11 +222,11 @@ function runWorker(archives: ExtractRequest["archives"], from: string, progress?
       }
       for (const p of msg.problems) console.warn("game data:", p);
       if (msg.where === "memory") {
-        keepInMemory(new Map((msg.files ?? []).map(([path, buf]) => [path, new Uint8Array(buf)])), msg.stamp);
+        keepInMemory(new Map((msg.files ?? []).map(([path, buf]) => [path, new Uint8Array(buf)])), msg.stamp, profile?.id ?? DEFAULT_PROFILE.id);
       }
       resolve({ ...msg.stamp, where: msg.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from };
-    worker.postMessage(req, archives.map((a) => a.bytes));
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay };
+    worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

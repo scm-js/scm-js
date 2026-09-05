@@ -270,7 +270,8 @@ throwing.
 `null`. That covers opening, saving, exporting and rendering a map
 (`document.open` / `create` / `save` / `saveAs` / `close` / `export` / `renderImage` /
 `changeTileset`), loading game data (`tileset.load`, `data.load`, `graphics.load`,
-`terrain.checkIsom`), and everything that waits for the user (`ui.pickArea`, `pickTile`,
+`terrain.checkIsom`, and installing, switching and removing a data set through
+`gameData`), and everything that waits for the user (`ui.pickArea`, `pickTile`,
 `pickFiles`, `saveFile`, `loadImage`, `readClipboardImage`, `confirm`, `alert`, `prompt`,
 `ask`). A user who dismisses something resolves the promise with `null` or `false`
 rather than rejecting, so the ordinary path needs no `try`:
@@ -604,6 +605,32 @@ flags, the sprite and image each unit draws through. `ready()`, `load()`, then `
 `race(unitId)` and `imagePath(imageId)`. Everything is null until the tables are loaded,
 and stays null when the game data was never extracted — degrade, do not throw.
 
+### `api.gameData`
+
+Which set of game files the editor draws from — the game's own, or a mod's that replaces
+them in the same formats — and installing, switching and removing sets: the plugin side
+of Help ▸ Game Data…. `source()` is where the files come from (`kind`, a `label`, the
+`profile` they belong to, `desktop` when the app extracted them; null while startup is
+still resolving), `profile()` the data set in use, `profiles()` every set with a copy
+here (the game's own first), `install(profile, files, progress?)` extracts a set from
+its files and switches to it, `select(id)` switches (dropping everything decoded from
+the previous set and redrawing; a set with no copy falls back to the game's own), and
+`remove(id)` drops a copy. The `"gameData"` event fires on any of them.
+
+`files` is `{ archives, files? }`: the archives with `StarDat.mpq` and `BrooDat.mpq`
+among them (a mod replaces files, it does not bring the rest; the game's own are read
+first, then the others in the order given, later winning), and loose files by member
+path (`arr/units.dat`), read before any archive. A `File` from `ui.pickFiles` or a
+`Uint8Array` both serve.
+
+A data set is a name over files in the game's own formats. The table sizes, the tileset
+formats and the map file's fixed-width sections are the game's, so a mod that extends
+them past 228 unit types or into an extended `.dat` layout is not covered — the codecs
+themselves would have to change. What *is* covered follows on its own: `data` decodes
+the set's tables, `tileset` and `graphics` draw its files, and `names` shows what it
+renamed (see below). A plugin written for the game's own data can read `profile().id`
+— `"starcraft"` is the game's — and grey itself out under any other.
+
 ### `api.consts`
 
 The numbers a record is *written* in, so a plugin does not carry the hex itself. These are
@@ -764,7 +791,9 @@ exactly this: switch layers and its brush follows). The Terrain palette's pick i
 
 The names behind the numbers a map stores, so a plugin that shows raw values need not
 carry the game's tables: `unit(id)` / `units()` (StarEdit's names, plus *Any unit*, *Men*,
-*Buildings*, *Factories* for the trigger classes 228–231), `upgrade` / `upgrades`, `tech`
+*Buildings*, *Factories* for the trigger classes 228–231; under a mod's data set, the
+mod's own name for anything it renamed — the rule is in
+[docs/game-data.md](game-data.md#names)), `upgrade` / `upgrades`, `tech`
 / `techs`, `weapon` / `weapons`, `playerType` / `playerTypes` (OWNR controllers), `race` /
 `races` (SIDE), `playerGroup` / `playerGroups` (the 27 trigger groups), `condition` /
 `conditions` and `action(type, briefing?)` / `actions(briefing?)` (trigger and briefing
@@ -870,9 +899,11 @@ changed: terrain brush, unit and owner, sprite, doodad, fog players), `"options"
 editing option moved: symmetry, placement and doodad rules, location snap, the fog view
 player, clip parts and paste mode, locked layers, the grid look, Preferences), `"file"`
 (the document's name or handle after a Save, its save options, the archive extras, the
-recent list) and `"commands"` (a plugin registered or removed a command — how a plugin
+recent list), `"commands"` (a plugin registered or removed a command — how a plugin
 that calls another's by id learns it has arrived, since plugins activate in no fixed
-order; check `commands.has` in the listener).
+order; check `commands.has` in the listener) and `"gameData"` (the game data source
+changed: installed, switched to another data set, or a copy removed — `gameData.source()`
+says what it is now, and everything drawn or named from the data is worth redoing).
 
 The `"document"` listener is handed a `DocumentEvent`: `reason` is `"open"` (File ▸ Open,
 a drop, `document.open` from any plugin), `"new"` (File ▸ New, the startup map included),

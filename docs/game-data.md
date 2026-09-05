@@ -25,6 +25,10 @@ settles the session's source once, in this order:
    with the archives; the result is then step 1.
 4. **None**: flat colours and markers, and Help ▸ Game Data… opens.
 
+When a data set other than the game's own is chosen (below), its stored copy is asked
+for before any of that, and when it is not there the chain notes it and goes on with
+the game's own — removing a mod's copy never leaves the editor without data.
+
 There used to be a fifth step between 3 and 4 — a web address, from a
 `VITE_GAME_DATA_URL` build default or a preference over it, serving either an extracted
 tree or the two archives. It is gone. Nothing is fetched from an address the user did not
@@ -93,6 +97,66 @@ Extraction is the same code everywhere: `src/gamedata/extract.ts` is pure (a
 `ReadMember` over the archives in, a map of paths to bytes out), `scripts/extract-*.mjs`
 wrap it for Node, `src/gamedata/extract.worker.ts` runs it in a browser worker, and
 `desktop/main.ts` runs it in the desktop app's main process.
+
+## Data sets
+
+The editor draws from one set of game files at a time, and a *data set*
+(`src/gamedata/profiles.ts`, a `GameDataProfile` — an id and a name) says which. The
+default is the game's own. Any other is a mod's: the same files in the same formats
+with some of them replaced — its own `units.dat`, graphics, sounds, `stat_txt.tbl` —
+installed under an id of its own and switched to from Help ▸ Game Data…, where the
+*Data sets* list appears once there is a second one. The choice is remembered
+(`scmjs.gameData`, listed in Preferences ▸ Browser storage like every other key).
+
+Installing one is the ordinary extraction over more inputs: the game's two archives are
+required every time, because a mod replaces files rather than bringing the rest, and
+the mod's own archives and loose files are laid over them the way its loader lays them
+(`src/gamedata/archives.ts#readerFor` reads an overlay of loose members before any
+archive; `install.ts#installDataSet` takes both, and `splitPickedFiles` turns a picked
+folder into them — every `.mpq` an archive, every file under an `arr`, `unit`,
+`tileset`, `game`, `scripts` or `rez` folder a member, anything else ignored). The copy
+goes to `gamedata-profiles/<id>/` in the browser's private file storage, beside the
+game's own under `gamedata/`, so removing one leaves the others alone
+(`store.ts#profileDir`, `listStoredCopies`). The desktop app's own extraction is always
+the game's; a mod's copy lives in the renderer's storage there as in a browser.
+
+Switching is the one thing the rest of the editor was not built for: every decoded
+tileset, table, GRP and cached frame describes the previous files, and the ids they are
+keyed by mean something else now. `src/services/gameData.ts#switchDataSet` drops the
+lot (`resetUnitAssets`, `releaseAllTilesets`, `clearFrameCache`, the plugin graphics
+cache), runs the chain again and bumps `gameDataRevisionAtom`, on which `useTileset`
+and `useUnitAssets` reload and the viewport repaints; an open map stays open and picks
+the new graphics up as they arrive. Plugins reach the same operations through
+`api.gameData` and hear about them on the `"gameData"` event.
+
+A data set is a name over files in the game's formats, nothing more. The table sizes
+(228 unit types, 130 weapons, 61 upgrades, 44 technologies), the tileset formats and the
+map file's own fixed-width sections are the game's, so a mod that extends them — more
+unit types, an extended `.dat` layout, extended tilesets — is not a data set and is not
+covered; it would need the codecs themselves to change.
+
+### Names
+
+The game names things in `stat_txt.tbl`: entries 0–227 are the unit types
+(`Name`, `Subname`, `Category`, NUL-separated — "Terran Siege Tank", "Tank Mode"), and
+`weapons.dat`, `upgrades.dat` and `techdata.dat` each carry a `label` column pointing
+into the same table. The editor's own tables (`src/data/units.ts`, `weapons.ts`) are
+StarEdit's names, which read better than the game's in about fifty places ("Cargo Ship
+(Unused)" where the game says "Unused", "Edmund Duke Turret (Tank Mode)" for "Duke
+Turret") and are the vocabulary the text trigger format and the other editors share.
+Both are wanted, so the rule (`src/data/gameNames.ts`) is per entry: **the data's name
+shows where it differs from what the game's own data says for that id, and StarEdit's
+stands everywhere else.** With Blizzard's files nothing changes; with a mod's, what it
+renamed shows its new name and the rest keep StarEdit's. The `GAME_*` tables there are
+what Blizzard's files say where that differs from StarEdit's table, generated from the
+real files and pinned against them in `tests/names.test.ts`; `unitName`, `weaponName`,
+`upgradeName` and `techName` read the loaded names first, so every list and dialog
+follows without being told, and the text trigger parser accepts the loaded names as well
+as StarEdit's so a trigger printed under a mod parses back.
+
+(Reading the labels is also what showed the upgrade table had Plasma Shields at id 7
+where `upgrades.dat` puts it at 15, shifting eight names by one. `UPGRADE_NAMES` and
+`UPGRADE_RACE` now follow the file.)
 
 ## The game itself
 

@@ -10,7 +10,7 @@ import { loadTileset } from "../src/formats/tileset/decode";
 import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import { hasIsom } from "../src/editor/isom";
-import { closeDocumentAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
+import { closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
@@ -2259,7 +2259,7 @@ describe.skipIf(!haveJungle)("plugin transactions with the jungle tileset", () =
     const { store, scn } = jungleStore();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
     const good = await api.terrain.checkIsom();
-    expect(good).toMatchObject({ stale: false, mismatched: 0 });
+    expect(good).toMatchObject({ stale: false, mismatched: 0, inherent: 0 });
     expect(good!.rects).toBeGreaterThan(0);
     // Matching already: nothing to change, no undo entry.
     const same = api.document.edit("same", (tx) => { expect(tx.rebuildIsom()).toMatchObject({ created: false, changed: 0 }); });
@@ -2289,9 +2289,24 @@ describe.skipIf(!haveJungle)("plugin transactions with the jungle tileset", () =
     api.document.edit("stamp", (tx) => { tx.stampTerrain({ x0: 4, y0: 4, x1: 12, y1: 12 }, other.id); });
     const stale = await api.terrain.checkIsom();
     expect(stale!.mismatched).toBeGreaterThan(0);
+    expect(stale).toMatchObject({ stale: true });
+    expect(stale!.inherent).toBeLessThan(stale!.mismatched);
+    // A rebuild over an existing lattice bumps the ISOM revision, so the palette's badge
+    // and Check Map re-measure: without that they kept saying "stale" after the repair.
+    const revision = store.get(isomRevisionAtom);
     const fixed = api.document.edit("fix", (tx) => { expect(tx.rebuildIsom()).toMatchObject({ created: false }); });
     expect(fixed.isom).toBeGreaterThan(0);
-    expect((await api.terrain.checkIsom())!.mismatched).toBeLessThan(stale!.mismatched);
+    expect(store.get(undoStackAtom).at(-1)).toMatchObject({ label: "fix", rebuiltIsom: true });
+    expect(store.get(isomRevisionAtom)).toBe(revision + 1);
+    store.set(undoAtom);
+    expect(store.get(isomRevisionAtom)).toBe(revision + 2);
+    store.set(redoAtom);
+    expect(store.get(isomRevisionAtom)).toBe(revision + 3);
+    // And the repair does not survive itself: what is left is what no lattice describes.
+    const after = (await api.terrain.checkIsom())!;
+    expect(after.mismatched).toBeLessThan(stale!.mismatched);
+    expect(after).toMatchObject({ stale: false });
+    expect(after.inherent).toBe(after.mismatched);
   });
 
   it("stamps, fills flat and paints isometrically, all undoable", () => {

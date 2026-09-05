@@ -799,20 +799,45 @@ export interface IsomCheck {
   mismatched: number;
 }
 
-/** Above this share of rects disagreeing with their tiles, the ISOM is reported as stale. */
+/** Above this share of rects a rebuild would bring back in step, the ISOM is reported as stale. */
 export const STALE_ISOM_SHARE = 0.02;
 
-/** `checkIsom` with the verdict the palette and Check Map draw from it. */
+/**
+ * `checkIsom` with what a rebuild would do about it — the verdict the palette, Check Map
+ * and the Repair plugin draw from.
+ *
+ * The two numbers measure opposite directions and are not inverses: `mismatched` is the
+ * lattice failing to reproduce the tiles, while a rebuild votes a lattice out of the
+ * tiles. A rebuild converges in one pass and leaves `inherent` behind for good, because
+ * hand-placed tiles, blends and another editor's ground are not terrain any lattice
+ * describes. Reporting `mismatched` alone therefore recommended a repair that could not
+ * move the number, on every map with terrain like that.
+ */
 export interface IsomReport extends IsomCheck {
-  /** More than `STALE_ISOM_SHARE` of the rects disagree with their tiles. */
+  /** Of `mismatched`, the rects a rebuild would leave: terrain no lattice describes. */
+  inherent: number;
+  /** A rebuild would bring more than `STALE_ISOM_SHARE` of the rects back in step. */
   stale: boolean;
 }
 
-/** The ISOM's health against the tiles, or null when the map has no (usable) ISOM. */
+/**
+ * The ISOM's health against the tiles and what a rebuild would do about it, or null when
+ * the map has no (usable) ISOM. Note what is *not* here: how many lattice values a
+ * rebuild would write differently. It is a number that sounds like the answer and is not
+ * — a rebuild rewrites hundreds of values on a map StarEdit laid perfectly, since a
+ * different row can mean the same thing.
+ */
 export function isomReport(scn: Scenario, tileset: Tileset): IsomReport | null {
   if (!hasIsom(scn)) return null;
   const check = checkIsom(scn, tileset);
-  return { ...check, stale: check.rects > 0 && check.mismatched / check.rects > STALE_ISOM_SHARE };
+  // Nothing disagrees, so there is nothing to recover and nothing inherent either. Worth
+  // the early exit: this is every map StarEdit and this editor write, and the rebuild
+  // below costs ~75 ms on a 256 x 256 map where the check costs 2.
+  if (check.mismatched === 0) return { ...check, inherent: 0, stale: false };
+  const after = checkIsom({ ...scn, isom: rebuildIsomFromTiles(scn, tileset).isom }, tileset);
+  // Clamped: a rebuild that made a rect worse is not a rect it recovers.
+  const inherent = Math.min(check.mismatched, after.mismatched);
+  return { ...check, inherent, stale: (check.mismatched - inherent) / check.rects > STALE_ISOM_SHARE };
 }
 
 /** How well the ISOM section describes the tiles that are actually on the map. */
@@ -862,15 +887,18 @@ export function rebuildIsomFromTiles(scn: Scenario, tileset: Tileset): IsomRebui
   };
 
   // For each (flag, link[, terrain type]) the rows that carry it — the inverse of edgeLink.
-  const rowsFor = new Map<string, number[]>();
+  // Keyed by number rather than by a template string: the vote loop below asks this once
+  // per rect side, which on a 256 x 256 map is 131,072 lookups.
+  const key = (flag: number, link: number, terrainType: number) => (flag << 17) | (link << 8) | terrainType;
+  const rowsFor = new Map<number, number[]>();
   for (let row = 0; row < links.length; row++) {
     if (links[row].terrainType === 0) continue;
     for (let flag = 0; flag < 16; flag += 2) {
       const link = edgeLink(links[row], flag);
-      const key = `${flag}:${link}:${isHard(link) ? links[row].terrainType : 0}`;
-      const list = rowsFor.get(key);
+      const k = key(flag, link, isHard(link) ? links[row].terrainType : 0);
+      const list = rowsFor.get(k);
       if (list) list.push(row);
-      else rowsFor.set(key, [row]);
+      else rowsFor.set(k, [row]);
     }
   }
 
@@ -888,7 +916,7 @@ export function rebuildIsomFromTiles(scn: Scenario, tileset: Tileset): IsomRebui
         const { sides, flags } = PROJECTED[q];
         const flag = flags[sides[0] === side ? 0 : 1];
         const link = group.edges[SIDE_NAME[side as Side]];
-        const rows = rowsFor.get(`${flag}:${link}:${isHard(link) ? group.index : 0}`);
+        const rows = rowsFor.get(key(flag, link, isHard(link) ? group.index : 0));
         if (rows) for (const row of rows) vote(d.x, d.y, row);
       }
     }
@@ -965,4 +993,4 @@ export type IsomStatus =
   | { kind: "no-tileset" }
   /** The map has no ISOM section (or a truncated one): the brush has nothing to work on. */
   | { kind: "missing" }
-  | { kind: "ready"; check: IsomCheck; stale: boolean };
+  | { kind: "ready"; report: IsomReport };

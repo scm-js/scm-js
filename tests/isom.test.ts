@@ -9,10 +9,10 @@ import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
 import { terrainName, TILESETS } from "../src/data/tilesets";
 import { ISOM_TABLES, isomValueOf } from "../src/data/isomTables";
 import {
-  applyIsomChanges, brushDiamonds, checkIsom, diamondAt, hasIsom, isomTables, isomTerrains, paintIsom,
-  rebuildIsomFromTiles, tilesFromIsom,
+  applyIsomChanges, brushDiamonds, checkIsom, diamondAt, hasIsom, isomReport, isomTables, isomTerrains, paintIsom,
+  rebuildIsomFromTiles, STALE_ISOM_SHARE, tilesFromIsom,
 } from "../src/editor/isom";
-import { applyChanges } from "../src/editor/terrain";
+import { applyChanges, stampTerrain } from "../src/editor/terrain";
 
 function seeded(seed: number): () => number {
   let state = seed >>> 0;
@@ -254,6 +254,55 @@ describe.skipIf(!haveTilesets || maps.length === 0)("isom against StarEdit-made 
     const ts = readTileset(tilesetIndex(scn));
     expect(paintIsom(scn, ts, { x: 10, y: 10 }, 99, 1)).toBeNull();
     expect(paintIsom(scn, ts, { x: 10, y: 11 }, TILESETS[tilesetIndex(scn)].defaultIsom, 1)).toBeNull();
+  });
+
+  it("reports staleness as what a rebuild would recover, not as raw disagreement", async () => {
+    // A rebuild converges in one pass and leaves behind the rects no lattice can produce.
+    // Measuring the raw disagreement recommended a repair that could not move the number,
+    // for ever, on any map with hand-placed terrain — which is what this pins.
+    let stressed = 0;
+    for (const file of maps) {
+      const scn = await readMap(file);
+      if (!hasIsom(scn)) continue;
+      const era = tilesetIndex(scn);
+      const ts = readTileset(era);
+
+      // As it came from StarEdit: nothing to recover, and no lattice trouble either.
+      const pristine = isomReport(scn, ts)!;
+      expect(pristine.stale, file).toBe(false);
+      expect(pristine.mismatched, file).toBe(pristine.inherent);
+
+      // Rect-brush blocks of every flat terrain over it, leaving the lattice behind.
+      const rnd = seeded(7);
+      for (const [n, t] of TILESETS[era].terrain.entries()) {
+        const group = ts.groups.findIndex((g, i) => i % 2 === 0 && g.index === t.id);
+        if (group < 0) continue;
+        const bx = 4 + (n * 13) % Math.max(1, scn.width - 20);
+        const by = 4 + (n * 7) % Math.max(1, scn.height - 20);
+        const cells: number[] = [];
+        for (let y = by; y < Math.min(by + 12, scn.height); y++) {
+          for (let x = bx; x < Math.min(bx + 12, scn.width); x++) cells.push(y * scn.width + x);
+        }
+        applyChanges(scn, stampTerrain(scn, ts, { group }, cells, rnd), "do");
+      }
+      const stale = isomReport(scn, ts)!;
+      expect(stale.stale, file).toBe(true);
+      expect(stale.inherent, file).toBeLessThan(stale.mismatched);
+      stressed++;
+
+      // Rebuild, and the finding must not survive itself: what is left is `inherent`,
+      // above the raw threshold on maps like these but no longer worth offering a repair for.
+      scn.isom = rebuildIsomFromTiles(scn, ts).isom;
+      const after = isomReport(scn, ts)!;
+      expect(after.stale, file).toBe(false);
+      expect(after.mismatched, file).toBe(stale.inherent);
+      expect(after.inherent, file).toBe(after.mismatched);
+      expect(isomReport(scn, ts)!.stale, file).toBe(false); // and again
+      // And the leftover really is past the raw threshold: measuring `mismatched` alone
+      // would have kept the warning — and the repair — up on every one of these maps.
+      expect(after.mismatched / after.rects, file).toBeGreaterThan(STALE_ISOM_SHARE);
+    }
+    expect(stressed).toBeGreaterThan(0);
   });
 
   it("a freshly created flat map round-trips through the brush machinery", () => {

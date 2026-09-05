@@ -347,7 +347,7 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   // A rebuilt lattice is the one edit the ISOM status is re-measured after.
-  if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+  if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
 });
 
 /**
@@ -421,7 +421,7 @@ export const undoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
     applyEntry(scn, entry, "undo");
-    if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+    if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     afterUnitEdit(get, set, entry);
     set(undoStackAtom, stack.slice(0, -1));
     set(redoStackAtom, [...get(redoStackAtom), entry]);
@@ -439,7 +439,7 @@ export const redoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
     applyEntry(scn, entry, "do");
-    if (entry.createdIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+    if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     afterUnitEdit(get, set, entry);
     set(redoStackAtom, stack.slice(0, -1));
     set(undoStackAtom, [...get(undoStackAtom), entry]);

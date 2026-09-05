@@ -86,8 +86,11 @@ function IsomTab() {
   const status = useIsomStatus();
   const types = useMemo(() => terrainTypes(loaded?.tileset ?? null, info.terrain), [loaded, info]);
   const list = types.length > 0 ? types : info.terrain.map((t) => ({ ...t, group: -1, height: 0 as const, buildable: true }));
-  const ready = status.kind === "ready";
-  const stalePct = ready ? Math.round((100 * status.check.mismatched) / Math.max(1, status.check.rects)) : 0;
+  const report = status.kind === "ready" ? status.report : null;
+  const share = (n: number) => Math.round((100 * n) / Math.max(1, report?.rects ?? 1));
+  // What a rebuild would recover, and what it would leave behind whatever anyone does.
+  const stalePct = report ? share(report.mismatched - report.inherent) : 0;
+  const inherentPct = report ? share(report.inherent) : 0;
 
   return (
     <>
@@ -95,11 +98,19 @@ function IsomTab() {
         <BrushSelect />
         <span className="grow" />
         <span className="lbl">
-          {status.kind === "missing" ? "no ISOM" : ready ? (status.stale ? `ISOM stale (${stalePct}%)` : "ISOM ok") : ""}
+          {status.kind === "missing"
+            ? "no ISOM"
+            : report
+              ? report.stale
+                ? `ISOM stale (${stalePct}%)`
+                : inherentPct > 0
+                  ? `ISOM ok (${inherentPct}% hand-laid)`
+                  : "ISOM ok"
+              : ""}
         </span>
       </div>
       <div className="palette-scroll">
-        <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0, opacity: status.kind === "ready" ? 1 : 0.55 }}>
+        <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0, opacity: report ? 1 : 0.55 }}>
           {list.map((t) => (
             <div key={t.id} className={`item ${active === t.id ? "selected" : ""}`} onClick={() => setActive(t.id)}>
               <TileThumb loaded={loaded} id={t.group >= 0 ? t.group << 4 : 0} size={18} className="swatch" />
@@ -126,12 +137,27 @@ function IsomTab() {
             </span>
           </div>
         )}
-        {ready && status.stale && (
+        {report?.stale && (
           <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
             <span>
-              The ISOM disagrees with the tiles under about {stalePct}% of the map — terrain edited with the Rect or Tile brush,
-              or another tool. Isometric strokes near those areas will not join up until it is rebuilt (Tools ▸ Repair Map…,
-              from the Repair plugin).
+              The ISOM is behind the tiles on about {stalePct}% of the map — terrain edited with the Rect or Tile brush, or
+              another tool. Isometric strokes near those areas will not join up until it is rebuilt (Tools ▸ Repair Map…, from
+              the Repair plugin).
+            </span>
+            {inherentPct > 0 && (
+              <span>
+                A rebuild leaves about {inherentPct}% that no diamond lattice describes; that part cannot be brought back in
+                step by any tool.
+              </span>
+            )}
+          </div>
+        )}
+        {report && !report.stale && inherentPct > 0 && (
+          <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
+            <span>
+              About {inherentPct}% of the map is terrain no diamond lattice describes — hand-placed tiles, blends, or ground
+              another editor laid. Isometric strokes there will not join up, and rebuilding the lattice will not change that.
+              The Rect, Tile and Blend brushes work as usual.
             </span>
           </div>
         )}

@@ -1387,10 +1387,19 @@ export interface TerrainApi {
   /** Whether the open map carries an ISOM section the isometric brush can work on. */
   hasIsom(): boolean;
   /**
-   * How well the ISOM describes the tiles — `rects` measured, `mismatched` among them,
-   * and `stale` when the share is past what the palette warns at — or null when the map
-   * has no ISOM (`hasIsom`) or no map is open. Waits for the tileset graphics to load
-   * and rejects when they are missing.
+   * How well the ISOM describes the tiles, and what rebuilding it would do about that:
+   * `rects` measured, `mismatched` among them, `inherent` of those a rebuild would leave
+   * behind (terrain no lattice describes — hand-placed tiles, blends, another editor's
+   * ground), and `stale` when a rebuild would bring more than the palette's threshold
+   * back in step. Null when the map has no ISOM (`hasIsom`) or no map is open. Waits for
+   * the tileset graphics to load and rejects when they are missing.
+   *
+   * Offer `tx.rebuildIsom` on `stale`, not on `mismatched`: the two measure opposite
+   * directions, a rebuild converges in one pass, and `inherent` never goes away.
+   *
+   * @example
+   * const r = await api.terrain.checkIsom();
+   * if (r?.stale) await api.document.edit("Rebuild ISOM", (tx) => { tx.rebuildIsom(); });
    */
   checkIsom(): Promise<IsomReport | null>;
   tileInfo(id: number): TileInfo | null;

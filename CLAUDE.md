@@ -156,8 +156,24 @@ through undo/redo (`applyIsomChanges`). `hasIsom(scn)` gates the brush: a map wi
 notice pointing at the Repair plugin; the rebuild itself (`rebuildIsomFromTiles`) is reached only through
 `tx.rebuildIsom` on the plugin API — there is no native button or menu item — and creating the section is
 the `createdIsom` history case (`commitEditAtom` bumps `isomRevisionAtom` for it). `isomReport` /
-`STALE_ISOM_SHARE` live in `editor/isom.ts`; `useIsomStatus` and `api.terrain.checkIsom` both read them. `checkIsom` measures ISOM/tile agreement (`useIsomStatus`, computed on
-load, not per stroke). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
+`STALE_ISOM_SHARE` live in `editor/isom.ts`; `useIsomStatus` and `api.terrain.checkIsom` both read them
+(computed on load, not per stroke). `checkIsom` measures **lattice → tiles**: does the lattice reproduce
+the tiles that are there. That is *not* the question a rebuild answers, and reporting it alone was a bug
+worth remembering: `rebuildIsomFromTiles` votes a lattice out of the tiles, converges in **one** pass,
+and leaves behind every rect no lattice can produce — hand-placed tiles, blends, another editor's
+ground. Measured over the fixture maps with Rect blocks stamped on, a rebuild took 5–34% disagreement
+down to a residue of 2–13% and a second rebuild changed nothing, so a map with hand-laid terrain warned
+"ISOM stale (14%)" and recommended a repair that could not move the number, for ever — the Repair
+plugin re-ticked it after every press. So `isomReport` runs the rebuild too and answers `inherent`
+(the rects it would leave) beside `mismatched`, and **`stale` is what a rebuild would recover**:
+`(mismatched - inherent) / rects > STALE_ISOM_SHARE`. The palette badge, its hint, Check Map and the
+plugin all read `stale`, and say the leftover is nobody's to fix rather than offering a repair for it.
+It deliberately does **not** report how many lattice values a rebuild would write: that number sounds
+like the answer and is not — a rebuild rewrites 500–3000 values on a Blizzard map that measures 0%
+mismatched, since a different row can mean the same thing. Cost: `checkIsom` is ~2 ms on a 256 × 256
+map and the rebuild ~75, so `isomReport` returns on the check alone when `mismatched` is 0, which is
+every map StarEdit and this editor write; `rebuildIsomFromTiles` keys its inverse-link table by number
+rather than by a template string, which is 131k lookups on that map (89 → 73 ms). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
 tests green when touching the CV5 decoder (`edges`, `stack`) or the tables.
 
 Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the same ids `ISOM` stores).

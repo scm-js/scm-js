@@ -216,7 +216,10 @@ editor's own record rather than anything the game reads, and which protected map
 strip. Where a map has none, the tab says so and the Repair plugin (Tools ▸ Repair Map…)
 reconstructs it: exact for ground that was laid down isometrically, a best guess under
 doodads and hand-placed tiles. The tab also warns when Rect or Tile edits have left the
-record out of step with the terrain.
+record out of step with the terrain — but only where a rebuild would put it back. Ground
+no diamond lattice can describe, which is what hand-placed tiles, blends and other
+editors leave behind, is reported as what it is: the brush will not join up there, and
+no tool can change that.
 
 ![The Rect tab](docs/images/palette-rect.webp) ![The Tile tab](docs/images/palette-tile.webp) ![The Blend tab](docs/images/palette-blend.webp)
 

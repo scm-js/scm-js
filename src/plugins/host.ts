@@ -200,6 +200,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   const notes: string[] = [];
   let createdMask: Uint8Array | undefined;
   let createdIsom: Uint16Array | undefined;
+  let rebuiltIsom = false;
   let serial = nextSerial(scn);
 
   const cellsOf = (cells: Cells): number[] => {
@@ -274,6 +275,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
         for (let i = 0; i < rebuilt.isom.length; i++) if (scn.isom[i] !== rebuilt.isom[i]) changes.push({ at: i, before: scn.isom[i], after: rebuilt.isom[i] });
         applyIsomChanges(scn, changes);
         isom.add(changes);
+        rebuiltIsom = true;
         return { ...base, created: false, changed: changes.length };
       }
       // No usable lattice (or one this transaction already created): the whole section is the change.
@@ -474,6 +476,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   if (fogChanges.length > 0) entry.fog = fogChanges;
   if (createdMask) entry.createdMask = createdMask;
   if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
+  else if (rebuiltIsom) entry.rebuiltIsom = true;
 
   if (!hasEdits(entry)) return { ...EMPTY_RESULT, notes };
   // The commit's stranded-doodad / stranded-unit pass may append to the entry's lists, so the counts come after it.

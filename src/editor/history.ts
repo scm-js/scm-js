@@ -26,6 +26,13 @@ export interface HistoryEdit {
    * removes the section again rather than leaving an all-zero one behind.
    */
   createdIsom?: Uint16Array;
+  /**
+   * Set when the edit rebuilt an existing lattice from the tiles, which is the one edit
+   * to `isom` the ISOM health is re-measured after: a brush stroke keeps the two in step
+   * by construction and is deliberately not measured (`useIsomStatus`), and measuring
+   * costs a second rebuild.
+   */
+  rebuiltIsom?: boolean;
   /** Unit placements, moves and deletions (see editor/units.ts). */
   units?: UnitChange[];
   /**

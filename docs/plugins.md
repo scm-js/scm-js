@@ -825,7 +825,7 @@ symmetry mode.
 | `symmetry()` / `setSymmetry(mode)` | Tools ▸ Symmetry: `"none"`, `"h"`, `"v"`, `"hv"`, `"rot180"`, `"rot90"`, `"diag"`, `"adiag"`. |
 | `symmetryAvailable(mode)` | The last three need a square map. |
 | `mirror(cells)` / `mirrorPoint(px, py)` | The images the built-in brushes paint and the palettes place on, so a plugin edit can honour the user's setting the way `tx.fillArea` does by itself. |
-| `checkIsom()` | Asynchronous. Waits for the tileset graphics (rejecting when they are missing) and resolves with how well the ISOM describes the tiles: `rects` measured, `mismatched` among them, `stale` when the share is past what the palette warns at. Null when the map has no ISOM or no map is open. |
+| `checkIsom()` | Asynchronous. Waits for the tileset graphics (rejecting when they are missing) and resolves with how well the ISOM describes the tiles and what rebuilding it would do about that: `rects` measured, `mismatched` among them, `inherent` of those a rebuild would leave behind, `wouldChange` lattice values, and `stale` when a rebuild would bring more than the palette's threshold back in step. Offer a rebuild on `stale`, not on `mismatched`: a rebuild converges in one pass and `inherent` — hand-placed tiles, blends, another editor's ground — never goes away. Null when the map has no ISOM or no map is open. |
 
 ### `api.tileset`
 

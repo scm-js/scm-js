@@ -131,8 +131,13 @@ describe("validateScenario", () => {
   it("reports ISOM health when given", () => {
     const scn = fresh();
     expect(texts(scn, { isom: { kind: "missing" } }).some((t) => t.includes("no ISOM section"))).toBe(true);
-    expect(texts(scn, { isom: { kind: "ready", stale: true, check: { rects: 100, mismatched: 25 } } })).toContain("warn: ISOM disagrees with the tiles on 25% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).");
-    expect(texts(scn, { isom: { kind: "ready", stale: false, check: { rects: 100, mismatched: 0 } } }).some((t) => t.includes("ISOM"))).toBe(false);
+    // Only what a rebuild would recover is warned about: 25 mismatched of which 5 no
+    // lattice can describe is a 20% repair, and the 5 are nobody's to fix.
+    const ready = (stale: boolean, mismatched: number, inherent: number) =>
+      ({ isom: { kind: "ready", report: { rects: 100, mismatched, inherent, stale } } }) as const;
+    expect(texts(scn, ready(true, 25, 5))).toContain("warn: ISOM is behind the tiles on 20% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).");
+    expect(texts(scn, ready(false, 14, 14)).some((t) => t.includes("ISOM"))).toBe(false);
+    expect(texts(scn, ready(false, 0, 0)).some((t) => t.includes("ISOM"))).toBe(false);
   });
 });
 

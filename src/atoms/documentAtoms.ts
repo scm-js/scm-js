@@ -431,6 +431,21 @@ export const undoAtom = atom(
   },
 );
 
+/**
+ * Take back an entry that was applied live but never committed — a plugin transaction whose
+ * builder threw. The change lists are the rollback material (that is what invertible changes
+ * are for): apply them backwards and repaint, and leave the history and the modified flag
+ * alone, since nothing that was recorded has changed.
+ */
+export const rollbackEntryAtom = atom(null, (get, set, entry: HistoryEntry) => {
+  const scn = get(scenarioAtom);
+  if (!scn) return;
+  applyEntry(scn, entry, "undo");
+  if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+  afterUnitEdit(get, set, entry);
+  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+});
+
 export const redoAtom = atom(
   (get) => get(redoStackAtom).at(-1)?.label ?? null,
   (get, set) => {

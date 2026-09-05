@@ -226,16 +226,19 @@ version is reserved for a change that would.
   `api.document.edit` takes a label and a builder, applies your operations as you call
   them, and commits them as a single history entry. It is the path a brush stroke takes,
   so the right file sections are marked dirty, the canvas repaints, and doodads or units
-  your terrain edit stranded are lifted in the same entry. `api.document.update` is the
-  same shape for the tables that live outside the undo model, and
-  `api.document.sections` for raw bytes. See **The three kinds of write**.
+  your terrain edit stranded are lifted in the same entry. If your builder throws, the
+  edit is rolled back and the error is yours. `api.document.update` is the same shape
+  for the tables that live outside the undo model, and `api.document.sections` for raw
+  bytes. See **The three kinds of write**.
 - **Everything you add is taken back for you.** A menu item, hotkey, context-menu entry,
   dialog, panel, overlay, map tool or event listener each hand you a `Disposable`, and the
   editor keeps its own list of them besides. Turning your plugin off, reloading it or
   removing it sweeps the lot whether or not you cleaned up.
-- **Reading the map is always safe.** Every method that reads answers `null`, `[]` or
-  `false` when no map is open, rather than throwing. You do not have to guard the empty
-  editor.
+- **Reading the map is safe.** Every method that reads answers `null`, `[]` or `false`
+  when no map is open, rather than throwing, so you do not have to guard the empty
+  editor. The one exception is `document.sections`, the raw-bytes path: `file()` and
+  `bytes(index)` throw with no map open, since bytes with no file behind them have no
+  empty answer.
 - **The graphics may not be there.** The user may not have installed Blizzard's data, and
   the editor works without it. Anything that needs the tileset degrades instead of
   failing: a terrain operation writes nothing and leaves a note on its result. Check what
@@ -440,7 +443,20 @@ edit) and they differ in what they cost:
 
 Both transactions apply their operations **as they are called**, so a later operation
 sees the result of an earlier one, and both commit once at the end. That is why the
-builder is synchronous.
+builder is synchronous: the transaction is closed when the builder returns, and a call
+on it after that — a handle you kept, or the rest of an `async` builder after its first
+`await` — throws rather than writing outside the entry.
+
+When a builder throws, the two differ. An `edit` is rolled back: the changes it had
+applied are taken off the map, nothing reaches the history or the modified flag, and the
+error comes out of `edit` for you to handle. An `update` has no change lists to roll
+back with, so what it wrote stays and is committed — the map is modified and the chrome
+re-reads — before the error comes out.
+
+A plugin that has been turned off keeps nothing of the editor: a callback it left
+behind finds every contribution it adds taken straight back, `edit` and `update`
+answering `changed: false` with a note, and the other document writes doing nothing,
+with a line in the console each time.
 
 ### `api.document`
 

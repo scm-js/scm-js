@@ -91,8 +91,9 @@ export interface Disposable {
  * builders (`document.edit` and `document.update`) are the exception, and deliberately
  * so: their operations apply as they are called and one commit closes the transaction
  * when the builder returns, so an `async` builder would commit the part of its work that
- * ran before the first `await` and leave the rest to land outside the entry, breaking
- * undo without an error. Do the awaiting *before* the call:
+ * ran before the first `await` and leave the rest with nowhere to land: the transaction
+ * is closed once the builder returns, and every call on it throws from then on. Do the
+ * awaiting *before* the call:
  *
  * ```ts
  * await api.tileset.load();                       // the async part, first
@@ -362,7 +363,11 @@ export interface DocumentApi {
    * Returns an all-zero result with `changed: false` when no map is open.
    *
    * `build` is synchronous — see `Sync`. Await what you need (graphics, a pick, a
-   * fetch) before the call, then write in one go.
+   * fetch) before the call, then write in one go. The transaction is closed when
+   * `build` returns; a call on it after that throws.
+   *
+   * A builder that throws is rolled back: what it had applied is taken off the map
+   * again, nothing reaches the history or the modified flag, and the error reaches you.
    *
    * @example
    * // One undo entry called "Fill", however many operations it takes.
@@ -379,7 +384,11 @@ export interface DocumentApi {
    * transaction, the way a settings dialog's OK applies its whole form at once.
    * Operations apply as they are called; the commit marks the map modified and bumps
    * what the chrome reads. There is no undo entry: keep your own if you need one.
-   * `build` is synchronous, as `edit`'s is.
+   * `build` is synchronous, as `edit`'s is, and closed when it returns.
+   *
+   * There is nothing to roll an update back with, so a builder that throws leaves what
+   * it wrote: the sections it touched are committed — the map is modified and the
+   * chrome re-reads — and the error reaches you.
    *
    * @example
    * api.document.update("Rename", (tx) => {

@@ -390,9 +390,12 @@ export interface LoadedPlugin {
   module: unknown;
 }
 
-export async function loadPlugin(spec: string, deps: LoaderDeps): Promise<LoadedPlugin> {
+export async function loadPlugin(spec: string, deps: LoaderDeps, opts: { accept?: (manifest: PluginManifest) => void } = {}): Promise<LoadedPlugin> {
   const source = parseSpec(spec);
   const { manifest, entryUrl, icon } = await resolvePlugin(source, deps);
+  // The host's compatibility check sits here, between reading the manifest and importing the
+  // module, so a plugin that will be refused never has its top-level code run.
+  opts.accept?.(manifest);
   if (source.kind === "builtin") return { source, manifest, icon, module: await deps.builtins[source.name].load() };
   const url = await bundleModule(entryUrl!, deps);
   let module: unknown;

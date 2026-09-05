@@ -17,7 +17,7 @@ import {
 } from "../atoms/editorAtoms";
 import {
   archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom,
-  recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
+  recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
@@ -144,14 +144,27 @@ export type Store = ReturnType<typeof createStore>;
 export class Contributions {
   readonly disposables: (() => void)[] = [];
   readonly counts = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 };
+  /**
+   * Set by `dispose` and never cleared: the bag is the plugin's activation, and the only
+   * thing that can reach it afterwards is a callback the plugin left behind — a timer, a
+   * fetch — whose contributions and edits would otherwise land with nothing to sweep them.
+   */
+  disposed = false;
 
   add(dispose: () => void, kind?: keyof Contributions["counts"]) {
+    if (this.disposed) {
+      // Registered from work that outlived the plugin: take it straight back.
+      console.warn("[plugins] a contribution was added after the plugin was deactivated and has been taken back");
+      try { dispose(); } catch (err) { console.error("[plugins] dispose failed", err); }
+      return { dispose: () => {} };
+    }
     this.disposables.push(dispose);
     if (kind) this.counts[kind]++;
     return { dispose: () => { dispose(); const i = this.disposables.indexOf(dispose); if (i >= 0) this.disposables.splice(i, 1); } };
   }
 
   dispose() {
+    this.disposed = true;
     for (const d of this.disposables.splice(0)) {
       try { d(); } catch (err) { console.error("[plugins] dispose failed", err); }
     }
@@ -174,7 +187,42 @@ function checkSyncBuilder(call: string, returned: unknown, notes: string[]): voi
   const text = `${call}'s builder is async — a transaction commits when the builder returns, so anything after its first await is outside the undo entry. Await before the call, not inside it.`;
   notes.push(text);
   console.error(`[scmJS] ${text}`);
+  // The half after the await runs against a closed transaction, whose every call throws; nobody
+  // awaits the builder's promise, so its rejection would otherwise surface as unhandled.
+  (returned as PromiseLike<unknown>).then(undefined, (err) => console.error(`[scmJS] ${call}'s builder failed after its transaction had closed`, err));
 }
+
+/**
+ * A transaction ends when its builder returns. A handle kept past that — or the rest of an
+ * `async` builder after its first await — used to keep writing to the scenario with nothing
+ * recording it; now every call on it throws. The transaction's function properties, and the
+ * nested groups of functions (`tx.strings`, `tx.triggers`, …), are wrapped; `tx.scenario` and
+ * the numbers are left as they are.
+ */
+function sealed<T extends object>(call: string, tx: T, isClosed: () => boolean): T {
+  const refuse = () => {
+    throw new Error(`${call}'s transaction is closed — it ended when its builder returned, so this call has nothing to record it. Do the work inside the builder, and await before the call rather than inside it.`);
+  };
+  const wrap = (obj: object): object => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === "function") out[k] = (...args: unknown[]) => { if (isClosed()) refuse(); return (v as (...a: unknown[]) => unknown)(...args); };
+      else if (isFunctionGroup(v)) out[k] = wrap(v);
+      else out[k] = v;
+    }
+    return out;
+  };
+  return wrap(tx) as T;
+}
+
+const isFunctionGroup = (v: unknown): v is object => {
+  if (!v || typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) return false;
+  const values = Object.values(v);
+  return values.length > 0 && values.every((f) => typeof f === "function");
+};
+
+/** `edit` and `update` on a plugin that has been deactivated do nothing and say so. */
+export const DEACTIVATED_NOTE = "the plugin is deactivated";
 
 /**
  * Run `build` against a transaction over the open scenario and commit what it did as
@@ -462,22 +510,42 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     note: (text) => { notes.push(text); },
   };
 
-  checkSyncBuilder("document.edit", build(tx), notes);
+  let isomChanges: TileChange[] = [];
+  let fogChanges: TileChange[] = [];
+  const finishEntry = (): HistoryEntry => {
+    const entry: HistoryEntry = { label, changes: tiles.finish() };
+    isomChanges = isom.finish();
+    fogChanges = fog.finish();
+    if (isomChanges.length > 0) entry.isom = isomChanges;
+    if (doodadTiles.length > 0) entry.doodadTiles = doodadTiles;
+    if (doodads.length > 0) entry.doodads = doodads;
+    if (sprites.length > 0) entry.sprites = sprites;
+    if (units.length > 0) entry.units = units;
+    if (locations.length > 0) entry.locations = locations;
+    if (fogChanges.length > 0) entry.fog = fogChanges;
+    if (createdMask) entry.createdMask = createdMask;
+    if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
+    else if (rebuiltIsom) entry.rebuiltIsom = true;
+    return entry;
+  };
 
-  const entry: HistoryEntry = { label, changes: tiles.finish() };
-  const isomChanges = isom.finish();
-  const fogChanges = fog.finish();
-  if (isomChanges.length > 0) entry.isom = isomChanges;
-  if (doodadTiles.length > 0) entry.doodadTiles = doodadTiles;
-  if (doodads.length > 0) entry.doodads = doodads;
-  if (sprites.length > 0) entry.sprites = sprites;
-  if (units.length > 0) entry.units = units;
-  if (locations.length > 0) entry.locations = locations;
-  if (fogChanges.length > 0) entry.fog = fogChanges;
-  if (createdMask) entry.createdMask = createdMask;
-  if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
-  else if (rebuiltIsom) entry.rebuiltIsom = true;
+  // The operations applied live as the builder called them, so a builder that throws has
+  // left them on the map: take them back (the change lists are the inverse) and let the
+  // error through. Nothing reaches the history or the modified flag either way.
+  let closed = false;
+  let returned: unknown;
+  try {
+    returned = build(sealed("document.edit", tx, () => closed));
+  } catch (err) {
+    closed = true;
+    const entry = finishEntry();
+    if (hasEdits(entry)) store.set(rollbackEntryAtom, entry);
+    throw err;
+  }
+  closed = true;
+  checkSyncBuilder("document.edit", returned, notes);
 
+  const entry = finishEntry();
   if (!hasEdits(entry)) return { ...EMPTY_RESULT, notes };
   // The commit's stranded-doodad / stranded-unit pass may append to the entry's lists, so the counts come after it.
   store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
@@ -635,15 +703,20 @@ function createDocument(store: Store, options: NewDocumentOptions): Promise<bool
  * for the largest map, and a plugin that lists often can cache on the `"document"` and
  * per-layer events.
  */
-export function sectionsApi(store: Store): SectionsApi {
+export function sectionsApi(store: Store, alive: () => boolean = () => true): SectionsApi {
   const open = () => {
     const scn = store.get(scenarioAtom);
     if (!scn) throw new Error("No map is open.");
     return scn;
   };
+  /** A write from a deactivated plugin is refused outright: a raw edit replaces the whole scenario. */
+  const writable = () => {
+    if (!alive()) throw new Error("The plugin is deactivated; document.sections no longer writes.");
+    return open();
+  };
   const dim = () => { const scn = store.get(scenarioAtom); return { width: scn?.width ?? 0, height: scn?.height ?? 0 }; };
   const edit = (mutate: (file: ChkFile) => void): RawEditResult => {
-    const next = editRaw(open(), mutate);
+    const next = editRaw(writable(), mutate);
     store.set(replaceScenarioAtom, next);
     return { warnings: [...next.warnings] };
   };
@@ -665,7 +738,7 @@ export function sectionsApi(store: Store): SectionsApi {
     remove: (index) => edit((file) => removeSection(file, index)),
     move: (from, to) => edit((file) => moveSection(file, from, to)),
     replaceFile: (bytes) => {
-      open();
+      writable();
       const next = parseRaw(bytes);
       store.set(replaceScenarioAtom, next);
       return { warnings: [...next.warnings] };
@@ -674,7 +747,7 @@ export function sectionsApi(store: Store): SectionsApi {
     required: () => { const scn = store.get(scenarioAtom); return scn ? requiredSectionNames(scn) : []; },
     defaults: (name) => { const scn = store.get(scenarioAtom); return scn ? defaultSectionBytes(scn, name.padEnd(4, " ")) : null; },
     rebuild: (names) => {
-      const { scenario, result } = rebuildSections(open(), names);
+      const { scenario, result } = rebuildSections(writable(), names);
       store.set(replaceScenarioAtom, scenario);
       return result;
     },
@@ -875,16 +948,34 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     note: (text) => { notes.push(text); },
   };
 
-  checkSyncBuilder("document.update", build(tx), notes);
+  // Both commits: triggers for the trigger lists and the script block's manifest, settings
+  // for everything that reads names and colours (a string is shown in half the chrome).
+  const commit = () => {
+    store.set(commitTriggersAtom);
+    store.set(commitSettingsAtom);
+    store.set(mapNameAtom, scenarioName(scn) ?? "");
+    store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+  };
+
+  // There are no change lists here to take an operation back with, so a builder that throws
+  // leaves what it wrote — the tables are in the scenario already — and the honest thing is to
+  // commit that: the map reads as modified and the chrome re-reads, rather than a name changed
+  // in the file and an unmodified title bar. The error goes through.
+  let closed = false;
+  let returned: unknown;
+  try {
+    returned = build(sealed("document.update", tx, () => closed));
+  } catch (err) {
+    closed = true;
+    if (sections.size > 0) commit();
+    throw err;
+  }
+  closed = true;
+  checkSyncBuilder("document.update", returned, notes);
 
   const touched = [...sections];
   if (touched.length === 0) return { changed: false, sections: [], notes };
-  // Both commits: triggers for the trigger lists and the script block's manifest, settings
-  // for everything that reads names and colours (a string is shown in half the chrome).
-  store.set(commitTriggersAtom);
-  store.set(commitSettingsAtom);
-  store.set(mapNameAtom, scenarioName(scn) ?? "");
-  store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+  commit();
   store.set(statusMessageAtom, notes.length > 0 ? `${label} — ${notes.join(", ")}` : label);
   return { changed: true, sections: touched, notes };
 }
@@ -1382,6 +1473,18 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
   const prefix = `${STORAGE_PREFIX}plugin.${info.id}.`;
   const widgets = createWidgets();
 
+  /**
+   * The bag is disposed when the plugin is deactivated; a callback it left behind — a fetch
+   * that landed late, a timer — finds every write refused here, with a line in the console,
+   * so that nothing changes the map or the chrome on behalf of a plugin that is off. The
+   * contributions refuse themselves in `Contributions.add`.
+   */
+  const gone = (what: string): boolean => {
+    if (!bag.disposed) return false;
+    console.error(`[${info.name}] ${what} was called after the plugin was deactivated; nothing was done`);
+    return true;
+  };
+
   const api: PluginApi = {
     apiVersion: PLUGIN_API_VERSION,
     plugin: info,
@@ -1406,19 +1509,19 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         };
       },
       scenario,
-      edit: (label, build) => runTransaction(store, label, build),
-      update: (label, build) => runUpdate(store, label, build),
+      edit: (label, build) => (gone("document.edit") ? { ...EMPTY_RESULT, notes: [DEACTIVATED_NOTE] } : runTransaction(store, label, build)),
+      update: (label, build) => (gone("document.update") ? { changed: false, sections: [], notes: [DEACTIVATED_NOTE] } : runUpdate(store, label, build)),
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
       history: () => {
         const u = store.get(undoStackAtom), r = store.get(redoStackAtom);
         return { undo: u.at(-1)?.label ?? null, redo: r.at(-1)?.label ?? null, undoDepth: u.length, redoDepth: r.length };
       },
-      open: (source, fileName) => openDocument(store, source, fileName),
-      create: (options) => createDocument(store, options),
+      open: (source, fileName) => (gone("document.open") ? Promise.resolve(false) : openDocument(store, source, fileName)),
+      create: (options) => (gone("document.create") ? Promise.resolve(false) : createDocument(store, options)),
       resize: (options) => {
         const scn = scenario();
-        if (!scn) return null;
+        if (!scn || gone("document.resize")) return null;
         const width = Math.max(1, Math.min(256, Math.round(options.width)));
         const height = Math.max(1, Math.min(256, Math.round(options.height)));
         const anchor = Math.max(0, Math.min(8, Math.round(options.anchor ?? 4)));
@@ -1435,7 +1538,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       save: async (options = {}) => {
         const scn = scenario();
-        if (!scn) return false;
+        if (!scn || gone("document.save")) return false;
         const path = store.get(mapFilePathAtom);
         if (!options.copy && path) {
           const saveOptions = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), path);
@@ -1443,16 +1546,16 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return askDialog(store, "saveAs", { copy: options.copy === true });
       },
-      saveAs: (options = {}) => (scenario() ? askDialog(store, "saveAs", { copy: options.copy === true }) : Promise.resolve(false)),
+      saveAs: (options = {}) => (scenario() && !gone("document.saveAs") ? askDialog(store, "saveAs", { copy: options.copy === true }) : Promise.resolve(false)),
       close: () => {
-        if (!scenario()) return Promise.resolve(false);
+        if (!scenario() || gone("document.close")) return Promise.resolve(false);
         return guardedAction(store, async () => { closeMapIn(store); return true; }, (done) => ({ action: "close", done }));
       },
       changeTileset: async (options) => {
-        if (!scenario()) return null;
+        if (!scenario() || gone("document.changeTileset")) return null;
         const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
         try { await loadTilesetFiles(TILESET_FILENAMES[era]); } catch { /* the fill uses the base ids without the graphics */ }
-        if (!scenario()) return null;
+        if (!scenario() || gone("document.changeTileset")) return null;
         return store.set(changeTilesetAtom, { tileset: options.tileset, terrainId: options.terrainId, keepTiles: options.keepTiles });
       },
       renderImage: async (options = {}) => {
@@ -1469,14 +1572,14 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         list: () => (scenario() ? [...store.get(archiveExtrasAtom).keys()] : []),
         get: (name) => (scenario() ? store.get(archiveExtrasAtom).get(name) ?? null : null),
         set: (name, bytes) => {
-          if (!scenario()) return;
+          if (!scenario() || gone("document.extras.set")) return;
           const next = new Map(store.get(archiveExtrasAtom));
           next.set(name, bytes);
           store.set(archiveExtrasAtom, next);
           store.set(mapModifiedAtom, true);
         },
         remove: (name) => {
-          if (!scenario() || !store.get(archiveExtrasAtom).has(name)) return false;
+          if (!scenario() || !store.get(archiveExtrasAtom).has(name) || gone("document.extras.remove")) return false;
           const next = new Map(store.get(archiveExtrasAtom));
           next.delete(name);
           store.set(archiveExtrasAtom, next);
@@ -1484,7 +1587,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           return true;
         },
       },
-      sections: sectionsApi(store),
+      sections: sectionsApi(store, () => !bag.disposed),
     },
 
     triggers: {
@@ -1910,19 +2013,21 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       has: (id) => findService(store, qualifyCommand(info.id, id)) !== null,
       watch: <T extends object>(id: string, listener: (service: T | null, info: ServiceInfo | null) => void) => {
         const name = qualifyCommand(info.id, id);
-        let last: object | null = null;
+        // The registration's key, not the object: re-providing the same object under a new
+        // version is a change the watcher wants to hear about, and a different object is a new key.
+        let last: number | null = null;
         const tell = (entry: ReturnType<typeof findService>) => {
           try { listener((entry?.service as T | undefined) ?? null, entry ? serviceInfo(entry) : null); } catch (err) { console.error(`[${info.name}] service watcher failed`, err); }
         };
         const check = () => {
           const entry = findService(store, name);
-          const now = entry?.service ?? null;
+          const now = entry?.key ?? null;
           if (now === last) return;
           last = now;
           tell(entry);
         };
         const first = findService(store, name);
-        last = first?.service ?? null;
+        last = first?.key ?? null;
         tell(first);
         const unsub = store.sub(pluginServicesAtom, check);
         return bag.add(unsub, "events");
@@ -2089,6 +2194,13 @@ export function activatePlugin(store: Store, spec: string, deps: LoaderDeps = br
   return entry.promise;
 }
 
+/** The one compatibility rule: a manifest may not ask for a newer API than the host provides. */
+export function checkApiVersion(manifest: PluginManifest): void {
+  if (manifest.api !== undefined && manifest.api > PLUGIN_API_VERSION) {
+    throw new Error(`The plugin needs plugin API ${manifest.api}; this editor provides ${PLUGIN_API_VERSION}.`);
+  }
+}
+
 /** The activation itself, once the slot in the active map is taken. */
 async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: Active): Promise<void> {
   const map = activeMap(store);
@@ -2097,12 +2209,11 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
   const stillWanted = () => map.get(spec) === entry;
   const local = loadDepsFor(store, spec, deps);
   try {
-    const { manifest, icon, module } = await loadPlugin(spec, local.deps);
+    // The manifest is read first and the module imported only once it is accepted: a plugin
+    // this editor cannot run has its top-level code never evaluated.
+    const { manifest, icon, module } = await loadPlugin(spec, local.deps, { accept: checkApiVersion });
     if (!stillWanted()) return;
     if (local.files) storeSnapshot(store, spec, local.files);
-    if (manifest.api !== undefined && manifest.api > PLUGIN_API_VERSION) {
-      throw new Error(`The plugin needs plugin API ${manifest.api}; this editor provides ${PLUGIN_API_VERSION}.`);
-    }
     const info: PluginInfo = { id: pluginIdOf(manifest), name: manifest.name, source: spec, version: manifest.version, icon };
     setRuntime(store, spec, { manifest, icon: icon ?? null });
     const api = createPluginApi(store, info, bag);

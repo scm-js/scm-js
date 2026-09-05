@@ -43,7 +43,7 @@ import {
 import { transpileTs } from "../src/plugins/transpile";
 import {
   activatePlugin, checkForUpdate, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
-  reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled,
+  reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled, DEACTIVATED_NOTE,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
 import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../src/plugins/defaults";
@@ -584,6 +584,69 @@ describe("plugin transactions", () => {
     expect(update.notes.some((n) => /async/.test(n))).toBe(true);
     errors2.mockRestore();
   });
+
+  // The operations applied live, so a builder that throws had already changed the map. The
+  // change lists are the inverse: the edit is taken back, nothing reaches the history or the
+  // modified flag, and the plugin gets its own error.
+  it("rolls an edit back when its builder throws", () => {
+    const { store, scn } = blankStore();
+    scn.mask = null;
+    const before = new Uint16Array(scn.tiles);
+    expect(() => runTransaction(store, "half", (tx) => {
+      tx.setTiles({ x0: 0, y0: 0, x1: 2, y1: 2 }, 0x21);
+      tx.addUnits([tx.makeUnit(0, 0, 48, 48)]);
+      tx.addLocation({ left: 0, top: 0, right: 64, bottom: 64 }, "Base");
+      tx.setFog([0, 1], 0x03, "clear"); // creates MASK on this map
+      throw new Error("a later step failed");
+    })).toThrow("a later step failed");
+    expect(scn.tiles).toEqual(before);
+    expect(scn.units).toHaveLength(0);
+    expect(scn.locations[0].right).toBe(0); // slot 0 blank again; slot 63 (Anywhere) always has bounds
+    expect(scn.mask).toBeNull();
+    expect(store.get(undoStackAtom)).toHaveLength(0);
+    expect(store.get(mapModifiedAtom)).toBe(false);
+  });
+
+  // An update has no change lists to take back with, so what it wrote stays — and is then
+  // committed, so the map reads as modified rather than carrying a change the title bar denies.
+  it("commits what an update wrote before its builder threw", () => {
+    const { store, scn } = blankStore();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(() => api.document.update("half", (tx) => {
+      tx.properties({ name: "Renamed" });
+      throw new Error("later");
+    })).toThrow("later");
+    expect(scenarioName(scn)).toBe("Renamed");
+    expect(store.get(mapNameAtom)).toBe("Renamed");
+    expect(store.get(mapModifiedAtom)).toBe(true);
+  });
+
+  it("closes a transaction when its builder returns", async () => {
+    const { store, scn } = blankStore();
+    let kept: EditTransaction | null = null;
+    runTransaction(store, "keep", (tx) => { kept = tx; });
+    expect(() => kept!.setTile(0, 0, 0x21)).toThrow(/transaction is closed/);
+    expect(() => kept!.tileAt(0, 0)).toThrow(/transaction is closed/); // reads too: the handle is done
+    expect(kept!.scenario).toBe(scn); // the data properties stay
+    expect(scn.tiles[0]).not.toBe(0x21);
+    expect(store.get(undoStackAtom)).toHaveLength(0);
+
+    // The nested groups of an update transaction are sealed too.
+    let strings: Parameters<Parameters<typeof runUpdate>[2]>[0]["strings"] | null = null;
+    runUpdate(store, "keep", (tx) => { strings = tx.strings; });
+    expect(() => strings!.intern("late")).toThrow(/transaction is closed/);
+
+    // The half of an async builder after its first await runs against the closed transaction:
+    // the write is refused rather than landing outside the entry, and the rejection is logged.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const build = (async (tx: EditTransaction) => { tx.setTile(0, 0, 0x21); await Promise.resolve(); tx.setTile(1, 0, 0x22); }) as (tx: EditTransaction) => unknown;
+    runTransaction(store, "async", build);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(scn.tiles[0]).toBe(0x21);
+    expect(scn.tiles[1]).not.toBe(0x22);
+    expect(errors.mock.calls.some((c) => /failed after its transaction had closed/.test(String(c[0])))).toBe(true);
+    errors.mockRestore();
+  });
 });
 
 /* ── Lifecycle ──────────────────────────────────────────── */
@@ -979,6 +1042,58 @@ describe("plugin lifecycle", () => {
     expect(disposed).toBe(1);
     expect(store.get(pluginMenuItemsAtom)).toEqual([]);
     expect(store.get(pluginRuntimesAtom)["builtin:hello"]).toMatchObject({ status: "disabled", contributions: zero });
+  });
+
+  // A callback the plugin left behind — a fetch landing after the user turned it off — finds its
+  // contributions taken straight back and its writes refused, so an inactive plugin changes nothing.
+  it("refuses contributions and writes through a deactivated plugin's API", () => {
+    const { store, scn } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    api.menu.add("Tools", { label: "before", run: () => {} });
+    bag.dispose();
+    expect(bag.disposed).toBe(true);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    api.menu.add("Tools", { label: "late", run: () => {} });
+    api.commands.register({ id: "late", title: "Late", run: () => {} });
+    expect(store.get(pluginMenuItemsAtom)).toEqual([]);
+    expect(store.get(pluginCommandsAtom)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+
+    const before = scn.tiles[0];
+    expect(api.document.edit("late", (tx) => tx.setTile(0, 0, 0x21))).toMatchObject({ changed: false, notes: [DEACTIVATED_NOTE] });
+    expect(scn.tiles[0]).toBe(before);
+    expect(api.document.update("late", (tx) => tx.properties({ name: "x" }))).toMatchObject({ changed: false, notes: [DEACTIVATED_NOTE] });
+    expect(scenarioName(scn)).toBe("p");
+    expect(api.document.resize({ width: 4, height: 4 })).toBeNull();
+    api.document.extras.set("a", new Uint8Array(1));
+    expect(api.document.extras.list()).toEqual([]);
+    expect(() => api.document.sections.write(0, new Uint8Array(4))).toThrow(/deactivated/);
+    expect(store.get(mapModifiedAtom)).toBe(false);
+    expect(errors).toHaveBeenCalled();
+    warn.mockRestore();
+    errors.mockRestore();
+  });
+
+  // The manifest is read before the module is imported, so a plugin the editor cannot run never
+  // has its top-level code evaluated.
+  it("refuses an incompatible plugin before importing its module", async () => {
+    const { store } = blankStore();
+    const load = vi.fn(async () => ({ default: () => {} }));
+    const deps = fakeDeps({ future: { manifest: { name: "Future", api: 999 }, load } });
+    await activatePlugin(store, "builtin:future", deps);
+    expect(store.get(pluginRuntimesAtom)["builtin:future"].error).toMatch(/plugin API 999/);
+    expect(load).not.toHaveBeenCalled();
+
+    const importModule = vi.fn(async () => ({ default: () => {} }));
+    const remote: LoaderDeps = {
+      fetchText: async (url: string) => { if (url.endsWith("plugin.json")) return JSON.stringify({ name: "R", api: 999, entry: "plugin.js" }); return "export default () => {}"; },
+      transpile: async (s) => s, createModuleUrl: () => "mem:0", importModule, builtins: {},
+    };
+    await activatePlugin(store, "https://x/r/", remote);
+    expect(store.get(pluginRuntimesAtom)["https://x/r/"].error).toMatch(/plugin API 999/);
+    expect(importModule).not.toHaveBeenCalled();
   });
 
   it("reports a failing plugin without leaving contributions behind", async () => {
@@ -2656,16 +2771,22 @@ describe("plugin services", () => {
     consumer.services.provide("other", {});
     expect(seen).toEqual([null, "jeany"]);
 
+    // Re-providing the same object under a new version is a change too: the watcher compares
+    // the registration, not the object.
+    provider.services.provide("account", account, { version: 3 });
+    expect(seen).toEqual([null, "jeany", "jeany"]);
+    expect(infos[2]).toEqual({ id: "scmjs-dev.account", pluginId: "scmjs-dev", version: 3 });
+
     // Replacing under the same name is one change; withdrawing is another.
     const next = { who: "jeany2" };
     provider.services.provide("account", next);
-    expect(seen).toEqual([null, "jeany", "jeany2"]);
+    expect(seen).toEqual([null, "jeany", "jeany", "jeany2"]);
     handle.dispose();
     // The first handle's key is gone already (replaced), so disposing it withdraws nothing.
     expect(consumer.services.get("scmjs-dev.account")).toBe(next);
     providerBag.dispose();
     expect(consumer.services.get("scmjs-dev.account")).toBeNull();
-    expect(seen).toEqual([null, "jeany", "jeany2", null]);
+    expect(seen).toEqual([null, "jeany", "jeany", "jeany2", null]);
   });
 
   it("raises the services event and survives a watcher that throws", () => {

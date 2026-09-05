@@ -147,8 +147,8 @@ folds it back into the main chunk.
 
 **Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract; the
 host builds it over the store with no React and no atoms exposed. A plugin's edit goes
-through the same transaction and history as a brush stroke. See
-[The plugin host](#the-plugin-host).
+through the same transaction and history as a brush stroke, and a builder that throws
+is rolled back through the same change lists. See [The plugin host](#the-plugin-host).
 
 ## Tests
 

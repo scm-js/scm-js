@@ -608,7 +608,26 @@ transaction's builder: `edit` / `update` commit when `build` returns, so an `asy
 what ran before its first `await` and let the rest mutate the map outside the entry. `Sync<T>` in
 `api.ts` (a conditional type resolving to a sentence when `T` is a promise) makes TypeScript refuse
 it, and `host.ts#checkSyncBuilder` catches it at runtime for a plain-JavaScript plugin — a `notes`
-entry and a `console.error`, not a throw. `ProgressHandle` carries `signal` beside `cancelled()`.
+entry and a `console.error`, not a throw. **A transaction is closed when its builder returns**:
+`host.ts#sealed` wraps every function on the `tx` (and the nested function groups of an update's)
+so a handle kept past the return, or the half of an async builder after its first await, throws
+instead of writing outside the entry — before this, both wrote to the scenario with nothing
+recording it. **A builder that throws is rolled back** in `runTransaction`: the change lists it
+accumulated are the inverse, `documentAtoms.ts#rollbackEntryAtom` applies them backwards and
+repaints without touching the history or the modified flag, and the error is rethrown. `runUpdate`
+has no change lists, so on a throw it commits the sections touched (the map reads as modified, the
+chrome re-reads) and rethrows; leaving a renamed map under an unmodified title bar was the
+alternative. `Contributions.disposed` is the terminal state of a deactivation: `add` after it takes
+the contribution straight back with a `console.warn`, and `createPluginApi`'s `gone()` makes every
+document write (`edit`, `update`, `open`, `create`, `save`, `saveAs`, `close`, `resize`,
+`changeTileset`, `extras.set` / `remove`, and `sectionsApi`'s writes through its `alive` argument)
+refuse with a `console.error` — a fetch landing after the user turned the plugin off used to register
+menu items and edit the map through the old API object. `loadPlugin` takes `{ accept }` and
+`loadAndRun` passes `checkApiVersion`, so an incompatible manifest is refused *between* reading it
+and importing the module: the plugin's top-level code never runs. `services.watch` compares the
+registration key, not the object, so re-providing the same object under a new version notifies.
+All of it came out of the 2026-09-05 outside review of the API's state design (`tests/plugins.test.ts`
+pins each). `ProgressHandle` carries `signal` beside `cancelled()`.
 `api.document.open(file)` is File ▸ Open without React: `host.ts#openDocument` builds a `File` and
 runs `useMapFileActions.ts#openFileInto` (the store-level half of the hook's `openFile`), or, when
 `needsCloseConfirm(store)` says the map is modified and Preferences ask, parks an "open"

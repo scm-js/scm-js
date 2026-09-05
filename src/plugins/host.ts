@@ -26,7 +26,7 @@ import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
-  type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
+  type BusyBox, type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
@@ -111,7 +111,7 @@ import {
   type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
 } from "./api";
-import { isPinned, loadPlugin, parseSpec, previewPlugin, recordingDeps, resolvePlugin, storedDeps, type LoaderDeps, type PluginPreview } from "./loader";
+import { isPinned, loadPlugin, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
@@ -1776,12 +1776,15 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         let key = -1;
         // The frame reads the title through this box, so `setTitle` reaches it without touching the spec.
         const title: TitleBox = { value: spec.title, listeners: new Set<() => void>() };
+        // And what the dialog is working on, the same way: the footer shows it and disables its buttons.
+        const busy: BusyBox = { value: null, listeners: new Set<() => void>() };
         const handle: DialogHandle = {
           close: () => { if (key >= 0) store.set(closeDialogAtom, key); },
           isOpen: () => store.get(dialogStackAtom).some((d) => d.key === key),
           setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
+          setBusy: (label) => { busy.value = label === false ? null : label; for (const l of busy.listeners) l(); },
         };
-        key = store.set(openDialogAtom, "pluginDialog", { spec, handle, plugin: info, title });
+        key = store.set(openDialogAtom, "pluginDialog", { spec, handle, plugin: info, title, busy });
         // Closed with the plugin — and taken off the list once it closes by itself, so a plugin
         // that opens dialogs in a loop does not grow the bag for the life of the plugin.
         const sweep = bag.add(() => { if (handle.isOpen()) handle.close(); });
@@ -2217,6 +2220,43 @@ export function effectiveInstalls(stored: readonly PluginInstall[], defaults: re
   });
   for (const p of stored) if (!claimed.has(pluginKey(p.spec))) out.push(p);
   return out;
+}
+
+/** What an update check found: what the address holds now, and whether that is other code. */
+export interface UpdateCheck {
+  /** The address previewed — the plugin at whatever its branch holds now. */
+  preview: PluginPreview;
+  /** The commit the installed version resolves to, when it could be worked out. */
+  current: string | null;
+  /** True when the address holds a different commit from the installed one. */
+  newer: boolean;
+}
+
+/**
+ * Ask a plugin's address whether it has moved past the version installed. One or two
+ * GitHub requests and one `plugin.json`; no plugin code is fetched, transpiled or run,
+ * and nothing is asked until the user presses the button.
+ *
+ * It compares **commits, not specs**. Comparing the spec strings said "newer" for every
+ * tag-pinned install for ever, since a tag is never spelt like the commit hash a check
+ * resolves — which would have made all five bundled defaults offer an update to the code
+ * they were already running. A spec pinned to a hash needs no request to answer for
+ * itself; a tag costs one more. If the installed ref cannot be resolved at all the spec
+ * comparison is the fallback, which errs towards offering the update rather than hiding
+ * one.
+ */
+export async function checkForUpdate(spec: string, deps: Pick<LoaderDeps, "fetchText" | "builtins"> = browserLoaderDeps()): Promise<UpdateCheck> {
+  const preview = await previewPlugin(unpin(spec), deps);
+  const source = parseSpec(spec);
+  const gh = source.kind === "remote" ? source.github : null;
+  let current: string | null = null;
+  if (gh?.ref) {
+    current = /^[0-9a-f]{40}$/i.test(gh.ref)
+      ? gh.ref.toLowerCase()
+      : await resolveCommit(gh, deps.fetchText).catch(() => null);
+  }
+  const newer = preview.pin !== null && (current === null ? preview.pin.spec !== spec : preview.pin.ref !== current);
+  return { preview, current, newer };
 }
 
 /**

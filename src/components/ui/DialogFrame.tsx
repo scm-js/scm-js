@@ -66,6 +66,14 @@ export default function DialogFrame({
           className={`dlg ${size} ${tall ? "tall" : ""}`}
           aria-describedby={undefined}
           onEscapeKeyDown={onEscapeKeyDown}
+          onInteractOutside={(e) => {
+            // A toast is drawn above the overlay, so a press on one is a press "outside"
+            // the dialog and would otherwise close it — dismissing the notice and the
+            // dialog that raised it in one click, or losing the dialog to a toast's own
+            // button. Everywhere else, a press on the dim still closes as it did.
+            const target = e.target;
+            if (target instanceof Element && target.closest(".toasts")) e.preventDefault();
+          }}
           onOpenAutoFocus={(e) => {
             // Focus the first text field if there is one, otherwise the dialog itself.
             e.preventDefault();

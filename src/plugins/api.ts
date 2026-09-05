@@ -1754,6 +1754,13 @@ export interface DialogHandle {
   isOpen(): boolean;
   /** Change the title strip's text. */
   setTitle(title: string): void;
+  /**
+   * Say the dialog is working: a ring and `label` at the left of the footer, and every
+   * footer button disabled until `setBusy(false)`. A button's own `run` already does this
+   * for as long as its promise is pending — this is for work the buttons did not start,
+   * such as the first load, or a search that runs as the user types.
+   */
+  setBusy(label: string | false): void;
 }
 
 /**
@@ -2145,8 +2152,19 @@ export interface ButtonOptions extends WidgetOptions {
   primary?: boolean;
   danger?: boolean;
   ghost?: boolean;
+  /** Start off waiting: a ring in front of the label, and the button disabled. */
+  busy?: boolean;
   onClick?: (event: MouseEvent) => void;
 }
+
+/** The `<button>`, with the one call that puts it in and out of its waiting state. */
+export type ButtonElement = HTMLButtonElement & {
+  /**
+   * A ring in front of the label while `busy`, and the button disabled — so the press
+   * that started the work cannot be repeated, and says why it cannot.
+   */
+  setBusy(busy: boolean): void;
+};
 
 export interface CheckboxOptions extends WidgetOptions {
   value?: boolean;
@@ -2209,13 +2227,95 @@ export interface ListOptions<T> {
   onPick?: (value: T, index: number) => void;
 }
 
+/* ── Waiting ──
+   Anything a plugin fetches, decodes or computes leaves the user looking at a dialog
+   that has not changed. These are the four ways to say so — a ring, a bar, the line
+   along the bottom, and grey stand-ins for content still on its way — plus `busy`,
+   which puts a ring over a box whose contents are being replaced. They are one
+   vocabulary on purpose: a plugin that uses them waits the way the editor waits. */
+
+export interface SpinnerOptions extends WidgetOptions {
+  /** `"sm"` 10px, `"md"` 14px (the default), `"lg"` 20px. */
+  size?: "sm" | "md" | "lg";
+  /** Text beside the ring. Without it you get the bare ring, to put beside your own. */
+  label?: string;
+}
+
+export interface ProgressBarOptions extends WidgetOptions {
+  /** How far along to start: 0…1, or null (the default) for the sliding bar that means "no idea how long". */
+  value?: number | null;
+  /** A line under the bar — what is being waited for, or how much of it is done. */
+  label?: string;
+  /** The percentage at the end of the bar; on for a bar that knows how far along it is. */
+  percent?: boolean;
+  /** Width in CSS pixels; it fills the width it is given by default. */
+  width?: number;
+}
+
+export type ProgressBarElement = HTMLElement & {
+  /**
+   * How far along: 0…1, or null for the sliding bar. `label` replaces the line under it.
+   * Cheap to call often — it repaints only when the bar actually moves.
+   */
+  set(value: number | null, label?: string): void;
+};
+
+export interface StatusLineOptions extends WidgetOptions {
+  /** What it says before anything has happened. */
+  text?: string;
+}
+
+/**
+ * The line along the bottom of a dialog: what happened, what is happening, how far
+ * along it is, and the Cancel that stops it — in one place, so a dialog has one voice.
+ * It is a live region, so a screen reader hears the outcome (but not every byte of a
+ * download: the bar's own movement is not announced).
+ */
+export type StatusLineElement = HTMLElement & {
+  /** A finished line. `kind` colours it; nothing means plain. */
+  set(text: string, kind?: "ok" | "warn" | "error"): void;
+  /** Waiting, with no idea how long: a ring and the text. */
+  busy(text: string): void;
+  /** Waiting with a share done (0…1), or null for the sliding bar. */
+  progress(text: string, value: number | null): void;
+  /** A Cancel beside the line that calls `stop`; null takes it away. */
+  cancel(stop: (() => void) | null): void;
+  /** Back to an empty line. */
+  clear(): void;
+};
+
+export interface SkeletonOptions extends WidgetOptions {
+  /** CSS width, `"100%"` by default. */
+  width?: string;
+  /** Height in CSS pixels: 10 for a line, 44 for a block. */
+  height?: number;
+  /** How many lines, stacked; 1 by default. The last is drawn short, as text ends short. */
+  lines?: number;
+  /** A block — the place a thumbnail or a picture will take — rather than a line of text. */
+  block?: boolean;
+}
+
+export interface BusyOptions {
+  /** What is being waited for, over the covered box. */
+  label?: string;
+  /** Dim what is already there rather than leaving it at full strength; true by default. */
+  dim?: boolean;
+}
+
+export interface BusyHandle {
+  /** Change the label without lifting the cover. */
+  set(label: string): void;
+  /** Uncover the box. Safe to call twice. */
+  done(): void;
+}
+
 /**
  * Buttons, fields, forms and lists in the editor's own styles, as plain DOM. A plugin
  * dialog built from these looks like a built-in one; `el` is the escape hatch for
  * anything they do not cover.
  */
 export interface WidgetsApi {
-  button(label: string, options?: ButtonOptions): HTMLButtonElement;
+  button(label: string, options?: ButtonOptions): ButtonElement;
   checkbox(label: string, options?: CheckboxOptions): CheckboxElement;
   text(options?: TextFieldOptions): HTMLInputElement;
   number(options?: NumberFieldOptions): HTMLInputElement;
@@ -2230,6 +2330,32 @@ export interface WidgetsApi {
   hint(text: string): HTMLElement;
   separator(): HTMLElement;
   list<T>(items: ListItem<T>[], options?: ListOptions<T>): HTMLElement;
+
+  /* ── Waiting ── */
+
+  /** A turning ring: on its own to put beside your own text, or with a `label` beside it. */
+  spinner(options?: SpinnerOptions): HTMLElement;
+  /**
+   * A bar, with the percentage and a line under it. `set(0…1)` moves it; `set(null)`
+   * gives the sliding bar for work whose length is not known. Use it where the wait has
+   * a size — a download, a pass over every trigger — and a spinner where it does not.
+   */
+  progressBar(options?: ProgressBarOptions): ProgressBarElement;
+  /** The dialog's bottom line: `set`, `busy`, `progress` and a `cancel` button. */
+  statusLine(options?: StatusLineOptions): StatusLineElement;
+  /**
+   * A grey stand-in for content that has not arrived, in the shape it will take. Rows of
+   * these in the list you are about to fill say more than an empty box does, and the list
+   * does not jump when the answer lands.
+   */
+  skeleton(options?: SkeletonOptions): HTMLElement;
+  /**
+   * Cover a box while what is in it is being replaced: dimmed, deaf to clicks, with a
+   * ring and a label over it. `done()` uncovers it. Give it the box, not the page — the
+   * search field that starts the work should stay live so the user can change their mind.
+   * Calling it again on a covered box only changes the label.
+   */
+  busy(target: HTMLElement, options?: BusyOptions | string): BusyHandle;
 }
 
 /* ── Menus, context menus, hotkeys ──────────────────────── */

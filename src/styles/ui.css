@@ -787,3 +787,202 @@ input[type="range"] {
   z-index: 160;
   animation: fade-in 0.1s ease;
 }
+
+/* ── Waiting ────────────────────────────────────────────── */
+/* One vocabulary for "an answer is on its way", used by the editor's own dialogs and by
+   `api.ui.widgets` (spinner / progressBar / statusLine / skeleton / busy). A plugin that
+   builds its waiting out of these waits the way the editor waits, and gets the
+   reduced-motion behaviour at the bottom of this block for free. */
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ui-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes ui-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(285%); }
+}
+
+/* The ring. `sm` sits inside a button or a status line, `lg` in the middle of an empty box. */
+.spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--teal);
+  animation: ui-spin 0.7s linear infinite;
+}
+.spinner.sm {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+.spinner.lg {
+  width: 20px;
+  height: 20px;
+}
+.spinner-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+/* The bar: a track with a fill, the percentage after it, and a line under both. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.progress > .row {
+  gap: 8px;
+}
+.progress-track {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+}
+.progress-track > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 90ms linear;
+}
+/* No idea how long: a piece of the bar crossing it, rather than a number that would lie. */
+.progress-track.sliding > i {
+  width: 35%;
+  background: var(--teal);
+  transition: none;
+  animation: ui-slide 1.1s ease-in-out infinite;
+}
+.progress .percent {
+  flex: none;
+  min-width: 30px;
+  text-align: right;
+  font-size: var(--fs-xs);
+}
+
+/* The line along the bottom of a dialog: what happened, or what is happening. */
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--h-control);
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+.status-line > .grow {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-line > .progress-track {
+  flex: none;
+  width: 120px;
+}
+.status-line.ok {
+  color: var(--ok);
+}
+.status-line.warn {
+  color: var(--warn);
+}
+.status-line.error {
+  color: var(--danger);
+}
+/* Grey stand-ins for content on its way, in the shape it will take. */
+.skeleton {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+}
+.skeleton.block {
+  border-radius: var(--radius-lg);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--line-hi), transparent);
+  animation: ui-sweep 1.3s ease-in-out infinite;
+}
+.skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A box whose contents are being replaced: dimmed, deaf to clicks, with a note over it. */
+.busy-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+.busy-box > .is-busy {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 0.12s linear;
+}
+.busy-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.busy-box > .is-busy:has(+ .busy-cover.no-dim) {
+  opacity: 1;
+}
+.busy-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-pop);
+}
+/* No label: the ring alone, with no empty pill's worth of padding beside it. */
+.busy-note > span:not(.spinner):empty {
+  display: none;
+}
+
+/* A loading indicator still has to indicate: the rings stay, slowed to a tick, and the
+   sweeps — which move without saying anything — go. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+    animation-timing-function: steps(8, end);
+  }
+  .skeleton::after {
+    animation: none;
+    background: none;
+  }
+  .progress-track.sliding > i {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}

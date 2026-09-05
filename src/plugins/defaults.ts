@@ -13,7 +13,7 @@
  * default too, and stands in for the remote spec it was built from — see `pluginKey`.
  */
 import { BUILTIN_PLUGINS, BUILTIN_REPLACES } from "./builtin";
-import { pluginIdentity } from "./loader";
+import { isPinned, pluginIdentity } from "./loader";
 
 /** A default: its spec, and whether it runs before the user has said anything. */
 export interface DefaultPlugin {
@@ -102,6 +102,31 @@ export const defaultPlugins = (): DefaultPlugin[] => {
   for (const spec of bundled.values()) out.push({ spec, enabled: true });
   return out;
 };
+
+/**
+ * The address an update check asks about for an installed plugin, or null when there is
+ * nothing to ask — the plugin follows a branch already (Reload is its update), or it came
+ * from somewhere with no versions to compare.
+ *
+ * A *bundled* plugin is the reason this is not simply `isPinned(spec)`. Vendoring swaps a
+ * default's spec for `builtin:paint`, which is not pinned and so grew no check button,
+ * which made the check appear on every row **except** the ones the editor ships — and only
+ * in builds that vendored, so whether a plugin offered an update depended on how the
+ * editor showing it was packaged. `BUILTIN_REPLACES` holds the exact spec each copy was
+ * built from, which is the address to ask about; nothing is fetched until the user asks.
+ *
+ * Updating a bundled plugin makes it an ordinary remote one — fetched at startup like any
+ * other, which is what the vendoring was avoiding — so `ConfirmPluginDialog` says so
+ * before it happens.
+ */
+export function updateAddress(spec: string): string | null {
+  const builtin = /^builtin:([\w-]+)$/i.exec(spec.trim());
+  if (builtin) {
+    const from = BUILTIN_REPLACES[builtin[1]];
+    return from && isPinned(from) ? from : null;
+  }
+  return isPinned(spec) ? spec : null;
+}
 
 /** The defaults' specs, for telling a default row from one the user added. */
 export const defaultPluginSpecs = (): string[] => defaultPlugins().map((d) => d.spec);

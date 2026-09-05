@@ -1,25 +1,42 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { ArrowUp, Blocks, CircleCheck, CircleSlash, Clock, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, Search, Settings2, ShieldAlert, Trash2, User } from "lucide-react";
+import { ArrowUp, Blocks, CircleCheck, CircleSlash, Clock, Download, ExternalLink, Globe, HardDrive, LoaderCircle, Plus, RefreshCw, RotateCcw, Search, Settings2, ShieldAlert, Trash2, TriangleAlert, User } from "lucide-react";
 import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
-import { activatePlugin, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
-import { defaultPlugins, defaultPluginSpecs, pluginKey } from "../../plugins/defaults";
+import { activatePlugin, checkForUpdate, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
+import { defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../../plugins/defaults";
 import {
-  addRegistry, entryIcon, groupByInstall, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry,
-  type InstallState, type Registry, type RegistryEntry,
+  addRegistry, entryIcon, groupByInstall, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry, unlistedInstalls,
+  type InstalledPlugin, type InstallState, type Registry, type RegistryEntry,
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
+
 import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
 import { PluginIconView } from "../ui/PluginIconView";
-import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginInfo } from "../../plugins/api";
+import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
+
+/** The same, for `DialogHandle.setBusy`: what the dialog is working on, or null. */
+interface BusyBox { value: string | null; listeners: Set<() => void> }
+
+/** Subscribe to one of those boxes and re-render when the plugin writes to it. */
+function useBox<T>(box: { value: T; listeners: Set<() => void> } | undefined, fallback: T): T {
+  const [value, setValue] = useState<T>(box?.value ?? fallback);
+  useEffect(() => {
+    if (!box) return;
+    const listen = () => setValue(box.value);
+    box.listeners.add(listen);
+    listen();
+    return () => { box.listeners.delete(listen); };
+  }, [box]);
+  return value;
+}
 
 /** Why the *Load from a copy saved here* tick is off for a plugin that is part of the build. */
 const BUILTIN_COPY_HINT = "This plugin is part of the build; there is nothing to fetch.";
@@ -43,19 +60,16 @@ export function PluginDialog({ entry }: DialogProps) {
   const handle = entry.payload?.handle as DialogHandle;
   const plugin = entry.payload?.plugin as PluginInfo | undefined;
   const titleBox = entry.payload?.title as TitleBox | undefined;
+  const busyBox = entry.payload?.busy as BusyBox | undefined;
   const stack = useAtomValue(dialogStackAtom);
   const topmost = stack[stack.length - 1]?.key === entry.key;
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState(titleBox?.value ?? spec.title);
-
-  useEffect(() => {
-    if (!titleBox) return;
-    const listen = () => setTitle(titleBox.value);
-    titleBox.listeners.add(listen);
-    listen();
-    return () => { titleBox.listeners.delete(listen); };
-  }, [titleBox]);
+  const [pressed, setPressed] = useState(false);
+  const title = useBox(titleBox, spec.title);
+  // Two ways to be working: a footer button whose `run` has not settled, and the plugin
+  // saying so itself for work no button started. Either disables the footer.
+  const working = useBox<string | null>(busyBox, null);
+  const busy = pressed || working !== null;
 
   // Ctrl+V while this is the topmost dialog. A paste into one of the plugin's own text fields is left
   // alone unless it carries files — a screenshot pasted "into" the URL box is still a picture.
@@ -89,14 +103,14 @@ export function PluginDialog({ entry }: DialogProps) {
 
   const buttons = spec.buttons ?? [{ label: "Close" }];
   const press = async (b: (typeof buttons)[number]) => {
-    setBusy(true);
+    setPressed(true);
     try {
       const r = b.run ? await b.run(handle) : undefined;
       if (r !== false && b.closes !== false) close(entry.key);
     } catch (err) {
       console.error(`[${plugin?.name ?? "plugin"}] dialog button failed`, err);
     } finally {
-      setBusy(false);
+      setPressed(false);
     }
   };
 
@@ -111,7 +125,11 @@ export function PluginDialog({ entry }: DialogProps) {
       footer={buttons.map((b, i) => (
         <Button key={i} variant={b.primary ? "primary" : undefined} disabled={busy} onClick={() => { void press(b); }}>{b.label}</Button>
       ))}
-      footerLeft={plugin ? <span className="hint">{plugin.name}</span> : undefined}
+      footerLeft={
+        working !== null
+          ? <span className="status-line" role="status" aria-live="polite"><span className="spinner sm" aria-hidden="true" />{working}</span>
+          : plugin ? <span className="hint">{plugin.name}</span> : undefined
+      }
     >
       <div
         ref={setHost}
@@ -267,12 +285,22 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
               </div>
             </div>
 
-            {replaces && (
-              <p className="hint">
-                Replacing the installed <span className="mono">{replaces.slice(replaces.indexOf("@") + 1, replaces.indexOf("@") + 8)}</span>. This
-                is newer code, so give it the same look over you would give a plugin you are adding for the first time.
-              </p>
-            )}
+            {replaces && (replaces.startsWith("builtin:")
+              ? (
+                <p className="hint">
+                  <strong>{name}</strong> is part of this build: it is compiled in, and the editor asks its
+                  repository for nothing — not at startup, not until you press the check. Updating it makes it an
+                  ordinary plugin fetched from that address, including each time the editor starts. The
+                  <em> Load from a copy saved here</em> tick below fetches it once and runs that copy from then on,
+                  which is the nearest thing to how it works now.
+                </p>
+              )
+              : (
+                <p className="hint">
+                  Replacing the installed <span className="mono">{replacedVersion(replaces)}</span>. This
+                  is newer code, so give it the same look over you would give a plugin you are adding for the first time.
+                </p>
+              ))}
 
             <div className="plugin-warning">
               <ShieldAlert size={15} />
@@ -399,8 +427,10 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
  * sense for it, and a line naming the state in words. A badge among the other badges —
  * which is all this used to be — is the one place the eye does not look.
  */
-function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
+function BrowseRow({ entry, icon, state, busy, onInstall, onEnable, onManage }: {
   entry: RegistryEntry;
+  /** The plugin's own icon when the editor has it loaded; the entry's own otherwise. */
+  icon?: PluginIcon | null;
   state: InstallState;
   busy: boolean;
   onInstall: () => void;
@@ -412,12 +442,13 @@ function BrowseRow({ entry, state, busy, onInstall, onEnable, onManage }: {
   const hasMeta = entry.author !== undefined || tags.length > 0 || entry.updated !== undefined;
   return (
     <div className={`item plugin-row browse-row is-${state}`} role="listitem">
-      <PluginIconView icon={entryIcon(entry)} />
+      <PluginIconView icon={icon ?? entryIcon(entry)} />
       <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
           <strong>{entry.name}</strong>
           {entry.version && <span className="dim">v{entry.version}</span>}
           {entry.default && <span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
+          {entry.unlisted && <span className="badge dim" title="You have this plugin, but no registry being searched lists it — it came from its own address">not listed</span>}
           {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
         </div>
         {entry.description && <span className="hint">{entry.description}</span>}
@@ -556,10 +587,17 @@ type BrowseFilter = (typeof BROWSE_FILTERS)[number]["value"];
  * others. It is split instead — `groupByInstall` over the search results, headed groups
  * with what can be installed first, and a filter on the same split with the counts on it,
  * so "what is there that I do not have" is one click and usually the top of the list.
+ *
+ * The list is the registries' entries **plus** the plugins the editor has that none of
+ * them carries (`unlistedInstalls`). Browse reads as the list of plugins there are, so a
+ * plugin installed from its own address — or one a registry has stopped listing — went
+ * missing from the only place it was looked for while running perfectly well in the other
+ * tab. Nothing installed can fall out of this list now, whatever a registry says.
  */
 function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const store = useStore();
   const installed = useAtomValue(installedPluginsAtom);
+  const runtimes = useAtomValue(pluginRuntimesAtom);
   const cache = useAtomValue(registryCacheAtom);
   const states = useAtomValue(registryStateAtom);
   useAtomValue(userRegistriesAtom);
@@ -573,7 +611,14 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const loading = urls.some((u) => states[u]?.status === "loading");
   const failures = urls.map((u) => states[u]).filter((s) => s?.status === "error");
   const registries = urls.map((u) => cache[u]?.registry).filter((r): r is Registry => r !== undefined);
-  const entries = mergeRegistries(registries);
+  const listed = mergeRegistries(registries);
+  // What the editor has, described from the manifest the loader read for it, so a plugin
+  // no registry carries still has a name, a version and an icon here rather than a spec.
+  const mine: InstalledPlugin[] = effectiveInstalls(installed, defaultPlugins()).map((p) => {
+    const m = runtimes[p.spec]?.manifest;
+    return { spec: p.spec, name: m?.name, version: m?.version, description: m?.description, author: m?.author, homepage: m?.homepage, icon: m?.icon, api: m?.api };
+  });
+  const entries = [...listed, ...unlistedInstalls(mine, listed, pluginKey)];
   const results = searchRegistry(entries, query);
 
   // One pass on open: recent enough lists are left alone (`REGISTRY_MAX_AGE`), so this is
@@ -634,7 +679,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
     : filter === "available"
       ? "Everything on the list is already installed."
       : filter === "installed"
-        ? "None of the listed plugins is installed yet."
+        ? "Nothing is installed yet."
         : loading && entries.length === 0
           ? "Reading the registry…"
           : "No plugin list could be read. Check the Sources, or paste a plugin's address under Installed.";
@@ -678,6 +723,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
                     <BrowseRow
                       key={e.spec}
                       entry={e}
+                      icon={runtimes[e.spec]?.icon}
                       state={state(e.spec)}
                       busy={busySpec === e.spec}
                       onInstall={() => { void install(e); }}
@@ -705,6 +751,35 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
 }
 
 /* ── Managing what is installed ─────────────────────────── */
+
+/**
+ * What a row's update check last answered. A newer commit keeps the preview it was found
+ * with, so the row can go on offering it — and reopen the confirmation — without asking
+ * GitHub a second time, and cancelling that confirmation does not throw the answer away.
+ */
+type CheckAnswer =
+  | { kind: "newer"; preview: PluginPreview }
+  | { kind: "current"; text: string }
+  | { kind: "problem"; text: string };
+
+/** The version a spec names, as the confirmation prints it: the tag, or a short commit. */
+function replacedVersion(spec: string): string {
+  const at = spec.lastIndexOf("@");
+  if (at < 0) return spec;
+  const ref = spec.slice(at + 1).split("/")[0];
+  return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 7) : ref;
+}
+
+/** How a check's address reads in a sentence: the repository, not the whole spec. */
+function addressLabel(spec: string): string {
+  const bare = unpin(spec);
+  return bare.startsWith("github:") ? bare.slice("github:".length) : bare;
+}
+
+/** What to call the version an update would move to: its own version, else the commit. */
+function offeredVersion(preview: PluginPreview): string {
+  return preview.manifest?.version ? `v${preview.manifest.version}` : preview.pin ? preview.pin.short : "the newest commit";
+}
 
 /**
  * The list of plugins this editor has, and the field for adding one.
@@ -800,22 +875,43 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   // Reload re-fetches the commit a pinned plugin names, which is the whole point of a pin —
   // so moving to a newer one is its own action: look up the branch again, and when it holds
   // a different commit, show it on the same confirmation screen as a first install.
+  //
+  // The button is on every pinned row whether or not anything is newer, so *most* presses
+  // can only answer "nothing is". That answer used to be one dim line at the top of the
+  // pane, which for a button near the bottom of a scrolling list read as the press doing
+  // nothing at all. It lands three ways now: on the row that asked (`checked`), as a toast
+  // — the channel the rest of the editor answers in — and, when there *is* a newer commit,
+  // by the button itself becoming the offer, so cancelling the confirmation does not lose
+  // what the check found.
   const [checking, setChecking] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const update = async (s: string) => {
+  const [checked, setChecked] = useState<Record<string, CheckAnswer>>({});
+  const answer = (s: string, a: CheckAnswer) => {
+    setChecked((c) => ({ ...c, [s]: a }));
+    if (a.kind === "current") store.set(pushToastAtom, { kind: "info", title: "No update", detail: a.text });
+    else if (a.kind === "problem") store.set(pushToastAtom, { kind: "warn", title: "Could not check for an update", detail: a.text });
+  };
+  const offer = (s: string, preview: PluginPreview) => {
+    store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, replaces: s, preview });
+  };
+  // `s` is the row (what gets replaced); `address` is what to ask, which for a bundled
+  // plugin is the remote spec it was vendored from.
+  const update = async (s: string, address: string) => {
     setChecking(s);
-    setNotice(null);
+    setChecked((c) => { const next = { ...c }; delete next[s]; return next; });
     try {
-      const preview = await inspectPlugin(unpin(s));
+      const { preview, newer } = await checkForUpdate(address);
       if (!preview.manifest) {
-        setNotice(`${NOT_FOUND} ${preview.problem ?? ""}`.trim());
-      } else if (preview.pin && preview.pin.spec !== s) {
-        store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, replaces: s, preview });
+        answer(s, { kind: "problem", text: `${NOT_FOUND} ${preview.problem ?? ""}`.trim() });
+      } else if (newer && preview.pin) {
+        setChecked((c) => ({ ...c, [s]: { kind: "newer", preview } }));
+        offer(s, preview);
+      } else if (preview.pin) {
+        answer(s, { kind: "current", text: `${preview.manifest.name} is already on the newest commit.` });
       } else {
-        setNotice(preview.pin ? `${preview.manifest?.name ?? s} is already on the newest commit.` : preview.pinProblem ?? "Could not ask for a newer version.");
+        answer(s, { kind: "problem", text: preview.pinProblem ?? "Could not ask for a newer version." });
       }
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
+      answer(s, { kind: "problem", text: err instanceof Error ? err.message : String(err) });
     } finally {
       setChecking(null);
     }
@@ -866,18 +962,25 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           )}
       </div>
       <span className="pane-label">Installed</span>
-      {notice && <span className="hint">{notice}</span>}
       <div className="listbox plugin-list" role="list" ref={listRef}>
         {list.map((p) => {
           const rt = runtimes[p.spec];
-          const isDefault = defaults.some((d) => pluginKey(d) === pluginKey(p.spec));
+          // The spec this editor ships for the plugin, when it is one of the defaults. It
+          // differs from the row's own once the user has moved that default forward, which
+          // is the only way back to the version the build was tested with.
+          const shipped = defaults.find((d) => pluginKey(d) === pluginKey(p.spec));
+          const isDefault = shipped !== undefined;
           const pinnedSpec = isPinned(p.spec);
+          // What an update check would ask about: this spec, or the address a bundled copy
+          // was built from. Null for a plugin that follows a branch — Reload is its update.
+          const address = updateAddress(p.spec);
           const copy = snapshots[p.spec];
           const builtinPlugin = p.spec.startsWith("builtin:");
           const name = rt?.manifest?.name ?? (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
           // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
           const named = rt?.manifest != null || builtinPlugin;
           const status = statusLabel(rt, p.enabled);
+          const answered = checked[p.spec];
           return (
             <div key={p.spec} className="item plugin-row" role="listitem" data-spec={p.spec}>
               <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={`Enable ${name}`} />
@@ -897,14 +1000,37 @@ function InstalledPane({ focus }: { focus?: string | null }) {
               </div>
               <div className="plugin-row-actions">
                 <div className="row" style={{ gap: 4 }}>
-                  {pinnedSpec && (
-                    <Button size="sm" title="Look for a newer commit and show it before switching to it" disabled={checking === p.spec} onClick={() => { void update(p.spec); }}>
-                      {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Update
-                    </Button>
-                  )}
+                  {address !== null && (answered?.kind === "newer"
+                    ? (
+                      <Button size="sm" variant="primary" title="Show what is in the newer version before switching to it" onClick={() => offer(p.spec, answered.preview)}>
+                        <ArrowUp size={11} /> Update to {offeredVersion(answered.preview)}
+                      </Button>
+                    )
+                    : (
+                      <Button size="sm" title={`Ask ${addressLabel(address)} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.`} disabled={checking === p.spec} onClick={() => { void update(p.spec, address); }}>
+                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Check for update
+                      </Button>
+                    ))}
                   <Button size="sm" title="Fetch the plugin again from its address (and replace any copy kept here)" disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> Reload</Button>
                   {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
+                  {shipped !== undefined && shipped !== p.spec && (
+                    <Button
+                      size="sm"
+                      title={shipped.startsWith("builtin:")
+                        ? "Go back to the copy compiled into this build, which is fetched from nowhere"
+                        : `Go back to ${replacedVersion(shipped)}, the version this editor ships`}
+                      onClick={() => remove(p.spec)}
+                    >
+                      <RotateCcw size={11} /> Revert
+                    </Button>
+                  )}
                 </div>
+                {answered?.kind === "current" && (
+                  <span className="plugin-here on" title={answered.text}><CircleCheck size={11} /> Up to date</span>
+                )}
+                {answered?.kind === "problem" && (
+                  <span className="plugin-here bad" title={answered.text}><TriangleAlert size={11} /> Could not check</span>
+                )}
                 {/* The copy used to be an icon button next to Reload, which said nothing about what
                     it did or whether it was on. It is a labelled tick under the buttons instead.
                     The label and the tooltip say the same thing whether it is on or off — a

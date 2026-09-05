@@ -302,6 +302,7 @@ gets from an address to a running `activate`.
 | `src/plugins/loader.ts` | Spec parsing, the manifest fetch, and the fetch / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the callbacks it takes, so the tests run it in Node. |
 | `src/plugins/defaults.ts` | The plugins a fresh editor starts with, each pinned to a tag. |
 | `src/plugins/registry.ts` | Browse Plugins: parsing, searching and caching the JSON indexes. |
+| `src/plugins/widgets.ts` | `el` and `api.ui.widgets`: plain DOM in the editor's own class names, so a plugin's dialog looks like a built-in one. The waiting kit — `spinner`, `progressBar`, `statusLine`, `skeleton`, `busy`, and a button's `setBusy` — is here too; its styles are the Waiting block at the end of `src/styles/ui.css`, which is also where the reduced-motion behaviour lives, so nothing here animates in JavaScript. |
 | `src/plugins/claims.ts` | The trigger-list claims the trigger editors read. |
 | `src/plugins/images.ts` | Image loading, clipboard images, and drop / paste transfers for plugin dialogs. |
 | `src/plugins/failures.ts` | The toast a failed activation raises. |

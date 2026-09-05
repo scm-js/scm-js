@@ -977,6 +977,12 @@
 .plugin-here.on {
   color: var(--teal);
 }
+/* An update check that could not be made — GitHub refusing, an address that moved. It is
+   an answer to a press rather than a fault in the map, so it stays a line on the row and
+   the whole of what went wrong is on the toast beside it. */
+.plugin-here.bad {
+  color: #ffb3b0;
+}
 .plugin-here > svg {
   flex: none;
 }

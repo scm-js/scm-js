@@ -320,7 +320,15 @@
   border-radius: 3px;
 }
 
-/* toasts — short notices that leave by themselves (a save that went through) */
+/* toasts — short notices that leave by themselves (a save that went through)
+
+   Above the dialog layer (.dlg-overlay 100, .dlg 101) on purpose. At 60 they sat *under*
+   the overlay, which is a 55% dark fill with a 2px backdrop blur over it — so every notice
+   raised from a dialog (a plugin installed, a data set removed, a map exported, a test map
+   written) was dimmed and blurred into something nobody could read, in the one situation
+   where the editor most wanted to answer. Below the splash (300) still, so a notice raised
+   during startup waits behind it rather than sitting on the loading animation, which is
+   what the update check's ttl-less toast counts on. */
 .toasts {
   position: fixed;
   right: 14px;
@@ -328,7 +336,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  z-index: 60;
+  z-index: 210;
   pointer-events: none;
 }
 .toast {

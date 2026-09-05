@@ -317,6 +317,16 @@ export interface TitleBox {
   listeners: Set<() => void>;
 }
 
+/**
+ * What a plugin dialog is working on (`DialogHandle.setBusy`), or null when it is not.
+ * The same arrangement as `TitleBox`: the frame listens, so the handle reaches it without
+ * the spec being touched.
+ */
+export interface BusyBox {
+  value: string | null;
+  listeners: Set<() => void>;
+}
+
 /** One `api.ui.panel`, rendered by `PluginPanels` over the map. */
 export interface PluginPanelEntry {
   key: number;

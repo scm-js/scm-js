@@ -70,13 +70,22 @@ The Add screen has three ticks:
 ### Keeping a plugin up to date
 
 A pinned plugin never changes on its own. A push to its repository reaches nobody who has
-it installed. When a newer version exists, the **Update** button on its row in Manage
-Plugins shows the new version's manifest and asks before anything changes, the same way
-the Add screen did.
+it installed. **Check for update** on its row in Manage Plugins asks the repository what it
+holds now. When that is a newer commit the button becomes *Update to …*, which shows the
+new version's manifest and asks before anything changes, the same way the Add screen did;
+when it is not, the row says *Up to date*. Nothing of the plugin is fetched or run by the
+check itself.
+
+The defaults have the button too, including in the builds that compile them in. A bundled
+plugin is asked for nothing — not at startup, not when the list is drawn — until you press
+it. Updating one turns it into an ordinary plugin fetched from its repository, each time
+the editor starts; the confirmation says so, *Load from a copy saved here* is the nearest
+way back to how it behaved, and **Revert** on the row returns it to the version this
+editor ships.
 
 **Reload** fetches the plugin again from its address and replaces any copy saved in the
-browser. For a pinned plugin that is the same commit again, so Update is the way forward
-and Reload is for a plugin you are writing.
+browser. For a pinned plugin that is the same commit again, so the update check is the way
+forward and Reload is for a plugin you are writing.
 
 Turning a plugin off takes back everything it added: menu items, hotkeys, dialogs, panels,
 overlays and its event listeners. **Remove** takes it off the list as well. A default
@@ -103,6 +112,11 @@ install them from. The project's own is
 lists being searched and takes the address of another. A registry decides only what is
 *offered*. Installing from a Browse row goes through the same Add screen, the same manifest
 fetch and the same pinning as an address you pasted by hand.
+
+A registry decides what is offered, not what exists, so Browse also shows the plugins you
+have that no registry lists — one you pasted in by address, or one a list has stopped
+carrying. They are marked *not listed* and sit under *Already installed*, with no Install
+to press. Nothing you have installed is missing from Browse.
 
 ## Writing a plugin
 
@@ -298,7 +312,8 @@ Three things follow from **What you are trusting** above and are worth writing f
   you by.
 - **They are pinned to a commit and never auto-updated.** Installing stores the commit
   your address pointed at, so a push of yours reaches nobody already running the plugin.
-  They move forward with the Update button, which shows them the new manifest first. Tag
+  They move forward with the update check on the row, which shows them the new manifest
+  first. Tag
   your releases: a tag is what the registry lists, and what a considered version looks
   like from the outside.
 - **They may be running a copy saved in their browser.** That copy is replaced only when
@@ -942,7 +957,7 @@ two ways to draw on the map, and the pickers.
 | `confirm(message, opts?)` / `alert(message, opts?)` / `prompt(message, opts?)` | A yes/no, a note, and a line of text, as dialogs in the editor's chrome rather than the browser's blocking boxes. `confirm` resolves `false` and `prompt` `null` on Cancel, Escape or the ×. Options: `title`, `confirmLabel`, `cancelLabel`, `danger` (a destructive primary button), and for `prompt` also `value`, `placeholder`, `multiline`. |
 | `progress(label, { title?, cancellable? })` | A progress panel over the map for long work. It blocks nothing, so report often: `report(0…1, text?)`, `cancelled()` (check it in your loop; the × counts as cancelling, `done()` does not), `signal` (an `AbortSignal` with the same answer), `done()`, `isOpen()`. A modal dialog covers the map and dims the panel behind it, so start the work from a panel, a menu item, or after closing your dialog. |
 | `el(tag, props?, ...children)` | The DOM helper the widgets are built from: `style` takes an object, `on*` keys take listeners, everything else is a property or an attribute. |
-| `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, onClick })`, `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`. Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
+| `widgets` | Buttons, fields, forms and lists in the editor's own styles, as plain DOM: `button(label, { primary, danger, ghost, busy, onClick })` (the button carries `setBusy(on)`), `checkbox(label, { value, radio, name, onChange })` (the `<label>` carries its `input`), `text(...)`, `number({ min, max, step, ... })`, `select(items, ...)`, `form(rows)` (a two-column grid of `{ label, field }`), `group(title, ...children)`, `row(...)`, `column(...)`, `hint(text)`, `separator()`, `list(items, { selected, height, onPick })`, and the five ways to wait: `spinner`, `progressBar`, `statusLine`, `skeleton`, `busy` (see below). Use them and a plugin's dialog looks like a built-in one; `el` is the escape hatch. |
 | `open(dialogId, payload?)` | Any built-in dialog (`"mapProperties"`, `"unitSettings"`, …), fire and forget. |
 | `ask(dialogId, payload?)` | A built-in dialog that answers (`"saveAs"`, `"confirmClose"`, `"newMap"`), resolving `true` when it went through and `false` when it was dismissed. |
 | `repaint()` | Redraw the viewport when you changed something a transaction did not cover, such as an overlay's picture. Raises no event. |
@@ -956,11 +971,65 @@ your own text fields is left alone unless it carries files), and `spec.onDrop` f
 on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog unless
 `spec.keepOpenOnEscape(target)` answers true for the element the key landed on, which is
 for something inside that handles Escape itself, such as a code editor dismissing its
-own popups. The handle has `close()`, `isOpen()` and `setTitle(text)`.
+own popups. The handle has `close()`, `isOpen()`, `setTitle(text)` and
+`setBusy(label | false)`.
 
 A dialog is modal and covers the map. To pick something on the map from a dialog, close
 the dialog, pick, and reopen it with the result. Terrain from Image does exactly this
 with its *Pick on Map…* button.
+
+**Waiting.** Anything a plugin fetches, decodes or counts leaves the user looking at a
+dialog that has not changed, and a dialog that does not say it is working reads as one
+that is broken. `ui.widgets` has one vocabulary for it, so a plugin waits the way the
+editor waits — and so a reduced-motion setting is honoured without your having to think
+about it:
+
+| | |
+| --- | --- |
+| `spinner({ size, label })` | The turning ring: on its own to put beside your own text, or with a `label` beside it. `size` is `"sm"`, `"md"` (the default) or `"lg"`. |
+| `progressBar({ value, label, percent, width })` | A bar with the percentage after it and a line under it. `set(0…1, label?)` moves it; `set(null)` gives the sliding bar for work whose length is not known. Cheap to call per chunk — it repaints only when the bar actually moves. |
+| `statusLine({ text })` | The line along the bottom of a dialog, with `set(text, "ok" \| "warn" \| "error")`, `busy(text)`, `progress(text, 0…1 \| null)`, `cancel(stop \| null)` (a Cancel beside the line) and `clear()`. |
+| `skeleton({ width, height, lines, block })` | A grey stand-in for content that has not arrived, in the shape it will take: a line, `lines` of them, or a `block` where a picture goes. |
+| `busy(target, label \| { label, dim })` | Cover a box while what is in it is being replaced: dimmed, deaf to clicks, a ring and a label over it. Returns `{ set(label), done() }`; `done()` uncovers it. |
+| `button(label, { busy })` / `button.setBusy(on)` | A ring in front of a button's label, and the button disabled — so the press that started the work cannot be repeated. |
+| `dialog.setBusy(label \| false)` | The dialog itself is working: a ring and the label at the left of the footer, every footer button disabled. A button's own `run` already does this while its promise is pending; this is for work no button started. |
+
+Which to reach for: a **spinner** where the wait has no size, a **progress bar** where it
+does (a download, a pass over every trigger), **skeletons** for a list or a pane you are
+about to fill — they say more than an empty box, and nothing jumps when the answer lands
+— and **busy** for a list being replaced by a different one. Put the outcome, the error
+and the Cancel on one **status line** so a dialog has a single voice, and leave the field
+that started the work live: the user changing their mind should not have to wait for the
+answer they no longer want. Every long call is a good place for an `AbortSignal`, and
+`statusLine.cancel(stop)` is where the user reaches it.
+
+```js
+const status = api.ui.widgets.statusLine();
+const search = api.ui.widgets.button("Search", { onClick: () => void run() });
+
+async function run() {
+  const stop = new AbortController();
+  const cover = api.ui.widgets.busy(results, "Searching…");
+  status.busy("Searching…");
+  status.cancel(() => stop.abort());
+  search.setBusy(true);
+  try {
+    const found = await fetch(url, { signal: stop.signal }).then((r) => r.json());
+    status.set(`${found.length} found.`, "ok");
+    fill(results, found);
+  } catch (err) {
+    status.set(err.name === "AbortError" ? "Stopped." : String(err), "error");
+  } finally {
+    cover.done();
+    search.setBusy(false);
+    status.cancel(null);
+  }
+}
+```
+
+`ui.progress(label)` is the other half of this: a panel over the *map* for work that runs
+while the user carries on editing. A dialog covers the map, so anything a dialog starts
+belongs on that dialog's own status line, not in a progress panel behind it.
 
 **Panels.** `panel(spec)` floats over the map and blocks nothing: the user keeps drawing,
 scrolling and using hotkeys while it is open (except while typing in one of its fields).

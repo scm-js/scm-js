@@ -45,6 +45,12 @@ export interface RegistryEntry {
   updated?: string;
   /** The editor already lists this one — it is one of `defaults.ts`. */
   default?: boolean;
+  /**
+   * Not from a registry at all: a plugin the editor has, made into a row by
+   * `unlistedInstalls`. There is nothing to install, so the row says so instead of
+   * offering it. A registry cannot claim this — `entryOf` builds its own entries.
+   */
+  unlisted?: boolean;
 }
 
 /** A registry as it was read: where from, what it calls itself, and its entries. */
@@ -138,6 +144,64 @@ export function entryIcon(entry: RegistryEntry): PluginIcon | null {
     base = null;
   }
   return resolveIcon(entry.icon, base);
+}
+
+/* ── Plugins the editor has that no registry lists ──────── */
+
+/** What the editor knows about an installed plugin, out of the manifest the loader read. */
+export interface InstalledPlugin {
+  spec: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  /** The manifest's `icon`, verbatim. */
+  icon?: string;
+  api?: number;
+}
+
+/**
+ * Rows for the plugins this editor has that no registry lists — one pasted in by address,
+ * one a registry has dropped or never carried.
+ *
+ * Browse is read as the list of plugins there *are*, so a plugin that is installed and
+ * running but in no index looked like it was not there at all, and the answer to "where
+ * is it?" was the other tab. But a registry decides what can be *installed*, never what
+ * exists: what it does not carry is added here out of what the editor already knows, and
+ * marked `unlisted` so the row states its position rather than offering an Install that
+ * would mean nothing.
+ *
+ * Matching is by `identity` (`pluginKey`, passed in so this module stays free of the
+ * defaults), because an install names a *version* — a pinned commit, a tag, the bundled
+ * copy — and the registry names the plugin; comparing specs would add a second row for
+ * every plugin already listed.
+ */
+export function unlistedInstalls(
+  installed: readonly InstalledPlugin[],
+  listed: readonly RegistryEntry[],
+  identity: (spec: string) => string,
+): RegistryEntry[] {
+  const known = new Set(listed.map((e) => identity(e.spec)));
+  const out: RegistryEntry[] = [];
+  for (const p of installed) {
+    const key = identity(p.spec);
+    if (known.has(key)) continue;
+    known.add(key);
+    const entry: RegistryEntry = { spec: p.spec, name: p.name ?? p.spec, unlisted: true };
+    for (const k of ["version", "description", "author", "homepage", "icon"] as const) {
+      const v = str(p[k]);
+      if (v !== undefined) entry[k] = v;
+    }
+    if (typeof p.api === "number") entry.api = p.api;
+    // The row's Source button, for a plugin that has a page a person can read it on.
+    try {
+      const source = parseSpec(p.spec);
+      if (source.kind === "remote" && source.webUrl) entry.repo = source.webUrl;
+    } catch { /* an unusable spec still lists; it is already installed */ }
+    out.push(entry);
+  }
+  return out;
 }
 
 /* ── Searching ──────────────────────────────────────────── */

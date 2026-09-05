@@ -10,7 +10,7 @@
  *
  * Nothing here touches the store or React: it is a DOM helper library, tested as one.
  */
-import type { CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, SelectOption, SelectOptions, TextFieldOptions, WidgetsApi } from "./api";
+import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SelectOption, SelectOptions, SkeletonOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi } from "./api";
 
 /** Attributes `el` maps onto the element rather than setting as a property. */
 const ATTRS = new Set(["type", "role", "name", "placeholder", "min", "max", "step", "colspan", "rowspan", "for", "href", "target", "src", "alt", "aria-label"]);
@@ -49,15 +49,29 @@ function append(node: HTMLElement, children: ElChild[]) {
 
 const classes = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join(" ");
 
+/** The cover `widgets.busy` put over a box, so a second call only changes its label. */
+const covers = new WeakMap<HTMLElement, BusyHandle>();
+
 export function createWidgets(): WidgetsApi {
   const widgets: WidgetsApi = {
     button: (label, options = {}) => {
+      const ring = el("span", { className: "spinner sm", "aria-hidden": "true" });
       const button = el("button", {
         type: "button",
         className: classes("btn", options.primary && "primary", options.danger && "danger", options.ghost && "ghost", options.className),
         title: options.title,
         disabled: options.disabled ?? false,
-      }, label);
+      }, label) as ButtonElement;
+      // The ring goes in front of the label and the button stops answering: a press that
+      // started work should not be repeatable, and should say why it is not.
+      button.setBusy = (busy: boolean) => {
+        if (busy === button.contains(ring)) return;
+        if (busy) button.prepend(ring);
+        else ring.remove();
+        button.disabled = busy || (options.disabled ?? false);
+        button.setAttribute("aria-busy", busy ? "true" : "false");
+      };
+      if (options.busy) button.setBusy(true);
       if (options.onClick) button.addEventListener("click", (ev) => options.onClick!(ev as MouseEvent));
       return button;
     },
@@ -145,6 +159,148 @@ export function createWidgets(): WidgetsApi {
         box.append(row);
       });
       return box;
+    },
+
+    /* ── Waiting ──
+       One vocabulary for "an answer is on its way", so a plugin's dialog waits the way
+       the editor's own do. The classes are `styles/ui.css`'s; nothing here animates in
+       JavaScript, so a reduced-motion setting is honoured by the stylesheet alone. */
+
+    spinner: (options: SpinnerOptions = {}) => {
+      const size = options.size ?? "md";
+      const ring = el("span", {
+        className: classes("spinner", size !== "md" && size, !options.label && options.className),
+        // On its own it is the only thing saying "working"; beside a label the label says it.
+        "aria-hidden": options.label ? "true" : undefined,
+        role: options.label ? undefined : "progressbar",
+        "aria-label": options.label ? undefined : "Working",
+        title: options.label ? undefined : options.title,
+      });
+      if (!options.label) return ring;
+      return el("span", { className: classes("spinner-row", options.className), title: options.title }, ring, el("span", {}, options.label));
+    },
+
+    progressBar: (options: ProgressBarOptions = {}) => {
+      const fill = el("i", {});
+      const track = el("div", { className: "progress-track", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
+      const percent = el("span", { className: "dim mono percent" }, "");
+      const line = el("div", { className: "hint" }, "");
+      const box = el("div", { className: classes("progress", options.className), title: options.title }, el("div", { className: "row" }, track, percent), line) as unknown as ProgressBarElement;
+      if (options.width) box.style.width = `${options.width}px`;
+      let last = -1;
+      box.set = (value, label) => {
+        const known = value !== null && value !== undefined && Number.isFinite(value);
+        const share = known ? Math.max(0, Math.min(1, value as number)) : 0;
+        track.classList.toggle("sliding", !known);
+        if (known) {
+          // A download reports per chunk; repainting for a move nobody can see costs more than it shows.
+          if (Math.abs(share - last) >= 0.005 || share === 1) {
+            last = share;
+            fill.style.width = `${(share * 100).toFixed(1)}%`;
+            percent.textContent = `${Math.round(share * 100)}%`;
+            track.setAttribute("aria-valuenow", String(Math.round(share * 100)));
+          }
+        } else {
+          last = -1;
+          fill.style.width = "";
+          percent.textContent = "";
+          track.removeAttribute("aria-valuenow");
+        }
+        percent.hidden = !known || options.percent === false;
+        if (label !== undefined) line.textContent = label;
+        line.hidden = !line.textContent;
+      };
+      box.set(options.value ?? null, options.label ?? "");
+      return box;
+    },
+
+    statusLine: (options: StatusLineOptions = {}) => {
+      const ring = el("span", { className: "spinner sm", "aria-hidden": "true" });
+      const text = el("span", { className: "grow" }, options.text ?? "");
+      const fill = el("i", {});
+      const track = el("div", { className: "progress-track", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
+      const cancelBtn = widgets.button("Cancel", { className: "sm" });
+      let stopper: (() => void) | null = null;
+      cancelBtn.addEventListener("click", () => stopper?.());
+      const line = el("div", { className: classes("status-line", options.className), role: "status", "aria-live": "polite", title: options.title }, ring, text, track, cancelBtn);
+      ring.hidden = true;
+      track.hidden = true;
+      cancelBtn.hidden = true;
+
+      const paint = (message: string, kind: string, spin: boolean, value: number | null) => {
+        line.className = classes("status-line", kind, options.className);
+        if (text.textContent !== message) text.textContent = message;
+        ring.hidden = !spin;
+        track.hidden = value === null;
+        if (value !== null) {
+          const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+          fill.style.width = `${pct}%`;
+          track.setAttribute("aria-valuenow", String(pct));
+        }
+        line.setAttribute("aria-busy", spin ? "true" : "false");
+        // A bar moves far too often to read out; the line either side of it is what matters.
+        line.setAttribute("aria-live", value === null ? "polite" : "off");
+      };
+
+      const node = line as unknown as StatusLineElement;
+      node.set = (message, kind) => paint(message, kind ?? "", false, null);
+      node.busy = (message) => paint(message, "", true, null);
+      node.progress = (message, value) => paint(message, "", true, value);
+      node.clear = () => paint("", "", false, null);
+      node.cancel = (stop) => { stopper = stop; cancelBtn.hidden = !stop; };
+      return node;
+    },
+
+    skeleton: (options: SkeletonOptions = {}) => {
+      const height = options.height ?? (options.block ? 44 : 10);
+      const one = (width: string, className?: string) =>
+        el("span", { className: classes("skeleton", options.block && "block", className), style: { width, height: `${height}px` } });
+      const lines = Math.max(1, options.lines ?? 1);
+      if (lines === 1) return one(options.width ?? "100%", options.className);
+      // Text ends short, so the last line does too — a block of equal bars reads as a table.
+      const rows = Array.from({ length: lines }, (_, i) => one(options.width ?? (i === lines - 1 ? "60%" : "100%")));
+      return el("div", { className: classes("skeleton-lines", options.className) }, ...rows);
+    },
+
+    busy: (target: HTMLElement, options: BusyOptions | string = {}): BusyHandle => {
+      const o = typeof options === "string" ? { label: options } : options;
+      const open = covers.get(target);
+      if (open) {
+        if (o.label !== undefined) open.set(o.label);
+        return open;
+      }
+      const label = el("span", {}, o.label ?? "");
+      const cover = el("div", { className: classes("busy-cover", o.dim === false && "no-dim"), "aria-hidden": "true" },
+        el("div", { className: "busy-note" }, el("span", { className: "spinner sm" }), label));
+      // A cover is absolute, so it needs a positioned box that does not scroll under it —
+      // hence the wrapper, which takes the target's place and gives it back on `done`.
+      const parent = target.parentElement;
+      const wrap = parent ? el("div", { className: "busy-box" }) : null;
+      if (wrap && parent) {
+        parent.insertBefore(wrap, target);
+        wrap.append(target, cover);
+      } else {
+        // Not mounted yet: the cover goes inside, which asks the box itself to position it.
+        if (!target.style.position) target.style.position = "relative";
+        target.append(cover);
+      }
+      target.classList.add("is-busy");
+      target.setAttribute("aria-busy", "true");
+      let done = false;
+      const handle: BusyHandle = {
+        set: (text) => { label.textContent = text; },
+        done: () => {
+          if (done) return;
+          done = true;
+          covers.delete(target);
+          cover.remove();
+          target.classList.remove("is-busy");
+          target.setAttribute("aria-busy", "false");
+          if (wrap?.parentElement) { wrap.replaceWith(target); }
+        },
+      };
+      covers.set(target, handle);
+      return handle;
     },
   };
   return widgets;

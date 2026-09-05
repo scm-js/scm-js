@@ -423,7 +423,14 @@ and are cleared by close; a `"replace"` load keeps the options. `saveDocument(st
 the one writer: builds (or takes the dialog's) bytes, calls the writer, and on success — unless
 `req.copy` — sets path, handle, options, modified=false, recents, then a status line and a toast
 (`pushToastAtom` / `toastsAtom`, `Toasts.tsx` bottom-right) worded "Saved" or "Downloaded … in the
-browser's downloads folder", since a download is the only route Firefox and Safari have. `save(mode)`
+browser's downloads folder", since a download is the only route Firefox and Safari have.
+`.toasts` sits at **z-index 210** — above the dialog layer (`.dlg-overlay` 100, `.dlg` 101),
+below the splash (300). At 60 it was under the overlay's 55% fill and 2px backdrop blur, so
+every notice raised from a dialog — a plugin installed, a data set removed, a map exported or
+a test map written, five dialog modules raise them — was dimmed and blurred in the one place
+the editor most wanted to be read. A toast is then a press *outside* the dialog, so
+`DialogFrame` prevents Radix's `onInteractOutside` for a target inside `.toasts`: dismissing a
+notice, or pressing its one action, must not close the dialog that raised it. `save(mode)`
 in the hook: `"save"` with a path writes with the remembered options; otherwise `askDialog(store,
 "saveAs", { copy })` opens `SaveMapDialog` and resolves when it calls `payload.done(true)` (after
 `taken`) or leaves the stack — so Close Scenario's Save waits for the whole thing. Save Copy As is the
@@ -743,10 +750,33 @@ is on). `PluginRuntime.loadedFrom` records which happened. `reloadPlugin` drops 
 and re-fetches — the way both a pinned and a stored plugin are moved forward — and
 `setInstalled` drops it whenever `local` goes false or the plugin is removed;
 `clearStoredDataAtom` `RESET`s the atom with the others. Reload re-fetches whatever the
-spec names, so a pinned plugin moves forward through the row's **Update** button instead:
-it previews `unpin(spec)` and, when the branch holds a different commit, reopens the
+spec names, so a pinned plugin moves forward through the row's **Check for update** button
+instead: it previews `unpin(spec)` and, when the branch holds a different commit, reopens the
 confirmation with `replaces` set, which makes `installPlugin` deactivate, unlist and
 un-copy the old commit before installing the new one.
+That button is on every row with an address to ask, whether or not anything is newer, so
+most presses can only answer "nothing is" — it used to say **Update** and put that answer in
+one dim line at the top of the pane, which for a button near the bottom of a scrolling list
+read as the press doing nothing at all. The answer is a `CheckAnswer` per spec now
+(`InstalledPane`'s `checked`): *Up to date* or *Could not check* on the row itself, a toast
+beside it, and for a newer commit the button becomes `Update to v…` holding the preview it
+was found with, so cancelling the confirmation neither loses the answer nor asks GitHub twice.
+Which rows get it is `defaults.ts#updateAddress`, not `isPinned`: vendoring swaps a default's
+spec for `builtin:paint`, which is not pinned, so the one button that moves a plugin forward
+appeared on every row **except** the ones the editor ships — and only in builds that skipped
+vendoring, making the button's presence a fact about the packaging rather than the plugin.
+`BUILTIN_REPLACES` holds the spec each bundled copy was built from, which is the address to
+ask; a bundled plugin is still asked for nothing until the press. The comparison is by
+**commit** (`host.ts#checkForUpdate`), because comparing spec strings called every
+tag-pinned install out of date for ever — a tag is never spelt like the hash a check
+resolves — which would have had all five defaults offering an update to the code they were
+already running; a hash-pinned spec answers for itself, a tag costs one more request, and an
+unresolvable ref falls back to the spec comparison. Updating a bundled default installs the
+remote pinned spec, which `effectiveInstalls` folds over the default and lets win (that rule
+was always there and had no button to reach it), at the cost of the plugin becoming an
+ordinary fetch at startup — which `ConfirmPluginDialog` says in place of its "replacing
+<commit>" line — so a default whose row spec is no longer the shipped one grows a **Revert**
+button: it drops the stored row and `usePlugins` activates the bundled copy again.
 `pluginRuntimesAtom` is status/manifest/error per
 spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Only
 `activatePlugin` used to write that atom, so a listed-but-off plugin was a bare spec in
@@ -792,6 +822,16 @@ Install goes through the ordinary `inspectPlugin` → `ConfirmPluginDialog` → 
 path, so the manifest is read from the plugin and the pin resolved at install time — a
 registry decides what is listed, never what is trusted. `clearStoredDataAtom` resets both
 atoms; `.listbox .plugin-row` is shared by the Installed, Browse and Sources lists.
+The list is the registries' entries **plus** `registry.ts#unlistedInstalls` — a row per
+installed plugin no registry carries, built from the manifest in `pluginRuntimesAtom`,
+badged `not listed` and matched on `pluginKey` (passed in, so the module stays free of the
+defaults) so a pinned or bundled install is not added beside the entry it is a version of.
+Browse is read as the list of plugins there *are*, so a plugin installed from its own
+address — or one a registry stopped listing, which is what an `exclude` in
+`scm-js/registry`'s `plugins.json` does — went missing from the only place it was looked
+for while running perfectly well under Installed. Nothing installed can fall out of the
+list now, whatever a registry says, and `BrowseRow` takes the resolved `icon` so those
+rows draw the plugin's own.
 
 `api.ui.pickArea` / `pickTile` (`host.ts#pickOnMap`) put one `MapPickRequest` in `mapPickAtom`
 (`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal marquee, HUD chip
@@ -904,7 +944,12 @@ the map raises a fresh `"replace"` for the rest — there is deliberately no plu
 `api.ui` also has `confirm` / `alert` / `prompt` / `progress` (`plugins/prompts.ts`, built on the
 plugin dialog and panel — a promise settled from `mount`'s cleanup, since a dismissal presses no
 button) and `el` / `widgets` (`plugins/widgets.ts`: plain DOM in the editor's own classes, so a
-plugin's dialog looks like a built-in one). All of it is additive — `PLUGIN_API_VERSION` stays 1 —
+plugin's dialog looks like a built-in one). The widgets carry the waiting kit — `spinner`,
+`progressBar`, `statusLine`, `skeleton`, `busy`, `button().setBusy`, and `DialogHandle.setBusy`
+(a `BusyBox` beside the `TitleBox`, so the footer shows a ring and disables its buttons) — whose
+styles are the Waiting block at the end of `styles/ui.css`; the reduced-motion rules are there,
+so nothing animates in JavaScript. `ui.progress` stays what it was: a panel over the *map*, for
+work that runs while the user carries on editing, which a modal dialog covers. All of it is additive — `PLUGIN_API_VERSION` stays 1 —
 and a plugin repository picks the addition up with `npm update @scm-js/plugin-api`.
 
 The beta pass added the rest of what the editor itself does to the contract — read `api.ts` and

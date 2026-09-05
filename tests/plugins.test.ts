@@ -42,15 +42,15 @@ import {
 } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
 import {
-  activatePlugin, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
+  activatePlugin, checkForUpdate, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
   reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
-import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey } from "../src/plugins/defaults";
+import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../src/plugins/defaults";
 import { failureToast, pluginFailures } from "../src/plugins/failures";
 import {
   addRegistry, cachedRegistries, entryIcon, groupByInstall, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, parseRegistry, registryUrls,
-  RegistryError, removeRegistry, searchRegistry, type InstallState, type RegistryEntry,
+  RegistryError, removeRegistry, searchRegistry, unlistedInstalls, type InstallState, type RegistryEntry,
 } from "../src/plugins/registry";
 import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
@@ -1590,6 +1590,59 @@ describe("plugin previews", () => {
     expect(isPinned(preview.spec)).toBe(false);
   });
 
+  it("checks for an update by commit, so a tag-pinned install is not offered its own code", async () => {
+    const files = githubFiles("o", "preview", SHA, { name: "Preview", version: "1.1" });
+    // The tag the install names resolves to the same commit the branch holds.
+    files[`https://api.github.com/repos/o/preview/commits/v1.0`] = JSON.stringify({ sha: SHA });
+    const { deps, asked } = servedDeps(files);
+
+    const onTag = await checkForUpdate("github:o/preview@v1.0", deps);
+    expect(onTag.current).toBe(SHA);
+    // Comparing specs would say "newer" here for ever: `@v1.0` is never spelt like a hash.
+    expect(onTag.newer).toBe(false);
+    expect(onTag.preview.manifest?.name).toBe("Preview");
+
+    // A hash-pinned install answers for itself: no second request to resolve the ref.
+    asked.length = 0;
+    const onSha = await checkForUpdate(`github:o/preview@${SHA}`, deps);
+    expect(onSha).toMatchObject({ current: SHA, newer: false });
+    expect(asked.filter((u) => u.includes("/commits/"))).toEqual(["https://api.github.com/repos/o/preview/commits/HEAD"]);
+  });
+
+  it("offers the update when the branch has moved past the installed commit", async () => {
+    const older = "1111111111111111111111111111111111111111";
+    const { deps } = servedDeps(githubFiles("o", "preview", SHA, { name: "Preview", version: "1.2" }));
+    const check = await checkForUpdate(`github:o/preview@${older}`, deps);
+    expect(check).toMatchObject({ current: older, newer: true });
+    expect(check.preview.pin?.spec).toBe(`github:o/preview@${SHA}`);
+  });
+
+  it("falls back to comparing specs when the installed ref cannot be resolved", async () => {
+    // The tag is gone from the repository; the branch still answers.
+    const { deps } = servedDeps(githubFiles("o", "preview", SHA, { name: "Preview" }));
+    const check = await checkForUpdate("github:o/preview@v9", deps);
+    // Erring towards offering the update rather than hiding one.
+    expect(check).toMatchObject({ current: null, newer: true });
+  });
+
+  it("has an address to check for every default, bundled or not", () => {
+    // The check button used to be `isPinned(spec)`, which vendoring turned off: a bundled
+    // default is `builtin:paint`, so the one button that moves a plugin forward appeared on
+    // every row except the ones the editor ships — and only in builds that did not vendor.
+    for (const d of defaultPlugins()) {
+      const address = updateAddress(d.spec);
+      expect(address, d.spec).not.toBeNull();
+      expect(pluginKey(address!), d.spec).toBe(pluginKey(d.spec));
+      expect(isPinned(address!), d.spec).toBe(true);
+    }
+    // A plugin that follows a branch has no update to check for — Reload is its update.
+    expect(updateAddress("github:o/p")).toBeNull();
+    expect(updateAddress("github:o/p@main")).toBeNull();
+    expect(updateAddress("https://example.com/p/plugin.json")).toBeNull();
+    expect(updateAddress("builtin:not-vendored-here")).toBeNull();
+    expect(updateAddress("github:o/p@v1.2.0")).toBe("github:o/p@v1.2.0");
+  });
+
   it("pins the ref the user gave rather than the branch tip", async () => {
     const { deps } = servedDeps(githubFiles("o", "preview", SHA, { name: "Sub" }, "v2"));
     // The manifest lives under the resolved commit, not under `v2`.
@@ -2365,6 +2418,43 @@ describe("plugin registries", () => {
     expect(groups.available.map((e) => e.name)).toEqual(["A", "C"]);
     expect(groups.installed.map((e) => e.name)).toEqual(["B", "D"]);
     expect(groupByInstall([], () => "new")).toEqual({ available: [], installed: [] });
+  });
+
+  it("adds a row for an installed plugin no registry lists, and none for one they do", () => {
+    const listed: RegistryEntry[] = [
+      { spec: "github:scm-js/plugin-paint", name: "Paint", version: "1.0.1" },
+      { spec: "github:scm-js/plugin-repair", name: "Repair" },
+    ];
+    // The identity a spec is matched on: the plugin, not the version of it that is installed.
+    const rows = unlistedInstalls(
+      [
+        // Installed pinned, and bundled — both are Paint, which is listed. Neither is added.
+        { spec: "github:scm-js/plugin-paint@v1.0.1", name: "Paint" },
+        { spec: "builtin:repair", name: "Repair" },
+        { spec: "github:scm-js/plugin-ai@abc1234", name: "AI", version: "0.4.0", description: "Tools that use a language model.", author: "Jeany", icon: "icon.svg" },
+        { spec: "https://example.com/mine/plugin.json", name: "Mine" },
+        // The same plugin at another version is one row, not two.
+        { spec: "github:scm-js/plugin-ai@0000000", name: "AI" },
+      ],
+      listed,
+      pluginKey,
+    );
+    expect(rows.map((e) => e.name)).toEqual(["AI", "Mine"]);
+    expect(rows.every((e) => e.unlisted)).toBe(true);
+    const ai = rows[0];
+    expect(ai.version).toBe("0.4.0");
+    expect(ai.author).toBe("Jeany");
+    // The row can be searched for and its icon and source page resolved, like any other.
+    expect(ai.repo).toBe("https://github.com/scm-js/plugin-ai/tree/abc1234");
+    expect(entryIcon(ai)).toEqual({ kind: "image", url: "https://raw.githubusercontent.com/scm-js/plugin-ai/abc1234/icon.svg" });
+    // ("ai" alone is a substring of half the specs — plugin-p*ai*nt, rep*ai*r.)
+    expect(searchRegistry([...listed, ...rows], "language").map((e) => e.name)).toEqual(["AI"]);
+    expect(searchRegistry([...listed, ...rows], "ai")[0].name).toBe("AI");
+    // Nothing installed, or everything already listed: no extra rows.
+    expect(unlistedInstalls([], listed, pluginKey)).toEqual([]);
+    // A plugin with no manifest read yet still gets a row, named by its spec.
+    expect(unlistedInstalls([{ spec: "https://x/p/plugin.json" }], [], pluginKey))
+      .toEqual([{ spec: "https://x/p/plugin.json", name: "https://x/p/plugin.json", unlisted: true }]);
   });
 
   it("merges registries, the first to list a spec winning", () => {

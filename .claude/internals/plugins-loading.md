@@ -274,3 +274,16 @@ address — or one a registry stopped listing, which is what an `exclude` in
 for while running perfectly well under Installed. Nothing installed can fall out of the
 list now, whatever a registry says, and `BrowseRow` takes the resolved `icon` so those
 rows draw the plugin's own.
+A row's `v…` is the reader's own version, not the index's (`PluginDialogs.tsx#browseVersion`).
+An entry carries the version its index was generated from — the newest *release* — which
+in the same grey as Manage Plugins' number beside the same plugin read as the copy being
+run, and did not move when the plugin was updated: updating scmjs.dev to 1.1.0 left Browse
+saying 1.0.4 until the hour-old cache was refreshed, and then said 1.1.0 for a reason that
+had nothing to do with the update. So an installed row prints the manifest version out of
+`pluginRuntimesAtom` and names the registry's only when `compareVersions` puts it ahead, as
+a `v… available` badge — which is the one time the difference is worth reading, and makes
+an available update visible in the tab it is not installed from. `unlistedInstalls` already
+built its entries from the same manifest, so the two kinds of row now mean the same thing.
+Both the version and the icon come through `runtimeOf`, which looks the runtime up by the
+*installed* spec: `runtimes[entry.spec]` never hit for anything pinned, so every installed
+row had been falling back to `entryIcon` since the defaults were pinned to tags.

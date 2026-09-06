@@ -102,6 +102,12 @@ request however many plugins are installed; only a plugin no index lists is aske
 own address. It runs at most once every six hours. **Check all for updates** above the
 list asks every row's repository in turn, which is the thorough version.
 
+Browse Plugins shows the same thing from the other side. A row for a plugin you have prints
+the version *you* are running — the number Manage Plugins shows beside it — and marks it
+*v… available* when the list carries a newer one. A row for a plugin you do not have prints
+the version the list carries, since that is the one an Install would get. The lists
+themselves are read at most once an hour; **Refresh** asks again.
+
 **Reload** fetches the plugin again from its address and replaces any copy saved in the
 browser. For a pinned plugin that is the same commit again, so the update check is the way
 forward and Reload is for a plugin you are writing.

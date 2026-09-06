@@ -13,6 +13,7 @@ import {
   type InstalledPlugin, type InstallState, type Registry, type RegistryEntry,
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
+import { compareVersions } from "../../plugins/updates";
 
 import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
@@ -417,6 +418,26 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
 /* ── Browsing a registry ────────────────────────────────── */
 
 /**
+ * What version a browse row prints, and whether it is the reader's own.
+ *
+ * A registry entry carries the version the index was generated from — the plugin's newest
+ * release, not the copy this editor is running. Printing that alone made an installed
+ * row's `v…` read as the number Manage Plugins shows beside the same plugin, and it did
+ * not move when the plugin was updated: the two answer different questions in the same
+ * grey. So a row for a plugin the editor has prints **its** version, and names the
+ * registry's only when that is newer — which is also the only time the difference is
+ * worth a reader's attention.
+ *
+ * `have` is unset for a row that is not installed, and for one whose manifest has not been
+ * read yet; the entry's version stands in for both, as it did before.
+ */
+function browseVersion(entry: RegistryEntry, have: string | undefined): { text?: string; mine: boolean; available?: string } {
+  if (!have) return { text: entry.version, mine: false };
+  const newer = entry.version !== undefined && compareVersions(entry.version, have) > 0;
+  return { text: have, mine: true, available: newer ? entry.version : undefined };
+}
+
+/**
  * One plugin as a registry lists it. Install does not install: it reads the plugin's own
  * `plugin.json` (`inspectPlugin`) and opens the same confirmation a pasted address does,
  * so what the registry said is never what gets trusted — it only decided that the row is
@@ -427,10 +448,12 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
  * sense for it, and a line naming the state in words. A badge among the other badges —
  * which is all this used to be — is the one place the eye does not look.
  */
-function BrowseRow({ entry, icon, state, busy, onInstall, onEnable, onManage }: {
+function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onManage }: {
   entry: RegistryEntry;
   /** The plugin's own icon when the editor has it loaded; the entry's own otherwise. */
   icon?: PluginIcon | null;
+  /** The version of the copy this editor has, when it has one — see `browseVersion`. */
+  have?: string;
   state: InstallState;
   busy: boolean;
   onInstall: () => void;
@@ -438,6 +461,7 @@ function BrowseRow({ entry, icon, state, busy, onInstall, onEnable, onManage }: 
   onManage: () => void;
 }) {
   const tooNew = entry.api !== undefined && entry.api > PLUGIN_API_VERSION;
+  const version = browseVersion(entry, have);
   const tags = entry.tags ?? [];
   const hasMeta = entry.author !== undefined || tags.length > 0 || entry.updated !== undefined;
   return (
@@ -446,8 +470,11 @@ function BrowseRow({ entry, icon, state, busy, onInstall, onEnable, onManage }: 
       <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
           <strong>{entry.name}</strong>
-          {entry.version && <span className="dim">v{entry.version}</span>}
-          {entry.default && <span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
+          {version.text && <span className="dim" title={version.mine ? "The version you have" : "The version the registry lists"}>v{version.text}</span>}
+          {version.available && (
+            <span className="badge gold" title={`You have v${have}. Update it under Installed.`}>v{version.available} available</span>
+          )}
+          {entry.default &&<span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
           {entry.unlisted && <span className="badge dim" title="You have this plugin, but no registry being searched lists it — it came from its own address">not listed</span>}
           {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
         </div>
@@ -614,7 +641,8 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const listed = mergeRegistries(registries);
   // What the editor has, described from the manifest the loader read for it, so a plugin
   // no registry carries still has a name, a version and an icon here rather than a spec.
-  const mine: InstalledPlugin[] = effectiveInstalls(installed, defaultPlugins()).map((p) => {
+  const installs = effectiveInstalls(installed, defaultPlugins());
+  const mine: InstalledPlugin[] = installs.map((p) => {
     const m = runtimes[p.spec]?.manifest;
     return { spec: p.spec, name: m?.name, version: m?.version, description: m?.description, author: m?.author, homepage: m?.homepage, icon: m?.icon, api: m?.api };
   });
@@ -629,7 +657,14 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   // tag, the bundled copy — so the two are matched on `pluginKey`. Comparing the specs
   // would make every pinned or bundled plugin look uninstalled and offer Install for
   // something already running.
-  const installOf = (spec: string) => effectiveInstalls(installed, defaultPlugins()).find((p) => pluginKey(p.spec) === pluginKey(spec));
+  const installOf = (spec: string) => installs.find((p) => pluginKey(p.spec) === pluginKey(spec));
+  // The runtime behind a listed entry, for the icon and the version it is running. Keyed
+  // by the *installed* spec: a default is pinned to a tag, so the registry's own spec is
+  // not in `runtimes` and looking it up there always missed.
+  const runtimeOf = (spec: string): PluginRuntime | undefined => {
+    const found = installOf(spec);
+    return found ? runtimes[found.spec] : undefined;
+  };
   const state = (spec: string): InstallState => {
     const found = installOf(spec);
     return !found ? "new" : found.enabled ? "installed" : "disabled";
@@ -723,7 +758,8 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
                     <BrowseRow
                       key={e.spec}
                       entry={e}
-                      icon={runtimes[e.spec]?.icon}
+                      icon={runtimeOf(e.spec)?.icon}
+                      have={runtimeOf(e.spec)?.manifest?.version}
                       state={state(e.spec)}
                       busy={busySpec === e.spec}
                       onInstall={() => { void install(e); }}

@@ -34,7 +34,10 @@ fits the ramp doodad afterwards with `query.doodadPlacement`, the same for `brid
 paints. **Measured, not derived:** ramps fit only straight south-facing diagonal cliff runs, and only for
 the pairs in `VERIFIED_RAMPS` / `VERIFIED_BRIDGES` — Ice's cliff ramps, Platform's Space walls and the
 Compound/Basilica walls need pieces the brush never draws, and only Jungle's and Platform's bridges fit the
-brush's shores; `DOODAD_MARGIN` keeps scattered doodads two tiles inside their ground)
+brush's shores; scattered doodads are then checked against the ground as painted. **Layout presets**
+(`ai/presets.ts`: `corner-camps`, `lanes`) are stored shape programs the design names in `layout`, sent to
+`ums-design` as `presets` like the toolkit kinds; the plugin lays them out with no terrain call, so the
+planner is asked only for layouts no preset describes)
 vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
 repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
 assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the wire contract,

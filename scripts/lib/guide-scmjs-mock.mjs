@@ -349,6 +349,7 @@ const RECIPES = {
         ],
         forces: [{ index: 1, name: "Commanders", allied: false, alliedVictory: false, sharedVision: false }],
         layoutBrief: "A square jungle map. Four walled bases in the corners on high ground, each with a single wide gate facing the centre. The middle is open low ground with ruins for cover. A spawn pad just inside each gate, and a Command Center's worth of room behind it for the base buildings.",
+        layout: { preset: "corner-camps", params: [{ key: "camps", value: "4" }, { key: "between", value: "water" }] },
         locations: [
           { name: "Spawn 1", purpose: "where Player 1's squads appear, inside the north-west gate" },
           { name: "Spawn 2", purpose: "where Player 2's squads appear, inside the north-east gate" },

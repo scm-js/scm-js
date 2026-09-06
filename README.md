@@ -747,12 +747,17 @@ tileset and the number of players, and press **Design**. The model writes a *des
 document* first, and nothing is built until you have read it: the genre and premise, the
 players and forces, every trigger system the map will run on with its parameters, a brief
 for the layout with the locations it must place, the objectives and the briefing. Change
-what you like — rename it, drop a system, edit a parameter, rewrite the brief — or write
-what should be different and press **Design again**.
+what you like — rename it, drop a system, edit a parameter, rewrite the brief — or open
+**Change the design first**, write what should be different and press **Design again**.
+A location in a system's parameters may carry `{p}` for the player number ("Spawn {p}",
+"Armory {p}"): one such system serves every player, built once per player with the
+number filled in, as long as the numbered locations exist.
 
-**Build** then goes step by step, each step a row that passes or fails on its own: the
-map, the terrain and the named locations (through Generate Map's planner), the players
-and forces, each system, the objectives and briefing, the name, and Check Map at the end.
+**Build** folds the design away and goes step by step, each step a row that passes or
+fails on its own: the map, the terrain and the named locations (through Generate Map's
+planner — the long step, a few minutes, with the clock and the model's reasoning shown
+under the rows), the players and forces, each system, the objectives and briefing, the
+name, and Check Map at the end.
 Systems the editor's own toolkit knows — hyper triggers, spawns on a timer, kills paid in
 minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
 leaderboards, countdowns, last standing, alliances and more — are built by the editor

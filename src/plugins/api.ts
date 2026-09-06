@@ -54,7 +54,7 @@ import type { ChangeTilesetResult } from "../editor/tileset";
 import type { TerrainPick } from "../editor/terrain";
 import type { SymmetryMode } from "../editor/symmetry";
 import type { PlacementOptions } from "../editor/placement";
-import type { DoodadPlacementOptions } from "../editor/doodads";
+import type { DoodadPlacementOptions, DoodadVerdict } from "../editor/doodads";
 import type { StartLayout, StartPlacementResult } from "../editor/startLocations";
 import type { BlendCandidate, BlendOptions, Side } from "../editor/blend";
 import type { Clip, ClipParts, PasteMode, PasteResult } from "../editor/clipboard";
@@ -68,7 +68,7 @@ export type {
 };
 export type {
   PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, ResizeResult, SoundRow,
-  CuwpSlotView, CuwpSlotPatch, SaveOptions, ChangeTilesetResult, TerrainPick, SymmetryMode, PlacementOptions, DoodadPlacementOptions, StartLayout, StartPlacementResult,
+  CuwpSlotView, CuwpSlotPatch, SaveOptions, ChangeTilesetResult, TerrainPick, SymmetryMode, PlacementOptions, DoodadPlacementOptions, DoodadVerdict, StartLayout, StartPlacementResult,
   BlendCandidate, BlendOptions, Side, Clip, ClipParts, PasteMode, PasteResult, Toast, Preferences, StringImport,
 };
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode, RebuildResult, IsomReport };
@@ -1007,6 +1007,14 @@ export interface QueryApi {
   startLocations(): StartLocation[];
   /** Whether a unit type may be placed centred there, and what stops it; null with no map. */
   placement(unitId: number, x: number, y: number): PlacementVerdict | null;
+  /**
+   * StarEdit's ground check for a doodad with its top-left tile at (tx, ty): `ok`, or the
+   * cells (row-major) whose ground is not what `DoodadInfo.required` asks for. It reads the
+   * map as it is right now — inside a `document.edit` that is the map with the transaction's
+   * earlier changes in — so a plugin can paint a cliff and then look for where a ramp fits.
+   * Null with no map or without the tileset graphics.
+   */
+  doodadPlacement(doodadId: number, tx: number, ty: number): DoodadVerdict | null;
   /** The MASK bits at a tile: bit n set = player n + 1 starts fogged there (every bit when the map has no MASK). */
   fogAt(tx: number, ty: number): number;
   /** The string table as it stands (index 0 is nothing); empty with no map. */
@@ -1640,6 +1648,19 @@ export interface DoodadInfo {
   /** Footprint in tiles. */
   width: number;
   height: number;
+  /**
+   * A ramp: a doodad with the VF4 ramp bit, filed under a cliff category with no name of
+   * its own. Ramps fit only on the cliff shape they were drawn for (see `required`), and
+   * a tileset has them for a few terrain pairs only.
+   */
+  ramp: boolean;
+  /**
+   * Per cell (row-major, `width` × `height`): the CV5 tile group that must already lie
+   * under it for StarEdit to allow the placement, or 0 for "anything". A flat terrain's
+   * pair is its `TerrainType.group` (even) and `group + 1`; the other numbers are cliff
+   * and shore pieces. `query.doodadPlacement` applies the rule.
+   */
+  required: number[];
 }
 
 export interface PaletteApi {

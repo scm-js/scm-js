@@ -80,7 +80,8 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   scn.playerTypes.forEach((type, p) => {
     const mine = starts.filter(({ u }) => u.owner === p);
     const playable = type === PlayerType.Human || type === PlayerType.Computer;
-    if (playable && mine.length === 0) add("error", `No start location for Player ${p + 1} (slot is ${type === PlayerType.Human ? "Human" : "Computer"}).`, "Players", { kind: "dialog", id: "playerSettings" });
+    // A human without one cannot join; a computer in a scenario often owns only what the triggers give it, so that is a warning.
+    if (playable && mine.length === 0) add(type === PlayerType.Human ? "error" : "warn", `No start location for Player ${p + 1} (slot is ${type === PlayerType.Human ? "Human" : "Computer"}).`, "Players", { kind: "dialog", id: "playerSettings" });
     if (!playable && type !== PlayerType.Rescuable && mine.length > 0) add("warn", `Player ${p + 1} has a start location but its slot is not playable.`, "Players", { kind: "unit", index: mine[0].index });
     if (mine.length > 1) add("warn", `Player ${p + 1} has ${mine.length} start locations; the game uses one.`, "Units", { kind: "unit", index: mine[1].index });
   });

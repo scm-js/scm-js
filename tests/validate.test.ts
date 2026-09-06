@@ -62,7 +62,7 @@ describe("validateScenario", () => {
     scn.units.push(makeUnit(null, START_LOCATION, 0, 300, 300, 3)); // a second for player 1
     scn.units.push(makeUnit(null, START_LOCATION, 5, 500, 500, 4)); // an inactive slot
     const out = texts(scn);
-    expect(out).toContain("error: No start location for Player 3 (slot is Computer).");
+    expect(out).toContain("warn: No start location for Player 3 (slot is Computer).");
     expect(out).toContain("warn: Player 1 has 2 start locations; the game uses one.");
     expect(out).toContain("warn: Player 6 has a start location but its slot is not playable.");
     const second = validateScenario(scn).find((i) => i.text.includes("2 start locations"));

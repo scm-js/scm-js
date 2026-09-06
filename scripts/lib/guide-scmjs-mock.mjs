@@ -251,6 +251,44 @@ const RECIPES = {
     const water = terrainId(T, "Water");
     const dirt = terrainId(T, "Dirt", "Mud");
     const ruins = terrainId(T, "Ruins", "Rocky Ground", "Mud");
+    if (input.language === "shapes") {
+      // The shape language: four corner plateaus of the ground the tileset has ramps for, each with a ramp
+      // on the corner nearest the middle, water between them, and a ruined arena in the centre.
+      const W = input.width, H = input.height;
+      const pair = input.rampPairs?.[0];
+      const top = pair ? pair.high : high;
+      const pw = Math.round(W * 0.3), ph = Math.round(H * 0.28), m = 3;
+      const shapes = [
+        { op: "ground", terrain: jungle },
+        { op: "border", terrain: water, width: 2 },
+        { op: "diamond", terrain: water, cx: W / 2, cy: H * 0.14, rx: W * 0.16, ry: H * 0.07 },
+        { op: "diamond", terrain: water, cx: W / 2, cy: H * 0.86, rx: W * 0.16, ry: H * 0.07 },
+        { op: "diamond", terrain: water, cx: W * 0.14, cy: H / 2, rx: W * 0.1, ry: H * 0.14 },
+        { op: "diamond", terrain: water, cx: W * 0.86, cy: H / 2, rx: W * 0.1, ry: H * 0.14 },
+        { op: "plateau", terrain: top, x: m, y: m, w: pw, h: ph, ramps: ["se"] },
+        { op: "plateau", terrain: top, x: W - m - pw, y: m, w: pw, h: ph, ramps: ["sw"] },
+        { op: "plateau", terrain: top, x: m, y: H - m - ph, w: pw, h: ph, ramps: ["se"] },
+        { op: "plateau", terrain: top, x: W - m - pw, y: H - m - ph, w: pw, h: ph, ramps: ["sw"] },
+        { op: "diamond", terrain: ruins, cx: W / 2, cy: H / 2, rx: W * 0.14, ry: H * 0.08 },
+      ];
+      // A river across the south-west approach with a bridge, where the tileset has bridges.
+      if (input.bridgePair) shapes.push({ op: "stroke", terrain: water, points: [[W * 0.3, H * 0.62], [W * 0.42, H * 0.68]], width: 5 }, { op: "bridge", x: Math.round(W * 0.36), y: Math.round(H * 0.65), along: "se" });
+      const spawn = (n, x, y) => ({ name: `Spawn ${n}`, x0: x, y0: y, x1: x + 6, y1: y + 6 });
+      const base = (n, x, y) => ({ name: `Base ${n}`, x0: x, y0: y, x1: x + pw, y1: y + ph });
+      return {
+        cost: 0.05, inputTokens: 5000, outputTokens: 900,
+        thinking: "Four plateaus in the corners, ramps on the corners that face the middle; the two northern ramps lead straight into the arena, the two southern ones open onto low ground beside the base that wraps around to it.",
+        output: {
+          name: "Corner Madness", description: "Four corner plateaus with one ramp each, water between them, a ruined arena in the middle.", symmetry: "none",
+          cellSize: 1, columns: W, rows: H, legend: {}, grid: [], shapes,
+          bases: [], ramps: [],
+          doodads: [{ category: "Water", terrains: [water], density: 0.2 }, { category: "Jungle", terrains: [jungle], density: 0.05 }],
+          units: [1, 2, 3, 4].map((p) => ({ unit: "Start Location", player: p, x: p % 2 ? m + 6 : W - m - 7, y: p <= 2 ? m + 5 : H - m - 6 })),
+          locations: [base(1, m, m), base(2, W - m - pw, m), base(3, m, H - m - ph), base(4, W - m - pw, H - m - ph), spawn(1, m + pw - 12, m + ph - 12), spawn(2, W - m - pw + 6, m + ph - 12), spawn(3, m + pw - 12, H - m - 6), spawn(4, W - m - pw + 6, H - m - 6), { name: "Centre", x0: W / 2 - 8, y0: H / 2 - 5, x1: W / 2 + 8, y1: H / 2 + 5 }],
+          notes: ["Every plateau's ramp faces south, as the game's ramps do."],
+        },
+      };
+    }
     const cell = input.cellSize;
     const columns = Math.ceil(input.width / cell), rows = Math.ceil(input.height / cell);
     const legend = { ".": jungle, "#": high, "~": water, "=": dirt, "+": ruins };

@@ -703,6 +703,7 @@ plus `find()` plus `view.goTo` and nothing else.
 | `unitsOf(owner)` | Every unit a player owns (0-based). |
 | `startLocations()` | `{ index, owner, x, y, tx, ty }` per start location, by player. |
 | `placement(unitId, x, y)` | The Units palette's verdict: `{ problem: "terrain" \| "collision" \| null, blocker, reason }`. `reason` is the problem in words ("the ground is unwalkable", "it overlaps Terran Marine"), null when it fits. Null with no map. |
+| `doodadPlacement(doodadId, tx, ty)` | StarEdit's ground check for a doodad with its top-left tile there: `{ ok, outOfBounds, bad }`, `bad` the cells whose ground is not what the doodad requires. Reads the map as it is, inside a transaction too, so a plugin can paint a cliff and then find where a ramp fits. Null with no map or graphics. |
 | `fogAt(tx, ty)` | The MASK bits at a tile (bit n = player n + 1 starts fogged; every bit when the map has no MASK). |
 | `strings()` | The string table as it stands. |
 | `validate()` | Check Map's `Issue[]`: `{ level, text, where, target? }`, where `target` is what `view.goTo` takes. |
@@ -955,7 +956,7 @@ exactly this: switch layers and its brush follows. The Terrain palette's pick is
 | `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb`, Remastered custom colours included. |
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |
 | `spriteGroups()` / `spriteName(kind, id)` | The Sprites palette's groups (empty until the unit tables are loaded) and names. |
-| `doodadCategories()` / `doodadInfo(id)` | The open map's doodads by category, each with its footprint in tiles (empty without the tileset graphics). |
+| `doodadCategories()` / `doodadInfo(id)` | The open map's doodads by category, each with its footprint in tiles, whether it is a `ramp`, and `required` — per cell, the tile group that must lie under it, 0 for any (empty without the tileset graphics). Ramps carry no name; the flag and the requirements are how a plugin tells which ramp goes on which cliff. |
 
 ### `api.names`
 

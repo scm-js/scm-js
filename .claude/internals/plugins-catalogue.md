@@ -26,7 +26,15 @@ Discord sign-in through a provider interface, roles with a weekly allowance or `
 credit through Stripe Checkout, an account page, `/v1/admin/*` for the site) and never any game data;
 the plugin gathers facts (terrain vocabulary, statistics, a `renderImage` PNG, the Trigger Script
 plugin's `declarations` command) and applies what comes back through the ordinary API — a map plan is
-a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's base geometry (`ai/layout.ts`
+a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's base geometry (`ai/layout.ts`;
+since 2026-09-06 Make Scenario asks `map-plan` for the **shape language** instead — `language: "shapes"`,
+statements in tiles that `ai/shapes.ts` compiles to a one-tile grid; a `plateau` with `ramps` gets its
+lower corner cut at the lattice's 2:1 slope and a wide apron of the tileset's ramp pair, and `ai/ramps.ts`
+fits the ramp doodad afterwards with `query.doodadPlacement`, the same for `bridge` over a channel it
+paints. **Measured, not derived:** ramps fit only straight south-facing diagonal cliff runs, and only for
+the pairs in `VERIFIED_RAMPS` / `VERIFIED_BRIDGES` — Ice's cliff ramps, Platform's Space walls and the
+Compound/Basilica walls need pieces the brush never draws, and only Jungle's and Platform's bridges fit the
+brush's shores; `DOODAD_MARGIN` keeps scattered doodads two tiles inside their ground)
 vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
 repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
 assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the wire contract,

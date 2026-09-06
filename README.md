@@ -754,10 +754,17 @@ A location in a system's parameters may carry `{p}` for the player number ("Spaw
 number filled in, as long as the numbered locations exist.
 
 **Build** folds the design away and goes step by step, each step a row that passes or
-fails on its own: the map, the terrain and the named locations (through Generate Map's
-planner — the long step, a few minutes, with the clock and the model's reasoning shown
-under the rows), the players and forces, each system, the objectives and briefing, the
-name, and Check Map at the end.
+fails on its own: the map, the terrain and the named locations, the players and forces,
+each system, the objectives and briefing, the name, and Check Map at the end. The
+terrain is the long step, with the clock and the model's reasoning shown under the rows.
+It is written as *shapes* — plateaus, lanes, rivers, arenas, in map tiles — that the
+editor draws with its own brush, so a lane from a spawn to a goal is continuous and a
+plateau that asks for a ramp gets one: the editor cuts the corner into the diagonal
+edge the game's ramps sit on, paints the ground the tileset has ramps for either side,
+and fits the ramp where its own placement check says it fits. Ramps go down toward the
+south-west or the south-east, as the game's do. Bridges the same way, over a diagonal
+channel the editor paints for them, in Jungle and Space Platform, which are the tilesets
+whose bridges fit the brush's shores; Ice has no ramp the brush's cliffs can take.
 Systems the editor's own toolkit knows — hyper triggers, spawns on a timer, kills paid in
 minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
 leaderboards, countdowns, last standing, alliances and more — are built by the editor

@@ -98,7 +98,7 @@ import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, 
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
 } from "../editor/sprites";
-import { applyDoodadChanges, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
+import { applyDoodadChanges, checkDoodadPlacement, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
 import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, locationAt, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
@@ -1091,6 +1091,13 @@ export function queryApi(store: Store): QueryApi {
       if (!scn) return null;
       return checkPlacement(scn, loaded()?.tileset ?? null, tables(), store.get(placementOptionsAtom), unitId, x, y);
     },
+    doodadPlacement: (doodadId, tx, ty) => {
+      const scn = scenario(), l = loaded();
+      const def = l?.doodads.byId.get(doodadId);
+      if (!scn || !l || !def) return null;
+      // The rule itself, not the palette's switch: a plugin asking is asking whether StarEdit would allow it.
+      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false });
+    },
     validate: () => {
       const scn = scenario();
       return scn ? validateScenario(scn, { extras: store.get(archiveExtrasAtom) }) : [];
@@ -1461,7 +1468,7 @@ export function settingsApi(store: Store): SettingsApi {
 }
 
 function doodadInfoOf(def: DoodadDef): DoodadInfo {
-  return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height };
+  return { id: def.id, name: doodadLabel(def), category: def.category, width: def.width, height: def.height, ramp: def.ramp, required: [...def.required] };
 }
 
 /** Build one plugin's view of the editor. Everything it registers lands in `bag`. */

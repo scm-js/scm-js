@@ -16,8 +16,10 @@ project code and the assets the project has the right to license.
   and the first splash screen (pull requests 1 to 4, committed as `copilot-swe-agent`),
   and later work carries `Co-Authored-By` trailers naming the Claude model used. All of it
   was directed, reviewed and is maintained by Jeany, who is responsible for it.
-- **Artwork.** `public/icon.png`, `public/favicon.svg`, the app logo component and the
-  splash screen's wireframe globe are one original drawing, made for this project.
+- **Artwork.** `public/icon.png`, `public/favicon.svg`, `public/icon-oauth.svg` (and the
+  `icon-512.png` / `icon-120.png` rendered from it for the OAuth providers' consoles), the
+  app logo component and the splash screen's wireframe globe are one original drawing, made
+  for this project.
 - **Screenshots.** The pictures in `docs/images/` show the editor with Blizzard's own
   maps open (Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero, from the
   game's Maps folder), so they contain Blizzard's terrain and unit art. They document the

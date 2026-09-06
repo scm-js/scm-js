@@ -24,8 +24,9 @@ own, listed at the [end](#documentation).
 Three ways to run the editor:
 
 - **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest
-  numbered release. Nothing to install; your maps stay on your own disk and are never
-  uploaded. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
+  numbered release. Nothing to install; your maps stay on your own disk, and nothing is
+  sent anywhere unless you ask for it — a copy kept on your scmjs.dev account, or a
+  question for the AI, both described further down. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
   every night from the latest changes, for trying what is coming; being a separate site
   it keeps its own settings and asks for the graphics again.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
@@ -68,7 +69,8 @@ Ctrl+O opens a file, and so does dropping one on the window. File ▸ Open Recen
 what you have had open before; in Chrome, Edge and the desktop app it reopens the file
 from disk directly. File ▸ Find on scmscx.com… searches the community map archive and
 opens the map you pick, when the editor can reach the site (see
-[Plugins](#plugins)).
+[Plugins](#plugins)). File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
+account, every revision you saved there (see [Your scmjs.dev account](#your-scmjsdev-account)).
 
 ## The editor window
 
@@ -94,7 +96,9 @@ opens the map you pick, when the editor can reach the site (see
    group, elevation, walkability and buildability; for a unit its owner, position and
    vitals; for a location its bounds and elevation flags.
 9. **Status bar.** The tile and pixel under the cursor, the tile id, map size, tileset,
-   layer and zoom, and a line saying what the last action did or why it was refused.
+   layer and zoom, and a line saying what the last action did or why it was refused. At
+   the right end, your scmjs.dev account (or *Sign in to scmjs.dev*) and the AI's state,
+   each a click to open.
 
 Scroll with the mouse wheel (Shift for sideways) or the scrollbars, or click on the
 minimap. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
@@ -610,6 +614,11 @@ The Save dialog is where the file's shape is decided:
 
 The options confirmed here are what Ctrl+S reuses for that map from then on.
 
+**Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
+scmjs.dev account as a numbered revision with a note — a backup with a history, and the
+way to reach the same map from another machine. It does not change where Ctrl+S writes.
+See [Keeping maps on scmjs.dev](#keeping-maps-on-scmjsdev).
+
 ### Export an image
 
 ![The Export Image dialog](docs/images/export-image.webp)
@@ -622,12 +631,270 @@ tile it is the game's minimap. Units, locations, fog and the grid are each a tic
 Tools ▸ Statistics counts what the map holds — units per player, resources, doodads,
 triggers, strings — and Ctrl+F finds a unit, location, sprite, string or trigger by name.
 
+## Your scmjs.dev account
+
+[scmjs.dev](https://scmjs.dev) is the project's own service. An account there does two
+things for the editor: it keeps maps for you, with a history of revisions, and it pays
+for the AI features in the [next section](#the-ai). None of it is required. The editor
+works completely without an account, and it sends nothing to scmjs.dev until you use one
+of these features — there is no request at startup unless you are already signed in, and
+then only to show your balance.
+
+All of it lives in the scmjs.dev plugin, which the editor ships **turned off**: the
+Account menu and everything below appears after you turn it on in Plugins ▸ Manage
+Plugins… (it is there in the list, badged *default*).
+
+### Signing in
+
+![The Account dialog, signed in](docs/images/account.webp)
+
+The **Account** menu and the cell at the right end of the status bar are the two ways
+in; either opens the Account dialog. Sign in with Discord: the provider's own page opens
+in a small window, you approve it there, and the window closes itself. The editor never
+sees a password, only a display name and an id from the provider.
+
+Signed in, the dialog shows your name, your balance, the sign-in you used, how much of
+your map storage is in use, and a list of recent activity — every AI request with what it
+cost, and every credit. The buttons top up the balance, open your account page on
+scmjs.dev (to link another sign-in, or delete the account and everything with it), open
+My Maps, and sign out. Under *Settings* are two ticks: **Use the AI features**, which
+takes the whole of Tools ▸ AI away when off and leaves the account and the maps, and
+the status-bar cell.
+
+What scmjs.dev keeps is short: the id and display name from your sign-in, a ledger of
+what your requests cost, and the maps you store there. It keeps no prompts and no card
+details — payment happens on the payment provider's page. The account page deletes all
+of it.
+
+### Keeping maps on scmjs.dev
+
+![My Maps: three maps on the account, one with two revisions](docs/images/my-maps.webp)
+
+**Account ▸ My Maps…** — also File ▸ Open from scmjs.dev… — lists the maps on your
+account, newest change first, each with a picture, its tileset, size and player count,
+and how many revisions it has. Pick one and its revisions appear on the right: the
+number, the note you wrote, the file name, the size and when it was saved. **Open** puts
+that revision in the editor, asking first if the map you have open has unsaved changes;
+**Download** saves the file to disk as it was uploaded; the note can be edited later and
+the map renamed. A revision can be deleted, except the last one — delete the map to
+remove it.
+
+![Save to scmjs.dev: a second revision of Big Game Hunters with a note](docs/images/save-to-scmjs.webp)
+
+**Account ▸ Save to scmjs.dev…** — also under File, beside Save Copy As — saves the open
+map to the account, as a new map or as the next revision of one you pick; the map it was
+opened from or last saved to is picked for you. Write a note saying what changed, and
+tick whether to include a one-pixel-per-tile picture for the list. The file is what
+File ▸ Save would write, with the save options you last confirmed, so what comes back is
+playable. It is a copy: Ctrl+S goes on writing to the file on your disk, and nothing on
+the account changes until you save there again.
+
+Revisions are numbered in order and a number is never reused. Saving a file whose bytes
+are already on the account costs no storage — only the new note is kept — so saving a
+note on its own is free. Storage is 250 MB per account on scmjs.dev, shown as a bar in
+both dialogs. Maps live on a signed-in account only; the free AI trial cannot store them.
+
+### Balance and costs
+
+The account and the map storage cost nothing. The AI does: each request is charged what
+the model's work cost, and the balance in the status bar and the Account dialog is what
+you have left. It fills in three steps:
+
+- **A free trial.** The first AI request you make starts one, with no sign-in — one per
+  browser. The Account dialog says how much it is worth.
+- **Sign-in credit.** Signing in adds a one-time credit (once per sign-in identity) and
+  keeps whatever the trial had left. The balance then follows your account, so another
+  browser or the desktop app picks it up when you sign in there.
+- **Top up.** When that is spent, Top up… in the Account dialog buys credit at cost,
+  through a payment page in a new tab. Bought credit does not expire.
+
+Every AI dialog shows what the request cost once it is back and what the session has
+cost so far; the *Quality* choice in the AI Options decides how hard the model works on a
+request, and so what it costs (see [Options](#options-and-turning-it-off)). Roughly, a
+name or a translation costs a few cents and a map plan, a trigger script or a review a
+few tens of cents. When the balance runs out the dialog says so and points to the Account
+dialog.
+
+## The AI
+
+![The Tools ▸ AI menu](docs/images/ai-menu.webp)
+
+**Tools ▸ AI** holds the AI features. They come with the editor, in the scmjs.dev plugin
+— which is installed but starts off, so the menu appears once you tick it on in Plugins ▸
+Manage Plugins… — and run on scmjs.dev (see [the previous
+section](#your-scmjsdev-account) for the account and what a request costs); there is
+nothing else to set up, no key to paste and no server to name. The first request starts
+the free trial.
+
+Each feature sends what it needs and no more: the words you typed, the map's facts (size,
+tileset, players, what is where), a picture of the map for a review, the strings for a
+rewrite, the triggers for an explanation. The map file itself is never sent for the AI —
+only Save to scmjs.dev uploads a file, and only when you press it. Every AI dialog shows
+what it is doing while it waits, and what the request cost once it is done.
+
+Every change the AI makes to the map is one undo step, labelled "AI: …", with one
+exception the dialogs point out: what the settings dialogs write (the name and
+description, strings, triggers, players, unit settings) is a transaction outside the undo
+history, as it is when you change it by hand.
+
+### Make Scenario
+
+![Make Scenario: the design document for a four-player madness map](docs/images/make-scenario.webp)
+
+**Make Scenario…** builds a whole scenario from a sentence — "a madness map", "an RPG
+about a marine lost on a Zerg world", "a two-lane tower defense". Say the size, the
+tileset and the number of players, and press **Design**. The model writes a *design
+document* first, and nothing is built until you have read it: the genre and premise, the
+players and forces, every trigger system the map will run on with its parameters, a brief
+for the layout with the locations it must place, the objectives and the briefing. Change
+what you like — rename it, drop a system, edit a parameter, rewrite the brief — or write
+what should be different and press **Design again**.
+
+**Build** then goes step by step, each step a row that passes or fails on its own: the
+map, the terrain and the named locations (through Generate Map's planner), the players
+and forces, each system, the objectives and briefing, the name, and Check Map at the end.
+Systems the editor's own toolkit knows — hyper triggers, spawns on a timer, kills paid in
+minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
+leaderboards, countdowns, last standing, alliances and more — are built by the editor
+from their parameters, instantly and the same way every time, and show in green.
+Anything else is written as a trigger script (gold), which needs the Trigger Script
+plugin switched on. Afterwards **Review it…** or **Open the assistant** to keep working
+on it.
+
+### Generate Map and Redo Area
+
+![Generate Map: the plan as a coloured grid, with the designer's notes](docs/images/generate-map.webp)
+
+**Generate Map…** lays out a map from a description: how many players, the feel of the
+terrain, where the bases go, the symmetry (or leave it to the model). What comes back is
+a *plan*, shown before anything is painted — a coarse grid of terrain types, the bases
+with their mineral lines and geysers, ramps, decoration, a name and a description, and
+the designer's notes on what the layout is for. **Apply** paints it: onto a new map of
+the size and tileset you chose, or onto the open map when it is the same size. The
+terrain goes down with the isometric brush, lowest ground first, so cliffs and shores
+form on their own; the bases are laid out as the Melee Wizard lays them; doodads are
+scattered where the plan says.
+
+![The plan applied: a two-player jungle map with a lake in the middle](docs/images/generated-map.webp)
+
+The result is a start, not a finished map. **Refine** sends the plan back with what you
+want changed — "more room around the naturals", "swap the lake for a plateau" — along
+with a picture of the result and everything the editor refused or Check Map found, and
+the revised plan replaces the applied one (the previous render is undone first when
+nothing else was edited in between). Ramps come as doodads chosen by size, since the
+tilesets give them no direction of their own, so check them against the cliffs before
+you play.
+
+**Redo Area…** does the same for one rectangle of an existing map: mark an area (or
+right-click on it and choose *Redo this area with AI…*), say what should be there, and
+the model sees the area as it is now with a margin around it, plus a picture, so the new
+ground joins the old at the edges.
+
+### Triggers
+
+**Write Triggers…** turns a description into triggers, written as a script in the
+[Trigger Script](#the-script-editor) plugin's language, which has to be switched on. The
+model is given the map's own declarations, so it can name every unit, location and switch
+as the map calls them; the script is compiled here, and if it does not compile the
+compiler's complaints go back to the model for up to two rounds of repairs. **Build**
+installs it exactly as the Script Editor's Build does, and the source stays with the map.
+It can extend the map's current script or replace every trigger with the script.
+
+**Explain Triggers…** walks through what the triggers do in play — all of them, a range,
+or the mission briefing — or answers a question about them, and the text streams in as
+it is written. Both are a button away inside the Trigger Editor, the Text Trigger Editor
+and Mission Briefing as well: *Explain*, *Write…* and *Ask*.
+
+### Names, briefings, reviews and strings
+
+![Name and Describe: three names to pick from](docs/images/name-describe.webp)
+
+**Name and Describe…** offers three name-and-description pairs from what is on the map,
+with a line of guidance if you want it ("short and grim", "in German"); pick one and
+**Use this** writes it into Map Properties. Map Properties itself has a *Suggest a name*
+button that fills its fields the same way and leaves OK to you.
+
+**Write Briefing…** writes objectives and narration for the map and puts them into one
+mission briefing trigger per player — the objectives as a Mission Objectives action, each
+line as a Text Message. Edit the text before it is written.
+
+![Review Map on Big Game Hunters](docs/images/review-map.webp)
+
+**Review Map…** sends a picture of the whole map with its statistics and what Check Map
+says, and comes back with a critique and a list of findings, each marked info, warning or
+problem; the ones that point somewhere have a **Go to** button. The chips offer a melee
+balance review, a readability review for a scenario, or "what to change first".
+
+![Rewrite Strings: every string in use, translated, with a tick per row](docs/images/rewrite-strings.webp)
+
+**Rewrite Strings…** takes an instruction — translate, fix spelling and grammar, shorten,
+put it in the map's voice — over the strings in use, or only the trigger text, the
+briefing or the names, and shows a before-and-after table with a tick on every row that
+would change. **Apply ticked** writes them back in place, never renumbering, so triggers
+keep pointing at the same strings. The String Editor has a *Rewrite with AI…* button
+that opens the same dialog.
+
+### The assistant
+
+![The assistant placing a squad for Player 1 on Big Game Hunters](docs/images/assistant.webp)
+
+**Assistant** (Ctrl+Shift+A, or the *AI* cell in the status bar) is a conversation about
+the open map, in a panel floating over it. Ask what you want to know or say what to
+change; the model reads the map through tools and changes it through others, and you
+watch it happen. The strip at the top says what it is doing — waiting, thinking, writing,
+working on the map — with the seconds and the cost. Its words arrive as they are
+written. A tool call appears as a row the moment the model decides on it and fills in
+when it runs: **▸** reads, **✎** changes the map, and the map outlines what a call is
+about to touch and flashes what it changed. The panel can be closed while it works; the
+status bar shows the same state, and Escape stops it.
+
+It can read everything: the map's facts and statistics, the units with every property,
+doodads, sprites, locations, strings, switches, sounds, the triggers as text, the trigger
+script, the settings of any unit type, upgrade or technology, the fog, the terrain, Check
+Map, what you have selected, and a screenshot of any area. It can change nearly
+everything the editor can: paint terrain, place, move and edit units, doodads and
+sprites, add and edit locations, set fog, name the map, write and rearrange triggers,
+edit strings, build the trigger script, set up players and forces, change unit, upgrade
+and technology settings, and resize the map. It knows the same genre guides and builds
+the same toolkit systems as Make Scenario, so "add kill to cash" is one call rather than
+a page of triggers. Each edit is its own undo step, and after a turn that changed the
+map the panel says what changed and offers to undo that turn in one press.
+
+The chips above the input suggest a question for the layer you are on and what you have
+selected. Right-click on the map and choose *Ask AI about this spot / the selection /
+this area…* to start a message about it. The *Picture* tick sends a screenshot of the
+visible area with the message. With every message the model gets the map's current state
+— players, counts, locations, the selection, where the view is, the top of the undo
+stack — and, once per map, a reference to the tileset's terrains, the doodads, the unit
+table and the trigger vocabulary; scmjs.dev caches that, so the second message costs
+little more than the words you typed. The assistant stops after a number of rounds of
+tool calls (24 unless you change it) and offers to continue.
+
+Player Settings has a *Set up with AI…* button that asks the assistant to set the players
+and forces up from a sentence.
+
+### Options, and turning it off
+
+**Tools ▸ AI ▸ Options…** is short. *Quality* is how hard the model works on a request,
+and so how long it takes and what it costs: *Standard* gives each feature the setting it
+was tuned for, *Quick* the cheapest, *Thorough* the highest. Under *Assistant*: the
+rounds of tool calls per message, the picture tick, whether the panel floats over the map
+or docks at the right under the Properties panel, and whether the model's reasoning
+summary is shown while it works. Which model answers is scmjs.dev's business and is
+never asked.
+
+The tick at the top, **Use the AI features** — also in the Account dialog — takes the
+whole AI away when off: the menu, the assistant, the status-bar cell and the buttons
+inside the editor's dialogs. Your account and the maps stored on it stay.
+
 ## Plugins
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
 Walkability, Paint, Repair, Terrain from Image and the scmscx.com search are installed
-and on from the start, and Melee Wizard, Trigger Script, Section Explorer and AI are a
-click away.
+and on from the start. scmjs.dev — the account and the AI — is installed too but starts
+*off*, because an account and a trial are yours to ask for: tick it on in Plugins ▸
+Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear. Melee
+Wizard, Trigger Script and Section Explorer are a click away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -649,7 +916,7 @@ and the addresses it will fetch from.
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | Triggers ▸ Script Editor… | A TypeScript file kept inside the map and compiled into a block of the trigger list — `if`, loops and variables included. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
-| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: sign in from the Account menu or the status bar, keep maps on your account with revisions and notes. And the AI: a whole scenario from a sentence, a map from a description, an area redone, triggers written and explained, names and briefings, a review, string rewrites, and an assistant beside the map that reads and edits it with you. The first AI request starts a free trial with no sign-in; a tick turns the AI off and keeps the account. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account and the AI that comes with it — see [Your scmjs.dev account](#your-scmjsdev-account) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](docs/images/walkability.webp)
 
@@ -679,6 +946,7 @@ F1 lists every shortcut. The ones worth knowing up front:
 | Ctrl+0, Ctrl+Shift+0 | 100%, zoom to fit |
 | Alt+Enter | map properties |
 | Ctrl+F5 | test map |
+| Ctrl+Shift+A | AI assistant |
 
 ![Preferences](docs/images/preferences.webp)
 
@@ -777,7 +1045,8 @@ The map you have open is never kept there and is not touched by any of it.
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: install it from Plugins ▸ Browse Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
 | Test Map | Yes (Ctrl+F5). Neither StarCraft build opens a map from the outside, so Test Map writes the map into a `scmJS` folder under the game's Maps folder, where Single Player ▸ Custom Game lists it, and the desktop app starts the game as well. In Chrome and Edge the map goes into a folder you pick once (the game's Maps folder); other browsers download it. |
-| Generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes, as a plugin (AI: install it from Plugins ▸ Browse Plugins…, then Tools ▸ AI). It needs a server that holds an Anthropic key — [scm-js/ai-server](https://github.com/scm-js/ai-server) is one to deploy — or your own key typed into its settings. Every change it makes is one undo step. |
+| Make a whole scenario from a sentence, generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes (Tools ▸ AI, in the scmjs.dev plugin — shipped with the editor, turned on in Plugins ▸ Manage Plugins…; it runs on scmjs.dev and the first request starts a free trial — see [The AI](#the-ai)). Every change it makes is one undo step; what the settings dialogs write is a transaction outside undo, as by hand. |
+| Keep maps on an account with numbered revisions and notes, and open them from any machine | Yes (Account ▸ Save to scmjs.dev… and My Maps…, signed in — see [Your scmjs.dev account](#your-scmjsdev-account)) |
 
 ## Documentation
 
@@ -796,7 +1065,8 @@ files stay the source; the site renders them.
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |
 
 The screenshots in this guide are made by `scripts/guide-screenshots.mjs` against the
-editor's own fixture maps, so they can be taken again when the chrome changes.
+editor's own fixture maps — and, for the scmjs.dev pictures, a stand-in for the service
+with example answers — so they can be taken again when the chrome changes.
 
 ## License
 

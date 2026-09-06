@@ -604,6 +604,14 @@ It needs the game data extracted and Big Game Hunters, Binary Burghs, Crescent M
 Ground Zero from the game's own Maps folder in `fixtures/maps/`. Never commit a picture
 that shows anything but the editor.
 
+The scmjs.dev pictures — the Account dialog, My Maps, the AI dialogs and the assistant —
+are taken against a stand-in for the service, `scripts/lib/guide-scmjs-mock.mjs`, which
+the script starts on port 8765 and points the plugin at through its stored settings: one
+signed-in account with a ledger, real map storage for what the scene uploads, and recipe
+answers written in advance for the fixture maps. Those pictures show the editor's chrome
+around example content, not a model's output; when a dialog changes, change the scene,
+and when a canned answer no longer fits the map it is written for, change the mock.
+
 ## Contributing
 
 - **Keep the documents current.** `README.md`, `docs/file-formats.md`, `docs/game-data.md`,

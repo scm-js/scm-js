@@ -11,7 +11,7 @@
  *   npm i --no-save playwright sharp         # not dependencies: only this script needs them
  *   npx playwright install chromium          # once
  *   node scripts/guide-screenshots.mjs [--base http://localhost:5173] [--browser <chrome>]
- *                                      [--only editor,units,fog] [--out docs/images]
+ *                                      [--only editor,units,fog] [--scenes scmjs-ai] [--out docs/images]
  *
  * Needs the game data extracted (the pictures are of real graphics) and, in
  * `fixtures/maps/`, Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero from
@@ -20,9 +20,16 @@
  *
  * Coordinates are for a 1400×900 window with the default panel widths: the map area is
  * x 292..1150, y 85..870, which is why the strokes below are written against (292, 85).
+ *
+ * The scmjs.dev pictures (the account, My Maps, the AI dialogs) are taken against a
+ * stand-in for the service, `lib/guide-scmjs-mock.mjs`, started here on port 8765: the
+ * plugin is pointed at it through its stored settings, signed in as one account, and the
+ * recipe answers are canned for the fixture maps. What those pictures show is the
+ * editor's chrome around example content, not a model's output.
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { startMock } from "./lib/guide-scmjs-mock.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -30,6 +37,8 @@ const opt = (name, fallback) => { const at = args.indexOf(name); return at === -
 const BASE = opt("--base", "http://localhost:5173/").replace(/\/?$/, "/");
 const OUT = resolve(root, opt("--out", "docs/images"));
 const ONLY = opt("--only", "")?.split(",").filter(Boolean) ?? [];
+/** Scenes to run at all (`--only` filters pictures; a scene still runs for its side effects). */
+const SCENES_ONLY = opt("--scenes", "")?.split(",").filter(Boolean) ?? [];
 const BROWSER = opt("--browser", process.env.SCMJS_BROWSER ?? "");
 const FIXTURES = join(root, "fixtures/maps");
 
@@ -180,7 +189,125 @@ const SCENES = [
     await p.page.locator(".dlg .trig-list .item").nth(0).click().catch(() => {}); await p.wait(600);
     await p.dialog("briefing");
   }),
+
+  /* ── scmjs.dev: the account, the maps, the AI ─────────────────────────────────── */
+
+  scene("scmjs-account", "", async (p) => {
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.minimap(0.22, 0.2);
+    // Revision 1 of Big Game Hunters, as opened.
+    await p.menu("Account", /^Save to scmjs\.dev/); await p.wait(800);
+    await p.page.locator(".dlg textarea").fill("From the game's Maps folder, untouched.");
+    await p.page.locator(".dlg button", { hasText: /^Save$/ }).click();
+    await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(500);
+    // A change, then revision 2 — the Save dialog offers the map it was saved to.
+    await p.page.click(rail(2)); await p.wait(600);
+    await p.unit("Mineral Field (Type 1)"); await p.click(...at(430, 560)); await p.click(...at(430, 600)); await p.esc();
+    await p.page.click(rail(0)); await p.wait(300);
+    await p.menu("Account", /^Save to scmjs\.dev/); await p.wait(1200);
+    await p.page.locator(".dlg textarea").fill("Two more mineral fields at the north-west natural.");
+    await p.dialog("save-to-scmjs");
+    await p.page.locator(".dlg button", { hasText: /^Save$/ }).click();
+    await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(500);
+    // Two more maps on the account.
+    for (const [file, note] of [["(2)Binary Burghs.scx", "Desert two-player, for the doodad tests."], ["(4)Crescent Moon.scx", ""]]) {
+      await p.drop(file);
+      await p.menu("Account", /^Save to scmjs\.dev/); await p.wait(1200);
+      if (note) await p.page.locator(".dlg textarea").fill(note);
+      await p.page.locator(".dlg button", { hasText: /^Save$/ }).click();
+      await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(500);
+    }
+    // Dates that read like a week's work rather than one minute's.
+    const hours = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const byName = (n) => p.mock.state.maps.find((m) => m.name.includes(n));
+    const bgh = byName("Big Game Hunters"), bb = byName("Binary Burghs"), cm = byName("Crescent Moon");
+    bgh.createdAt = bgh.history[0].createdAt = hours(5 * 24 + 3); bgh.history[1].createdAt = bgh.updatedAt = hours(2);
+    bb.createdAt = bb.updatedAt = bb.history[0].createdAt = hours(3 * 24 + 6);
+    cm.createdAt = cm.updatedAt = cm.history[0].createdAt = hours(26);
+
+    await p.menu("Account", /^My Maps/); await p.wait(1500);
+    await p.page.locator(".dlg .sd-map", { hasText: /Big Game Hunters/ }).click(); await p.wait(1200);
+    await p.dialog("my-maps"); await p.esc();
+    await p.menu("Account", /^Account…/); await p.wait(1500);
+    await p.dialog("account"); await p.esc();
+  }, { seed: true }),
+
+  scene("scmjs-ai", "", async (p) => {
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.minimap(0.22, 0.2);
+    await p.page.click('.menubar button:has-text("Tools")'); await p.wait(300);
+    await p.page.locator(".menu-item", { hasText: /^AI$/ }).hover(); await p.wait(800);
+    await p.take("ai-menu");
+    await p.esc(); await p.esc(); await p.wait(300);
+
+    await p.minimap(0.17, 0.12); // Player 1's start location and the ground beside it, left of where the panel opens
+    await p.page.keyboard.press("Control+Shift+A"); await p.wait(1000);
+    await p.page.locator(".plugin-panel textarea").fill("Give player 1 four marines and a siege tank beside their start location.");
+    await p.page.keyboard.press("Enter");
+    await p.page.locator(".plugin-panel .ai-msg", { hasText: /^Done\./ }).waitFor({ timeout: 60_000 }); await p.wait(1500);
+    await p.take("assistant");
+    await p.page.keyboard.press("Control+Shift+A"); await p.wait(400);
+
+    await p.submenu("Tools", /^AI$/, /^Name and Describe/); await p.wait(800);
+    await p.page.locator(".dlg button", { hasText: /^Suggest$/ }).click();
+    await p.page.locator(".dlg .ai-item").first().waitFor({ timeout: 30_000 }); await p.wait(600);
+    await p.page.locator(".dlg .ai-item").first().click(); await p.wait(300);
+    await p.dialog("name-describe"); await p.esc();
+
+    await p.submenu("Tools", /^AI$/, /^Review Map/); await p.wait(800);
+    await p.page.locator(".dlg .ai-chip", { hasText: /Melee balance/ }).click();
+    await p.page.locator(".dlg button", { hasText: /^Review$/ }).click();
+    await p.page.locator(".dlg .ai-item").first().waitFor({ timeout: 60_000 }); await p.wait(600);
+    await p.dialog("review-map"); await p.esc();
+
+    await p.submenu("Tools", /^AI$/, /^Rewrite Strings/); await p.wait(800);
+    await p.page.locator(".dlg textarea").first().fill("Translate into German.");
+    await p.page.locator(".dlg button", { hasText: /^Rewrite$/ }).click();
+    await p.page.locator(".dlg .ai-table tr").nth(1).waitFor({ timeout: 30_000 }); await p.wait(600);
+    await p.dialog("rewrite-strings"); await p.esc();
+  }, { seed: true }),
+
+  scene("scmjs-generate", "", async (p) => {
+    await p.submenu("Tools", /^AI$/, /^Generate Map/); await p.wait(800);
+    await p.page.locator(".dlg select").nth(2).selectOption("jungle"); await p.wait(300); // width, height, tileset, …
+    await p.page.locator(".dlg textarea").first().fill("A two-player jungle map with mains on high ground in opposite corners, a natural below each with one ramp, and a lake in the middle with two island expansions.");
+    await p.page.locator(".dlg button", { hasText: /^Generate$/ }).click();
+    await p.page.locator(".dlg .ai-cell").first().waitFor({ timeout: 60_000 }); await p.wait(800);
+    await p.dialog("generate-map");
+    await p.page.locator(".dlg button", { hasText: /^Apply$/ }).click();
+    await p.page.locator(".dlg button", { hasText: /^Refine$/ }).waitFor({ state: "visible", timeout: 60_000 }); await p.wait(1500);
+    await p.esc(); await p.wait(500);
+    await p.page.keyboard.press("Control+Shift+0"); await p.wait(1500);
+    await p.take("generated-map");
+
+    await p.submenu("Tools", /^AI$/, /^Make Scenario/); await p.wait(800);
+    await p.page.locator(".dlg textarea").first().fill("A four-player madness map.");
+    await p.page.locator(".dlg button", { hasText: /^Design$/ }).click();
+    await p.page.locator(".dlg", { hasText: /Systems \(/ }).waitFor({ timeout: 60_000 }); await p.wait(800);
+    await p.dialog("make-scenario"); await p.esc();
+  }, { seed: true }),
 ];
+
+/**
+ * The scmjs.dev plugin turned on and signed in against the stand-in server.
+ *
+ * Two keys. `scmjs.plugins` is the installed list: the plugin is a default, but one that
+ * ships *off* (`src/plugins/defaults.ts`), so without a stored row saying otherwise there
+ * is no Account menu and no Tools ▸ AI to photograph. The spec is left unpinned on
+ * purpose — `effectiveInstalls` matches a stored row to a default by `pluginKey` and then
+ * runs the *default's* spec, so this says "on" without also freezing which version these
+ * pictures are of. The other key is the editor's per-plugin storage prefix and the
+ * plugin's own `settings` key, holding the server and a session.
+ */
+function seedScmjs(mockUrl) {
+  return `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([
+    { spec: "github:scm-js/plugin-scmjs-dev", enabled: true },
+  ]))});
+  localStorage.setItem("scmjs.plugin.scmjs-dev.settings", ${JSON.stringify(JSON.stringify({
+    serverUrl: mockUrl, session: "guide-session", deviceId: "guide-device", statusItem: true,
+    ai: true, quality: "standard", showThinking: true, maxRounds: 24, attachView: false, dockAssistant: false,
+  }))});`;
+}
 
 /* ── the annotated overview ────────────────────────────────────────────────────── */
 
@@ -196,30 +323,34 @@ async function annotate(from, to) {
 
 /* ── the driver ────────────────────────────────────────────────────────────────── */
 
-function scene(name, query, run) { return { name, query, run }; }
+function scene(name, query, run, { seed = false } = {}) { return { name, query, run, seed }; }
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
+  const mock = await startMock({ port: 8765 });
   const browser = await chromium.launch({ ...(BROWSER ? { executablePath: BROWSER } : {}), args: ["--no-sandbox"] });
   try {
     for (const s of SCENES) {
+      if (SCENES_ONLY.length && !SCENES_ONLY.includes(s.name)) continue;
       const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
+      if (s.seed) await ctx.addInitScript(seedScmjs(mock.url));
       const page = await ctx.newPage();
       page.on("pageerror", (e) => console.error(`[${s.name}] page error:`, e.message));
-      const p = driver(page);
+      const p = driver(page, mock);
       await p.goto(s.query);
       await s.run(p);
       await ctx.close();
     }
   } finally {
     await browser.close();
+    await mock.close();
   }
 }
 
-function driver(page) {
+function driver(page, mock) {
   const wait = (ms) => page.waitForTimeout(ms);
   const p = {
-    page, wait,
+    page, wait, mock,
     async goto(query) { await page.goto(`${BASE}?nosplash${query ? "&" + query : ""}`); await wait(2500); },
     async take(name, clip, { lossless = !!clip && clip.width < 858 } = {}) {
       if (ONLY.length && !ONLY.includes(name)) return;
@@ -251,6 +382,12 @@ function driver(page) {
     async menu(top, item) {
       await page.click(`.menubar button:has-text("${top}")`); await wait(200);
       await page.locator(".menu-item", { hasText: item }).first().click(); await wait(800);
+    },
+    /** An item inside a submenu: open the top menu, hover the submenu's row, click the item. */
+    async submenu(top, sub, item) {
+      await page.click(`.menubar button:has-text("${top}")`); await wait(200);
+      await page.locator(".menu-item", { hasText: sub }).hover(); await wait(500);
+      await page.locator(".menu-content").last().locator(".menu-item", { hasText: item }).click(); await wait(800);
     },
     async minimap(fx, fy) {
       const mm = await page.locator(".minimap").first().boundingBox();

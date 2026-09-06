@@ -1,6 +1,7 @@
 # Generated game data
 
-Everything in this directory except `favicon.svg` and this file is **extracted from a
+Everything in this directory except this file and the app mark (`favicon.svg`,
+`icon.png`, `icon-oauth.svg`, `icon-512.png`, `icon-120.png`) is **extracted from a
 StarCraft installation and is not checked in** — it is Blizzard game data, not scm-js
 MIT-licensed content. Generate it once per clone with:
 

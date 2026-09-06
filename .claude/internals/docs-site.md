@@ -50,6 +50,23 @@ fails on a picture the guide names that is not on disk. `scripts/guide-screensho
 regenerates them against the dev server and the fixture maps (Playwright and sharp,
 installed ad hoc, not dependencies — `docs/development.md#guide-screenshots`); re-run it
 when the chrome changes, and never commit a picture that shows anything but the editor.
+The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-menu`,
+`assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
+`generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a
+stand-in for the ai-server on port 8765 that the script points the plugin at by seeding
+`localStorage["scmjs.plugins"]` (the plugin is a default that ships *off*, so without a
+stored row turning it on there is no Account menu to photograph) and
+`localStorage["scmjs.plugin.scmjs-dev.settings"]` (`serverUrl` + a session) before the
+page loads: the account and ledger are constants, the map storage is real (multipart
+parsed by hand, dedup by hash, dates rewritten by the scene afterwards so the list reads
+like a week's work), and the recipe answers are canned per recipe — `map-plan` is
+procedural over the request's terrain vocabulary and doodad categories, `agent` is a
+three-turn script keyed on whether the request carries tool results and reads Player 1's
+start location out of the `list_units` result, the rest are text written for Big Game
+Hunters. Chosen over running the real server because a live run needs an OAuth provider,
+a model key and gives a different picture every time; the mock is not a test of anything
+and must stay honest to what the dialogs would show. `--scenes scmjs-ai` runs one scene;
+`--only` still filters pictures within it.
 
 `ATTRIBUTION.md` is the provenance record (audited 2026-09-04) and `scripts/lib/notices.mjs`
 its mechanical half: the `scmjs-notices` plugin in `vite.config.ts` emits

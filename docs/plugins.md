@@ -4,10 +4,10 @@ A plugin is a small program the editor loads from a public Git repository or a w
 address. Once loaded it can add menu items, context-menu entries, hotkeys, dialogs,
 floating panels, map tools and overlays, and it can read and change the open map through
 the same undo model the built-in tools use. Some of what the user guide describes is a
-plugin: Walkability, Paint, Repair, Terrain from Image and the scmscx.com search are
-installed from the start, and Melee Wizard, Trigger Script, Section Explorer and AI are a
-click away in Plugins ▸ Browse Plugins…. The [user guide](../README.md#plugins) lists
-them with what each one does.
+plugin: Walkability, Paint, Repair, Terrain from Image, the scmscx.com search and
+scmjs.dev (the account and the AI) are installed from the start, and Melee Wizard, Trigger
+Script and Section Explorer are a click away in Plugins ▸ Browse Plugins…. The
+[user guide](../README.md#plugins) lists them with what each one does.
 
 This document is in three parts, for two readers:
 

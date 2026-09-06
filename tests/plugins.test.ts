@@ -1126,9 +1126,9 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships scmscx.com, Repair, Walkability, Terrain from Image, Paint and scmjs.dev on, pinned to a version", () => {
-    // Which six, in which order, and all on — the versions deliberately not, since every
-    // plugin release would otherwise have to come back and edit this.
+  it("ships six defaults in order, scmjs.dev alone starting off, each pinned to a version", () => {
+    // Which six, in which order, and which of them start on — the versions deliberately
+    // not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-scm-scx",
       "github:scm-js/plugin-repair",
@@ -1137,7 +1137,17 @@ describe("plugin lifecycle", () => {
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-scmjs-dev",
     ]);
-    expect(DEFAULT_REMOTE_PLUGINS.every((d) => d.enabled)).toBe(true);
+    // scmjs.dev is the one that starts off: it is an account and a paid trial, which is
+    // the user's to ask for rather than the editor's to assume. It is still listed and
+    // badged *default*, and ticking it on is remembered like any other change.
+    expect(DEFAULT_REMOTE_PLUGINS.map((d) => [pluginIdentity(d.spec), d.enabled])).toEqual([
+      ["github:scm-js/plugin-scm-scx", true],
+      ["github:scm-js/plugin-repair", true],
+      ["github:scm-js/plugin-walkability", true],
+      ["github:scm-js/plugin-image-to-terrain", true],
+      ["github:scm-js/plugin-paint", true],
+      ["github:scm-js/plugin-scmjs-dev", false],
+    ]);
     // The point of the pin: a released editor loads the code it was tested against, and
     // the desktop build can compile that exact version in. A default on a moving branch
     // would change under everyone who already has the editor. A version tag, not a bare
@@ -1164,7 +1174,11 @@ describe("plugin lifecycle", () => {
     expect(fresh).toContain("github:scm-js/plugin-paint");
     // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
     expect(fresh).toContain("github:scm-js/plugin-scm-scx");
-    expect(effectiveInstalls([]).every((p) => p.enabled)).toBe(true);
+    // A fresh editor runs every default but scmjs.dev, which is listed and waiting to be
+    // ticked on rather than signing anybody in.
+    expect(effectiveInstalls([]).filter((p) => !p.enabled).map((p) => pluginKey(p.spec))).toEqual([
+      "github:scm-js/plugin-scmjs-dev",
+    ]);
     // Melee Wizard, Trigger Script and Section Explorer are not defaults: they are found and
     // installed through Browse Plugins.
     for (const spec of ["plugin-melee-wizard", "plugin-trigger-script", "plugin-section-explorer"]) {

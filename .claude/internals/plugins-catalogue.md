@@ -1,6 +1,6 @@
 # The plugins themselves
 
-**scmjs.dev** (`github.com/scm-js/plugin-scmjs-dev`, a default that starts on) is the account and the
+**scmjs.dev** (`github.com/scm-js/plugin-scmjs-dev`, a default that starts **off** — listed and badged *default*, ticked on by the user) is the account and the
 AI in one plugin, and its server (`github.com/scm-js/ai-server`, Fastify + Caddy + Postgres, one image on
 GHCR) is a service the project runs at `api.scmjs.dev`. It used to be two plugins — scmjs.dev (account,
 map storage, the `scmjs-dev.account` service) and AI (`github.com/scm-js/plugin-ai`, now archived with

@@ -23,7 +23,15 @@ never electron-builder's `portable` target, whose SFX re-extracts the whole app 
 launch and can only cover the wait with a static `.bmp` painted over the desktop (`docs/development.md`) — that file, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
 once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
-pink. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode no longer changes anything —
+pink. `scripts/lib/docs/assets/logo.svg` and `scm-js/site`'s copy are the same paths without the
+rounded square, and `public/icon-oauth.svg` is the one variant that is *not* a straight copy: an OAuth
+consent screen draws the app's icon at around 32 px inside its own circular mask, where the two faintest
+lattice tiers become noise and the rest disappears, so that file is full bleed, drops them and thickens
+what is left. `icon-512.png` (Discord's app icon) and `icon-120.png` (Google's branding logo, which
+must be exactly that size, under 1 MB and opaque) are rendered from it with sharp and committed, since
+nothing in a build reads them — they are uploads to those two consoles, and Google re-runs brand
+verification when the logo changes, so settle it before submitting. Battle.net's consent page shows no
+icon. Re-render both if the drawing changes. `npm run build:desktop` is `scripts/build-desktop.mjs`: `build --mode desktop` (the mode no longer changes anything —
 it used to blank the game-data address) + the main bundle + electron-builder, where its arguments pick the packaging
 step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for

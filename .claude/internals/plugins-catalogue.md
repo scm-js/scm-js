@@ -35,7 +35,7 @@ paints. **Measured, not derived:** ramps fit only straight south-facing diagonal
 the pairs in `VERIFIED_RAMPS` / `VERIFIED_BRIDGES` — Ice's cliff ramps, Platform's Space walls and the
 Compound/Basilica walls need pieces the brush never draws, and only Jungle's and Platform's bridges fit the
 brush's shores; scattered doodads are then checked against the ground as painted. **Layout presets**
-(`ai/presets.ts`: `corner-camps`, `lanes`) are stored shape programs the design names in `layout`, sent to
+(`ai/presets.ts`: `corner-camps`, `lanes`, `arena`, `bound`, `town-regions`) are stored shape programs the design names in `layout`, sent to
 `ums-design` as `presets` like the toolkit kinds; the plugin lays them out with no terrain call, so the
 planner is asked only for layouts no preset describes)
 vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →

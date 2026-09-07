@@ -756,8 +756,9 @@ number filled in, as long as the numbered locations exist.
 **Build** folds the design away and goes step by step, each step a row that passes or
 fails on its own: the map, the terrain and the named locations, the players and forces,
 each system, the objectives and briefing, the name, and Check Map at the end. When the
-design fits a *layout preset* — corner camps around an arena, lanes from spawns to a goal —
-the editor lays the terrain out itself from the design's few numbers, in a second, and
+design fits a *layout preset* — corner camps around an arena, lanes from spawns to a goal,
+a walled arena, a bound's winding course, a town with a chain of regions — the editor lays
+the terrain out itself from the design's few numbers, in a second, and
 the row says so. Otherwise the terrain is the long step, with the clock and the model's
 reasoning shown under the rows, and it is written as *shapes* — plateaus, lanes, rivers, arenas, in map tiles — that the
 editor draws with its own brush, so a lane from a spawn to a goal is continuous and a

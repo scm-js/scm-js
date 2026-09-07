@@ -1,4 +1,4 @@
-# Sprites, locations and fog of war
+# Sprites, doodads, locations and fog of war
 
 ### Sprites (`src/editor/sprites.ts`, `src/hooks/useSpriteTools.ts`, `src/data/sprites.ts`)
 
@@ -16,6 +16,27 @@ sprite's a units.dat id. `makeSprite` writes StarEdit's flags (pure → `0x1000`
 `thingy\tileset\<ts>` path — there is no sprite name table in the game data. `scripts/extract-units.mjs`
 seeds the GRP walk from all 517 sprites.dat images so pure sprites (and doodad overlays) can be drawn.
 `tests/sprite-edit.test.ts` pins the flags, ordering and the THG2 round trip.
+
+### Doodads (`src/editor/doodads.ts`, `src/hooks/useDoodadTools.ts`)
+
+A doodad is three things: its tiles in `MTXM` only (`placeDoodad` writes nothing to `TILE`, so the
+ground beneath survives there), its `DD2` record, and the overlay sprite in `THG2` when the CV5
+group names one. `DoodadEdit.tiles` are therefore **MTXM-only** changes (`applyChanges(…, "mtxm")`,
+`HistoryEntry.doodadTiles`), and `removeDoodads` puts the ground back from `TILE` through
+`groundUnder`. `convertDoodads` (right-click ▸ Convert to Terrain, the panel's *To terrain*,
+`tx.convertDoodads`) is the one operation that crosses over: the record goes, the overlay stays as a
+plain sprite, and the tiles are re-recorded as **terrain-layer** changes `{ before: id, after: id }`
+so `applyChanges` copies them into `TILE` and undo (`under`) puts the old ground back. Writing them
+into `TILE` is the point — a terrain-only copy, the ground that returns when a later doodad leaves,
+and anything else reading `TILE` now sees the converted tiles as ground; dropping the record alone
+would have left those readers showing dirt under a ramp the map still draws. `Stroke.finish` keeps a
+change whose `under !== after` even though `before === after`, which is what lets a plugin's
+transaction merge a conversion with a stroke over the same cell in one entry. Cells another edit has
+covered since, or that `TILE` already holds, are skipped. `DoodadPlacementOptions.asTerrain` (the
+palette's *Place as terrain*, off by default) makes `placeAt` go through `placeDoodadAsTerrain` instead:
+the same stamp as terrain-layer changes plus the overlay sprite, no record, one entry with `changes`
+and `sprites`. It is the palette's option only — `tx.placeDoodad` ignores it, since a plugin says what
+it means by calling `convertDoodads`.
 
 ### Locations (`src/editor/locations.ts`, `src/hooks/useLocationTools.ts`)
 

@@ -8,7 +8,8 @@ import { serializeScenario } from "../src/formats/chk/scenario";
 import { flatTerrain } from "../src/formats/tileset/terrain";
 import { loadTileset } from "../src/formats/tileset/decode";
 import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
-import { NO_DOODADS } from "../src/formats/tileset/doodads";
+import { NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../src/formats/tileset/doodads";
+import type { Tileset } from "../src/formats/tileset/decode";
 import { hasIsom } from "../src/editor/isom";
 import { closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
@@ -3006,6 +3007,52 @@ import { isLocationUsed } from "../src/formats/chk/sections/objects";
 
 describe("plugin api: editing additions", () => {
   const apiOver = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+
+  it("converts doodads to terrain: TILE follows, the record goes, the overlay stays, and one undo takes it all back", () => {
+    // A Twilight map (no other test primes that tileset) with a hand-made 2×1 doodad whose canopy is sprite 300.
+    const tree: DoodadDef = {
+      id: 7, group: 6, width: 2, height: 1, category: "Trees", flags: 0x1380, overlay: { kind: "sprite", id: 300, flipped: false },
+      tiles: new Uint16Array([0x60, 0x61]), required: new Uint16Array([0, 0]), ramp: false,
+    };
+    const doodads: DoodadCatalogue = { doodads: [tree], byId: new Map([[7, tree]]), categories: [{ name: "Trees", doodads: [tree] }], hasPlacementData: false };
+    primeTileset({ name: "twilight", tileset: { groups: [] } as unknown as Tileset, atlas: { image: {} as CanvasImageSource, columns: 1, tileSize: 32, count: 1, averages: new Uint32Array(1), animation: null }, doodads });
+    const store = createStore();
+    const scn = createScenario({ width: 8, height: 8, era: 7, name: "d" });
+    store.set(scenarioAtom, scn);
+    const api = apiOver(store);
+    const ground = scn.tiles[2 * 8 + 3];
+    api.document.edit("place", (tx) => { expect(tx.placeDoodad(7, 3, 2)).toBe(0); });
+    expect(scn.editorTiles[2 * 8 + 3]).toBe(ground);
+    const r = api.document.edit("convert", (tx) => {
+      expect(tx.convertDoodads([0, 5])).toBe(1);
+      expect(tx.convertDoodads([0])).toBe(0); // gone already
+    });
+    expect(r).toMatchObject({ changed: true, tiles: 2, doodads: 1, sprites: 0 });
+    expect(scn.doodads).toHaveLength(0);
+    expect(scn.sprites).toHaveLength(1);
+    expect(scn.tiles[2 * 8 + 3]).toBe(0x60);
+    expect(scn.editorTiles[2 * 8 + 3]).toBe(0x60);
+    expect(scn.editorTiles[2 * 8 + 4]).toBe(0x61);
+    // A stroke over a converted cell in the same entry merges with the conversion: undo puts the old ground back.
+    api.document.edit("convert and paint", (tx) => {
+      tx.placeDoodad(7, 3, 4);
+      tx.convertDoodads([0]);
+      tx.setTile(3, 4, 0x20);
+    });
+    expect(scn.tiles[4 * 8 + 3]).toBe(0x20);
+    expect(scn.editorTiles[4 * 8 + 3]).toBe(0x20);
+    store.set(undoAtom);
+    expect(scn.tiles[4 * 8 + 3]).toBe(ground);
+    expect(scn.editorTiles[4 * 8 + 3]).toBe(ground);
+    expect(scn.doodads).toHaveLength(0);
+    store.set(undoAtom);
+    expect(scn.doodads).toHaveLength(1);
+    expect(scn.tiles[2 * 8 + 3]).toBe(0x60);
+    expect(scn.editorTiles[2 * 8 + 3]).toBe(ground);
+    store.set(redoAtom);
+    expect(scn.doodads).toHaveLength(0);
+    expect(scn.editorTiles[2 * 8 + 3]).toBe(0x60);
+  });
 
   it("fills areas, replaces tiles and mirrors cells under the symmetry mode", () => {
     const { store, scn } = blankStore(8, 8);

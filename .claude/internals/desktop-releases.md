@@ -14,7 +14,24 @@ back and handed to the editor (`guardClose` / `closeIpc`, `src/hooks/useCloseGua
 one window; the search order is AppImage dir /
 next to the executable / userData / env / the platform's install paths (so two archives dropped beside
 the app are found). `preload.ts` is
-the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it. `electron-builder.yml`
+the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it.
+
+`app://scmjs` being an **origin** is the thing that catches people out. A plugin's `fetch` carries it,
+so a server whose CORS allowance lists the web origins alone answers the desktop build and the
+renderer discards every reply — indistinguishable, from inside a plugin, from the server being
+down (it is why the scmjs.dev plugin could not connect from the desktop until `ai-server`'s
+`server.allowedOrigins` and its `/v1/auth/start` `returnOrigin` check learned the scheme). The
+window-open handler sends anything with an address out to `shell.openExternal` and allows exactly
+one kind of window: a **blank named** popup, `window.open("", name)`, which is how a plugin runs an
+OAuth sign-in — a browser tab is nobody's `window.opener`, so the callback page would have nothing
+to post the session back to. Electron may hand a child window its parent's preload, so the bridge
+is not left to that: the window's `additionalArguments` carry `--scmjs-origin=` (the `app://` origin,
+or `SCMJS_DEV_URL`'s in dev) and `preload.ts` exposes `window.scmjsDesktop` only when
+`location.origin` matches it. The popup is created with none of those arguments and goes on to a
+remote origin besides, so it fails that test twice over, and `did-create-window` denies it windows
+of its own. Keep it that way — the bridge spawns the game, reads folders and installs updates.
+
+`electron-builder.yml`
 packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
 unsigned, with `public/icon.png` as every platform's icon, `electronLanguages: [en-US]` (the 55
 Chromium locales were 50 MB unpacked and 12 MB of the zip; the editor has no translations) and

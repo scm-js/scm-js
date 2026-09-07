@@ -559,6 +559,11 @@ function originOf(url: string): string {
   try { return new URL(url).origin || url; } catch { return url; }
 }
 
+/** The origin the editor itself is served from — `preload.ts` hands the bridge to that page alone. */
+function pageOrigin(): string {
+  return process.env.SCMJS_DEV_URL ? originOf(process.env.SCMJS_DEV_URL) : `${SCHEME}://${HOST}`;
+}
+
 function createWindow() {
   const icon = join(distDir, "icon.png");
   const state = readWindowState();
@@ -580,7 +585,7 @@ function createWindow() {
       sandbox: true,
       // No prose is typed in the editor worth checking, and the dictionaries cost memory and a download.
       spellcheck: false,
-      additionalArguments: [`--scmjs-version=${app.getVersion()}`],
+      additionalArguments: [`--scmjs-version=${app.getVersion()}`, `--scmjs-origin=${pageOrigin()}`],
     },
   });
   if (opening) keepRestoreBounds(win, restoreRect(state, opening));
@@ -590,9 +595,34 @@ function createWindow() {
   guardClose(win);
   progressTarget = win;
   win.on("closed", () => { if (progressTarget === win) progressTarget = null; });
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  // A link with an address goes out to the system browser. The one thing that may open a
+  // window here is a *blank named* popup — `window.open("", name)` — which is how a plugin
+  // runs an OAuth sign-in: the page it then points the popup at has to post the session back
+  // to `window.opener`, and a browser tab is nobody's opener. It is a plain web page with
+  // none of the editor's privileges (the preload hands the bridge to `pageOrigin()` alone)
+  // and may not open windows of its own; anything it links to leaves for the browser as well.
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if ((url === "" || url === "about:blank") && frameName) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 540, height: 720, minWidth: 380, minHeight: 480,
+          minimizable: false, fullscreenable: false, autoHideMenuBar: true,
+          backgroundColor: "#0b0c10",
+          // Electron may hand a child window its parent's preload; `additionalArguments: []`
+          // is what makes that harmless, since the bridge only appears for the origin named there.
+          webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false, webviewTag: false, spellcheck: false, additionalArguments: [] },
+        },
+      };
+    }
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
+  });
+  win.webContents.on("did-create-window", (child) => {
+    child.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/.test(url)) void shell.openExternal(url);
+      return { action: "deny" };
+    });
   });
   // The window shows one page for its whole life. Anything that would replace it is a
   // mistake — above all a file dropped on a part of the page that did not take the drop,

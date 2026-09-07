@@ -98,7 +98,7 @@ import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, 
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
 } from "../editor/sprites";
-import { applyDoodadChanges, checkDoodadPlacement, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
+import { applyDoodadChanges, checkDoodadPlacement, convertDoodads, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
 import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, locationAt, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
@@ -378,6 +378,23 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       doodadTiles.push(...edit.tiles);
       doodads.push(...edit.doodads);
       sprites.push(...edit.sprites);
+      return edit.doodads.length;
+    },
+    convertDoodads: (indices) => {
+      const edit = convertDoodads(scn, loaded?.doodads ?? NO_DOODADS, indices);
+      // Terrain-layer changes: TILE follows MTXM, and the stroke keeps them though MTXM did
+      // not move. A doodad this transaction itself placed has its stamp in `doodadTiles`,
+      // which `applyEntry` replays *after* `changes` — so fold that stamp into the terrain
+      // change (ground → tile, both sections) and drop it, or undo would put the tile back.
+      for (const c of edit.tiles) {
+        const first = doodadTiles.find((d) => d.at === c.at);
+        if (!first) continue;
+        c.before = first.before;
+        for (let k = doodadTiles.length - 1; k >= 0; k--) if (doodadTiles[k].at === c.at) doodadTiles.splice(k, 1);
+      }
+      applyTiles(edit.tiles);
+      applyDoodadChanges(scn, edit.doodads);
+      doodads.push(...edit.doodads);
       return edit.doodads.length;
     },
 
@@ -1096,7 +1113,7 @@ export function queryApi(store: Store): QueryApi {
       const def = l?.doodads.byId.get(doodadId);
       if (!scn || !l || !def) return null;
       // The rule itself, not the palette's switch: a plugin asking is asking whether StarEdit would allow it.
-      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false });
+      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false, asTerrain: false });
     },
     validate: () => {
       const scn = scenario();

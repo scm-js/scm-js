@@ -213,9 +213,10 @@ function DoodadProps() {
         </div>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
           <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete (restores the ground beneath)"><Trash2 size={12} /></Button>
+          <Button size="sm" onClick={() => tools.convertSelected()} title="Keep the tiles as plain terrain and drop the doodad record; an overlay stays as a sprite">To terrain</Button>
           {firstDef && <Button size="sm" onClick={() => tools.startPlacing(firstDef.id)} title="Place more of this doodad">Place more</Button>}
         </div>
-        <div className="span hint" style={{ marginTop: 4 }}>Drag to move; a red ghost means the ground there does not fit. Delete puts the terrain the doodad sat on back.</div>
+        <div className="span hint" style={{ marginTop: 4 }}>Drag to move; a red ghost means the ground there does not fit. Delete puts the terrain the doodad sat on back; To terrain keeps the tiles and forgets the doodad, so they can be painted over piece by piece.</div>
       </div>
     );
   }

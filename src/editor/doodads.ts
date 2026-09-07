@@ -54,9 +54,11 @@ export interface DoodadPlacementOptions {
   placeAnywhere: boolean;
   /** Keep the left column on an even tile, as StarEdit always does. */
   snapToGrid: boolean;
+  /** Place as plain terrain: the tiles (both sections) and any overlay sprite, no DD2 record — a placement and a conversion in one. */
+  asTerrain: boolean;
 }
 
-export const DEFAULT_DOODAD_PLACEMENT: DoodadPlacementOptions = { placeAnywhere: false, snapToGrid: true };
+export const DEFAULT_DOODAD_PLACEMENT: DoodadPlacementOptions = { placeAnywhere: false, snapToGrid: true, asTerrain: false };
 
 export interface TileRect {
   x0: number;
@@ -105,6 +107,13 @@ export interface DoodadVerdict {
 /**
  * May `def` go with its top-left tile at (tx, ty)? `tileAt` overrides what a cell
  * currently holds — a move passes the map as it would be with the moving doodads gone.
+ *
+ * A requirement counts only under a cell the doodad draws. Measured against Blizzard's
+ * own maps (Ice Floes, Spring Thaw, Isolation): every ramp and bridge they placed sits
+ * on ground that matches its drawn cells exactly and its undrawn "approach" cells not
+ * at all — an Ice cliff ramp wants two more rows of cliff above it than any cliff has, a
+ * Desert bridge wants dirt where its channel's water is — so StarEdit never looked at
+ * those.
  */
 export function checkDoodadPlacement(
   scn: Scenario, tileset: Tileset | null, def: DoodadDef, tx: number, ty: number, opts: DoodadPlacementOptions,
@@ -117,7 +126,7 @@ export function checkDoodadPlacement(
       for (let col = 0; col < def.width; col++) {
         const cell = row * def.width + col;
         const required = def.required[cell];
-        if (required === 0 && def.tiles[cell] === 0) continue;
+        if (def.tiles[cell] === 0) continue;
         const id = tileAt((ty + row) * scn.width + tx + col);
         const group = id >> 4;
         if (required !== 0 && group !== required) { bad.push(cell); continue; }
@@ -176,6 +185,26 @@ export function placeDoodad(scn: Scenario, def: DoodadDef, tx: number, ty: numbe
 }
 
 /**
+ * Stamp `def` at (tx, ty) as plain terrain — `placeDoodad` followed by `convertDoodads`
+ * in one: the tiles as terrain-layer changes (both sections), the overlay sprite, and no
+ * record. `tiles` is for the terrain layer (the entry's `changes`).
+ */
+export function placeDoodadAsTerrain(scn: Scenario, def: DoodadDef, tx: number, ty: number, owner: number): { tiles: TileChange[]; sprites: SpriteChange[] } {
+  const tiles: TileChange[] = [];
+  for (let row = 0; row < def.height; row++) {
+    for (let col = 0; col < def.width; col++) {
+      const id = def.tiles[row * def.width + col];
+      if (id === 0) continue;
+      const at = (ty + row) * scn.width + tx + col;
+      // A cell already showing the tile (over another doodad, say) still needs it in TILE.
+      if (scn.tiles[at] !== id || scn.editorTiles[at] !== id) tiles.push({ at, before: scn.tiles[at], after: id });
+    }
+  }
+  const sprite = makeOverlaySprite(def, makeDoodad(def, tx, ty, owner));
+  return { tiles, sprites: sprite ? [{ index: scn.sprites.length, before: null, after: sprite }] : [] };
+}
+
+/**
  * What a doodad cell goes back to when the doodad leaves: the ground TILE kept under it,
  * or — when TILE holds a doodad tile too (a map from an editor that writes doodads into
  * both sections) — a fresh tile of the group dddata says belongs there. With nothing
@@ -223,6 +252,50 @@ export function removeDoodads(scn: Scenario, tileset: Tileset | null, catalogue:
   }
   const sprites = [...spriteIndices].sort((a, b) => b - a).map((index) => ({ index, before: scn.sprites[index], after: null }));
   return { tiles: stroke.finish(), doodads, sprites };
+}
+
+/**
+ * What turning doodads into plain terrain changes: `tiles` are terrain-layer changes
+ * (both sections, unlike a `DoodadEdit`'s MTXM-only ones), and the records go. The
+ * overlay sprites stay: the game draws them as ordinary THG2 records either way.
+ */
+export interface DoodadConversion {
+  tiles: TileChange[];
+  doodads: DoodadChange[];
+}
+
+/**
+ * Make the doodads at `indices` plain terrain: their records go, their tiles stay in
+ * MTXM and are written into TILE too, so the cells count as ground everywhere the
+ * editor reads TILE — a terrain-only copy, the Rect brush's base, the ground that comes
+ * back when a later doodad leaves. Cells another edit has already covered are left as
+ * they are. Removals are ordered highest index first. `tiles` is for the terrain layer
+ * (`applyChanges(…, "terrain")`, the entry's `changes`), not the doodad-tile slot.
+ */
+export function convertDoodads(scn: Scenario, catalogue: DoodadCatalogue, indices: Iterable<number>): DoodadConversion {
+  const tiles: TileChange[] = [];
+  const seen = new Set<number>();
+  const doodads: DoodadChange[] = [];
+  for (const i of [...new Set(indices)].sort((a, b) => b - a)) {
+    const rec = scn.doodads[i];
+    if (!rec) continue;
+    doodads.push({ index: i, before: rec, after: null });
+    const def = catalogue.byId.get(rec.doodadId);
+    if (!def) continue;
+    const o = doodadOrigin(def, rec.x, rec.y);
+    for (let row = 0; row < def.height; row++) {
+      for (let col = 0; col < def.width; col++) {
+        const id = def.tiles[row * def.width + col];
+        const x = o.x + col, y = o.y + row;
+        if (id === 0 || x < 0 || y < 0 || x >= scn.width || y >= scn.height) continue;
+        const at = y * scn.width + x;
+        if (scn.tiles[at] !== id || scn.editorTiles[at] === id || seen.has(at)) continue;
+        seen.add(at);
+        tiles.push({ at, before: id, after: id });
+      }
+    }
+  }
+  return { tiles, doodads };
 }
 
 /** Replace fields on the doodads at `indices` (and mirror owner / disabled onto their overlay sprites). */

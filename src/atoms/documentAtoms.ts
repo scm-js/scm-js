@@ -20,7 +20,7 @@ import { START_LOCATION } from "../data/units";
 import { statusMessageAtom } from "./uiAtoms";
 import { applyChanges } from "../editor/terrain";
 import { applyUnitChanges, removeUnits } from "../editor/units";
-import { applyDoodadChanges, removeDoodads, strandedDoodads } from "../editor/doodads";
+import { applyDoodadChanges, convertDoodads, removeDoodads, strandedDoodads } from "../editor/doodads";
 import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
@@ -529,7 +529,6 @@ export const startLocationsAtom = atom<ViewStartLocation[]>((get) => {
 
 /* ── Doodad selection edits ──────────────────────────────── */
 
-/** Remove the selected doodads (tiles, DD2 records and overlay sprites) as one undo step. Returns how many went. */
 /**
  * Edit ▸ Select All (Ctrl+A) on an object layer: every doodad, sprite, used location (never
  * Anywhere) or unit; the clipboard layer marks the whole map through its own hook. Returns
@@ -547,6 +546,7 @@ export const selectAllAtom = atom(null, (get, set, layer: EditorLayer): number =
   }
 });
 
+/** Remove the selected doodads (tiles, DD2 records and overlay sprites) as one undo step. Returns how many went. */
 export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedDoodadsAtom);
@@ -559,6 +559,25 @@ export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   set(selectedDoodadsAtom, []);
   const n = edit.doodads.length;
   set(commitEditAtom, { label: `Delete ${n} doodad${n === 1 ? "" : "s"}`, changes: [], doodadTiles: edit.tiles, doodads: edit.doodads, sprites: edit.sprites });
+  return n;
+});
+
+/**
+ * Turn the selected doodads into plain terrain as one undo step: the records go, the
+ * tiles stay and are written into TILE too, the overlay sprites remain as ordinary
+ * sprites. Returns how many were converted.
+ */
+export const convertSelectedDoodadsAtom = atom(null, (get, set) => {
+  const scn = get(scenarioAtom);
+  const selected = get(selectedDoodadsAtom);
+  if (!scn || selected.length === 0) return 0;
+  const loaded = peekTileset(get(tilesetFileNameAtom));
+  const edit = convertDoodads(scn, loaded?.doodads ?? NO_DOODADS, selected);
+  applyChanges(scn, edit.tiles);
+  applyDoodadChanges(scn, edit.doodads);
+  set(selectedDoodadsAtom, []);
+  const n = edit.doodads.length;
+  set(commitEditAtom, { label: `Convert ${n} doodad${n === 1 ? "" : "s"} to terrain`, changes: edit.tiles, doodads: edit.doodads });
   return n;
 });
 

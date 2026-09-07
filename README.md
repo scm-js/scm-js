@@ -278,6 +278,13 @@ cliffs and walls without saying so.
 
 A placed doodad stays whole across the three places a map keeps it — its tiles, its
 record and any canopy or door overlay — and removing one restores the ground underneath.
+When you want the tiles without the doodad — a ramp to touch up piece by piece, a cliff
+edge to paint into — right-click it and choose *Convert Doodad to Terrain* (the Properties
+panel has the same button). The tiles stay, the record goes, and an overlay stays on as
+an ordinary sprite; from then on the Terrain layer treats the cells as ground, so a
+Terrain-only copy carries them and a later doodad leaving them puts them back. *Place
+as terrain* in the palette does the same at placement, for laying out ramps and cliff
+pieces you mean to work over by hand.
 
 ## Units
 
@@ -1017,7 +1024,7 @@ The map you have open is never kept there and is not touched by any of it.
 
 | | Status |
 | --- | --- |
-| Doodads: catalogue, placement rules, overlays, move, delete | Yes |
+| Doodads: catalogue, placement rules, overlays, move, delete, convert to terrain | Yes |
 | Units: placement checks, properties, team colours, idle animation | Yes |
 | Sprites: pure and unit sprites, flags, properties | Yes |
 | Locations: create, resize, snap, rename, elevation flags | Yes |

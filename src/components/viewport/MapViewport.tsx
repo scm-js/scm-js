@@ -1732,6 +1732,11 @@ export default function MapViewport() {
       const hit = locationTools.pickAt(hoverPointRef.current);
       if (hit >= 0 && !selectedLocations.includes(hit)) locationTools.select([hit]);
     }
+    if (layer === "doodads" && hoverRef.current) {
+      // Likewise a doodad: the menu's Delete and Convert act on it.
+      const hit = doodadTools.pickAt(hoverRef.current.x, hoverRef.current.y);
+      if (hit >= 0 && !selectedDoodads.includes(hit)) doodadTools.select([hit]);
+    }
     menuTileRef.current = hoverRef.current;
     menuPointRef.current = hoverPointRef.current;
   };
@@ -1778,6 +1783,7 @@ export default function MapViewport() {
     ...(layer === "doodads"
       ? [
           { label: `Delete ${selectedDoodads.length > 1 ? `${selectedDoodads.length} Doodads` : "Doodad"}`, disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.deleteSelected() },
+          { label: `Convert ${selectedDoodads.length > 1 ? `${selectedDoodads.length} Doodads` : "Doodad"} to Terrain`, disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.convertSelected() },
           {
             label: "Pick Doodad Here",
             disabled: !scenario || !menuTileRef.current || doodadTools.pickAt(menuTileRef.current.x, menuTileRef.current.y) < 0,

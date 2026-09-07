@@ -6,7 +6,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type { DesktopBridge, UpdateProgress } from "../src/gamedata/desktop";
 
-const version = process.argv.find((a) => a.startsWith("--scmjs-version="))?.slice("--scmjs-version=".length) ?? "";
+const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? "";
+const version = arg("scmjs-version");
+/** The origin `main.ts` serves the editor from; a window it did not open is given no origin at all. */
+const pageOrigin = arg("scmjs-origin");
 
 const bridge: DesktopBridge = {
   platform: process.platform,
@@ -70,4 +73,8 @@ const bridge: DesktopBridge = {
   },
 };
 
-contextBridge.exposeInMainWorld("scmjsDesktop", bridge);
+// The bridge spawns the game, reads folders and installs updates, so it belongs to the editor's
+// own page and nothing else. A plugin's sign-in popup is a child window, and Electron may hand a
+// child its parent's preload — that window carries no `--scmjs-origin`, and the remote page it
+// goes on to load is a different origin besides, so it is served no bridge either way.
+if (pageOrigin && location.origin === pageOrigin) contextBridge.exposeInMainWorld("scmjsDesktop", bridge);

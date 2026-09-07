@@ -187,6 +187,7 @@ function DoodadPalette() {
       <div className="placement-options" title="Placement options">
         {option("placeAnywhere", "Place anywhere", "Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground.")}
         {option("snapToGrid", "Snap to grid", "Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for. This is not the View ▸ Grid Settings spacing — it is always two tiles.")}
+        {option("asTerrain", "Place as terrain", "Lay the doodad's tiles down as plain terrain, with no doodad record: the same as placing it and then choosing Convert to Terrain. An overlay is placed as an ordinary sprite. The tiles can then be painted over piece by piece, but the doodad cannot be selected or moved as one.")}
       </div>
       <div className="palette-scroll">
         {!loaded && (

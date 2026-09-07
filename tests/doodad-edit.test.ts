@@ -11,8 +11,8 @@ import { TILESET_FILENAMES } from "../src/formats/tileset/load";
 import { decodeTbl } from "../src/formats/dat/tbl";
 import { applyChanges, mirrorEditorTiles, stampTile } from "../src/editor/terrain";
 import {
-  applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, DEFAULT_DOODAD_PLACEMENT, doodadAt, doodadsInBox, groundUnder, placeDoodad,
-  removeDoodads, snapDoodad, strandedDoodads, updateDoodads, type DoodadEdit,
+  applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, convertDoodads, DEFAULT_DOODAD_PLACEMENT, doodadAt, doodadsInBox, groundUnder,
+  placeDoodad, placeDoodadAsTerrain, removeDoodads, snapDoodad, strandedDoodads, updateDoodads, type DoodadEdit,
 } from "../src/editor/doodads";
 
 /* ── A synthetic tileset: 2 flat pairs, a 2×1 tree with a sprite overlay, a 4×2 ramp ── */
@@ -162,16 +162,17 @@ describe("placement checks", () => {
     expect(checkDoodadPlacement(scn, ts, tree, 4, 3, opts)).toEqual({ ok: true, outOfBounds: false, bad: [] });
     // Off the pair grid the left cell sees the right dirt group.
     expect(checkDoodadPlacement(scn, ts, tree, 5, 3, opts).bad).toEqual([0, 1]);
-    // The ramp wants grass under its top-right cells: not on plain dirt.
-    expect(checkDoodadPlacement(scn, ts, ramp, 4, 2, opts).bad).toEqual([2, 3]);
-    applyChanges(scn, stampTile(scn, [2 * 16 + 6, 2 * 16 + 7], 0x40));
-    scn.tiles[2 * 16 + 7] = 0x50;
+    // The ramp's top-right cells want grass but draw no tile, and a cell a doodad does not
+    // draw is never checked (StarEdit's rule, measured on Blizzard's own maps): plain dirt is fine.
     expect(checkDoodadPlacement(scn, ts, ramp, 4, 2, opts).ok).toBe(true);
+    // Its bottom row draws tiles and wants dirt: grass there refuses those cells.
+    applyChanges(scn, stampTile(scn, [3 * 16 + 4, 3 * 16 + 5, 3 * 16 + 6, 3 * 16 + 7], 0x40));
+    expect(checkDoodadPlacement(scn, ts, ramp, 4, 2, opts).bad).toEqual([4, 5, 6, 7]);
   });
 
   it("never allows the footprint off the map, place-anywhere included", () => {
     const scn = fresh();
-    const anywhere = { placeAnywhere: true, snapToGrid: false };
+    const anywhere = { placeAnywhere: true, snapToGrid: false, asTerrain: false };
     expect(checkDoodadPlacement(scn, ts, ramp, 14, 0, anywhere)).toMatchObject({ ok: false, outOfBounds: true });
     expect(checkDoodadPlacement(scn, ts, ramp, 4, 7, anywhere)).toMatchObject({ ok: false, outOfBounds: true });
     expect(checkDoodadPlacement(scn, ts, tree, 5, 3, anywhere).ok).toBe(true);
@@ -244,6 +245,76 @@ describe("placing and removing", () => {
     expect(scn.doodads.map((d) => d.doodadId)).toEqual([7, 9]);
     expect(scn.sprites).toHaveLength(1);
     expect(scn.tiles[3 * 16 + 5]).toBe(0x61);
+  });
+
+  it("converting keeps the tiles, writes them into TILE, drops the record and leaves the overlay; undo restores the ground", () => {
+    const scn = fresh();
+    applyEdit(scn, placeDoodad(scn, tree, 4, 3, 0));
+    applyEdit(scn, placeDoodad(scn, ramp, 8, 2, 0));
+    scn.dirty.clear();
+    const edit = convertDoodads(scn, cat, [0]);
+    expect(edit.doodads).toEqual([{ index: 0, before: scn.doodads[0], after: null }]);
+    expect(edit.tiles).toEqual([
+      { at: 3 * 16 + 4, before: 0x60, after: 0x60 },
+      { at: 3 * 16 + 5, before: 0x61, after: 0x61 },
+    ]);
+    applyChanges(scn, edit.tiles);
+    applyDoodadChanges(scn, edit.doodads);
+    expect(scn.doodads.map((d) => d.doodadId)).toEqual([9]);
+    expect(scn.sprites).toHaveLength(1); // the canopy is an ordinary sprite now
+    expect(scn.tiles[3 * 16 + 4]).toBe(0x60);
+    expect(scn.editorTiles[3 * 16 + 4]).toBe(0x60);
+    expect(scn.editorTiles[3 * 16 + 5]).toBe(0x61);
+    expect([...scn.dirty].sort()).toEqual(["DD2 ", "MTXM", "TILE"]);
+    // The cells are plain ground now: nothing is stranded by an edit there, and a new
+    // doodad leaving them puts the converted tiles back, not the old dirt.
+    expect(strandedDoodads(scn, cat, [3 * 16 + 4])).toEqual([]);
+    applyDoodadChanges(scn, edit.doodads, "undo");
+    applyChanges(scn, edit.tiles, "undo");
+    expect(scn.doodads.map((d) => d.doodadId)).toEqual([7, 9]);
+    expect(scn.tiles[3 * 16 + 4]).toBe(0x60);
+    expect(scn.editorTiles[3 * 16 + 4]).toBe(0x20);
+    expect(scn.editorTiles[3 * 16 + 5]).toBe(0x30);
+  });
+
+  it("placing as terrain stamps both sections and the overlay with no record; undo restores the ground", () => {
+    const scn = fresh();
+    scn.dirty.clear();
+    const edit = placeDoodadAsTerrain(scn, tree, 4, 3, 5);
+    expect(edit.tiles).toEqual([
+      { at: 3 * 16 + 4, before: 0x20, after: 0x60 },
+      { at: 3 * 16 + 5, before: 0x30, after: 0x61 },
+    ]);
+    applyChanges(scn, edit.tiles);
+    applySpriteChanges(scn, edit.sprites);
+    expect(scn.doodads).toEqual([]);
+    expect(scn.sprites.map((s) => s.spriteId)).toEqual([300]);
+    expect(scn.tiles[3 * 16 + 4]).toBe(0x60);
+    expect(scn.editorTiles[3 * 16 + 4]).toBe(0x60);
+    expect([...scn.dirty].sort()).toEqual(["MTXM", "THG2", "TILE"]);
+    expect(doodadAt(scn, cat, 4, 3)).toBe(-1);
+    applySpriteChanges(scn, edit.sprites, "undo");
+    applyChanges(scn, edit.tiles, "undo");
+    expect(scn.tiles[3 * 16 + 4]).toBe(0x20);
+    expect(scn.editorTiles[3 * 16 + 4]).toBe(0x20);
+    expect(scn.sprites).toEqual([]);
+  });
+
+  it("converting skips cells another edit covered and cells already ground in TILE, highest index first", () => {
+    const scn = fresh();
+    applyEdit(scn, placeDoodad(scn, tree, 0, 0, 0));
+    applyEdit(scn, placeDoodad(scn, tree, 2, 0, 0));
+    applyEdit(scn, placeDoodad(scn, tree, 4, 0, 0));
+    applyChanges(scn, stampTile(scn, [3], 0x20)); // the second tree lost its right cell to the Tile brush
+    scn.editorTiles[0] = 0x60; // the first tree's left cell is in TILE already (a map from another editor)
+    const edit = convertDoodads(scn, cat, [1, 0, 1]);
+    expect(edit.doodads.map((c) => c.index)).toEqual([1, 0]);
+    expect(edit.tiles.map((c) => c.at)).toEqual([2, 1]);
+    applyChanges(scn, edit.tiles);
+    applyDoodadChanges(scn, edit.doodads);
+    expect(scn.doodads.map((d) => d.x)).toEqual([4 * 32 + 32]);
+    expect(scn.editorTiles[3]).toBe(0x20);
+    expect(convertDoodads(scn, cat, [7]).doodads).toEqual([]);
   });
 
   it("orders multi-removals highest index first so the indices stay valid", () => {

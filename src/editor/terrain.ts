@@ -242,9 +242,13 @@ export class Stroke {
     return this.changes.size;
   }
 
-  /** The net change list, dropping tiles that ended where they started. */
+  /**
+   * The net change list, dropping tiles that ended where they started. A change whose
+   * MTXM did not move but whose TILE did (a doodad converted to terrain: `under` is the
+   * old ground, `after` the doodad tile now in both sections) is a change and stays.
+   */
   finish(): TileChange[] {
-    return [...this.changes.values()].filter((c) => c.before !== c.after);
+    return [...this.changes.values()].filter((c) => c.before !== c.after || (c.under !== undefined && c.under !== c.after));
   }
 }
 

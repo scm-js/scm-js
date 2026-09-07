@@ -3,10 +3,10 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, symmetryAtom, unitOwnerAtom } from "../atoms/editorAtoms";
 import { mirrorTileRect } from "../editor/symmetry";
 import type { TileChange } from "../editor/terrain";
-import { commitEditAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
+import { commitEditAtom, convertSelectedDoodadsAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, doodadAt, doodadFootprint, doodadsInBox, placeDoodad, removeDoodads,
+  applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, doodadAt, doodadFootprint, doodadsInBox, placeDoodad, placeDoodadAsTerrain, removeDoodads,
   snapDoodad, updateDoodads, type DoodadChange, type DoodadEdit, type DoodadVerdict, type SpriteChange, type TileRect,
 } from "../editor/doodads";
 import { applyChanges, Stroke } from "../editor/terrain";
@@ -38,7 +38,7 @@ function describeRefusal(def: DoodadDef, v: DoodadVerdict, hasPlacementData: boo
 }
 
 /**
- * The Doodads layer's tools: place, pick, select, drag-move, re-own and delete, reading
+ * The Doodads layer's tools: place, pick, select, drag-move, re-own, delete and convert to terrain, reading
  * the live store so pointer handlers never go stale. A move is applied on release only —
  * the drag shows ghosts — as one remove-and-place undo step.
  */
@@ -49,6 +49,7 @@ export function useDoodadTools() {
   const setSelected = useSetAtom(selectedDoodadsAtom);
   const setPlacing = useSetAtom(doodadPlacingAtom);
   const deleteSelectedDoodads = useSetAtom(deleteSelectedDoodadsAtom);
+  const convertSelectedDoodads = useSetAtom(convertSelectedDoodadsAtom);
   const { loaded } = useTileset();
   const tilesetName = useAtomValue(tilesetFileNameAtom);
   const catalogue: DoodadCatalogue = loaded?.doodads ?? NO_DOODADS;
@@ -112,16 +113,26 @@ export function useDoodadTools() {
     let placed = 0;
     for (const g of ghosts) {
       if (g !== ghost && !checkDoodadPlacement(scn, tileset, g.def, g.x, g.y, opts).ok) continue;
-      const edit = placeDoodad(scn, g.def, g.x, g.y, g.owner);
-      apply(scn, edit);
-      tiles.push(...edit.tiles);
-      doodads.push(...edit.doodads);
-      sprites.push(...edit.sprites);
+      if (opts.asTerrain) {
+        // Tiles into both sections and the overlay as a plain sprite; no record to select or move later.
+        const edit = placeDoodadAsTerrain(scn, g.def, g.x, g.y, g.owner);
+        applyChanges(scn, edit.tiles);
+        applySpriteChanges(scn, edit.sprites);
+        tiles.push(...edit.tiles);
+        sprites.push(...edit.sprites);
+      } else {
+        const edit = placeDoodad(scn, g.def, g.x, g.y, g.owner);
+        apply(scn, edit);
+        tiles.push(...edit.tiles);
+        doodads.push(...edit.doodads);
+        sprites.push(...edit.sprites);
+      }
       placed++;
     }
     setSelected([]);
-    commit(entryFor(placed === 1 ? `Place ${doodadLabel(ghost.def)}` : `Place ${placed} × ${doodadLabel(ghost.def)}`, { tiles, doodads, sprites }));
-    setStatus(`Placed ${placed === 1 ? "" : `${placed} × `}${doodadLabel(ghost.def)} (${ghost.def.width}×${ghost.def.height}) at tile ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    const label = placed === 1 ? `Place ${doodadLabel(ghost.def)}` : `Place ${placed} × ${doodadLabel(ghost.def)}`;
+    commit(opts.asTerrain ? { label: `${label} as terrain`, changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
+    setStatus(`Placed ${placed === 1 ? "" : `${placed} × `}${doodadLabel(ghost.def)} (${ghost.def.width}×${ghost.def.height})${opts.asTerrain ? " as terrain" : ""} at tile ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
     return true;
   }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
 
@@ -292,8 +303,15 @@ export function useDoodadTools() {
     return n;
   }, [deleteSelectedDoodads, setStatus]);
 
+  /** The selection becomes plain terrain: records gone, tiles kept in both sections, overlays left as sprites. */
+  const convertSelected = useCallback(() => {
+    const n = convertSelectedDoodads();
+    if (n > 0) setStatus(`Converted ${n} doodad${n === 1 ? "" : "s"} to terrain`);
+    return n;
+  }, [convertSelectedDoodads, setStatus]);
+
   return useMemo(
-    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected }),
-    [loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected],
+    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected }),
+    [loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected],
   );
 }

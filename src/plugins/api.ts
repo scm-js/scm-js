@@ -611,6 +611,13 @@ export interface EditTransaction {
   /** Stamp a doodad (a `dddata.bin` id) at a tile; returns its record index, or -1 when unknown or off the map. */
   placeDoodad(doodadId: number, tx: number, ty: number, owner?: number): number;
   removeDoodads(indices: number[]): number;
+  /**
+   * Make doodads plain terrain: their records go, their tiles stay (in TILE as well as
+   * MTXM, so the cells are ground to every tool from here on) and an overlay stays as an
+   * ordinary sprite. The way to touch up a ramp or a cliff piece tile by tile.
+   * Returns records converted.
+   */
+  convertDoodads(indices: number[]): number;
 
   /** A location in the lowest free slot (pixel bounds); returns the slot, or -1 when the table is full. */
   addLocation(bounds: Bounds, name?: string, elevationFlags?: number): number;

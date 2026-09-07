@@ -347,6 +347,25 @@ Three things follow from **What you are trusting** above and are worth writing f
 - **They may be running a copy saved in their browser.** That copy is replaced only when
   they press Reload.
 
+### Talking to a server
+
+The editor puts nothing between your plugin and the network — you call `fetch` yourself —
+but a plugin that reaches its own server has two things to settle before it works
+everywhere, and both of them show up only in the desktop app:
+
+- **The desktop editor's origin is `app://scmjs`.** The web builds are on
+  `https://editor.scmjs.dev` and `https://nightly.editor.scmjs.dev`; the desktop app serves
+  its own bundle from a custom scheme instead, so that is the `Origin` your server is sent
+  and what its CORS allowance has to name. A server that lists the web origins alone answers
+  every desktop request perfectly well and the browser throws all of them away — which
+  looks, from inside the plugin, exactly like the server being down.
+- **A sign-in popup must be opened blank and pointed afterwards.** A link with an address
+  in it opens in the user's real browser, which is right for a homepage and useless for
+  OAuth, since a browser tab cannot post a session back to the page that sent it. Open the
+  window empty and named — `window.open("", "my-plugin-signin", "width=540,height=720")` —
+  then set its `location.href` once your server has said where to go. That window is a plain
+  web page with none of the editor's privileges, and links inside it leave for the browser.
+
 ### Getting listed
 
 The project's registry, [`scm-js/registry`](https://github.com/scm-js/registry), is
@@ -558,6 +577,7 @@ as for a stroke), commits, and repaints.
 | `makeSprite(kind, id, owner, x, y, opts?)` / `addSprites` / `removeSprites` / `placeSprite(...)` | `placeSprite` is make + add, kept on the map. Returns the index. |
 | `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position, in place, so indices hold. |
 | `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` / `updateDoodads(indices, { owner?, disabled? })` | Doodads stamp tiles and may carry an overlay sprite. All three keep the tiles, the record and the overlay together. |
+| `convertDoodads(indices)` | The Doodads layer's *Convert to Terrain*: the records go, the tiles stay as plain ground (in both tile sections), an overlay stays as an ordinary sprite. Returns records converted. |
 | `addLocation(bounds, name?, elevationFlags?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) and unused slots are refused by `editLocation`. `addLocation` also puts Anywhere back if it was missing. |
 | `restoreAnywhere()` | Anywhere back to the whole map. `true` when it had to move. |
 | `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask. Creates MASK on first use. |
@@ -951,7 +971,7 @@ exactly this: switch layers and its brush follows. The Terrain palette's pick is
 | --- | --- |
 | `active()` / `setActive({...})` | A `PaletteChoice`: `unit` and `owner` (0-based; 0 is Player 1), `spriteKind` with `sprite` / `unitSprite`, `spriteFlipped` / `spriteDisabled`, `doodad` (-1 before one was picked), `fogPlayers` (a bit mask, bit n = player n + 1), `fogMode` and `fogViewPlayer` (whose fog the viewport draws). |
 | `placementOptions()` / `setPlacementOptions(patch)` | The Units palette's rules: `checkCollision`, `checkTerrain`, `snapToGrid`, `removeStranded`. They govern `placeUnit`, `canPlaceUnit`, `query.placement` and whether an edit removes stranded units. Remembered in the browser, so a change outlives the session. |
-| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere` and `snapToGrid` (the two-tile isometric grid, not the View menu's grid spacing). Remembered in the browser. |
+| `doodadPlacement()` / `setDoodadPlacement(patch)` | The Doodads palette's `placeAnywhere`, `snapToGrid` (the two-tile isometric grid, not the View menu's grid spacing) and `asTerrain` (the palette lays doodads down as plain terrain; a transaction's `placeDoodad` does not read it — call `convertDoodads` after it). Remembered in the browser. |
 | `locationSnap()` / `setLocationSnap(step)` | The Locations layer's snap step in pixels (0 off, 8, 16, 32, 64). |
 | `playerColor(owner)` | The colour a player's units are shown in, `#rrggbb`, Remastered custom colours included. |
 | `unitGroups()` / `unitName(id)` / `unitSize(id)` | The Units palette's grouping, StarEdit's names, and a type's placement box in pixels with `building` / `flyer` flags (a one-tile box without the unit tables). |

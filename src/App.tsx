@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import { screenAtom } from "./atoms/editorAtoms";
 import { panelsAtom } from "./atoms/uiAtoms";
@@ -115,10 +115,17 @@ export default function App() {
     e.preventDefault();
     setDropTarget(false);
   };
+  // The highlight follows the last `dragover`: a drag that leaves the window from inside a
+  // child, or is cancelled with Escape, fires no `dragleave` on `.app` and no drop, and the
+  // dashed border would stay until the next drag. So it fades on its own a moment after the
+  // last `dragover` — a drag in progress renews it many times a second.
+  const dropTimer = useRef<number | null>(null);
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     setDropTarget(true);
+    if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
+    dropTimer.current = window.setTimeout(() => { dropTimer.current = null; setDropTarget(false); }, 600);
   };
 
   return (

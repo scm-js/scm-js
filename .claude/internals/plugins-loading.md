@@ -20,10 +20,10 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-scmscx.com, Repair, Walkability, Terrain from Image, Paint and scmjs.dev, each pinned to a tag and
-all on; that file is the only place the versions are written down, so read them there
-rather than here; Melee Wizard,
-TrigScript and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
+scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigScript (a default since 2026-09-07, on) and
+scmjs.dev (off), each pinned to a tag; that file is the only place the versions are written down, so read them there
+rather than here; Melee Wizard
+and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise
@@ -287,3 +287,17 @@ built its entries from the same manifest, so the two kinds of row now mean the s
 Both the version and the icon come through `runtimeOf`, which looks the runtime up by the
 *installed* spec: `runtimes[entry.spec]` never hit for anything pinned, so every installed
 row had been falling back to `entryIcon` since the defaults were pinned to tags.
+
+**A vendored plugin cannot hand its own module to a worker.** Found when TrigScript became a default
+(2026-09-07): its compile worker `import()`s the compiler by `import.meta.url`, which is the module's
+`blob:` URL when the loader fetched the plugin and works from a same-origin worker. Compiled in by Vite,
+that URL is the plugin's chunk under `assets/`, and the chunk imports `__vitePreload` from the app's
+index chunk (Vite wraps every dynamic `import()`, `@vite-ignore` or not, in it), so importing it in a
+worker runs the whole app and dies on `document`. Vite's own chunking cannot be told otherwise from the
+plugin, and the plugin must work under both bundlers. The plugin's answer: `dist/compiler.js`, the
+compiler bundled alone by its `npm run build`, which the worker fetches from jsDelivr at the plugin's
+own version tag when `ENTRY_URL` is not `blob:` (`compile.ts#workerModuleUrl`, `version.ts` — the
+one place the version is written as code, test-checked against the manifest), the way Monaco and
+TypeScript already arrive. Without that it silently fell back to compiling on the main thread — the
+probe is `typeof globalThis.ts === "undefined"` after a check, since only the fallback loads
+TypeScript into the page. Any plugin that starts a worker from its own module has the same trap.

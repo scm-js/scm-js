@@ -286,7 +286,103 @@ const SCENES = [
     await p.page.locator(".dlg", { hasText: /Systems \(/ }).waitFor({ timeout: 60_000 }); await p.wait(800);
     await p.dialog("make-scenario"); await p.esc();
   }, { seed: true }),
+
+  /* ── TrigScript: the script editor, on a map with three named locations ──────── */
+
+  scene("trigscript", "layer=locations", async (p) => {
+    await p.drop("(8)Big Game Hunters.scm");
+    // Three locations the script refers to, named through the Locations panel.
+    for (const [name, from, to] of [["Beacon", [330, 470], [470, 570]], ["Spawn", [560, 250], [700, 360]], ["Hill", [700, 520], [860, 660]]]) {
+      await p.drag(from, to);
+      await p.page.locator(".props input[aria-label='Location name']").fill(name);
+      await p.page.keyboard.press("Enter"); await p.wait(400);
+    }
+    await p.page.click(rail(0)); await p.wait(300);
+    await p.menu("Triggers", /^TrigScript…/);
+    await p.script(TRIGSCRIPT);
+    await p.dialog("trigscript");
+
+    // Completion on `locations.`: a new statement typed on the blank line between the programs.
+    const line = TRIGSCRIPT.split("\n").findIndex((l, i) => i > 17 && l === "") + 1;
+    await p.monaco((monaco, ed) => { ed.revealLineInCenter(line); ed.setPosition({ lineNumber: line, column: 1 }); ed.focus(); ed.trigger("keyboard", "type", { text: "trigger(P1, [elapsedTime(\">=\", 60)], [centerView(locations." }); }, { line });
+    await p.page.locator(".suggest-widget .monaco-list-row").first().waitFor({ timeout: 15_000 }); await p.wait(800);
+    // Open the list again once the editor has settled, so it sits at the cursor.
+    await p.esc(); await p.monaco((monaco, ed) => { ed.trigger("keyboard", "editor.action.triggerSuggest", {}); }); await p.wait(1000);
+    await p.page.locator(".suggest-widget .monaco-list-row").first().waitFor({ timeout: 15_000 }); await p.wait(400);
+    // The list opens above or below the line; the picture holds the line either way.
+    const box = await p.page.locator(".suggest-widget").boundingBox();
+    const cursor = await p.page.locator(".tsd .monaco-editor .cursor").first().boundingBox();
+    const left = (await p.page.locator(".tsd .monaco-editor").boundingBox()).x;
+    const top = Math.min(cursor.y, box.y) - 24, bottom = Math.max(cursor.y + cursor.height, box.y + box.height) + 16;
+    await p.take("trigscript-complete", { x: left, y: Math.max(0, top), width: Math.min(1400 - left, box.x + box.width + 40 - left), height: bottom - top }, { lossless: true });
+    await p.esc(); await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: TRIGSCRIPT }); await p.wait(2500);
+
+    await p.page.locator(".tsd button", { hasText: /^Simulate$/ }).click();
+    await p.page.locator(".tsd-run li").first().waitFor({ timeout: 30_000 }); await p.wait(800);
+    // The lower part of the window: the last lines of the code and the run beneath them.
+    const first = await p.page.locator(".tsd-run li").first().boundingBox();
+    const dlg = await p.page.locator(".dlg").last().boundingBox();
+    const foot = await p.page.locator(".dlg .dlg-footer").last().boundingBox();
+    await p.take("trigscript-simulate", { x: dlg.x, y: first.y - 72, width: dlg.width, height: foot.y - (first.y - 72) }, { lossless: true });
+
+    await p.page.locator(".dlg-footer button", { hasText: /^Build & Close$/ }).click();
+    await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(800);
+    await p.menu("Triggers", /^Trigger Editor/); await p.wait(1200);
+    await p.page.locator(".dlg .trig-list .item", { has: p.page.locator(".badge") }).first().click(); await p.wait(600);
+    await p.dialog("trigscript-triggers"); await p.esc();
+
+    // Beside the map, on the Locations layer so the named locations show; the panel made
+    // smaller by its corner grip and moved to the top right, so two of them stay in view.
+    await p.page.click(rail(4)); await p.wait(400);
+    await p.menu("Triggers", /^TrigScript beside the map/);
+    await p.page.locator(".plugin-panel .monaco-editor .view-lines").waitFor({ timeout: 120_000 }); await p.wait(3000);
+    const panel = await p.page.locator(".plugin-panel").boundingBox();
+    await p.page.mouse.move(panel.x + panel.width - 6, panel.y + panel.height - 6); await p.page.mouse.down();
+    await p.page.mouse.move(panel.x + panel.width - 100, panel.y + panel.height - 150, { steps: 8 }); await p.page.mouse.up(); await p.wait(400);
+    await p.page.mouse.move(panel.x + 250, panel.y + 12); await p.page.mouse.down();
+    await p.page.mouse.move(panel.x + 250 + (1146 - (panel.x + panel.width - 100)), panel.y + 12, { steps: 8 }); await p.page.mouse.up(); await p.wait(800);
+    await p.take("trigscript-beside");
+  }),
 ];
+
+/**
+ * The script in the TrigScript pictures: the guide's wave-defence example, on the three
+ * locations the scene makes, without hyper triggers so that Simulate's thirty cycles
+ * reach the last wave (a sleep of twenty seconds is ten cycles at the plain rate).
+ */
+const TRIGSCRIPT = `const waves = [
+  { unit: units.ZergZergling, n: 8 },
+  { unit: units.ZergHydralisk, n: 6 },
+  { unit: units.ZergUltralisk, n: 2 },
+];
+
+program(() => {
+  displayText("The first wave arrives in twenty seconds.");
+  sleep(seconds(20));
+  for (const w of waves) {
+    createUnit(P8, w.unit, w.n, locations.Spawn);
+    order(P8, w.unit, locations.Spawn, locations.Hill, "attack");
+    sleep(seconds(20));
+  }
+  while (command(P8, units.AnyUnit, ">=", 1)) {
+    sleep(seconds(2));
+  }
+  displayText("The last wave is broken.");
+  victory();
+});
+
+program(() => {
+  let lives: u8 = 3;
+  while (true) {
+    if (deaths(CurrentPlayer, units.JimRaynorMarine, ">=", 1)) {
+      setDeaths(CurrentPlayer, units.JimRaynorMarine, "set", 0);
+      lives -= 1;
+      if (lives == 0) defeat();
+      else createUnit(CurrentPlayer, units.JimRaynorMarine, 1, locations.Beacon);
+    }
+  }
+}, { owner: AllPlayers });
+`;
 
 /**
  * The scmjs.dev plugin turned on and signed in against the stand-in server.
@@ -410,6 +506,25 @@ function driver(page, mock) {
     async unit(name) {
       await p.search(name);
       await page.locator(".palette .node", { hasText: new RegExp(`^${name.replace(/[()]/g, "\\$&")}$`) }).first().click(); await wait(200);
+    },
+    /**
+     * Run `fn(monaco, editor)` in the page against the Monaco the TrigScript plugin loaded —
+     * the same module instance, since it is imported by the same URL (the plugin's `DIST_TAG`).
+     */
+    async monaco(fn, args = {}) {
+      await page.evaluate(async ({ src, args }) => {
+        const monaco = await import("https://cdn.jsdelivr.net/gh/scm-js/plugin-trigscript@monaco-0.56.0-2/dist/monaco.js");
+        const ed = monaco.editor.getEditors()[0];
+        Object.assign(globalThis, args);
+        new Function("monaco", "ed", `(${src})(monaco, ed)`)(monaco, ed);
+      }, { src: fn.toString(), args });
+    },
+    /** Wait for the TrigScript editor, put `text` in `main.ts`, and wait for the check to settle. */
+    async script(text) {
+      await page.locator(".tsd .monaco-editor .view-lines").waitFor({ timeout: 120_000 }); await wait(1500);
+      await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: text });
+      await wait(2500);
+      await page.locator(".tsd > .row .hint", { hasText: /problem/ }).waitFor({ timeout: 60_000 }); await wait(1500);
     },
   };
   return p;

@@ -456,22 +456,10 @@ same syntax.
 
 ### TrigScript
 
-A plugin, TrigScript ([scm-js/plugin-trigscript](https://github.com/scm-js/plugin-trigscript)),
-installed from Plugins ▸ Browse Plugins…, then Triggers ▸ TrigScript…. It keeps TypeScript
-files inside the map and builds them into triggers. The files are ordinary TypeScript:
-they run when you press Build, with the whole language and standard library to hand, and
-every `trigger()` call they make — directly, from a helper, in a loop over the players —
-becomes one trigger of the map. A script can be split over files that import each other.
-Code inside `program(() => { … })` runs in the game instead: its variables are death
-counters and switches, its `if`s and loops become a state machine of ordinary triggers,
-no EUD anywhere in it, so what comes out runs on any version of the game. Names come from
-the map, so `locations.` completes to what the map has. A built-in simulator runs thirty
-cycles of the result and says what happened. The language is described in that
-repository's README.
-
-Triggers a plugin generates show up in the Trigger Editor with a badge and are locked
-there, with a button to the plugin's own editor; the text editor fences them in
-comments; hand-made triggers around them are left alone.
+Triggers ▸ TrigScript… is the third editor: triggers as code. It is a plugin, on from the
+start, and it has a [section of its own](#trigscript) below — TypeScript files kept inside
+the map, built into a block of ordinary triggers, with loops and helpers to write them
+and programs that run in the game as death-counter state machines.
 
 ### Mission briefings
 
@@ -500,6 +488,529 @@ points out the raw values so they are not mistaken for errors.
 File ▸ Import and Export carry triggers as `.trg` files (SCMDraft's format) or as text,
 appending to or replacing the map's list. Triggers ▸ Validate Triggers is Check Map
 restricted to them.
+
+## TrigScript
+
+TrigScript is a way to write triggers as code. The code is TypeScript, it lives inside
+the map, and Build turns it into ordinary triggers — the same kind the Trigger Editor
+shows, with no EUD anywhere in them, so a map built with it plays on any version of the
+game. It is a plugin, on from the start: Triggers ▸ TrigScript… opens it as soon as a map
+is open.
+
+Two ideas carry it. The files are real TypeScript and they *run* when you press Build:
+every `trigger()` call they make becomes one trigger of the map, so a helper that returns
+the ten triggers a shop needs, a loop over the players, a table of waves and the whole
+standard library are there to write triggers *with*. And code inside `program(() => { … })`
+runs *in the game* instead: its variables become death counters and switches, its `if`s
+and loops become a state machine of triggers, and a lives counter or a wave timer is
+written as a loop rather than as a dozen triggers with hand-numbered death counts.
+
+![The TrigScript editor on a wave-defence script: the files on the left, the code checked as you type, and the cost of each line at its end](docs/images/trigscript.webp)
+
+### Opening the script
+
+Triggers ▸ TrigScript… opens the map's script in a window. The list on the left is its
+files: `main.ts` is where a build starts, **New file** adds another, and a file's ✎ and ×
+rename and remove it. Edits are saved into the map as you type — the files are members
+of the map archive, like a sound — and only **Build** changes triggers.
+
+The code is checked as you type, against the map's own names: `locations.` completes to
+the locations the map has, `units.` to every unit type (and the map's custom names),
+`switches.` to the switches by number and by the names the map gives them, and
+`players.` to the forces. A location passed where a unit belongs is an error before you
+build, and so is a name the map no longer has. The line under the toolbar says *No
+problems* or how many there are, and the list below the code says where.
+
+![Completion on `locations.`, listing what the open map has](docs/images/trigscript-complete.webp)
+
+**Build** runs the script and puts the triggers it recorded into the map as one
+contiguous block of the trigger list, replacing the previous block or adding the first.
+**Build & Close** does that and closes. The Trigger Editor shows those triggers with a
+`script` badge and will not edit them; *Open TrigScript* there jumps to the file and line
+that made one. The Text Trigger Editor fences them in comments. Hand-made triggers around
+the block are left alone, and a hand-made trigger inserted before the block just moves
+it along.
+
+![The Trigger Editor on a built script: the generated rows badged, and the way back to the line that made one](docs/images/trigscript-triggers.webp)
+
+Editing one of the generated triggers by hand makes the block *stale*, and the editor
+says so at the next open: how many of its triggers are still the build's and how many
+were changed. The next Build replaces the unchanged ones and keeps the edited ones as
+hand-made triggers right after the block, so a wave system tuned in one trigger does not
+come back twice; *Append instead* on the notice leaves them all alone and adds a fresh
+block after them. **Import map triggers** goes the other way: it rewrites the map's
+hand-made triggers as `trigger()` calls, in their order, so a map made in the Trigger
+Editor can carry on as a script.
+
+**Simulate** runs the built triggers for thirty trigger cycles in a built-in interpreter
+and lists every action that ran, with its cycle and the source line, and the final
+value of every program variable. It models death counters, switches, preserve, list
+order and the game's counting (adding wraps, subtracting stops at zero); unit
+conditions answer "false", so it is a check on the logic, not on the units. The
+summary button on the toolbar lists the programs, how many triggers each cost and
+where each variable lives.
+
+![Simulate: thirty cycles of the script, each action with its cycle and line](docs/images/trigscript-simulate.webp)
+
+The files and a build record live in the map archive under `trigscript\` — `main.ts`,
+any other file, and `build.json` — next to the scenario, so they travel with the `.scx`.
+The [Save dialog](#saving) lists them under the archive's other files, each with a tick,
+so a copy for release can leave the source out; the triggers stay either way.
+
+### Beside the map
+
+The editor opens two ways. The window is for writing; *Beside the map* — a button on its
+toolbar, or Triggers ▸ TrigScript beside the map — is a panel over the map that blocks
+nothing: drag it by its title, resize it by its corner, and keep placing units while the
+code sits next to them.
+
+![The script beside the map](docs/images/trigscript-beside.webp)
+
+Beside the map, the names in the code and the objects on the map know about each other:
+
+- **Ctrl+click** on `locations.Beacon` scrolls the map to the location and flashes it.
+  Hovering the name says where it is and how big.
+- **Pick from map** on the toolbar: click a location or a unit on the map, and its name
+  (`locations.Beacon`, `units.TerranMarine`) lands at the cursor. From the window, the
+  button first moves the editor beside the map.
+- When you rename a location or a switch the script mentions, a notice offers to
+  **update the references** in every file. It follows the name the way the code does — an
+  alias from `import { locations as L }` counts — and leaves comments, strings and
+  anything merely spelled the same alone.
+
+### Writing triggers
+
+A trigger is one call:
+
+```ts
+trigger(AllPlayers, [
+  bring(CurrentPlayer, units.AnyUnit, locations.Beacon, ">=", 1),
+], [
+  displayText("You found it!"),
+  preserve(),
+]);
+```
+
+`trigger(players, conditions, actions, options?)` records one trigger. `players` is a
+player or a list of them; `conditions` and `actions` are lists of what the condition and
+action functions return. The options are the execution flags by name: `{ preserve: true }`
+is the same as the `preserve()` action, and `disabled`, `ignoreGameEnd` and the rest are
+there too.
+
+Every condition and action the game has is a function named after StarEdit's, in camel
+case: `bring`, `deaths`, `command`, `accumulate`, `elapsedTime`, `switchIs` (its real name
+is a reserved word), `createUnit`, `displayText`, `setResources`, `moveUnit`, `order`,
+`runAiScript`, `victory`. The arguments come in the order the Trigger Editor shows them,
+and the ones the editor offers as a list are short words: `">="`, `"<="`, `"=="` for a
+comparison; `"set"`, `"add"`, `"subtract"` for a modifier; `"set"`, `"clear"`,
+`"toggle"`, `"randomize"` for a switch; `"ore"`, `"gas"`, `"oreAndGas"` for a resource;
+`"move"`, `"patrol"`, `"attack"` for an order. A unit count is a number or `"All"`.
+StarEdit's own labels (`"At least"`) are accepted as well. `not(condition)` is the
+opposite of a condition where one condition can say it: `not(bring(…, ">=", 1))` is "at
+most 0". Hover any of them in the editor for its arguments.
+
+Names come from the map. Each display name becomes an identifier — `Terran Marine` is
+`units.TerranMarine`, `Terran Siege Tank (Tank Mode)` is
+`units.TerranSiegeTankTankMode` — and the display name itself still works as an index,
+`units["Terran Marine"]`. `P1` … `P12`, `CurrentPlayer` and `AllPlayers` are constants,
+and the other groups are under `players`: `players.Force1`, `players.Foes`,
+`players.Allies`. A raw number works wherever a name does, which is how an EUD player or
+an odd unit id gets in.
+
+The script is a program that runs when you build, and everything TypeScript offers at
+that moment is fair game. A loop makes the same trigger for several players; a function
+returns a list of actions; a table holds the numbers; a template string builds the text:
+
+```ts
+function reinforce(p: Player) {
+  return trigger(p, [deaths(p, units.TerranMarine, ">=", 10)], [
+    createUnit(p, units.TerranSiegeTankTankMode, 1, locations.Spawn),
+    setDeaths(p, units.TerranMarine, "subtract", 10),
+    displayText("Reinforcements have arrived."),
+  ], { preserve: true });
+}
+
+for (const p of [P1, P2, P3, P4]) reinforce(p);
+```
+
+Nested lists are flattened and `false`, `null` and `undefined` entries are skipped, so a
+helper can return a list of actions and a condition can be written `hardMode && bring(…)`.
+What the script records is what the map gets, and the order of the `trigger()` calls is
+the order of the triggers.
+
+A condition is a *value* here — the game tests it later — so `if (bring(…))` outside a
+program does not do what it looks like, and the editor says so and where the test belongs:
+in a trigger's conditions, or in an `if` inside a program.
+
+A script can be several files. `import { x } from "./name"` brings in another file of the
+map's script; nothing else can be imported. The library is available as globals, so no
+import is needed, and also as the module `"trigscript"` for anyone who prefers
+`import { trigger, bring } from "trigscript"`.
+
+`hyperTriggers(P8)` anywhere in the script emits the classic three preserved triggers of
+sixty-two waits, so the whole trigger list runs every frame instead of every two seconds.
+Give them to a player whose other triggers never wait — a computer slot, usually — since
+a Wait stalls every trigger of that player.
+
+### Programs
+
+Everything inside `program(() => { … })` runs in the game:
+
+```ts
+program(() => {
+  let wave = 0;
+  let alarm = false;
+  while (true) {
+    if (bring(P1, units.AnyUnit, locations.Beacon, ">=", 1) && !alarm) {
+      alarm = true;
+      displayText("They are coming.");
+    }
+    if (alarm) {
+      createUnit(P8, units.ZergZergling, 4, locations.Spawn);
+      wave += 1;
+    }
+    if (wave >= 10) defeat();
+    sleep(seconds(20));
+  }
+}, { owner: P1 });
+```
+
+**Variables are death counters.** A `let n = 0` takes a death counter on a unit that can
+never die (the "(Unused)" entries of the unit list), twelve players per unit, so there
+are hundreds to go round; a `let f = false` takes a switch; a `let p = { lives: 3, gold: 0 }`
+is a variable per field. Numbers are what a death counter holds, 0 to 4 294 967 295: a
+result below zero is stored as 0, and a `u8` or `u16` variable (`let lives: u8 = 3`)
+stays within 0 … 255 or 0 … 65 535 and is much cheaper to compare and copy. `+`, `-`,
+`*` by a constant, `/` and `%` by a constant, `Math.min`, `Math.max`, `Math.abs` and
+`clamp()` all work. The allocator keeps clear of every death counter and switch the
+map's hand-made triggers use, so a script can be added to a map that already has some.
+
+**Control flow is what it says.** `if`/`else`, `while`, `do`, `for`, `switch`, `break`,
+`continue` and `c ? a : b` all work. Conditions go in an `if` or a `while`; actions stand
+as statements. Straight-line code runs within one trigger cycle, and a loop's back edge
+waits for the next one, so `while (true) { … }` is a game loop running once per cycle —
+every two seconds at normal speed, every frame with hyper triggers. A `for` whose bounds
+are known when you build is unrolled and runs at once.
+
+**Time is `sleep`.** `sleep(seconds(15))` pauses the program: what follows runs that
+much later, and nothing else of *this* program runs meanwhile, while other programs and
+the map's triggers carry on. `minutes()` and `cycles()` are the other units, and the
+count is worked out from whether the script emits hyper triggers. Something that runs on
+its own clock is another program — one program per concurrent activity. The game's own
+`wait()` is allowed but is a different thing: it stalls every trigger of that player,
+hyper triggers included, so use it for a short pause inside one cycle (a text, then a
+sound) and `sleep` to pass time.
+
+**Edges.** `if (rose(bring(…)))` is true on the cycle the condition becomes true and not
+again until it has been false in between; `once(…)` is true the first time only.
+`random()` is a coin toss.
+
+**Functions** declared inside the program, or made with `game()` in any file, run in the
+game too. They are inlined at each call, arguments pass by value, and they may return a
+number or a boolean — `function canAfford(price: number) { return gold >= price; }`.
+There is no recursion.
+
+**A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as one
+thread running as that player. `AllPlayers`, a force or a list of players makes a
+**per-player program**: the same code runs once for each of them at the same time,
+`CurrentPlayer` is that player, and every variable is per player, each with their own
+copy — which is how lives, scores and cooldowns are written once. `let total = shared(0)`
+is one cell they all share.
+
+**Everything the body reads from outside is computed when you build.** A constant, a
+helper, a condition, an action: each is worked out once, when the script runs, and the
+editor underlines those parts with dots so the boundary is visible as you type. That is
+what lets a helper written outside the program emit actions inside it. It is also the
+one rule to keep in mind: a program variable can never reach a condition, an action or a
+helper, because those were computed before the game started. `createUnit(P8, unit, wave,
+at)` is an error saying so. The exceptions are the amount of `setResources`, `setDeaths`,
+`setScore` and `setCountdownTimer` and the unit count of `createUnit`, `killUnitAt`,
+`removeUnitAt` and `giveUnits`, which can be a variable or an expression over one — the
+action is done bit by bit.
+
+**Cost is shown where you write it.** Every line that generates more than one trigger gets
+its count at its end, and the `program(` line its total. `n += 5`, `n = 3` and a
+comparison with a number are one trigger each; an operation between two *variables*
+(`a = b`, `a < b`, `a += b`) is the classic binary decomposition, 66 triggers for a plain
+number and 19 for a `u8`, so declare the range on anything you compare or copy in a hot
+loop. Hover a variable to see where it lives.
+
+### Examples
+
+Each of these is a complete `main.ts`. They assume a map with locations named `Beacon`,
+`Spawn`, `Base`, `Hill` and `Shop`; use your own names, and the editor completes them.
+
+**Starting resources and a welcome.** The simplest trigger: no preserve, so it runs once,
+and `CurrentPlayer` means each player in turn.
+
+```ts
+trigger(AllPlayers, [always()], [
+  setResources(CurrentPlayer, "set", 500, "ore"),
+  setResources(CurrentPlayer, "set", 100, "gas"),
+  displayText("Hold the hill for five minutes to win."),
+]);
+```
+
+**Hyper triggers.** One line, and the whole trigger list runs every frame. Player 8 is
+the computer slot here, and nothing else in the script makes that player wait.
+
+```ts
+hyperTriggers(P8);
+```
+
+**Something for every player.** A helper returns the trigger; a loop calls it. Death
+counts are the game's own counters, and subtracting ten after the reward makes the
+trigger fire again at the next ten, which `preserve: true` allows.
+
+```ts
+function reinforce(p: Player) {
+  return trigger(p, [deaths(p, units.TerranMarine, ">=", 10)], [
+    createUnit(p, units.TerranSiegeTankTankMode, 1, locations.Spawn),
+    setDeaths(p, units.TerranMarine, "subtract", 10),
+    displayText("Reinforcements have arrived."),
+  ], { preserve: true });
+}
+
+for (const p of [P1, P2, P3, P4]) reinforce(p);
+```
+
+**A shop.** Bring a civilian to the shop with enough minerals, and four marines appear
+at the spawn. The civilian is moved out first, so the trigger does not fire again on the
+next cycle, and `price` is an ordinary constant used twice.
+
+```ts
+const price = 150;
+
+trigger(AllPlayers, [
+  bring(CurrentPlayer, units.TerranCivilian, locations.Shop, ">=", 1),
+  accumulate(CurrentPlayer, ">=", price, "ore"),
+], [
+  moveUnit(CurrentPlayer, units.TerranCivilian, 1, locations.Shop, locations.Spawn),
+  setResources(CurrentPlayer, "subtract", price, "ore"),
+  createUnit(CurrentPlayer, units.TerranMarine, 4, locations.Spawn),
+  displayText(`Four marines for ${price} minerals.`),
+], { preserve: true });
+```
+
+**Waves from a table.** The table is ordinary data; the program walks it, one wave every
+forty-five seconds, then waits for the last attacker to die. `for … of` over a list known
+when you build is unrolled, so `w.unit` and `w.n` are plain values in each copy. The
+program runs as Player 1, so `victory()` is Player 1's; a team needs a `trigger()` for
+the others.
+
+```ts
+hyperTriggers(P8);
+
+const waves = [
+  { unit: units.ZergZergling, n: 8 },
+  { unit: units.ZergHydralisk, n: 6 },
+  { unit: units.ZergUltralisk, n: 2 },
+];
+
+program(() => {
+  displayText("The first wave arrives in thirty seconds.");
+  sleep(seconds(30));
+  for (const w of waves) {
+    createUnit(P8, w.unit, w.n, locations.Spawn);
+    order(P8, w.unit, locations.Spawn, locations.Base, "attack");
+    minimapPing(locations.Spawn);
+    sleep(seconds(45));
+  }
+  while (command(P8, units.AnyUnit, ">=", 1)) {
+    sleep(seconds(2));
+  }
+  displayText("The last wave is broken.");
+  victory();
+});
+```
+
+**Lives, per player.** One program, run once for every player: `lives` is a separate
+counter for each. When the hero dies the game's death count for it goes to 1; the
+program resets that count, takes a life, and either brings the hero back or ends the
+game for that player. `u8` keeps the counter cheap.
+
+```ts
+program(() => {
+  let lives: u8 = 3;
+  while (true) {
+    if (deaths(CurrentPlayer, units.JimRaynorMarine, ">=", 1)) {
+      setDeaths(CurrentPlayer, units.JimRaynorMarine, "set", 0);
+      lives -= 1;
+      if (lives == 0) {
+        displayText("No lives left.");
+        defeat();
+      } else {
+        createUnit(CurrentPlayer, units.JimRaynorMarine, 1, locations.Spawn);
+        displayText("Your hero returns.");
+      }
+    }
+  }
+}, { owner: AllPlayers });
+```
+
+**King of the hill.** A point a second for holding the hill alone, shown on a
+leaderboard, and a win at a hundred. `points` is a variable of the program and the
+amount of `setScore` follows it; `players.Foes` is "anyone at war with the current
+player", so the check is written once for everyone.
+
+```ts
+hyperTriggers(P8);
+
+trigger(AllPlayers, [always()], [leaderboardPoints("Hill", "custom")]);
+
+program(() => {
+  let points: u16 = 0;
+  while (true) {
+    if (bring(CurrentPlayer, units.AnyUnit, locations.Hill, ">=", 1)
+        && !bring(players.Foes, units.AnyUnit, locations.Hill, ">=", 1)) {
+      points += 1;
+      setScore(CurrentPlayer, "set", points, "custom");
+      if (points >= 100) {
+        displayText("The hill is yours.");
+        victory();
+      }
+    }
+    sleep(seconds(1));
+  }
+}, { owner: AllPlayers });
+```
+
+**Random events.** Every two minutes, a coin toss decides which of two things happens.
+`random()` is a randomized switch; `else` is the other side of it.
+
+```ts
+program(() => {
+  while (true) {
+    sleep(minutes(2));
+    if (random()) {
+      displayText("Reinforcements pour from the nydus canal.");
+      createUnit(P8, units.ZergZergling, 12, locations.Spawn);
+    } else {
+      displayText("A supply drop: 100 minerals for everyone.");
+      setResources(AllPlayers, "add", 100, "ore");
+    }
+  }
+});
+```
+
+**A beacon that opens a gate, once.** `rose()` fires on the cycle the condition becomes
+true, `once()` only the first time it does, so this runs exactly once however long the
+unit stands there. Two things happen on their own clocks, so there are two programs.
+
+```ts
+program(() => {
+  while (true) {
+    if (once(bring(P1, units.AnyUnit, locations.Beacon, ">=", 1))) {
+      displayText("The gate opens.");
+      killUnitAt(P12, units.LeftUpperLevelDoor, "All", locations.Base);
+      setSwitch(switches.Switch1, "set");
+    }
+  }
+});
+
+program(() => {
+  while (true) {
+    if (switchIs(switches.Switch1, "set")) {
+      createUnit(P8, units.ZergHydralisk, 2, locations.Spawn);
+      sleep(seconds(30));
+    }
+  }
+});
+```
+
+**A map that already has triggers.** Open TrigScript and press **Import map triggers**:
+every hand-made trigger comes back as a `trigger()` call in its order, and the next Build
+replaces the whole list with what the script makes. From there a repeated trigger becomes
+a loop, a number used in ten places becomes a constant, and the rest stays as it was.
+
+### Reference
+
+The trigger form and its options:
+
+| | |
+| --- | --- |
+| `trigger(players, conditions, actions, options?)` | One trigger. `players` is a player or a list; up to 16 conditions and 64 actions. |
+| `{ preserve, disabled, ignoreGameEnd, ignoreDisplay, conditionsMet, paused, waitSkipDisabled, flags }` | The options: each execution flag by name, and `flags` for raw bits. |
+| `preserve()` | The same as `{ preserve: true }`, as an action. |
+| `not(condition)` | The opposite, where one condition can say it: a comparison flips, a switch test flips, `always()` becomes `never()`. "Exactly n" has no opposite and is an error. |
+| `disabled(item)` | The condition or action kept in the trigger but switched off, as the Trigger Editor's disable does. |
+| `hyperTriggers(owner?)` | The three preserved triggers of sixty-two waits that make the list run every frame. |
+| `condition(type, …)`, `action(type, …)` | A record by raw type number and fields, for anything the tables do not know. |
+| `memory(address, comparison, value)`, `setMemory(address, modifier, value)` | EUD: the value at a memory address, through the deaths table. |
+
+The words the enumerated arguments take (StarEdit's labels work too):
+
+| Argument | Words |
+| --- | --- |
+| Comparison | `">="`, `"<="`, `"=="` |
+| Modifier | `"set"`, `"add"`, `"subtract"` |
+| Switch state, switch action | `"set"`, `"cleared"`; `"set"`, `"clear"`, `"toggle"`, `"randomize"` |
+| Resource | `"ore"`, `"gas"`, `"oreAndGas"` |
+| Score | `"total"`, `"units"`, `"buildings"`, `"unitsAndBuildings"`, `"kills"`, `"razings"`, `"killsAndRazings"`, `"custom"` |
+| Order | `"move"`, `"patrol"`, `"attack"` |
+| Alliance | `"enemy"`, `"ally"`, `"alliedVictory"` |
+| Unit state (doodads, invincibility) | `"enable"`, `"disable"`, `"toggle"` |
+| Count | A number, or `"All"` |
+| Text display | `displayText(text)` always displays; `displayText(text, false)` follows the game's message setting |
+
+The names:
+
+| | |
+| --- | --- |
+| `P1` … `P12`, `CurrentPlayer`, `AllPlayers` | Constants. |
+| `players.` | Every player group: `Force1` … `Force4` (and the force's own name), `Foes`, `Allies`, `Neutral`, `NonAlliedVictory`, and the twelve players again. |
+| `units.` | Every unit type by StarEdit name as an identifier (`TerranMarine`) or a string index (`units["Terran Marine"]`), and by the custom name the map gives it. `AnyUnit`, `Men`, `Buildings`, `Factories` are there. |
+| `locations.` | The map's locations by name; `Anywhere` and `NoLocation`. |
+| `switches.` | `Switch1` … `Switch256`, and any name the map sets. |
+| `aiScripts.` | The AI scripts by StarEdit name; a four-letter code as a string works too. |
+| A number | Accepted wherever a name is: an EUD player, an unlisted unit id. |
+
+Inside a program:
+
+| | |
+| --- | --- |
+| `program(body, options?)` | Code that runs in the game. Options: `owner` (a player, `AllPlayers`, a force, or a list — the last three run it once per player), `comments` (a comment naming the source line on every generated trigger; on by default), `variableUnits` (which unit types' death counters hold the variables). |
+| `game(fn)` | A function that runs in the game, for programs to call; it can live in any file and be imported. |
+| `let n = 0`, `let f = false`, `let p = { … }` | A death counter, a switch, a record of them. `const` is a build-time value when it can be. |
+| `u8`, `u16`, `u32` | The declared range of a number variable: `let lives: u8 = 3`. Narrower is cheaper, and saturates at its maximum. |
+| `shared(value)` | In a per-player program, one cell for all the players instead of one each. |
+| `sleep(duration)` | Pause this program. `seconds(n)`, `minutes(n)`, `cycles(n)` make a duration. |
+| `rose(condition)`, `once(condition)` | True on the cycle the condition becomes true; true the first time only. |
+| `random()` | A coin toss (a randomized switch). |
+| `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs` | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
+| `wait(ms)` | The game's own Wait: allowed, stalls every trigger of the player, so prefer `sleep`. |
+
+What things cost, in triggers, for a plain number and for a `u8` (the editor shows the
+exact count at the end of each line):
+
+| | Plain number | `u8` |
+| --- | --- | --- |
+| `n += 5`, `n = 3`, `n++` | 1 | 1 |
+| `if (n >= 3) { … }` | 4 | 4 |
+| `a = b`, `a += b` (two variables) | 65 | 18 |
+| `if (a < b) { … }` (two variables) | 133 | 38 |
+| `c = a * 3` | as `c = a` | as `c = a` |
+| `c = a / 4`, `c = a % 4` | 157 | 40 |
+| `c = a * b` (two variables) | far more | 203 |
+| `if (rose(…)) { … }`, `if (once(…)) { … }` | 9 | 9 |
+| `setResources(p, "add", n, "ore")` | 65 | 18 |
+| `createUnit(p, unit, n, at)` | 74 | 18 |
+| `sleep(seconds(2))` | 4 | 4 |
+
+What a program cannot do:
+
+- A text, a location, a unit type or a player is fixed when you build; only the amounts
+  and counts listed above can follow a variable.
+- A condition cannot be tested against a variable — the game compares a quantity with a
+  number it is given — so compare variables in the program's own statements.
+- No recursion, no division by a variable, no `for` unrolled more than 256 times (write a
+  `while`), and no sum past 4 294 967 295 in a plain number.
+- A program variable cannot reach a helper, a condition or an action, since those were
+  computed when the script was built.
+
+The full description of the language, its compiler and the commands it offers other
+plugins is in the plugin's own README at
+[scm-js/plugin-trigscript](https://github.com/scm-js/plugin-trigscript).
 
 ## Scenario settings
 
@@ -945,11 +1456,11 @@ inside the editor's dialogs. Your account and the maps stored on it stay.
 ## Plugins
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
-Walkability, Paint, Repair, Terrain from Image and the scmscx.com search are installed
-and on from the start. scmjs.dev — the account and the AI — is installed too but starts
-*off*, because an account and a trial are yours to ask for: tick it on in Plugins ▸
-Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear. Melee
-Wizard, TrigScript and Section Explorer are a click away.
+Walkability, Paint, Repair, Terrain from Image, TrigScript and the scmscx.com search are
+installed and on from the start. scmjs.dev — the account and the AI — is installed too
+but starts *off*, because an account and a trial are yours to ask for: tick it on in
+Plugins ▸ Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear.
+Melee Wizard and Section Explorer are a click away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -969,7 +1480,7 @@ and the addresses it will fetch from.
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) and opens the map you pick. The site does not yet allow a page served elsewhere to read it, so today the dialog explains and links to the site instead. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
-| [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | TypeScript files kept inside the map and built into a block of the trigger list: ordinary code that runs when you build, and `program()` bodies that run in the game as death-counter state machines. |
+| [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game as death-counter state machines. See [TrigScript](#trigscript). |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account and the AI that comes with it — see [Your scmjs.dev account](#your-scmjsdev-account) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
@@ -1071,7 +1582,7 @@ The map you have open is never kept there and is not touched by any of it.
 | --- | --- |
 | Classic editor: every condition and action, per-item disable | Yes |
 | Text editor in SCMDraft's TrigEdit syntax | Yes |
-| Scripting: TypeScript that builds into triggers | Yes, as a plugin (TrigScript: install it from Plugins ▸ Browse Plugins…, then Triggers ▸ TrigScript…). |
+| Scripting: TypeScript that builds into triggers | Yes, as a plugin (TrigScript, on by default): Triggers ▸ TrigScript…. Loops, helpers and tables to write triggers with, `program()` bodies that run in the game, checked against the map's names as you type, a simulator, and an editor beside the map. See [TrigScript](#trigscript). |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |
 | Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |

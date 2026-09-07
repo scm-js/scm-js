@@ -23,7 +23,7 @@ npm run dev            # http://localhost:5173
 ```
 
 The first `npm run dev` or `npm run build` needs a network connection: a `predev` /
-`prebuild` hook fetches the five default plugins at their pinned versions into the
+`prebuild` hook fetches the default plugins at their pinned versions into the
 gitignored `plugins/` folder, where the build compiles them in (see
 [Defaults and vendoring](#defaults-and-vendoring)). After that it is offline. The same
 hook reports what game data is on disk and warns, rather than fails, when there is none.
@@ -382,8 +382,8 @@ fetching it. Reload drops the copy and fetches again; turning the option off dro
 
 ### Defaults and vendoring
 
-The five default plugins (scmscx.com, Repair, Walkability, Terrain from Image and Paint)
-are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
+The default plugins (scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigScript
+and scmjs.dev) are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
 to a **tag**, never a branch, so that a push to a plugin repository cannot change every
 editor already in use and any release can be rebuilt as it shipped. Moving a default
 forward is a commit that changes the tag there. A plugin's identity is its repository,
@@ -645,7 +645,7 @@ and when a canned answer no longer fits the map it is written for, change the mo
 | What is in a map file and what the editor does with it | [file-formats.md](file-formats.md) |
 | Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
 | Using, installing and writing plugins, the plugin API | [plugins.md](plugins.md), and the generated reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
-| TrigScript, the trigger scripting language | the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README |
+| TrigScript, the trigger scripting language | the user guide's [TrigScript](../README.md#trigscript) section for map makers; the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README for the compiler and the commands it offers other plugins |
 | Each plugin's internals | its own repository's README |
 | Running, building, releasing, contributing | this file |
 | Per-subsystem implementation notes | [CLAUDE.md](../CLAUDE.md) |

@@ -34,7 +34,7 @@ real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in th
 ### Trigger claims, and the TrigScript plugin
 
 The trigger scripting language — its compiler, simulator and Monaco dialog — is the **TrigScript**
-plugin (`github.com/scm-js/plugin-trigscript`, not a default — installed from Browse Plugins), not the
+plugin (`github.com/scm-js/plugin-trigscript`, a default that ships on since 2026-09-07, pinned in `defaults.ts`), not the
 editor: it was moved out (as "Trigger Script", 2026-09-03) so the editor no longer bundles Monaco and a
 second TypeScript (the desktop download lost ~14 MB of the 18 MB those chunks weighed), and rewritten
 on 2026-09-07 as TrigScript: the script is ordinary TypeScript that *runs* when built (files, imports,

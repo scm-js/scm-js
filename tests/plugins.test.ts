@@ -1207,9 +1207,10 @@ describe("plugin lifecycle", () => {
     expect(effectiveInstalls([]).filter((p) => !p.enabled).map((p) => pluginKey(p.spec))).toEqual([
       "github:scm-js/plugin-scmjs-dev",
     ]);
-    // Melee Wizard, TrigScript and Section Explorer are not defaults: they are found and
-    // installed through Browse Plugins.
-    for (const spec of ["plugin-melee-wizard", "plugin-trigscript", "plugin-section-explorer"]) {
+    // Melee Wizard and Section Explorer are not defaults: they are found and installed
+    // through Browse Plugins. (Run this without a vendored `plugins/` directory too — a
+    // bundled copy's `builtin:` spec hides the name this looks for.)
+    for (const spec of ["plugin-melee-wizard", "plugin-section-explorer"]) {
       expect(defaultPluginSpecs().some((s) => s.includes(spec))).toBe(false);
     }
   });

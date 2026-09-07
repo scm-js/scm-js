@@ -191,6 +191,14 @@ the same pass: `.btn` is `inline-flex`, an author rule that beat the browser's o
 `el.hidden = true`, which is what plain DOM reaches for — stayed on screen after the
 work ended. Nothing here tests the widgets' DOM: the test environment is node, and a
 DOM test runner is a dependency the repository does not carry.
+The 2026-09-07 assistant-transcript pass added `steps` and `fold` (the "Work, step by step"
+block in `ui.css`): the scmjs.dev plugin had two hand-rolled step lists (Make Scenario's
+build stages and the assistant's tool calls) and was about to grow a `<details>` with a live
+summary line, an Undo button inside the summary (which needs `preventDefault` or the click
+folds the block — `fold.action` carries that) and a tail window (`steps({ tail })` hides all
+but the last rows while `running(true)`, in JS rather than `:nth-last-child`, so the number
+is an option). The assistant's transcript is the worked example: a `fold` per turn holding a
+`steps` list, notes between the rows for the model's words, and a second `fold` for its reasoning.
 
 The beta pass added the rest of what the editor itself does to the contract — read `api.ts` and
 `docs/plugins.md` for the list: `document.save` / `saveAs` / `close` / `changeTileset` (`export`

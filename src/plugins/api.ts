@@ -2410,6 +2410,85 @@ export interface BusyHandle {
   done(): void;
 }
 
+export interface StepsOptions extends WidgetOptions {
+  /**
+   * While the list is `running`, show only its last this many rows; the rest come back
+   * when it stops. For a list that grows past what a panel can hold while it is watched.
+   * 0, the default, shows every row.
+   */
+  tail?: number;
+}
+
+export interface StepOptions {
+  /** A character in front of the label, in the list's own vocabulary: ✎ for a change, ▸ for a read. */
+  icon?: string;
+  /** The row's tooltip. */
+  title?: string;
+  /** Begin running (a ring) rather than pending (a hollow mark). */
+  running?: boolean;
+}
+
+/** One row of a `steps` list. Each state takes the detail shown dim after the label. */
+export type StepHandle = {
+  readonly element: HTMLElement;
+  /** Rename the row (a step named before its arguments were known), and its tooltip. */
+  set(label: string, title?: string): void;
+  start(detail?: string): void;
+  done(detail?: string): void;
+  fail(detail?: string): void;
+  skip(detail?: string): void;
+  /** Change the detail and nothing else — a clock ticking beside a running step. */
+  detail(text: string): void;
+  /** Something under the label — a thumbnail, a line of output. */
+  append(node: Node): void;
+};
+
+/**
+ * A list of steps: one row per unit of work, each pending, running, done, failed or
+ * skipped, with a detail after its label and a mark at its end. What a builder shows
+ * while it builds, and what a tool-using assistant shows while it works.
+ */
+export type StepsElement = HTMLElement & {
+  add(label: string, options?: StepOptions): StepHandle;
+  /**
+   * A line between rows that is not a step — an assistant's words between its tool
+   * calls. `at` puts it before the row at that index; without it, at the end.
+   */
+  note(content: string | Node, at?: number): HTMLElement;
+  /** Rows and notes so far, for `note`'s `at`. */
+  size(): number;
+  /** Steps so far (rows, not notes). */
+  count(): number;
+  /** Whether work is running: while it is, the `tail` window applies. */
+  running(on: boolean): void;
+};
+
+export interface FoldOptions extends WidgetOptions {
+  /** The line to begin with. */
+  text?: string;
+  /** Open to begin with. */
+  open?: boolean;
+  /** Start with a ring for a mark. */
+  busy?: boolean;
+}
+
+/**
+ * A block that folds to one line: a mark, the line, a control at its end, and a body.
+ * For work worth a line when it is done and a list while it runs — one turn of an
+ * assistant, a pass over the map — and for anything long that most readers skip, such
+ * as a model's reasoning.
+ */
+export type FoldElement = HTMLDetailsElement & {
+  /** Where the content goes. */
+  readonly body: HTMLElement;
+  /** The line: text, or text and nodes. */
+  set(...content: (string | Node)[]): void;
+  /** The mark in front of the line: `"busy"` for a ring, a character (✓, ✗) in a colour, or null for none. */
+  mark(sym: string | null, kind?: "ok" | "warn" | "error"): void;
+  /** A control at the end of the line — an Undo — whose click does not fold the block; null takes it away. */
+  action(node: HTMLElement | null): void;
+};
+
 /**
  * Buttons, fields, forms and lists in the editor's own styles, as plain DOM. A plugin
  * dialog built from these looks like a built-in one; `el` is the escape hatch for
@@ -2457,6 +2536,13 @@ export interface WidgetsApi {
    * Calling it again on a covered box only changes the label.
    */
   busy(target: HTMLElement, options?: BusyOptions | string): BusyHandle;
+
+  /* ── Work, step by step ── */
+
+  /** A list of steps, each pending → running → done / failed / skipped, with a detail. */
+  steps(options?: StepsOptions): StepsElement;
+  /** A block folded to one line — a mark, a line that can change, a control at its end — over a body. */
+  fold(options?: FoldOptions): FoldElement;
 }
 
 /* ── Menus, context menus, hotkeys ──────────────────────── */

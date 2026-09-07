@@ -971,6 +971,138 @@ input[type="range"] {
 
 /* A loading indicator still has to indicate: the rings stay, slowed to a tick, and the
    sweeps — which move without saying anything — go. */
+/* ── Work, step by step ──────────────────────────────────── */
+/* A list of steps: a row each, the detail after the label, a mark at the end saying how it went. */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.step {
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.step-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.step.running {
+  background: var(--bg-3);
+}
+.step-icon {
+  flex: none;
+  width: 12px;
+  text-align: center;
+}
+.step-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.step.pending .step-label,
+.step.skipped .step-label {
+  color: var(--text-dim);
+}
+.step.skipped {
+  color: var(--text-faint);
+}
+.step-detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.step-detail:empty {
+  display: none;
+}
+.step.failed .step-detail {
+  color: var(--danger);
+}
+.step-mark {
+  flex: none;
+  width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.step.done .step-mark {
+  color: var(--ok);
+}
+.step.failed .step-mark {
+  color: var(--danger);
+}
+.step-extra {
+  margin: 2px 0 0 18px;
+}
+.step-note {
+  padding: 2px 4px;
+  line-height: 1.4;
+}
+
+/* A block folded to one line: the mark, the line, a control at its end; the body under. */
+.fold {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  min-width: 0;
+}
+.fold > .fold-head {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.fold > .fold-head::-webkit-details-marker {
+  display: none;
+}
+.fold > .fold-head > .fold-mark {
+  flex: none;
+  width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ok);
+}
+.fold > .fold-head > .fold-mark.warn {
+  color: var(--warn);
+}
+.fold > .fold-head > .fold-mark.error {
+  color: var(--danger);
+}
+.fold > .fold-head > .fold-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fold > .fold-head > .fold-line .error {
+  color: var(--danger);
+}
+.fold > .fold-head > .btn {
+  flex: none;
+}
+.fold > .fold-body {
+  padding: 4px 6px 6px;
+  border-top: 1px solid var(--border);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 2.4s;

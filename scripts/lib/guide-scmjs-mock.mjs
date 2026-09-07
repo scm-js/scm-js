@@ -389,6 +389,25 @@ const RECIPES = {
       const text = "Done. Two cliff-walled lanes from the north spawns to the south goal, a yard and a hire pad per player; Spawn 1 reaches the Goal on foot, and every player owns something. Add the waves with ums_build when you are ready.";
       return { cost: 0.01, inputTokens: 7600, outputTokens: 90, text, output: { stopReason: "end_turn", content: [{ type: "text", text }] } };
     }
+    // A long turn, to exercise the panel: reasoning, narration, reads, a screenshot, a
+    // call that fails, edits — seven steps before the answer.
+    if (/exercise/i.test(asked)) {
+      const done = messages.flatMap((m) => m.role === "assistant" ? m.content.filter((c) => c.type === "tool_use").map((c) => c.name) : []);
+      const step = (text, id, name, input, thinking) => ({ cost: 0.01, inputTokens: 7000, outputTokens: 120, text, thinking, tools: [{ id, name }], output: { stopReason: "tool_use", content: [...(thinking ? [{ type: "thinking", thinking, signature: "sig" }] : []), ...(text ? [{ type: "text", text }] : []), { type: "tool_use", id, name, input }] } });
+      const script = [
+        ["A look at the map first.", "map_info", {}, "The person wants a survey and then a squad; start with the facts, then a picture."],
+        ["", "screenshot", { x0: 0, y0: 0, x1: 40, y1: 30 }],
+        ["The north-west is open ground. Counting Player 1's units.", "list_units", { owner: 1 }],
+        ["", "no_such_tool", { a: 1 }],
+        ["Placing the squad by the start location.", "place_units", { units: [{ unit: "Terran Marine", player: 1, x: 100, y: 22 }, { unit: "Terran Marine", player: 1, x: 101, y: 22 }] }, "Two Marines east of the start, off the mineral line."],
+        ["", "place_units", { units: [{ unit: "Terran Siege Tank (Tank Mode)", player: 1, x: 103, y: 23 }] }],
+        ["A check before I finish.", "validate", {}],
+      ];
+      const i = done.length;
+      if (i < script.length) { const [text, name, input, thinking] = script[i]; return step(text, `toolu_e${i}`, name, input, thinking); }
+      const text = "Done. Player 1 has two Marines and a Siege Tank east of the start; the map checks clean. One tool call failed on the way (a tool that does not exist), which changed nothing.";
+      return { cost: 0.01, inputTokens: 7600, outputTokens: 90, text, output: { stopReason: "end_turn", content: [{ type: "text", text }] } };
+    }
     // Turn one: look for Player 1's start location.
     if (!results.length) {
       return {

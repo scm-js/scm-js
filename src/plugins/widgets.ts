@@ -10,7 +10,7 @@
  *
  * Nothing here touches the store or React: it is a DOM helper library, tested as one.
  */
-import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SelectOption, SelectOptions, SkeletonOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi } from "./api";
+import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SelectOption, SelectOptions, SkeletonOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi, FoldElement, FoldOptions, StepHandle, StepsElement, StepsOptions } from "./api";
 
 /** Attributes `el` maps onto the element rather than setting as a property. */
 const ATTRS = new Set(["type", "role", "name", "placeholder", "min", "max", "step", "colspan", "rowspan", "for", "href", "target", "src", "alt", "aria-label"]);
@@ -302,6 +302,86 @@ export function createWidgets(): WidgetsApi {
       };
       covers.set(target, handle);
       return handle;
+    },
+
+    /* ── Work, step by step ──
+       A list of rows that says how each unit of work went, and a block that folds to a
+       line. Between them they are what a builder and a tool-using assistant show. */
+
+    steps: (options: StepsOptions = {}) => {
+      const box = el("div", { className: classes("steps", options.className), title: options.title }) as unknown as StepsElement;
+      const tail = Math.max(0, options.tail ?? 0);
+      let count = 0;
+      let running = false;
+      // The tail window: while running, every row but the last `tail` is hidden.
+      const trim = () => {
+        const n = box.children.length;
+        for (let i = 0; i < n; i++) (box.children[i] as HTMLElement).hidden = running && tail > 0 && i < n - tail;
+      };
+      box.add = (label, o = {}) => {
+        const text = el("span", { className: "step-label" }, label);
+        const detail = el("span", { className: "step-detail dim" }, "");
+        const mark = el("span", { className: "step-mark" }, "○");
+        const row = el("div", { className: "step pending", title: o.title }, el("div", { className: "step-main" }, o.icon && el("span", { className: "step-icon" }, o.icon), text, detail, mark));
+        box.append(row);
+        count++;
+        trim();
+        const state = (name: string, sym: string | null, d?: string) => {
+          row.className = classes("step", name);
+          if (sym === null) mark.replaceChildren(widgets.spinner({ size: "sm" }));
+          else mark.textContent = sym;
+          if (d !== undefined) { detail.textContent = d; detail.title = d; }
+        };
+        const handle: StepHandle = {
+          element: row,
+          set(l, t) { text.textContent = l; if (t !== undefined) row.title = t; },
+          start: (d) => state("running", null, d),
+          done: (d) => state("done", "✓", d),
+          fail: (d) => state("failed", "✗", d),
+          skip: (d) => state("skipped", "–", d),
+          detail: (d) => { detail.textContent = d; detail.title = d; },
+          append: (node) => { row.append(el("div", { className: "step-extra" }, node)); },
+        };
+        if (o.running) handle.start();
+        return handle;
+      };
+      box.note = (content, at) => {
+        const note = el("div", { className: "step-note" }, content);
+        box.insertBefore(note, at === undefined ? null : box.children[at] ?? null);
+        trim();
+        return note;
+      };
+      box.size = () => box.children.length;
+      box.count = () => count;
+      box.running = (on) => { running = on; box.classList.toggle("running", on); trim(); };
+      return box;
+    },
+
+    fold: (options: FoldOptions = {}) => {
+      const mark = el("span", { className: "fold-mark" });
+      const line = el("span", { className: "fold-line" }, options.text ?? "");
+      const head = el("summary", { className: "fold-head" }, mark, line);
+      const body = el("div", { className: "fold-body" });
+      const box = el("details", { className: classes("fold", options.className), title: options.title }, head, body) as unknown as FoldElement;
+      box.open = options.open ?? false;
+      (box as unknown as { body: HTMLElement }).body = body;
+      let action: HTMLElement | null = null;
+      // A click on a control in the summary would also fold the block: the control's click is its own.
+      const keep = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); };
+      box.set = (...content) => { line.replaceChildren(...content); };
+      box.mark = (sym, kind) => {
+        mark.className = classes("fold-mark", kind);
+        if (sym === "busy") mark.replaceChildren(widgets.spinner({ size: "sm" }));
+        else mark.textContent = sym ?? "";
+        mark.hidden = sym === null;
+      };
+      box.action = (node) => {
+        if (action) { action.removeEventListener("click", keep); action.remove(); }
+        action = node;
+        if (node) { node.addEventListener("click", keep); head.append(node); }
+      };
+      box.mark(options.busy ? "busy" : null);
+      return box;
     },
   };
   return widgets;

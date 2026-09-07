@@ -864,12 +864,20 @@ that opens the same dialog.
 **Assistant** (Ctrl+Shift+A, or the *AI* cell in the status bar) is a conversation about
 the open map, in a panel floating over it. Ask what you want to know or say what to
 change; the model reads the map through tools and changes it through others, and you
-watch it happen. The strip at the top says what it is doing — waiting, thinking, writing,
-working on the map — with the seconds and the cost. Its words arrive as they are
-written. A tool call appears as a row the moment the model decides on it and fills in
-when it runs: **▸** reads, **✎** changes the map, and the map outlines what a call is
-about to touch and flashes what it changed. The panel can be closed while it works; the
-status bar shows the same state, and Escape stops it.
+watch it happen. The transcript reads as what you asked, then what it answered, with the
+work between them folded into one block per turn. While the turn runs the block is open
+on its last few steps — each tool call a line in plain words, **▸** for a read and **✎**
+for a change, with what came back after it — and the model's words between calls sit
+there small, so the answer stands apart from the narration. When the turn ends the block
+folds to one line: how many steps, how many edits, whether any failed, the seconds and
+the cost, and an **Undo** for that turn's edits. Open it to see every step; a screenshot
+the model took is a thumbnail there that grows when clicked, and the model's reasoning is
+a fold of its own inside. The strip at the top says what it is doing — waiting, thinking,
+writing, the step it is on — with the seconds and the cost. The map outlines what a call
+is about to touch and flashes what it changed. The panel can be closed while it works;
+the status bar shows the same state, and Escape stops it. The transcript follows the work
+only while you are at the bottom of it: scroll up to read and it stays, with a button
+back to the latest.
 
 It can read everything: the map's facts and statistics, the units with every property,
 doodads, sprites, locations, strings, switches, sounds, the triggers as text, the trigger
@@ -885,8 +893,8 @@ and paints terrain as shapes — a plateau with a ramp that fits, a lane that st
 walkable, a river with a bridge — fits a ramp or a bridge on ground already there, tells
 you whether units can walk from one place to another, and checks the game's silent rules
 (a player who owns nothing is defeated at once) and fixes them when asked. Each edit is
-its own undo step, and after a turn that changed the
-map the panel says what changed and offers to undo that turn in one press.
+its own undo step, and the folded line of a turn that changed the map carries the Undo
+for all of that turn's edits in one press.
 
 The chips above the input suggest a question for the layer you are on and what you have
 selected. Right-click on the map and choose *Ask AI about this spot / the selection /

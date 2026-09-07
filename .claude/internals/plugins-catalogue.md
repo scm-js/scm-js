@@ -44,7 +44,11 @@ over VF4 walkability, the check the lanes defect needed) and `scenario_rules` (o
 once, triggers dead — with `fix: true` placing an Overlord keeper)
 vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
 repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
-assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the wire contract,
+assistant panel is a tool-use loop whose tools run in the plugin (its transcript, since 2026-09-07, is a
+`widgets.fold` per turn holding a `widgets.steps` list — `Tool.describe(input, ctx)` / `Tool.report(result)`
+phrase each row, with a generic fallback in `tools/common.ts`; a round's text is the answer until the round
+turns out to call tools, when it is demoted to a note in the block; `groupTurns` rebuilds the blocks on
+reopen; the server's agent prompt tells the model not to announce a step before taking it). `protocol.ts` is the wire contract,
 kept identical in both repositories. The editor knows nothing of it beyond the host additions above.
 The plugin also owns the **Account** top-level menu, a status-bar cell, the Account dialog (balance,
 ledger, storage, top-up, the two ticks) and map storage over the server's `/v1/maps`

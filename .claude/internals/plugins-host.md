@@ -160,10 +160,18 @@ arrive on `api`), `api.graphics`
 context, everything else already drew in map coordinates) and `api.commands`
 (`pluginCommandsAtom`; ids are namespaced under the plugin unless they carry a dot, and
 `menu.add` / `contextMenu.add` / `hotkeys.add` take `command` in place of `run`).
-The `"document"` event carries a `DocumentEvent { reason, fileName }` (`host.ts#documentEvent` over
+The `"document"` event carries a `DocumentEvent { reason, fileName, id }` (`host.ts#documentEvent` over
 `documentChangeAtom`, which `loadDocumentAtom` — `reason` on `LoadedDocument`, `"open"` by default, `"new"`
-from File ▸ New, `"replace"` from `replaceScenarioAtom` — and `closeDocumentAtom` write); the other events
-carry nothing. Events are notifications in activation order and never intercept; a listener that rewrites
+from File ▸ New, `"replace"` from `replaceScenarioAtom`, `"switch"` from `activateDocumentAtom` and from
+`closeDocumentAtom` when another map takes the front — and `closeDocumentAtom` write; `id` is
+`activeDocumentIdAtom`, null for a scenario a test set directly). Several maps (2026-09-07, see
+`viewport-ui.md`): `api.document` grew `id()`, `list()` (`documentTabsAtom` copied), `activate(id)`
+(synchronous — nothing is read), `open(file, fileName?, { into })`, `into` on `create`'s options and
+`close(id?)`, all over `useMapFileActions` (`activateDocumentIn`, `closeDocumentIn`, `openTarget`);
+the API talks about documents, never tabs, so the strip is the chrome's business and no UI surface was
+added. Plugins that keep per-map state key it on `id`; Repair resets on any reason but `"open"`, so a
+switch drops its *Restore original* for the map that went behind (a plugin-side improvement, not a
+host bug). The other events carry nothing. Events are notifications in activation order and never intercept; a listener that rewrites
 the map raises a fresh `"replace"` for the rest — there is deliberately no plugin ordering.
 `api.document.sections` also has `trailing()`, `required()`, `defaults(name)` and `rebuild(names?)`
 (`editor/sections.ts#defaultSectionBytes` / `rebuildSections` / `requiredSectionNames`), and

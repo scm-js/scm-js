@@ -19,6 +19,7 @@ import { droppedHandle } from "./services/mapIo";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
 import ToolBar from "./components/chrome/ToolBar";
+import TabStrip from "./components/chrome/TabStrip";
 import StatusBar from "./components/chrome/StatusBar";
 import Toasts from "./components/chrome/Toasts";
 import { LeftDock, RightDock } from "./components/panels/Docks";
@@ -141,6 +142,7 @@ export default function App() {
           <>
             <MenuBar />
             {panels.toolbar && <ToolBar />}
+            <TabStrip />
             <div className="body">
               {panels.palette && <LeftDock />}
               <MapViewport />

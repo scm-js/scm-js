@@ -10,12 +10,16 @@ import { mapFilePathAtom } from "../src/atoms/editorAtoms";
 import { serializeScenario } from "../src/formats/chk/scenario";
 import { statusMessageAtom } from "../src/atoms/uiAtoms";
 
-/** A store with a map open, modified, and the preference on: what `useCloseGuard` guards. */
+/**
+ * A store with a map open, modified, and the preference on: what `useCloseGuard` guards.
+ * One map at a time, so an open or a new map replaces the open one and is asked about;
+ * `tests/documents.test.ts` covers the several-maps default.
+ */
 function dirtyStore() {
   const store = createStore();
   store.set(scenarioAtom, createScenario({ width: 8, height: 6, era: 0, name: "p" }));
   store.set(mapModifiedAtom, true);
-  store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
+  store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true, multipleMaps: false });
   return store;
 }
 

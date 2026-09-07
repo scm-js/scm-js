@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom, zoomToFitAtom,
@@ -12,7 +12,7 @@ import { desktopBridge } from "../gamedata/desktop";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
-import { useMapFileActions } from "./useMapFileActions";
+import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 
 const LAYER_KEYS: Record<string, EditorLayer> = { t: "terrain", d: "doodads", u: "units", s: "sprites", l: "locations", f: "fog", c: "clipboard" };
@@ -20,6 +20,7 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 
 /** Global editor hotkeys (UI only). */
 export function useHotkeys() {
+  const store = useStore();
   const open = useSetAtom(openDialogAtom);
   const setLayer = useSetAtom(activeLayerAtom);
   const setFlags = useSetAtom(viewFlagsAtom);
@@ -72,6 +73,9 @@ export function useHotkeys() {
           return;
         }
       }
+
+      // Ctrl+Tab walks the open maps — a browser keeps it for its own tabs, so only the desktop build sees it here.
+      if (mod && e.key === "Tab" && desktopBridge()) { e.preventDefault(); stepDocumentIn(store, e.shiftKey ? -1 : 1); return; }
 
       if (mod && !e.shiftKey) {
         const k = e.key.toLowerCase();
@@ -183,5 +187,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit]);
+  }, [store, open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit]);
 }

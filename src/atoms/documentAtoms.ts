@@ -12,10 +12,13 @@ import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
-  clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
+  centerViewOnAtom, clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, type EditorLayer,
+  spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
 } from "./editorAtoms";
+import type { SaveOptions } from "../editor/save";
+import type { Rect } from "../editor/terrain";
+import type { OpenDocumentInfo } from "../plugins/api";
 import { START_LOCATION } from "../data/units";
 import { statusMessageAtom } from "./uiAtoms";
 import { applyChanges } from "../editor/terrain";
@@ -220,10 +223,20 @@ export interface LoadedDocument {
   origin?: MemberInfo | null;
   /** How the document came to be installed; File ▸ Open when omitted. */
   reason?: DocumentChangeReason;
+  /**
+   * Where the document goes: `"tab"` keeps the open map beside it (parked, to come back
+   * to), `"replace"` — the default, and what a `"replace"` reason always does — takes the
+   * open map's place. `openTarget` in `useMapFileActions` decides between them from the
+   * preference; the atom itself has no opinion.
+   */
+  into?: "tab" | "replace";
 }
 
-/** Why `scenarioAtom` last changed: a file opened, a new map, the map closed, or the open one re-parsed (a raw section edit). */
-export type DocumentChangeReason = "open" | "new" | "close" | "replace";
+/**
+ * Why `scenarioAtom` last changed: a file opened, a new map, the map closed, the open one
+ * re-parsed (a raw section edit), or another open map brought to the front.
+ */
+export type DocumentChangeReason = "open" | "new" | "close" | "replace" | "switch";
 
 /**
  * The reason behind the latest `scenarioAtom` change, with the object it applies to so a
@@ -232,49 +245,176 @@ export type DocumentChangeReason = "open" | "new" | "close" | "replace";
  */
 export const documentChangeAtom = atom<{ reason: DocumentChangeReason; scenario: Scenario | null }>({ reason: "close", scenario: null });
 
-/**
- * Install a freshly parsed scenario, mirroring the fields the existing UI atoms read.
- * Those atoms stay the editor's source of truth for display; `scenarioAtom` is the
- * source of truth for what gets written back out.
- */
-export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
-  const { scenario } = doc;
-  set(documentChangeAtom, { reason: doc.reason ?? "open", scenario });
-  set(scenarioAtom, scenario);
-  set(archiveExtrasAtom, doc.extras);
-  set(archiveStoredAtom, doc.stored ?? null);
-  set(mapFilePathAtom, doc.fileName);
-  set(mapFileHandleAtom, doc.handle ?? null);
-  set(mapOriginAtom, doc.origin ?? null);
-  // A re-parse keeps the options the user confirmed; a new document starts from the defaults.
-  if (doc.reason !== "replace") set(saveOptionsAtom, null);
+/* ── Several maps open at once ───────────────────────────── */
 
-  set(mapNameAtom, scenarioName(scenario) ?? doc.fileName ?? "Untitled Scenario");
+/**
+ * Everything the document registers hold for one map — the atoms above and in
+ * `editorAtoms.ts` that describe *the open document* rather than the editor's tools —
+ * kept while another map is in front. The registers stay the one place every hook and
+ * panel reads; a map that is not in front does no work and holds no subscriptions, it is
+ * this record and nothing else. Bringing it back is `activateDocumentAtom`: the front
+ * map is parked the same way and this one is put into the registers.
+ */
+export interface ParkedDocument {
+  scenario: Scenario;
+  extras: Map<string, Uint8Array>;
+  stored: StoredMembers | null;
+  fileName: string | null;
+  handle: MapFileHandle | null;
+  origin: MemberInfo | null;
+  saveOptions: SaveOptions | null;
+  modified: boolean;
+  blankFill: { terrainId: number } | null;
+  undo: HistoryEntry[];
+  redo: HistoryEntry[];
+  selected: { units: number[]; doodads: number[]; sprites: number[]; locations: number[] };
+  clipSelection: Rect | null;
+  zoom: number;
+  /** The tile at the middle of the view, so the map comes back where it was left; null for a map never shown. */
+  center: { x: number; y: number } | null;
+}
+
+/** One open map: the one in front (`parked` null — the registers hold it) or one waiting behind it. */
+export interface DocumentSlot {
+  id: number;
+  parked: ParkedDocument | null;
+}
+
+/**
+ * The open maps in the order the tab strip and the Window menu show them. Exactly one has
+ * `parked` null while a map is open: that is the one in the registers. Empty when nothing
+ * is open — or when a scenario was put into `scenarioAtom` behind the writers' backs (a
+ * test), in which case there is a map and no slot for it, and `activeDocumentIdAtom` is null.
+ */
+export const documentsAtom = atom<DocumentSlot[]>([]);
+
+let nextDocumentId = 1;
+
+/** The id of the map in front, or null with no map (or no slot for it). Ids are never reused in a session. */
+export const activeDocumentIdAtom = atom<number | null>((get) => get(documentsAtom).find((d) => d.parked === null)?.id ?? null);
+
+/** Whether any open map — in front or parked — has unsaved changes; what leaving the editor asks about. */
+export const anyModifiedAtom = atom<boolean>((get) => get(mapModifiedAtom) || get(documentsAtom).some((d) => d.parked?.modified === true));
+
+/** The tilesets the parked maps draw with, so `useTileset` keeps them decoded across a switch. */
+export const parkedTilesetsAtom = atom<Set<TilesetFileName>>((get) => {
+  const held = new Set<TilesetFileName>();
+  for (const d of get(documentsAtom)) if (d.parked) held.add(TILESET_FILENAMES[tilesetIndex(d.parked.scenario)]);
+  return held;
+});
+
+/**
+ * The open maps as the chrome and the plugin API list them. The one in front is read from
+ * the registers (its record in `documentsAtom` is empty by design); a parked one from its record.
+ */
+export const documentTabsAtom = atom<OpenDocumentInfo[]>((get) =>
+  get(documentsAtom).map(({ id, parked: p }): OpenDocumentInfo =>
+    p
+      ? {
+        id, name: scenarioName(p.scenario) ?? p.fileName ?? "Untitled Scenario", fileName: p.fileName,
+        tileset: (TILESETS[tilesetIndex(p.scenario)]?.id ?? "jungle") as TilesetId, width: p.scenario.width, height: p.scenario.height, modified: p.modified, active: false,
+      }
+      : { id, name: get(mapNameAtom), fileName: get(mapFilePathAtom), tileset: get(mapTilesetAtom), width: get(mapWidthAtom), height: get(mapHeightAtom), modified: get(mapModifiedAtom), active: true }));
+
+/** The registers as a record: what parking the front map keeps. Null with no map. */
+function parkRegisters(get: Getter): ParkedDocument | null {
+  const scenario = get(scenarioAtom);
+  if (!scenario) return null;
+  const v = get(viewportRectAtom);
+  return {
+    scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom),
+    saveOptions: get(saveOptionsAtom), modified: get(mapModifiedAtom), blankFill: get(blankFillAtom), undo: get(undoStackAtom), redo: get(redoStackAtom),
+    selected: { units: get(selectedUnitsAtom), doodads: get(selectedDoodadsAtom), sprites: get(selectedSpritesAtom), locations: get(selectedLocationsAtom) },
+    clipSelection: get(clipSelectionAtom), zoom: get(zoomAtom),
+    // The viewport has not measured itself before the first paint (w = h = 1): nothing to come back to.
+    center: v.w > 1 || v.h > 1 ? { x: v.x + v.w / 2, y: v.y + v.h / 2 } : null,
+  };
+}
+
+/**
+ * Put a record into the registers — the one write behind opening, switching and closing
+ * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and
+ * bumping every revision, since everything drawn is now another object. Selections, the
+ * history and the view come from the record: empty for a map just opened, as left for one
+ * coming back. The placing modes are always off — a click on the map that arrives should select.
+ */
+function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: DocumentChangeReason) {
+  const { scenario } = p;
+  set(documentChangeAtom, { reason, scenario });
+  set(scenarioAtom, scenario);
+  set(archiveExtrasAtom, p.extras);
+  set(archiveStoredAtom, p.stored);
+  set(mapFilePathAtom, p.fileName);
+  set(mapFileHandleAtom, p.handle);
+  set(mapOriginAtom, p.origin);
+  set(saveOptionsAtom, p.saveOptions);
+
+  set(mapNameAtom, scenarioName(scenario) ?? p.fileName ?? "Untitled Scenario");
   set(mapDescriptionAtom, scenarioDescription(scenario) ?? "");
   set(mapWidthAtom, scenario.width);
   set(mapHeightAtom, scenario.height);
   set(mapTilesetAtom, (TILESETS[tilesetIndex(scenario)]?.id ?? "jungle") as TilesetId);
   set(mapVersionAtom, mapVersionOf(scenario.fileVersion));
-  set(mapModifiedAtom, false);
-  // A fill laid without the graphics belongs to the map that is going away; `newMapInto`
-  // sets it again for the one arriving when it had none either.
-  set(blankFillAtom, null);
+  set(mapModifiedAtom, p.modified);
+  set(blankFillAtom, p.blankFill);
+  set(undoStackAtom, p.undo);
+  set(redoStackAtom, p.redo);
+  set(selectedUnitsAtom, p.selected.units);
+  set(selectedDoodadsAtom, p.selected.doodads);
+  set(selectedSpritesAtom, p.selected.sprites);
+  set(selectedLocationsAtom, p.selected.locations);
+  set(doodadPlacingAtom, false);
+  set(spritePlacingAtom, false);
+  // The clip itself is kept — copying between maps is the point — but the marked area belongs to a map.
+  set(clipSelectionAtom, p.clipSelection);
+  set(clipPastingAtom, false);
+  set(zoomAtom, p.zoom);
+  if (p.center) set(centerViewOnAtom, p.center);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
-  set(selectedUnitsAtom, []);
-  set(selectedDoodadsAtom, []);
-  set(doodadPlacingAtom, false);
-  set(selectedSpritesAtom, []);
-  set(spritePlacingAtom, false);
-  set(selectedLocationsAtom, []);
-  // The clip itself is kept — copying between maps is the point — but the marked area was on the old one.
-  set(clipSelectionAtom, null);
-  set(clipPastingAtom, false);
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
+  set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
-  set(undoStackAtom, []);
-  set(redoStackAtom, []);
+  set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
+}
+
+/**
+ * Install a freshly parsed scenario, mirroring the fields the existing UI atoms read.
+ * Those atoms stay the editor's source of truth for display; `scenarioAtom` is the
+ * source of truth for what gets written back out.
+ *
+ * With `into: "tab"` the map in front is parked and the new one takes a slot after the
+ * last; otherwise it takes the front map's slot (a new id — it is another document), or
+ * the first slot when nothing was open. A `"replace"` reason is the same document parsed
+ * again and keeps its slot, its id and the save options the user confirmed for it.
+ */
+export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
+  const reason = doc.reason ?? "open";
+  const docs = get(documentsAtom);
+  const front = docs.findIndex((d) => d.parked === null);
+  if (reason === "replace" && front >= 0) {
+    // Same slot, same id.
+  } else if (doc.into === "tab" && front >= 0) {
+    const parked = parkRegisters(get);
+    set(documentsAtom, [...docs.map((d, i) => (i === front ? { id: d.id, parked } : d)), { id: nextDocumentId++, parked: null }]);
+  } else if (front >= 0) {
+    set(documentsAtom, docs.map((d, i) => (i === front ? { id: nextDocumentId++, parked: null } : d)));
+  } else {
+    set(documentsAtom, [...docs, { id: nextDocumentId++, parked: null }]);
+  }
+
+  installRegisters(get, set, {
+    scenario: doc.scenario, extras: doc.extras, stored: doc.stored ?? null, fileName: doc.fileName, handle: doc.handle ?? null, origin: doc.origin ?? null,
+    // A re-parse keeps the options the user confirmed; a new document starts from the defaults.
+    saveOptions: reason === "replace" ? get(saveOptionsAtom) : null,
+    modified: false,
+    // A fill laid without the graphics belongs to the map that is going away; `newMapInto`
+    // sets it again for the one arriving when it had none either.
+    blankFill: null,
+    undo: [], redo: [], selected: { units: [], doodads: [], sprites: [], locations: [] }, clipSelection: null,
+    zoom: get(zoomAtom), center: null,
+  }, reason);
 
   if (doc.fileName) {
     set(pushRecentAtom, { name: doc.fileName, handle: doc.handle ?? null });
@@ -294,7 +434,40 @@ export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => 
   set(mapModifiedAtom, true);
 });
 
+/**
+ * Bring a parked map to the front: the front map is parked as it stands — its history,
+ * selections, marked area and view included — and `id`'s record goes into the registers,
+ * so every hook and panel shows the other map. Nothing is parsed or re-laid; the cost is
+ * the atom writes and one repaint. False for an id that is not open; true (and nothing
+ * done) for the one already in front. Fires `"switch"`.
+ */
+export const activateDocumentAtom = atom(null, (get, set, id: number): boolean => {
+  const docs = get(documentsAtom);
+  const target = docs.find((d) => d.id === id);
+  if (!target) return false;
+  if (!target.parked) return true;
+  const parked = parkRegisters(get);
+  set(documentsAtom, docs.map((d) => (d === target ? { id, parked: null } : d.parked === null && parked ? { id: d.id, parked } : d)));
+  installRegisters(get, set, target.parked, "switch");
+  return true;
+});
+
+/**
+ * Close the map in front. The one to its right comes to the front (the one to its left
+ * when it was last), with reason `"switch"` — a map is still open, and the listeners
+ * learn which from its id; with no other map the registers are cleared, reason `"close"`.
+ */
 export const closeDocumentAtom = atom(null, (get, set) => {
+  const docs = get(documentsAtom);
+  const front = docs.findIndex((d) => d.parked === null);
+  const rest = front >= 0 ? docs.filter((_, i) => i !== front) : docs;
+  const next = front >= 0 ? rest[front] ?? rest[front - 1] ?? null : null;
+  if (next?.parked) {
+    set(documentsAtom, rest.map((d) => (d === next ? { id: d.id, parked: null } : d)));
+    installRegisters(get, set, next.parked, "switch");
+    return;
+  }
+  set(documentsAtom, rest);
   set(documentChangeAtom, { reason: "close", scenario: null });
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());

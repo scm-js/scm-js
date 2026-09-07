@@ -65,8 +65,10 @@ coloured markers, and everything else works.
 
 ### Opening a map
 
-Ctrl+O opens a file, and so does dropping one on the window. File ▸ Open Recent lists
-what you have had open before; in Chrome, Edge and the desktop app it reopens the file
+Ctrl+O opens a file, and so does dropping one on the window. A map opens beside the ones
+already open, in its own tab (see [The editor window](#the-editor-window)); the one
+exception is the blank map the editor starts on, which the first map opened takes the
+place of. File ▸ Open Recent lists what you have had open before; in Chrome, Edge and the desktop app it reopens the file
 from disk directly. File ▸ Find on scmscx.com… searches the community map archive and
 opens the map you pick, when the editor can reach the site (see
 [Plugins](#plugins)). File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
@@ -99,6 +101,14 @@ account, every revision you saved there (see [Your scmjs.dev account](#your-scmj
    layer and zoom, and a line saying what the last action did or why it was refused. At
    the right end, your scmjs.dev account (or *Sign in to scmjs.dev*) and the AI's state,
    each a click to open.
+
+Open a second map and a row of tabs appears under the toolbar, one per open map, with a
+glowing dot on any that has unsaved changes. Click a tab to switch, or use the Window menu
+(Ctrl+Tab and Ctrl+Shift+Tab in the desktop app); the × on a tab, a middle click, or
+File ▸ Close closes that map, asking about unsaved changes first. Each map keeps its own
+undo history, selection and view, so switching back lands where you left off. With one map
+open there is no row: the window looks as it always has. Preferences ▸ General can turn
+this off, and then Open and New replace the open map as StarEdit does.
 
 Scroll with the mouse wheel (Shift for sideways) or the scrollbars, or click on the
 minimap. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
@@ -987,6 +997,7 @@ F1 lists every shortcut. The ones worth knowing up front:
 | Ctrl+0, Ctrl+Shift+0 | 100%, zoom to fit |
 | Alt+Enter | map properties |
 | Ctrl+F5 | test map |
+| Ctrl+Tab, Ctrl+Shift+Tab | next / previous open map (desktop app) |
 | Ctrl+Shift+A | AI assistant |
 
 ![Preferences](docs/images/preferences.webp)
@@ -1018,7 +1029,7 @@ The map you have open is never kept there and is not touched by any of it.
 | Open Recent | Yes. In Chrome, Edge and the desktop app a recent map reopens from disk (the file handle is kept in the browser; it asks once before reading). Firefox and Safari keep the names and reopen through File ▸ Open. |
 | Open a map from the file manager | Yes, in the desktop app. The installers (Windows setup, `.deb`, AppImage, macOS) register `.scm`, `.scx` and `.chk`, so a double-click, "Open with", a drag onto the app's icon or a path on the command line opens the map — in the running window when one is already up. The Windows zip registers nothing (nothing is installed), but a map dragged onto `scmJS.exe` still opens. Dropping a map anywhere on the window works in every build, and in the browser. |
 | In-app updates | Yes, in the desktop app. It checks GitHub at startup (a preference, on by default) and offers what it finds in a notice; Help ▸ Check for Updates… asks on demand. Nothing downloads or installs without being asked. Windows, the Linux AppImage and the `.deb` apply the update themselves; macOS can see one but not install it until the app is code-signed, so it offers the download page instead. |
-| More than one map open at once | No. One map per tab or window; open the editor twice. |
+| More than one map open at once | Yes. Each map opened or created goes in its own tab under the toolbar, with its own undo history, selection and view; the Window menu lists them. Copy and paste work between them. A map that is not in front does no work: switching costs one repaint, and the tilesets the open maps use stay decoded. Preferences ▸ General turns it off for StarEdit's one map at a time. |
 
 ### Terrain
 

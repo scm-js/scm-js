@@ -392,6 +392,8 @@ const HOTKEYS: [string, string][] = [
   ["Trigger Editor", "Ctrl+T"],
   ["Text Trigger Editor", "Ctrl+Shift+T"],
   ["Test Map", "Ctrl+F5"],
+  ["Next / previous open map (desktop app)", "Ctrl+Tab · Ctrl+Shift+Tab"],
+  ["Close map (desktop app)", "Ctrl+W"],
   ["Preferences", "Ctrl+,"],
   ["Keyboard shortcuts", "F1"],
   ["Full screen", "F11"],
@@ -474,6 +476,20 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     as they arrive.
                   </p>
                 </Group>
+                <Group title="Open maps">
+                  <div className="col" style={{ gap: 2 }}>
+                    <Check
+                      label="Open each map in its own tab, keeping the others open"
+                      checked={local.multipleMaps}
+                      onChange={(e) => patch({ multipleMaps: e.target.checked })}
+                    />
+                  </div>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Off opens a map in place of the one that is open, as StarEdit does.
+                    Either way the first map opened takes the place of the blank map the
+                    editor starts on.
+                  </p>
+                </Group>
                 <Group title="Unsaved changes">
                   <div className="col" style={{ gap: 2 }}>
                     <Check
@@ -485,8 +501,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Applies to File ▸ New, Open, Close and a file dropped on the
-                    window.
+                    Applies to File ▸ Close, to closing a tab, to leaving the editor, and
+                    to File ▸ New, Open and a dropped file when they replace the open map.
                   </p>
                 </Group>
                 {isDesktop() && (

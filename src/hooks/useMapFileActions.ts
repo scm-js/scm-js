@@ -1,9 +1,13 @@
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { archiveExtrasAtom, archiveStoredAtom, closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, terrainRevisionAtom, type RecentEntry } from "../atoms/documentAtoms";
+import {
+  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, archiveExtrasAtom, archiveStoredAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
+  recentFilesAtom, redoStackAtom, scenarioAtom, terrainRevisionAtom, undoStackAtom, type RecentEntry,
+} from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
-import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
+import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
+import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
@@ -49,14 +53,15 @@ export const DEFAULT_NEW_MAP: NewMapOptions = {
  * user chooses Save / Don't Save (`runPending`), else it runs at once.
  */
 export type PendingAction =
-  /** `done` and `taken` as for "open": a plugin's `document.create` waits on them. */
-  | { action: "new"; options: NewMapOptions; done?: (created: boolean) => void; taken?: boolean }
+  /** `done` and `taken` as for "open": a plugin's `document.create` waits on them. `into` as for "open". */
+  | { action: "new"; options: NewMapOptions; into?: OpenInto; done?: (created: boolean) => void; taken?: boolean }
   /**
    * `done` hears how it went: true once the file is open, false when the file was unreadable.
    * The Close Scenario dialog sets `taken` the moment the user chooses to go on, so whoever
    * watches the dialog stack can tell a dismissal (Cancel, Escape, the ×) from an open in progress.
+   * `into` is a plugin's explicit choice of beside or in place; omitted, `openTarget` decides.
    */
-  | { action: "open"; file: File; handle?: MapFileHandle | null; done?: (opened: boolean) => void; taken?: boolean }
+  | { action: "open"; file: File; handle?: MapFileHandle | null; into?: OpenInto; done?: (opened: boolean) => void; taken?: boolean }
   /**
    * The window or the tab is going away (`useCloseGuard`): nothing here replaces the document,
    * the answer *is* the point — `done` is what tells the desktop's main process whether to go
@@ -69,14 +74,39 @@ export type PendingAction =
 type Store = ReturnType<typeof useStore>;
 
 /**
+ * The blank map the editor made for itself and nobody has touched: no file, no changes,
+ * no history. The first map opened takes its place rather than sitting beside it, so
+ * opening one map still leaves one map open.
+ */
+export function isUntouchedBlank(store: Store): boolean {
+  return store.get(scenarioAtom) !== null && !store.get(mapModifiedAtom) && store.get(mapFilePathAtom) === null
+    && store.get(undoStackAtom).length === 0 && store.get(redoStackAtom).length === 0;
+}
+
+/**
+ * Where the next map opened or created goes: beside the open one (`"tab"`) when
+ * Preferences allow several maps at once, in its place (`"replace"`) otherwise — or as a
+ * plugin's explicit `into` says. Nothing open, or only the untouched blank startup map,
+ * is always `"replace"`. Decided here, before any file is read, so the answer is about
+ * the state the user acted on.
+ */
+export function openTarget(store: Store, into?: OpenInto): "tab" | "replace" {
+  if (into === "new") return store.get(scenarioAtom) ? "tab" : "replace";
+  if (into === "current") return "replace";
+  if (!store.get(preferencesAtom).multipleMaps || !store.get(scenarioAtom) || isUntouchedBlank(store)) return "replace";
+  return "tab";
+}
+
+/**
  * Read a map file and install it as the open document, reporting on the status bar.
  * The store-level half of `openFile`, so the plugin host can open a map without React.
  */
-export async function openFileInto(store: Store, file: File, handle: MapFileHandle | null = null): Promise<boolean> {
+export async function openFileInto(store: Store, file: File, handle: MapFileHandle | null = null, into?: OpenInto): Promise<boolean> {
+  const target = openTarget(store, into);
   store.set(statusMessageAtom, `Opening ${file.name}…`);
   try {
     const doc = await openMapFile(file, handle);
-    store.set(loadDocumentAtom, doc);
+    store.set(loadDocumentAtom, { ...doc, into: target });
     store.set(screenAtom, "editor");
     const warnings = doc.scenario.warnings.length;
     store.set(
@@ -101,8 +131,9 @@ export async function openFileInto(store: Store, file: File, handle: MapFileHand
  * `onlyWhenEmpty` is for the startup map: a file opened while the tileset was still
  * loading wins over it. Returns whether a map was installed.
  */
-export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_NEW_MAP, onlyWhenEmpty = false): Promise<boolean> {
+export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_NEW_MAP, onlyWhenEmpty = false, into?: OpenInto): Promise<boolean> {
   const { width, height, name, description } = options;
+  const target = openTarget(store, into);
   const info = TILESET_BY_ID[options.tileset];
   const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
   const loaded = peekTileset(TILESET_FILENAMES[era]) ?? await ensureTileset(TILESET_FILENAMES[era]).catch(() => null);
@@ -132,6 +163,7 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
     extras: new Map(),
     fileName: null,
     reason: "new",
+    into: target,
   });
   // Without the CV5 every pair took variation 0, which draws as one megatile repeated once
   // the graphics arrive; remember to lay it again if they do (`relayBlankTerrain`).
@@ -179,8 +211,13 @@ export async function relayBlankTerrain(store: Store): Promise<boolean> {
   return true;
 }
 
-/** Whether replacing the document should go through the Close Scenario dialog first. */
-export function needsCloseConfirm(store: Store): boolean {
+/**
+ * Whether an action should go through the Close Scenario dialog first: the map in front
+ * has unsaved changes, Preferences say to ask, and the action would lose them — an open
+ * or a new map that goes beside the open one (`openTarget`) loses nothing and is not asked about.
+ */
+export function needsCloseConfirm(store: Store, p?: PendingAction): boolean {
+  if (p && (p.action === "open" || p.action === "new") && openTarget(store, p.into) === "tab") return false;
   return store.get(preferencesAtom).confirmClose && store.get(mapModifiedAtom) && store.get(scenarioAtom) !== null;
 }
 
@@ -198,9 +235,9 @@ export function guardedAction(
   run: () => Promise<boolean>,
   pending: (done: (ok: boolean) => void) => PendingAction & { taken?: boolean },
 ): Promise<boolean> {
-  if (!needsCloseConfirm(store)) return run();
   return new Promise((resolve) => {
     const p = pending(resolve);
+    if (!needsCloseConfirm(store, p)) { void run().then(resolve); return; }
     store.set(openDialogAtom, "confirmClose", { pending: p });
     const unsub = store.sub(dialogStackAtom, () => {
       if (store.get(dialogStackAtom).some((d) => d.payload?.pending === p)) return;
@@ -317,10 +354,70 @@ export function clearRecents(store: Store) {
   store.set(recentFilesAtom, []);
 }
 
-/** Drop the open document (File ▸ Close). */
+/** Drop the map in front (File ▸ Close); the next open map, when there is one, takes its place. */
 export function closeMapIn(store: Store) {
+  const name = store.get(mapFilePathAtom) ?? store.get(mapNameAtom);
   store.set(closeDocumentAtom);
-  store.set(statusMessageAtom, "Closed the scenario — File ▸ New or Open to continue.");
+  const next = store.get(scenarioAtom) ? store.get(mapFilePathAtom) ?? store.get(mapNameAtom) : null;
+  store.set(statusMessageAtom, next ? `Closed ${name} — ${next} is in front.` : "Closed the scenario — File ▸ New or Open to continue.");
+}
+
+/** Bring an open map to the front (the tab strip, the Window menu, a plugin's `document.activate`). False for an id that is not open. */
+export function activateDocumentIn(store: Store, id: number): boolean {
+  return store.set(activateDocumentAtom, id);
+}
+
+/** Window ▸ Next / Previous Map: the open map `delta` places along, wrapping round. False with fewer than two open. */
+export function stepDocumentIn(store: Store, delta: 1 | -1): boolean {
+  const docs = store.get(documentsAtom);
+  const at = docs.findIndex((d) => d.parked === null);
+  if (docs.length < 2 || at < 0) return false;
+  return store.set(activateDocumentAtom, docs[(at + delta + docs.length) % docs.length].id);
+}
+
+/**
+ * Close one open map through the unsaved-changes gate: the one in front, or the one `id`
+ * names, brought to the front first so the question is about the map on screen. True once
+ * it is gone; false when the user kept it or nothing has that id.
+ */
+export function closeDocumentIn(store: Store, id?: number): Promise<boolean> {
+  if (id !== undefined && id !== store.get(activeDocumentIdAtom) && !store.set(activateDocumentAtom, id)) return Promise.resolve(false);
+  if (!store.get(scenarioAtom)) return Promise.resolve(false);
+  return guardedAction(store, async () => { closeMapIn(store); return true; }, (done) => ({ action: "close", done }));
+}
+
+/**
+ * Leaving the editor with several maps open: each one with unsaved changes is brought to
+ * the front and asked about in turn — Save writes it, Don't Save moves on, Cancel keeps
+ * the window — so nothing is lost behind the map on screen. Resolves true when every
+ * question was answered with going on (at once when there was nothing to ask, unless
+ * `confirmEvenClean` asks the plain Quit question the File menu's Exit always has).
+ */
+export async function quitGuard(store: Store, confirmEvenClean = false): Promise<boolean> {
+  const ask = () => guardedAction(store, async () => true, (done) => ({ action: "quit", done }));
+  const answered = new Set<number>();
+  for (;;) {
+    const docs = store.get(documentsAtom);
+    const dirty = store.get(preferencesAtom).confirmClose
+      ? docs.find((d) => !answered.has(d.id) && (d.parked ? d.parked.modified : store.get(mapModifiedAtom)))
+      : undefined;
+    if (!dirty) break;
+    answered.add(dirty.id);
+    if (dirty.parked) store.set(activateDocumentAtom, dirty.id);
+    if (!(await ask())) return false;
+  }
+  if (!store.get(anyModifiedAtom) && confirmEvenClean && store.get(scenarioAtom)) {
+    return new Promise((resolve) => {
+      const p: PendingAction = { action: "quit", done: resolve };
+      store.set(openDialogAtom, "confirmClose", { pending: p });
+      const unsub = store.sub(dialogStackAtom, () => {
+        if (store.get(dialogStackAtom).some((d) => d.payload?.pending === p)) return;
+        unsub();
+        if (!p.taken) resolve(false);
+      });
+    });
+  }
+  return true;
 }
 
 /**
@@ -331,10 +428,10 @@ export function closeMapIn(store: Store) {
  */
 export async function runPendingAction(store: Store, p: PendingAction): Promise<void> {
   if (p.action === "new") {
-    const created = await newMapInto(store, p.options);
+    const created = await newMapInto(store, p.options, false, p.into);
     p.done?.(created);
   } else if (p.action === "open") {
-    const opened = await openFileInto(store, p.file, p.handle ?? null);
+    const opened = await openFileInto(store, p.file, p.handle ?? null, p.into);
     p.done?.(opened);
   } else if (p.action === "quit") {
     p.done?.(true);
@@ -388,7 +485,7 @@ export function useMapFileActions() {
    * map has unsaved changes and Preferences say to ask. True when the dialog took over.
    */
   const guard = useCallback((p: PendingAction): boolean => {
-    if (!needsCloseConfirm(store)) { void runPending(p); return false; }
+    if (!needsCloseConfirm(store, p)) { void runPending(p); return false; }
     openDialog("confirmClose", { pending: p });
     return true;
   }, [store, openDialog, runPending]);

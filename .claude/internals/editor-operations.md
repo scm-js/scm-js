@@ -16,7 +16,8 @@ tileset is loaded, else the flat fill's lattice; objects outside the new bounds 
 locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is pure and
 revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
 `payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
-behind Ctrl+F. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
+behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ General ▸ Open maps) is read by
+`openTarget` in `useMapFileActions` only — see `viewport-ui.md` for the several-maps design. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
 (`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
 `atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory

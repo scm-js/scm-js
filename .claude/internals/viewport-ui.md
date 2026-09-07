@@ -57,6 +57,34 @@ read in the first effect pass is still null.
   dialogs' warnings, the sound importer's decoder notes, About). It decides *wording* only
   — what the shell can do is still asked of `desktopBridge()` and the platform APIs.
   `tests/platform.test.ts`.
+- **Several maps at once** (2026-09-07). `documentAtoms.ts` keeps the open maps as `documentsAtom:
+  DocumentSlot[]` — `{ id, parked }`, `parked` null for the one the registers (the document atoms
+  in `documentAtoms.ts` / `editorAtoms.ts`) hold, a `ParkedDocument` snapshot for the rest. The
+  design decision: the registers stay the one thing every hook and panel reads, and a switch
+  (`activateDocumentAtom`) is `parkRegisters` + `installRegisters`, a few dozen atom writes and one
+  full repaint; nothing is re-parsed and a parked map has no subscriptions, no viewport and no
+  analysis running, so the one-map case is unchanged and a background map costs memory only. The
+  alternative, one Jotai store per map with the Provider swapped, remounts the whole tree and loses
+  component state (`useTileset`'s), and the plugin host holds the default store — rejected.
+  Per-map: the file, handle, origin, save options, modified, blank fill, both history stacks, the
+  five selections, the marked clip area, zoom and the view centre (read back from `viewportRectAtom`
+  and restored through `centerViewOnAtom`, since the scroll lives in the scroller element).
+  Global: the active layer, brushes, palette picks, view flags, symmetry, the clipboard itself.
+  `loadDocumentAtom` takes `into: "tab" | "replace"` (default replace, so every existing caller and
+  test behaves as before; `"replace"` reason keeps the slot); `openTarget` in `useMapFileActions`
+  decides from the `multipleMaps` preference and `isUntouchedBlank` (no file, no changes, no history
+  — the startup map is replaced rather than kept beside the first real map, so opening one map still
+  leaves one map). `needsCloseConfirm(store, pending)` answers false for an open/new that goes beside.
+  `closeDocumentAtom` brings the neighbour to the right (else left) forward with reason `"switch"`.
+  The tab strip is `chrome/TabStrip.tsx` under the toolbar, rendered only from the second map; the
+  Window menu lists the same maps (Ctrl+Tab / Ctrl+Shift+Tab on the desktop only — the browser owns
+  them); there is deliberately no tab reordering yet. `useTileset` no longer releases a tileset a
+  parked map draws with (`parkedTilesetsAtom`), which is the one thing that would have made a switch
+  slow (~20 MB atlas rasterised again each way). `useCloseGuard` asks on `anyModifiedAtom`, and the
+  desktop's close and File ▸ Exit go through `quitGuard`, which brings each modified map forward and
+  asks the Close Scenario dialog about it in turn (Don't Save moves on, Cancel keeps the window).
+  `tests/documents.test.ts` covers all of it; headless check 2026-09-07 (two fixtures dropped, switch,
+  scroll restored, both tilesets held then one released on close, Window menu, preference off).
 - `src/hooks/useWindowTitle.ts` keeps `document.title` on the open map — the file name when there is
   one, else the scenario name, with a leading `*` while it is modified, and the plain
   `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page

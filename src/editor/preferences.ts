@@ -10,6 +10,13 @@ export interface Preferences {
   splash: boolean;
   /** Ask before closing or replacing a map with unsaved changes. */
   confirmClose: boolean;
+  /**
+   * Open each map beside the ones already open, in its own tab, rather than in place of
+   * the open one. Off is StarEdit's one map at a time: Open and New replace the map, asking
+   * about unsaved changes first. Either way the blank map the editor starts on, untouched,
+   * is replaced by the first map opened rather than kept beside it.
+   */
+  multipleMaps: boolean;
   /** What File ▸ New and the startup map start with. */
   newMap: { tileset: TilesetId; width: number; height: number };
   /** Initial View ▸ Animate Water / Animate Units. */
@@ -60,6 +67,7 @@ export type PluginUpdateMode = "notify" | "manual" | "auto";
 export const DEFAULT_PREFERENCES: Preferences = {
   splash: true,
   confirmClose: true,
+  multipleMaps: true,
   newMap: { tileset: "badlands", width: 128, height: 128 },
   animateWater: true,
   animateUnits: true,

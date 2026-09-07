@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
-import { tilesetFileNameAtom } from "../atoms/documentAtoms";
+import { useAtomValue, useStore } from "jotai";
+import { parkedTilesetsAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
 import {
   ensureTileset,
@@ -36,6 +36,7 @@ function initial(name: TilesetFileName): Internal {
  * through the previous tileset's graphics, which looked like scrambled terrain.
  */
 export function useTileset(): TilesetState {
+  const store = useStore();
   const name = useAtomValue(tilesetFileNameAtom);
   // Bumped when Help ▸ Game Data… installs a source, so a tileset that failed is asked for again.
   const revision = useAtomValue(gameDataRevisionAtom);
@@ -44,13 +45,15 @@ export function useTileset(): TilesetState {
 
   // The map moved to another tileset: the one it left would otherwise stay decoded for the
   // session. Released here, on the transition, rather than by sweeping everything but the
-  // current one, so a tileset a dialog is loading ahead of a change is never taken away.
+  // current one, so a tileset a dialog is loading ahead of a change is never taken away —
+  // and kept while another open map still draws with it, so switching between two maps
+  // never rasterises an atlas twice. It goes when the last map using it closes or changes.
   useEffect(() => {
     if (previous.current !== name) {
-      releaseTileset(previous.current);
+      if (!store.get(parkedTilesetsAtom).has(previous.current)) releaseTileset(previous.current);
       previous.current = name;
     }
-  }, [name]);
+  }, [name, store]);
 
   useEffect(() => {
     void revision;

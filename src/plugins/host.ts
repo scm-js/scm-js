@@ -16,7 +16,7 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -108,7 +108,7 @@ import {
   type FlashTarget, type StatusItemHandle, type StatusItemSpec,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
-  type ContextMenuContext, type NewDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
+  type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
 } from "./api";
 import { canonicalSpec, githubSource, HASH_REF, isPinned, listTags, loadPlugin, newestTag, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview, type RepoTag } from "./loader";
@@ -116,7 +116,7 @@ import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "./transpileClient";
-import { askDialog, closeMapIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
+import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { defaultSaveOptions } from "../editor/save";
 import { saveBlob } from "../services/mapIo";
 import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
@@ -696,18 +696,20 @@ export function registerOverlay(store: Store, bag: Contributions, info: PluginIn
  * dialog stack: the entry leaves it without `taken` set. (An unmount effect in the dialog
  * would be simpler, but React's development double-mount runs it once at mount.)
  */
-function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?: string): Promise<boolean> {
+function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?: string, options: OpenDocumentOptions = {}): Promise<boolean> {
   const name = fileName ?? (source instanceof File ? source.name : "map.scx");
   const file = source instanceof File && !fileName
     ? source
     : new File([source as unknown as BlobPart], name, { type: "application/octet-stream" });
-  return guardedAction(store, () => openFileInto(store, file), (done) => ({ action: "open", file, done }));
+  const { into } = options;
+  return guardedAction(store, () => openFileInto(store, file, null, into), (done) => ({ action: "open", file, into, done }));
 }
 
 /** `document.create`: File ▸ New through the same gate. */
 function createDocument(store: Store, options: NewDocumentOptions): Promise<boolean> {
-  const full = { name: "Untitled Scenario", description: "", ...options };
-  return guardedAction(store, () => newMapInto(store, full), (done) => ({ action: "new", options: full, done }));
+  const { into, ...rest } = options;
+  const full = { name: "Untitled Scenario", description: "", ...rest };
+  return guardedAction(store, () => newMapInto(store, full, false, into), (done) => ({ action: "new", options: full, into, done }));
 }
 
 /* ── Raw section edits ──────────────────────────────────── */
@@ -1450,7 +1452,7 @@ export function documentEvent(store: Store): DocumentEvent {
   const scenario = store.get(scenarioAtom);
   const change = store.get(documentChangeAtom);
   const reason = change.scenario === scenario ? change.reason : scenario ? "open" : "close";
-  return { reason, fileName: scenario ? store.get(mapFilePathAtom) : null };
+  return { reason, fileName: scenario ? store.get(mapFilePathAtom) : null, id: scenario ? store.get(activeDocumentIdAtom) : null };
 }
 
 /** `api.settings`: the dialogs' tables without a transaction. */
@@ -1533,6 +1535,9 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         };
       },
       scenario,
+      id: () => (scenario() ? store.get(activeDocumentIdAtom) : null),
+      list: () => store.get(documentTabsAtom).map((d) => ({ ...d })),
+      activate: (id) => !gone("document.activate") && activateDocumentIn(store, id),
       edit: (label, build) => (gone("document.edit") ? { ...EMPTY_RESULT, notes: [DEACTIVATED_NOTE] } : runTransaction(store, label, build)),
       update: (label, build) => (gone("document.update") ? { changed: false, sections: [], notes: [DEACTIVATED_NOTE] } : runUpdate(store, label, build)),
       undo: () => store.set(undoAtom),
@@ -1541,7 +1546,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const u = store.get(undoStackAtom), r = store.get(redoStackAtom);
         return { undo: u.at(-1)?.label ?? null, redo: r.at(-1)?.label ?? null, undoDepth: u.length, redoDepth: r.length };
       },
-      open: (source, fileName) => (gone("document.open") ? Promise.resolve(false) : openDocument(store, source, fileName)),
+      open: (source, fileName, options) => (gone("document.open") ? Promise.resolve(false) : openDocument(store, source, fileName, options)),
       create: (options) => (gone("document.create") ? Promise.resolve(false) : createDocument(store, options)),
       resize: (options) => {
         const scn = scenario();
@@ -1571,10 +1576,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return askDialog(store, "saveAs", { copy: options.copy === true });
       },
       saveAs: (options = {}) => (scenario() && !gone("document.saveAs") ? askDialog(store, "saveAs", { copy: options.copy === true }) : Promise.resolve(false)),
-      close: () => {
-        if (!scenario() || gone("document.close")) return Promise.resolve(false);
-        return guardedAction(store, async () => { closeMapIn(store); return true; }, (done) => ({ action: "close", done }));
-      },
+      close: (id) => (!scenario() || gone("document.close") ? Promise.resolve(false) : closeDocumentIn(store, id)),
       changeTileset: async (options) => {
         if (!scenario() || gone("document.changeTileset")) return null;
         const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));

@@ -23,13 +23,14 @@ import {
 } from "../../atoms/editorAtoms";
 import { desktopBridge } from "../../gamedata/desktop";
 import {
-  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, recentFilesAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
+  activeDocumentIdAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
+  selectAllAtom, undoAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
-import { clearRecents, useMapFileActions } from "../../hooks/useMapFileActions";
+import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 
@@ -175,6 +176,8 @@ function useMenus(): Menu[] {
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
   const { save, openRecent } = useMapFileActions();
+  const tabs = useAtomValue(documentTabsAtom);
+  const activeId = useAtomValue(activeDocumentIdAtom);
   const [undoLabel, undo] = useAtom(undoAtom);
   const [redoLabel, redo] = useAtom(redoAtom);
   const clipTools = useClipboardTools();
@@ -269,8 +272,8 @@ function useMenus(): Menu[] {
         sep,
         // Ctrl+W is the browser's own (it closes the tab); only the desktop build can take it.
         dlg("Close Map", "confirmClose", desktop ? "Ctrl+W" : undefined),
-        // A browser tab cannot close itself; the desktop build quits through the same unsaved-changes gate as its close button.
-        ...(desktop ? [sep, dlgWith("Exit", "confirmClose", { pending: { action: "quit", done: (quit: boolean) => { if (quit) desktop.window.respondClose(true); } } }, desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4")] : []),
+        // A browser tab cannot close itself; the desktop build quits through the same unsaved-changes gate as its close button, one open map at a time.
+        ...(desktop ? [sep, { kind: "item", label: "Exit", shortcut: desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4", onSelect: () => { void quitGuard(store, true).then((quit) => { if (quit) desktop.window.respondClose(true); }); } } as Item] : []),
       ],
     },
     {
@@ -392,6 +395,21 @@ function useMenus(): Menu[] {
       items: [
         dlgWith("Browse Plugins…", "plugins", { tab: "browse" }),
         dlg("Manage Plugins…", "plugins"),
+      ],
+    },
+    {
+      label: "Window",
+      items: [
+        // Ctrl+Tab belongs to the browser's own tabs; only the desktop build can take it.
+        { kind: "item", label: "Next Map", shortcut: desktop ? "Ctrl+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, 1); } },
+        { kind: "item", label: "Previous Map", shortcut: desktop ? "Ctrl+Shift+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, -1); } },
+        sep,
+        ...(tabs.length > 0
+          ? [{
+            kind: "radio-group", value: String(activeId ?? ""), onChange: (v) => { activateDocumentIn(store, Number(v)); },
+            items: tabs.map((t) => ({ value: String(t.id), label: `${t.modified ? "*" : ""}${t.fileName ?? t.name}` })),
+          } as Item]
+          : [{ kind: "item", label: "No map open", disabled: true } as Item]),
       ],
     },
     {

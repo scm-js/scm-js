@@ -331,6 +331,32 @@ export interface ResizeDocumentOptions {
   clampLocations?: boolean;
 }
 
+/**
+ * Where a map opened or created goes. `"new"` opens it beside the open one, which stays
+ * open behind it; `"current"` opens it in place of the open one, through the unsaved-changes
+ * gate. Omitted, the editor follows its preference (several maps at once, on by default),
+ * except that the untouched blank map it started on is always replaced.
+ */
+export type OpenInto = "new" | "current";
+
+export interface OpenDocumentOptions {
+  into?: OpenInto;
+}
+
+/** One open map, as `document.list()` reports it. `active` marks the one in front — the one every other call reads and writes. */
+export interface OpenDocumentInfo {
+  /** Stable for the map's life in this session; never reused. */
+  id: number;
+  /** The scenario's name. */
+  name: string;
+  fileName: string | null;
+  tileset: TilesetId;
+  width: number;
+  height: number;
+  modified: boolean;
+  active: boolean;
+}
+
 /** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
 export interface NewDocumentOptions {
   width: number;
@@ -338,6 +364,8 @@ export interface NewDocumentOptions {
   tileset: TilesetId;
   /** `Untitled Scenario` when omitted. */
   name?: string;
+  /** Beside the open map or in place of it; see `OpenInto`. */
+  into?: OpenInto;
   description?: string;
   /** ISOM id of the terrain to fill with; the tileset's default ground when omitted. */
   terrainId?: number;
@@ -401,18 +429,39 @@ export interface DocumentApi {
   /** The undo and redo stacks' tops — the labels the Edit menu shows — and their depths, without moving anything. */
   history(): DocumentHistory;
   /**
-   * Open a map file (`.scx` / `.scm` / `.chk`) in place of the current one, the way
-   * File ▸ Open does: when the open map has unsaved changes and Preferences say to ask,
-   * the Close Scenario dialog comes first and the user may cancel. Resolves true once
-   * the file is the open document, false when the user kept the current map or the
-   * file could not be read (the status bar says why).
+   * The id of the map in front — the one `info()`, `scenario()` and every write are
+   * about — or null with no map. Stable for the map's life, so a plugin can key what it
+   * keeps per map on it. (Null too for a scenario a test put in place without the editor.)
    */
-  open(file: File | Blob | Uint8Array, fileName?: string): Promise<boolean>;
+  id(): number | null;
   /**
-   * A blank map in place of the current one, the way File ▸ New makes one: flat ground
-   * of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, every
-   * section a fresh map needs. Goes through the same unsaved-changes gate as `open`.
-   * Resolves true once the new map is the open document, false when the user kept the
+   * Every open map, in the order the editor lists them, the one in front marked `active`.
+   * Empty with no map. The list changes only through `open`, `create`, `activate` and
+   * `close` (by any plugin or the user), each of which fires the `"document"` event.
+   */
+  list(): OpenDocumentInfo[];
+  /**
+   * Bring an open map to the front, as clicking its tab does: its history, selections and
+   * view come back as they were left, and the `"document"` event fires with reason
+   * `"switch"`. Nothing is re-read. True once it is in front (at once, when it already
+   * was); false for an id that is not open. Call it for something the user asked for —
+   * the map changing under someone mid-stroke is not a thing a plugin should do on its own.
+   */
+  activate(id: number): boolean;
+  /**
+   * Open a map file (`.scx` / `.scm` / `.chk`), the way File ▸ Open does: beside the open
+   * map or in place of it as `options.into` (or, omitted, the editor's preference) says.
+   * In place of a map with unsaved changes, when Preferences say to ask, the Close
+   * Scenario dialog comes first and the user may cancel. Resolves true once the file is
+   * the map in front, false when the user kept the current map or the file could not be
+   * read (the status bar says why).
+   */
+  open(file: File | Blob | Uint8Array, fileName?: string, options?: OpenDocumentOptions): Promise<boolean>;
+  /**
+   * A blank map the way File ▸ New makes one: flat ground of the tileset's default terrain
+   * (or `terrainId`), an ISOM lattice to match, every section a fresh map needs. Beside
+   * the open map or in place of it as `open` decides, through the same unsaved-changes
+   * gate. Resolves true once the new map is in front, false when the user kept the
    * current one.
    */
   create(options: NewDocumentOptions): Promise<boolean>;
@@ -432,10 +481,13 @@ export interface DocumentApi {
   /** File ▸ Save As (or Save Copy As with `copy`): the Save dialog, resolving as `save` does. */
   saveAs(options?: SaveDocumentOptions): Promise<boolean>;
   /**
-   * File ▸ Close: through the same unsaved-changes gate as `open`. Resolves true once the
-   * map is closed (`isOpen()` is then false), false when the user kept it.
+   * File ▸ Close: the map in front, or the open map `id` names, through the same
+   * unsaved-changes gate as `open` (a map behind is brought to the front first, so the
+   * question is about what the user sees). Resolves true once the map is closed — another
+   * open map is then in front, or `isOpen()` is false — false when the user kept it or no
+   * map has that id.
    */
-  close(): Promise<boolean>;
+  close(id?: number): Promise<boolean>;
   /**
    * A picture of the map as File ▸ Export ▸ Image draws it, as a PNG. `pixelsPerTile`
    * is the one dial (32 is the game's art 1:1, 1 is a minimap); the other options
@@ -2682,11 +2734,19 @@ export type DocumentChangeReason =
   /** File ▸ Close: `document.isOpen()` is now false. */
   | "close"
   /** The open map parsed again from edited bytes — a `document.sections` write, by any plugin. */
-  | "replace";
+  | "replace"
+  /**
+   * Another open map came to the front — a tab clicked, `document.activate`, or the map
+   * in front closed with others still open. Nothing was read or written; the map that
+   * was in front is still open behind, as it was. `id` says which map is in front now.
+   */
+  | "switch";
 
 export interface DocumentEvent {
   reason: DocumentChangeReason;
   fileName: string | null;
+  /** `document.id()` after the change: the map now in front, or null after a close. */
+  id: number | null;
 }
 
 /**

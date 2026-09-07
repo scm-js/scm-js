@@ -467,7 +467,8 @@ describe("plugin api", () => {
     const { store } = blankStore();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
     const file = (await api.document.export())!;
-    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
+    // One map at a time: the open replaces the modified map and is asked about (with several maps allowed it would open beside it).
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true, multipleMaps: false });
     api.document.edit("tile", (tx) => { tx.setTile(0, 0, 0x321); });
     expect(store.get(mapModifiedAtom)).toBe(true);
     const opening = api.document.open(file);
@@ -1483,16 +1484,20 @@ describe("plugin document events", () => {
     api.document.sections.write(api.document.sections.list().findIndex((s) => s.name === "DIM "), new Uint8Array([6, 0, 3, 0]));
     store.set(closeDocumentAtom);
     expect(seen).toEqual([
-      { reason: "open", fileName: "a.scx" },
-      { reason: "new", fileName: null },
-      { reason: "replace", fileName: null },
-      { reason: "close", fileName: null },
+      { reason: "open", fileName: "a.scx", id: expect.any(Number) },
+      { reason: "new", fileName: null, id: expect.any(Number) },
+      { reason: "replace", fileName: null, id: expect.any(Number) },
+      { reason: "close", fileName: null, id: null },
     ]);
-    // A scenario installed behind the writers' backs is still an open, and the other events carry nothing.
+    // A new map in place of the open one is another document; a re-parse is the same one.
+    const ids = seen.map((e) => (e as { id: number | null }).id);
+    expect(ids[1]).not.toBe(ids[0]);
+    expect(ids[2]).toBe(ids[1]);
+    // A scenario installed behind the writers' backs is still an open (with no id, the writers never saw it), and the other events carry nothing.
     let payload: unknown = "unset";
     api.events.on("terrain", (...args: unknown[]) => { payload = args[0]; });
     store.set(scenarioAtom, createScenario({ width: 4, height: 2, era: 0, name: "c" }));
-    expect(seen.at(-1)).toEqual({ reason: "open", fileName: null });
+    expect(seen.at(-1)).toEqual({ reason: "open", fileName: null, id: null });
     api.document.edit("t", (tx) => tx.setTile(0, 0, 5));
     expect(payload).toMatchObject({ reason: "open" });
   });
@@ -2901,9 +2906,9 @@ describe("plugin trigger claims and commands", () => {
     expect(events).toEqual(["new"]);
     expect(store.get(scenarioAtom)?.tiles.length).toBe(64 * 32);
 
-    // Modified map + the preference: the Close Scenario dialog holds the create; cancelling keeps the map.
+    // Modified map + the preference, one map at a time: the Close Scenario dialog holds the create; cancelling keeps the map.
     store.set(mapModifiedAtom, true);
-    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true, multipleMaps: false });
     const held = api.document.create({ width: 96, height: 96, tileset: "jungle" });
     const entry = store.get(dialogStackAtom).find((d) => d.id === "confirmClose");
     expect(entry?.payload?.pending).toMatchObject({ action: "new", options: { width: 96, name: "Untitled Scenario" } });

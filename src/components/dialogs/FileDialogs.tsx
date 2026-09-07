@@ -10,7 +10,7 @@ import { baseTerrain } from "../../formats/tileset/terrain";
 import { renderTerrainPatch, type TerrainPatch } from "../../formats/tileset/preview";
 import { PREVIEW_TILES, useTilesetGraphics, useTilesetThumbs } from "../../hooks/useTilesetPreview";
 import { MapPreview, PatchThumb, type PreviewStart } from "./TerrainPreview";
-import { DEFAULT_NEW_MAP, saveDocument, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
+import { DEFAULT_NEW_MAP, needsCloseConfirm, openTarget, saveDocument, useMapFileActions, type PendingAction } from "../../hooks/useMapFileActions";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { hostTerms } from "../../editor/platform";
 import { canPickSaveLocation, droppedHandle, MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, type PickedMapFile } from "../../services/mapIo";
@@ -162,9 +162,8 @@ export function OpenMapDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const load = useSetAtom(loadDocumentAtom);
+  const store = useStore();
   const { guard, openRecent } = useMapFileActions();
-  const modified = useAtomValue(mapModifiedAtom);
-  const prefs = useAtomValue(preferencesAtom);
   const reopen = async (i: number) => {
     const r = recents[i];
     if (!r?.handleKey) { setError(`${r?.name ?? "This file"} cannot be reopened from here — browse for it.`); return; }
@@ -178,17 +177,18 @@ export function OpenMapDialog({ entry }: DialogProps) {
   const accept = useCallback(async (picked: PickedMapFile | null) => {
     if (!picked) return;
     const { file, handle } = picked;
-    // Unsaved changes: hand the file to the Close Scenario dialog and let it decide.
-    if (prefs.confirmClose && modified) {
+    // Unsaved changes the open would lose: hand the file to the Close Scenario dialog and let it decide.
+    if (needsCloseConfirm(store, { action: "open", file, handle })) {
       close(entry.key);
       guard({ action: "open", file, handle });
       return;
     }
+    const into = openTarget(store);
     setBusy(true);
     setError(null);
     try {
       const doc = await openMapFile(file, handle);
-      load(doc);
+      load({ ...doc, into });
       const warnings = doc.scenario.warnings.length;
       setStatus(
         `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}` +
@@ -200,7 +200,7 @@ export function OpenMapDialog({ entry }: DialogProps) {
     } finally {
       setBusy(false);
     }
-  }, [close, entry.key, load, setStatus, guard, modified, prefs.confirmClose]);
+  }, [close, entry.key, load, setStatus, guard, store]);
 
   return (
     <DialogFrame

@@ -199,6 +199,13 @@ jobs:
         env:
           VERSION: ${{ steps.v.outputs.version }}
           DRY: ${{ inputs.dry_run }}
+          # main requires a pull request, and a run's own GITHUB_TOKEN cannot bypass that,
+          # so the release commit is pushed with REGISTRY_PAT — an organisation secret
+          # belonging to the owner, whom the ruleset lets through. The *tag* is pushed with
+          # GITHUB_TOKEN on purpose: see the note at the top about why Build is dispatched
+          # rather than triggered. Without the secret the branch push falls back and may be
+          # refused, which the fallback below is for.
+          REGISTRY_PAT: ${{ secrets.REGISTRY_PAT }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -226,7 +233,11 @@ jobs:
           # The tag first: it must exist before Build is dispatched on it, and if the branch
           # push is refused (a protected main) the release is still tagged and buildable.
           git push origin "refs/tags/v$VERSION"
-          git push origin HEAD:main
+          if [ -n "${REGISTRY_PAT:-}" ]; then
+            git push "https://x-access-token:$REGISTRY_PAT@github.com/$GITHUB_REPOSITORY" HEAD:main
+          else
+            git push origin HEAD:main || echo "::warning::main was not updated; the tag carries the release."
+          fi
 
       - name: Build the release
         if: ${{ !inputs.dry_run }}

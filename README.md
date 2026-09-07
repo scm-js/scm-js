@@ -769,7 +769,7 @@ channel the editor paints for them, in Jungle and Space Platform, which are the 
 whose bridges fit the brush's shores; Ice has no ramp the brush's cliffs can take.
 Systems the editor's own toolkit knows — hyper triggers, spawns on a timer, kills paid in
 minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
-leaderboards, countdowns, last standing, alliances and more — are built by the editor
+leaderboards, countdowns, last standing, alliances, escalation stages and more — are built by the editor
 from their parameters, instantly and the same way every time, and show in green.
 Anything else is written as a trigger script (gold), which needs the Trigger Script
 plugin switched on. Afterwards **Review it…** or **Open the assistant** to keep working

@@ -31,14 +31,16 @@ transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (mar
 real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
 `newCondition` / `newAction` seed StarEdit-like defaults.
 
-### Trigger claims, and the Trigger Script plugin
+### Trigger claims, and the TrigScript plugin
 
-The Script Editor — the TypeScript-subset language that generates a block of `scenario.triggers`,
-its compiler, simulator and Monaco dialog — is the **Trigger Script** plugin
-(`github.com/scm-js/plugin-trigger-script`, not a default — installed from Browse Plugins), not the editor: it was moved
-out so the editor no longer bundles Monaco and a second TypeScript (the desktop download lost ~14 MB
-of the 18 MB those chunks weighed). Its README documents the language and its internals. What stays
-here is generic:
+The trigger scripting language — its compiler, simulator and Monaco dialog — is the **TrigScript**
+plugin (`github.com/scm-js/plugin-trigscript`, not a default — installed from Browse Plugins), not the
+editor: it was moved out (as "Trigger Script", 2026-09-03) so the editor no longer bundles Monaco and a
+second TypeScript (the desktop download lost ~14 MB of the 18 MB those chunks weighed), and rewritten
+on 2026-09-07 as TrigScript: the script is ordinary TypeScript that *runs* when built (files, imports,
+helpers, the standard library), recording one trigger per `trigger()` call, and only `program(() => …)`
+bodies are compiled — into the same death-counter state machine as before. Its README documents the
+language and its internals. What stays here is generic:
 
 - `api.triggers.claim(spec)` (`host.ts`, `pluginTriggerClaimsAtom`, `plugins/claims.ts`): a plugin
   names a run of the trigger list it generates, found by *content* — `spec.locate(list)` is asked
@@ -49,8 +51,8 @@ here is generic:
   them. `commitTriggersAtom` no longer relocates anything: the plugin listens to `"triggers"` and
   rewrites its manifest itself. `tests/plugins.test.ts` covers locate/clamp/throw/refresh/dispose.
 - The `"commands"` event (`EVENT_ATOMS.commands` = `pluginCommandsAtom`) is how a plugin that calls
-  another's commands by id (the scmjs.dev plugin's AI → `trigger-script.compile` / `.build` / `.declarations` /
-  `.state` / `.print` / `.simulate` / `.triggerAtLine` / `.open`) learns they arrived — there is
+  another's commands by id (the scmjs.dev plugin's AI → `trigscript.compile` / `.build` / `.declarations` /
+  `.state` / `.print` / `.simulate` / `.triggerAt` / `.open`) learns they arrived — there is
   deliberately no plugin ordering, so `commands.has` at call time is the contract.
 - `api.services` (`pluginServicesAtom`, `host.ts`, the `"services"` event) is the stateful counterpart
   of commands: a plugin `provide`s one live object under a namespaced name (`qualifyCommand` rules)
@@ -63,8 +65,12 @@ here is generic:
   (`withPluginItems`; `MenuPath` accepts any string for it) — it used to fall back to Plugins.
 - `DialogSpec.keepOpenOnEscape(target)` lets a plugin dialog keep Escape for something inside it
   (Monaco's popups); `PluginDialog` routes it to `DialogFrame.onEscapeKeyDown`.
-- `editor/save.ts` keeps `SCRIPT_MEMBER` / `MANIFEST_MEMBER` (`scmjs\\triggers.ts` / `.json`) only so
-  the Save dialog can say what leaving the plugin's members out means; nothing here reads them.
+- `editor/save.ts` keeps `SCRIPT_FOLDER` / `SCRIPT_MEMBER` / `MANIFEST_MEMBER` (`trigscript\\`, its
+  `main.ts` and `build.json`) so the Save dialog can say what leaving the plugin's members out means
+  (`extraKind` → "script" for anything under the folder) and so `referencedMembers` can probe a
+  listfile-less archive for the entry file and manifest; `scriptMembersFromManifest` reads the
+  manifest's `files` list and `readMembers`' second pass (`more`) probes those too — the one thing the
+  editor reads out of the plugin's members.
 - `data/triggerDefs.ts#DEATHS_TABLE_ADDRESS` is the EPD base the Classic editor's player pick uses
   (the plugin's compiler carries its own copy).
 - TypeScript stays a runtime dependency for one job: `plugins/transpile.worker.ts` +

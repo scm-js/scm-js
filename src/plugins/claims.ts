@@ -1,5 +1,5 @@
 /**
- * Trigger claims: a plugin that generates triggers (the Trigger Script plugin builds a
+ * Trigger claims: a plugin that generates triggers (the TrigScript plugin builds a
  * block of them from its source) tells the editor which run of the list is its, and the
  * editor's own trigger editors show those rows badged and locked, with a way to the
  * plugin's editor, instead of letting the user edit records the next build will replace.

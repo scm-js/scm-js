@@ -62,7 +62,7 @@ Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test)
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
 into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
 Repair, Walkability, Terrain from Image, Paint and scmjs.dev are default plugins, all on
-(`src/plugins/defaults.ts`); Melee Wizard, Trigger Script and Section Explorer are installed from
+(`src/plugins/defaults.ts`); Melee Wizard, TrigScript and Section Explorer are installed from
 Browse Plugins.
 `zoomToFitAtom` is View ▸ Zoom to Fit (Ctrl+Shift+0), `lockedLayersAtom` the Layers panel's padlocks
 (the viewport's `onDown` refuses a locked layer's gestures), `cursorPixelAtom` the status bar's Px.

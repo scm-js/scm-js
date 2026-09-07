@@ -126,8 +126,8 @@ them as one row under the plugin's id, with a button to clear them, and Clear al
 sweeps them with the rest.
 
 A plugin can also keep files inside the map archive, next to the scenario itself. The
-Trigger Script plugin stores its script there, so the script travels with the map. The
-Save dialog lists those files and can leave them out.
+TrigScript plugin stores its script's files there, so the script travels with the map.
+The Save dialog lists those files and can leave them out.
 
 ### Sources
 
@@ -706,8 +706,8 @@ says what a replace would remove. The run is found by content: `spec.locate(list
 with whatever list an editor holds (the map's, or a working copy with local inserts in
 it) and answers `{ start, count }`, or null when the records are not there because they
 were edited by hand or removed. So keep a hash of what you generated and look for it, as
-the Trigger Script plugin does. `spec.label` is the words a sentence uses ("the trigger
-script"). The handle has `refresh()`, for after a rebuild so editors ask `locate` again,
+the TrigScript plugin does. `spec.label` is the words a sentence uses ("the TrigScript
+block"). The handle has `refresh()`, for after a rebuild so editors ask `locate` again,
 and `remove()`. The claim leaves with the plugin.
 
 ### `api.query`
@@ -1288,5 +1288,5 @@ above. Read the one nearest to what you are writing.
 | [Repair](https://github.com/scm-js/plugin-repair) | The `"document"` event's payload, `document.sections` (`defaults`, `rebuild`, `trailing`, `required`, `replaceFile`), `tx.rebuildIsom`, and `api.text` for the Remastered newline finding. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
-| [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | `triggers.claim`, a dialog that keeps Escape for its own editor, files kept with the map through `document.extras`, and commands published for other plugins. |
+| [TrigScript](https://github.com/scm-js/plugin-trigscript) | `triggers.claim`, a dialog that keeps Escape for its own editor, a folder of files kept with the map through `document.extras`, and commands published for other plugins. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |

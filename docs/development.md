@@ -645,7 +645,7 @@ and when a canned answer no longer fits the map it is written for, change the mo
 | What is in a map file and what the editor does with it | [file-formats.md](file-formats.md) |
 | Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
 | Using, installing and writing plugins, the plugin API | [plugins.md](plugins.md), and the generated reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
-| The trigger scripting language | the [Trigger Script plugin](https://github.com/scm-js/plugin-trigger-script)'s README |
+| TrigScript, the trigger scripting language | the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README |
 | Each plugin's internals | its own repository's README |
 | Running, building, releasing, contributing | this file |
 | Per-subsystem implementation notes | [CLAUDE.md](../CLAUDE.md) |

@@ -38,7 +38,8 @@
   to npm from a `v*` tag): `.scm`/`.scx` → `staredit\scenario.chk`; bare `.chk` files are accepted.
   Non-scenario archive members are read by `readMembers`: by name where a name is known — the
   `(listfile)` plus `editor/sounds.ts#referencedMembers` (the WAV table, every `wav` action
-  argument, the Trigger Script members), probed with `slotOf`, since protectors strip the listfile
+  argument, the TrigScript entry file and manifest — the manifest's `files` list then names the
+  rest through `readMembers`' second pass), probed with `slotOf`, since protectors strip the listfile
   and the sounds are then only findable by the names the scenario carries — into
   `archiveExtrasAtom`, and everything else (no name, or bytes this build cannot decode) as
   `StoredMembers` into `archiveStoredAtom`: mopaq's `members()` / `hashEntries()`, written back

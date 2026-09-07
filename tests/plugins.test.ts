@@ -1180,9 +1180,9 @@ describe("plugin lifecycle", () => {
     expect(effectiveInstalls([]).filter((p) => !p.enabled).map((p) => pluginKey(p.spec))).toEqual([
       "github:scm-js/plugin-scmjs-dev",
     ]);
-    // Melee Wizard, Trigger Script and Section Explorer are not defaults: they are found and
+    // Melee Wizard, TrigScript and Section Explorer are not defaults: they are found and
     // installed through Browse Plugins.
-    for (const spec of ["plugin-melee-wizard", "plugin-trigger-script", "plugin-section-explorer"]) {
+    for (const spec of ["plugin-melee-wizard", "plugin-trigscript", "plugin-section-explorer"]) {
       expect(defaultPluginSpecs().some((s) => s.includes(spec))).toBe(false);
     }
   });
@@ -2879,16 +2879,16 @@ describe("plugin trigger claims and commands", () => {
     const { store } = blankStore();
     const consumer = createPluginApi(store, { id: "ai", name: "AI", source: "s" }, new Contributions());
     const providerBag = new Contributions();
-    const provider = createPluginApi(store, { id: "trigger-script", name: "Trigger Script", source: "s" }, providerBag);
+    const provider = createPluginApi(store, { id: "trigscript", name: "TrigScript", source: "s" }, providerBag);
     const seen: boolean[] = [];
-    consumer.events.on("commands", () => seen.push(consumer.commands.has("trigger-script.compile")));
-    expect(consumer.commands.has("trigger-script.compile")).toBe(false);
+    consumer.events.on("commands", () => seen.push(consumer.commands.has("trigscript.compile")));
+    expect(consumer.commands.has("trigscript.compile")).toBe(false);
     provider.commands.register({ id: "compile", title: "Compile", run: (src: unknown) => `compiled ${String(src)}` });
     expect(seen).toEqual([true]);
-    expect(consumer.commands.run("trigger-script.compile", "x")).toBe("compiled x");
+    expect(consumer.commands.run("trigscript.compile", "x")).toBe("compiled x");
     providerBag.dispose();
     expect(seen).toEqual([true, false]);
-    expect(consumer.commands.run("trigger-script.compile", "x")).toBeUndefined();
+    expect(consumer.commands.run("trigscript.compile", "x")).toBeUndefined();
   });
 
   it("creates a blank map through document.create and honours the close gate", async () => {

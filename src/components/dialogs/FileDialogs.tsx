@@ -414,7 +414,7 @@ export function SaveMapDialog({ entry }: DialogProps) {
                         checked={e.kept}
                         disabled={!archive}
                         onChange={(ev) => keepExtra(e.name, ev.target.checked)}
-                        label={<><span className="path" title={e.name}>{e.name}</span><span className="dim">{e.kind === "script" ? "trigger script" : e.kind === "sound" ? "sound" : ""}</span><span className="size">{formatBytes(e.size)}</span></>}
+                        label={<><span className="path" title={e.name}>{e.name}</span><span className="dim">{e.kind === "script" ? "TrigScript" : e.kind === "sound" ? "sound" : ""}</span><span className="size">{formatBytes(e.size)}</span></>}
                       />
                     ))}
                   </div>

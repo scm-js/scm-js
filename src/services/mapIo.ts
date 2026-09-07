@@ -1,6 +1,7 @@
 import { parseScenario, type Scenario } from "../formats/chk/scenario";
 import { loadMap, readMembers, type StoredMembers } from "../formats/mpq/scm";
 import { referencedMembers } from "../editor/sounds";
+import { scriptMembersFromManifest, MANIFEST_MEMBER } from "../editor/save";
 import type { LoadedDocument } from "../atoms/documentAtoms";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, type MapFormat, type SaveOptions } from "../editor/save";
 
@@ -28,7 +29,10 @@ export async function openMapFile(file: File, handle: MapFileHandle | null = nul
   const loaded = await loadMap(bytes);
   const scenario = parseScenario(loaded.chk);
   const { extras, stored } = loaded.archive
-    ? await readMembers(loaded.archive, loaded.files, referencedMembers(scenario), scenario.warnings)
+    ? await readMembers(loaded.archive, loaded.files, referencedMembers(scenario), scenario.warnings, (extras) => {
+        for (const [name, bytes] of extras) if (name.replace(/\//g, "\\").toLowerCase() === MANIFEST_MEMBER.toLowerCase()) return scriptMembersFromManifest(bytes);
+        return [];
+      })
     : { extras: new Map<string, Uint8Array>(), stored: null };
   if (stored) {
     const n = stored.members.length - stored.unreadable.length;

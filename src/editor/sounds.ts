@@ -61,8 +61,9 @@ export function wavUsage(scn: Scenario, stringIndex: number): string[] {
 
 /**
  * Every archive path the scenario itself names: the WAV table's entries and the `wav`
- * argument of every trigger and briefing action, plus the members the Trigger Script
- * plugin keeps its source in. What `readMembers` probes an archive for when its
+ * argument of every trigger and briefing action, plus the members the TrigScript
+ * plugin keeps its entry file and build manifest in (the manifest then names the rest,
+ * see `scriptMembersFromManifest`). What `readMembers` probes an archive for when its
  * (listfile) is gone — the one way a protected map's sounds get their names back.
  */
 export function referencedMembers(scn: Scenario): string[] {

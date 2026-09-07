@@ -182,7 +182,7 @@ export interface ArchiveMembers {
  * way to carry a member whose key depends on a name nobody has; `problems` gets a line
  * for the unreadable ones. Nothing the archive holds is dropped.
  */
-export async function readMembers(archive: Archive, files: string[] | null, hints: Iterable<string> = [], problems?: string[]): Promise<ArchiveMembers> {
+export async function readMembers(archive: Archive, files: string[] | null, hints: Iterable<string> = [], problems?: string[], more?: (extras: ReadonlyMap<string, Uint8Array>) => Iterable<string>): Promise<ArchiveMembers> {
   const extras = new Map<string, Uint8Array>();
   const taken = new Set<number>();
   const unreadable: string[] = [];
@@ -199,18 +199,23 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
     return true;
   });
   const keepStored = new Set<number>();
-  for (const name of names) {
-    const slot = archive.slotOf(name);
-    if (slot === null || taken.has(slot)) continue; // a listed name the archive lacks, or one already read under another spelling
-    taken.add(slot);
-    try {
-      extras.set(name, await archive.readFileAsync(name));
-    } catch (err) {
-      unreadable.push(name);
-      keepStored.add(slot);
-      problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it is kept in a saved copy as it is.`);
+  const read = async (list: string[]) => {
+    for (const name of list) {
+      const slot = archive.slotOf(name);
+      if (slot === null || taken.has(slot)) continue; // a listed name the archive lacks, or one already read under another spelling
+      taken.add(slot);
+      try {
+        extras.set(name, await archive.readFileAsync(name));
+      } catch (err) {
+        unreadable.push(name);
+        keepStored.add(slot);
+        problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it is kept in a saved copy as it is.`);
+      }
     }
-  }
+  };
+  await read(names);
+  // Names that only what was read can give (a manifest listing its files): one more pass.
+  if (more) await read([...more(extras)].filter((name) => { const key = normalize(name); if (seen.has(key)) return false; seen.add(key); return true; }));
 
   const members = archive.members().filter((m) => !taken.has(m.slot) || keepStored.has(m.slot));
   const stored: StoredMembers | null = members.length === 0 ? null : { hashTable: archive.hashEntries(), sectorSize: archive.sectorSize, members, unreadable };

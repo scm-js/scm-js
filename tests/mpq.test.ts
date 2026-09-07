@@ -7,7 +7,7 @@ import { createScenario } from "../src/formats/chk/create";
 import { applySounds, referencedMembers, wavMemberName } from "../src/editor/sounds";
 import { internString } from "../src/editor/settings";
 import { openMapFile, writeMapBytes } from "../src/services/mapIo";
-import { MANIFEST_MEMBER, SCRIPT_MEMBER } from "../src/editor/save";
+import { MANIFEST_MEMBER, SCRIPT_MEMBER, scriptMembersFromManifest } from "../src/editor/save";
 
 const MAPS_DIR = join(import.meta.dirname, "..", "fixtures", "maps");
 
@@ -71,6 +71,24 @@ describe("members without a file list", () => {
     wavs[3] = internString(scn, WAV);
     applySounds(scn, wavs);
     expect(referencedMembers(scn)).toEqual([WAV, SCRIPT_MEMBER, MANIFEST_MEMBER]);
+  });
+
+  it("finds a script's other files through its manifest when there is no listfile", async () => {
+    const scn = createScenario({ width: 32, height: 32, era: 0 });
+    const manifest = new TextEncoder().encode(JSON.stringify({ version: 2, start: 0, count: 0, hash: "0:0", sources: [], files: ["main.ts", "ai/waves.ts"], sourceHash: "x" }));
+    const bytes = await saveMap(serializeScenario(scn), {
+      extras: new Map([[SCRIPT_MEMBER, new Uint8Array([1])], ["trigscript\\ai\\waves.ts", new Uint8Array([2])], [MANIFEST_MEMBER, manifest], ["trigscript\\orphan.ts", new Uint8Array([3])]]),
+      listfile: false, compress: "pkware", encrypt: true,
+    });
+    const loaded = await loadMap(bytes);
+    expect(loaded.files).toBeNull();
+    const more = (extras: ReadonlyMap<string, Uint8Array>) => { const m = extras.get(MANIFEST_MEMBER); return m ? scriptMembersFromManifest(m) : []; };
+    const { extras, stored } = await readMembers(loaded.archive!, loaded.files, referencedMembers(scn), undefined, more);
+    expect([...extras.keys()].sort()).toEqual([MANIFEST_MEMBER, SCRIPT_MEMBER, "trigscript\\ai\\waves.ts"].sort());
+    // The file the manifest does not list is nameless, and stays stored as it is.
+    expect(stored!.members).toHaveLength(1);
+    expect(scriptMembersFromManifest(new TextEncoder().encode("{not json"))).toEqual([]);
+    expect(scriptMembersFromManifest(new TextEncoder().encode(JSON.stringify({ files: ["../x.ts", "ok.ts", 5] })))).toEqual(["trigscript\\ok.ts"]);
   });
 
   it("reads a referenced member by name and keeps the rest as stored", async () => {

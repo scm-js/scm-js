@@ -99,12 +99,13 @@ describe("save options", () => {
     expect(extraKind("staredit\\wav\\hello.wav")).toBe("sound");
     expect(extraKind("STAREDIT/WAV/x.WAV")).toBe("sound");
     expect(extraKind(SCRIPT_MEMBER)).toBe("script");
+    expect(extraKind("TRIGSCRIPT/ai/waves.ts")).toBe("script");
     expect(extraKind("readme.txt")).toBe("file");
 
     const plan = planSave(scn, extras, opts({ omitExtras: ["staredit\\wav\\hello.wav", SCRIPT_MEMBER] }));
     expect(plan.extras.map((e) => e.kept)).toEqual([false, false, true, true]);
     expect(plan.warnings.join(" ")).toMatch(/1 sound file left out/);
-    expect(plan.warnings.join(" ")).toMatch(/trigger script/);
+    expect(plan.warnings.join(" ")).toMatch(/TrigScript/);
     const loaded = await loadMap(await buildMapFile(scn, extras, opts({ omitExtras: ["staredit\\wav\\hello.wav", SCRIPT_MEMBER] })));
     expect(loaded.files?.sort()).toEqual([SCENARIO_PATH, MANIFEST_MEMBER, "readme.txt"].sort());
 

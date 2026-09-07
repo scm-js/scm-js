@@ -50,7 +50,7 @@ export const EXAMPLE_PLUGINS = [
   { repo: "plugin-melee-wizard", name: "Melee Wizard", groups: ["query", "document", "ui"], of: "placing units with the editor's own placement checks" },
   { repo: "plugin-image-to-terrain", name: "Terrain from Image", groups: ["terrain", "ui"], of: "an image turned into terrain, one transaction" },
   { repo: "plugin-scm-scx", name: "scmscx.com", groups: ["document", "ui"], of: "opening a map fetched from elsewhere" },
-  { repo: "plugin-trigger-script", name: "Trigger Script", groups: ["triggers", "commands"], of: "generating a run of triggers and claiming it" },
+  { repo: "plugin-trigscript", name: "TrigScript", groups: ["triggers", "commands"], of: "generating a run of triggers and claiming it" },
 ];
 
 function read(file) {

@@ -23,7 +23,7 @@ icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, 
 scmscx.com, Repair, Walkability, Terrain from Image, Paint and scmjs.dev, each pinned to a tag and
 all on; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard,
-Trigger Script and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
+TrigScript and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over
 the stored list, so a default is always listed, starts as its entry says unless the stored list says
 otherwise, can be turned on or off but not removed, and is otherwise

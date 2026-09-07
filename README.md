@@ -444,15 +444,20 @@ A leading `;` disables a line, and a `Flags:` block carries the trigger flags SC
 has no syntax for. The *Briefing* switch at the top edits the mission briefing in the
 same syntax.
 
-### The Script Editor
+### TrigScript
 
-A plugin, Trigger Script ([scm-js/plugin-trigger-script](https://github.com/scm-js/plugin-trigger-script)),
-installed from Plugins ▸ Browse Plugins…. It keeps a TypeScript file inside the map that
-generates triggers, at two levels: one `trigger()` call per trigger, and structured code
-with variables, `if`, loops and functions, which compiles down to a state machine built
-out of death counters — no EUD anywhere in it, so what comes out runs on any version of
-the game. A built-in simulator runs thirty cycles of the result and says what happened.
-The language is described in that repository's README.
+A plugin, TrigScript ([scm-js/plugin-trigscript](https://github.com/scm-js/plugin-trigscript)),
+installed from Plugins ▸ Browse Plugins…, then Triggers ▸ TrigScript…. It keeps TypeScript
+files inside the map and builds them into triggers. The files are ordinary TypeScript:
+they run when you press Build, with the whole language and standard library to hand, and
+every `trigger()` call they make — directly, from a helper, in a loop over the players —
+becomes one trigger of the map. A script can be split over files that import each other.
+Code inside `program(() => { … })` runs in the game instead: its variables are death
+counters and switches, its `if`s and loops become a state machine of ordinary triggers,
+no EUD anywhere in it, so what comes out runs on any version of the game. Names come from
+the map, so `locations.` completes to what the map has. A built-in simulator runs thirty
+cycles of the result and says what happened. The language is described in that
+repository's README.
 
 Triggers a plugin generates show up in the Trigger Editor with a badge and are locked
 there, with a button to the plugin's own editor; the text editor fences them in
@@ -780,8 +785,8 @@ minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
 leaderboards, countdowns, last standing, alliances, escalation stages, a bound's obstacles
 and checkpoints and more — are built by the editor
 from their parameters, instantly and the same way every time, and show in green.
-Anything else is written as a trigger script (gold), which needs the Trigger Script
-plugin switched on. Afterwards **Review it…** or **Open the assistant** to keep working
+Anything else is written as a TrigScript (gold), which needs the TrigScript plugin
+switched on. Afterwards **Review it…** or **Open the assistant** to keep working
 on it.
 
 ### Generate Map and Redo Area
@@ -815,13 +820,13 @@ ground joins the old at the edges.
 
 ### Triggers
 
-**Write Triggers…** turns a description into triggers, written as a script in the
-[Trigger Script](#the-script-editor) plugin's language, which has to be switched on. The
-model is given the map's own declarations, so it can name every unit, location and switch
-as the map calls them; the script is compiled here, and if it does not compile the
-compiler's complaints go back to the model for up to two rounds of repairs. **Build**
-installs it exactly as the Script Editor's Build does, and the source stays with the map.
-It can extend the map's current script or replace every trigger with the script.
+**Write Triggers…** turns a description into triggers, written in
+[TrigScript](#trigscript), whose plugin has to be switched on. The model is given the
+map's own declarations, so it can name every unit, location and switch as the map calls
+them; the script is checked and run here, and if it fails the complaints go back to the
+model for up to two rounds of repairs. **Build** installs it exactly as TrigScript's own
+Build does, and the source stays with the map. It can extend the map's current script or
+replace every trigger with the script.
 
 **Explain Triggers…** walks through what the triggers do in play — all of them, a range,
 or the mission briefing — or answers a question about them, and the text streams in as
@@ -930,7 +935,7 @@ Walkability, Paint, Repair, Terrain from Image and the scmscx.com search are ins
 and on from the start. scmjs.dev — the account and the AI — is installed too but starts
 *off*, because an account and a trial are yours to ask for: tick it on in Plugins ▸
 Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear. Melee
-Wizard, Trigger Script and Section Explorer are a click away.
+Wizard, TrigScript and Section Explorer are a click away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -950,7 +955,7 @@ and the addresses it will fetch from.
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) and opens the map you pick. The site does not yet allow a page served elsewhere to read it, so today the dialog explains and links to the site instead. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
-| [Trigger Script](https://github.com/scm-js/plugin-trigger-script) | Triggers ▸ Script Editor… | A TypeScript file kept inside the map and compiled into a block of the trigger list — `if`, loops and variables included. |
+| [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | TypeScript files kept inside the map and built into a block of the trigger list: ordinary code that runs when you build, and `program()` bodies that run in the game as death-counter state machines. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account and the AI that comes with it — see [Your scmjs.dev account](#your-scmjsdev-account) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
@@ -1051,7 +1056,7 @@ The map you have open is never kept there and is not touched by any of it.
 | --- | --- |
 | Classic editor: every condition and action, per-item disable | Yes |
 | Text editor in SCMDraft's TrigEdit syntax | Yes |
-| Script editor: a TypeScript subset that generates triggers | Yes, as a plugin (Trigger Script: install it from Plugins ▸ Browse Plugins…, then Triggers ▸ Script Editor…). |
+| Scripting: TypeScript that builds into triggers | Yes, as a plugin (TrigScript: install it from Plugins ▸ Browse Plugins…, then Triggers ▸ TrigScript…). |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |
 | Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |

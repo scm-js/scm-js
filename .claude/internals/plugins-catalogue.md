@@ -24,8 +24,8 @@ anywhere**, the runner says "Asking scmjs.dev…"; a failed request links to the
 access rules (per-IP and per-session budgets, and *accounts*: a free trial session per browser,
 Discord sign-in through a provider interface, roles with a weekly allowance or `unlimited`, purchased
 credit through Stripe Checkout, an account page, `/v1/admin/*` for the site) and never any game data;
-the plugin gathers facts (terrain vocabulary, statistics, a `renderImage` PNG, the Trigger Script
-plugin's `declarations` command) and applies what comes back through the ordinary API — a map plan is
+the plugin gathers facts (terrain vocabulary, statistics, a `renderImage` PNG, the TrigScript
+plugin's `declarations` command with `{ compact: true }`) and applies what comes back through the ordinary API — a map plan is
 a coarse legend grid turned into `paintIsom` strokes plus Melee Wizard's base geometry (`ai/layout.ts`;
 since 2026-09-06 Make Scenario asks `map-plan` for the **shape language** instead — `language: "shapes"`,
 statements in tiles that `ai/shapes.ts` compiles to a one-tile grid; a `plateau` with `ramps` gets its
@@ -42,7 +42,7 @@ planner is asked only for layouts no preset describes). The assistant reaches al
 `place_ramp` / `place_bridge` (the fitters on ground already there), `reachable` (`ai/reach.ts`: a flood fill
 over VF4 walkability, the check the lanes defect needed) and `scenario_rules` (ownerless players — defeated at
 once, triggers dead — with `fix: true` placing an Overlord keeper)
-vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
+vendored there), triggers come back as TrigScript and go through the TrigScript plugin's `compile` →
 repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
 assistant panel is a tool-use loop whose tools run in the plugin (its transcript, since 2026-09-07, is a
 `widgets.fold` per turn holding a `widgets.steps` list — `Tool.describe(input, ctx)` / `Tool.report(result)`

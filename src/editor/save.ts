@@ -23,13 +23,31 @@ import type { Scenario } from "../formats/chk/scenario";
 import { requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
 
 /**
- * The archive members the Trigger Script plugin keeps its source and build manifest in
- * (`scmjs\triggers.ts`, `scmjs\triggers.json`, next to `staredit\scenario.chk`). The
- * editor never reads them; it knows the names so the Save dialog can say what leaving
- * them out means.
+ * The archive folder the TrigScript plugin keeps its files in (`trigscript\main.ts` and
+ * whatever other files the script has, plus the build manifest `trigscript\build.json`),
+ * next to `staredit\scenario.chk`. The editor never reads them; it knows the names so the
+ * Save dialog can say what leaving them out means, and so a protected map's script can
+ * be found by name when the listfile is gone (`scriptMembersFromManifest`).
  */
-export const SCRIPT_MEMBER = "scmjs\\triggers.ts";
-export const MANIFEST_MEMBER = "scmjs\\triggers.json";
+export const SCRIPT_FOLDER = "trigscript\\";
+export const SCRIPT_MEMBER = `${SCRIPT_FOLDER}main.ts`;
+export const MANIFEST_MEMBER = `${SCRIPT_FOLDER}build.json`;
+
+/**
+ * The script's other files, from its build manifest: the manifest lists every file the
+ * block was built from, so an archive without a listfile still gives them up by name.
+ * Empty for anything that is not such a manifest.
+ */
+export function scriptMembersFromManifest(bytes: Uint8Array): string[] {
+  try {
+    const m = JSON.parse(new TextDecoder().decode(bytes)) as { files?: unknown };
+    if (!Array.isArray(m.files)) return [];
+    const sane = (f: string) => /^[A-Za-z0-9_\-./]+\.ts$/i.test(f) && !f.split("/").some((seg) => seg === "" || seg === "." || seg === "..");
+    return m.files.filter((f): f is string => typeof f === "string" && sane(f)).map((f) => `${SCRIPT_FOLDER}${f.replace(/\//g, "\\")}`);
+  } catch {
+    return [];
+  }
+}
 import { currentChk } from "./sections";
 
 export type MapFormat = "scx" | "scm" | "chk";
@@ -161,7 +179,7 @@ export interface SavePlan {
 /** What an archive member is, from its path. */
 export function extraKind(name: string): ExtraKind {
   const key = name.replace(/\//g, "\\").toLowerCase();
-  if (key === SCRIPT_MEMBER.toLowerCase() || key === MANIFEST_MEMBER.toLowerCase()) return "script";
+  if (key.startsWith(SCRIPT_FOLDER.toLowerCase())) return "script";
   if (key.startsWith("staredit\\wav\\") || /\.(wav|ogg|mp3)$/.test(key)) return "sound";
   return "file";
 }
@@ -247,7 +265,7 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
   const sounds = planned.filter((e) => e.kind === "sound" && !e.kept && options.format !== "chk").length;
   if (sounds > 0) warnings.push(`${sounds} sound file${sounds === 1 ? "" : "s"} left out will not play.`);
   if (planned.some((e) => e.kind === "script" && !e.kept && options.format !== "chk")) {
-    warnings.push("Without the trigger script members the generated triggers stay but their source is gone.");
+    warnings.push("Without the TrigScript files the generated triggers stay but their source is gone.");
   }
   if (options.compression === "zlib" && options.format !== "chk") {
     warnings.push("zlib needs StarCraft 1.16.1 or Remastered; older builds do not read it.");

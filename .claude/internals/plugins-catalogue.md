@@ -37,7 +37,11 @@ Compound/Basilica walls need pieces the brush never draws, and only Jungle's and
 brush's shores; scattered doodads are then checked against the ground as painted. **Layout presets**
 (`ai/presets.ts`: `corner-camps`, `lanes`, `arena`, `bound`, `town-regions`) are stored shape programs the design names in `layout`, sent to
 `ums-design` as `presets` like the toolkit kinds; the plugin lays them out with no terrain call, so the
-planner is asked only for layouts no preset describes)
+planner is asked only for layouts no preset describes). The assistant reaches all of it through
+`ai/tools/layout.ts` — `layout_presets` / `layout_preset`, `paint_shapes` (area-relative via `shiftShapes`),
+`place_ramp` / `place_bridge` (the fitters on ground already there), `reachable` (`ai/reach.ts`: a flood fill
+over VF4 walkability, the check the lanes defect needed) and `scenario_rules` (ownerless players — defeated at
+once, triggers dead — with `fix: true` placing an Overlord keeper)
 vendored there), triggers come back as script and go through the Trigger Script plugin's `compile` →
 repair rounds → `build` commands (`commands.has` first; the plugin says so when it is off), the
 assistant panel is a tool-use loop whose tools run in the plugin. `protocol.ts` is the wire contract,

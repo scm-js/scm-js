@@ -873,7 +873,12 @@ sprites, add and edit locations, set fog, name the map, write and rearrange trig
 edit strings, build the trigger script, set up players and forces, change unit, upgrade
 and technology settings, and resize the map. It knows the same genre guides and builds
 the same toolkit systems as Make Scenario, so "add kill to cash" is one call rather than
-a page of triggers. Each edit is its own undo step, and after a turn that changed the
+a page of triggers; it lays out the same layout presets ("make this a two-lane defense")
+and paints terrain as shapes — a plateau with a ramp that fits, a lane that stays
+walkable, a river with a bridge — fits a ramp or a bridge on ground already there, tells
+you whether units can walk from one place to another, and checks the game's silent rules
+(a player who owns nothing is defeated at once) and fixes them when asked. Each edit is
+its own undo step, and after a turn that changed the
 map the panel says what changed and offers to undo that turn in one press.
 
 The chips above the input suggest a question for the layer you are on and what you have

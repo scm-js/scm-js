@@ -378,6 +378,17 @@ const RECIPES = {
     const results = last.content.filter((c) => c.type === "tool_result");
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     const calls = lastAssistant?.content.filter((c) => c.type === "tool_use") ?? [];
+    // A layout conversation: lay lanes out, check the walk from a spawn to the goal, then the game's rules.
+    const asked = String(messages[0]?.content?.[0]?.text ?? messages[0]?.content ?? "");
+    if (/lane|defense|preset/i.test(asked)) {
+      const done = new Set(messages.flatMap((m) => m.role === "assistant" ? m.content.filter((c) => c.type === "tool_use").map((c) => c.name) : []));
+      const step = (text, id, name, input) => ({ cost: 0.02, inputTokens: 7200, outputTokens: 140, text, tools: [{ id, name }], output: { stopReason: "tool_use", content: [{ type: "text", text }, { type: "tool_use", id, name, input }] } });
+      if (!done.has("layout_preset")) return step("Two lanes with cliff walls, then I'll check the walk and the rules.", "toolu_11", "layout_preset", { preset: "lanes", params: { lanes: "2", wall: "cliff", bends: "yes" } });
+      if (!done.has("reachable")) return step("Laid out. Checking that a unit can walk from Spawn 1 to the Goal.", "toolu_12", "reachable", { fromLocation: "Spawn 1", toLocation: "Goal" });
+      if (!done.has("scenario_rules")) return step("The lane is joined. Now the game's own rules.", "toolu_13", "scenario_rules", { fix: true });
+      const text = "Done. Two cliff-walled lanes from the north spawns to the south goal, a yard and a hire pad per player; Spawn 1 reaches the Goal on foot, and every player owns something. Add the waves with ums_build when you are ready.";
+      return { cost: 0.01, inputTokens: 7600, outputTokens: 90, text, output: { stopReason: "end_turn", content: [{ type: "text", text }] } };
+    }
     // Turn one: look for Player 1's start location.
     if (!results.length) {
       return {

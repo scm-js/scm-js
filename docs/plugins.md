@@ -1277,8 +1277,15 @@ keep it small and readable.
 
 ### `api.plugin`, `api.apiVersion`, `api.log(...)`
 
-Who you are (`id`, `name`, `source`), which API version you got, and a console logger
-with the plugin's name prefixed.
+Who you are (`id`, `name`, `source`), which API version you got, and a logger with the
+plugin's name in front. `log` writes to the browser's console *and* to the editor's own
+log, which the user reads in **View ▸ Debug Console** and copies into a bug report — so
+write the lines someone else would need to understand what your plugin did, and keep them
+short. Anything else the host notices about a plugin lands there too, with its name on it:
+it started and at which version, the edits it made and what they changed, a listener of
+yours that threw, and a call made after the plugin was turned off. With the console's
+**Verbose** tick on, every call a plugin makes into the API is recorded, which is how a
+user (or you) finds out which plugin did something to a map.
 
 ## Plugins to read
 

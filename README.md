@@ -1529,6 +1529,35 @@ everything the editor keeps, one row per setting or cache, with a plugin's own d
 its name; each row can be cleared on its own, or **Clear all data** throws the lot away.
 The map you have open is never kept there and is not touched by any of it.
 
+## When something goes wrong
+
+Most of what the editor knows about a bad session used to go somewhere nobody looks. **View
+▸ Debug Console** opens a strip along the bottom of the window with the log in it: maps
+opened and saved, plugins started and stopped, where the game data came from, and every
+error the page threw.
+
+![The debug console](docs/images/debug-console.webp)
+
+It records whether the strip is open or not, so opening it *after* something odd happened
+still shows what happened — you do not have to make the problem occur again to catch it.
+The last couple of thousand lines are kept; older ones fall off the end, and **Clear** is
+there for starting from a clean slate before reproducing something.
+
+**Copy** puts the whole log on the clipboard with a short header above it: the version, the
+browser or desktop app, where the game data came from, the map's size and tileset, and the
+plugins with their versions. That header is most of what a bug report needs, and **Help ▸
+Copy Diagnostics** copies it on its own without the log. **Save…** writes the same text to a
+file. Both name the map *file* you have open, the plugins you have installed and the build
+you are running — nothing else about you, and never the folder the map is in.
+
+**Warnings** and **Errors** narrow the list to what went wrong; the box beside them filters
+on any text. **Verbose** adds a line for every edit and every call a plugin makes into the
+editor. It answers "which plugin did that?", it is noisy by design, and it turns itself off
+when you next load the editor.
+
+If something is wrong and you want it looked at, the useful report is: what you did, what
+you expected, and a copied log.
+
 ## What works, and what does not
 
 ### Map files

@@ -509,3 +509,150 @@
   color: var(--text);
   background: var(--bg-4);
 }
+
+/* ── Debug console (View ▸ Debug Console) ───────────────── */
+
+/* Sunk to the map's own void colour: it is a well in the chrome, not a panel on it. */
+.debug-console {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 80px;
+  background: var(--bg-0);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.console-grip {
+  height: 5px;
+  margin-bottom: -3px;
+  cursor: ns-resize;
+  flex: none;
+}
+.console-grip:hover {
+  background: var(--sel-hi);
+}
+.console-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-lo);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  flex: none;
+}
+.console-title {
+  color: var(--text-dim);
+  padding-right: 4px;
+}
+.console-spacer {
+  flex: 1;
+}
+.console-head button {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-3);
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+.console-head button:hover {
+  background: var(--bg-4);
+  color: var(--text);
+}
+.console-filters {
+  display: flex;
+}
+.console-filters button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.console-filters button:first-child {
+  border-radius: 2px 0 0 2px;
+  margin-left: 0;
+}
+.console-filters button:last-child {
+  border-radius: 0 2px 2px 0;
+}
+.console-filters button.on {
+  background: var(--bg-5);
+  color: var(--text);
+}
+.console-find {
+  width: 140px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-1);
+  color: var(--text);
+  font: inherit;
+}
+.console-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.console-close {
+  font-size: var(--fs-md);
+  line-height: 1;
+}
+.console-body {
+  flex: 1;
+  overflow: auto;
+  padding: 3px 0;
+  /* Long messages wrap rather than scroll the strip sideways; a stack trace's line is long. */
+  overflow-wrap: anywhere;
+}
+.console-empty {
+  margin: 8px 10px;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+}
+.console-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.console-row:hover {
+  background: var(--bg-1);
+}
+.console-row.warn {
+  color: var(--warn);
+}
+.console-row.error {
+  color: var(--danger);
+}
+.console-at {
+  color: var(--text-faint);
+  white-space: pre;
+  flex: none;
+}
+.console-source {
+  color: var(--teal-dim);
+  flex: none;
+  min-width: 72px;
+}
+.console-msg {
+  flex: 1;
+}
+.console-data {
+  color: var(--text-faint);
+}
+.console-repeat {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}

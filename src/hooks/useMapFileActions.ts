@@ -1,3 +1,4 @@
+import { baseName, logError, logInfo } from "../editor/log";
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
@@ -293,8 +294,9 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   try {
     const bytes = req.bytes ?? await buildMapFile(scenario, store.get(archiveExtrasAtom), req.options, undefined, store.get(archiveStoredAtom));
     const outcome = await write(bytes, req.fileName, req.handle);
-    if (!outcome) return false;
+    if (!outcome) { logInfo("document", `Save of the ${what} was dismissed`); return false; }
     const size = formatBytes(bytes.length);
+    logInfo("document", `Saved the ${what}`, { file: baseName(outcome.fileName), bytes: bytes.length, route: outcome.route, format: req.options?.format, compression: req.options?.compression });
     if (!req.copy) {
       store.set(mapFilePathAtom, outcome.fileName);
       store.set(mapFileHandleAtom, outcome.handle ?? (outcome.route === "file" ? req.handle : null));
@@ -317,6 +319,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) });
     store.set(statusMessageAtom, `Could not save the ${what}: ${message}`);
     store.set(pushToastAtom, { kind: "error", title: `Could not save the ${what}`, detail: message });
     return false;

@@ -29,6 +29,8 @@ import {
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
+import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
+import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
@@ -154,8 +156,8 @@ export class Contributions {
   add(dispose: () => void, kind?: keyof Contributions["counts"]) {
     if (this.disposed) {
       // Registered from work that outlived the plugin: take it straight back.
-      console.warn("[plugins] a contribution was added after the plugin was deactivated and has been taken back");
-      try { dispose(); } catch (err) { console.error("[plugins] dispose failed", err); }
+      logWarn("plugins", "A contribution was added after the plugin was deactivated and has been taken back");
+      try { dispose(); } catch (err) { logError("plugins", "Disposing a contribution failed", err); }
       return { dispose: () => {} };
     }
     this.disposables.push(dispose);
@@ -166,7 +168,7 @@ export class Contributions {
   dispose() {
     this.disposed = true;
     for (const d of this.disposables.splice(0)) {
-      try { d(); } catch (err) { console.error("[plugins] dispose failed", err); }
+      try { d(); } catch (err) { logError("plugins", "Disposing a contribution failed", err); }
     }
   }
 }
@@ -186,10 +188,10 @@ function checkSyncBuilder(call: string, returned: unknown, notes: string[]): voi
   if (typeof (returned as PromiseLike<unknown> | null | undefined)?.then !== "function") return;
   const text = `${call}'s builder is async — a transaction commits when the builder returns, so anything after its first await is outside the undo entry. Await before the call, not inside it.`;
   notes.push(text);
-  console.error(`[scmJS] ${text}`);
+  logError("plugins", text);
   // The half after the await runs against a closed transaction, whose every call throws; nobody
   // awaits the builder's promise, so its rejection would otherwise surface as unhandled.
-  (returned as PromiseLike<unknown>).then(undefined, (err) => console.error(`[scmJS] ${call}'s builder failed after its transaction had closed`, err));
+  (returned as PromiseLike<unknown>).then(undefined, (err) => logError("plugins", `${call}'s builder failed after its transaction had closed`, err));
 }
 
 /**
@@ -638,7 +640,7 @@ export function startMapTool(store: Store, bag: Contributions, info: PluginInfo,
     disposable.dispose();
     if (store.get(mapToolAtom)?.key === key) store.set(mapToolAtom, null);
     store.set(statusMessageAtom, `${spec.name} — ${reason === "stopped" ? "done" : reason === "cancelled" ? "cancelled" : "stopped"}`);
-    try { spec.onStop?.(reason); } catch (err) { console.error(`[${info.name}] map tool onStop failed`, err); }
+    try { spec.onStop?.(reason); } catch (err) { logError(info.name, "A map tool's onStop failed", err); }
     store.set(mapToolRevisionAtom, store.get(mapToolRevisionAtom) + 1);
   };
   unsubDoc = store.sub(scenarioAtom, () => finish("document"));
@@ -1354,14 +1356,14 @@ function serviceInfo(s: { id: string; pluginId: string; version: number }): Serv
 export function runCommand(store: Store, id: string, args: unknown[] = []): unknown {
   const command = store.get(pluginCommandsAtom).find((c) => c.id === id);
   if (!command) {
-    console.warn(`[plugins] no such command: ${id}`);
+    logWarn("plugins", `No such command: ${id}`);
     return undefined;
   }
   try {
     if (command.enabled && !command.enabled()) return undefined;
     return command.run(...args);
   } catch (err) {
-    console.error(`[plugins] command ${id} failed`, err);
+    logError("plugins", `Command ${id} failed`, err);
     return undefined;
   }
 }
@@ -1518,6 +1520,61 @@ function doodadInfoOf(def: DoodadDef): DoodadInfo {
 }
 
 /** Build one plugin's view of the editor. Everything it registers lands in `bag`. */
+/** One argument or logged value, cut to something that fits on a line. A log entry must stay small. */
+function printable(v: unknown, max = 80): string {
+  if (typeof v === "string") return v.length > max ? `${v.slice(0, max)}…` : v;
+  if (v === null || v === undefined || typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Error) return v.message;
+  if (typeof v === "function") return "fn";
+  try {
+    const text = JSON.stringify(v) ?? String(v);
+    return text.length > max ? `${text.slice(0, max)}…` : text;
+  } catch {
+    return Object.prototype.toString.call(v);
+  }
+}
+
+/**
+ * Wrap every function on the API object so a verbose session records who called what.
+ *
+ * "Which plugin touched the map" is the question a strange map raises and nothing else can
+ * answer — there is no sandbox, and five plugins ship on by default. Wrapping here rather
+ * than at two hundred call sites works because `createPluginApi` builds one fresh literal
+ * per plugin: the wrappers are private to that plugin, so the path they log
+ * (`document.edit`, `ui.pickObject`) needs no extra bookkeeping.
+ *
+ * Off, a call costs one function frame and a boolean — nothing beside the store reads and
+ * scenario walks underneath it. The message is built inside the gate, never before it.
+ */
+function instrument(node: Record<string, unknown>, info: PluginInfo, path = "", depth = 0): void {
+  if (depth > 3) return;
+  const keys = Object.keys(node);
+  // A data table (`api.consts`) is not worth walking, and there is nothing to wrap in it.
+  if (keys.length > 200) return;
+  for (const key of keys) {
+    const value = node[key];
+    const full = path ? `${path}.${key}` : key;
+    if (typeof value === "function") {
+      const fn = value as (...args: unknown[]) => unknown;
+      node[key] = function (this: unknown, ...args: unknown[]) {
+        if (!isVerbose()) return fn.apply(this, args);
+        const started = performance.now();
+        try {
+          const out = fn.apply(this, args);
+          const ms = Math.round(performance.now() - started);
+          log("info", info.name, `${full}(${args.map((a) => printable(a, 40)).join(", ")})`, { ms: ms >= 1 ? ms : undefined });
+          return out;
+        } catch (err) {
+          logError(info.name, `${full} threw`, err);
+          throw err;
+        }
+      };
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype) {
+      instrument(value as Record<string, unknown>, info, full, depth + 1);
+    }
+  }
+}
+
 export function createPluginApi(store: Store, info: PluginInfo, bag: Contributions): PluginApi {
   const scenario = () => store.get(scenarioAtom);
   const loaded = (): LoadedTileset | null => peekTileset(store.get(tilesetFileNameAtom));
@@ -1534,7 +1591,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
    */
   const gone = (what: string): boolean => {
     if (!bag.disposed) return false;
-    console.error(`[${info.name}] ${what} was called after the plugin was deactivated; nothing was done`);
+    logError(info.name, `${what} was called after the plugin was deactivated; nothing was done`);
     return true;
   };
 
@@ -1565,8 +1622,28 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       id: () => (scenario() ? store.get(activeDocumentIdAtom) : null),
       list: () => store.get(documentTabsAtom).map((d) => ({ ...d })),
       activate: (id) => !gone("document.activate") && activateDocumentIn(store, id),
-      edit: (label, build) => (gone("document.edit") ? { ...EMPTY_RESULT, notes: [DEACTIVATED_NOTE] } : runTransaction(store, label, build)),
-      update: (label, build) => (gone("document.update") ? { changed: false, sections: [], notes: [DEACTIVATED_NOTE] } : runUpdate(store, label, build)),
+      edit: (label, build) => {
+        if (gone("document.edit")) return { ...EMPTY_RESULT, notes: [DEACTIVATED_NOTE] };
+        const result = runTransaction(store, label, build);
+        // Counts, never the change lists: an entry that held them would pin every cell
+        // record it touched for as long as the ring holds the line (`editor/log.ts`).
+        logInfo(info.name, `Edit: ${label}`, {
+          changed: result.changed, tiles: result.tiles || undefined, isom: result.isom || undefined,
+          units: result.units || undefined, doodads: result.doodads || undefined, sprites: result.sprites || undefined,
+          locations: result.locations || undefined, fog: result.fog || undefined,
+          notes: result.notes.length > 0 ? result.notes.join("; ") : undefined,
+        });
+        return result;
+      },
+      update: (label, build) => {
+        if (gone("document.update")) return { changed: false, sections: [], notes: [DEACTIVATED_NOTE] };
+        const result = runUpdate(store, label, build);
+        logInfo(info.name, `Update: ${label}`, {
+          changed: result.changed, sections: result.sections.join(",") || undefined,
+          notes: result.notes.length > 0 ? result.notes.join("; ") : undefined,
+        });
+        return result;
+      },
       undo: () => store.set(undoAtom),
       redo: () => store.set(redoAtom),
       history: () => {
@@ -1968,7 +2045,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
             if (closed) return;
             closed = true;
             store.set(pluginPanelsAtom, store.get(pluginPanelsAtom).filter((p) => p.key !== key));
-            try { spec.onClose?.(); } catch (err) { console.error(`[${info.name}] panel onClose failed`, err); }
+            try { spec.onClose?.(); } catch (err) { logError(info.name, "A panel's onClose failed", err); }
           },
           isOpen: () => !closed,
           setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
@@ -2046,7 +2123,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       register: (spec) => {
         const key = nextContributionKey();
         const id = qualifyCommand(info.id, spec.id);
-        if (store.get(pluginCommandsAtom).some((c) => c.id === id)) console.warn(`[plugins] command ${id} is already registered; the newer one wins`);
+        if (store.get(pluginCommandsAtom).some((c) => c.id === id)) logWarn("plugins", `Command ${id} is already registered; the newer one wins`);
         store.set(pluginCommandsAtom, [...store.get(pluginCommandsAtom).filter((c) => c.id !== id), { key, pluginId: info.id, id, title: spec.title, enabled: spec.enabled, run: spec.run }]);
         return bag.add(() => store.set(pluginCommandsAtom, store.get(pluginCommandsAtom).filter((c) => c.key !== key)));
       },
@@ -2059,7 +2136,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       provide: (id, service, options) => {
         const key = nextContributionKey();
         const name = qualifyCommand(info.id, id);
-        if (store.get(pluginServicesAtom).some((s) => s.id === name)) console.warn(`[plugins] service ${name} is already provided; the newer one wins`);
+        if (store.get(pluginServicesAtom).some((s) => s.id === name)) logWarn("plugins", `Service ${name} is already provided; the newer one wins`);
         store.set(pluginServicesAtom, [...store.get(pluginServicesAtom).filter((s) => s.id !== name), { key, pluginId: info.id, id: name, version: options?.version ?? 1, service }]);
         return bag.add(() => store.set(pluginServicesAtom, store.get(pluginServicesAtom).filter((s) => s.key !== key)));
       },
@@ -2071,7 +2148,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         // version is a change the watcher wants to hear about, and a different object is a new key.
         let last: number | null = null;
         const tell = (entry: ReturnType<typeof findService>) => {
-          try { listener((entry?.service as T | undefined) ?? null, entry ? serviceInfo(entry) : null); } catch (err) { console.error(`[${info.name}] service watcher failed`, err); }
+          try { listener((entry?.service as T | undefined) ?? null, entry ? serviceInfo(entry) : null); } catch (err) { logError(info.name, "A service watcher failed", err); }
         };
         const check = () => {
           const entry = findService(store, name);
@@ -2094,7 +2171,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const atoms = EVENT_ATOMS[event];
         if (!atoms) throw new Error(`Unknown plugin event "${event}"`);
         // Only "document" carries a payload; the other listeners are declared with none and ignore it.
-        const safe = () => { try { listener(documentEvent(store)); } catch (err) { console.error(`[${info.name}] event listener failed`, err); } };
+        const safe = () => { try { listener(documentEvent(store)); } catch (err) { logError(info.name, "An event listener failed", err); } };
         const unsubs = atoms.map((a) => store.sub(a, safe));
         return bag.add(() => { for (const u of unsubs) u(); }, "events");
       },
@@ -2119,8 +2196,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
     },
 
-    log: (...args) => console.log(`[${info.name}]`, ...args),
+    log: (...args) => {
+      console.log(`[${info.name}]`, ...args);
+      logInfo(info.name, args.map(printable).join(" "));
+    },
   };
+  instrument(api as unknown as Record<string, unknown>, info);
   return api;
 }
 
@@ -2154,7 +2235,7 @@ function runDeactivate(d: Deactivate | undefined) {
     if (typeof d === "function") d();
     else if (d && typeof d === "object" && typeof d.dispose === "function") d.dispose();
   } catch (err) {
-    console.error("[plugins] deactivate failed", err);
+    logError("plugins", "A plugin's deactivate failed", err);
   }
 }
 
@@ -2214,7 +2295,7 @@ function storeSnapshot(store: Store, spec: string, files: Record<string, string>
   const size = Object.entries(files).reduce((n, [url, text]) => n + url.length + text.length, 0);
   if (size === 0) return;
   if (size > MAX_SNAPSHOT) {
-    console.warn(`[plugins] ${spec}: ${size} characters is too much to keep in browser storage; it will load from its address.`);
+    logWarn("plugins", `${specLabel(spec)}: ${size} characters is too much to keep in browser storage; it will load from its address.`);
     return;
   }
   store.set(pluginCodeAtom, { ...store.get(pluginCodeAtom), [spec]: { files, at: Date.now(), size } });
@@ -2275,11 +2356,12 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
     if (!stillWanted()) { runDeactivate(result); bag.dispose(); return; }
     entry.deactivate = result;
     setRuntime(store, spec, { status: "active", error: null, loadedFrom: local.from, contributions: { ...bag.counts } });
+    logInfo("plugins", `${manifest.name} started`, { version: manifest.version, from: spec.startsWith("builtin:") ? "bundled" : local.from, api: manifest.api, spec });
   } catch (err) {
     bag.dispose();
     if (stillWanted()) map.delete(spec);
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[plugins] ${spec}:`, err);
+    logError("plugins", `${specLabel(spec)} did not load`, err, { spec });
     setRuntime(store, spec, { status: "error", error: message });
   }
 }
@@ -2338,7 +2420,7 @@ async function runDescribe(store: Store, spec: string, deps: Pick<LoaderDeps, "f
     rememberManifest(store, spec, manifest, icon ?? null, { runtime: !activeMap(store).has(spec), cache: source.kind !== "builtin" });
   } catch (err) {
     // Not an error state: the row keeps whatever it had (a cached manifest, or the spec).
-    console.warn(`[plugins] could not describe ${spec}:`, err);
+    logWarn("plugins", `Could not read ${specLabel(spec)}'s manifest: ${err instanceof Error ? err.message : String(err)}`, { spec });
   } finally {
     setRuntime(store, spec, { describing: false });
   }
@@ -2380,6 +2462,7 @@ export function deactivatePlugin(store: Store, spec: string) {
   runDeactivate(entry.deactivate);
   entry.bag.dispose();
   setRuntime(store, spec, { status: "disabled", error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } });
+  logInfo("plugins", `${store.get(pluginRuntimesAtom)[spec]?.manifest?.name ?? specLabel(spec)} stopped`, { spec });
 }
 
 /** Fetch a plugin again from its address, replacing any copy kept in the browser. */

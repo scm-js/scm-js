@@ -15,12 +15,14 @@ import { usePlugins } from "./hooks/usePlugins";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
+import { useErrorCapture } from "./hooks/useErrorCapture";
 import { droppedHandle } from "./services/mapIo";
 import { TooltipProvider } from "./components/ui";
 import MenuBar from "./components/chrome/MenuBar";
 import ToolBar from "./components/chrome/ToolBar";
 import TabStrip from "./components/chrome/TabStrip";
 import StatusBar from "./components/chrome/StatusBar";
+import DebugConsole from "./components/chrome/DebugConsole";
 import Toasts from "./components/chrome/Toasts";
 import { LeftDock, RightDock } from "./components/panels/Docks";
 import MapViewport from "./components/viewport/MapViewport";
@@ -54,6 +56,8 @@ export default function App() {
   // and the splash is already animating while it happens. Nothing here waits on the chrome —
   // every startup hook lives in App, above.
   const [chrome, setChrome] = useState(false);
+  // First, so it is listening before the preload and the plugins are.
+  useErrorCapture();
   useApplyPreferences();
   useHotkeys();
   useDevDeepLinks();
@@ -148,6 +152,7 @@ export default function App() {
               <MapViewport />
               {rightVisible && <RightDock />}
             </div>
+            <DebugConsole />
             {panels.statusbar && <StatusBar />}
             <Toasts />
           </>

@@ -32,6 +32,7 @@ reach, and the traps in them are not visible from the code.
 | `sections/triggers.ts`, `data/triggerDefs.ts`, `formats/triggers/text.ts`, `src/editor/triggers.ts`, trigger claims | `triggers.md` |
 | `src/editor/save.ts`, `services/mapIo.ts`, `saveDocument`, `SaveMapDialog` | `saving.md` |
 | `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
+| `src/editor/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
 | `src/plugins/{host,api}.ts`, `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces | `plugins-host.md` |
 | `src/plugins/{loader,builtin,defaults,registry,updates}.ts`, `vendor-plugins.mjs`, `*-plugin-types.mjs` | `plugins-loading.md` |
 | A specific plugin repository, or which plugin is the worked example for an API | `plugins-catalogue.md` |

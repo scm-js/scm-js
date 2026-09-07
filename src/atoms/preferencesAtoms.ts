@@ -14,6 +14,7 @@ import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUp
 import { browserStorage, mergedStorage, removeStoredKeys, storedKeys } from "./storage";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
 import { dockWidthsAtom, panelsAtom } from "./uiAtoms";
+import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { recentFilesAtom } from "./documentAtoms";
 import { gameDataProfileAtom } from "./gameDataAtoms";
@@ -81,6 +82,8 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.doodadPlacement": (set) => set(doodadPlacementAtom, RESET),
   "scmjs.panels": (set) => set(panelsAtom, RESET),
   "scmjs.docks": (set) => set(dockWidthsAtom, RESET),
+  "scmjs.console": (set) => set(debugConsoleAtom, RESET),
+  "scmjs.consoleHeight": (set) => set(consoleHeightAtom, RESET),
   "scmjs.recents": (set) => { set(recentFilesAtom, RESET); void clearHandles(); },
   "scmjs.plugins": (set) => set(installedPluginsAtom, RESET),
   "scmjs.plugin-manifests": (set) => set(pluginManifestCacheAtom, RESET),

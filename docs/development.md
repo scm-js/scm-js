@@ -145,6 +145,19 @@ and an entry in the registry in `DialogHost.tsx`, which loads each dialog module
 first use. Nothing on the startup path may import a dialog module statically, or Vite
 folds it back into the main chunk.
 
+**Anything worth explaining later is logged.** The editor keeps a ring buffer of what it
+did — maps opened and saved, plugins started and stopped, where the game data resolved,
+and every uncaught error and rejected promise — which the user reads in View ▸ Debug
+Console and copies, with a header describing the build, into a bug report. It records
+whether the console is open or not, because the failures worth reporting do not repeat on
+request. Two rules for anything that writes to it: log counts and labels, never payloads
+(an entry holding an edit's change list would pin every cell record it touched for as long
+as the ring holds the line), and log at the granularity of user intent, never the inner
+loop — one line per stroke, nothing on the paint or pointer path. Warnings and errors are
+mirrored to the browser's console as before. The chatty tier — every plugin API call,
+every edit — is behind the console's *Verbose* tick and off by default, and code on a hot
+path checks that flag before it builds a message.
+
 **Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract; the
 host builds it over the store with no React and no atoms exposed. A plugin's edit goes
 through the same transaction and history as a brush stroke, and a builder that throws

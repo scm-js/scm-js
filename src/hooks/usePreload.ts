@@ -4,6 +4,7 @@ import { preloadLogAtom, preloadStepAtom } from "../atoms/preloadAtoms";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { logInfo } from "../editor/log";
 import { openDialogAtom } from "../atoms/uiAtoms";
 import { desktopBridge } from "../gamedata/desktop";
 import { currentAssetSource, onAssetSource } from "../gamedata/source";
@@ -49,7 +50,12 @@ export function usePreload() {
   const setSource = useSetAtom(gameDataSourceAtom);
   const started = useRef(false);
 
-  useEffect(() => onAssetSource((source) => setSource(source)), [setSource]);
+  useEffect(() => onAssetSource((source) => {
+    setSource(source);
+    // Where the graphics came from explains a whole class of "the map draws wrong", so it
+    // is the one startup fact a shared log always carries.
+    logInfo("gamedata", source.kind === "none" ? "No game data" : `Game data: ${source.label}`, { kind: source.kind, profile: source.profile.id, tried: source.tried.length || undefined });
+  }), [setSource]);
 
   useEffect(() => {
     if (started.current) return;

@@ -21,6 +21,7 @@ import type { Rect } from "../editor/terrain";
 import type { OpenDocumentInfo } from "../plugins/api";
 import { START_LOCATION } from "../data/units";
 import { statusMessageAtom } from "./uiAtoms";
+import { baseName, isVerbose, logInfo } from "../editor/log";
 import { applyChanges } from "../editor/terrain";
 import { applyUnitChanges, removeUnits } from "../editor/units";
 import { applyDoodadChanges, convertDoodads, removeDoodads, strandedDoodads } from "../editor/doodads";
@@ -338,8 +339,20 @@ function parkRegisters(get: Getter): ParkedDocument | null {
  * history and the view come from the record: empty for a map just opened, as left for one
  * coming back. The placing modes are always off — a click on the map that arrives should select.
  */
+/** The document lifecycle in a reader's words; the reasons themselves are the event's vocabulary. */
+const DOCUMENT_LINES: Partial<Record<DocumentChangeReason, string>> = {
+  open: "Map opened",
+  new: "New map",
+  switch: "Switched to another open map",
+  replace: "Map parsed again from edited bytes",
+};
+
 function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: DocumentChangeReason) {
   const { scenario } = p;
+  logInfo("document", DOCUMENT_LINES[reason] ?? `Map ${reason}`, {
+    file: baseName(p.fileName), width: scenario.width, height: scenario.height,
+    tileset: TILESETS[tilesetIndex(scenario)]?.id, version: scenario.fileVersion, open: get(documentsAtom).length,
+  });
   set(documentChangeAtom, { reason, scenario });
   set(scenarioAtom, scenario);
   set(archiveExtrasAtom, p.extras);
@@ -468,6 +481,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
     return;
   }
   set(documentsAtom, rest);
+  logInfo("document", "Map closed; none open");
   set(documentChangeAtom, { reason: "close", scenario: null });
   set(scenarioAtom, null);
   set(archiveExtrasAtom, new Map());
@@ -512,6 +526,14 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  */
 export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (!hasEdits(entry)) return;
+  // Verbose only: a painting session commits a stroke every time the mouse comes up, and
+  // at the always-on tier that would push everything worth reading out of the ring.
+  if (isVerbose()) {
+    logInfo("edit", entry.label, {
+      tiles: entry.changes.length || undefined, units: entry.units?.length, doodads: entry.doodads?.length,
+      sprites: entry.sprites?.length, locations: entry.locations?.length,
+    });
+  }
   set(undoStackAtom, [...get(undoStackAtom), entry].slice(-UNDO_LEVELS));
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);

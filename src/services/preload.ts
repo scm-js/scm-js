@@ -8,6 +8,7 @@ import {
   awaitGrps, getUnitAssets, imageGrpPath, peekUnitAssets, unitImageId,
 } from "../formats/units/load";
 import { fetchAsset, resolveAssetSource } from "../gamedata/source";
+import { logWarn } from "../editor/log";
 
 /**
  * Startup asset preloading.
@@ -139,7 +140,7 @@ export async function runPreload(
       });
     } catch (err) {
       failed = err instanceof Error ? err.message : String(err);
-      console.warn(`preload: ${task.label} failed`, err);
+      logWarn("startup", `${task.label} failed: ${failed}`);
     }
     before = base + share;
     onStep({

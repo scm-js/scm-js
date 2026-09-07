@@ -27,6 +27,7 @@ import {
   selectAllAtom, undoAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
+import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
@@ -160,6 +161,12 @@ function useMenus(): Menu[] {
   const overlays = useAtomValue(pluginOverlaysAtom);
   const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const copyDiagnostics = () => {
+    void navigator.clipboard.writeText(diagnostics).then(
+      () => setStatus("Diagnostics copied — the build, the game data source and the plugins."),
+      () => setStatus("The browser did not allow copying; open View ▸ Debug Console and save the log instead."),
+    );
+  };
   const store = useStore();
   const desktop = desktopBridge();
   const zoomToFit = useSetAtom(zoomToFitAtom);
@@ -172,6 +179,8 @@ function useMenus(): Menu[] {
   const deleteLocations = useSetAtom(deleteSelectedLocationsAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
+  const [consoleOpen, setConsoleOpen] = useAtom(debugConsoleAtom);
+  const diagnostics = useAtomValue(diagnosticsTextAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
@@ -326,6 +335,8 @@ function useMenus(): Menu[] {
         ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
         { kind: "sub", label: "Panels", items: [panel("palette", "Palette"), panel("minimap", "Minimap"), panel("layers", "Layers"), panel("properties", "Properties"), sep, panel("toolbar", "Toolbar"), panel("statusbar", "Status Bar")] },
+        // Not in Panels: it is not one of the map's panels, and it is off unless something is wrong.
+        { kind: "check", label: "Debug Console", checked: consoleOpen, onChange: setConsoleOpen },
         sep,
         { kind: "item", label: "Full Screen", shortcut: "F11", onSelect: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen(); } },
       ],
@@ -420,6 +431,10 @@ function useMenus(): Menu[] {
         // Desktop only: the web build has nothing to update.
         ...(isDesktop() ? [dlg("Check for Updates…", "update")] : []),
         link("Documentation", `${REPO_URL}#readme`),
+        sep,
+        // The half of a bug report that is worth more than the log: the build, the game
+        // data source and the plugins. Beside Report an Issue, which is where it is pasted.
+        { kind: "item", label: "Copy Diagnostics", onSelect: copyDiagnostics },
         link("Report an Issue…", `${REPO_URL}/issues/new`),
         sep,
         dlg("About scmJS…", "about"),

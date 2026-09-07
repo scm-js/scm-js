@@ -119,6 +119,8 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.doodadPlacement": "Doodad placement options",
   "scmjs.panels": "Panels shown",
   "scmjs.docks": "Panel widths",
+  "scmjs.console": "Debug console shown",
+  "scmjs.consoleHeight": "Debug console height",
   "scmjs.recents": "Recent files",
   "scmjs.plugins": "Installed plugins",
   "scmjs.plugin-code": "Plugin code copies",

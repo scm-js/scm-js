@@ -14,6 +14,7 @@
 import type { createStore } from "jotai";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { displayColorHex, playerTeamColor } from "../data/players";
+import { logError } from "../editor/log";
 import { atlasSource } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
@@ -154,7 +155,7 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
     },
 
     onImageLoaded: (listener) => {
-      const off = onGrpLoaded(() => { try { listener(); } catch (err) { console.error("[plugins] onImageLoaded listener failed", err); } });
+      const off = onGrpLoaded(() => { try { listener(); } catch (err) { logError("plugins", "An onImageLoaded listener failed", err); } });
       return bag.add(off);
     },
 

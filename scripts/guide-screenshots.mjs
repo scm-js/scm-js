@@ -183,6 +183,16 @@ const SCENES = [
     await p.take("fog");
   }),
 
+  scene("debug-console", "", async (p) => {
+    // The strip along the bottom, with a session's worth of the always-on tier in it: the
+    // startup lines are already there by the time the map is dropped.
+    await p.menu("View", /^Debug Console$/);
+    await p.drop("(6)Ground Zero.scm");
+    await p.wait(1200);
+    const box = await p.page.locator(".debug-console").boundingBox();
+    if (box) await p.take("debug-console", { x: 0, y: Math.round(box.y), width: 1400, height: Math.round(Math.min(box.height + 26, 900 - box.y)) }, { lossless: true });
+  }),
+
   scene("briefing", "", async (p) => {
     await p.drop("(6)Ground Zero.scm");
     await p.menu("Triggers", /^Mission Briefing/); await p.wait(1200);

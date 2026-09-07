@@ -133,7 +133,7 @@ import { restoreAnywhere } from "../editor/locations";
 import { copyFog, floodFog, fogPlayersAt, invertFog } from "../editor/fog";
 import { DEFAULT_START_PLACEMENT, placeStartLocations } from "../editor/startLocations";
 import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseStringTable } from "../editor/exchange";
-import { clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ObjectSelection } from "../editor/clipboard";
+import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
 import { writeMapBytes } from "../services/mapIo";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
@@ -524,6 +524,27 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       applyLocationChanges(scn, [c]);
       locations.push(c);
       return true;
+    },
+
+    paste: (clip, px, py, options = {}) => {
+      const r = pasteClip(scn, clip, px, py, {
+        parts: { ...ALL_CLIP_PARTS, ...options.parts }, mode: options.mode ?? "merge",
+        catalogue: loaded?.doodads ?? NO_DOODADS, tileset: loaded?.tileset ?? null,
+      });
+      // `pasteClip` applied its lists already; fold them into the entry's, in the order `applyEntry` replays them.
+      const e = r.edit;
+      tiles.add(e.changes);
+      if (e.doodadTiles) doodadTiles.push(...e.doodadTiles);
+      if (e.doodads) doodads.push(...e.doodads);
+      if (e.sprites) sprites.push(...e.sprites);
+      if (e.units) units.push(...e.units);
+      if (e.locations) locations.push(...e.locations);
+      if (e.fog) fog.add(e.fog);
+      if (e.createdMask) createdMask = e.createdMask;
+      // The pasted units took serials of their own; `makeUnit` must not hand them out again.
+      serial = Math.max(serial, nextSerial(scn));
+      notes.push(...r.notes);
+      return r;
     },
 
     note: (text) => { notes.push(text); },
@@ -2189,7 +2210,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
       },
       set: (key, value) => {
-        try { browserStorage().setItem(prefix + key, JSON.stringify(value)); } catch { /* quota */ }
+        try { browserStorage().setItem(prefix + key, JSON.stringify(value)); return true; } catch { return false; /* quota */ }
       },
       remove: (key) => {
         try { browserStorage().removeItem(prefix + key); } catch { /* ignore */ }

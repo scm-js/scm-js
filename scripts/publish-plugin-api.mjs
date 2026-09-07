@@ -26,9 +26,14 @@
  *   node scripts/publish-plugin-api.mjs --push --npm       # …and publish the tarball
  *   node scripts/publish-plugin-api.mjs --work ../plugin-api --push   # use a checkout you have
  *
- * In CI the git push needs `PLUGIN_API_PAT` (an organisation secret: a token with
- * Contents: write on `scm-js/plugin-api` and nothing else, since a repository's own
- * GITHUB_TOKEN cannot write to another repository), passed as `GH_TOKEN`. The npm publish
+ * In CI the git push needs a credential of its own, since a repository's own GITHUB_TOKEN
+ * cannot write to another repository. `PLUGIN_API_KEY` is that credential: the private
+ * half of a write deploy key on `scm-js/plugin-api`, kept as a secret here because this is
+ * where the workflow runs. It has to be a key rather than the `PLUGIN_API_PAT` token this
+ * used before, because that repository's main requires a pull request and a fine-grained
+ * token acts as itself rather than as the person who owns it, so it inherits none of their
+ * bypass; the ruleset names deploy keys as bypass actors instead. `GH_TOKEN` still works
+ * when no key is set, for a fork or a run by hand. The npm publish
  * authenticates with npm's trusted publishing over OIDC and nothing else — there is no
  * token to store, and it is the reason the package's `repository` names scm-js, where the
  * workflow runs. The tarball is published with `--provenance` when Actions built it, so
@@ -45,7 +50,7 @@
  * a tag claiming a version nobody can install.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generate, nextVersion, PACKAGE_NAME, writePluginApi } from "./build-plugin-types.mjs";
@@ -53,10 +58,23 @@ import { generate, nextVersion, PACKAGE_NAME, writePluginApi } from "./build-plu
 const REPO = "scm-js/plugin-api";
 const REGISTRY = "https://registry.npmjs.org";
 
-const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+/**
+ * Set when PLUGIN_API_KEY is: the ssh command every git call below runs, pointed at the
+ * deploy key written beside it. `IdentitiesOnly` keeps ssh from offering whatever else the
+ * agent holds, which on a developer's machine would authenticate as them.
+ */
+let sshCommand = null;
 
-/** The remote to push to: with a token, one that carries it; otherwise plain https. */
-export function remoteUrl(repo, token) {
+const git = (cwd, ...args) =>
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: sshCommand ? { ...process.env, GIT_SSH_COMMAND: sshCommand } : process.env,
+  }).trim();
+
+/** The remote to push to: the SSH one with a deploy key, one carrying the token with a token, else plain https. */
+export function remoteUrl(repo, token, ssh = false) {
+  if (ssh) return `git@github.com:${repo}.git`;
   return token ? `https://x-access-token:${token}@github.com/${repo}.git` : `https://github.com/${repo}.git`;
 }
 
@@ -78,7 +96,18 @@ async function main(argv) {
   const repo = value("--repo") ?? REPO;
   const registry = value("--registry") ?? REGISTRY;
   const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+  const key = process.env.PLUGIN_API_KEY ?? "";
   const given = value("--work");
+
+  // The key never touches the checkout: it goes to a file of its own, read only by the
+  // ssh that these git calls run.
+  let keyDir = null;
+  if (key) {
+    keyDir = mkdtempSync(join(tmpdir(), "scmjs-plugin-api-key-"));
+    const keyFile = join(keyDir, "id_ed25519");
+    writeFileSync(keyFile, key.endsWith("\n") ? key : `${key}\n`, { mode: 0o600 });
+    sshCommand = `ssh -i ${keyFile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new`;
+  }
 
   const published = await publishedVersion(registry);
   const version = value("--version") ?? nextVersion(generate().apiVersion, published);
@@ -88,8 +117,8 @@ async function main(argv) {
   const temporary = !given;
   try {
     if (temporary) {
-      git(process.cwd(), "clone", "--depth", "1", remoteUrl(repo, token), work);
-      if (token) git(work, "remote", "set-url", "origin", remoteUrl(repo, token));
+      git(process.cwd(), "clone", "--depth", "1", remoteUrl(repo, token, !!key), work);
+      if (token || key) git(work, "remote", "set-url", "origin", remoteUrl(repo, token, !!key));
     }
 
     // The declarations alone decide whether there is anything to do: `package.json`'s
@@ -137,6 +166,7 @@ async function main(argv) {
     }
   } finally {
     if (temporary) rmSync(work, { recursive: true, force: true });
+    if (keyDir) rmSync(keyDir, { recursive: true, force: true });
   }
 }
 

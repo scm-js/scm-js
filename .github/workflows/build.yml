@@ -72,8 +72,8 @@
 # ("/" for a custom domain; the default is the repository name), and NIGHTLY_DOMAIN is the
 # custom domain written into the nightly site's CNAME — unset, and the nightly deploy is
 # skipped, as it is without the NIGHTLY_PAT secret — a fine-grained token whose only
-# permission is Contents: write on <owner>/nightly, kept as a *repository* secret rather
-# than an organisation one like PLUGIN_API_PAT, since only this workflow reads it. Neither
+# permission is Contents: write on <owner>/nightly, kept as a *repository* secret since
+# only this workflow reads it, as PLUGIN_API_KEY is below. Neither
 # missing is an error: a fork builds and releases without either. No build carries game
 # data or an address to fetch it from — every one of them looks on the user's disk and
 # otherwise asks (src/gamedata/source.ts). Nothing here has, or needs, the game data: the
@@ -258,10 +258,13 @@ jobs:
   # all when `src/plugins/api.ts` has not moved. That is also why it does not depend on the
   # channel: a contract that moved on main is a contract plugin authors can have today.
   #
-  # PLUGIN_API_PAT is an organisation secret — a token with Contents: write on
-  # scm-js/plugin-api and nothing else — because a repository's own GITHUB_TOKEN cannot
-  # write to another repository. Without it this reports what it would have done and stops:
-  # the types being one build behind is not worth failing a release over.
+  # PLUGIN_API_KEY is the private half of a write deploy key on scm-js/plugin-api, because
+  # a repository's own GITHUB_TOKEN cannot write to another repository. A token was what
+  # this used, and cannot be: that repository's main requires a pull request, and a
+  # fine-grained token acts as itself rather than as the person who owns it, so it inherits
+  # none of their bypass — the ruleset names deploy keys as bypass actors instead. Without
+  # the key this reports what it would have done and stops: the types being one build
+  # behind is not worth failing a release over.
   #
   # PUBLISH_PLUGIN_API is the repository variable that turns the npm half on. It is
   # separate because the tarball needs the @scm-js scope to exist and npm's trusted
@@ -297,12 +300,16 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - name: Publish
         env:
-          GH_TOKEN: ${{ secrets.PLUGIN_API_PAT }}
+          # The private half of a write deploy key on scm-js/plugin-api. That repository's
+          # main requires a pull request, and a fine-grained token acts as itself rather
+          # than as the person who owns it, so PLUGIN_API_PAT inherits none of their bypass
+          # and the push is refused; the ruleset names deploy keys as bypass actors.
+          PLUGIN_API_KEY: ${{ secrets.PLUGIN_API_KEY }}
           TO_NPM: ${{ vars.PUBLISH_PLUGIN_API }}
         run: |
           set -e
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::notice::PLUGIN_API_PAT is not set; reporting what would be published."
+          if [ -z "$PLUGIN_API_KEY" ]; then
+            echo "::notice::PLUGIN_API_KEY is not set; reporting what would be published."
             node scripts/publish-plugin-api.mjs
             exit 0
           fi

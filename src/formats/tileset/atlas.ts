@@ -41,19 +41,56 @@ export interface AtlasAnimation {
 
 const ATLAS_COLUMNS = 64;
 
+/**
+ * Pixels of border around every megatile in an atlas, filled with the megatile's own edge
+ * pixels. Below 100% the viewport blits with smoothing on, and a bilinear sample at a
+ * tile's edge reaches half a source pixel past the 32×32 rect — into the next megatile
+ * in the atlas, which for a snow tile is often a cliff piece, so every such edge carried
+ * a dark hairline. With the gutter the sample lands on the tile's own colour instead.
+ */
+export const ATLAS_GUTTER = 1;
+/** The distance between one megatile's origin and the next, in atlas pixels. */
+export const ATLAS_PITCH = MEGATILE_PX + 2 * ATLAS_GUTTER;
+
+/** Atlas pixel coordinates of slot `i`'s megatile (the pixel inside its gutter). */
+export function atlasCell(i: number, columns: number): { x: number; y: number } {
+  return { x: (i % columns) * ATLAS_PITCH + ATLAS_GUTTER, y: Math.floor(i / columns) * ATLAS_PITCH + ATLAS_GUTTER };
+}
+
+/** Draw a megatile into slot `i` of a `columns`-wide RGBA atlas and fill its gutter with its edges. */
+function drawAtlasCell(tileset: Tileset, megatile: number, dest: Uint8ClampedArray | Uint8Array, columns: number, i: number, palette?: Uint8Array) {
+  const width = columns * ATLAS_PITCH;
+  const { x, y } = atlasCell(i, columns);
+  drawMegatile(tileset, megatile, dest, width, x, y, palette);
+  const copy = (fromX: number, fromY: number, toX: number, toY: number) => {
+    const from = (fromY * width + fromX) * 4, to = (toY * width + toX) * 4;
+    dest[to] = dest[from]; dest[to + 1] = dest[from + 1]; dest[to + 2] = dest[from + 2]; dest[to + 3] = dest[from + 3];
+  };
+  for (let g = 1; g <= ATLAS_GUTTER; g++) {
+    for (let k = 0; k < MEGATILE_PX; k++) {
+      copy(x + k, y, x + k, y - g);
+      copy(x + k, y + MEGATILE_PX - 1, x + k, y + MEGATILE_PX - 1 + g);
+      copy(x, y + k, x - g, y + k);
+      copy(x + MEGATILE_PX - 1, y + k, x + MEGATILE_PX - 1 + g, y + k);
+    }
+    for (let h = 1; h <= ATLAS_GUTTER; h++) {
+      copy(x, y, x - h, y - g);
+      copy(x + MEGATILE_PX - 1, y, x + MEGATILE_PX - 1 + h, y - g);
+      copy(x, y + MEGATILE_PX - 1, x - h, y + MEGATILE_PX - 1 + g);
+      copy(x + MEGATILE_PX - 1, y + MEGATILE_PX - 1, x + MEGATILE_PX - 1 + h, y + MEGATILE_PX - 1 + g);
+    }
+  }
+}
+
 export function buildAtlasImageData(tileset: Tileset): { pixels: Uint8ClampedArray<ArrayBuffer>; width: number; height: number; columns: number } {
   const count = Math.max(1, tileset.megatileCount);
   const columns = Math.min(ATLAS_COLUMNS, count);
   const rows = Math.ceil(count / columns);
-  const width = columns * MEGATILE_PX;
-  const height = rows * MEGATILE_PX;
+  const width = columns * ATLAS_PITCH;
+  const height = rows * ATLAS_PITCH;
   const pixels = new Uint8ClampedArray(new ArrayBuffer(width * height * 4));
 
-  for (let i = 0; i < count; i++) {
-    const x = (i % columns) * MEGATILE_PX;
-    const y = Math.floor(i / columns) * MEGATILE_PX;
-    drawMegatile(tileset, i, pixels, width, x, y);
-  }
+  for (let i = 0; i < count; i++) drawAtlasCell(tileset, i, pixels, columns, i);
 
   return { pixels, width, height, columns };
 }
@@ -69,8 +106,7 @@ export function megatileAverages(
   const area = MEGATILE_PX * MEGATILE_PX;
 
   for (let i = 0; i < count; i++) {
-    const ox = (i % columns) * MEGATILE_PX;
-    const oy = Math.floor(i / columns) * MEGATILE_PX;
+    const { x: ox, y: oy } = atlasCell(i, columns);
     let r = 0, g = 0, b = 0;
     for (let y = 0; y < MEGATILE_PX; y++) {
       let at = ((oy + y) * width + ox) * 4;
@@ -84,7 +120,7 @@ export function megatileAverages(
   return out;
 }
 
-/** Rasterise `megatiles` in slot order into a `columns`-wide RGBA buffer using `palette`. */
+/** Rasterise `megatiles` in slot order, gutters and all, into a `columns`-wide RGBA buffer using `palette`. */
 export function drawAnimationPixels(
   tileset: Tileset,
   megatiles: Uint32Array,
@@ -92,12 +128,7 @@ export function drawAnimationPixels(
   columns: number,
   dest: Uint8ClampedArray | Uint8Array,
 ) {
-  const width = columns * MEGATILE_PX;
-  for (let s = 0; s < megatiles.length; s++) {
-    const x = (s % columns) * MEGATILE_PX;
-    const y = Math.floor(s / columns) * MEGATILE_PX;
-    drawMegatile(tileset, megatiles[s], dest, width, x, y, palette);
-  }
+  for (let s = 0; s < megatiles.length; s++) drawAtlasCell(tileset, megatiles[s], dest, columns, s, palette);
 }
 
 function buildAnimation(tileset: Tileset, bands: readonly PaletteBand[]): AtlasAnimation | null {
@@ -110,8 +141,8 @@ function buildAnimation(tileset: Tileset, bands: readonly PaletteBand[]): AtlasA
   megatiles.forEach((m, s) => { slot[m] = s; });
 
   const image = document.createElement("canvas");
-  image.width = columns * MEGATILE_PX;
-  image.height = rows * MEGATILE_PX;
+  image.width = columns * ATLAS_PITCH;
+  image.height = rows * ATLAS_PITCH;
   const pixels = new ImageData(image.width, image.height);
   const palette = new Uint8Array(tileset.palette);
   drawAnimationPixels(tileset, megatiles, palette, columns, pixels.data);
@@ -170,17 +201,9 @@ export function atlasSource(atlas: TilesetAtlas, megatile: number): AtlasSource 
   const anim = atlas.animation;
   const slot = anim ? anim.slot[megatile] : -1;
   if (anim && slot >= 0) {
-    return {
-      image: anim.image,
-      sx: (slot % anim.columns) * atlas.tileSize,
-      sy: Math.floor(slot / anim.columns) * atlas.tileSize,
-      animated: true,
-    };
+    const { x, y } = atlasCell(slot, anim.columns);
+    return { image: anim.image, sx: x, sy: y, animated: true };
   }
-  return {
-    image: atlas.image,
-    sx: (megatile % atlas.columns) * atlas.tileSize,
-    sy: Math.floor(megatile / atlas.columns) * atlas.tileSize,
-    animated: false,
-  };
+  const { x, y } = atlasCell(megatile, atlas.columns);
+  return { image: atlas.image, sx: x, sy: y, animated: false };
 }

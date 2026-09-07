@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TILESET_FILENAMES } from "../src/formats/tileset/load";
 import { TILESETS } from "../src/data/tilesets";
-import { buildAtlasImageData, drawAnimationPixels, megatileAverages } from "../src/formats/tileset/atlas";
+import { ATLAS_PITCH, atlasCell, buildAtlasImageData, drawAnimationPixels, megatileAverages } from "../src/formats/tileset/atlas";
 import { CYCLE_BANDS, cycleBands, cycleLength, cyclePalette, cycleStepAt, cyclingMegatiles, CYCLE_STEP_MS } from "../src/formats/tileset/cycle";
 import {
   decodeCv5, decodePalette, drawMegatile, loadTileset, megatileForTile,
@@ -123,8 +123,19 @@ describe("tileset decoding", () => {
     const ts = syntheticTileset();
     const { pixels, width, height, columns } = buildAtlasImageData(ts);
     expect(columns).toBe(2);
-    expect(width).toBe(2 * MEGATILE_PX);
-    expect(height).toBe(MEGATILE_PX);
+    expect(width).toBe(2 * ATLAS_PITCH);
+    expect(height).toBe(ATLAS_PITCH);
+    // Each megatile sits inside a gutter of its own edge pixels, so a smoothed blit at a
+    // tile's edge samples the tile's colour and never the megatile beside it.
+    const at = (x: number, y: number) => Array.from(pixels.subarray((y * width + x) * 4, (y * width + x) * 4 + 4));
+    for (let k = 0; k < MEGATILE_PX; k++) {
+      const { x, y } = atlasCell(1, columns);
+      expect(at(x - 1, y + k)).toEqual(at(x, y + k));
+      expect(at(x + MEGATILE_PX, y + k)).toEqual(at(x + MEGATILE_PX - 1, y + k));
+      expect(at(x + k, y - 1)).toEqual(at(x + k, y));
+      expect(at(x + k, y + MEGATILE_PX)).toEqual(at(x + k, y + MEGATILE_PX - 1));
+    }
+    expect(at(atlasCell(1, columns).x - 1, atlasCell(1, columns).y - 1)).toEqual(at(atlasCell(1, columns).x, atlasCell(1, columns).y));
 
     const averages = megatileAverages(pixels, width, columns, ts.megatileCount);
     // Megatile 1 is the ramp everywhere: mean red is (0+1+..+7)/8 = 3.5 -> 3.
@@ -259,9 +270,10 @@ describe("palette cycling", () => {
   it("rasterises the animated sub-atlas with the rotated palette", () => {
     const ts = syntheticTileset();
     const megatiles = Uint32Array.from([1]);
-    const px = new Uint8ClampedArray(MEGATILE_PX * MEGATILE_PX * 4);
+    const px = new Uint8ClampedArray(ATLAS_PITCH * ATLAS_PITCH * 4);
     drawAnimationPixels(ts, megatiles, cyclePalette(ts.palette, WATER, 1), 1, px);
-    const red = (x: number) => px[x * 4];
+    const origin = atlasCell(0, 1);
+    const red = (x: number) => px[((origin.y * ATLAS_PITCH) + origin.x + x) * 4];
     expect(red(0)).toBe(0); // index 0 is outside the band
     expect(red(1)).toBe(6); // index 1 now shows entry 6's colour
     expect(red(2)).toBe(1);

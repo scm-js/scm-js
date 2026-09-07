@@ -350,19 +350,30 @@ export default function MapViewport() {
         layer.terrainRevision === terrainRevision && layer.doodadsRevision === doodadsRevision;
       if (!same) {
         const canvas = layer?.canvas ?? document.createElement("canvas");
-        if (canvas.width !== size.w * dpr || canvas.height !== size.h * dpr) {
-          canvas.width = size.w * dpr;
-          canvas.height = size.h * dpr;
+        // Whole device pixels: a fractional backing size would be truncated and the copy
+        // below would then stretch the layer by a hair, doubling a row here and there.
+        const devW = Math.round(size.w * dpr), devH = Math.round(size.h * dpr);
+        if (canvas.width !== devW || canvas.height !== devH) {
+          canvas.width = devW;
+          canvas.height = devH;
         }
         layer = { canvas, scenario, tiles, assets: tilesetAssets, sx, sy, w: size.w, h: size.h, dpr, tilePx, terrainRevision, doodadsRevision, step, animated: false };
         terrainLayerRef.current = layer;
       }
       if (!same || layer!.step !== step) {
         const lc = layer!.canvas.getContext("2d")!;
-        lc.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // The layer is drawn in device pixels, every tile snapped to whole ones: a tile
+        // drawn at a fractional position (a fractional scroll offset, a display scaled to
+        // 125%) is blended over its edges, and a hairline of the dark ground behind the
+        // layer shows between it and its neighbour wherever the rounding lands the two
+        // apart. Snapped, neighbours share an edge exactly; a tile is a device pixel
+        // wider or narrower here and there, which nothing can see.
+        lc.setTransform(1, 0, 0, 1, 0, 0);
+        const snapX = (tx: number) => Math.round((tx * tilePx - sx) * dpr);
+        const snapY = (ty: number) => Math.round((ty * tilePx - sy) * dpr);
         // A step change redraws only the tiles that cycle; everything else is still right.
         const onlyAnimated = same;
-        if (!onlyAnimated) lc.clearRect(0, 0, size.w, size.h);
+        if (!onlyAnimated) lc.clearRect(0, 0, layer!.canvas.width, layer!.canvas.height);
         // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
         // precomputed mean colour instead.
         const flat = tilePx < 4;
@@ -370,36 +381,39 @@ export default function MapViewport() {
         let animated = false;
         for (let ty = y0; ty < y1; ty++) {
           const row = ty * mapW;
+          const py = snapY(ty), ph = snapY(ty + 1) - py;
           for (let tx = x0; tx < x1; tx++) {
             const megatile = megatileForTile(ts, tiles[row + tx]);
-            const px = tx * tilePx - sx;
-            const py = ty * tilePx - sy;
+            const px = snapX(tx), pw = snapX(tx + 1) - px;
             if (megatile < 0) {
               if (onlyAnimated) continue;
               lc.fillStyle = "#000";
-              lc.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+              lc.fillRect(px, py, pw, ph);
               continue;
             }
             if (flat) {
               if (onlyAnimated) continue;
               const rgb = atlas.averages[megatile];
               lc.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
-              lc.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
+              lc.fillRect(px, py, pw, ph);
               continue;
             }
             const src = atlasSource(atlas, megatile);
             if (src.animated) animated = true;
             else if (onlyAnimated) continue;
-            lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
+            lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, pw, ph);
           }
         }
         layer!.step = step;
         if (!onlyAnimated) layer!.animated = animated;
       }
       animatedInView = layer!.animated;
+      // Device pixel for device pixel: no resampling of the layer on its way to the screen.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(layer!.canvas, 0, 0, size.w, size.h);
+      ctx.drawImage(layer!.canvas, 0, 0);
       ctx.imageSmoothingEnabled = true;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     } else if (tiles && tilesetLoading) {
       // Map open, graphics still coming: a calm plate under the loading overlay. Anything
       // tile-shaped here would just be wrong terrain for a moment.

@@ -1152,8 +1152,8 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships seven defaults in order, scmjs.dev alone starting off, each pinned to a version", () => {
-    // Which seven, in which order, and which of them start on — the versions deliberately
+  it("ships eight defaults in order, scmjs.dev alone starting off, each pinned to a version", () => {
+    // Which eight, in which order, and which of them start on — the versions deliberately
     // not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-scm-scx",
@@ -1162,6 +1162,7 @@ describe("plugin lifecycle", () => {
       "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-trigscript",
+      "github:scm-js/plugin-stamp-library",
       "github:scm-js/plugin-scmjs-dev",
     ]);
     // scmjs.dev is the one that starts off: it is an account and a paid trial, which is
@@ -1174,6 +1175,7 @@ describe("plugin lifecycle", () => {
       ["github:scm-js/plugin-image-to-terrain", true],
       ["github:scm-js/plugin-paint", true],
       ["github:scm-js/plugin-trigscript", true],
+      ["github:scm-js/plugin-stamp-library", true],
       ["github:scm-js/plugin-scmjs-dev", false],
     ]);
     // The point of the pin: a released editor loads the code it was tested against, and

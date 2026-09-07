@@ -183,7 +183,13 @@ function storedText(key: string): string {
 }
 
 /** One row: the summary line, its Clear button, and what it is keeping when opened. */
-function StoredRow({ entry, onClear }: { entry: StoredEntry; onClear: () => void }) {
+function StoredRow({
+  entry,
+  onClear,
+}: {
+  entry: StoredEntry;
+  onClear: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="stored-entry">
@@ -198,7 +204,10 @@ function StoredRow({ entry, onClear }: { entry: StoredEntry; onClear: () => void
           <Database size={12} className="dim" />
           <span>{entry.label}</span>
         </button>
-        <span className="grow dim" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span
+          className="grow dim"
+          style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+        >
           {entry.detail}
         </span>
         <span className="dim">{bytes(entry.size)}</span>
@@ -238,11 +247,18 @@ function StoredRow({ entry, onClear }: { entry: StoredEntry; onClear: () => void
  * on the defaults when the preferences were among them — otherwise pressing OK afterwards
  * would write the old ones straight back.
  */
-function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) {
+function StorageSection({
+  onCleared,
+}: {
+  onCleared: (keys: string[]) => void;
+}) {
   const host = hostTerms();
   const clearAll = useSetAtom(clearStoredDataAtom);
   const clearKeys = useSetAtom(clearStoredKeysAtom);
-  const [asking, setAsking] = useState<{ what: string; keys: string[] | null } | null>(null);
+  const [asking, setAsking] = useState<{
+    what: string;
+    keys: string[] | null;
+  } | null>(null);
   const [cleared, setCleared] = useState<string | null>(null);
   const [run, setRun] = useState(0);
   const entries = useMemo(() => {
@@ -331,11 +347,16 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
 function GameDataSection() {
   const open = useSetAtom(openDialogAtom);
   const source = useAtomValue(gameDataSourceAtom);
-  const set = source && source.profile.id !== DEFAULT_PROFILE.id ? `${source.profile.name} · ` : "";
+  const set =
+    source && source.profile.id !== DEFAULT_PROFILE.id
+      ? `${source.profile.name} · `
+      : "";
   return (
     <Group title="Game data">
       <div className="row" style={{ alignItems: "baseline" }}>
-        <span className="grow dim">{source ? `${set}${source.label}` : "Locating…"}</span>
+        <span className="grow dim">
+          {source ? `${set}${source.label}` : "Locating…"}
+        </span>
         <Button size="sm" onClick={() => open("gameData")}>
           <HardDrive size={11} /> Game Data…
         </Button>
@@ -474,19 +495,34 @@ export function PreferencesDialog({ entry }: DialogProps) {
                       <Check
                         label="Check for updates when scmJS starts"
                         checked={local.updates.checkOnStart}
-                        onChange={(e) => patch({ updates: { ...local.updates, checkOnStart: e.target.checked } })}
+                        onChange={(e) =>
+                          patch({
+                            updates: {
+                              ...local.updates,
+                              checkOnStart: e.target.checked,
+                            },
+                          })
+                        }
                       />
                       <Check
                         label="Include nightly builds"
                         checked={local.updates.nightly}
-                        onChange={(e) => patch({ updates: { ...local.updates, nightly: e.target.checked } })}
+                        onChange={(e) =>
+                          patch({
+                            updates: {
+                              ...local.updates,
+                              nightly: e.target.checked,
+                            },
+                          })
+                        }
                       />
                     </div>
                     <p className="hint" style={{ marginTop: 4 }}>
-                      A new version is offered in a notice, never installed on its own.
-                      Nightly builds come from the latest commit and are untested; going back
-                      to a numbered release means downloading it by hand, since the updater
-                      will not offer an older version.
+                      A new version is offered in a notice, never installed on
+                      its own. Nightly builds come from the latest commit and
+                      are untested; going back to a numbered release means
+                      downloading it by hand, since the updater will not offer
+                      an older version.
                     </p>
                   </Group>
                 )}
@@ -495,7 +531,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     <Field label="Plugin updates">
                       <Select
                         value={local.plugins.updates}
-                        onChange={(e) => patch({ plugins: { ...local.plugins, updates: e.target.value as PluginUpdateMode } })}
+                        onChange={(e) =>
+                          patch({
+                            plugins: {
+                              ...local.plugins,
+                              updates: e.target.value as PluginUpdateMode,
+                            },
+                          })
+                        }
                         options={[
                           { value: "notify", label: "Tell me" },
                           { value: "manual", label: "Do nothing" },
@@ -506,13 +549,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
                     What to do when an installed plugin has a newer version.{" "}
-                    <em>Tell me</em> looks a few seconds after the plugins start and raises a
-                    notice with a button to the rows offering the update.{" "}
-                    <em>Do nothing</em> asks only when you press <em>Check for update</em> on a row.{" "}
-                    <em>Install them</em> installs what it finds, for the plugins you added;
-                    a default moves with scmJS's own releases and is only named in the
-                    notice. Whatever the choice, an update pressed on a row shows what it
-                    is before anything changes.
+                    <em>Tell me</em> looks a few seconds after the plugins start
+                    and raises a notice with a button to the rows offering the
+                    update. <em>Do nothing</em> asks only when you press{" "}
+                    <em>Check for update</em> on a row. <em>Install them</em>{" "}
+                    installs what it finds, for the plugins you added; a default
+                    moves with scmJS's own releases and is only named in the
+                    notice. Whatever the choice, an update pressed on a row
+                    shows what it is before anything changes.
                   </p>
                 </Group>
                 <Group title="New scenario defaults">
@@ -558,7 +602,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
                 <GameDataSection />
                 <StorageSection
                   onCleared={(keys) => {
-                    if (keys.includes("scmjs.prefs")) setLocal(DEFAULT_PREFERENCES);
+                    if (keys.includes("scmjs.prefs"))
+                      setLocal(DEFAULT_PREFERENCES);
                   }}
                 />
               </div>
@@ -612,8 +657,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     onChange={(e) => patch({ classicText: e.target.checked })}
                   />
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Every preview of a string follows this — Map Properties, the String
-                    Editor, force and unit names, trigger text.
+                    Every preview of a string follows this — Map Properties, the
+                    String Editor, force and unit names, trigger text.
                   </p>
                 </Group>
               </div>
@@ -1056,8 +1101,14 @@ const STACK = [
   ["Canvas 2D", "terrain atlas, sprites, minimap, splash, this background"],
   ["mopaq", "MPQ read and write, PKWARE included, for .scm / .scx"],
   ["Web Workers", "the MPQ extraction, and TypeScript for plugin files"],
-  ["OPFS · IndexedDB · localStorage", "extracted graphics, file handles, preferences"],
-  ["File System Access", "open and save in place; picker and download fallbacks"],
+  [
+    "OPFS · IndexedDB · localStorage",
+    "extracted graphics, file handles, preferences",
+  ],
+  [
+    "File System Access",
+    "open and save in place; picker and download fallbacks",
+  ],
   ["Web Audio", "imported sounds converted to formats the game reads"],
   ["DecompressionStream", "the zip reader, over HTTP range requests"],
   ["Electron · electron-builder", "the desktop build"],
@@ -1217,6 +1268,10 @@ export function AboutDialog({ entry }: DialogProps) {
         </div>
       </div>
 
+      <div>
+        And of course, <b>Quetz</b>, for putting up with me ❤️.
+      </div>
+
       <details className="about-details">
         <summary>Under the hood</summary>
         <div className="about-details-body">
@@ -1238,8 +1293,8 @@ export function AboutDialog({ entry }: DialogProps) {
             Terrain and units are drawn from the game's own files. None of
             Blizzard's data is redistributed here: the editor extracts it from
             an installed copy of Brood War, or from the free StarEdit download
-            Blizzard still serves, and keeps the result in {hostTerms().here} for
-            next time.
+            Blizzard still serves, and keeps the result in {hostTerms().here}{" "}
+            for next time.
           </p>
           <p>
             There is no server behind any of this — the web build is static

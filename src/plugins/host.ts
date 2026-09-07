@@ -13,7 +13,7 @@ import {
   centerViewOnAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorTileAtom, doodadPlacementAtom, fogModeAtom, fogPlayersAtom,
   fogViewPlayerAtom, gridSizeAtom, locationSnapAtom, lockedLayersAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom,
   mapNameAtom, mapOriginAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, type EditorLayer,
+  spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
   activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
@@ -1149,6 +1149,33 @@ export function viewApi(store: Store): ViewApi {
       return { x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h };
     },
     center: centerOn,
+    reveal: (rect, options = {}) => {
+      if (!scenario()) return Promise.resolve(false);
+      const { fit = false, animate = true } = options;
+      const margin = Math.max(0, options.margin ?? 1);
+      const x0 = Math.min(rect.x0, rect.x1), x1 = Math.max(rect.x0, rect.x1), y0 = Math.min(rect.y0, rect.y1), y1 = Math.max(rect.y0, rect.y1);
+      const v = store.get(viewportRectAtom);
+      let zoom = store.get(zoomAtom);
+      let w = v.w, h = v.h;
+      if (fit) {
+        // The viewport's size in tiles grows as the zoom shrinks; take the largest step that holds the rect.
+        const steps = ZOOM_STEPS.filter((z) => z <= zoom).reverse();
+        const step = steps.find((z) => x1 - x0 + 2 * margin <= (w * zoom) / z && y1 - y0 + 2 * margin <= (h * zoom) / z) ?? steps.at(-1);
+        if (step !== undefined && step < zoom) { w *= zoom / step; h *= zoom / step; zoom = step; store.set(zoomAtom, zoom); }
+      }
+      const inside = x0 >= v.x && x1 <= v.x + v.w && y0 >= v.y && y1 <= v.y + v.h;
+      if (inside && w === v.w && h === v.h) return Promise.resolve(true);
+      // The shortest move that shows the rect with its margin; a rect wider than the view is centred.
+      const shift = (lo: number, hi: number, at: number, size: number) => {
+        if (hi - lo + 2 * margin > size) return (lo + hi) / 2 - size / 2;
+        if (lo - margin < at) return lo - margin;
+        if (hi + margin > at + size) return hi + margin - size;
+        return at;
+      };
+      // After a zoom-out the viewport keeps its centre, so the origin to move from is around it.
+      const ox = shift(x0, x1, v.x + v.w / 2 - w / 2, w), oy = shift(y0, y1, v.y + v.h / 2 - h / 2, h);
+      return new Promise<boolean>((done) => store.set(centerViewOnAtom, { x: ox + w / 2, y: oy + h / 2, animate, done }));
+    },
     goTo: (target) => {
       const scn = scenario();
       if (!scn) return;

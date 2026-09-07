@@ -889,7 +889,11 @@ the cost, and an **Undo** for that turn's edits. Open it to see every step; a sc
 the model took is a thumbnail there that grows when clicked, and the model's reasoning is
 a fold of its own inside. The strip at the top says what it is doing — waiting, thinking,
 writing, the step it is on — with the seconds and the cost. The map outlines what a call
-is about to touch and flashes what it changed. The panel can be closed while it works;
+is about to touch and flashes what it changed, and the view follows: it glides to each
+call's spot, zooming out when the spot is larger than the view and never in. Scroll or
+zoom yourself and the view is yours for the rest of the turn; *Follow the assistant's
+work around the map* in Tools ▸ AI ▸ Options… turns the following off for good. The
+panel can be closed while it works;
 the status bar shows the same state, and Escape stops it. The transcript follows the work
 only while you are at the bottom of it: scroll up to read and it stays, with a button
 back to the latest.

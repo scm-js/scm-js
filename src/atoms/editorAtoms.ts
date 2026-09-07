@@ -145,10 +145,18 @@ export const cursorTileAtom = atom<{ x: number; y: number }>({ x: 0, y: 0 });
 export const viewportRectAtom = atom<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
 
 /**
- * One-shot request to centre the main viewport on a tile — set by the minimap,
- * consumed (and cleared) by MapViewport.
+ * One-shot request to centre the main viewport on a tile — set by the minimap, `view.center`
+ * and `view.reveal`, consumed (and cleared) by MapViewport. With `animate` the viewport
+ * glides there over a few hundred milliseconds instead of jumping; `done` hears whether it
+ * arrived (`false` when the user, or a newer request, moved the view first).
  */
-export const centerViewOnAtom = atom<{ x: number; y: number } | null>(null);
+export interface ViewCenterRequest {
+  x: number;
+  y: number;
+  animate?: boolean;
+  done?: (arrived: boolean) => void;
+}
+export const centerViewOnAtom = atom<ViewCenterRequest | null>(null);
 
 export const viewFlagsAtom = atom<ViewFlags>({
   // StarEdit draws no grid until you ask for one, and terrain reads better without it.

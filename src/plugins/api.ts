@@ -1111,6 +1111,17 @@ export interface ViewApi {
   visible(): Rect;
   /** Scroll so a tile is in the middle of the viewport. */
   center(x: number, y: number): void;
+  /**
+   * Bring a tile rect onto the screen, gliding there by the shortest way rather than
+   * jumping, and leaving the view alone when the rect is already visible. With `fit` the
+   * view zooms out (never in) as far as the rect needs. Resolves once the view is there;
+   * `false` when the user, or another request, moved it first — a plugin that follows its
+   * own work around the map takes that as its cue to stop.
+   *
+   * @example
+   * if (!(await api.view.reveal(rect))) following = false;
+   */
+  reveal(rect: Rect, options?: RevealOptions): Promise<boolean>;
   /** Scroll to an object (and select it, for a unit, sprite or location). */
   goTo(target: GoTo): void;
   /** The tile under the pointer, as the status bar shows it. */
@@ -1131,6 +1142,16 @@ export interface ViewApi {
    * if (r.changed) api.view.flash({ rect });
    */
   flash(target: FlashTarget): void;
+}
+
+/** How `view.reveal` brings a rect on screen. */
+export interface RevealOptions {
+  /** Zoom out to the zoom control's nearest step that fits the rect (plus the margin); never zooms in. Off by default. */
+  fit?: boolean;
+  /** Glide rather than jump. On by default. */
+  animate?: boolean;
+  /** Tiles kept clear between the rect and the viewport's edge when the view has to move. 1 by default. */
+  margin?: number;
 }
 
 /* ── Commands ───────────────────────────────────────────── */

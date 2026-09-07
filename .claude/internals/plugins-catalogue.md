@@ -56,7 +56,11 @@ ledger, storage, top-up, the two ticks) and map storage over the server's `/v1/m
 `ObjectStore` — memory / directory / GCS through a dependency-free JSON-API client — a per-role
 `storageMb` cap over `maps.capMb`, checked in a transaction that locks the user row). It is the worked
 example for the "built-in feel" surfaces (`dock: "right"`, `ui.statusItem`, `ui.dialogSlot`,
-`view.flash`, plus an `ui.overlay` for a running tool call's footprint — `ai/intent.ts` there) and for
+`view.flash`, plus an `ui.overlay` for a running tool call's footprint — `ai/intent.ts` there — and
+`view.reveal` to follow the calls round the map: `followBox` there is the footprint's box or null for
+an empty or whole-map one, the reveal is awaited with `fit` before the tool runs, and a `"view"` event
+that is neither a reveal's nor a tool's own means the user took the view — `followMap` off for the
+rest of the turn; the preference is on by default) and for
 a contribution group put in and taken out by a setting. The server streams the `agent` recipe (text
 `delta`s and a `tool_use` event the moment the model names a tool; the system blocks are on the
 one-hour cache in `claude.ts#systemBlocks`), and the Scenario workflow is an `ums-design` recipe (the

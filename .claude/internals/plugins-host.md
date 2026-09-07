@@ -146,7 +146,15 @@ views without a transaction; `document.resize` is `resizeDocumentAtom` (history 
 (hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,
 `findInScenario`, `stringUsages`), `api.view` (`zoomAtom`, `viewportRectAtom`, `centerViewOnAtom`,
 `viewFlagsAtom`, and `goTo` taking the same shape `Issue.target` carries, so a linter can scroll to
-what it found), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), **`api.consts`**
+what it found; `reveal` is the shortest move that shows a rect, worked out in `host.ts` against
+`viewportRectAtom` and `ZOOM_STEPS` — with `fit` the zoom is set first and the target origin is
+measured from the centre, because `MapViewport`'s zoom layout-effect keeps the centre — and posted
+as a `ViewCenterRequest` with `animate` and `done`; `MapViewport` glides there in its own rAF
+loop, eased, 220–600 ms by distance, and gives up with `done(false)` the moment the scroll
+position is not where its last frame left it, which is how a wheel, a scrollbar drag or a
+minimap click wins without a listener. `done(true)` is deferred two frames past the paint that
+moved `viewportRectAtom`, so a plugin can take any `"view"` event *after* the promise settles as
+the user's — the scmjs.dev assistant's following rests on exactly that), `api.data` (the decoded `.dat` tables off `peekUnitAssets`), **`api.consts`**
 (the numbers a record is *written* in: `TILE_PX`, the special unit ids and default resource amounts
 from `editor/units.ts`, the `UnitValid` / `UnitUsed` / `UnitState` / `UnitRelation` / `SpriteFlag`
 / `Elevation` bit masks and `ANYWHERE_INDEX` from `sections/objects.ts`, and `consts.triggers` —

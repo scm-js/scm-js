@@ -1326,15 +1326,62 @@ export default function MapViewport() {
     return () => cancelAnimationFrame(raf);
   }, [flags.animateWater, flags.animateUnits, flags.units, flags.sprites, tilesetAssets, scenario, animator, waterSpeed, unitSpeed]);
 
-  /* minimap-driven recentring */
+  /* recentring, from the minimap, `view.center` and `view.reveal` */
+  const tilePxRef = useRef(tilePx);
+  tilePxRef.current = tilePx;
+  /** The glide in progress, if any; a newer request or a scroll from elsewhere cancels it. */
+  const glideRef = useRef<{ cancel(): void } | null>(null);
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || !centerOn) return;
-    el.scrollLeft = centerOn.x * tilePx - el.clientWidth / 2;
-    el.scrollTop = centerOn.y * tilePx - el.clientHeight / 2;
+    const request = centerOn;
     clearCenterOn(null);
-    scheduleDraw();
-  }, [centerOn, tilePx, clearCenterOn, draw]);
+    glideRef.current?.cancel();
+    glideRef.current = null;
+    const targetLeft = () => request.x * tilePxRef.current - el.clientWidth / 2;
+    const targetTop = () => request.y * tilePxRef.current - el.clientHeight / 2;
+    // `done` is answered a frame after the paint that moved `viewportRectAtom`, so a plugin
+    // hearing the "view" event knows every change before the answer was this request's own.
+    const arrived = () => requestAnimationFrame(() => requestAnimationFrame(() => request.done?.(true)));
+    if (!request.animate) {
+      el.scrollLeft = targetLeft();
+      el.scrollTop = targetTop();
+      scheduleDraw();
+      arrived();
+      return;
+    }
+    // A glide of the viewport's own: eased over a duration that grows with the distance, and
+    // given up the moment the scroll position is not where the last frame left it — the
+    // user's wheel, a scrollbar drag, the keyboard — so the view never fights its owner.
+    const fromLeft = el.scrollLeft, fromTop = el.scrollTop;
+    const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth), maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    const toLeft = Math.max(0, Math.min(maxLeft, targetLeft())), toTop = Math.max(0, Math.min(maxTop, targetTop()));
+    const distance = Math.hypot(toLeft - fromLeft, toTop - fromTop);
+    if (distance < 1) { arrived(); return; }
+    const duration = Math.min(600, 220 + distance / 6);
+    const start = performance.now();
+    let lastLeft = fromLeft, lastTop = fromTop;
+    let raf = 0;
+    const glide = { cancel() { cancelAnimationFrame(raf); if (glideRef.current === glide) glideRef.current = null; request.done?.(false); } };
+    glideRef.current = glide;
+    const frame = (now: number) => {
+      if (Math.abs(el.scrollLeft - lastLeft) > 1 || Math.abs(el.scrollTop - lastTop) > 1) { glide.cancel(); return; }
+      const t = Math.min(1, (now - start) / duration);
+      const e = 1 - (1 - t) ** 3;
+      lastLeft = Math.round(fromLeft + (toLeft - fromLeft) * e);
+      lastTop = Math.round(fromTop + (toTop - fromTop) * e);
+      el.scrollLeft = lastLeft;
+      el.scrollTop = lastTop;
+      // The scroller's own scroll event books the repaint; setting the same position fires none.
+      lastLeft = el.scrollLeft; lastTop = el.scrollTop;
+      if (t < 1) { raf = requestAnimationFrame(frame); return; }
+      if (glideRef.current === glide) glideRef.current = null;
+      scheduleDraw();
+      arrived();
+    };
+    raf = requestAnimationFrame(frame);
+  }, [centerOn, clearCenterOn, draw]);
+  useEffect(() => () => glideRef.current?.cancel(), []);
 
   /* keep the view centred when zooming */
   const prevZoom = useRef(zoom);

@@ -25,7 +25,7 @@ import { Elevation, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid } f
 import { DEATHS_TABLE_ADDRESS } from "../src/data/triggerDefs";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, MINERAL_FIELD_IDS, TILE_PX, VESPENE_GEYSER } from "../src/editor/units";
 import {
-  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom,
+  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom, viewportRectAtom, zoomAtom,
 } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import type { PendingAction } from "../src/hooks/useMapFileActions";
@@ -942,7 +942,7 @@ describe("plugin query", () => {
 });
 
 describe("plugin view", () => {
-  it("scrolls, zooms and goes to an object", () => {
+  it("scrolls, zooms, goes to an object and reveals a rect", async () => {
     const { store } = blankStore(32, 32);
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
     api.document.edit("place", (tx) => {
@@ -973,6 +973,30 @@ describe("plugin view", () => {
     expect(api.view.visible()).toEqual({ x0: 0, y0: 0, x1: 1, y1: 1 });
     expect(api.view.cursorTile()).toEqual({ x: 0, y: 0 });
     expect(events).toBeGreaterThan(0);
+
+    // reveal: nothing to do when the rect is on screen, the shortest move otherwise, and the
+    // request carries `done` for the viewport to answer.
+    store.set(viewportRectAtom, { x: 10, y: 10, w: 20, h: 10 });
+    store.set(centerViewOnAtom, null);
+    await expect(api.view.reveal({ x0: 12, y0: 12, x1: 14, y1: 14 })).resolves.toBe(true);
+    expect(store.get(centerViewOnAtom)).toBeNull();
+    const pending = api.view.reveal({ x0: 40, y0: 12, x1: 44, y1: 14 });
+    let request = store.get(centerViewOnAtom)!;
+    expect(request).toMatchObject({ x: 35, y: 15, animate: true }); // right edge at 45: the margin past 44
+    request.done!(false);
+    await expect(pending).resolves.toBe(false);
+    api.view.reveal({ x0: 0, y0: 0, x1: 2, y1: 2 }, { animate: false, margin: 0 });
+    request = store.get(centerViewOnAtom)!;
+    expect(request).toMatchObject({ x: 10, y: 5, animate: false });
+    // fit: a rect wider than the view zooms out to the step that holds it, never in.
+    store.set(zoomAtom, 1);
+    api.view.reveal({ x0: 0, y0: 0, x1: 60, y1: 10 }, { fit: true, margin: 0 });
+    expect(api.view.zoom()).toBe(0.25); // 20 tiles at 1 → 40 at 0.5 → 80 at 0.25
+    expect(store.get(centerViewOnAtom)).toMatchObject({ x: 20, y: 15 }) // the view keeps its centre when it zooms out, and the rect is inside it there;
+    store.set(zoomAtom, 0.25);
+    store.set(viewportRectAtom, { x: 0, y: 0, w: 80, h: 40 });
+    api.view.reveal({ x0: 0, y0: 0, x1: 2, y1: 2 }, { fit: true });
+    expect(api.view.zoom()).toBe(0.25);
   });
 });
 

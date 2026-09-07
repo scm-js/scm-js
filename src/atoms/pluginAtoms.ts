@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, SlottedDialogId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -401,7 +401,7 @@ export const pluginStatusItemsAtom = atom<PluginStatusItemEntry[]>([]);
 export interface PluginDialogSlotEntry {
   key: number;
   plugin: PluginInfo;
-  dialog: SlottedDialogId;
+  dialog: DialogSlotId;
   spec: DialogSlotSpec;
 }
 

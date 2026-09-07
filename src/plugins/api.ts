@@ -1007,6 +1007,23 @@ export interface TriggersApi {
    * deactivation; call `refresh()` after a rebuild so the editors ask `locate` again.
    */
   claim(spec: TriggerClaimSpec): TriggerClaimHandle;
+  /**
+   * Every plugin's claims as located in `list` (TRIG as it stands, when omitted), first
+   * run first — what an editor of the trigger list needs to fence or lock the generated
+   * runs. A claim whose `locate` finds nothing, or throws, is left out.
+   */
+  claims(list?: TriggerRecord[]): TriggerClaimRange[];
+}
+
+/** One claimed run as `triggers.claims` located it. */
+export interface TriggerClaimRange {
+  pluginId: string;
+  /** `TriggerClaimSpec.label`: what generated the run, as a sentence would use it. */
+  label: string;
+  /** The badge word the trigger list shows; the plugin's id by default. */
+  badge: string;
+  start: number;
+  count: number;
 }
 
 /**
@@ -1947,6 +1964,20 @@ export interface DialogSpec {
    * (a code editor dismissing its own popups), judged by the element it landed on.
    */
   keepOpenOnEscape?: (target: EventTarget | null) => boolean;
+  /**
+   * Offer a slot of this dialog's own, so other plugins can add to it with `ui.dialogSlot`
+   * the way they add to a built-in dialog: `id` is what they name (`"<plugin>.<name>"`),
+   * `fields` the working copy lent to them, read live, and `payload` what the dialog was
+   * opened with. The Text Trigger Editor plugin offers `"trigedit.text"` with a `text` field.
+   */
+  slot?: DialogSlotOffer;
+}
+
+/** A slot a plugin dialog offers to other plugins; see `DialogSpec.slot`. */
+export interface DialogSlotOffer {
+  id: string;
+  payload?: Record<string, unknown>;
+  fields?: Record<string, DialogField>;
 }
 
 export interface DialogHandle {
@@ -2034,10 +2065,16 @@ export interface StatusItemHandle {
  * not yet applied to the map — so a slot's button can fill it in and leave OK to them.
  *
  * - `mapProperties`: `name`, `description`.
- * - `textTriggerEditor`: `text` (the whole editor); `payload.briefing` says which list.
  * - `triggerEditor`, `stringEditor`, `playerSettings`, `missionBriefing`: no fields, a slot only.
+ *
+ * A plugin's own dialog can offer a slot too (`DialogSpec.slot`), under an id of its
+ * choosing — `"trigedit.text"` is the Text Trigger Editor's, lending `text` with
+ * `payload.briefing` — and another plugin adds to it with the same `dialogSlot` call.
  */
-export type SlottedDialogId = "mapProperties" | "textTriggerEditor" | "triggerEditor" | "stringEditor" | "playerSettings" | "missionBriefing";
+export type SlottedDialogId = "mapProperties" | "triggerEditor" | "stringEditor" | "playerSettings" | "missionBriefing";
+
+/** A slot id: one of the editor's dialogs, or the id a plugin dialog offers (`"<plugin>.<name>"` by convention). */
+export type DialogSlotId = SlottedDialogId | (string & {});
 
 /** A form field a dialog lends to a slot: read it, set it, hear it change. */
 export interface DialogField {
@@ -2047,7 +2084,7 @@ export interface DialogField {
 
 /** What a slot's `mount` is handed: which dialog, its payload, its fields, and a way to close it. */
 export interface DialogSlotHost {
-  readonly dialog: SlottedDialogId;
+  readonly dialog: DialogSlotId;
   readonly payload: Readonly<Record<string, unknown>>;
   readonly fields: Readonly<Record<string, DialogField>>;
   close(): void;
@@ -2250,8 +2287,9 @@ export interface UiApi {
   /**
    * Add to a built-in dialog. `mount` runs in a row at the left of the dialog's footer each
    * time that dialog opens, with the dialog's working-copy fields to read and fill
-   * (`SlottedDialogId` lists which dialogs and fields). Returns the registration; it
-   * leaves with `dispose()` or the plugin.
+   * (`SlottedDialogId` lists which dialogs and fields) — or to another plugin's dialog,
+   * by the id its `DialogSpec.slot` offers. Returns the registration; it leaves with
+   * `dispose()` or the plugin.
    *
    * @example
    * api.ui.dialogSlot("mapProperties", {
@@ -2262,7 +2300,7 @@ export interface UiApi {
    *   },
    * });
    */
-  dialogSlot(dialog: SlottedDialogId, spec: DialogSlotSpec): Disposable;
+  dialogSlot(dialog: DialogSlotId, spec: DialogSlotSpec): Disposable;
   /**
    * Take over the pointer on the map until `stop()`, Esc, a right-click, a map change
    * or another tool. One tool runs at a time — starting one stops the previous — and a

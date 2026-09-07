@@ -2363,10 +2363,11 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     const bag = new Contributions();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
     const a = api.ui.dialogSlot("mapProperties", { mount: () => {} });
-    api.ui.dialogSlot("textTriggerEditor", { mount: () => {} });
-    expect(store.get(pluginDialogSlotsAtom).map((e) => [e.plugin.id, e.dialog])).toEqual([["t", "mapProperties"], ["t", "textTriggerEditor"]]);
+    // A slot another plugin's dialog offers (`DialogSpec.slot`) is named the same way.
+    api.ui.dialogSlot("trigedit.text", { mount: () => {} });
+    expect(store.get(pluginDialogSlotsAtom).map((e) => [e.plugin.id, e.dialog])).toEqual([["t", "mapProperties"], ["t", "trigedit.text"]]);
     a.dispose();
-    expect(store.get(pluginDialogSlotsAtom).map((e) => e.dialog)).toEqual(["textTriggerEditor"]);
+    expect(store.get(pluginDialogSlotsAtom).map((e) => e.dialog)).toEqual(["trigedit.text"]);
     bag.dispose();
     expect(store.get(pluginDialogSlotsAtom)).toEqual([]);
   });
@@ -2898,6 +2899,10 @@ describe("plugin trigger claims and commands", () => {
     const shifted = [api.triggers.newTrigger(), ...scn.triggers];
     expect(locateClaims(claims, shifted)[0]).toMatchObject({ start: 2, count: 1 });
     expect(locateClaims(claims, [hand])).toEqual([]);
+    // What another plugin's trigger editor reads to fence the run: every claim, located in the map's list or in its own.
+    expect(api.triggers.claims()).toEqual([{ pluginId: "gen", label: "the generator", badge: "gen", start: 1, count: 1 }]);
+    expect(api.triggers.claims(shifted)).toEqual([{ pluginId: "gen", label: "the generator", badge: "gen", start: 2, count: 1 }]);
+    expect(api.triggers.claims([hand])).toEqual([]);
     // Out-of-range answers are clamped rather than trusted.
     const wild = locateClaims([{ ...claims[0], spec: { label: "x", locate: () => ({ start: 2, count: 50 }) } }], scn.triggers);
     expect(wild[0]).toMatchObject({ start: 2, count: 1 });

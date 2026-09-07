@@ -673,6 +673,7 @@ Reading triggers, and everything needed to *show* one. Writing is `document.upda
 | `comment(t)` | A trigger's `Comment` action text, if it has one. |
 | `switchNames()` / `switchUsage()` | SWNM, and how many conditions and actions mention each switch. |
 | `claim(spec)` | Mark a run of the trigger list as *generated* by this plugin. See below. |
+| `claims(list?)` | Every plugin's claimed runs as located in `list` (the map's triggers when omitted): `{ pluginId, label, badge, start, count }`, first run first — what an editor of the trigger list needs to fence or lock them. |
 
 **Generating triggers.** There is no fluent builder here on purpose, because
 `tx.triggers.fromText` already is one, and a better one. A record is 16 conditions and 64
@@ -1078,7 +1079,9 @@ on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog u
 `spec.keepOpenOnEscape(target)` answers true for the element the key landed on, which is
 for something inside that handles Escape itself, such as a code editor dismissing its
 own popups. The handle has `close()`, `isOpen()`, `setTitle(text)` and
-`setBusy(label | false)`.
+`setBusy(label | false)`. `spec.slot = { id, fields?, payload? }` offers a slot of the
+dialog's own, so other plugins add to it with `dialogSlot(id, …)` exactly as they add to a
+built-in dialog (below); name it `<plugin>.<name>`, and lend the working copy as `fields`.
 
 A dialog is modal and covers the map. To pick something on the map from a dialog, close
 the dialog, pick, and reopen it with the result. Terrain from Image does exactly this
@@ -1165,7 +1168,8 @@ the icon for a spinner, `warn` paints the cell as a warning, `onClick` makes it 
 Keep the handle and `set(patch)` it as things move; `remove()` takes it away, and so does
 disabling the plugin.
 
-**Dialog slots.** `dialogSlot(dialogId, { mount })` adds to a built-in dialog. Each time
+**Dialog slots.** `dialogSlot(dialogId, { mount })` adds to a built-in dialog — or to
+another plugin's dialog that offers a slot, by the id it names. Each time
 that dialog opens, `mount(body, host)` runs with an empty `<span>` at the left of the
 dialog's footer; fill it with the widgets and it reads as part of the dialog. `host` says
 which dialog (`host.dialog`), what it was opened with (`host.payload`), and lends the

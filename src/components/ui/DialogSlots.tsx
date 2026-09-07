@@ -1,5 +1,6 @@
 /**
- * The row a plugin adds to a built-in dialog through `api.ui.dialogSlot`. `DialogFrame`
+ * The row a plugin adds to a built-in dialog — or to another plugin's dialog that offers
+ * one (`DialogSpec.slot`) — through `api.ui.dialogSlot`. `DialogFrame`
  * renders one at the left of the footer for every dialog that passes it a `slot`, and
  * each registered slot for that dialog gets an empty `<span>` to fill with plain DOM —
  * the pattern `PluginDialog` and `PluginPanels` use, host element in state so the mount
@@ -14,10 +15,10 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { pluginDialogSlotsAtom, type PluginDialogSlotEntry } from "../../atoms/pluginAtoms";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
-import type { DialogField, DialogSlotHost, SlottedDialogId } from "../../plugins/api";
+import type { DialogField, DialogSlotHost, DialogSlotId } from "../../plugins/api";
 
 export interface DialogSlotProps {
-  dialog: SlottedDialogId;
+  dialog: DialogSlotId;
   /** The dialog's working copy, lent to the slot. Rebuilt per render is fine. */
   fields?: Record<string, DialogField>;
   payload?: Record<string, unknown>;

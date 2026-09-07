@@ -21,6 +21,7 @@ import {
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
@@ -1035,6 +1036,11 @@ export function triggersApi(store: Store): Omit<TriggersApi, "claim"> {
   return {
     list: () => { const scn = scenario(); return scn ? readTriggers(scn) : []; },
     briefing: () => { const scn = scenario(); return scn ? readBriefing(scn) : []; },
+    claims: (list) => {
+      const scn = scenario();
+      const target = list ?? (scn ? scn.triggers : []);
+      return locateClaims(store.get(pluginTriggerClaimsAtom), target).map((r) => ({ pluginId: r.claim.pluginId, label: r.claim.spec.label, badge: claimBadge(r), start: r.start, count: r.count }));
+    },
     switchNames: () => { const scn = scenario(); return scn ? readSwitchNames(scn) : []; },
     switchUsage: () => { const scn = scenario(); return scn ? switchUsage(scn) : []; },
     names,

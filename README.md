@@ -405,6 +405,10 @@ copied from either side.
 
 ![A marked area copied and being pasted](docs/images/clipboard.webp)
 
+A piece worth keeping past this map — a ramp, a bridge, a cliff corner — can be saved as a
+*stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and laid down
+on any later map from the Stamps panel; see [Plugins](#plugins).
+
 *Include* says both what a copy takes and what a paste lays down: terrain, doodads,
 units, sprites, locations, fog. Terrain carries the ground under the doodads too, so a
 paste without doodads shows plain ground rather than half a tree. Doodads are re-stamped
@@ -1456,8 +1460,8 @@ inside the editor's dialogs. Your account and the maps stored on it stay.
 ## Plugins
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
-Walkability, Paint, Repair, Terrain from Image, TrigScript and the scmscx.com search are
-installed and on from the start. scmjs.dev — the account and the AI — is installed too
+Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library and the
+scmscx.com search are installed and on from the start. scmjs.dev — the account and the AI — is installed too
 but starts *off*, because an account and a trial are yours to ask for: tick it on in
 Plugins ▸ Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear.
 Melee Wizard and Section Explorer are a click away.
@@ -1481,6 +1485,7 @@ and the addresses it will fetch from.
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) and opens the map you pick. The site does not yet allow a page served elsewhere to read it, so today the dialog explains and links to the site instead. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game as death-counter state machines. See [TrigScript](#trigscript). |
+| [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account and the AI that comes with it — see [Your scmjs.dev account](#your-scmjsdev-account) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 

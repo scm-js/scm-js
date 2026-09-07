@@ -582,6 +582,7 @@ as for a stroke), commits, and repaints.
 | `updateSprites(indices, patch)` / `moveSprites(indices, dx, dy)` | Owner, flags, position, in place, so indices hold. |
 | `placeDoodad(doodadId, tx, ty, owner)` / `removeDoodads(indices)` / `updateDoodads(indices, { owner?, disabled? })` | Doodads stamp tiles and may carry an overlay sprite. All three keep the tiles, the record and the overlay together. |
 | `convertDoodads(indices)` | The Doodads layer's *Convert to Terrain*: the records go, the tiles stay as plain ground (in both tile sections), an overlay stays as an ordinary sprite. Returns records converted. |
+| `paste(clip, tx, ty, { parts?, mode? })` | A `Clip` laid down with its top-left at a tile, inside this transaction: the clipboard's paste without the clipboard, so the user's clip is left alone and several stamps (or a stamp and the strokes around it) are one undo step. Every part the clip carries goes down unless `parts` narrows it; `mode` is `"merge"` unless given. Returns the `PasteResult`. Stamp Library is the worked example. |
 | `addLocation(bounds, name?, elevationFlags?)` / `editLocation(index, patch)` / `removeLocations(indices)` | Slot 63 (Anywhere) and unused slots are refused by `editLocation`. `addLocation` also puts Anywhere back if it was missing. |
 | `restoreAnywhere()` | Anywhere back to the whole map. `true` when it had to move. |
 | `setFog(cells, players, "fog" \| "clear")` | `players` is a bit mask. Creates MASK on first use. |
@@ -851,6 +852,7 @@ from, so listing five hundred units costs about what the Units palette costs.
 | `tileImage(tileId)` | One 32 × 32 megatile of the open map's tileset. |
 | `doodadImage(doodadId)` | A doodad drawn from the tiles it stamps. |
 | `renderRect(rect, options?)` | Part of the map as File ▸ Export ▸ Image draws it, cropped to a tile rect, as a PNG `Blob`. `pixelsPerTile` defaults to 8 here. |
+| `renderClip(clip, { pixelsPerTile?, parts? })` | A `Clip` as the paste ghost draws it — its tiles, then units, sprites and doodad overlays from the sprite cache, then location boxes — as a `{ image, width, height }` canvas, for a thumbnail or a ghost under the pointer. Drawn with the graphics of the clip's own tileset, so a clip from another tileset answers null (as does a missing tileset). Synchronous and uncached: keep the result while nothing changed. |
 | `playerColor(owner)` | `#rrggbb`. |
 | `requestUnit(id)` / `requestSprite(kind, id)` / `onImageLoaded(fn)` | Graphics load lazily, so the first `unitImage` for a type is often null. Ask for it, redraw on `onImageLoaded`, and the list fills in. |
 
@@ -952,6 +954,7 @@ The Cut / Copy / Paste layer, sharing the user's own clip.
 | --- | --- |
 | `clip()` / `setClip(clip \| null)` | What is on the clipboard. A `Clip` is self-contained: it outlives the map it came from and pastes into another, with terrain and doodads refused across tilesets. |
 | `copy(source?)` / `cut(source?)` | `source` is `{ rect }` for a tile rect or `{ units?, sprites?, doodads?, locations? }` for objects by index. Omitted, they take what Ctrl+C would: the object layer's selection, else the marked area, with the parts ticked in `parts()`. |
+| `capture(source?, { parts? })` | The clip `copy` would take, handed back instead of put on the clipboard — for a plugin keeping clips of its own (Stamp Library) without disturbing the user's. `parts` overrides `parts()` for the one capture. |
 | `paste(tx, ty, { parts?, mode? })` | The clip's top-left at a tile, as one undo step, with the pasted area marked afterwards. Returns the `PasteResult`: counts per list, and notes for what was skipped. |
 | `parts()` / `setParts(patch)` | Which parts a copy takes and a paste lays down. |
 | `mode()` / `setMode("merge" \| "replace")` | Whether a paste clears the area first. |
@@ -1269,7 +1272,9 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 
 `get(key, fallback)`, `set(key, value)` and `remove(key)` keep JSON in the browser's
 storage under a per-plugin prefix (`scmjs.plugin.<id>.`), falling back to memory when
-storage is unavailable. The user can see and throw it away: Preferences ▸ General ▸
+storage is unavailable. `set` answers false when the browser refused the write — its quota
+is a few megabytes for the whole editor — so a plugin keeping something the user made
+(Stamp Library's stamps) can say so instead of losing it silently. The user can see and throw it away: Preferences ▸ General ▸
 Browser storage lists your keys as one row under your plugin's id, opening onto the
 values, with a Clear button of its own, and Clear all data sweeps every key the editor
 owns. So treat what you store as a convenience, never as the only copy of something, and
@@ -1304,4 +1309,5 @@ above. Read the one nearest to what you are writing.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | `triggers.claim`, a dialog that keeps Escape for its own editor, the same workspace as a resizable panel beside the map (`ui.panel` with `resizable`), `ui.pickObject` to put a clicked location or unit into the code, `view.goTo` and `view.flash` from a Ctrl+click, a folder of files kept with the map through `document.extras`, and commands published for other plugins. |
+| [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | A library kept in `api.storage` (one record per item, an index, and the quota answer from `set`); `clipboard.capture` for a clip that leaves the user's clipboard alone, `tx.paste` to lay it down as one undo step, `graphics.renderClip` for thumbnails and the ghost a `ui.mapTool` draws under the pointer; a floating panel that can move into the dock and back; JSON export and import, and one item as a line of text through the system clipboard. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, `view.reveal` to follow the assistant's tool calls around the map with the `"view"` event as the sign the user took the view back, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |

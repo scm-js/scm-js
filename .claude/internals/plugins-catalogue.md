@@ -166,3 +166,25 @@ swaps the axes gets the base laid out again, since a 2 × 1 patch cannot turn), 
 checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.query.placement` colouring
 the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
 plus bases at every start location, mirroring the selection and the symmetry check.
+
+**Stamp Library** (`github.com/scm-js/plugin-stamp-library`, a default that starts on since 2026-09-07) is the
+clipboard-plus-storage-plus-panel plugin for the extended-terrain parts bin, and the worked example for the
+three additions it asked of the host — `clipboard.capture` (a clip built as `copy` would but not put on the
+clipboard, with a `parts` override), `tx.paste` (`pasteClip` inside `runTransaction`: its lists fold into the
+entry's in `applyEntry` order, `createdMask` carried, and `serial` bumped past `nextSerial(scn)` so a later
+`makeUnit` cannot reuse a pasted unit's serial) and `graphics.renderClip` (`graphics.ts#renderClip`, the
+viewport's paste-ghost pass without the viewport: tiles, then units / sprites / doodad overlays from the
+sprite cache, then location boxes; drawn with the graphics of the clip's *own* era via
+`peekTileset(TILESET_FILENAMES[era])`, so a foreign clip is null rather than wrong tiles) — plus
+`storage.set` returning `false` on a refused write. `library.ts` there is the pure half (tests): a `Stamp` is
+a `Clip` + name / tags / notes / `used` / `origin`, stored as one `stamp.<id>` record (typed arrays as
+little-endian base64) under an `index` of ids, the share file `{ format: "scmjs-stamps", version: 1,
+stamps }` being the same records so one stamp as text and a whole library are one parser. `origin` is the
+capture rectangle's corner: `snapToLattice` keeps both offsets from it even, which is what puts a piece back
+on the isometric lattice it was copied off (Shift bypasses). The panel floats by default with a Dock / Float
+button that closes and reopens it on the other side (`settings.dock`; the docked form was starved for height
+under three built-in panels in a 900 px window). Stamping is a `ui.mapTool` whose `draw` blits the cached
+full-size `renderClip` scaled to `view.tilePx`; a click is one `document.edit` with `tx.paste`, the pasted
+rect then marked as a paste marks it. It captures every part (`ALL_PARTS`) and lets the stamping ticks
+choose, so nothing is lost at save time; a foreign-tileset stamp can still lay down its objects.
+

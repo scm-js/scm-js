@@ -133,7 +133,7 @@ import { restoreAnywhere } from "../editor/locations";
 import { copyFog, floodFog, fogPlayersAt, invertFog } from "../editor/fog";
 import { DEFAULT_START_PLACEMENT, placeStartLocations } from "../editor/startLocations";
 import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseStringTable } from "../editor/exchange";
-import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ObjectSelection } from "../editor/clipboard";
+import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ClipParts, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
 import { writeMapBytes } from "../services/mapIo";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
@@ -1411,11 +1411,11 @@ function clipboardApi(store: Store): ClipboardApi {
     const rect = store.get(clipSelectionAtom);
     return rect ? { rect } : null;
   };
-  const take = (source?: ClipSource): { clip: Clip; src: { rect: Rect } | { sel: ObjectSelection } } | null => {
+  const take = (source?: ClipSource, partsOver?: Partial<ClipParts>): { clip: Clip; src: { rect: Rect } | { sel: ObjectSelection } } | null => {
     const scn = scenario();
     const src = resolve(source);
     if (!scn || !src) return null;
-    const parts = store.get(clipPartsAtom);
+    const parts = { ...store.get(clipPartsAtom), ...partsOver };
     const clip = "rect" in src ? copyRegion(scn, src.rect, parts, graphics().catalogue) : copyObjects(scn, src.sel, parts, graphics().catalogue);
     return clip ? { clip, src } : null;
   };
@@ -1423,6 +1423,7 @@ function clipboardApi(store: Store): ClipboardApi {
     clip: () => store.get(clipboardAtom),
     setClip: (clip) => store.set(clipboardAtom, clip),
     copy: (source) => { const t = take(source); if (t) store.set(clipboardAtom, t.clip); return t?.clip ?? null; },
+    capture: (source, options = {}) => take(source, options.parts)?.clip ?? null,
     cut: (source) => {
       const scn = scenario();
       const t = take(source);

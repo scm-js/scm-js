@@ -3269,4 +3269,55 @@ describe("plugin api: editing additions", () => {
     expect(api.tileset.name()).toBe("Badlands");
     bag.dispose();
   });
+
+  it("tx.paste stamps a clip without touching the clipboard, several in one undo step, and reports what it skipped", () => {
+    const { store, scn } = blankStore(12, 8);
+    const api = apiOver(store);
+    scn.tiles.fill(0x20); scn.editorTiles.fill(0x20);
+    for (let y = 0; y < 2; y++) for (let x = 0; x < 3; x++) { scn.tiles[y * 12 + x] = 0x40 + x; scn.editorTiles[y * 12 + x] = 0x40 + x; }
+    api.document.edit("unit", (tx) => { tx.addUnits([tx.makeUnit(0, 1, 40, 40)]); });
+    const clip = api.clipboard.copy({ rect: { x0: 0, y0: 0, x1: 3, y1: 2 } })!;
+    expect(clip.units).toHaveLength(1);
+    api.clipboard.setClip(null);
+    // `capture` builds the same clip and leaves the clipboard alone; `parts` narrows it for one call.
+    const captured = api.clipboard.capture({ rect: { x0: 0, y0: 0, x1: 3, y1: 2 } }, { parts: { units: false } })!;
+    expect(captured.units).toHaveLength(0);
+    expect(Array.from(captured.tiles!)).toEqual(Array.from(clip.tiles!));
+    expect(api.clipboard.clip()).toBeNull();
+    const r = api.document.edit("stamp twice", (tx) => {
+      const a = tx.paste(clip, 4, 4);
+      expect(a.counts).toMatchObject({ tiles: 6, units: 1 });
+      const b = tx.paste(clip, 10, 6, { parts: { units: false } }); // two columns fall off the map
+      expect(b.counts).toMatchObject({ tiles: 4, units: 0 });
+      // The pasted unit's serial is not handed out again by makeUnit.
+      const fresh = tx.makeUnit(0, 2, 200, 200);
+      expect(scn.units.some((u) => u.serial === fresh.serial)).toBe(false);
+    });
+    expect(r).toMatchObject({ changed: true, tiles: 10, units: 1 });
+    expect(api.clipboard.clip()).toBeNull();
+    expect(scn.tiles[4 * 12 + 4]).toBe(0x40);
+    expect(scn.tiles[5 * 12 + 6]).toBe(0x42);
+    expect(scn.editorTiles[5 * 12 + 6]).toBe(0x42);
+    expect(scn.tiles[6 * 12 + 11]).toBe(0x41);
+    expect(scn.units).toHaveLength(2);
+    expect(api.document.undo()).toBe("stamp twice");
+    expect(scn.tiles[4 * 12 + 4]).toBe(0x20);
+    expect(scn.tiles[6 * 12 + 11]).toBe(0x20);
+    expect(scn.units).toHaveLength(1);
+    // Another tileset's terrain is refused with a note, as the clipboard refuses it.
+    const foreign = { ...clip, era: 5 };
+    const r2 = api.document.edit("foreign", (tx) => { expect(tx.paste(foreign, 0, 4).counts.tiles).toBe(0); });
+    expect(r2.notes.join(" ")).toMatch(/different tileset/);
+    // No canvas in node: renderClip answers null rather than throwing.
+    expect(api.graphics.renderClip(clip)).toBeNull();
+  });
+
+  it("storage.set says whether the write landed", () => {
+    const api = apiOver(createStore());
+    expect(api.storage.set("k", 1)).toBe(true);
+    const huge = "x".repeat(1 << 20);
+    // The memory stand-in has no quota, so this is the contract's shape rather than a refusal.
+    expect(typeof api.storage.set("big", huge)).toBe("boolean");
+    api.storage.remove("k"); api.storage.remove("big");
+  });
 });

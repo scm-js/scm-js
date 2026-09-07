@@ -212,6 +212,17 @@ the same pass: `.btn` is `inline-flex`, an author rule that beat the browser's o
 `el.hidden = true`, which is what plain DOM reaches for — stayed on screen after the
 work ended. Nothing here tests the widgets' DOM: the test environment is node, and a
 DOM test runner is a dependency the repository does not carry.
+The Stamp Library pass (2026-09-07) added three small things a plugin keeping clips of its own needed:
+`clipboard.capture(source?, { parts? })` (`host.ts#clipboardApi`'s `take` with a parts override, not
+stored), `EditTransaction.paste(clip, tx, ty, { parts?, mode? })` (`pasteClip` run inside
+`runTransaction` — it applies as it builds, so the op only folds its `HistoryEdit` lists into the
+transaction's `Stroke`s and arrays and moves `serial` past `nextSerial(scn)`; defaults are every part
+and `"merge"`, unlike `clipboard.paste`, which reads the palette's ticks) and
+`graphics.renderClip(clip, { pixelsPerTile?, parts? })` (`graphics.ts#renderClip`, the viewport's
+paste-ghost pass reproduced over the clip's own era's `peekTileset`, null when those graphics are not
+in memory — the open map's are — so a plugin never gets another tileset's tiles drawn as this one's).
+`StorageApi.set` now returns a boolean (false on a quota refusal) — additive for a caller that ignored
+`void`. `tests/plugins.test.ts` "tx.paste stamps a clip…" pins all four.
 The 2026-09-07 assistant-transcript pass added `steps` and `fold` (the "Work, step by step"
 block in `ui.css`): the scmjs.dev plugin had two hand-rolled step lists (Make Scenario's
 build stages and the assistant's tool calls) and was about to grow a `<details>` with a live

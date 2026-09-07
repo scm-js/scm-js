@@ -1677,6 +1677,12 @@ export interface ClipboardApi {
    * nothing to copy.
    */
   copy(source?: ClipSource): Clip | null;
+  /**
+   * The clip `copy` would take, handed back instead of put on the clipboard — for a
+   * plugin keeping clips of its own without disturbing the user's. `parts` overrides
+   * `parts()` for this one capture. Null when there is nothing to take.
+   */
+  capture(source?: ClipSource, options?: { parts?: Partial<ClipParts> }): Clip | null;
   /** Copy, then remove the source's objects as one undo step (terrain and fog stay). Null when there was nothing. */
   cut(source?: ClipSource): Clip | null;
   /**

@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PluginIcon, PluginInfo, PluginManifest, SlottedDialogId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, SlottedDialogId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -248,7 +248,9 @@ export function comboOfEvent(e: KeyboardEvent): string {
 
 /* ── Interactive picks on the map ───────────────────────── */
 
-export type MapPickKind = "area" | "tile";
+export type MapPickKind = "area" | "tile" | "object";
+/** What a pick hands back: a tile rect, a tile, or an object. */
+export type MapPickResult = Rect | { x: number; y: number } | PickedObject;
 
 /**
  * A plugin waiting for the user to drag a rectangle (or click a tile) on the map —
@@ -263,7 +265,9 @@ export interface MapPickRequest {
   /** What the HUD shows while picking. */
   prompt: string;
   pluginId: string;
-  finish: (result: Rect | { x: number; y: number } | null) => void;
+  /** An object pick: which kinds count (every kind when unset). */
+  kinds?: PickObjectKind[];
+  finish: (result: MapPickResult | null) => void;
 }
 
 export const mapPickAtom = atom<MapPickRequest | null>(null);

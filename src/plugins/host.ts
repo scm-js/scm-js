@@ -26,7 +26,7 @@ import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
-  type BusyBox, type CachedManifest, type MapPickKind, type PluginInstall, type PluginRuntime, type TitleBox,
+  type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
@@ -104,7 +104,7 @@ import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
-  type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickOptions, type PluginApi, type PluginEvent, type ServiceInfo,
+  type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
   type FlashTarget, type StatusItemHandle, type StatusItemSpec,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
@@ -585,14 +585,14 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
 
 /* ── Picking on the map ─────────────────────────────────── */
 
-const PICK_PROMPTS: Record<MapPickKind, string> = { area: "Drag a rectangle on the map", tile: "Click a tile on the map" };
+const PICK_PROMPTS: Record<MapPickKind, string> = { area: "Drag a rectangle on the map", tile: "Click a tile on the map", object: "Click a unit or a location on the map" };
 
 /**
  * Put a `MapPickRequest` in front of the viewport and resolve when it (or Esc, a
  * right-click, a document change, the plugin's deactivation, or a newer pick) finishes it.
  * The request's `finish` clears the atom itself, so the viewport only ever calls it.
  */
-export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, kind: MapPickKind, options: PickOptions = {}): Promise<Rect | { x: number; y: number } | null> {
+export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, kind: MapPickKind, options: PickObjectOptions = {}): Promise<MapPickResult | null> {
   return new Promise((resolve) => {
     store.get(mapPickAtom)?.finish(null);
     if (!store.get(scenarioAtom)) { resolve(null); return; }
@@ -601,7 +601,7 @@ export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, ki
     let done = false;
     let unsubDoc = () => {};
     let disposable = { dispose: () => {} };
-    const finish = (result: Rect | { x: number; y: number } | null) => {
+    const finish = (result: MapPickResult | null) => {
       if (done) return;
       done = true;
       unsubDoc();
@@ -612,7 +612,7 @@ export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, ki
     };
     unsubDoc = store.sub(scenarioAtom, () => finish(null));
     disposable = bag.add(() => finish(null));
-    store.set(mapPickAtom, { key, kind, prompt, pluginId: info.id, finish });
+    store.set(mapPickAtom, { key, kind, prompt, pluginId: info.id, ...(options.kinds ? { kinds: options.kinds } : {}), finish });
     store.set(statusMessageAtom, `${prompt} — Esc or right-click to cancel`);
   });
 }
@@ -1971,6 +1971,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       }),
       pickArea: (options) => pickOnMap(store, bag, info, "area", options) as Promise<Rect | null>,
       pickTile: (options) => pickOnMap(store, bag, info, "tile", options) as Promise<{ x: number; y: number } | null>,
+      pickObject: (options) => pickOnMap(store, bag, info, "object", options) as Promise<PickedObject | null>,
       loadImage,
       readClipboardImage,
       confirm: (message, options) => confirmDialog(api.ui.dialog, message, options),

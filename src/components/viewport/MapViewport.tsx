@@ -74,7 +74,9 @@ import type { TeamColorSpec } from "../../formats/units/teamColor";
 import { NO_UNIT } from "../../formats/dat/dat";
 import { ANYWHERE_INDEX, SpriteFlag, UnitState, UnitUsed } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
-import { placementBox, unitBox, unitGeometry } from "../../editor/units";
+import { placementBox, unitAt, unitBox, unitGeometry } from "../../editor/units";
+import { locationAt } from "../../editor/locations";
+import type { PickedObject } from "../../plugins/api";
 import type { TileRect } from "../../editor/doodads";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { START_LOCATION, unitName } from "../../data/units";
@@ -168,6 +170,8 @@ export default function MapViewport() {
   const clipGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   /** A plugin's `pickArea` / `pickTile` drag in progress (see `mapPickAtom`). */
   const pickGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  /** A plugin's `pickObject`: the unit or location under the pointer right now, outlined and named until the click. */
+  const pickHoverRef = useRef<PickedObject | null>(null);
   /** Whether a plugin's map tool holds the primary button (see `mapToolAtom`). */
   const toolDownRef = useRef(false);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
@@ -866,6 +870,33 @@ export default function MapViewport() {
       }
     }
 
+    // A plugin's object pick: the unit or location under the pointer, outlined with its name.
+    const ph = pickHoverRef.current;
+    if (picking && mapPick?.kind === "object" && ph && scenario) {
+      let box: { left: number; top: number; right: number; bottom: number } | null = null;
+      let label = "";
+      if (ph.kind === "unit") {
+        const u = scenario.units[ph.index];
+        if (u) { box = unitBox(unitGeometry(unitAssets?.units ?? null, u.unitId), u.x, u.y); label = unitName(u.unitId); }
+      } else {
+        const l = locations.find((x) => x.index === ph.index);
+        if (l) { box = l; label = l.name; }
+      }
+      if (box) {
+        const bx = box.left * zoom - sx, by = box.top * zoom - sy, bw = (box.right - box.left) * zoom, bh = (box.bottom - box.top) * zoom;
+        ctx.strokeStyle = "#bff5ef";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.round(bx) + 0.5, Math.round(by) + 0.5, Math.max(2, Math.round(bw)), Math.max(2, Math.round(bh)));
+        ctx.lineWidth = 1;
+        ctx.font = `11px ${getComputedStyle(document.body).getPropertyValue("--font-ui")}`;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(10,12,16,0.85)";
+        ctx.fillRect(bx, by - 18, tw + 10, 16);
+        ctx.fillStyle = "#bff5ef";
+        ctx.fillText(label, bx + 5, by - 6);
+      }
+    }
+
     // A plugin's pick in progress: the rectangle being dragged, teal so it reads as "not the marked area".
     const pg = pickGestureRef.current;
     if (picking && pg && scenario) {
@@ -1328,6 +1359,16 @@ export default function MapViewport() {
       y: Math.floor((e.clientY - r.top + el.scrollTop) / tilePx),
     };
   };
+  /** For a plugin's `pickObject`: the unit, else the location, under a map pixel — of the kinds the pick asked for. */
+  const objectUnder = (px: number, py: number): PickedObject | null => {
+    if (!scenario) return null;
+    const kinds = mapPick?.kinds;
+    const wants = (k: PickedObject["kind"]) => !kinds || kinds.includes(k);
+    if (wants("unit")) { const i = unitAt(scenario, unitAssets?.units ?? null, px, py); if (i >= 0) return { kind: "unit", index: i }; }
+    if (wants("location")) { const i = locationAt(scenario, px, py); if (i >= 0) return { kind: "location", index: i }; }
+    return null;
+  };
+
   const pointAt = (e: { clientX: number; clientY: number }): MapPoint => {
     const el = scrollerRef.current!;
     const r = el.getBoundingClientRect();
@@ -1381,6 +1422,14 @@ export default function MapViewport() {
     }
     if (picking) {
       e.preventDefault();
+      if (mapPick?.kind === "object") {
+        // An object pick answers on the press with what is under it; nothing there keeps the pick going.
+        const p = pointAt(e);
+        const o = objectUnder(p.px, p.py);
+        if (o) { pickHoverRef.current = null; mapPick.finish(o); }
+        scheduleDraw();
+        return;
+      }
       e.currentTarget.setPointerCapture(e.pointerId);
       pickGestureRef.current = { from: t, to: t };
       scheduleDraw();
@@ -1514,6 +1563,11 @@ export default function MapViewport() {
       setCursor(c);
       scheduleDraw();
       return;
+    }
+    if (picking && mapPick?.kind === "object") {
+      const o = objectUnder(point.px, point.py);
+      const was = pickHoverRef.current;
+      if (o?.kind !== was?.kind || o?.index !== was?.index) { pickHoverRef.current = o; scheduleDraw(); }
     }
     if (picking) e.currentTarget.style.cursor = "crosshair";
     const cGesture = clipGestureRef.current;
@@ -1906,7 +1960,7 @@ export default function MapViewport() {
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
         {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
-        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? "drag a rectangle" : "click a tile"} · Esc cancels</span>}
+        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? "drag a rectangle" : mapPick.kind === "tile" ? "click a tile" : "click a unit or a location"} · Esc cancels</span>}
         {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} · Esc / right-click to stop</span>}
         {unitPlacing && !tooling && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
         {spritePlacing && !tooling && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}

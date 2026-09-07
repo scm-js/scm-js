@@ -1052,6 +1052,7 @@ two ways to draw on the map, and the pickers.
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
 | `pickArea({ prompt })` | The user drags a rectangle on the map. The viewport shows a crosshair and a marquee, the HUD shows your prompt, and the gesture goes to you ahead of the active layer's tools. Resolves with the tile `Rect` (exclusive `x1` / `y1`), or `null` on Esc or a right-click, when no map is open, when the map is replaced meanwhile, or when the plugin is disabled. One pick at a time; starting another cancels the first. |
 | `pickTile({ prompt })` | The same for a single click. Resolves with `{ x, y }`. |
+| `pickObject({ prompt, kinds })` | The same for an object: the user clicks a unit or a location, and the viewport outlines and names what is under the pointer as it moves. `kinds` limits it to `"unit"` or `"location"` (both when omitted; a unit wins over a location under the pointer). A click on nothing keeps picking. Resolves with `{ kind, index }`, the index into the scenario's `units` or `locations`. |
 | `loadImage(source)` | Decode a `File` / `Blob`, a `data:` URL or an `http(s)` URL into an `ImageBitmap`. A remote URL is fetched with CORS and, failing that, loaded through an `<img crossOrigin>`; a site that allows neither rejects with a message that says to save the picture and choose the file. |
 | `readClipboardImage()` | The picture on the system clipboard as a `Blob` (the browser may ask permission), or `null`. For Ctrl+V use a dialog's `onPaste` instead, which needs no permission. |
 | `confirm(message, opts?)` / `alert(message, opts?)` / `prompt(message, opts?)` | A yes/no, a note, and a line of text, as dialogs in the editor's chrome rather than the browser's blocking boxes. `confirm` resolves `false` and `prompt` `null` on Cancel, Escape or the ×. Options: `title`, `confirmLabel`, `cancelLabel`, `danger` (a destructive primary button), and for `prompt` also `value`, `placeholder`, `multiline`. |
@@ -1136,11 +1137,13 @@ belongs on that dialog's own status line, not in a progress panel behind it.
 **Panels.** `panel(spec)` floats over the map and blocks nothing: the user keeps drawing,
 scrolling and using hotkeys while it is open (except while typing in one of its fields).
 `spec.mount(body, handle)` fills an empty `<div>` as a dialog's does; `width` is in CSS
-pixels (260 by default) and the panel is as tall as its content; `onClose` fires however
-it closes. The user drags it by its title bar and closes it with the ×. It opens at the
-top-right of the map and remembers where it was left for the session. The handle has
-`close()`, `isOpen()` and `setTitle()`. Open as many as you like; they all close with the
-plugin.
+pixels (260 by default) and the panel is as tall as its content, or `height` pixels tall;
+`onClose` fires however it closes. The user drags it by its title bar and closes it with
+the ×. It opens at the top-right of the map and remembers where it was left for the
+session. `resizable: true` adds a grip at the bottom-right corner and remembers the size
+too; the body is then a column, so a root element with `flex: 1; min-height: 0` fills it —
+what a code editor or a long list beside the map wants. The handle has `close()`,
+`isOpen()` and `setTitle()`. Open as many as you like; they all close with the plugin.
 
 `dock: "right"` puts the panel in the right dock instead, under Minimap, Layers and
 Properties, with the same head and hide button the built-in panels have — the plugin's
@@ -1291,5 +1294,5 @@ above. Read the one nearest to what you are writing.
 | [Repair](https://github.com/scm-js/plugin-repair) | The `"document"` event's payload, `document.sections` (`defaults`, `rebuild`, `trailing`, `required`, `replaceFile`), `tx.rebuildIsom`, and `api.text` for the Remastered newline finding. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | `document.sections` reads and writes as a hex editor, and `api.names` for showing what a byte means. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
-| [TrigScript](https://github.com/scm-js/plugin-trigscript) | `triggers.claim`, a dialog that keeps Escape for its own editor, a folder of files kept with the map through `document.extras`, and commands published for other plugins. |
+| [TrigScript](https://github.com/scm-js/plugin-trigscript) | `triggers.claim`, a dialog that keeps Escape for its own editor, the same workspace as a resizable panel beside the map (`ui.panel` with `resizable`), `ui.pickObject` to put a clicked location or unit into the code, `view.goTo` and `view.flash` from a Ctrl+click, a folder of files kept with the map through `document.extras`, and commands published for other plugins. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |

@@ -22,6 +22,10 @@ const MARGIN = 14;
 const STEP = 28;
 
 const positions = new Map<string, { x: number; y: number }>();
+/** Sizes of resizable panels, kept the way positions are. */
+const sizes = new Map<string, { w: number; h: number }>();
+const MIN_WIDTH = 220;
+const MIN_HEIGHT = 120;
 
 export default function PluginPanels() {
   const panels = useAtomValue(pluginPanelsAtom).filter((p) => (p.spec.dock ?? "float") === "float");
@@ -93,9 +97,11 @@ function DockedPanel({ entry }: { entry: PluginPanelEntry }) {
 
 function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number }) {
   const { spec, handle, plugin, title: titleBox } = entry;
-  const width = spec.width ?? DEFAULT_WIDTH;
   const memoryKey = `${plugin.id}:${spec.title}`;
+  const [size, setSize] = useState(() => sizes.get(memoryKey) ?? { w: spec.width ?? DEFAULT_WIDTH, h: spec.height ?? 0 });
+  const width = size.w;
   const [pos, setPos] = useState(() => positions.get(memoryKey) ?? { x: 0, y: 0 });
+  const resize = useRef<{ dx: number; dy: number } | null>(null);
   const title = usePanelTitle(titleBox);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   usePanelMount(host, entry);
@@ -133,14 +139,40 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
+  // The grip at the bottom-right corner (`spec.resizable`): the size follows the pointer, within the map and above a minimum.
+  const onGripDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const h = size.h || frame.current?.offsetHeight || MIN_HEIGHT;
+    resize.current = { dx: e.clientX - size.w, dy: e.clientY - h };
+  };
+  const onGripMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = resize.current;
+    const parent = frame.current?.parentElement;
+    if (!r || !parent) return;
+    const next = {
+      w: Math.max(MIN_WIDTH, Math.min(parent.clientWidth - pos.x, e.clientX - r.dx)),
+      h: Math.max(MIN_HEIGHT, Math.min(parent.clientHeight - pos.y, e.clientY - r.dy)),
+    };
+    sizes.set(memoryKey, next);
+    setSize(next);
+  };
+  const onGripUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    resize.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   return (
-    <div ref={frame} className="plugin-panel" style={{ left: pos.x, top: pos.y, width }} role="dialog" aria-label={title}>
+    <div ref={frame} className={`plugin-panel${spec.resizable ? " resizable" : ""}`} style={{ left: pos.x, top: pos.y, width, ...(size.h ? { height: size.h } : {}) }} role="dialog" aria-label={title}>
       <div className="dlg-title plugin-panel-title" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         <span className="icon-lead"><PluginIconView icon={plugin.icon} size={14} /></span>
         <h2>{title}</h2>
         <button className="dlg-close" aria-label="Close" onClick={() => handle.close()}><X size={14} /></button>
       </div>
       <div ref={setHost} className="plugin-panel-body" />
+      {spec.resizable && <div className="plugin-panel-grip" aria-label="Resize" onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} />}
     </div>
   );
 }

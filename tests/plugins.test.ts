@@ -2086,6 +2086,14 @@ describe("plugin picks and images", () => {
     store.get(mapPickAtom)!.finish({ x: 3, y: 4 });
     expect(await tile).toEqual({ x: 3, y: 4 });
     expect(bag.disposables).toHaveLength(0); // a finished pick leaves nothing behind
+    const object = api.ui.pickObject({ kinds: ["location"] });
+    expect(store.get(mapPickAtom)).toMatchObject({ kind: "object", kinds: ["location"], prompt: "Click a unit or a location on the map" });
+    store.get(mapPickAtom)!.finish({ kind: "location", index: 2 });
+    expect(await object).toEqual({ kind: "location", index: 2 });
+    const any = api.ui.pickObject();
+    expect(store.get(mapPickAtom)!.kinds).toBeUndefined();
+    store.get(mapPickAtom)!.finish(null);
+    expect(await any).toBeNull();
   });
 
   it("cancels on Esc, when a newer pick starts, when the document changes and on deactivation", async () => {
@@ -2371,8 +2379,9 @@ describe("plugin panels and palettes", () => {
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
     let closed = 0;
     const a = api.ui.panel({ title: "Paint", width: 300, mount: () => {}, onClose: () => closed++ });
-    const b = api.ui.panel({ title: "Other", mount: () => {} });
+    const b = api.ui.panel({ title: "Other", height: 400, resizable: true, mount: () => {} });
     expect(store.get(pluginPanelsAtom).map((p) => p.spec.title)).toEqual(["Paint", "Other"]);
+    expect(store.get(pluginPanelsAtom)[1].spec).toMatchObject({ height: 400, resizable: true });
     expect(store.get(pluginPanelsAtom)[0].plugin.id).toBe("t");
     a.setTitle("Paint — Line");
     expect(store.get(pluginPanelsAtom)[0].title.value).toBe("Paint — Line");

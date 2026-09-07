@@ -60,9 +60,12 @@ icon at `menu.add`, so `PluginMenuItem.icon` is always a `PluginIcon`) draws thr
 in the item's indicator slot, and `after` makes `withPluginItems` splice the item under the named
 built-in instead of appending after a separator.
 
-`api.ui.pickArea` / `pickTile` (`host.ts#pickOnMap`) put one `MapPickRequest` in `mapPickAtom`
-(`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal marquee, HUD chip
-with the prompt) and calls its `finish` on mouse-up; `finish` clears the atom and is guarded so the
+`api.ui.pickArea` / `pickTile` / `pickObject` (`host.ts#pickOnMap`) put one `MapPickRequest` in
+`mapPickAtom` (`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal
+marquee, HUD chip with the prompt) and calls its `finish` on mouse-up — for `"object"` on
+mouse-down with the unit or location under the pointer (`pickHoverRef`, resolved on every move
+with `unitAt` / `locationAt` and drawn as a teal outline with the name; a click on nothing keeps
+picking; `kinds` narrows it); `finish` clears the atom and is guarded so the
 host's other exits (scenario change, `Contributions` dispose, a newer pick) and `cancelMapPickAtom`
 (Esc in `useHotkeys`, right-click in the viewport) all resolve the promise exactly once. A modal
 dialog covers the map, so a plugin closes its dialog, picks, and reopens. `images.ts` is
@@ -97,7 +100,9 @@ goes through `setOverlayVisibleAtom` so `onToggle` fires once per change and
 `"view"` event.
 `api.ui.panel` is a floating, non-modal frame over the map (`pluginPanelsAtom`,
 `components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
-positions kept per plugin + title for the session, opens top-right) — hotkeys keep working since
+positions kept per plugin + title for the session, opens top-right; `PanelSpec.height` and
+`resizable` — a corner grip, sizes kept like positions, the body a flex column so the plugin's root
+can fill it — exist for a plugin that keeps an editor beside the map, TrigScript being the case) — hotkeys keep working since
 it is not in the dialog stack. `PanelSpec.dock: "right"` puts the same entry in the right dock
 instead (`DockedPluginPanels` in the same file, rendered by `Docks.tsx` after Properties as a
 `.panel.plugin-docked` with the built-in panel head; `App.tsx`'s `rightVisible` counts them, so

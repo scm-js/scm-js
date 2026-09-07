@@ -1917,6 +1917,15 @@ export interface PanelSpec {
   title: string;
   /** In CSS pixels; 260 by default. The panel is as tall as its content, up to the map's height. Ignored when docked. */
   width?: number;
+  /** Floating only: a height in CSS pixels instead of the content's own; the body then scrolls, or fills, as its content asks. */
+  height?: number;
+  /**
+   * Floating only: a grip at the bottom-right corner lets the user resize the panel, and
+   * the size is remembered with the position for the session. The body is a column flex
+   * box, so a root element with `flex: 1; min-height: 0` fills whatever size it has —
+   * what a code editor or a long list beside the map wants.
+   */
+  resizable?: boolean;
   /**
    * Where the panel lives. `"float"` (the default) is a frame over the map the user drags
    * about. `"right"` puts it in the right dock as a panel of its own, under Minimap, Layers
@@ -2137,6 +2146,20 @@ export interface PickOptions {
   prompt?: string;
 }
 
+/** What `ui.pickObject` can pick. */
+export type PickObjectKind = "unit" | "location";
+
+export interface PickObjectOptions extends PickOptions {
+  /** Which kinds count; every kind when omitted. Under the pointer, a unit wins over a location. */
+  kinds?: PickObjectKind[];
+}
+
+/** What the user picked: the record's index in `document.scenario().units` or `.locations`. */
+export interface PickedObject {
+  kind: PickObjectKind;
+  index: number;
+}
+
 export interface PickFilesOptions {
   /** `accept` for the file input, e.g. `"image/*"` or `".png,.jpg"`. */
   accept?: string;
@@ -2209,6 +2232,12 @@ export interface UiApi {
   pickArea(options?: PickOptions): Promise<Rect | null>;
   /** As `pickArea`, for a single click: the tile under it. */
   pickTile(options?: PickOptions): Promise<{ x: number; y: number } | null>;
+  /**
+   * As `pickTile`, for an object: the user clicks a unit or a location. The viewport
+   * outlines and names what is under the pointer as it moves; a click on nothing keeps
+   * picking. Resolves with the kind and the record's index, or null as `pickArea` does.
+   */
+  pickObject(options?: PickObjectOptions): Promise<PickedObject | null>;
   /**
    * Decode a picture: a `File` / `Blob`, a `data:` URL, or an `http(s)` URL (fetched, and
    * when the site refuses cross-origin reads, loaded through an `<img>` with

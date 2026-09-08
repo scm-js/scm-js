@@ -60,7 +60,14 @@ installers on ONE rolling prerelease whose `nightly` tag is force-moved and whos
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).
 **Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was
-main's HEAD, which was the one artifact whose version nobody could get back to), and the
+main's HEAD, which was the one artifact whose version nobody could get back to) — which needs the
+`github-pages` **environment** to allow the tag: its deployment policy listed the `main` branch alone,
+so v0.1.0's deploy was rejected in two seconds with "Tag v0.1.0 is not allowed to deploy to
+github-pages due to environment protection rules", after everything else in the run had passed. The
+policy now carries a `v*` **tag** rule beside `main` (Settings ▸ Environments, or
+`gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='v*'
+-f type=tag`), and a fork serving its own editor has to add one too. Nothing in the repository can
+say this, which is why it is here. The
 `nightly-site` job unpacks the nightly's own web zip — never a second build — onto
 `nightly.editor.scmjs.dev` as one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch,
 carrying the `CNAME` a branch-served Pages site keeps its domain in. The nightly prerelease's notes

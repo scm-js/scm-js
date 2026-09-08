@@ -1251,7 +1251,7 @@ export function AboutDialog({ entry }: DialogProps) {
         <div className="what" style={{ color: "#ffffff" }}>
           <h4>{t("Staredit.net")}</h4>
           <div className="about-what">
-            {t("Our map making hub. Thanks to")}{" "}<b>{t("YoshiDaSnipa")}</b>,{" "}
+            {t("Our map making hub. Thanks to")}{" "}<b>{t("LegacyWeapon")}</b>, <b>{t("YoshiDaSnipa")}</b>,{" "}
             <b>{t("Shadowflare")}</b>, <b>{t("Heimdal")}</b> {" "}{t("for showing us we can make our own editor,")}{" "}<b>{t("Suicidal Insanity")}</b> {" "}{t("for creating SCMDraft and blowing us all away,")}{" "}<b>{t("Clokr_")}</b> {" "}{t("for their tools,")}{" "}<b>{t("jjf28")}</b> {" "}{t("for finally reverse engineering the sections we didn't understand,")}{" "}
             <b>{t("Heinermann")}</b> {" "}{t("for their technical knowledge,")}{" "}<b>{t("poiuy_qwert")}</b>{" "}
             {t("for their modding tools,")}{" "}<b>{t("Ladislav Zezula")}</b> {" "}{t("for StormLib and showing us we can edit MPQs, and")}{" "}<b>{t("FaRTy1billion")}</b>, <b>{t("rockz")}</b>,{" "}

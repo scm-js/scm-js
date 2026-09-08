@@ -3,6 +3,7 @@ import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { browserStorage } from "./storage";
 import type { DialogId } from "../components/dialogs/ids";
 import type { Toast } from "../editor/view";
+import { msg } from "../i18n";
 
 export type { DialogId, Toast };
 
@@ -66,7 +67,7 @@ export const leftDockWidthAtom = atom((get) => get(dockWidthsAtom).left, (get, s
 export const rightDockWidthAtom = atom((get) => get(dockWidthsAtom).right, (get, set, width: number) => set(dockWidthsAtom, { ...get(dockWidthsAtom), right: width }));
 
 /** Transient status-bar message ("Ready", "Saved", …). */
-export const statusMessageAtom = atom<string>("Ready");
+export const statusMessageAtom = atom<string>(msg("Ready"));
 
 /* ── Toasts ─────────────────────────────────────────────── */
 

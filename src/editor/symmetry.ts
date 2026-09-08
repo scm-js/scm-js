@@ -11,6 +11,7 @@
  * stays out, since it places from a picked anchor rather than a point.
  */
 import type { Rect } from "./terrain";
+import { msg, translate } from "../i18n";
 
 export type SymmetryMode = "none" | "h" | "v" | "hv" | "rot180" | "rot90" | "diag" | "adiag";
 
@@ -23,14 +24,14 @@ export interface SymmetryModeInfo {
 }
 
 export const SYMMETRY_MODES: readonly SymmetryModeInfo[] = [
-  { id: "none", label: "None", hint: "Brushes paint where you point them" },
-  { id: "h", label: "Mirror horizontally", hint: "Left ↔ right across the vertical centre line" },
-  { id: "v", label: "Mirror vertically", hint: "Top ↔ bottom across the horizontal centre line" },
-  { id: "hv", label: "Mirror both axes (4-way)", hint: "Every stroke lands in all four quadrants" },
-  { id: "rot180", label: "Rotational 180°", hint: "Point-mirrored through the map centre (2-player maps)" },
-  { id: "rot90", label: "Rotational 90° (4-way)", hint: "Repeated at each quarter turn about the centre", square: true },
-  { id: "diag", label: "Diagonal", hint: "Mirrored across the top-left ↔ bottom-right diagonal", square: true },
-  { id: "adiag", label: "Anti-diagonal", hint: "Mirrored across the top-right ↔ bottom-left diagonal", square: true },
+  { id: "none", label: msg("None"), hint: msg("Brushes paint where you point them") },
+  { id: "h", label: msg("Mirror horizontally"), hint: msg("Left ↔ right across the vertical centre line") },
+  { id: "v", label: msg("Mirror vertically"), hint: msg("Top ↔ bottom across the horizontal centre line") },
+  { id: "hv", label: msg("Mirror both axes (4-way)"), hint: msg("Every stroke lands in all four quadrants") },
+  { id: "rot180", label: msg("Rotational 180°"), hint: msg("Point-mirrored through the map centre (2-player maps)") },
+  { id: "rot90", label: msg("Rotational 90° (4-way)"), hint: msg("Repeated at each quarter turn about the centre"), square: true },
+  { id: "diag", label: msg("Diagonal"), hint: msg("Mirrored across the top-left ↔ bottom-right diagonal"), square: true },
+  { id: "adiag", label: msg("Anti-diagonal"), hint: msg("Mirrored across the top-right ↔ bottom-left diagonal"), square: true },
 ];
 
 export const requiresSquare = (mode: SymmetryMode) => SYMMETRY_MODES.find((m) => m.id === mode)?.square === true;
@@ -41,7 +42,7 @@ export function symmetryAvailable(mode: SymmetryMode, width: number, height: num
 }
 
 export function symmetryLabel(mode: SymmetryMode): string {
-  return SYMMETRY_MODES.find((m) => m.id === mode)?.label ?? mode;
+  return translate(SYMMETRY_MODES.find((m) => m.id === mode)?.label ?? mode);
 }
 
 export interface Point { x: number; y: number }

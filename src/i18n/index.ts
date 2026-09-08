@@ -170,7 +170,8 @@ function placeholder(inner: string, params: Params | undefined, loc: Locale): st
     const name = (bar < 0 ? inner : inner.slice(0, bar)).trim();
     const value = params?.[name];
     if (value === undefined) return `{${inner}}`;
-    const text = typeof value === "number" ? new Intl.NumberFormat(loc).format(value) : value;
+    // As typed: an id, an offset or a map size must not gain grouping separators. `#` in a plural is the formatted one.
+    const text = String(value);
     return bar < 0 ? text : josa(text, inner.slice(bar + 1).trim());
   }
   const name = inner.slice(0, comma).trim();

@@ -17,9 +17,10 @@ import { imageGrpPath, requestGrp, unitImageId, type UnitAssets } from "../forma
 import { editorFrame } from "../formats/units/sprites";
 import type { Grp } from "../formats/dat/grp";
 import { spriteLabel } from "../data/sprites";
-import { unitName } from "../data/units";
+import { unitLabel } from "../data/units";
 import type { MapPoint } from "./useTerrainTools";
 import { useUnitAssets } from "./useUnitAssets";
+import { t } from "../i18n";
 
 export interface SpriteGhost {
   kind: SpriteKind;
@@ -52,7 +53,7 @@ export function spriteFrame(assets: UnitAssets, kind: SpriteKind, id: number, fl
 
 /** "Terran Marine" for a unit sprite, the sprites.dat label for a pure one. */
 export function spriteName(assets: UnitAssets | null, kind: SpriteKind, id: number): string {
-  return kind === "unit" ? unitName(id) : spriteLabel(assets, id);
+  return kind === "unit" ? unitLabel(id) : spriteLabel(assets, id);
 }
 
 /**
@@ -132,8 +133,8 @@ export function useSpriteTools() {
     applySpriteChanges(scn, sprites);
     const name = spriteName(assets, ghost.kind, ghost.id);
     const n = sprites.length;
-    commit({ label: n === 1 ? `Place sprite ${name}` : `Place ${n} × sprite ${name}`, changes: [], sprites });
-    setStatus(`Placed ${n === 1 ? "" : `${n} × `}${ghost.kind === "unit" ? "unit sprite" : "sprite"} ${name} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    commit({ label: n === 1 ? t("Place sprite {name}", { name }) : t("Place {n} × sprite {name}", { n, name }), changes: [], sprites });
+    setStatus(t("Placed {count}{kind} {name} for Player {player} at {x}, {y} — Esc or right-click to stop placing", { count: n === 1 ? "" : `${n} × `, kind: ghost.kind === "unit" ? t("unit sprite") : t("sprite"), name, player: ghost.owner + 1, x: ghost.x, y: ghost.y }));
     return true;
   }, [store, assets, ghostsAt, commit, setStatus]);
 
@@ -147,7 +148,7 @@ export function useSpriteTools() {
   const stopPlacing = useCallback(() => {
     if (!store.get(spritePlacingAtom)) return false;
     setPlacing(false);
-    setStatus("Stopped placing — click a sprite to select it, or pick one in the palette to place");
+    setStatus(t("Stopped placing — click a sprite to select it, or pick one in the palette to place"));
     return true;
   }, [store, setPlacing, setStatus]);
 
@@ -207,8 +208,8 @@ export function useSpriteTools() {
     if (sprites.length === 0) return false;
     // The records are already in place; commit just records the step and marks the file dirty.
     applySpriteChanges(scn, sprites);
-    commit({ label: `Move ${sprites.length} sprite${sprites.length === 1 ? "" : "s"}`, changes: [], sprites });
-    setStatus(`Moved ${sprites.length} sprite${sprites.length === 1 ? "" : "s"}`);
+    commit({ label: t("Move {length, plural, one {# sprite} other {# sprites}}", { length: sprites.length }), changes: [], sprites });
+    setStatus(t("Moved {length, plural, one {# sprite} other {# sprites}}", { length: sprites.length }));
     return true;
   }, [store, commit, setStatus]);
 
@@ -226,7 +227,7 @@ export function useSpriteTools() {
   }, [store, commit, setSelected]);
 
   const setOwner = useCallback((owner: number) => {
-    updateSelected(`Set sprite owner to Player ${owner + 1}`, () => ({ owner }));
+    updateSelected(t("Set sprite owner to Player {n}", { n: owner + 1 }), () => ({ owner }));
   }, [updateSelected]);
 
   const setFlag = useCallback((bit: number, on: boolean, label: string) => {
@@ -235,7 +236,7 @@ export function useSpriteTools() {
 
   const deleteSelected = useCallback(() => {
     const n = deleteSelectedSprites();
-    if (n > 0) setStatus(`Deleted ${n} sprite${n === 1 ? "" : "s"}`);
+    if (n > 0) setStatus(t("Deleted {n, plural, one {# sprite} other {# sprites}}", { n }));
     return n;
   }, [deleteSelectedSprites, setStatus]);
 

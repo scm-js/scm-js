@@ -5,7 +5,7 @@ import { leftDockWidthAtom, panelsAtom, rightDockWidthAtom } from "../../atoms/u
 import { useDockResize } from "../../hooks/useDockResize";
 import { Button, Tip } from "../ui";
 import { LAYERS } from "../chrome/MenuBar";
-import { translate } from "../../i18n";
+import { t, translate } from "../../i18n";
 import PalettePanel from "./PalettePanel";
 import MinimapPanel from "./MinimapPanel";
 import LayersPanel from "./LayersPanel";
@@ -30,8 +30,8 @@ export function LeftDock() {
     <aside className="dock left" style={{ width }}>
       <div className="panel grow">
         <PanelHead
-          title={<>Palette <span className="faint">·</span> <span className="gold">{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span></>}
-          right={<Tip label="Hide palette"><Button icon onClick={() => setPanels({ ...panels, palette: false })}><PanelLeftClose size={13} /></Button></Tip>}
+          title={<>{t("Palette")}{" "}<span className="faint">·</span> <span className="gold">{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span></>}
+          right={<Tip label={t("Hide palette")}><Button icon onClick={() => setPanels({ ...panels, palette: false })}><PanelLeftClose size={13} /></Button></Tip>}
         />
         <PalettePanel />
       </div>
@@ -49,19 +49,19 @@ export function RightDock() {
       <div className={`dock-resizer ${dragging ? "dragging" : ""}`} onPointerDown={onPointerDown} />
       {panels.minimap && (
         <div className="panel">
-          <PanelHead title="Minimap" right={<Tip label="Hide minimap"><Button icon onClick={() => setPanels({ ...panels, minimap: false })}><PanelRightClose size={13} /></Button></Tip>} />
+          <PanelHead title={t("Minimap")} right={<Tip label={t("Hide minimap")}><Button icon onClick={() => setPanels({ ...panels, minimap: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <MinimapPanel />
         </div>
       )}
       {panels.layers && (
         <div className="panel">
-          <PanelHead title="Layers" right={<Tip label="Hide layers"><Button icon onClick={() => setPanels({ ...panels, layers: false })}><PanelRightClose size={13} /></Button></Tip>} />
+          <PanelHead title={t("Layers")} right={<Tip label={t("Hide layers")}><Button icon onClick={() => setPanels({ ...panels, layers: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <LayersPanel />
         </div>
       )}
       {panels.properties && (
         <div className="panel grow">
-          <PanelHead title="Properties" right={<Tip label="Hide properties"><Button icon onClick={() => setPanels({ ...panels, properties: false })}><PanelRightClose size={13} /></Button></Tip>} />
+          <PanelHead title={t("Properties")} right={<Tip label={t("Hide properties")}><Button icon onClick={() => setPanels({ ...panels, properties: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <div className="panel-body">
             <PropertiesPanel />
           </div>

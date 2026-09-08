@@ -21,6 +21,7 @@ import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/ti
 import { openMapFile, saveBytes, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
 import { buildMapFile, defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
 import { hostTerms } from "../editor/platform";
+import { t, translate } from "../i18n";
 
 export interface NewMapOptions {
   width: number;
@@ -171,8 +172,8 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
   if (!loaded) store.set(blankFillAtom, { terrainId: terrain.id });
   store.set(
     statusMessageAtom,
-    `New ${width}×${height} ${info.name} scenario — ${terrainName(info, terrain.id)}` +
-    (wanted > 0 ? `, ${starts} start location${starts === 1 ? "" : "s"}${starts < wanted ? ` (no room for ${wanted - starts})` : ""}` : ""),
+    t("New {w}×{h} {tileset} scenario — {terrain}", { w: width, h: height, tileset: translate(info.name), terrain: translate(terrainName(info, terrain.id)) }) +
+    (wanted > 0 ? t(", {n, plural, one {# start location} other {# start locations}}", { n: starts }) + (starts < wanted ? t(" (no room for {n})", { n: wanted - starts }) : "") : ""),
   );
   return true;
 }
@@ -309,19 +310,19 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       store.set(statusMessageAtom, `Downloaded ${outcome.fileName} — ${size}`);
       store.set(pushToastAtom, {
         kind: "ok",
-        title: req.copy ? "Copy downloaded" : "Downloaded",
-        detail: `${outcome.fileName} (${size}) is in ${host.downloads}. ${host.Here} cannot write a file back in place, so every save is a new download.`,
+        title: req.copy ? t("Copy downloaded") : t("Downloaded"),
+        detail: t("{fileName} ({size}) is in {downloads}. {Here} cannot write a file back in place, so every save is a new download.", { fileName: outcome.fileName, size, downloads: host.downloads, Here: host.Here }),
       });
     } else {
       store.set(statusMessageAtom, `Saved ${outcome.fileName} — ${size}`);
-      store.set(pushToastAtom, { kind: "ok", title: req.copy ? "Copy saved" : "Saved", detail: `${outcome.fileName} (${size})` });
+      store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})` });
     }
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) });
     store.set(statusMessageAtom, `Could not save the ${what}: ${message}`);
-    store.set(pushToastAtom, { kind: "error", title: `Could not save the ${what}`, detail: message });
+    store.set(pushToastAtom, { kind: "error", title: t("Could not save the {what}", { what }), detail: message });
     return false;
   }
 }
@@ -335,7 +336,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
 export async function openRecentInto(store: Store, entry: RecentEntry): Promise<boolean> {
   const handle = entry.handleKey ? await loadHandle<MapFileHandle>(entry.handleKey) : null;
   if (!handle || !(await ensurePermission(handle as MapFileHandle & { kind: "file" }, "read"))) {
-    store.set(statusMessageAtom, handle ? `The browser did not allow reading ${entry.name} again — open it with File ▸ Open.` : `${entry.name} cannot be reopened from here — this browser keeps no file handles; open it with File ▸ Open.`);
+    store.set(statusMessageAtom, handle ? t("The browser did not allow reading {name} again — open it with File ▸ Open.", { name: entry.name }) : t("{name} cannot be reopened from here — this browser keeps no file handles; open it with File ▸ Open.", { name: entry.name }));
     if (!handle && entry.handleKey) store.set(recentFilesAtom, store.get(recentFilesAtom).map((r) => (r.name === entry.name ? { name: r.name, at: r.at } : r)));
     return false;
   }
@@ -362,7 +363,7 @@ export function closeMapIn(store: Store) {
   const name = store.get(mapFilePathAtom) ?? store.get(mapNameAtom);
   store.set(closeDocumentAtom);
   const next = store.get(scenarioAtom) ? store.get(mapFilePathAtom) ?? store.get(mapNameAtom) : null;
-  store.set(statusMessageAtom, next ? `Closed ${name} — ${next} is in front.` : "Closed the scenario — File ▸ New or Open to continue.");
+  store.set(statusMessageAtom, next ? t("Closed {name} — {next} is in front.", { name, next }) : t("Closed the scenario — File ▸ New or Open to continue."));
 }
 
 /** Bring an open map to the front (the tab strip, the Window menu, a plugin's `document.activate`). False for an id that is not open. */
@@ -468,7 +469,7 @@ export function useMapFileActions() {
    * or the dialog is dismissed (false), so Close Scenario's Save can wait on it.
    */
   const save = useCallback(async (mode: "save" | "saveAs" | "copy" = "save"): Promise<boolean> => {
-    if (!scenario) { setStatus("Nothing to save — open or create a map first."); return false; }
+    if (!scenario) { setStatus(t("Nothing to save — open or create a map first.")); return false; }
     if (mode === "save" && path) {
       const options = store.get(saveOptionsAtom) ?? defaultSaveOptions(scenario, store.get(mapOriginAtom), path);
       return saveDocument(store, { fileName: path, handle: store.get(mapFileHandleAtom), options, copy: false });

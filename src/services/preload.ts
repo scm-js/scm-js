@@ -9,6 +9,7 @@ import {
 } from "../formats/units/load";
 import { fetchAsset, resolveAssetSource } from "../gamedata/source";
 import { logWarn } from "../editor/log";
+import { t } from "../i18n";
 
 /**
  * Startup asset preloading.
@@ -84,14 +85,14 @@ function tasks(startup: TilesetFileName): PreloadTask[] {
       // Where the files come from: bundled, a stored copy, the desktop's disk search
       // (which may extract, slowly) or the configured address (which may download).
       // The loaders below all wait on this same resolution, so it is the natural first step.
-      label: "Locating game data",
+      label: t("Locating game data"),
       run: async (report) => {
         const source = await resolveAssetSource((f) => report(f));
-        if (source.kind === "none") throw new Error(source.tried[source.tried.length - 1] ?? "none found");
+        if (source.kind === "none") throw new Error(source.tried[source.tried.length - 1] ?? t("none found"));
       },
     },
     {
-      label: `Loading tileset · ${era}`,
+      label: t("Loading tileset · {era}", { era }),
       // A couple of megabytes of tileset against a few hundred KB for everything else.
       weight: 6,
       run: async (report) => {
@@ -106,8 +107,8 @@ function tasks(startup: TilesetFileName): PreloadTask[] {
         }
       },
     },
-    { label: "Reading units.dat · sprites.dat · iscript.bin", weight: 2, run: () => getUnitAssets() },
-    { label: "Rasterising unit graphics", weight: 2, run: () => warmUnitGrps() },
+    { label: t("Reading units.dat · sprites.dat · iscript.bin"), weight: 2, run: () => getUnitAssets() },
+    { label: t("Rasterising unit graphics"), weight: 2, run: () => warmUnitGrps() },
   ];
 }
 
@@ -152,7 +153,7 @@ export async function runPreload(
       done: false,
     });
   }
-  onStep({ progress: 1, completed: list.length, total: list.length, label: "Ready.", done: true });
+  onStep({ progress: 1, completed: list.length, total: list.length, label: t("Ready."), done: true });
 }
 
 /* ── Background warm-up ─────────────────────────────────── */

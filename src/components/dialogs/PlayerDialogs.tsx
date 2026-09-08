@@ -12,18 +12,19 @@ import { Button, Check, Group, ListBox, Select, TextInput } from "../ui";
 import { ColorTextField } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { msg, t, translate } from "../../i18n";
 
 /** A select over a byte table, keeping a value the table does not list (a map from another editor) selectable as raw. */
 function ByteSelect({ value, onChange, options, disabled }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; disabled?: boolean }) {
   const opts = options.map((o) => ({ value: String(o.value), label: o.label }));
-  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: `${value} (raw)` });
+  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: t("{value} (raw)", { value }) });
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} disabled={disabled} />;
 }
 
 function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: React.ReactNode }) {
   return (
     <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
-      <p className="hint">Open or create a map first.</p>
+      <p className="hint">{t("Open or create a map first.")}</p>
     </DialogFrame>
   );
 }
@@ -40,7 +41,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const open = useSetAtom(openDialogAtom);
   const [local, setLocal] = useScenarioForm(scenario, readPlayerSettings);
-  if (!scenario || !local) return <NoMap entry={entry} title="Player Settings" icon={<Users size={14} />} />;
+  if (!scenario || !local) return <NoMap entry={entry} title={t("Player Settings")} icon={<Users size={14} />} />;
 
   const patch = (key: "types" | "races" | "colors" | "force", i: number, v: number) =>
     setLocal({ ...local, [key]: local[key].map((x, j) => (j === i ? v : x)) });
@@ -49,23 +50,23 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Player Settings"
+      title={t("Player Settings")}
       icon={<Users size={14} />}
       size="lg"
       onOk={apply}
       showApply
       slot={{ dialog: "playerSettings" }}
-      footerLeft={<div className="row"><Button size="sm" onClick={() => open("playerColors")}><Palette size={12} /> Player Colors…</Button><Button size="sm" onClick={() => open("forceSettings")}><Shield size={12} /> Forces…</Button></div>}
+      footerLeft={<div className="row"><Button size="sm" onClick={() => open("playerColors")}><Palette size={12} /> {" "}{t("Player Colors…")}</Button><Button size="sm" onClick={() => open("forceSettings")}><Shield size={12} /> {" "}{t("Forces…")}</Button></div>}
     >
       <div className="listbox" style={{ maxHeight: 420 }}>
         <table className="table">
           <thead>
-            <tr><th style={{ width: 90 }}>Player</th><th>Controller</th><th>Race</th><th style={{ width: 150 }}>Colour</th><th style={{ width: 90 }}>Force</th></tr>
+            <tr><th style={{ width: 90 }}>{t("Player")}</th><th>{t("Controller")}</th><th>{t("Race")}</th><th style={{ width: 150 }}>{t("Colour")}</th><th style={{ width: 90 }}>{t("Force")}</th></tr>
           </thead>
           <tbody>
             {Array.from({ length: PLAYER_SLOTS }, (_, i) => (
               <tr key={i}>
-                <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(local.colors, scenario.playerRgb, i) }} />P{i + 1}</span></td>
+                <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(local.colors, scenario.playerRgb, i) }} />{t("P{v}", { v: i + 1 })}</span></td>
                 <td><ByteSelect value={local.types[i]} onChange={(v) => patch("types", i, v)} options={PLAYER_TYPES} /></td>
                 <td><ByteSelect value={local.races[i]} onChange={(v) => patch("races", i, v)} options={PLAYER_RACES} /></td>
                 <td>
@@ -75,7 +76,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
                 </td>
                 <td>
                   {i < FORCE_SLOTS
-                    ? <Select value={String(local.force[i])} onChange={(e) => patch("force", i, Number(e.target.value))} options={[0, 1, 2, 3].map((f) => ({ value: String(f), label: `Force ${f + 1}` }))} />
+                    ? <Select value={String(local.force[i])} onChange={(e) => patch("force", i, Number(e.target.value))} options={[0, 1, 2, 3].map((f) => ({ value: String(f), label: t("Force {v}", { v: f + 1 }) }))} />
                     : <span className="faint">—</span>}
                 </td>
               </tr>
@@ -84,7 +85,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
         </table>
       </div>
       <p className="hint">
-        Controller is the OWNR byte (IOWN is kept in step), race SIDE, colour COLR and force FORC. Players 9–12 are the game's neutral / trigger-only slots: no colour choice, no force.
+        {t("Controller is the OWNR byte (IOWN is kept in step), race SIDE, colour COLR and force FORC. Players 9–12 are the game's neutral / trigger-only slots: no colour choice, no force.")}
       </p>
     </DialogFrame>
   );
@@ -93,10 +94,10 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
 /* ── Force Settings ─────────────────────────────────────── */
 
 const FORCE_FLAGS: { bit: number; label: string }[] = [
-  { bit: ForceFlag.RandomStart, label: "Random start location" },
-  { bit: ForceFlag.Allied, label: "Allies" },
-  { bit: ForceFlag.AlliedVictory, label: "Allied victory" },
-  { bit: ForceFlag.SharedVision, label: "Shared vision" },
+  { bit: ForceFlag.RandomStart, label: msg("Random start location") },
+  { bit: ForceFlag.Allied, label: msg("Allies") },
+  { bit: ForceFlag.AlliedVictory, label: msg("Allied victory") },
+  { bit: ForceFlag.SharedVision, label: msg("Shared vision") },
 ];
 
 /** FORC: the four names, flags and which force each playable slot is in. */
@@ -106,7 +107,7 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const [local, setLocal] = useScenarioForm(scenario, readForceSettings);
   const [sel, setSel] = useState<{ force: number; player: number } | null>(null);
-  if (!scenario || !local) return <NoMap entry={entry} title="Force Settings" icon={<Shield size={14} />} />;
+  if (!scenario || !local) return <NoMap entry={entry} title={t("Force Settings")} icon={<Shield size={14} />} />;
 
   const move = (player: number, to: number) => setLocal({ ...local, playerForce: local.playerForce.map((f, i) => (i === player ? to : f)) });
   const setName = (fi: number, name: string) => setLocal({ ...local, names: local.names.map((n, i) => (i === fi ? name : n)) });
@@ -114,16 +115,16 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
   const apply = () => { applyForceSettings(scenario, local); commit(); };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Force Settings" icon={<Shield size={14} />} size="lg" onOk={apply} showApply>
+    <DialogFrame dialogKey={entry.key} title={t("Force Settings")} icon={<Shield size={14} />} size="lg" onOk={apply} showApply>
       <div className="force-grid">
         {[0, 1, 2, 3].map((fi) => {
           const members = Array.from({ length: FORCE_SLOTS }, (_, p) => p).filter((p) => local.playerForce[p] === fi);
           const picked = sel?.force === fi && members.includes(sel.player) ? sel.player : null;
           return (
             <fieldset key={fi} className="group force-box">
-              <legend>Force {fi + 1}</legend>
+              <legend>{t("Force {v}", { v: fi + 1 })}</legend>
               <div className="row" style={{ marginBottom: 6 }}>
-                <ColorTextField wrapClassName="grow" value={local.names[fi]} placeholder={`Force ${fi + 1}`} onChange={(v) => setName(fi, v)} />
+                <ColorTextField wrapClassName="grow" value={local.names[fi]} placeholder={t("Force {v}", { v: fi + 1 })} onChange={(v) => setName(fi, v)} />
               </div>
               <div className="row" style={{ alignItems: "stretch" }}>
                 <ListBox
@@ -131,25 +132,25 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
                   items={members}
                   selected={picked === null ? null : members.indexOf(picked)}
                   onSelect={(_, p) => setSel({ force: fi, player: p })}
-                  empty="No players"
-                  render={(p) => <><span className="swatch" style={{ background: displayColorHex(scenario.playerColors, scenario.playerRgb, p) }} />Player {p + 1}<span className="faint" style={{ marginLeft: "auto" }}>{playerTypeLabel(scenario.playerTypes[p])}</span></>}
+                  empty={t("No players")}
+                  render={(p) => <><span className="swatch" style={{ background: displayColorHex(scenario.playerColors, scenario.playerRgb, p) }} />{t("Player {v}", { v: p + 1 })}<span className="faint" style={{ marginLeft: "auto" }}>{playerTypeLabel(scenario.playerTypes[p])}</span></>}
                 />
                 <div className="col" style={{ gap: 4 }}>
-                  {[0, 1, 2, 3].filter((t) => t !== fi).map((t) => (
-                    <Button key={t} size="sm" disabled={picked === null} title={`Move to Force ${t + 1}`} onClick={() => { if (picked !== null) { move(picked, t); setSel({ force: t, player: picked }); } }}>
-                      {t < fi ? <ChevronLeft size={11} /> : <ChevronRight size={11} />} F{t + 1}
+                  {[0, 1, 2, 3].filter((f) => f !== fi).map((f) => (
+                    <Button key={f} size="sm" disabled={picked === null} title={t("Move to Force {v}", { v: f + 1 })} onClick={() => { if (picked !== null) { move(picked, f); setSel({ force: f, player: picked }); } }}>
+                      {f < fi ? <ChevronLeft size={11} /> : <ChevronRight size={11} />} {" "}{t("F{v}", { v: f + 1 })}
                     </Button>
                   ))}
                 </div>
               </div>
               <div className="row flags">
-                {FORCE_FLAGS.map((f) => <Check key={f.bit} label={f.label} checked={(local.flags[fi] & f.bit) !== 0} onChange={(e) => setFlag(fi, f.bit, e.target.checked)} />)}
+                {FORCE_FLAGS.map((f) => <Check key={f.bit} label={translate(f.label)} checked={(local.flags[fi] & f.bit) !== 0} onChange={(e) => setFlag(fi, f.bit, e.target.checked)} />)}
               </div>
             </fieldset>
           );
         })}
       </div>
-      <p className="hint">Select a player, then use the buttons to move it between forces. A renamed force reuses an identical string if the table has one, else appends a new one. Players 9–12 cannot belong to a force.</p>
+      <p className="hint">{t("Select a player, then use the buttons to move it between forces. A renamed force reuses an identical string if the table has one, else appends a new one. Players 9–12 cannot belong to a force.")}</p>
     </DialogFrame>
   );
 }
@@ -157,16 +158,16 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
 /* ── Player Colors ──────────────────────────────────────── */
 
 const COLOR_MODES: { mode: number; label: string; hint: string }[] = [
-  { mode: ColorMode.Palette, label: "Palette colour (COLR)", hint: "The entry picked above — what every client reads" },
-  { mode: ColorMode.Random, label: "Random predefined", hint: "Any entry from the table, chosen when the game starts" },
-  { mode: ColorMode.PlayerChoice, label: "Player's choice", hint: "Whatever the player set in the lobby" },
-  { mode: ColorMode.Custom, label: "Custom RGB", hint: "The exact colour below" },
+  { mode: ColorMode.Palette, label: msg("Palette colour (COLR)"), hint: msg("The entry picked above — what every client reads") },
+  { mode: ColorMode.Random, label: msg("Random predefined"), hint: msg("Any entry from the table, chosen when the game starts") },
+  { mode: ColorMode.PlayerChoice, label: msg("Player's choice"), hint: msg("Whatever the player set in the lobby") },
+  { mode: ColorMode.Custom, label: msg("Custom RGB"), hint: msg("The exact colour below") },
 ];
 
 /** What the list says beside a slot: its palette name, or the CRGB mode that overrides it. */
 function slotLabel(colr: number, mode: number | undefined): string {
   if (mode === undefined || mode === ColorMode.Palette) return PLAYER_COLORS[colr]?.name ?? `Colour ${colr}`;
-  return COLOR_MODES.find((m) => m.mode === mode)?.label ?? `Mode ${mode}`;
+  return translate(COLOR_MODES.find((m) => m.mode === mode)?.label ?? `Mode ${mode}`);
 }
 
 /**
@@ -184,7 +185,7 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   }));
   const [sel, setSel] = useState(0);
   const [hexText, setHexText] = useState<string | null>(null);
-  if (!scenario || !form) return <NoMap entry={entry} title="Player Colors" icon={<Palette size={14} />} />;
+  if (!scenario || !form) return <NoMap entry={entry} title={t("Player Colors")} icon={<Palette size={14} />} />;
   const { colors, rgb } = form;
   const setColors = (c: number[]) => setForm({ ...form, colors: c });
   const setRgb = (r: PlayerRgb | null) => setForm({ ...form, rgb: r });
@@ -215,42 +216,40 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Player Colors" icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? " + CRGB" : ""}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? " + CRGB" : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "200px" }}>
-        <Group title="Player" flush>
+        <Group title={t("Player")} flush>
           <ListBox
             items={colors}
             selected={sel}
             onSelect={setSel}
             style={{ height: 262, border: "none", boxShadow: "none" }}
-            render={(c, i) => <><span className="swatch" style={{ background: displayColorHex(colors, rgb, i) }} />Player {i + 1}<span className="faint" style={{ marginLeft: "auto" }}>{slotLabel(c, rgb?.mode[i])}</span></>}
+            render={(c, i) => <><span className="swatch" style={{ background: displayColorHex(colors, rgb, i) }} />{t("Player {v}", { v: i + 1 })}<span className="faint" style={{ marginLeft: "auto" }}>{slotLabel(c, rgb?.mode[i])}</span></>}
           />
         </Group>
         <div className="stack">
-          <Group title={`Player ${sel + 1} palette colour`}>
+          <Group title={t("Player {v} palette colour", { v: sel + 1 })}>
             <div className="color-grid">
               {PLAYER_COLORS.map((c) => (
-                <button key={c.id} className={`color-chip ${colors[sel] === c.id ? "selected" : ""}`} style={{ ["--c" as string]: c.hex }} title={`${c.id}: ${c.name}`} onClick={() => pickPalette(c.id)} />
+                <button key={c.id} className={`color-chip ${colors[sel] === c.id ? "selected" : ""}`} style={{ ["--c" as string]: c.hex }} title={`${c.id}: ${translate(c.name)}`} onClick={() => pickPalette(c.id)} />
               ))}
             </div>
             <div className="row" style={{ marginTop: 10 }}>
-              <span className="dim" style={{ fontSize: 11 }}>Shown as:</span>
+              <span className="dim" style={{ fontSize: 11 }}>{t("Shown as:")}</span>
               <span className="swatch" style={{ background: current, width: 18, height: 18 }} />
-              <strong>{mode === ColorMode.Custom ? current : PLAYER_COLORS[colors[sel]]?.name ?? `Colour ${colors[sel]}`}</strong>
+              <strong>{mode === ColorMode.Custom ? current : PLAYER_COLORS[colors[sel]]?.name ?? t("Colour {v}", { v: colors[sel] })}</strong>
             </div>
           </Group>
-          <Group title="Remastered (CRGB)">
+          <Group title={t("Remastered (CRGB)")}>
             <div className="col" style={{ gap: 2 }}>
-              {COLOR_MODES.map((m) => <Check key={m.mode} radio name="crgb-mode" label={m.label} title={m.hint} checked={mode === m.mode} onChange={() => setMode(m.mode)} />)}
+              {COLOR_MODES.map((m) => <Check key={m.mode} radio name="crgb-mode" label={translate(m.label)} title={translate(m.hint)} checked={mode === m.mode} onChange={() => setMode(m.mode)} />)}
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <input type="color" className="input" disabled={mode !== ColorMode.Custom} value={customHex} onChange={(e) => { setCustom(e.target.value); setHexText(null); }} />
               <TextInput className="mono" disabled={mode !== ColorMode.Custom} style={{ width: 90 }} value={hexText ?? customHex} onChange={(e) => { setHexText(e.target.value); setCustom(e.target.value); }} onBlur={() => setHexText(null)} />
             </div>
             <p className="hint" style={{ marginTop: 6 }}>
-              {version === "remastered"
-                ? "The map draws a custom colour with a ramp built from the RGB — an approximation of Remastered's shading."
-                : `This map is ${MAP_VERSIONS[version].label}: older clients ignore CRGB and read COLR. Set the revision to Remastered in Map Revision for it to take effect.`}
+              {version === "remastered" ? t("The map draws a custom colour with a ramp built from the RGB — an approximation of Remastered's shading.") : t("This map is {label}: older clients ignore CRGB and read COLR. Set the revision to Remastered in Map Revision for it to take effect.", { label: MAP_VERSIONS[version].label })}
             </p>
           </Group>
         </div>

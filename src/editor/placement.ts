@@ -13,7 +13,8 @@ import type { Scenario } from "../formats/chk/scenario";
 import type { UnitsDat } from "../formats/dat/dat";
 import { groupBuildable, megatileForTile, TileFlag, type Tileset } from "../formats/tileset/decode";
 import { placementBox, TILE_PX, unitBox, unitGeometry, type PixelBox, type UnitGeometry } from "./units";
-import { START_LOCATION, unitName } from "../data/units";
+import { START_LOCATION, unitLabel } from "../data/units";
+import { t } from "../i18n";
 
 export interface PlacementOptions {
   /** Refuse to put a unit on top of another (ground units and buildings only). */
@@ -103,9 +104,9 @@ export interface PlacementVerdict {
 /** The words for a verdict's problem, given the record list the blocker indexes. */
 export function placementReason(tables: UnitsDat | null, unitId: number, problem: PlacementProblem | null, blocker: number, units: readonly { unitId: number }[]): string | null {
   if (problem === null) return null;
-  if (problem === "terrain") return `the ground is ${unitGeometry(tables, unitId).building ? "unbuildable" : "unwalkable"}`;
+  if (problem === "terrain") return unitGeometry(tables, unitId).building ? t("the ground is unbuildable") : t("the ground is unwalkable");
   const other = units[blocker];
-  return `it overlaps ${other ? unitName(other.unitId) : "another unit"}`;
+  return t("it overlaps {what}", { what: other ? unitLabel(other.unitId) : t("another unit") });
 }
 
 /** Apply the enabled checks to a unit of type `unitId` at (x, y); `ignore` are indices that do not count as blockers (the units being moved). */

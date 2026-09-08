@@ -15,6 +15,7 @@ import { PanelRightClose, X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { Button, Tip } from "../ui";
+import { t } from "../../i18n";
 
 const DEFAULT_WIDTH = 260;
 /** Where a panel first opens: the top-right corner of the map, clear of the palette and the area most work starts in; each further one is stepped in and down. */
@@ -72,7 +73,7 @@ function usePanelMount(host: HTMLDivElement | null, entry: PluginPanelEntry) {
       cleanup = spec.mount(host, handle);
     } catch (err) {
       console.error(`[${plugin.name}] panel mount failed`, err);
-      host.textContent = `The plugin's panel failed to open: ${err instanceof Error ? err.message : String(err)}`;
+      host.textContent = t("The plugin's panel failed to open: {error}", { error: err instanceof Error ? err.message : String(err) });
     }
     return () => { try { cleanup?.(); } catch (err) { console.error(`[${plugin.name}] panel cleanup failed`, err); } };
   }, [host, spec, handle, plugin]);
@@ -88,7 +89,7 @@ function DockedPanel({ entry }: { entry: PluginPanelEntry }) {
       <div className="panel-head">
         <span className="icon-lead"><PluginIconView icon={plugin.icon} size={12} /></span>
         <span className="title">{title}</span>
-        <Tip label={`Hide ${title}`}><Button icon onClick={() => handle.close()}><PanelRightClose size={13} /></Button></Tip>
+        <Tip label={t("Hide {title}", { title })}><Button icon onClick={() => handle.close()}><PanelRightClose size={13} /></Button></Tip>
       </div>
       <div ref={setHost} className="panel-body plugin-panel-body" />
     </div>
@@ -169,10 +170,10 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
       <div className="dlg-title plugin-panel-title" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         <span className="icon-lead"><PluginIconView icon={plugin.icon} size={14} /></span>
         <h2>{title}</h2>
-        <button className="dlg-close" aria-label="Close" onClick={() => handle.close()}><X size={14} /></button>
+        <button className="dlg-close" aria-label={t("Close")} onClick={() => handle.close()}><X size={14} /></button>
       </div>
       <div ref={setHost} className="plugin-panel-body" />
-      {spec.resizable && <div className="plugin-panel-grip" aria-label="Resize" onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} />}
+      {spec.resizable && <div className="plugin-panel-grip" aria-label={t("Resize")} onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} />}
     </div>
   );
 }

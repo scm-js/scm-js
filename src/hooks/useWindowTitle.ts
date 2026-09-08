@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAtomValue } from "jotai";
 import { mapFilePathAtom, mapModifiedAtom, mapNameAtom } from "../atoms/editorAtoms";
 import { scenarioAtom } from "../atoms/documentAtoms";
+import { t } from "../i18n";
 
 /** What the tab (and, on the desktop, the window) says when nothing is open. */
 export const APP_TITLE = "scmJS — StarCraft Scenario Editor";
@@ -13,7 +14,7 @@ export const APP_TITLE = "scmJS — StarCraft Scenario Editor";
  */
 export function documentTitle(fileName: string | null, mapName: string, modified: boolean): string {
   const name = (fileName ?? mapName).trim();
-  return `${modified ? "*" : ""}${name || "Untitled Scenario"} — scmJS`;
+  return `${modified ? "*" : ""}${name || t("Untitled Scenario")} — scmJS`;
 }
 
 /**

@@ -51,7 +51,7 @@ export default function StatusBar() {
       </span>
       <span className="status-cell" title={t("Tileset")}>
         <span className="swatch" style={{ background: tileset.color }} />
-        <span>{tileset.name}</span>
+        <span>{translate(tileset.name)}</span>
       </span>
       <span className="status-cell" title={t("Active layer")}>
         <span className="k">{t("Layer")}</span>
@@ -66,7 +66,7 @@ export default function StatusBar() {
           <span className={`badge ${symmetryAvailable(symmetry, w, h) ? "teal" : "warn"}`}>{symmetryLabel(symmetry)}</span>
         </span>
       )}
-      <span className="status-cell grow msg">{status}</span>
+      <span className="status-cell grow msg">{translate(status)}</span>
       {pluginItems.map((item) => (
         <span
           key={item.key}

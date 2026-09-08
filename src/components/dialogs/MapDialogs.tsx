@@ -13,7 +13,7 @@ import { isTextEncoding, TEXT_ENCODINGS, textEncodingInfo, type TextEncoding } f
 import { unencodableStrings } from "../../formats/chk/sections/strings";
 import { PLAYER_TYPES } from "../../data/players";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
-import { translate } from "../../i18n";
+import { msg, t, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
@@ -28,7 +28,7 @@ function playerSummary(scenario: Scenario): string {
   const counts = new Map<number, number>();
   for (const t of scenario.playerTypes) if (t !== PlayerType.Inactive) counts.set(t, (counts.get(t) ?? 0) + 1);
   if (counts.size === 0) return "none";
-  return [...counts].map(([t, n]) => `${n} ${(PLAYER_TYPES.find((p) => p.value === t)?.label ?? `type ${t}`).toLowerCase()}`).join(", ");
+  return [...counts].map(([t, n]) => `${n} ${translate(PLAYER_TYPES.find((p) => p.value === t)?.label ?? `type ${t}`).toLowerCase()}`).join(", ");
 }
 
 /* ── Map Properties ─────────────────────────────────────── */
@@ -73,10 +73,10 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
       const run = () => {
         const r = changeTs({ tileset: localTileset, terrainId: fill, keepTiles });
         if (!r) return;
-        const dropped = [r.doodadsDropped && `${r.doodadsDropped} doodad${r.doodadsDropped === 1 ? "" : "s"}`, r.spritesDropped && `${r.spritesDropped} overlay sprite${r.spritesDropped === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
-        setStatus(`Tileset changed to ${TILESET_BY_ID[localTileset].name}${r.refilled ? ` — terrain refilled with ${TILESET_BY_ID[localTileset].terrain.find((t) => t.id === fill)?.name ?? "the default"}` : " — tile numbers kept"}${dropped ? `, dropped ${dropped}` : ""}`);
+        const dropped = [r.doodadsDropped && t("{n, plural, one {# doodad} other {# doodads}}", { n: r.doodadsDropped }), r.spritesDropped && t("{n, plural, one {# overlay sprite} other {# overlay sprites}}", { n: r.spritesDropped })].filter(Boolean).join(t(" and "));
+        setStatus(t("Tileset changed to {tileset}", { tileset: TILESET_BY_ID[localTileset].name }) + (r.refilled ? t(" — terrain refilled with {terrain}", { terrain: TILESET_BY_ID[localTileset].terrain.find((x) => x.id === fill)?.name ?? t("the default") }) : t(" — tile numbers kept")) + (dropped ? t(", dropped {what}", { what: dropped }) : ""));
       };
-      setStatus(`Loading the ${TILESET_BY_ID[localTileset].name} graphics…`);
+      setStatus(t("Loading the {name} graphics…", { name: TILESET_BY_ID[localTileset].name }));
       ensureTileset(TILESET_FILENAMES[era]).then(run, run);
     }
   };
@@ -84,72 +84,72 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Map Properties"
+      title={t("Map Properties")}
       icon={<FileText size={14} />}
       size="md"
       onOk={apply}
       showApply
       slot={{ dialog: "mapProperties", fields: { name: { get: () => localName, set: setLocalName }, description: { get: () => localDesc, set: setLocalDesc } } }}
     >
-      <Group title="Scenario">
+      <Group title={t("Scenario")}>
         <div className="form wide">
-          <Field label="Name" hint="Up to 128 characters. Control bytes show as <XX> while the field has focus, and may be typed that way.">
-            <ColorTextField value={localName} onChange={setLocalName} placeholder="No name" />
+          <Field label={t("Name")} hint={t("Up to 128 characters. Control bytes show as <XX> while the field has focus, and may be typed that way.")}>
+            <ColorTextField value={localName} onChange={setLocalName} placeholder={t("No name")} />
           </Field>
-          <Field label="Description">
-            <ColorTextField value={localDesc} onChange={setLocalDesc} multiline rows={5} preview="below" placeholder="No description" />
+          <Field label={t("Description")}>
+            <ColorTextField value={localDesc} onChange={setLocalDesc} multiline rows={5} preview="below" placeholder={t("No description")} />
           </Field>
         </div>
       </Group>
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
-        <Group title="Terrain">
+        <Group title={t("Terrain")}>
           <div className="form">
-            <Field label="Tileset" hint={tilesetChanged ? "Tile numbers mean something else in every tileset, so the terrain is laid again and the doodads go. Units, sprites, locations, fog and triggers stay. This clears the undo history." : undefined}>
+            <Field label={t("Tileset")} hint={tilesetChanged ? t("Tile numbers mean something else in every tileset, so the terrain is laid again and the doodads go. Units, sprites, locations, fog and triggers stay. This clears the undo history.") : undefined}>
               <div className="row">
                 <span className="swatch" style={{ background: TILESET_BY_ID[localTileset].color }} />
                 <Select value={localTileset} onChange={(e) => pickTileset(e.target.value as TilesetId)} options={TILESETS.map((t) => ({ value: t.id, label: t.name }))} />
               </div>
             </Field>
             {tilesetChanged && !keepTiles && (
-              <Field label="Refill with">
+              <Field label={t("Refill with")}>
                 <Select value={String(fill)} onChange={(e) => setFill(Number(e.target.value))} options={TILESET_BY_ID[localTileset].terrain.map((t) => ({ value: String(t.id), label: t.name }))} />
               </Field>
             )}
             {tilesetChanged && (
               <Field label="">
-                <Check label="Keep the tile numbers" title="Change only the tileset id and leave every tile number as it is — what SCMDraft's tileset switch does; the picture becomes whatever those numbers draw in the new tileset" checked={keepTiles} onChange={(e) => setKeepTiles(e.target.checked)} />
+                <Check label={t("Keep the tile numbers")} title={t("Change only the tileset id and leave every tile number as it is — what SCMDraft's tileset switch does; the picture becomes whatever those numbers draw in the new tileset")} checked={keepTiles} onChange={(e) => setKeepTiles(e.target.checked)} />
               </Field>
             )}
-            <Field label="Size">
-              <div className="row"><span className="mono">{w} × {h}</span><Button size="sm" onClick={() => open("resizeMap")}>Resize…</Button></div>
+            <Field label={t("Size")}>
+              <div className="row"><span className="mono">{w} × {h}</span><Button size="sm" onClick={() => open("resizeMap")}>{t("Resize…")}</Button></div>
             </Field>
-            <Field label="Revision">
+            <Field label={t("Revision")}>
               <div className="row">
                 <span>{scenario ? MAP_VERSIONS[mapVersionOf(scenario.fileVersion)].label : "—"}</span>
                 {scenario && <span className="faint mono">VER {scenario.fileVersion} · {scenario.type}</span>}
-                <Button size="sm" onClick={() => open("mapRevision")}>Change…</Button>
+                <Button size="sm" onClick={() => open("mapRevision")}>{t("Change…")}</Button>
               </div>
             </Field>
-            <Field label="Players">
+            <Field label={t("Players")}>
               <span>{scenario ? playerSummary(scenario) : "—"}</span>
             </Field>
           </div>
         </Group>
-        <Group title="Statistics">
+        <Group title={t("Statistics")}>
           <div className="form">
-            <Field label="Units"><span className="mono">{scenario ? scenario.units.length : 0}</span></Field>
-            <Field label="Sprites"><span className="mono">{scenario ? scenario.sprites.length : 0}</span></Field>
-            <Field label="Doodads"><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
-            <Field label="Locations"><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : 0}</span></Field>
-            <Field label="Triggers"><span className="mono">{scenario ? scenario.triggers.length : 0}</span></Field>
-            <Field label="Strings"><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
+            <Field label={t("Units")}><span className="mono">{scenario ? scenario.units.length : 0}</span></Field>
+            <Field label={t("Sprites")}><span className="mono">{scenario ? scenario.sprites.length : 0}</span></Field>
+            <Field label={t("Doodads")}><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
+            <Field label={t("Locations")}><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : 0}</span></Field>
+            <Field label={t("Triggers")}><span className="mono">{scenario ? scenario.triggers.length : 0}</span></Field>
+            <Field label={t("Strings")}><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
           </div>
         </Group>
       </div>
       <div className="row end">
-        <Button size="sm" onClick={() => open("mapRevision")}>Map Revision…</Button>
-        <Button size="sm" onClick={() => open("playerSettings")}>Players…</Button>
-        <Button size="sm" onClick={() => open("forceSettings")}>Forces…</Button>
+        <Button size="sm" onClick={() => open("mapRevision")}>{t("Map Revision…")}</Button>
+        <Button size="sm" onClick={() => open("playerSettings")}>{t("Players…")}</Button>
+        <Button size="sm" onClick={() => open("forceSettings")}>{t("Forces…")}</Button>
       </div>
     </DialogFrame>
   );
@@ -183,14 +183,14 @@ export function ResizeMapDialog({ entry }: DialogProps) {
   const same = nw === w && nh === h;
 
   if (!scenario) {
-    return <DialogFrame dialogKey={entry.key} title="Resize / Crop Map" icon={<Maximize size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+    return <DialogFrame dialogKey={entry.key} title={t("Resize / Crop Map")} icon={<Maximize size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
   const apply = () => {
     const r = resize({ width: nw, height: nh, anchor, terrainId: terrain, clampLocations: clamp });
     if (!r) return;
     const dropped = [r.unitsDropped && `${r.unitsDropped} units`, r.spritesDropped && `${r.spritesDropped} sprites`, r.doodadsDropped && `${r.doodadsDropped} doodads`].filter(Boolean).join(", ");
-    setStatus(`Resized to ${nw}×${nh} (${ANCHOR_NAMES[anchor]} anchor)${dropped ? ` — dropped ${dropped}` : ""}${r.locationsClamped ? `, clamped ${r.locationsClamped} locations` : ""}${r.isomRebuilt ? "" : " — ISOM is the fill's; Rebuild ISOM once the tileset is loaded"}`);
+    setStatus(t("Resized to {w}×{h} ({anchor} anchor)", { w: nw, h: nh, anchor: translate(ANCHOR_NAMES[anchor]) }) + (dropped ? t(" — dropped {what}", { what: dropped }) : "") + (r.locationsClamped ? t(", clamped {n} locations", { n: r.locationsClamped }) : "") + (r.isomRebuilt ? "" : t(" — ISOM is the fill's; Rebuild ISOM once the tileset is loaded")));
   };
 
   const crops = preview ? [
@@ -200,41 +200,41 @@ export function ResizeMapDialog({ entry }: DialogProps) {
   ].filter(Boolean) : [];
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Resize / Crop Map" icon={<Maximize size={14} />} size="md" okLabel="Resize" onOk={apply} footerLeft={<span className="mono hint">{w}×{h} → {nw}×{nh}{preview ? ` · offset ${preview.dx}, ${preview.dy}` : ""}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Resize / Crop Map")} icon={<Maximize size={14} />} size="md" okLabel={t("Resize")} onOk={apply} footerLeft={<span className="mono hint">{w}×{h} → {nw}×{nh}{preview ? ` · offset ${preview.dx}, ${preview.dy}` : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <div className="stack">
-          <Group title="New size">
+          <Group title={t("New size")}>
             <div className="form">
-              <Field label="Width"><Select value={String(nw)} onChange={(e) => setNw(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
-              <Field label="Height"><Select value={String(nh)} onChange={(e) => setNh(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
-              <Field label="Fill new area"><Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={ts.terrain.map((t) => ({ value: String(t.id), label: t.name }))} /></Field>
+              <Field label={t("Width")}><Select value={String(nw)} onChange={(e) => setNw(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
+              <Field label={t("Height")}><Select value={String(nh)} onChange={(e) => setNh(Number(e.target.value))} options={MAP_SIZES.map(String)} /></Field>
+              <Field label={t("Fill new area")}><Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={ts.terrain.map((t) => ({ value: String(t.id), label: t.name }))} /></Field>
             </div>
           </Group>
-          <Group title="Anchor existing terrain">
+          <Group title={t("Anchor existing terrain")}>
             <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
               <div className="anchor">
                 {ANCHORS.map((Icon, i) => (
                   <button key={i} className={anchor === i ? "selected" : ""} onClick={() => setAnchor(i)} title={ANCHOR_NAMES[i]}><Icon size={12} /></button>
                 ))}
               </div>
-              <p className="hint">Existing tiles, units and locations keep their position relative to the chosen edge or corner (whole tile pairs, so the offset is even). Content outside the new bounds is cropped.</p>
+              <p className="hint">{t("Existing tiles, units and locations keep their position relative to the chosen edge or corner (whole tile pairs, so the offset is even). Content outside the new bounds is cropped.")}</p>
             </div>
           </Group>
         </div>
         <div className="stack">
-          <Group title="Options">
+          <Group title={t("Options")}>
             <div className="col" style={{ gap: 2 }}>
-              <Check label="Clamp locations to new bounds" checked={clamp} onChange={(e) => setClamp(e.target.checked)} />
+              <Check label={t("Clamp locations to new bounds")} checked={clamp} onChange={(e) => setClamp(e.target.checked)} />
             </div>
-            <p className="hint" style={{ marginTop: 6 }}>Locations are never dropped — triggers name them by slot. Anywhere becomes the new map.</p>
+            <p className="hint" style={{ marginTop: 6 }}>{t("Locations are never dropped — triggers name them by slot. Anywhere becomes the new map.")}</p>
           </Group>
-          <Group title="What will happen">
+          <Group title={t("What will happen")}>
             <ul className="hint" style={{ margin: 0, paddingLeft: 16 }}>
-              {same && <li>The size is unchanged; nothing will move.</li>}
-              {!same && <li>{crops.length > 0 ? `Cropped: ${crops.join(", ")}.` : "No units, sprites or doodads fall outside."}</li>}
-              {!same && preview && preview.locationsClamped > 0 && <li>{preview.locationsClamped} location{preview.locationsClamped === 1 ? "" : "s"} hang{preview.locationsClamped === 1 ? "s" : ""} past the edge{clamp ? " and will be pulled inside" : " and will stay there"}.</li>}
-              {!same && (scenario.isom ? <li>{loaded ? "ISOM will be rebuilt from the tiles." : "The tileset is not loaded, so ISOM will be the fill's lattice — run Rebuild ISOM afterwards."}</li> : <li>The map has no ISOM section; none is made.</li>)}
-              <li>This cannot be undone: the undo history is cleared.</li>
+              {same && <li>{t("The size is unchanged; nothing will move.")}</li>}
+              {!same && <li>{crops.length > 0 ? t("Cropped: {join}.", { join: crops.join(", ") }) : t("No units, sprites or doodads fall outside.")}</li>}
+              {!same && preview && preview.locationsClamped > 0 && <li>{t("{locationsClamped} location", { locationsClamped: preview.locationsClamped })}{preview.locationsClamped === 1 ? "" : "s"} {" "}{t("hang")}{preview.locationsClamped === 1 ? "s" : ""} {" "}{t("past the edge")}{clamp ? t(" and will be pulled inside") : t(" and will stay there")}.</li>}
+              {!same && (scenario.isom ? <li>{loaded ? t("ISOM will be rebuilt from the tiles.") : t("The tileset is not loaded, so ISOM will be the fill's lattice — run Rebuild ISOM afterwards.")}</li> : <li>{t("The map has no ISOM section; none is made.")}</li>)}
+              <li>{t("This cannot be undone: the undo history is cleared.")}</li>
             </ul>
           </Group>
         </div>
@@ -247,13 +247,13 @@ export function ResizeMapDialog({ entry }: DialogProps) {
 
 /** Revision-specific section pairs: which of each the file carries says what other editors wrote. */
 const REVISION_PAIRS: [string, string, string][] = [
-  ["Strings", "STR ", "STRx"],
-  ["Unit settings", "UNIS", "UNIx"],
-  ["Upgrade settings", "UPGS", "UPGx"],
-  ["Technology settings", "TECS", "TECx"],
-  ["Upgrade restrictions", "UPGR", "PUPx"],
-  ["Technology restrictions", "PTEC", "PTEx"],
-  ["Player colours", "COLR", "CRGB"],
+  [msg("Strings"), "STR ", "STRx"],
+  [msg("Unit settings"), "UNIS", "UNIx"],
+  [msg("Upgrade settings"), "UPGS", "UPGx"],
+  [msg("Technology settings"), "TECS", "TECx"],
+  [msg("Upgrade restrictions"), "UPGR", "PUPx"],
+  [msg("Technology restrictions"), "PTEC", "PTEx"],
+  [msg("Player colours"), "COLR", "CRGB"],
 ];
 
 /**
@@ -333,7 +333,7 @@ export function MapRevisionDialog({ entry }: DialogProps) {
           <thead><tr><th></th><th>{t("Original")}</th><th>{t("Brood War")}</th></tr></thead>
           <tbody>
             {REVISION_PAIRS.map(([label, a, b]) => (
-              <tr key={label}><td>{label}</td><td className={has(a) ? "" : "faint"}>{a.trim()}{has(a) ? "" : " —"}</td><td className={has(b) ? "" : "faint"}>{b}{has(b) ? "" : " —"}</td></tr>
+              <tr key={label}><td>{translate(label)}</td><td className={has(a) ? "" : "faint"}>{a.trim()}{has(a) ? "" : " —"}</td><td className={has(b) ? "" : "faint"}>{b}{has(b) ? "" : " —"}</td></tr>
             ))}
           </tbody>
         </table>
@@ -362,31 +362,29 @@ export function GridSettingsDialog({ entry }: DialogProps) {
     if (doodadPlacement.snapToGrid !== snapDoodads) setDoodadPlacement({ ...doodadPlacement, snapToGrid: snapDoodads });
   };
   return (
-    <DialogFrame dialogKey={entry.key} title="Grid Settings" icon={<Grid3x3 size={14} />} size="sm" onOk={apply} showApply>
-      <Group title="Grid">
+    <DialogFrame dialogKey={entry.key} title={t("Grid Settings")} icon={<Grid3x3 size={14} />} size="sm" onOk={apply} showApply>
+      <Group title={t("Grid")}>
         <div className="form">
-          <Field label="Spacing">
-            <Select value={String(local)} onChange={(e) => setLocal(Number(e.target.value) as typeof size)} options={[{ value: "8", label: "8 px (mini-tile)" }, { value: "16", label: "16 px" }, { value: "32", label: "32 px (tile)" }, { value: "64", label: "64 px" }, { value: "128", label: "128 px (isometric)" }]} />
+          <Field label={t("Spacing")}>
+            <Select value={String(local)} onChange={(e) => setLocal(Number(e.target.value) as typeof size)} options={[{ value: "8", label: t("8 px (mini-tile)") }, { value: "16", label: t("16 px") }, { value: "32", label: t("32 px (tile)") }, { value: "64", label: t("64 px") }, { value: "128", label: t("128 px (isometric)") }]} />
           </Field>
-          <Field label="Colour">
+          <Field label={t("Colour")}>
             <div className="row">
-              <input type="color" className="input" value={localLook.color} onChange={(e) => setLocalLook({ ...localLook, color: e.target.value })} aria-label="Grid colour" />
-              <input type="range" min={0} max={100} value={localLook.opacity} onChange={(e) => setLocalLook({ ...localLook, opacity: Number(e.target.value) })} aria-label="Grid opacity" />
+              <input type="color" className="input" value={localLook.color} onChange={(e) => setLocalLook({ ...localLook, color: e.target.value })} aria-label={t("Grid colour")} />
+              <input type="range" min={0} max={100} value={localLook.opacity} onChange={(e) => setLocalLook({ ...localLook, opacity: Number(e.target.value) })} aria-label={t("Grid opacity")} />
               <span className="mono hint" style={{ width: 36 }}>{localLook.opacity}%</span>
             </div>
           </Field>
-          <Field label="Style"><Select value={localLook.style} onChange={(e) => setLocalLook({ ...localLook, style: e.target.value as GridStyle })} options={[{ value: "lines", label: "Lines" }, { value: "dots", label: "Dots" }, { value: "crosses", label: "Crosses" }]} /></Field>
+          <Field label={t("Style")}><Select value={localLook.style} onChange={(e) => setLocalLook({ ...localLook, style: e.target.value as GridStyle })} options={[{ value: "lines", label: t("Lines") }, { value: "dots", label: t("Dots") }, { value: "crosses", label: t("Crosses") }]} /></Field>
         </div>
       </Group>
-      <Group title="Snapping">
+      <Group title={t("Snapping")}>
         <div className="col" style={{ gap: 2 }}>
-          <Check className="wrap" label={`Snap locations to the grid (${local} px)`} checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
-          <Check className="wrap" label="Snap doodads to the two-tile isometric grid" checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
+          <Check className="wrap" label={t("Snap locations to the grid ({local} px)", { local })} checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
+          <Check className="wrap" label={t("Snap doodads to the two-tile isometric grid")} checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
         </div>
         <p className="hint" style={{ marginTop: 6 }}>
-          Locations snap to the spacing above; the Locations palette can pick a different step. A doodad's snap is
-          always the two-tile grid StarEdit places them on, whatever the spacing is — the same tick as the Doodads
-          palette's. Units have their own “Snap to grid” in the Units palette; sprites are always placed by the pixel.
+          {t("Locations snap to the spacing above; the Locations palette can pick a different step. A doodad's snap is always the two-tile grid StarEdit places them on, whatever the spacing is — the same tick as the Doodads palette's. Units have their own “Snap to grid” in the Units palette; sprites are always placed by the pixel.")}
         </p>
       </Group>
     </DialogFrame>

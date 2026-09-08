@@ -20,6 +20,7 @@ import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
 import { hexTile, terrainTypes, type TerrainType } from "../formats/tileset/palette";
 import { TILESET_BY_ID, terrainName } from "../data/tilesets";
+import { t, translate } from "../i18n";
 
 export interface GhostTile {
   x: number;
@@ -58,7 +59,7 @@ export function useTerrainTools() {
   const isomStroke = useRef<Stroke | null>(null);
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
   const lastDiamond = useRef<Diamond | null>(null);
-  const strokeLabel = useRef("Paint terrain");
+  const strokeLabel = useRef(t("Paint terrain"));
 
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const loaded = peekTileset(useAtomValue(tilesetFileNameAtom));
@@ -109,7 +110,7 @@ export function useTerrainTools() {
     if (mode === "rect") {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Rect painting needs the tileset graphics — Help ▸ Game Data…");
+        setStatus(t("Rect painting needs the tileset graphics — Help ▸ Game Data…"));
         return null;
       }
       return stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y));
@@ -171,7 +172,7 @@ export function useTerrainTools() {
     strokeLabel.current =
       mode === "rect" ? `Paint ${currentTerrain()?.name ?? "terrain"}`
         : mode === "isom" ? `Paint ${terrainName(info, currentIsomTerrain() ?? -1)} (isometric)`
-          : `Place tile ${hexTile(store.get(activeTileAtom))}`;
+          : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
     paintAt(x, y, p);
   }, [store, info, currentTerrain, currentIsomTerrain, paintAt]);
 
@@ -203,12 +204,12 @@ export function useTerrainTools() {
     if (!paintsTiles(mode)) return;
     const seed = scn.tiles[y * scn.width + x];
     let changes: TileChange[] = [];
-    let label = "Fill area";
+    let label = t("Fill area");
 
     if (mode === "rect") {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Fill needs the tileset graphics — Help ▸ Game Data…");
+        setStatus(t("Fill needs the tileset graphics — Help ▸ Game Data…"));
         return;
       }
       const groups = loaded.tileset.groups;
@@ -216,13 +217,13 @@ export function useTerrainTools() {
       const seedType = typeOf(seed);
       const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => typeOf(id) === seedType), scn.width, scn.height);
       changes = stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, region);
-      label = `Fill ${terrain.name}`;
+      label = t("Fill {terrain}", { terrain: translate(terrain.name) });
     } else {
       const tile = store.get(activeTileAtom);
       if (tile === seed) return;
       const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => id === seed), scn.width, scn.height);
       changes = stampTile(scn, region, tile);
-      label = `Fill with ${hexTile(tile)}`;
+      label = t("Fill with {tile}", { tile: hexTile(tile) });
     }
 
     if (changes.length === 0) return;
@@ -245,11 +246,11 @@ export function useTerrainTools() {
     if (store.get(terrainModeAtom) === "tile") {
       const tile = store.get(activeTileAtom);
       for (let at = 0; at < scn.tiles.length; at++) if (scn.tiles[at] !== tile) changes.push({ at, before: scn.tiles[at], after: tile });
-      label = `Fill map with ${hexTile(tile)}`;
+      label = t("Fill map with {tile}", { tile: hexTile(tile) });
     } else {
       const terrain = currentTerrain();
       if (!terrain || !loaded) {
-        setStatus("Fill Terrain needs the tileset graphics — Help ▸ Game Data…");
+        setStatus(t("Fill Terrain needs the tileset graphics — Help ▸ Game Data…"));
         return;
       }
       const flat = flatTerrain(scn.width, scn.height, { id: terrain.id, group: terrain.group }, loaded.tileset, Math.random, tilesetIndex(scn));
@@ -258,10 +259,10 @@ export function useTerrainTools() {
         isom = [];
         for (let i = 0; i < flat.isom.length; i++) if (scn.isom[i] !== flat.isom[i]) isom.push({ at: i, before: scn.isom[i], after: flat.isom[i] });
       }
-      label = `Fill map with ${terrain.name}`;
+      label = t("Fill map with {terrain}", { terrain: translate(terrain.name) });
     }
     if (changes.length === 0 && !(isom && isom.length > 0)) {
-      setStatus("The map is already that terrain — nothing to fill.");
+      setStatus(t("The map is already that terrain — nothing to fill."));
       return;
     }
     applyChanges(scn, changes);
@@ -278,18 +279,18 @@ export function useTerrainTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return 0;
     if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) {
-      setStatus("Replace Terrain needs the tileset graphics — Help ▸ Game Data…");
+      setStatus(t("Replace Terrain needs the tileset graphics — Help ▸ Game Data…"));
       return 0;
     }
     const changes = replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect);
     if (changes.length === 0) {
-      setStatus("Nothing to replace — no tile matches, or the replacement is what is there already.");
+      setStatus(t("Nothing to replace — no tile matches, or the replacement is what is there already."));
       return 0;
     }
     const name = (p: TerrainPick) => (p.kind === "tile" ? hexTile(p.id) : terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id));
     const label = `Replace ${name(from)} with ${name(to)}`;
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}${rect ? " in the marked area" : ""}`);
+    commitTerrain(scn, { label, changes }, `${label} — ${t("{n, plural, one {# tile} other {# tiles}}", { n: changes.length })}${rect ? t(" in the marked area") : ""}`);
     return changes.length;
   }, [store, loaded, commitTerrain, setStatus]);
 
@@ -307,7 +308,7 @@ export function useTerrainTools() {
     const mode = store.get(terrainModeAtom);
     if (mode === "blend") {
       setBlendAnchor({ x, y });
-      setStatus(`Blend from tile ${hexTile(id)} at ${x}, ${y} — pick a match in the palette`);
+      setStatus(t("Blend from tile {hexTile} at {x}, {y} — pick a match in the palette", { hexTile: hexTile(id), x, y }));
       return;
     }
     if (mode === "isom" && p && hasIsom(scn) && loaded) {
@@ -318,7 +319,7 @@ export function useTerrainTools() {
         const type = isomTables(loaded.tileset, tilesetIndex(scn)).links[value]?.terrainType ?? 0;
         if (isomTypes.includes(type)) {
           setActiveTerrain(type);
-          setStatus(`Picked ${terrainName(info, type)}`);
+          setStatus(t("Picked {terrainName}", { terrainName: terrainName(info, type) }));
           return;
         }
       }
@@ -327,13 +328,13 @@ export function useTerrainTools() {
       const type = types.find((t) => t.group === (id >> 4 & ~1));
       if (type) {
         setActiveTerrain(type.id);
-        setStatus(`Picked ${type.name}`);
+        setStatus(t("Picked {name}", { name: type.name }));
         return;
       }
       setMode("tile");
     }
     setActiveTile(id);
-    setStatus(`Picked tile ${hexTile(id)} (group ${id >> 4}, slot ${id & 15})`);
+    setStatus(t("Picked tile {tile} (group {group}, slot {slot})", { tile: hexTile(id), group: id >> 4, slot: id & 15 }));
   }, [store, loaded, info, types, isomTypes, setActiveTerrain, setActiveTile, setMode, setBlendAnchor, setStatus]);
 
   /**
@@ -348,7 +349,7 @@ export function useTerrainTools() {
     const at = neighbourOf(anchor, side);
     const changes = placeBlend(scn, anchor, side, id);
     if (!changes) {
-      setStatus(`Nothing ${side} of ${anchor.x}, ${anchor.y} — that is off the map`);
+      setStatus(t("Nothing {side} of {x}, {y} — that is off the map", { side, x: anchor.x, y: anchor.y }));
       return;
     }
     setActiveTile(id);
@@ -357,7 +358,7 @@ export function useTerrainTools() {
       applyChanges(scn, changes);
       commitTerrain(scn, { label, changes }, label);
     } else {
-      setStatus(`${hexTile(id)} is already ${side} of ${anchor.x}, ${anchor.y}`);
+      setStatus(t("{hexTile} is already {side} of {x}, {y}", { hexTile: hexTile(id), side, x: anchor.x, y: anchor.y }));
     }
     if (store.get(blendFollowAtom)) store.set(blendAnchorAtom, at);
   }, [store, commitTerrain, setActiveTile, setStatus]);

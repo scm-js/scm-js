@@ -8,6 +8,7 @@
  * for the same result.
  */
 import { encodeWav, isPlainPcm, parseWavHeader, type WavBits, type WavInfo, decodeWav, wavDuration, type PcmAudio } from "../formats/wav";
+import { msg } from "../i18n";
 
 export interface WavTarget {
   sampleRate: number;
@@ -26,11 +27,11 @@ export interface WavPreset {
  * rates StarCraft's mixer takes. 8-bit is for maps chasing the file-size limit.
  */
 export const WAV_PRESETS: readonly WavPreset[] = [
-  { id: "22k16m", label: "22050 Hz · 16-bit · mono (game standard)", target: { sampleRate: 22050, channels: 1, bits: 16 } },
-  { id: "22k16s", label: "22050 Hz · 16-bit · stereo", target: { sampleRate: 22050, channels: 2, bits: 16 } },
-  { id: "44k16m", label: "44100 Hz · 16-bit · mono", target: { sampleRate: 44100, channels: 1, bits: 16 } },
-  { id: "44k16s", label: "44100 Hz · 16-bit · stereo", target: { sampleRate: 44100, channels: 2, bits: 16 } },
-  { id: "11k8m", label: "11025 Hz · 8-bit · mono (smallest)", target: { sampleRate: 11025, channels: 1, bits: 8 } },
+  { id: "22k16m", label: msg("22050 Hz · 16-bit · mono (game standard)"), target: { sampleRate: 22050, channels: 1, bits: 16 } },
+  { id: "22k16s", label: msg("22050 Hz · 16-bit · stereo"), target: { sampleRate: 22050, channels: 2, bits: 16 } },
+  { id: "44k16m", label: msg("44100 Hz · 16-bit · mono"), target: { sampleRate: 44100, channels: 1, bits: 16 } },
+  { id: "44k16s", label: msg("44100 Hz · 16-bit · stereo"), target: { sampleRate: 44100, channels: 2, bits: 16 } },
+  { id: "11k8m", label: msg("11025 Hz · 8-bit · mono (smallest)"), target: { sampleRate: 11025, channels: 1, bits: 8 } },
 ];
 
 export const DEFAULT_WAV_PRESET = WAV_PRESETS[0];

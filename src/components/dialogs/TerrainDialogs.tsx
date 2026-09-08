@@ -14,6 +14,7 @@ import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { Check, Field, Group, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t } from "../../i18n";
 
 /* ── Replace Terrain ────────────────────────────────────── */
 
@@ -56,40 +57,40 @@ export function ReplaceTerrainDialog({ entry }: DialogProps) {
   const needsGraphics = (from.kind === "terrain" || to.kind === "terrain") && !tools.loaded;
 
   if (!scenario) {
-    return <DialogFrame dialogKey={entry.key} title="Replace Terrain" icon={<Replace size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+    return <DialogFrame dialogKey={entry.key} title={t("Replace Terrain")} icon={<Replace size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
   const options = types.map((t) => ({ value: String(t.id), label: t.name }));
   const picker = (kind: PickKind, setKind: (k: PickKind) => void, terrain: number, setTerrain: (id: number) => void, tile: number, setTile: (id: number) => void, what: string) => (
     <div className="form">
-      <Field label="Match">
-        <Select value={kind} onChange={(e) => setKind(e.target.value as PickKind)} options={[{ value: "terrain", label: "Terrain type" }, { value: "tile", label: "Exact tile" }]} />
+      <Field label={t("Match")}>
+        <Select value={kind} onChange={(e) => setKind(e.target.value as PickKind)} options={[{ value: "terrain", label: t("Terrain type") }, { value: "tile", label: t("Exact tile") }]} />
       </Field>
       {kind === "terrain"
-        ? <Field label={what}>{options.length > 0 ? <Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={options} /> : <span className="hint">Needs the tileset graphics</span>}</Field>
-        : <Field label={what} hint={`Tile ${hexTile(tile)} — the Tile brush's number, as the palette shows it`}><NumberInput value={tile} onChange={setTile} min={0} max={65535} width={110} /></Field>}
+        ? <Field label={what}>{options.length > 0 ? <Select value={String(terrain)} onChange={(e) => setTerrain(Number(e.target.value))} options={options} /> : <span className="hint">{t("Needs the tileset graphics")}</span>}</Field>
+        : <Field label={what} hint={t("Tile {hexTile} — the Tile brush's number, as the palette shows it", { hexTile: hexTile(tile) })}><NumberInput value={tile} onChange={setTile} min={0} max={65535} width={110} /></Field>}
     </div>
   );
 
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Replace Terrain"
+      title={t("Replace Terrain")}
       icon={<Replace size={14} />}
       size="md"
-      okLabel="Replace"
+      okLabel={t("Replace")}
       okDisabled={count === 0 || same || needsGraphics}
       onOk={() => { tools.replace(from, to, rect); }}
-      footerLeft={<span className="hint">{needsGraphics ? "Terrain types need the tileset graphics — Help ▸ Game Data…" : same ? "Pick something different to replace with." : `${count} tile${count === 1 ? "" : "s"} match${count === 1 ? "es" : ""}${rect ? " in the marked area" : ""}`}</span>}
+      footerLeft={<span className="hint">{needsGraphics ? t("Terrain types need the tileset graphics — Help ▸ Game Data…") : same ? t("Pick something different to replace with.") : t("{n, plural, one {# tile matches} other {# tiles match}}", { n: count }) + (rect ? t(" in the marked area") : "")}</span>}
     >
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
-        <Group title="Replace">{picker(fromKind, setFromKind, fromTerrain, setFromTerrain, fromTile, setFromTile, "Terrain")}</Group>
-        <Group title="With">{picker(toKind, setToKind, toTerrain, setToTerrain, toTile, setToTile, "Terrain")}</Group>
+        <Group title={t("Replace")}>{picker(fromKind, setFromKind, fromTerrain, setFromTerrain, fromTile, setFromTile, t("Terrain"))}</Group>
+        <Group title={t("With")}>{picker(toKind, setToKind, toTerrain, setToTerrain, toTile, setToTile, t("Terrain"))}</Group>
       </div>
-      <Group title="Where">
-        <Check label={marked ? `Only the marked area (${marked.x1 - marked.x0} × ${marked.y1 - marked.y0} tiles)` : "Only the marked area — mark one on the Cut / Copy / Paste layer first"} checked={inMarked && marked !== null} disabled={marked === null} onChange={(e) => setInMarked(e.target.checked)} />
+      <Group title={t("Where")}>
+        <Check label={marked ? t("Only the marked area ({v} × {v2} tiles)", { v: marked.x1 - marked.x0, v2: marked.y1 - marked.y0 }) : t("Only the marked area — mark one on the Cut / Copy / Paste layer first")} checked={inMarked && marked !== null} disabled={marked === null} onChange={(e) => setInMarked(e.target.checked)} />
         <p className="hint" style={{ marginTop: 6 }}>
-          A terrain type is every tile of its flat pair; cliff edges and doodads stay. The replacement is laid as the Rect brush lays it, left and right halves in step. The isometric lattice is not touched — use the isometric brush, or the Repair plugin's Rebuild ISOM, when it should follow. One undo step.
+          {t("A terrain type is every tile of its flat pair; cliff edges and doodads stay. The replacement is laid as the Rect brush lays it, left and right halves in step. The isometric lattice is not touched — use the isometric brush, or the Repair plugin's Rebuild ISOM, when it should follow. One undo step.")}
         </p>
       </Group>
     </DialogFrame>
@@ -121,34 +122,34 @@ export function AutoStartsDialog({ entry }: DialogProps) {
   const existing = scenario ? scenario.units.filter((u) => u.unitId === START_LOCATION).length : 0;
 
   if (!scenario) {
-    return <DialogFrame dialogKey={entry.key} title="Auto-place Start Locations" icon={<Flag size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+    return <DialogFrame dialogKey={entry.key} title={t("Auto-place Start Locations")} icon={<Flag size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
   const apply = () => {
     const tileset = peekTileset(tilesetName)?.tileset ?? null;
     const r = placeStartLocations(scenario, tileset, assets?.units ?? null, { players, layout, margin, replace, placement: store.get(placementOptionsAtom) });
     const placed = r.placed.filter((p) => p !== null).length;
-    if (r.changes.length === 0) { setStatus("No start location could be placed — no ground within reach passes the placement checks."); return; }
-    commit({ label: `Auto-place ${placed} start location${placed === 1 ? "" : "s"}`, changes: [], units: r.changes });
+    if (r.changes.length === 0) { setStatus(t("No start location could be placed — no ground within reach passes the placement checks.")); return; }
+    commit({ label: t("Auto-place {n, plural, one {# start location} other {# start locations}}", { n: placed }), changes: [], units: r.changes });
     setSelected(r.changes.filter((c) => c.after !== null).map((c) => c.index));
     setLayer("units");
     const missed = r.placed.map((p, i) => (p ? null : i + 1)).filter((p): p is number => p !== null);
-    setStatus(`Placed ${placed} start location${placed === 1 ? "" : "s"}${r.removed ? ` (replaced ${r.removed})` : ""}${missed.length > 0 ? ` — no room for player${missed.length === 1 ? "" : "s"} ${missed.join(", ")}` : ""}`);
+    setStatus(t("Placed {n, plural, one {# start location} other {# start locations}}", { n: placed }) + (r.removed ? t(" (replaced {n})", { n: r.removed }) : "") + (missed.length > 0 ? t(" — no room for {n, plural, one {player} other {players}} {list}", { n: missed.length, list: missed.join(", ") }) : ""));
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Auto-place Start Locations" icon={<Flag size={14} />} size="md" okLabel="Place" onOk={apply} footerLeft={<span className="hint">{existing} on the map now</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Auto-place Start Locations")} icon={<Flag size={14} />} size="md" okLabel={t("Place")} onOk={apply} footerLeft={<span className="hint">{t("{existing} on the map now", { existing })}</span>}>
       <div className="form wide">
-        <Field label="Players"><NumberInput value={players} onChange={setPlayers} min={1} max={8} width={80} /></Field>
-        <Field label="Layout" hint={layout === "ring" ? "Evenly around the map, top-left first." : "The four corners, then the edge midpoints."}>
-          <Select value={layout} onChange={(e) => setLayout(e.target.value as StartLayout)} options={[{ value: "ring", label: "Ring" }, { value: "corners", label: "Corners" }]} />
+        <Field label={t("Players")}><NumberInput value={players} onChange={setPlayers} min={1} max={8} width={80} /></Field>
+        <Field label={t("Layout")} hint={layout === "ring" ? t("Evenly around the map, top-left first.") : t("The four corners, then the edge midpoints.")}>
+          <Select value={layout} onChange={(e) => setLayout(e.target.value as StartLayout)} options={[{ value: "ring", label: t("Ring") }, { value: "corners", label: t("Corners") }]} />
         </Field>
-        <Field label="Inset" hint="Tiles from the map edge to the ideal spot; each start then moves to the nearest ground it fits on."><NumberInput value={margin} onChange={setMargin} min={0} max={64} width={80} unit="tiles" /></Field>
+        <Field label={t("Inset")} hint={t("Tiles from the map edge to the ideal spot; each start then moves to the nearest ground it fits on.")}><NumberInput value={margin} onChange={setMargin} min={0} max={64} width={80} unit="tiles" /></Field>
         <div className="span">
-          <Check className="wrap" label={`Replace the ${existing} start location${existing === 1 ? "" : "s"} already on the map`} checked={replace} disabled={existing === 0} onChange={(e) => setReplace(e.target.checked)} />
+          <Check className="wrap" label={t("Replace the {n, plural, one {# start location} other {# start locations}} already on the map", { n: existing })} checked={replace} disabled={existing === 0} onChange={(e) => setReplace(e.target.checked)} />
         </div>
       </div>
-      <p className="hint" style={{ marginTop: 10 }}>Players 1 to N get one each, on buildable ground away from other units (the Units palette's placement checks). Drag them afterwards as you would any unit; the Melee Wizard plugin lays out symmetric starts and bases from a point you pick.</p>
+      <p className="hint" style={{ marginTop: 10 }}>{t("Players 1 to N get one each, on buildable ground away from other units (the Units palette's placement checks). Drag them afterwards as you would any unit; the Melee Wizard plugin lays out symmetric starts and bases from a point you pick.")}</p>
     </DialogFrame>
   );
 }

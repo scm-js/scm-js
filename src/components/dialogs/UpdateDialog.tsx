@@ -12,6 +12,7 @@ import { desktopBridge } from "../../gamedata/desktop";
 import { Button, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t } from "../../i18n";
 
 /**
  * Help ▸ Check for Updates…, and where the startup toast's Download leads.
@@ -57,15 +58,15 @@ export function UpdateDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Software Update"
+      title={t("Software Update")}
       icon={<RefreshCw size={14} />}
       size="sm"
       footerLeft={
         <Button size="sm" disabled={busy} onClick={() => void check({ nightly: prefs.updates.nightly })}>
-          <RotateCw size={11} /> Check again
+          <RotateCw size={11} /> {" "}{t("Check again")}
         </Button>
       }
-      footer={<Button variant="primary" onClick={() => close(entry.key)}>Close</Button>}
+      footer={<Button variant="primary" onClick={() => close(entry.key)}>{t("Close")}</Button>}
     >
       <div className="stack">
         <Group title={words.title}>
@@ -82,16 +83,16 @@ export function UpdateDialog({ entry }: DialogProps) {
           {state.phase === "available" && (
             <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
               {canDownload(state)
-                ? <Button size="sm" variant="primary" onClick={() => void download()}><Download size={11} /> Download</Button>
-                : <Button size="sm" variant="primary" onClick={() => openReleases(support?.releasesUrl)}><ExternalLink size={11} /> Open download page</Button>}
-              {state.info.bytes !== undefined && canDownload(state) && <span className="hint">About {formatBytes(state.info.bytes)}.</span>}
+                ? <Button size="sm" variant="primary" onClick={() => void download()}><Download size={11} /> {" "}{t("Download")}</Button>
+                : <Button size="sm" variant="primary" onClick={() => openReleases(support?.releasesUrl)}><ExternalLink size={11} /> {" "}{t("Open download page")}</Button>}
+              {state.info.bytes !== undefined && canDownload(state) && <span className="hint">{t("About {formatBytes}.", { formatBytes: formatBytes(state.info.bytes) })}</span>}
             </div>
           )}
 
           {state.phase === "downloaded" && (
             <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-              <Button size="sm" variant="primary" disabled={installing} onClick={() => void install()}>Restart and install</Button>
-              <span className="hint">Or leave it — it is applied the next time scmJS quits.</span>
+              <Button size="sm" variant="primary" disabled={installing} onClick={() => void install()}>{t("Restart and install")}</Button>
+              <span className="hint">{t("Or leave it — it is applied the next time scmJS quits.")}</span>
             </div>
           )}
         </Group>
@@ -105,7 +106,7 @@ export function UpdateDialog({ entry }: DialogProps) {
 
         {(state.phase === "current" || state.phase === "error" || (support && !support.install)) && (
           <div className="row" style={{ gap: 6 }}>
-            <Button size="sm" onClick={() => openReleases(support?.releasesUrl)}><ExternalLink size={11} /> Releases on GitHub</Button>
+            <Button size="sm" onClick={() => openReleases(support?.releasesUrl)}><ExternalLink size={11} /> {" "}{t("Releases on GitHub")}</Button>
           </div>
         )}
       </div>

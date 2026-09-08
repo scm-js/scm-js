@@ -5,6 +5,7 @@ import { preloadLogAtom, preloadStepAtom } from "../../atoms/preloadAtoms";
 import { APP_VERSION_SHORT } from "../../version";
 import { removeBootSplash } from "./bootSplash";
 import { PINK, PINK_HI, buildSphere, drawNebula, drawSphereGlow, drawSphereWire, drawStars, generateStars, projectSphere } from "./starfield";
+import { t } from "../../i18n";
 
 /* ── Timing ─────────────────────────────────────────────── */
 
@@ -134,27 +135,27 @@ export default function SplashScreen({ solid = false }: { solid?: boolean }) {
         <canvas ref={canvasRef} className="splash-canvas" />
         <div className="splash-center">
           <h1 className="splash-title">scm<span>JS</span></h1>
-          <div className="splash-sub">StarCraft · Brood War</div>
+          <div className="splash-sub">{t("StarCraft · Brood War")}</div>
         </div>
         <div className="splash-bottom">
           <div className="splash-log">
             {lines.map((line, i) => (
               <div key={`${line.label}${i}`} className={line.failed ? "failed" : undefined}>
-                {line.label}{line.failed ? " — unavailable" : ""}
+                {line.label}{line.failed ? t(" — unavailable") : ""}
               </div>
             ))}
             {!step.done && <div className="current">{step.label}</div>}
-            {step.done && <div className="current">Ready</div>}
+            {step.done && <div className="current">{t("Ready")}</div>}
           </div>
           <div className="splash-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
             <i style={{ width: `${progress * 100}%` }} />
           </div>
           <div className="splash-foot">
             <span className="splash-version">v{APP_VERSION_SHORT}</span>
-            <span className="splash-author">by Jeany</span>
+            <span className="splash-author">{t("by Jeany")}</span>
           </div>
           <div className="splash-skip">
-            {step.done ? "click anywhere to continue" : "click to skip"}
+            {step.done ? t("click anywhere to continue") : t("click to skip")}
           </div>
         </div>
       </div>

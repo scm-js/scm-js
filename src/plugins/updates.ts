@@ -33,6 +33,7 @@ import { defaultPlugins, pluginKey, updateAddress } from "./defaults";
 import { checkForUpdate, effectiveInstalls, installPlugin, type Store, type UpdateCheck } from "./host";
 import type { PluginPreview } from "./loader";
 import { loadRegistries, type Registry, type RegistryEntry } from "./registry";
+import { t } from "../i18n";
 
 /** One plugin with a newer release than the one it runs. */
 export interface PluginUpdate {
@@ -170,7 +171,7 @@ export function updateToast(updates: readonly PluginUpdate[], openPlugins: () =>
   const detail = updates.length === 1
     ? (updates[0].from ? `You have ${updates[0].from}. Each update shows what it is before anything changes.` : "The update shows what it is before anything changes.")
     : `${updates.map(versionLine).join(", ")}. Each update shows what it is before anything changes.`;
-  return { kind: "info", title, detail, ttl: 0, action: { label: "Plugins…", run: openPlugins } };
+  return { kind: "info", title, detail, ttl: 0, action: { label: t("Plugins…"), run: openPlugins } };
 }
 
 /** What an `auto` pass did, for the notice that says so. */
@@ -199,7 +200,7 @@ export function autoUpdateToast(outcome: AutoUpdateOutcome, openPlugins: () => v
     : failed.length > 0 ? "A plugin update failed"
     : skipped.length === 1 ? `${skipped[0].update.name} ${skipped[0].update.to} is available`
     : `${skipped.length} plugins have newer versions`;
-  return { kind: failed.length > 0 ? "warn" : "info", title, detail: parts.join(" "), ttl: 0, action: { label: "Plugins…", run: openPlugins } };
+  return { kind: failed.length > 0 ? "warn" : "info", title, detail: parts.join(" "), ttl: 0, action: { label: t("Plugins…"), run: openPlugins } };
 }
 
 /* ── The pass ───────────────────────────────────────────── */

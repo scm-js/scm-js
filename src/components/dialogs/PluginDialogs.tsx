@@ -19,6 +19,7 @@ import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
+import { msg, t, translate } from "../../i18n";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
@@ -40,11 +41,11 @@ function useBox<T>(box: { value: T; listeners: Set<() => void> } | undefined, fa
 }
 
 /** Why the *Load from a copy saved here* tick is off for a plugin that is part of the build. */
-const BUILTIN_COPY_HINT = "This plugin is part of the build; there is nothing to fetch.";
+const BUILTIN_COPY_HINT = msg("This plugin is part of the build; there is nothing to fetch.");
 
 /** What that tick does, in the words of whichever shell the editor is running in. */
 function localCopyHint(): string {
-  return `Saves the plugin's files in ${hostTerms().here} on the first load and runs that copy from then on. Its address is not contacted again until you press Reload.`;
+  return t("Saves the plugin's files in {here} on the first load and runs that copy from then on. Its address is not contacted again until you press Reload.", { here: hostTerms().here });
 }
 
 /* ── A plugin's own dialog ──────────────────────────────── */
@@ -97,12 +98,12 @@ export function PluginDialog({ entry }: DialogProps) {
       cleanup = spec.mount(host, handle);
     } catch (err) {
       console.error(`[${plugin?.name ?? "plugin"}] dialog mount failed`, err);
-      host.textContent = `The plugin's dialog failed to open: ${err instanceof Error ? err.message : String(err)}`;
+      host.textContent = t("The plugin's dialog failed to open: {error}", { error: err instanceof Error ? err.message : String(err) });
     }
     return () => { try { cleanup?.(); } catch (err) { console.error(`[${plugin?.name ?? "plugin"}] dialog cleanup failed`, err); } };
   }, [host, spec, handle, plugin]);
 
-  const buttons = spec.buttons ?? [{ label: "Close" }];
+  const buttons = spec.buttons ?? [{ label: t("Close") }];
   const press = async (b: (typeof buttons)[number]) => {
     setPressed(true);
     try {
@@ -227,7 +228,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
     setBusy(true);
     try {
       await installPlugin(store, preview, { enabled: enable, pin, local, replaces });
-      store.set(pushToastAtom, { kind: "ok", title: replaces ? "Plugin updated" : "Plugin installed", detail: `${preview.manifest?.name ?? preview.spec}${preview.manifest?.version ? ` ${preview.manifest.version}` : ""}${enable ? "" : " — off until you turn it on in Manage Plugins"}` });
+      store.set(pushToastAtom, { kind: "ok", title: replaces ? t("Plugin updated") : t("Plugin installed"), detail: `${preview.manifest?.name ?? preview.spec}${preview.manifest?.version ? ` ${preview.manifest.version}` : ""}${enable ? "" : t(" — off until you turn it on in Manage Plugins")}` });
       onAdded?.();
       close(entry.key);
     } finally {
@@ -251,24 +252,24 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title={replaces ? "Update Plugin" : "Add Plugin"}
+      title={replaces ? t("Update Plugin") : t("Add Plugin")}
       icon={<ShieldAlert size={14} />}
       size="md"
       tall
       footer={
         <>
           <Button variant="primary" disabled={busy || unreadable !== null} onClick={() => { void install(); }}>
-            {busy && <LoaderCircle size={11} className="spin" />}{replaces ? "Update" : enable ? "Add and Enable" : "Add"}
+            {busy && <LoaderCircle size={11} className="spin" />}{replaces ? t("Update") : enable ? t("Add and Enable") : t("Add")}
           </Button>
-          <Button onClick={() => close(entry.key)}>Cancel</Button>
+          <Button onClick={() => close(entry.key)}>{t("Cancel")}</Button>
         </>
       }
     >
       <div className="stack plugin-confirm">
         {unreadable !== null ? (
           <>
-            <p className="error-text">Could not find plugin data at that address.</p>
-            <p className="hint">Check that the link points at a <span className="mono">plugin.json</span>, or at a repository or folder that has one.</p>
+            <p className="error-text">{t("Could not find plugin data at that address.")}</p>
+            <p className="hint">{t("Check that the link points at a")}{" "}<span className="mono">plugin.json</span>{t(", or at a repository or folder that has one.")}</p>
             <p className="hint mono">{unreadable}</p>
           </>
         ) : (
@@ -279,8 +280,8 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 <div className="row" style={{ gap: 8 }}>
                   <strong className="plugin-confirm-name">{name}</strong>
                   {manifest?.version && <span className="dim">v{manifest.version}</span>}
-                  {!preview && <span className="badge dim"><LoaderCircle size={9} className="spin" />reading plugin.json…</span>}
-                  {preview?.needsApi != null && <span className="badge warn">needs plugin API {preview.needsApi}</span>}
+                  {!preview && <span className="badge dim"><LoaderCircle size={9} className="spin" />{t("reading plugin.json…")}</span>}
+                  {preview?.needsApi != null && <span className="badge warn">{t("needs plugin API {needsApi}", { needsApi: preview.needsApi })}</span>}
                 </div>
                 {manifest?.author && <span className="hint">by {manifest.author}</span>}
                 {manifest?.description && <span className="hint">{manifest.description}</span>}
@@ -290,43 +291,37 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
             {replaces && (replaces.startsWith("builtin:")
               ? (
                 <p className="hint">
-                  <strong>{name}</strong> is part of this build: it is compiled in, and the editor asks its
-                  repository for nothing — not at startup, not until you press the check. Updating it makes it an
-                  ordinary plugin fetched from that address, including each time the editor starts. The
-                  <em> Load from a copy saved here</em> tick below fetches it once and runs that copy from then on,
-                  which is the nearest thing to how it works now.
+                  <strong>{name}</strong> {" "}{t("is part of this build: it is compiled in, and the editor asks its repository for nothing — not at startup, not until you press the check. Updating it makes it an ordinary plugin fetched from that address, including each time the editor starts. The")}
+                  <em> {t("Load from a copy saved here")}</em> {" "}{t("tick below fetches it once and runs that copy from then on, which is the nearest thing to how it works now.")}
                 </p>
               )
               : (
                 <p className="hint">
-                  Replacing the installed <span className="mono">{replacedVersion(replaces)}</span>. This
-                  is newer code, so give it the same look over you would give a plugin you are adding for the first time.
+                  {t("Replacing the installed")}{" "}<span className="mono">{replacedVersion(replaces)}</span>{t(". This is newer code, so give it the same look over you would give a plugin you are adding for the first time.")}
                 </p>
               ))}
 
             <div className="plugin-warning">
               <ShieldAlert size={15} />
               <div>
-                <strong>Only add plugins you trust.</strong> Plugins are not sandboxed. This one will run with the same
-                access as the editor: it can read and change the map you have open and anything you save from it, add menu
-                items and hotkeys, keep data in {host.here}, and make network requests.
+                <strong>{t("Only add plugins you trust.")}</strong> {" "}{t("Plugins are not sandboxed. This one will run with the same access as the editor: it can read and change the map you have open and anything you save from it, add menu items and hotkeys, keep data in {here}, and make network requests.", { here: host.here })}
               </div>
             </div>
 
             <div className="plugin-options">
               <Option
-                label="Enable it now"
-                hint="Run the plugin as soon as it is added. Leave it off to add it to the list and start it later."
+                label={t("Enable it now")}
+                hint={t("Run the plugin as soon as it is added. Leave it off to add it to the list and start it later.")}
                 checked={enable}
                 onChange={setEnable}
               />
               <Option
-                label={pinnable ? `Pin to this version (${preview!.pin!.short})` : "Pin to this version"}
+                label={pinnable ? t("Pin to this version ({short})", { short: preview!.pin!.short }) : t("Pin to this version")}
                 hint={
                   pinnable
                     ? pin
-                      ? <>Stores <span className="mono">@{preview!.pin!.short}</span>, so the editor loads this exact commit every time. The Update button on the row is how you move to a newer one.</>
-                      : <>Follows <span className="mono">{preview!.ref ?? "the default branch"}</span>: the editor downloads whatever is there each time it starts.</>
+                      ? <>{t("Stores")}{" "}<span className="mono">@{preview!.pin!.short}</span>{t(", so the editor loads this exact commit every time. The Update button on the row is how you move to a newer one.")}</>
+                      : <>{t("Follows")}{" "}<span className="mono">{preview!.ref ?? t("the default branch")}</span>{t(": the editor downloads whatever is there each time it starts.")}</>
                     : preview?.pinProblem ?? "—"
                 }
                 checked={pinning}
@@ -334,7 +329,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 onChange={setPin}
               />
               <Option
-                label="Load from a copy saved here"
+                label={t("Load from a copy saved here")}
                 hint={
                   builtin
                     ? BUILTIN_COPY_HINT
@@ -347,34 +342,33 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
             </div>
 
             <div className="plugin-facts">
-              <Fact label="Source">
+              <Fact label={t("Source")}>
                 <span className="mono">{pinning ? preview.pin!.spec : preview?.spec ?? spec}</span>
               </Fact>
-              {where?.webUrl && <Fact label="Repository"><Link href={where.webUrl} /></Fact>}
-              {manifest?.homepage && /^https?:\/\//i.test(manifest.homepage) && <Fact label="Homepage"><Link href={manifest.homepage} /></Fact>}
-              {where?.manifestUrl && <Fact label="Manifest"><span className="mono">{where.manifestUrl}</span></Fact>}
-              <Fact label="Code">
+              {where?.webUrl && <Fact label={t("Repository")}><Link href={where.webUrl} /></Fact>}
+              {manifest?.homepage && /^https?:\/\//i.test(manifest.homepage) && <Fact label={t("Homepage")}><Link href={manifest.homepage} /></Fact>}
+              {where?.manifestUrl && <Fact label={t("Manifest")}><span className="mono">{where.manifestUrl}</span></Fact>}
+              <Fact label={t("Code")}>
                 {builtin
-                  ? <span>Part of this build of the editor.</span>
+                  ? <span>{t("Part of this build of the editor.")}</span>
                   : where?.entryUrl
                     ? <>
                         <span className="mono">{where.entryUrl}</span>
                         {where.built && (
                           <div className="dim">
-                            A JavaScript bundle the repository builds from <span className="mono">{manifest?.entry ?? "its source"}</span>, which is what to read.
+                            {t("A JavaScript bundle the repository builds from")}{" "}<span className="mono">{manifest?.entry ?? t("its source")}</span>{t(", which is what to read.")}
                           </div>
                         )}
                       </>
-                    : <span className="dim">{where?.base ? <><span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> in <span className="mono">{where.base}</span></> : "—"}</span>}
+                    : <span className="dim">{where?.base ? <><span className="mono">{t("plugin.ts")}</span> or <span className="mono">{t("plugin.js")}</span> in <span className="mono">{where.base}</span></> : "—"}</span>}
               </Fact>
             </div>
 
             {preview?.needsApi != null && (
-              <p className="hint">This plugin asks for a newer plugin API than the editor has, so it will probably fail to load.</p>
+              <p className="hint">{t("This plugin asks for a newer plugin API than the editor has, so it will probably fail to load.")}</p>
             )}
             <p className="hint">
-              Only the <span className="mono">plugin.json</span> has been read so far. None of the plugin's code has been
-              downloaded or run yet; {replaces ? "Update" : "Add"} does that.
+              {t("Only the")}{" "}<span className="mono">plugin.json</span> {" "}{t("has been read so far. None of the plugin's code has been downloaded or run yet;")}{" "}{replaces ? t("Update") : t("Add")} {" "}{t("does that.")}
             </p>
           </>
         )}
@@ -386,7 +380,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
 /* ── Manage Plugins ─────────────────────────────────────── */
 
 /** Said whenever an address answered, but with nothing that names a plugin. */
-const NOT_FOUND = "Could not find plugin data at that address. Check that the link points at a plugin.json, or at a repository or folder that has one.";
+const NOT_FOUND = msg("Could not find plugin data at that address. Check that the link points at a plugin.json, or at a repository or folder that has one.");
 
 /**
  * The row's badge. `busy` spins it: a plugin does not appear out of nowhere — fetching,
@@ -395,13 +389,13 @@ const NOT_FOUND = "Could not find plugin data at that address. Check that the li
  * when the network answers.
  */
 function statusLabel(rt: PluginRuntime | undefined, enabled: boolean): { text: string; className: string; busy?: boolean } {
-  if (enabled && rt?.status === "loading") return { text: "loading…", className: "dim", busy: true };
+  if (enabled && rt?.status === "loading") return { text: t("loading…"), className: "dim", busy: true };
   const describing = rt?.describing === true;
-  if (!enabled) return describing ? { text: "reading…", className: "dim", busy: true } : { text: "off", className: "dim" };
+  if (!enabled) return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: "off", className: "dim" };
   switch (rt?.status) {
-    case "active": return { text: "active", className: "teal" };
-    case "error": return { text: "failed", className: "error-text" };
-    default: return describing ? { text: "reading…", className: "dim", busy: true } : { text: "off", className: "dim" };
+    case "active": return { text: t("active"), className: "teal" };
+    case "error": return { text: t("failed"), className: "error-text" };
+    default: return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: "off", className: "dim" };
   }
 }
 
@@ -409,11 +403,11 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
   if (!rt || rt.status !== "active") return "";
   const c = rt.contributions;
   const parts: string[] = [];
-  if (c.menu) parts.push(`${c.menu} menu item${c.menu === 1 ? "" : "s"}`);
-  if (c.contextMenu) parts.push(`${c.contextMenu} context-menu item${c.contextMenu === 1 ? "" : "s"}`);
+  if (c.menu) parts.push(t("{n, plural, one {# menu item} other {# menu items}}", { n: c.menu }));
+  if (c.contextMenu) parts.push(t("{n, plural, one {# context-menu item} other {# context-menu items}}", { n: c.contextMenu }));
   if (c.hotkeys) parts.push(`${c.hotkeys} hotkey${c.hotkeys === 1 ? "" : "s"}`);
   if (c.events) parts.push(`${c.events} listener${c.events === 1 ? "" : "s"}`);
-  return parts.length > 0 ? parts.join(", ") : "no contributions";
+  return parts.length > 0 ? parts.join(", ") : t("no contributions");
 }
 
 /* ── Browsing a registry ────────────────────────────────── */
@@ -471,13 +465,13 @@ function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onMana
       <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
           <strong>{entry.name}</strong>
-          {version.text && <span className="dim" title={version.mine ? "The version you have" : "The version the registry lists"}>v{version.text}</span>}
+          {version.text && <span className="dim" title={version.mine ? t("The version you have") : t("The version the registry lists")}>v{version.text}</span>}
           {version.available && (
-            <span className="badge gold" title={`You have v${have}. Update it under Installed.`}>v{version.available} available</span>
+            <span className="badge gold" title={t("You have v{have}. Update it under Installed.", { have: have ?? "" })}>{t("v{available} available", { available: version.available })}</span>
           )}
-          {entry.default &&<span className="badge dim" title="One of the plugins the editor lists out of the box">default</span>}
-          {entry.unlisted && <span className="badge dim" title="You have this plugin, but no registry being searched lists it — it came from its own address">not listed</span>}
-          {tooNew && <span className="badge warn" title={`Needs plugin API ${entry.api}; this editor has ${PLUGIN_API_VERSION}`}>needs a newer editor</span>}
+          {entry.default &&<span className="badge dim" title={t("One of the plugins the editor lists out of the box")}>{t("default")}</span>}
+          {entry.unlisted && <span className="badge dim" title={t("You have this plugin, but no registry being searched lists it — it came from its own address")}>{t("not listed")}</span>}
+          {tooNew && <span className="badge warn" title={t("Needs plugin API {api}; this editor has {PLUGIN_API_VERSION}", { api: entry.api ?? "?", PLUGIN_API_VERSION })}>{t("needs a newer editor")}</span>}
         </div>
         {entry.description && <span className="hint">{entry.description}</span>}
         {/* Author, tags and the date sat in the same faint grey as the description above
@@ -488,7 +482,7 @@ function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onMana
             {entry.author && <span className="plugin-by"><User size={10} />{entry.author}</span>}
             {tags.map((t) => <span key={t} className="plugin-tag">{t}</span>)}
             {entry.updated && (
-              <span className="plugin-updated" title={`Last updated ${entry.updated}`}>
+              <span className="plugin-updated" title={t("Last updated {updated}", { updated: entry.updated })}>
                 <Clock size={10} />{entry.updated.slice(0, 10)}
               </span>
             )}
@@ -499,24 +493,24 @@ function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onMana
       <div className="plugin-row-actions">
         <div className="row" style={{ gap: 4 }}>
           {entry.repo && (
-            <Button size="sm" title="Read the source" onClick={() => window.open(entry.repo, "_blank", "noopener,noreferrer")}>
-              <ExternalLink size={11} /> Source
+            <Button size="sm" title={t("Read the source")} onClick={() => window.open(entry.repo, "_blank", "noopener,noreferrer")}>
+              <ExternalLink size={11} /> {" "}{t("Source")}
             </Button>
           )}
           {state === "new" && (
             <Button size="sm" variant="primary" disabled={busy || tooNew} onClick={onInstall}>
-              {busy ? <LoaderCircle size={11} className="spin" /> : <Download size={11} />} Install
+              {busy ? <LoaderCircle size={11} className="spin" /> : <Download size={11} />} {" "}{t("Install")}
             </Button>
           )}
-          {state === "disabled" && <Button size="sm" title="Turn it on" onClick={onEnable}>Turn on</Button>}
+          {state === "disabled" && <Button size="sm" title={t("Turn it on")} onClick={onEnable}>{t("Turn on")}</Button>}
           {state !== "new" && (
-            <Button size="sm" title="Show this plugin under Installed" onClick={onManage}>
-              <Settings2 size={11} /> Manage
+            <Button size="sm" title={t("Show this plugin under Installed")} onClick={onManage}>
+              <Settings2 size={11} /> {" "}{t("Manage")}
             </Button>
           )}
         </div>
-        {state === "installed" && <span className="plugin-here on"><CircleCheck size={11} /> Installed</span>}
-        {state === "disabled" && <span className="plugin-here"><CircleSlash size={11} /> Installed, turned off</span>}
+        {state === "installed" && <span className="plugin-here on"><CircleCheck size={11} /> {" "}{t("Installed")}</span>}
+        {state === "disabled" && <span className="plugin-here"><CircleSlash size={11} /> {" "}{t("Installed, turned off")}</span>}
       </div>
     </div>
   );
@@ -544,11 +538,9 @@ function RegistrySources() {
 
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <span className="pane-label">Registries</span>
+      <span className="pane-label">{t("Registries")}</span>
       <p className="hint">
-        A registry is one file listing plugins. The project's own is fetched from
-        its repository; add another to browse someone else's list. Being listed is not a
-        promise about the plugin — installing one still shows you where it comes from first.
+        {t("A registry is one file listing plugins. The project's own is fetched from its repository; add another to browse someone else's list. Being listed is not a promise about the plugin — installing one still shows you where it comes from first.")}
       </p>
       <div className="listbox" role="list">
         {registryUrls(store).map((u) => {
@@ -560,21 +552,21 @@ function RegistrySources() {
               <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <strong>{held?.registry.name ?? hostOf(u)}</strong>
-                  {st?.status === "loading" && <span className="badge dim"><LoaderCircle size={9} className="spin" />reading…</span>}
-                  {isDefaultRegistry(u) && <span className="badge dim">default</span>}
+                  {st?.status === "loading" && <span className="badge dim"><LoaderCircle size={9} className="spin" />{t("reading…")}</span>}
+                  {isDefaultRegistry(u) && <span className="badge dim">{t("default")}</span>}
                 </div>
                 <span className="hint mono" style={{ opacity: 0.7 }}>{u}</span>
                 {held && (
                   <span className="hint">
-                    {held.registry.plugins.length} plugin{held.registry.plugins.length === 1 ? "" : "s"}
-                    {held.registry.skipped > 0 && `, ${held.registry.skipped} entr${held.registry.skipped === 1 ? "y" : "ies"} skipped`}
-                    {` · read ${new Date(held.at).toLocaleString()}`}
+                    {t("{length} plugin", { length: held.registry.plugins.length })}{held.registry.plugins.length === 1 ? "" : "s"}
+                    {held.registry.skipped > 0 && t(", {skipped, plural, one {# entry} other {# entries}} skipped", { skipped: held.registry.skipped })}
+                    {t(" · read {toLocaleString}", { toLocaleString: new Date(held.at).toLocaleString() })}
                   </span>
                 )}
                 {st?.status === "error" && st.error && <span className="error-text">{st.error}</span>}
               </div>
               {!isDefaultRegistry(u) && (
-                <Button size="sm" title="Remove this registry" onClick={() => removeRegistry(store, u)}><Trash2 size={11} /></Button>
+                <Button size="sm" title={t("Remove this registry")} onClick={() => removeRegistry(store, u)}><Trash2 size={11} /></Button>
               )}
             </div>
           );
@@ -587,9 +579,9 @@ function RegistrySources() {
           value={url}
           onChange={(e) => { setUrl(e.target.value); setProblem(null); }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-          aria-label="Registry address"
+          aria-label={t("Registry address")}
         />
-        <Button onClick={add} disabled={url.trim() === ""}><Plus size={12} /> Add</Button>
+        <Button onClick={add} disabled={url.trim() === ""}><Plus size={12} /> {" "}{t("Add")}</Button>
       </div>
       {problem && <span className="error-text">{problem}</span>}
     </div>
@@ -598,9 +590,9 @@ function RegistrySources() {
 
 /** The three ways of looking at the browse list, and what each is called above it. */
 const BROWSE_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "available", label: "Not installed" },
-  { value: "installed", label: "Installed" },
+  { value: "all", label: msg("All") },
+  { value: "available", label: msg("Not installed") },
+  { value: "installed", label: msg("Installed") },
 ] as const;
 type BrowseFilter = (typeof BROWSE_FILTERS)[number]["value"];
 
@@ -679,8 +671,8 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   };
   // Headed groups are only worth their lines when both are on screen at once.
   const sections: { key: BrowseFilter; label: string; rows: RegistryEntry[] }[] = [
-    { key: "available", label: "Not installed", rows: filter === "installed" ? [] : groups.available },
-    { key: "installed", label: "Already installed", rows: filter === "available" ? [] : groups.installed },
+    { key: "available", label: t("Not installed"), rows: filter === "installed" ? [] : groups.available },
+    { key: "installed", label: t("Already installed"), rows: filter === "available" ? [] : groups.installed },
   ];
   const headed = sections.filter((g) => g.rows.length > 0).length > 1;
   const shown = sections.reduce((n, g) => n + g.rows.length, 0);
@@ -711,30 +703,30 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const manage = (spec: string) => onManage(installOf(spec)?.spec ?? spec);
 
   const nothing = query.trim() !== ""
-    ? `Nothing matches “${query.trim()}”${filter === "all" ? "" : " under this filter"}.`
+    ? t("Nothing matches “{query}”{filter}.", { query: query.trim(), filter: filter === "all" ? "" : t(" under this filter") })
     : filter === "available"
-      ? "Everything on the list is already installed."
+      ? t("Everything on the list is already installed.")
       : filter === "installed"
-        ? "Nothing is installed yet."
+        ? t("Nothing is installed yet.")
         : loading && entries.length === 0
-          ? "Reading the registry…"
-          : "No plugin list could be read. Check the Sources, or paste a plugin's address under Installed.";
+          ? t("Reading the registry…")
+          : t("No plugin list could be read. Check the Sources, or paste a plugin's address under Installed.");
 
   return (
     <div className="stack plugin-manage">
       <div className="row" style={{ alignItems: "flex-start" }}>
         <TextInput
           className="grow"
-          placeholder="Search plugins"
+          placeholder={t("Search plugins")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search plugins"
+          aria-label={t("Search plugins")}
         />
-        <Button title="Read every registry again" disabled={loading} onClick={() => { void loadRegistries(store, { force: true }); }}>
-          {loading ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />} Refresh
+        <Button title={t("Read every registry again")} disabled={loading} onClick={() => { void loadRegistries(store, { force: true }); }}>
+          {loading ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />} {" "}{t("Refresh")}
         </Button>
-        <Button active={sources} onClick={() => setSources((s) => !s)} title="The lists being searched">
-          <Globe size={12} /> Sources
+        <Button active={sources} onClick={() => setSources((s) => !s)} title={t("The lists being searched")}>
+          <Globe size={12} /> {" "}{t("Sources")}
         </Button>
       </div>
       {problem && <span className="error-text">{problem}</span>}
@@ -745,11 +737,11 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
             <div className="row browse-filters">
               {BROWSE_FILTERS.map((f) => (
                 <Button key={f.value} size="sm" active={filter === f.value} onClick={() => setFilter(f.value)}>
-                  {f.label} <span className="dim">{counts[f.value]}</span>
+                  {translate(f.label)} <span className="dim">{counts[f.value]}</span>
                 </Button>
               ))}
               <span className="grow" />
-              {query.trim() !== "" && <span className="hint">{results.length} of {entries.length} match</span>}
+              {query.trim() !== "" && <span className="hint">{t("{length} of {length2} match", { length: results.length, length2: entries.length })}</span>}
             </div>
             <div className="listbox plugin-list">
               {sections.map((g) => g.rows.length === 0 ? null : (
@@ -778,7 +770,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
             </div>
             {failures.length > 0 && (
               <span className="hint error-text">
-                {failures.length === 1 ? "A registry could not be read" : `${failures.length} registries could not be read`} — see Sources.
+                {failures.length === 1 ? t("A registry could not be read") : t("{length} registries could not be read", { length: failures.length })} {" "}{t("— see Sources.")}
               </span>
             )}
           </>
@@ -805,7 +797,7 @@ function addressLabel(spec: string): string {
 
 /** What to call the version an update would move to: its own version, else the commit. */
 function offeredVersion(preview: PluginPreview): string {
-  return preview.manifest?.version ? `v${preview.manifest.version}` : preview.pin ? preview.pin.short : "the newest commit";
+  return preview.manifest?.version ? `v${preview.manifest.version}` : preview.pin ? preview.pin.short : t("the newest commit");
 }
 
 /**
@@ -868,7 +860,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
       setDetail(null);
       return;
     }
-    if (list.some((p) => p.spec === canonical)) { setProblem("That plugin is already in the list."); setDetail(null); return; }
+    if (list.some((p) => p.spec === canonical)) { setProblem(t("That plugin is already in the list.")); setDetail(null); return; }
     setProblem(null);
     setDetail(null);
     setLooking(true);
@@ -920,8 +912,8 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   const setChecked = (fn: (c: Record<string, PluginUpdateAnswer>) => Record<string, PluginUpdateAnswer>) => setCheckedAll(fn);
   const answer = (s: string, a: PluginUpdateAnswer) => {
     setChecked((c) => ({ ...c, [s]: a }));
-    if (a.kind === "current") store.set(pushToastAtom, { kind: "info", title: "No update", detail: a.text });
-    else if (a.kind === "problem") store.set(pushToastAtom, { kind: "warn", title: "Could not check for an update", detail: a.text });
+    if (a.kind === "current") store.set(pushToastAtom, { kind: "info", title: t("No update"), detail: a.text });
+    else if (a.kind === "problem") store.set(pushToastAtom, { kind: "warn", title: t("Could not check for an update"), detail: a.text });
   };
   const offer = (s: string, preview: PluginPreview) => {
     store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, replaces: s, preview });
@@ -943,9 +935,9 @@ function InstalledPane({ focus }: { focus?: string | null }) {
         // Naming the version is the whole answer: "the newest commit" said nothing about
         // whether the plugin had been released since, which is what was actually asked.
         const at = tag ?? (preview.manifest.version ? `v${preview.manifest.version}` : preview.pin.short);
-        answer(s, { kind: "current", text: `${preview.manifest.name} ${at} is the newest version there is.` });
+        answer(s, { kind: "current", text: t("{name} {at} is the newest version there is.", { name: preview.manifest.name, at }) });
       } else {
-        answer(s, { kind: "problem", text: preview.pinProblem ?? "Could not ask for a newer version." });
+        answer(s, { kind: "problem", text: preview.pinProblem ?? t("Could not ask for a newer version.") });
       }
     } catch (err) {
       answer(s, { kind: "problem", text: err instanceof Error ? err.message : String(err) });
@@ -965,7 +957,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   return (
     <div className="stack plugin-manage">
       <div className="plugin-add">
-        <span className="pane-label">Add a plugin</span>
+        <span className="pane-label">{t("Add a plugin")}</span>
         <div className="row" style={{ alignItems: "flex-start" }}>
           <TextInput
             className="mono grow"
@@ -973,10 +965,10 @@ function InstalledPane({ focus }: { focus?: string | null }) {
             value={spec}
             onChange={(e) => { setSpec(e.target.value); setProblem(null); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void add(); } }}
-            aria-label="Plugin location"
+            aria-label={t("Plugin location")}
           />
           <Button variant="primary" onClick={() => { void add(); }} disabled={spec.trim() === "" || looking}>
-            {looking ? <LoaderCircle size={12} className="spin" /> : <Plus size={12} />} Add
+            {looking ? <LoaderCircle size={12} className="spin" /> : <Plus size={12} />} {" "}{t("Add")}
           </Button>
         </div>
         {problem
@@ -989,9 +981,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           : (
             <>
               <p className="hint">
-                Paste a link to the plugin. Any address {hostTerms().here} can read will do: a git repository, a folder
-                inside one, or the <span className="mono">plugin.json</span> itself. The ones the project
-                publishes are under <strong>Browse</strong>.
+                {t("Paste a link to the plugin. Any address {here} can read will do: a git repository, a folder inside one, or the", { here: hostTerms().here })}{" "}<span className="mono">plugin.json</span> {" "}{t("itself. The ones the project publishes are under")}{" "}<strong>{t("Browse")}</strong>.
               </p>
               <ul className="hint plugin-examples">
                 <li><span className="mono">https://github.com/owner/repo</span></li>
@@ -1000,22 +990,21 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                 <li><span className="mono">https://example.com/my-plugin/plugin.json</span></li>
               </ul>
               <p className="hint">
-                Repositories on GitHub can also be written <span className="mono">github:owner/repo@v1.2</span>, and are the
-                ones that can be pinned to a version.
+                {t("Repositories on GitHub can also be written")}{" "}<span className="mono">{t("github:owner/repo@v1.2")}</span>{t(", and are the ones that can be pinned to a version.")}
               </p>
             </>
           )}
       </div>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <span className="pane-label">Installed</span>
+        <span className="pane-label">{t("Installed")}</span>
         {checkable.length > 0 && (
           <Button
             size="sm"
-            title="Ask every plugin's repository for its newest release, one after another. Nothing is downloaded by the check."
+            title={t("Ask every plugin's repository for its newest release, one after another. Nothing is downloaded by the check.")}
             disabled={checking !== null}
             onClick={() => { void checkAll(); }}
           >
-            {checking !== null ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Check all for updates
+            {checking !== null ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Check all for updates")}
           </Button>
         )}
       </div>
@@ -1040,15 +1029,15 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           const answered = checked[p.spec];
           return (
             <div key={p.spec} className="item plugin-row" role="listitem" data-spec={p.spec}>
-              <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={`Enable ${name}`} />
+              <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={t("Enable {name}", { name })} />
               <PluginIconView icon={rt?.icon} />
               <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <strong>{name}</strong>
                   {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
                   <span className={`badge ${status.className}`}>{status.busy && <LoaderCircle size={9} className="spin" />}{status.text}</span>
-                  {isDefault && <span className="badge dim">default</span>}
-                  {pinnedSpec && <span className="badge dim" title="Loads one fixed commit">pinned</span>}
+                  {isDefault && <span className="badge dim">{t("default")}</span>}
+                  {pinnedSpec && <span className="badge dim" title={t("Loads one fixed commit")}>{t("pinned")}</span>}
                 </div>
                 {rt?.manifest?.description && <span className="hint">{rt.manifest.description}</span>}
                 {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
@@ -1064,37 +1053,35 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                       <Button
                         size="sm"
                         variant="primary"
-                        title="Show what is in the newer version before switching to it"
+                        title={t("Show what is in the newer version before switching to it")}
                         disabled={checking === p.spec}
                         onClick={() => { if (answered.preview) offer(p.spec, answered.preview); else void update(p.spec, address, rt?.manifest?.version); }}
                       >
-                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Update to {answered.preview ? offeredVersion(answered.preview) : `v${answered.version ?? "?"}`}
+                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Update to")}{" "}{answered.preview ? offeredVersion(answered.preview) : `v${answered.version ?? "?"}`}
                       </Button>
                     )
                     : (
-                      <Button size="sm" title={`Ask ${addressLabel(address)} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.`} disabled={checking === p.spec} onClick={() => { void update(p.spec, address, rt?.manifest?.version); }}>
-                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} Check for update
+                      <Button size="sm" title={t("Ask {addressLabel} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.", { addressLabel: addressLabel(address) })} disabled={checking === p.spec} onClick={() => { void update(p.spec, address, rt?.manifest?.version); }}>
+                        {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Check for update")}
                       </Button>
                     ))}
-                  <Button size="sm" title="Fetch the plugin again from its address (and replace any copy kept here)" disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> Reload</Button>
-                  {!isDefault && <Button size="sm" title="Remove from the list" onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
+                  <Button size="sm" title={t("Fetch the plugin again from its address (and replace any copy kept here)")} disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> {" "}{t("Reload")}</Button>
+                  {!isDefault && <Button size="sm" title={t("Remove from the list")} onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
                   {shipped !== undefined && shipped !== p.spec && (
                     <Button
                       size="sm"
-                      title={shipped.startsWith("builtin:")
-                        ? "Go back to the copy compiled into this build, which is fetched from nowhere"
-                        : `Go back to ${replacedVersion(shipped)}, the version this editor ships`}
+                      title={shipped.startsWith("builtin:") ? t("Go back to the copy compiled into this build, which is fetched from nowhere") : t("Go back to {replacedVersion}, the version this editor ships", { replacedVersion: replacedVersion(shipped) })}
                       onClick={() => remove(p.spec)}
                     >
-                      <RotateCcw size={11} /> Revert
+                      <RotateCcw size={11} /> {" "}{t("Revert")}
                     </Button>
                   )}
                 </div>
                 {answered?.kind === "current" && (
-                  <span className="plugin-here on" title={answered.text}><CircleCheck size={11} /> Up to date</span>
+                  <span className="plugin-here on" title={answered.text}><CircleCheck size={11} /> {" "}{t("Up to date")}</span>
                 )}
                 {answered?.kind === "problem" && (
-                  <span className="plugin-here bad" title={answered.text}><TriangleAlert size={11} /> Could not check</span>
+                  <span className="plugin-here bad" title={answered.text}><TriangleAlert size={11} /> {" "}{t("Could not check")}</span>
                 )}
                 {/* The copy used to be an icon button next to Reload, which said nothing about what
                     it did or whether it was on. It is a labelled tick under the buttons instead.
@@ -1108,14 +1095,14 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                 >
                   <HardDrive size={11} />
                   <Check
-                    label="Load from a copy saved here"
+                    label={t("Load from a copy saved here")}
                     checked={p.local === true}
                     disabled={builtinPlugin}
                     onChange={(e) => toggleLocal(p.spec, e.target.checked)}
-                    aria-label={`Load ${name} from a copy saved in ${hostTerms().here}`}
+                    aria-label={t("Load {name} from a copy saved in {here}", { name, here: hostTerms().here })}
                   />
                   {p.local === true && !builtinPlugin && (
-                    <span className="dim">{copy ? `· ${Math.max(1, Math.round(copy.size / 1024))} KB` : "· not saved yet"}</span>
+                    <span className="dim">{copy ? t("· {max} KB", { max: Math.max(1, Math.round(copy.size / 1024)) }) : t("· not saved yet")}</span>
                   )}
                 </span>
               </div>
@@ -1124,9 +1111,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
         })}
       </div>
       <p className="hint">
-        To write one, put a <span className="mono">plugin.json</span> next to
-        a <span className="mono">plugin.ts</span> or <span className="mono">plugin.js</span> anywhere {hostTerms().here} can read
-        it. The API is in <span className="mono">docs/plugins.md</span>.
+        {t("To write one, put a")}{" "}<span className="mono">plugin.json</span> {" "}{t("next to a")}{" "}<span className="mono">{t("plugin.ts")}</span> or <span className="mono">{t("plugin.js")}</span> {" "}{t("anywhere {here} can read it. The API is in", { here: hostTerms().here })}{" "}<span className="mono">{t("docs/plugins.md")}</span>.
       </p>
     </div>
   );
@@ -1148,12 +1133,12 @@ export function PluginsDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Plugins"
+      title={t("Plugins")}
       icon={<Blocks size={14} />}
       size="lg"
       tall
-      footer={<Button variant="primary" onClick={() => store.set(closeDialogAtom, entry.key)}>Close</Button>}
-      description="Plugins add extra tools and features to the editor. A plugin can read and change the map you have open, so only add ones you trust."
+      footer={<Button variant="primary" onClick={() => store.set(closeDialogAtom, entry.key)}>{t("Close")}</Button>}
+      description={t("Plugins add extra tools and features to the editor. A plugin can read and change the map you have open, so only add ones you trust.")}
     >
       <Tabs
         className="grow plugin-tabs"
@@ -1162,11 +1147,11 @@ export function PluginsDialog({ entry }: DialogProps) {
         tabs={[
           {
             value: "browse",
-            label: "Browse",
+            label: t("Browse"),
             icon: <Search size={12} />,
             content: <BrowsePane onManage={(spec) => { setFocus(spec); setTab("installed"); }} />,
           },
-          { value: "installed", label: "Installed", icon: <Blocks size={12} />, content: <InstalledPane focus={focus} /> },
+          { value: "installed", label: t("Installed"), icon: <Blocks size={12} />, content: <InstalledPane focus={focus} /> },
         ]}
       />
     </DialogFrame>

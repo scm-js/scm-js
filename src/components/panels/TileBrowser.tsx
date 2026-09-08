@@ -3,6 +3,7 @@ import { atlasSource } from "../../formats/tileset/atlas";
 import { megatileForTile, MEGATILE_PX } from "../../formats/tileset/decode";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import type { TileGroupInfo } from "../../formats/tileset/palette";
+import { t } from "../../i18n";
 
 /** Paint one tile id from the atlas; the null megatile and out-of-range ids draw as void. */
 export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, id: number, x: number, y: number, px: number) {
@@ -102,7 +103,7 @@ const GroupRow = memo(function GroupRow({ loaded, group, tilePx, top, selected, 
 
   return (
     <div className={`tile-row ${selectedSlot >= 0 ? "is-selected" : ""} kind-${group.kind}`} style={{ top, height: h }}>
-      <div className="tile-row-lbl" title={`Group ${group.group} · ${group.label}`}>
+      <div className="tile-row-lbl" title={t("Group {group} · {label}", { group: group.group, label: group.label })}>
         <span className="mono">{group.group}</span>
         <span className="name">{group.label}</span>
       </div>
@@ -167,7 +168,7 @@ export function TileBrowser({ loaded, groups, selected, onSelect }: TileBrowserP
           <GroupRow key={g.group} loaded={loaded} group={g} tilePx={tilePx} top={(first + i) * rowH} selected={selected} onSelect={onSelect} />
         ))}
       </div>
-      {groups.length === 0 && <div className="hint" style={{ padding: 12 }}>No tile groups match.</div>}
+      {groups.length === 0 && <div className="hint" style={{ padding: 12 }}>{t("No tile groups match.")}</div>}
     </div>
   );
 }
@@ -299,7 +300,7 @@ export function TileGrid({ loaded, tiles, selected, onSelect }: TileGridProps) {
           );
         })}
       </div>
-      {tiles.length === 0 && <div className="hint" style={{ padding: 12 }}>No tiles match.</div>}
+      {tiles.length === 0 && <div className="hint" style={{ padding: 12 }}>{t("No tiles match.")}</div>}
     </div>
   );
 }

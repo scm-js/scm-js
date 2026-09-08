@@ -11,6 +11,7 @@ import {
 import { TILE_PX } from "../editor/units";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
 import type { MapPoint } from "./useTerrainTools";
+import { t } from "../i18n";
 
 /** How close (in screen pixels) the pointer must be to a handle to grab it. */
 const HANDLE_GRAB_PX = 6;
@@ -118,15 +119,15 @@ export function useLocationTools() {
       made.push(index);
     }
     if (made.length === 0) {
-      setStatus(`All ${locationCapacity(scn) - 1} location slots are in use — delete one first`);
+      setStatus(t("All {v} location slots are in use — delete one first", { v: locationCapacity(scn) - 1 }));
       return -1;
     }
     const index = made[0];
     const restored = all.some((c) => c.index === ANYWHERE_INDEX);
     const b = scn.locations[index];
     // `run` applies the list; the boxes are already in place, so hand it an empty apply — commit only.
-    commit({ label: made.length === 1 ? `Create location ${locationName(scn, index) === `Location ${index}` ? index : ""}`.trimEnd() : `Create ${made.length} locations`, changes: [], locations: all });
-    setStatus(`Created location ${index} "${locationName(scn, index)}" at ${at(b)} — ${tiles(b)}${made.length > 1 ? ` and ${made.length - 1} mirror image${made.length === 2 ? "" : "s"}` : ""}${restored ? " · restored Anywhere in slot 63" : ""}${made.length < boxes.length ? " · the table filled up before every image was made" : ""}`);
+    commit({ label: made.length === 1 ? (locationName(scn, index) === `Location ${index}` ? t("Create location {n}", { n: index }) : t("Create location")) : t("Create {n} locations", { n: made.length }), changes: [], locations: all });
+    setStatus(t("Created location {n} \"{name}\" at {at} — {tiles}", { n: index, name: locationName(scn, index), at: at(b), tiles: tiles(b) }) + (made.length > 1 ? t(" and {n, plural, one {# mirror image} other {# mirror images}}", { n: made.length - 1 }) : "") + (restored ? t(" · restored Anywhere in slot 63") : "") + (made.length < boxes.length ? t(" · the table filled up before every image was made") : ""));
     setSelected(made);
     return index;
   }, [store, commit, setStatus, setSelected]);
@@ -221,11 +222,11 @@ export function useLocationTools() {
     const one = locations[0];
     const b = boundsOf(one.after);
     if (d.kind === "move") {
-      commit({ label: n === 1 ? `Move location ${locationName(scn, one.index)}` : `Move ${n} locations`, changes: [], locations });
-      setStatus(n === 1 ? `Moved location ${one.index} "${locationName(scn, one.index)}" to ${at(b)}` : `Moved ${n} locations`);
+      commit({ label: n === 1 ? t("Move location {locationName}", { locationName: locationName(scn, one.index) }) : t("Move {n} locations", { n }), changes: [], locations });
+      setStatus(n === 1 ? t("Moved location {index} \"{locationName}\" to {at}", { index: one.index, locationName: locationName(scn, one.index), at: at(b) }) : t("Moved {n} locations", { n }));
     } else {
-      commit({ label: `Resize location ${locationName(scn, one.index)}`, changes: [], locations });
-      setStatus(`Resized location ${one.index} "${locationName(scn, one.index)}" to ${tiles(b)} at ${at(b)}`);
+      commit({ label: t("Resize location {locationName}", { locationName: locationName(scn, one.index) }), changes: [], locations });
+      setStatus(t("Resized location {index} \"{locationName}\" to {tiles} at {at}", { index: one.index, locationName: locationName(scn, one.index), tiles: tiles(b), at: at(b) }));
     }
     return true;
   }, [store, commit, setStatus]);
@@ -240,8 +241,8 @@ export function useLocationTools() {
     const change = editLocation(scn, index, patch);
     if (!change) return false;
     const renamed = patch.name !== undefined && patch.name !== was;
-    const ok = run(label ?? (renamed ? `Rename location ${was}` : `Edit location ${was}`), [change]);
-    if (ok) setStatus(renamed ? `Renamed location ${index} "${was}" to "${locationName(scn, index)}"` : `Edited location ${index} "${was}"`);
+    const ok = run(label ?? (renamed ? t("Rename location {name}", { name: was }) : t("Edit location {name}", { name: was })), [change]);
+    if (ok) setStatus(renamed ? t("Renamed location {index} \"{was}\" to \"{locationName}\"", { index, was, locationName: locationName(scn, index) }) : t("Edited location {index} \"{was}\"", { index, was }));
     return ok;
   }, [store, run, setStatus]);
 
@@ -260,7 +261,7 @@ export function useLocationTools() {
     }
     const what = changes.length === 1 ? `location ${changes[0].index} "${locationName(scn, changes[0].index)}"` : `${changes.length} locations`;
     const label = ELEVATIONS.find((e) => e.bit === bit)?.label.toLowerCase() ?? `bit ${bit}`;
-    run(`${enabled ? "Allow" : "Exclude"} ${label} on ${what}`, changes, `${enabled ? "Allowed" : "Excluded"} ${label} on ${what}`);
+    run(enabled ? t("Allow {label} on {what}", { label, what }) : t("Exclude {label} on {what}", { label, what }), changes, enabled ? t("Allowed {label} on {what}", { label, what }) : t("Excluded {label} on {what}", { label, what }));
   }, [store, run]);
 
   const remove = useCallback((indices: number[]): number => {
@@ -268,15 +269,15 @@ export function useLocationTools() {
     if (!scn) return 0;
     const locations = removeLocations(scn, indices);
     if (locations.length === 0) return 0;
-    const label = locations.length === 1 ? `Delete location ${locationName(scn, locations[0].index)}` : `Delete ${locations.length} locations`;
-    run(label, locations, locations.length === 1 ? `Deleted location ${locations[0].index}` : `Deleted ${locations.length} locations`);
+    const label = locations.length === 1 ? t("Delete location {name}", { name: locationName(scn, locations[0].index) }) : t("Delete {n} locations", { n: locations.length });
+    run(label, locations, locations.length === 1 ? t("Deleted location {n}", { n: locations[0].index }) : t("Deleted {n} locations", { n: locations.length }));
     setSelected(store.get(selectedLocationsAtom).filter((i) => !locations.some((c) => c.index === i)));
     return locations.length;
   }, [store, run, setSelected]);
 
   const deleteSelected = useCallback(() => {
     const n = deleteSelectedLocations();
-    if (n > 0) setStatus(`Deleted ${n} location${n === 1 ? "" : "s"}`);
+    if (n > 0) setStatus(t("Deleted {n, plural, one {# location} other {# locations}}", { n }));
     return n;
   }, [deleteSelectedLocations, setStatus]);
 
@@ -287,7 +288,7 @@ export function useLocationTools() {
     ensureLocationSlots(scn);
     const change = restoreAnywhere(scn);
     if (!change) return false;
-    return run("Restore Anywhere", [change], `Restored Anywhere (slot 63) to the whole ${scn.width}×${scn.height} map`);
+    return run(t("Restore Anywhere"), [change], t("Restored Anywhere (slot 63) to the whole {w}×{h} map", { w: scn.width, h: scn.height }));
   }, [store, run]);
 
   const anywhereIntact = useCallback((): boolean => {

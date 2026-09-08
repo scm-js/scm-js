@@ -10,7 +10,10 @@ import {
   unitOwnerAtom, unitPlacingAtom,
 } from "../../atoms/editorAtoms";
 import { doodadsRevisionAtom, locationsRevisionAtom, scenarioAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
-import { CLIP_PARTS, clipSummary } from "../../editor/clipboard";
+import { CLIP_PARTS, clipSummary, type ClipPart } from "../../editor/clipboard";
+
+/** The clip parts as the Properties panel names them in a sentence, lower case. */
+const CLIP_PART_NAMES: Record<ClipPart, string> = { terrain: msg("terrain"), doodads: msg("doodads"), units: msg("units"), sprites: msg("sprites"), locations: msg("locations"), fog: msg("fog of war") };
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { boundsOf, isAnywhereIntact, isInverted, locationName } from "../../editor/locations";
 import { useLocationTools } from "../../hooks/useLocationTools";
@@ -20,7 +23,7 @@ import { displayColorHex, PLAYER_COLORS, playerColorIndex } from "../../data/pla
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
-import { unitName } from "../../data/units";
+import { unitLabel } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { doodadLabel, useDoodadTools } from "../../hooks/useDoodadTools";
@@ -35,6 +38,7 @@ import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
 import { TileThumb } from "./TileBrowser";
 import { SpritePreview, UnitPreview } from "./UnitPreview";
+import { msg, t, translate } from "../../i18n";
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
@@ -45,7 +49,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-const MODE_LABEL = { isom: "Isometric", rect: "Rectangular", tile: "Tile", blend: "Blend" } as const;
+const MODE_LABEL = { isom: msg("Isometric"), rect: msg("Rectangular"), tile: msg("Tile"), blend: msg("Blend") } as const;
 
 function TerrainProps() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -65,26 +69,26 @@ function TerrainProps() {
 
   return (
     <div className="props">
-      <Row k="Brush">
+      <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{terrainName(info, terrain)}{mode === "rect" && variation >= 0 ? <span className="faint"> · var {variation}</span> : null}</>
+          ? <>{terrainName(info, terrain)}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
-      <Row k="Mode">{MODE_LABEL[mode]}</Row>
-      <Row k="Size">{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
-      <div className="props-section">Under cursor</div>
-      <Row k="Tile">{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
-      <Row k="Group">{under ? <>{under.label} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>
-      <Row k="MegaTile">{under ? <span className="mono">{under.megatile >= 0 ? under.megatile : "none"}</span> : dash}</Row>
-      <Row k="Elevation">{under ? heightLabel(under.height) : dash}</Row>
-      <Row k="Walkable">{under ? `${under.walkable} / 16 minitiles` : dash}</Row>
-      <Row k="Buildable">{under ? (under.buildable ? "Yes" : "No") : dash}</Row>
+      <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>
+      <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
+      <div className="props-section">{t("Under cursor")}</div>
+      <Row k={t("Tile")}>{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
+      <Row k={t("Group")}>{under ? <>{under.label} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>
+      <Row k={t("MegaTile")}>{under ? <span className="mono">{under.megatile >= 0 ? under.megatile : "none"}</span> : dash}</Row>
+      <Row k={t("Elevation")}>{under ? heightLabel(under.height) : dash}</Row>
+      <Row k={t("Walkable")}>{under ? t("{walkable} / 16 minitiles", { walkable: under.walkable }) : dash}</Row>
+      <Row k={t("Buildable")}>{under ? (under.buildable ? t("Yes") : t("No")) : dash}</Row>
     </div>
   );
 }
 
 const OWNER_OPTIONS = (colors: readonly number[] | null | undefined) =>
-  Array.from({ length: 12 }, (_, i) => <option key={i} value={i}>Player {i + 1} ({PLAYER_COLORS[playerColorIndex(colors, i)].name})</option>);
+  Array.from({ length: 12 }, (_, i) => <option key={i} value={i}>{t("Player {v} ({name})", { v: i + 1, name: translate(PLAYER_COLORS[playerColorIndex(colors, i)].name) })}</option>);
 
 /** Selected units when there are any, otherwise the unit about to be placed. */
 function UnitProps() {
@@ -114,27 +118,27 @@ function UnitProps() {
         <div className="span unit-head">
           <UnitPreview unitId={first.unitId} owner={first.owner} colors={colors} rgb={scenario?.playerRgb} size={48} />
           <div style={{ minWidth: 0 }}>
-            <div className="name" title={unitName(first.unitId)}>{unitName(first.unitId)}</div>
-            <div className="sub">#{first.unitId} · serial {first.serial}{many ? ` · +${selected.length - 1} more` : ""}</div>
+            <div className="name" title={unitLabel(first.unitId)}>{unitLabel(first.unitId)}</div>
+            <div className="sub">{t("#{unitId} · serial {serial}", { unitId: first.unitId, serial: first.serial })}{many ? t(" · +{v} more", { v: selected.length - 1 }) : ""}</div>
           </div>
         </div>
-        <Row k="Owner">
+        <Row k={t("Owner")}>
           <select className="select" value={first.owner} onChange={(e) => tools.setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
         </Row>
-        <Row k="Position"><span className="mono">{first.x}, {first.y}</span> <span className="faint">px · tile {Math.floor(first.x / 32)}, {Math.floor(first.y / 32)}</span></Row>
-        <Row k="Type">{g.building ? "Building" : g.flyer ? "Flyer" : "Ground unit"}</Row>
-        <div className="props-section">Properties{many ? <span className="faint"> · edits apply to all {selected.length}</span> : null}</div>
-        <Row k="Hit points">{vital(UnitUsed.HitPoints, "hitPointsPercent", "Hit points", 255, "%")}</Row>
-        <Row k="Shields">{vital(UnitUsed.Shields, "shieldPercent", "Shields", 255, "%")}</Row>
-        <Row k="Energy">{vital(UnitUsed.Energy, "energyPercent", "Energy", 255, "%")}</Row>
-        <Row k="Resources">{vital(UnitUsed.Resources, "resourceAmount", "Resources", 0xffffffff)}</Row>
-        <Row k="Hangar">{vital(UnitUsed.Hangar, "hangarUnits", "Hangar count", 0xffff)}</Row>
+        <Row k={t("Position")}><span className="mono">{first.x}, {first.y}</span> <span className="faint">{t("px · tile {floor}, {floor2}", { floor: Math.floor(first.x / 32), floor2: Math.floor(first.y / 32) })}</span></Row>
+        <Row k={t("Type")}>{g.building ? t("Building") : g.flyer ? t("Flyer") : t("Ground unit")}</Row>
+        <div className="props-section">{t("Properties")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null}</div>
+        <Row k={t("Hit points")}>{vital(UnitUsed.HitPoints, "hitPointsPercent", "Hit points", 255, "%")}</Row>
+        <Row k={t("Shields")}>{vital(UnitUsed.Shields, "shieldPercent", "Shields", 255, "%")}</Row>
+        <Row k={t("Energy")}>{vital(UnitUsed.Energy, "energyPercent", "Energy", 255, "%")}</Row>
+        <Row k={t("Resources")}>{vital(UnitUsed.Resources, "resourceAmount", "Resources", 0xffffffff)}</Row>
+        <Row k={t("Hangar")}>{vital(UnitUsed.Hangar, "hangarUnits", "Hangar count", 0xffff)}</Row>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
-          <Button size="sm" onClick={() => open("unitProperties", { indices: selected })}>Unit Properties…</Button>
-          <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete"><Trash2 size={12} /></Button>
-          <Button size="sm" onClick={() => tools.startPlacing(first.unitId)} title="Place more of this unit type">Place more</Button>
+          <Button size="sm" onClick={() => open("unitProperties", { indices: selected })}>{t("Unit Properties…")}</Button>
+          <Button size="sm" onClick={() => tools.deleteSelected()} title={t("Delete")}><Trash2 size={12} /></Button>
+          <Button size="sm" onClick={() => tools.startPlacing(first.unitId)} title={t("Place more of this unit type")}>{t("Place more")}</Button>
         </div>
-        <div className="span hint" style={{ marginTop: 4 }}>Double-click a unit for every field the map format stores.</div>
+        <div className="span hint" style={{ marginTop: 4 }}>{t("Double-click a unit for every field the map format stores.")}</div>
       </div>
     );
   }
@@ -145,25 +149,23 @@ function UnitProps() {
       <div className="span unit-head">
         <UnitPreview unitId={activeUnit} owner={owner} colors={colors} rgb={scenario?.playerRgb} size={48} />
         <div style={{ minWidth: 0 }}>
-          <div className="name" title={unitName(activeUnit)}>{unitName(activeUnit)}</div>
-          <div className="sub">#{activeUnit} · {placing ? "placing" : "select mode"}</div>
+          <div className="name" title={unitLabel(activeUnit)}>{unitLabel(activeUnit)}</div>
+          <div className="sub">#{activeUnit} · {placing ? t("placing") : t("select mode")}</div>
         </div>
       </div>
-      <Row k="Owner">
+      <Row k={t("Owner")}>
         <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
       </Row>
-      <Row k="Type">{g.building ? "Building" : g.flyer ? "Flyer" : "Ground unit"}</Row>
-      <Row k="Footprint">{tools.tables ? <span className="mono">{g.building ? `${g.placeW / 32} × ${g.placeH / 32} tiles` : `${g.left + g.right + 1} × ${g.up + g.down + 1} px`}</span> : dash}</Row>
-      <Row k="Placed">{scenario ? scenario.units.filter((u) => u.unitId === activeUnit).length : dash}</Row>
+      <Row k={t("Type")}>{g.building ? t("Building") : g.flyer ? t("Flyer") : t("Ground unit")}</Row>
+      <Row k={t("Footprint")}>{tools.tables ? <span className="mono">{g.building ? `${g.placeW / 32} × ${g.placeH / 32} tiles` : `${g.left + g.right + 1} × ${g.up + g.down + 1} px`}</span> : dash}</Row>
+      <Row k={t("Placed")}>{scenario ? scenario.units.filter((u) => u.unitId === activeUnit).length : dash}</Row>
       <div className="span row" style={{ marginTop: 6, gap: 6 }}>
         {placing
-          ? <Button size="sm" onClick={() => tools.stopPlacing()}>Stop placing</Button>
-          : <Button size="sm" onClick={() => tools.startPlacing()}>Place {unitName(activeUnit)}</Button>}
+          ? <Button size="sm" onClick={() => tools.stopPlacing()}>{t("Stop placing")}</Button>
+          : <Button size="sm" onClick={() => tools.startPlacing()}>{t("Place {unitName}", { unitName: unitLabel(activeUnit) })}</Button>}
       </div>
       <div className="span hint" style={{ marginTop: 6 }}>
-        {placing
-          ? "Click the map to place; a red box means the placement checks refuse the spot. Esc or right-click stops placing."
-          : "Click a unit to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a unit in the palette to place it."}
+        {placing ? t("Click the map to place; a red box means the placement checks refuse the spot. Esc or right-click stops placing.") : t("Click a unit to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a unit in the palette to place it.")}
       </div>
     </div>
   );
@@ -189,7 +191,7 @@ function DoodadProps() {
   const underIndex = scenario ? tools.pickAt(cursor.x, cursor.y) : -1;
   const under = underIndex >= 0 ? scenario!.doodads[underIndex] : null;
   const underDef = under ? catalogue.byId.get(under.doodadId) ?? null : null;
-  const overlayLabel = (kind: "sprite" | "unit", id: number) => (kind === "unit" ? `${unitName(id)} (unit #${id})` : `sprite #${id}`);
+  const overlayLabel = (kind: "sprite" | "unit", id: number) => (kind === "unit" ? `${unitLabel(id)} (unit #${id})` : `sprite #${id}`);
 
   if (first) {
     const many = selected.length > 1;
@@ -199,24 +201,24 @@ function DoodadProps() {
         <div className="span unit-head">
           {firstDef ? <DoodadThumb loaded={loaded} def={firstDef} width={56} height={40} /> : <span className="swatch" style={{ width: 48, height: 48 }} />}
           <div style={{ minWidth: 0 }}>
-            <div className="name">{firstDef ? doodadLabel(firstDef) : `Doodad #${first.doodadId}`}</div>
-            <div className="sub">{firstDef ? `${firstDef.width} × ${firstDef.height} tiles` : "unknown to this tileset"}{many ? ` · +${selected.length - 1} more` : ""}</div>
+            <div className="name">{firstDef ? doodadLabel(firstDef) : t("Doodad #{doodadId}", { doodadId: first.doodadId })}</div>
+            <div className="sub">{firstDef ? t("{width} × {height} tiles", { width: firstDef.width, height: firstDef.height }) : t("unknown to this tileset")}{many ? t(" · +{v} more", { v: selected.length - 1 }) : ""}</div>
           </div>
         </div>
-        <Row k="Position">{o ? <><span className="mono">tile {o.x}, {o.y}</span> <span className="faint">· centre {first.x}, {first.y} px</span></> : <span className="mono">{first.x}, {first.y} px</span>}</Row>
-        <Row k="Overlay">{firstDef?.overlay ? <>{overlayLabel(firstDef.overlay.kind, firstDef.overlay.id)}{firstDef.overlay.flipped ? " · flipped" : ""}</> : <span className="faint">none</span>}</Row>
-        <Row k="Owner">
+        <Row k={t("Position")}>{o ? <><span className="mono">{t("tile {x}, {y}", { x: o.x, y: o.y })}</span> <span className="faint">{t("· centre {x}, {y} px", { x: first.x, y: first.y })}</span></> : <span className="mono">{first.x}, {first.y} px</span>}</Row>
+        <Row k={t("Overlay")}>{firstDef?.overlay ? <>{overlayLabel(firstDef.overlay.kind, firstDef.overlay.id)}{firstDef.overlay.flipped ? t(" · flipped") : ""}</> : <span className="faint">{t("none")}</span>}</Row>
+        <Row k={t("Owner")}>
           <select className="select" value={first.owner} onChange={(e) => tools.setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
         </Row>
         <div className="span">
-          <Check label="Enabled" title="DD2 enabled byte; for Installation doors and traps this also sets the overlay unit's disabled flag" checked={first.disabled === 0} onChange={(e) => tools.setDisabled(!e.target.checked)} />
+          <Check label={t("Enabled")} title={t("DD2 enabled byte; for Installation doors and traps this also sets the overlay unit's disabled flag")} checked={first.disabled === 0} onChange={(e) => tools.setDisabled(!e.target.checked)} />
         </div>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
-          <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete (restores the ground beneath)"><Trash2 size={12} /></Button>
-          <Button size="sm" onClick={() => tools.convertSelected()} title="Keep the tiles as plain terrain and drop the doodad record; an overlay stays as a sprite">To terrain</Button>
-          {firstDef && <Button size="sm" onClick={() => tools.startPlacing(firstDef.id)} title="Place more of this doodad">Place more</Button>}
+          <Button size="sm" onClick={() => tools.deleteSelected()} title={t("Delete (restores the ground beneath)")}><Trash2 size={12} /></Button>
+          <Button size="sm" onClick={() => tools.convertSelected()} title={t("Keep the tiles as plain terrain and drop the doodad record; an overlay stays as a sprite")}>{t("To terrain")}</Button>
+          {firstDef && <Button size="sm" onClick={() => tools.startPlacing(firstDef.id)} title={t("Place more of this doodad")}>{t("Place more")}</Button>}
         </div>
-        <div className="span hint" style={{ marginTop: 4 }}>Drag to move; a red ghost means the ground there does not fit. Delete puts the terrain the doodad sat on back; To terrain keeps the tiles and forgets the doodad, so they can be painted over piece by piece.</div>
+        <div className="span hint" style={{ marginTop: 4 }}>{t("Drag to move; a red ghost means the ground there does not fit. Delete puts the terrain the doodad sat on back; To terrain keeps the tiles and forgets the doodad, so they can be painted over piece by piece.")}</div>
       </div>
     );
   }
@@ -227,28 +229,26 @@ function DoodadProps() {
       <div className="span unit-head">
         {def ? <DoodadThumb loaded={loaded} def={def} width={56} height={40} /> : <span className="swatch" style={{ width: 48, height: 48 }} />}
         <div style={{ minWidth: 0 }}>
-          <div className="name">{def ? doodadLabel(def) : "No doodads"}</div>
-          <div className="sub">{def ? `${def.width} × ${def.height} tiles · ${placing ? "placing" : "select mode"}` : loaded ? "this tileset lists none" : "tileset graphics not loaded"}</div>
+          <div className="name">{def ? doodadLabel(def) : t("No doodads")}</div>
+          <div className="sub">{def ? `${def.width} × ${def.height} ${t("tiles")} · ${placing ? t("placing") : t("select mode")}` : loaded ? t("this tileset lists none") : t("tileset graphics not loaded")}</div>
         </div>
       </div>
-      <Row k="Owner">
+      <Row k={t("Owner")}>
         <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
       </Row>
-      <Row k="Overlay">{def?.overlay ? <>{overlayLabel(def.overlay.kind, def.overlay.id)}{def.overlay.flipped ? " · flipped" : ""}</> : <span className="faint">none</span>}</Row>
-      <Row k="Ground">{def ? def.required.some((r) => r !== 0) ? `${def.required.filter((r) => r !== 0).length} of ${def.width * def.height} cells checked` : "any" : dash}</Row>
-      <Row k="Options">{options.placeAnywhere ? "place anywhere" : "checked"} · {options.snapToGrid ? "snapped" : "free"}</Row>
-      <Row k="Placed">{scenario && def ? scenario.doodads.filter((d) => d.doodadId === def.id).length : dash}</Row>
+      <Row k={t("Overlay")}>{def?.overlay ? <>{overlayLabel(def.overlay.kind, def.overlay.id)}{def.overlay.flipped ? t(" · flipped") : ""}</> : <span className="faint">{t("none")}</span>}</Row>
+      <Row k={t("Ground")}>{def ? def.required.some((r) => r !== 0) ? t("{length} of {v} cells checked", { length: def.required.filter((r) => r !== 0).length, v: def.width * def.height }) : "any" : dash}</Row>
+      <Row k={t("Options")}>{options.placeAnywhere ? t("place anywhere") : t("checked")} · {options.snapToGrid ? t("snapped") : t("free")}</Row>
+      <Row k={t("Placed")}>{scenario && def ? scenario.doodads.filter((d) => d.doodadId === def.id).length : dash}</Row>
       <div className="span row" style={{ marginTop: 6, gap: 6 }}>
         {def && (placing
-          ? <Button size="sm" onClick={() => tools.stopPlacing()}>Stop placing</Button>
-          : <Button size="sm" onClick={() => tools.startPlacing()}>Place {doodadLabel(def)}</Button>)}
+          ? <Button size="sm" onClick={() => tools.stopPlacing()}>{t("Stop placing")}</Button>
+          : <Button size="sm" onClick={() => tools.startPlacing()}>{t("Place {doodadLabel}", { doodadLabel: doodadLabel(def) })}</Button>)}
       </div>
-      <div className="props-section">Under cursor · {cursor.x}, {cursor.y}</div>
-      <Row k="Doodad">{under ? <>{underDef ? doodadLabel(underDef) : `#${under.doodadId}`} <span className="faint mono">DD2 {underIndex}</span></> : <span className="faint">none</span>}</Row>
+      <div className="props-section">{t("Under cursor · {x}, {y}", { x: cursor.x, y: cursor.y })}</div>
+      <Row k={t("Doodad")}>{under ? <>{underDef ? doodadLabel(underDef) : `#${under.doodadId}`} <span className="faint mono">DD2 {underIndex}</span></> : <span className="faint">{t("none")}</span>}</Row>
       <div className="span hint" style={{ marginTop: 6 }}>
-        {placing
-          ? "Click the map to place; red cells show where the ground does not match what this doodad was drawn for. Esc or right-click stops placing."
-          : "Click a doodad to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a doodad in the palette to place it."}
+        {placing ? t("Click the map to place; red cells show where the ground does not match what this doodad was drawn for. Esc or right-click stops placing.") : t("Click a doodad to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a doodad in the palette to place it.")}
       </div>
     </div>
   );
@@ -289,28 +289,28 @@ function SpriteProps() {
           <SpritePreview kind={k} id={first.spriteId} owner={first.owner} colors={colors} rgb={scenario?.playerRgb} size={48} flipped={flipped} />
           <div style={{ minWidth: 0 }}>
             <div className="name" title={spriteName(tools.assets, k, first.spriteId)}>{spriteName(tools.assets, k, first.spriteId)}</div>
-            <div className="sub">{k === "pure" ? "pure sprite" : "unit sprite"} #{first.spriteId} · THG2 {selected[0]}{many ? ` · +${selected.length - 1} more` : ""}</div>
+            <div className="sub">{k === "pure" ? t("pure sprite") : t("unit sprite")} {" "}{t("#{spriteId} · THG2 {v}", { spriteId: first.spriteId, v: selected[0] })}{many ? t(" · +{v} more", { v: selected.length - 1 }) : ""}</div>
           </div>
         </div>
-        <Row k="Owner">
+        <Row k={t("Owner")}>
           <select className="select" value={first.owner} onChange={(e) => tools.setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
         </Row>
-        <Row k="Position"><span className="mono">{first.x}, {first.y}</span> <span className="faint">px · tile {Math.floor(first.x / 32)}, {Math.floor(first.y / 32)}</span></Row>
-        <Row k="Graphic"><span className="mono">{size.width} × {size.height} px</span></Row>
-        {ownerDoodad >= 0 && <Row k="Overlay of">{doodadLabel(catalogue.byId.get(scenario.doodads[ownerDoodad].doodadId)!)} <span className="faint mono">DD2 {ownerDoodad}</span></Row>}
-        <div className="props-section">Flags{many ? <span className="faint"> · edits apply to all {selected.length}</span> : null} <span className="faint mono">{`0x${first.flags.toString(16).toUpperCase().padStart(4, "0")}`}</span></div>
+        <Row k={t("Position")}><span className="mono">{first.x}, {first.y}</span> <span className="faint">{t("px · tile {floor}, {floor2}", { floor: Math.floor(first.x / 32), floor2: Math.floor(first.y / 32) })}</span></Row>
+        <Row k={t("Graphic")}><span className="mono">{size.width} × {size.height} px</span></Row>
+        {ownerDoodad >= 0 && <Row k={t("Overlay of")}>{doodadLabel(catalogue.byId.get(scenario.doodads[ownerDoodad].doodadId)!)} <span className="faint mono">DD2 {ownerDoodad}</span></Row>}
+        <div className="props-section">{t("Flags")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null} <span className="faint mono">{`0x${first.flags.toString(16).toUpperCase().padStart(4, "0")}`}</span></div>
         <div className="span col" style={{ gap: 0 }}>
-          <Check label="Pure sprite" title="Drawn as a graphic only; unticked, the game creates a unit of this id on load (0x1000)" checked={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.PureSprite, e.target.checked, e.target.checked ? "Make pure sprite" : "Make unit sprite")} />
-          <Check label="Flipped" title="Mirror the graphic left-to-right (0x2000)" checked={flipped} onChange={(e) => tools.setFlag(SpriteFlag.Flipped, e.target.checked, e.target.checked ? "Flip sprite" : "Unflip sprite")} />
-          <Check label="Disabled" title="Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (0x8000)" checked={disabled} disabled={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.Disabled, e.target.checked, e.target.checked ? "Disable sprite" : "Enable sprite")} />
+          <Check label={t("Pure sprite")} title={t("Drawn as a graphic only; unticked, the game creates a unit of this id on load (0x1000)")} checked={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.PureSprite, e.target.checked, e.target.checked ? t("Make pure sprite") : t("Make unit sprite"))} />
+          <Check label={t("Flipped")} title={t("Mirror the graphic left-to-right (0x2000)")} checked={flipped} onChange={(e) => tools.setFlag(SpriteFlag.Flipped, e.target.checked, e.target.checked ? t("Flip sprite") : t("Unflip sprite"))} />
+          <Check label={t("Disabled")} title={t("Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (0x8000)")} checked={disabled} disabled={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.Disabled, e.target.checked, e.target.checked ? t("Disable sprite") : t("Enable sprite"))} />
         </div>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
-          <Button size="sm" onClick={() => open("spriteProperties", { indices: selected })}>Sprite Properties…</Button>
-          <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete"><Trash2 size={12} /></Button>
-          <Button size="sm" onClick={() => tools.startPlacing(k, first.spriteId)} title="Place more of this sprite">Place more</Button>
+          <Button size="sm" onClick={() => open("spriteProperties", { indices: selected })}>{t("Sprite Properties…")}</Button>
+          <Button size="sm" onClick={() => tools.deleteSelected()} title={t("Delete")}><Trash2 size={12} /></Button>
+          <Button size="sm" onClick={() => tools.startPlacing(k, first.spriteId)} title={t("Place more of this sprite")}>{t("Place more")}</Button>
         </div>
         <div className="span hint" style={{ marginTop: 4 }}>
-          {ownerDoodad >= 0 ? "This is a doodad's overlay: moving or deleting it leaves the doodad's tiles behind; edit it on the Doodads layer to keep them together." : "Double-click a sprite for every field the THG2 record stores."}
+          {ownerDoodad >= 0 ? t("This is a doodad's overlay: moving or deleting it leaves the doodad's tiles behind; edit it on the Doodads layer to keep them together.") : t("Double-click a sprite for every field the THG2 record stores.")}
         </div>
       </div>
     );
@@ -325,25 +325,23 @@ function SpriteProps() {
         <SpritePreview kind={kind} id={id} owner={owner} colors={colors} rgb={scenario?.playerRgb} size={48} flipped={options.flipped} />
         <div style={{ minWidth: 0 }}>
           <div className="name" title={label}>{label}</div>
-          <div className="sub">{kind === "pure" ? "pure sprite" : "unit sprite"} #{id} · {placing ? "placing" : "select mode"}</div>
+          <div className="sub">{kind === "pure" ? t("pure sprite") : t("unit sprite")} #{id} · {placing ? t("placing") : t("select mode")}</div>
         </div>
       </div>
-      <Row k="Owner">
+      <Row k={t("Owner")}>
         <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
       </Row>
-      <Row k="Kind">{kind === "pure" ? "Pure sprite — a graphic, no unit behind it" : "Unit sprite — becomes a unit when the map loads"}</Row>
-      <Row k="Flags">{[options.flipped && "flipped", kind === "unit" && options.disabled && "disabled"].filter(Boolean).join(" · ") || <span className="faint">none</span>}</Row>
-      <Row k="Graphic">{tools.assets ? <span className="mono">{size.width} × {size.height} px</span> : dash}</Row>
-      <Row k="Placed">{scenario ? scenario.sprites.filter((r) => r.spriteId === id && spriteKind(r) === kind).length : dash}</Row>
+      <Row k={t("Kind")}>{kind === "pure" ? t("Pure sprite — a graphic, no unit behind it") : t("Unit sprite — becomes a unit when the map loads")}</Row>
+      <Row k={t("Flags")}>{[options.flipped && "flipped", kind === "unit" && options.disabled && "disabled"].filter(Boolean).join(" · ") || <span className="faint">{t("none")}</span>}</Row>
+      <Row k={t("Graphic")}>{tools.assets ? <span className="mono">{size.width} × {size.height} px</span> : dash}</Row>
+      <Row k={t("Placed")}>{scenario ? scenario.sprites.filter((r) => r.spriteId === id && spriteKind(r) === kind).length : dash}</Row>
       <div className="span row" style={{ marginTop: 6, gap: 6 }}>
         {placing
-          ? <Button size="sm" onClick={() => tools.stopPlacing()}>Stop placing</Button>
-          : <Button size="sm" onClick={() => tools.startPlacing()}>Place {label}</Button>}
+          ? <Button size="sm" onClick={() => tools.stopPlacing()}>{t("Stop placing")}</Button>
+          : <Button size="sm" onClick={() => tools.startPlacing()}>{t("Place {label}", { label })}</Button>}
       </div>
       <div className="span hint" style={{ marginTop: 6 }}>
-        {placing
-          ? "Click the map to place; sprites go anywhere, at any pixel. Esc or right-click stops placing."
-          : "Click a sprite to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a sprite in the palette to place it."}
+        {placing ? t("Click the map to place; sprites go anywhere, at any pixel. Esc or right-click stops placing.") : t("Click a sprite to select it, drag to move, drag on empty ground to box-select; Delete removes the selection. Pick a sprite in the palette to place it.")}
       </div>
     </div>
   );
@@ -409,7 +407,7 @@ function LocationProps() {
     return (
       <div className="props-empty">
         <SquareDashed size={20} />
-        Drag on empty ground to create a location. Click one to select it (Shift adds), drag it to move, drag its handles to resize; double-click for every field.
+        {t("Drag on empty ground to create a location. Click one to select it (Shift adds), drag it to move, drag its handles to resize; double-click for every field.")}
       </div>
     );
   }
@@ -422,38 +420,36 @@ function LocationProps() {
   const step = snap || 1;
   const maxX = scenario.width * 32, maxY = scenario.height * 32;
   const edge = (key: "left" | "top" | "right" | "bottom", max: number) => (
-    <CommitNumber key={`${index}:${key}:${rec[key]}`} label={`${key} edge`} value={rec[key]} step={step} max={max} disabled={anywhere} onCommit={(v) => tools.edit(index, { [key]: v })} />
+    <CommitNumber key={`${index}:${key}:${rec[key]}`} label={t("{key} edge", { key })} value={rec[key]} step={step} max={max} disabled={anywhere} onCommit={(v) => tools.edit(index, { [key]: v })} />
   );
 
   return (
     <div className="props">
       <div className="span unit-head">
         <div style={{ minWidth: 0, flex: 1 }}>
-          <CommitText key={`${index}:${name}`} value={name} disabled={anywhere} onCommit={(v) => tools.rename(index, v)} aria-label="Location name" style={{ width: "100%", fontWeight: 600 }} />
-          <div className="sub">slot {index}{anywhere ? " · Anywhere" : ""}{many ? ` · +${selected.length - 1} more` : ""} · string #{rec.nameIndex}</div>
+          <CommitText key={`${index}:${name}`} value={name} disabled={anywhere} onCommit={(v) => tools.rename(index, v)} aria-label={t("Location name")} style={{ width: "100%", fontWeight: 600 }} />
+          <div className="sub">{t("slot {index}", { index })}{anywhere ? t(" · Anywhere") : ""}{many ? t(" · +{v} more", { v: selected.length - 1 }) : ""} {" "}{t("· string #{nameIndex}", { nameIndex: rec.nameIndex })}</div>
         </div>
       </div>
-      <Row k="Left · Top"><div className="row" style={{ gap: 4 }}>{edge("left", maxX)}{edge("top", maxY)}</div></Row>
-      <Row k="Right · Btm"><div className="row" style={{ gap: 4 }}>{edge("right", maxX)}{edge("bottom", maxY)}</div></Row>
-      <Row k="Size"><span className="mono">{fmtTiles(b.right - b.left)} × {fmtTiles(b.bottom - b.top)}</span> tiles <span className="faint mono">{b.right - b.left}×{b.bottom - b.top}px</span></Row>
-      {isInverted(rec) && <div className="span hint">Stored inverted (right &lt; left or bottom &lt; top): the game reads the normalised box; dragging a handle normalises it.</div>}
-      <div className="props-section">Elevations{many ? <span className="faint"> · edits apply to all {selected.length}</span> : null} <span className="faint mono">0x{rec.elevationFlags.toString(16).toUpperCase().padStart(2, "0")}</span></div>
+      <Row k={t("Left · Top")}><div className="row" style={{ gap: 4 }}>{edge("left", maxX)}{edge("top", maxY)}</div></Row>
+      <Row k={t("Right · Btm")}><div className="row" style={{ gap: 4 }}>{edge("right", maxX)}{edge("bottom", maxY)}</div></Row>
+      <Row k={t("Size")}><span className="mono">{fmtTiles(b.right - b.left)} × {fmtTiles(b.bottom - b.top)}</span> {" "}{t("tiles")}{" "}<span className="faint mono">{b.right - b.left}×{b.bottom - b.top}px</span></Row>
+      {isInverted(rec) && <div className="span hint">{t("Stored inverted (right < left or bottom < top): the game reads the normalised box; dragging a handle normalises it.")}</div>}
+      <div className="props-section">{t("Elevations")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null} <span className="faint mono">0x{rec.elevationFlags.toString(16).toUpperCase().padStart(2, "0")}</span></div>
       <div className="span" style={{ display: "grid", gridAutoFlow: "column", gridTemplateRows: "repeat(3, auto)", gap: "0 8px" }}>
         {ELEVATIONS.map((e) => (
-          <Check key={e.bit} label={e.label} title="Ticked: the location applies on this elevation (its bit is clear in the file)" checked={(rec.elevationFlags & e.bit) === 0} disabled={anywhere} onChange={(ev) => tools.setElevation(e.bit, ev.target.checked)} />
+          <Check key={e.bit} label={e.label} title={t("Ticked: the location applies on this elevation (its bit is clear in the file)")} checked={(rec.elevationFlags & e.bit) === 0} disabled={anywhere} onChange={(ev) => tools.setElevation(e.bit, ev.target.checked)} />
         ))}
       </div>
       {anywhere && (
         <div className="span hint" style={{ marginTop: 6 }}>
-          {intact
-            ? "The 64th location — every trigger's “Anywhere”. It stays the whole map and cannot be moved, resized, renamed or deleted."
-            : <>Anywhere should cover the whole map but does not. <Button size="sm" onClick={() => tools.fixAnywhere()}>Reset to map bounds</Button></>}
+          {intact ? t("The 64th location — every trigger's “Anywhere”. It stays the whole map and cannot be moved, resized, renamed or deleted.") : <>{t("Anywhere should cover the whole map but does not.")} <Button size="sm" onClick={() => tools.fixAnywhere()}>{t("Reset to map bounds")}</Button></>}
         </div>
       )}
       <div className="span row" style={{ marginTop: 6, gap: 6 }}>
-        <Button size="sm" onClick={() => open("locationProperties", { index })}>Location Properties…</Button>
-        <Button size="sm" onClick={() => tools.centerOn(index)} title="Scroll the map to this location"><Crosshair size={12} /></Button>
-        <Button size="sm" onClick={() => tools.deleteSelected()} title="Delete" disabled={!selected.some((i) => i !== ANYWHERE_INDEX)}><Trash2 size={12} /></Button>
+        <Button size="sm" onClick={() => open("locationProperties", { index })}>{t("Location Properties…")}</Button>
+        <Button size="sm" onClick={() => tools.centerOn(index)} title={t("Scroll the map to this location")}><Crosshair size={12} /></Button>
+        <Button size="sm" onClick={() => tools.deleteSelected()} title={t("Delete")} disabled={!selected.some((i) => i !== ANYWHERE_INDEX)}><Trash2 size={12} /></Button>
       </div>
     </div>
   );
@@ -474,18 +470,18 @@ function FogProps() {
     const swatches = (players: number) => (
       <span className="row" style={{ gap: 3 }}>
         {Array.from({ length: FOG_PLAYERS }, (_, i) => (players & playerBit(i)) !== 0 && (
-          <span key={i} className="swatch" title={`Player ${i + 1}`} style={{ background: displayColorHex(scenario?.playerColors, scenario?.playerRgb, i), width: 10, height: 10 }} />
+          <span key={i} className="swatch" title={t("Player {v}", { v: i + 1 })} style={{ background: displayColorHex(scenario?.playerColors, scenario?.playerRgb, i), width: 10, height: 10 }} />
         ))}
       </span>
     );
     return (
       <div className="props">
-        <Row k="Brush">{brush} × {brush} · {fogMode === "fog" ? "lay fog" : "clear fog"}</Row>
-        <Row k="Players">{fogPlayers === 0 ? <span className="faint">none selected</span> : <>{swatches(fogPlayers)}<span className="mono" style={{ marginLeft: 6 }}>{fogPlayersLabel(fogPlayers)}</span></>}</Row>
-        <Row k="Viewing">Player {fogViewPlayer + 1} · {scenario ? `${fogCount(scenario, fogViewPlayer).toLocaleString()} fogged` : "—"}</Row>
-        <div className="props-section">Under cursor · {cursor.x}, {cursor.y}</div>
-        <Row k="Fogged for">{!scenario ? <span className="faint">—</span> : under === 0 ? <span className="faint">nobody (explored for all)</span> : <>{swatches(under)}<span className="mono" style={{ marginLeft: 6 }}>{fogPlayersLabel(under)}</span></>}</Row>
-        {scenario && !scenario.mask && <div className="span hint">No MASK section: the game treats every tile as fogged for everyone.</div>}
+        <Row k={t("Brush")}>{brush} × {brush} · {fogMode === "fog" ? t("lay fog") : t("clear fog")}</Row>
+        <Row k={t("Players")}>{fogPlayers === 0 ? <span className="faint">{t("none selected")}</span> : <>{swatches(fogPlayers)}<span className="mono" style={{ marginLeft: 6 }}>{fogPlayersLabel(fogPlayers)}</span></>}</Row>
+        <Row k={t("Viewing")}>{t("Player {v} ·", { v: fogViewPlayer + 1 })}{" "}{scenario ? t("{toLocaleString} fogged", { toLocaleString: fogCount(scenario, fogViewPlayer).toLocaleString() }) : "—"}</Row>
+        <div className="props-section">{t("Under cursor · {x}, {y}", { x: cursor.x, y: cursor.y })}</div>
+        <Row k={t("Fogged for")}>{!scenario ? <span className="faint">—</span> : under === 0 ? <span className="faint">{t("nobody (explored for all)")}</span> : <>{swatches(under)}<span className="mono" style={{ marginLeft: 6 }}>{fogPlayersLabel(under)}</span></>}</Row>
+        {scenario && !scenario.mask && <div className="span hint">{t("No MASK section: the game treats every tile as fogged for everyone.")}</div>}
       </div>
     );
 }
@@ -501,19 +497,19 @@ function ClipProps() {
   const mode = useAtomValue(clipPasteModeAtom);
   const pasting = useAtomValue(clipPastingAtom);
   useAtomValue(terrainRevisionAtom);
-  if (!scenario) return <div className="props-empty"><SquareDashed size={20} />Open or create a map first.</div>;
-  const parted = CLIP_PARTS.filter((p) => parts[p]).map((p) => p === "fog" ? "fog of war" : p);
+  if (!scenario) return <div className="props-empty"><SquareDashed size={20} />{t("Open or create a map first.")}</div>;
+  const parted = CLIP_PARTS.filter((p) => parts[p]).map((p) => translate(CLIP_PART_NAMES[p]));
   return (
     <div className="props">
-      <div className="props-section">Marked area</div>
+      <div className="props-section">{t("Marked area")}</div>
       {marked
-        ? <Row k="Tiles">{marked.x0}, {marked.y0} → {marked.x1 - 1}, {marked.y1 - 1} · {marked.x1 - marked.x0} × {marked.y1 - marked.y0}</Row>
-        : <div className="span hint">Drag on the map to mark an area; Ctrl+C copies it, Ctrl+X cuts it, Del clears it.</div>}
-      <div className="props-section">Clipboard</div>
-      <Row k="Holds">{clip ? <span className="mono">{clipSummary(clip)}</span> : <span className="faint">empty</span>}</Row>
-      <Row k="Copies">{parted.length > 0 ? parted.join(", ") : <span className="faint">nothing ticked</span>}</Row>
-      <Row k="Paste">{mode === "replace" ? "replace — clears units, sprites and doodads under the paste" : "merge — over what is there"}{pasting ? " · click the map to paste" : ""}</Row>
-      {clip && clip.era !== tilesetIndex(scenario) && <div className="span hint">The clip is from another tileset: its terrain and doodads will not paste, the rest will.</div>}
+        ? <Row k={t("Tiles")}>{marked.x0}, {marked.y0} → {marked.x1 - 1}, {marked.y1 - 1} · {marked.x1 - marked.x0} × {marked.y1 - marked.y0}</Row>
+        : <div className="span hint">{t("Drag on the map to mark an area; Ctrl+C copies it, Ctrl+X cuts it, Del clears it.")}</div>}
+      <div className="props-section">{t("Clipboard")}</div>
+      <Row k={t("Holds")}>{clip ? <span className="mono">{clipSummary(clip)}</span> : <span className="faint">{t("empty")}</span>}</Row>
+      <Row k={t("Copies")}>{parted.length > 0 ? parted.join(", ") : <span className="faint">{t("nothing ticked")}</span>}</Row>
+      <Row k={t("Paste")}>{mode === "replace" ? t("replace — clears units, sprites and doodads under the paste") : t("merge — over what is there")}{pasting ? t(" · click the map to paste") : ""}</Row>
+      {clip && clip.era !== tilesetIndex(scenario) && <div className="span hint">{t("The clip is from another tileset: its terrain and doodads will not paste, the rest will.")}</div>}
     </div>
   );
 }
@@ -532,7 +528,7 @@ export default function PropertiesPanel() {
   return (
     <div className="props-empty">
       <MousePointer2 size={20} />
-      Drag a rectangle on the map to select.
+      {t("Drag a rectangle on the map to select.")}
     </div>
   );
 }

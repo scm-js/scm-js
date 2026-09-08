@@ -34,7 +34,7 @@ import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { msg, translate } from "../../i18n";
+import { msg, t, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
@@ -524,9 +524,9 @@ export default function MenuBar() {
 
   return (
     <Menubar.Root className="menubar">
-      <div className="brand" title="scmJS">
+      <div className="brand" title={t("scmJS")}>
         <AppLogo size={16} />
-        scmJS
+        {t("scmJS")}
       </div>
       {menus.map((m) => (
         <Fragment key={m.label}>

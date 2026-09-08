@@ -1,55 +1,56 @@
+import { msg, translate } from "../i18n";
 /** Unit type catalogue: StarEdit names by units.dat id, and the palette's grouping of them. */
 
 export type RaceKey = "terran" | "zerg" | "protoss" | "neutral";
 
 /** StarEdit's display names, indexed by units.dat id (0–227). */
 export const UNIT_NAMES: readonly string[] = [
-  "Terran Marine", "Terran Ghost", "Terran Vulture", "Terran Goliath", "Goliath Turret",
-  "Terran Siege Tank (Tank Mode)", "Siege Tank Turret (Tank Mode)", "Terran SCV", "Terran Wraith", "Terran Science Vessel",
-  "Gui Montag (Firebat)", "Terran Dropship", "Terran Battlecruiser", "Spider Mine", "Nuclear Missile",
-  "Terran Civilian", "Sarah Kerrigan (Ghost)", "Alan Schezar (Goliath)", "Alan Schezar Turret", "Jim Raynor (Vulture)",
-  "Jim Raynor (Marine)", "Tom Kazansky (Wraith)", "Magellan (Science Vessel)", "Edmund Duke (Tank Mode)", "Edmund Duke Turret (Tank Mode)",
-  "Edmund Duke (Siege Mode)", "Edmund Duke Turret (Siege Mode)", "Arcturus Mengsk (Battlecruiser)", "Hyperion (Battlecruiser)", "Norad II (Battlecruiser)",
-  "Terran Siege Tank (Siege Mode)", "Siege Tank Turret (Siege Mode)", "Terran Firebat", "Scanner Sweep", "Terran Medic",
-  "Zerg Larva", "Zerg Egg", "Zerg Zergling", "Zerg Hydralisk", "Zerg Ultralisk",
-  "Zerg Broodling", "Zerg Drone", "Zerg Overlord", "Zerg Mutalisk", "Zerg Guardian",
-  "Zerg Queen", "Zerg Defiler", "Zerg Scourge", "Torrasque (Ultralisk)", "Matriarch (Queen)",
-  "Infested Terran", "Infested Kerrigan (Infested Terran)", "Unclean One (Defiler)", "Hunter Killer (Hydralisk)", "Devouring One (Zergling)",
-  "Kukulza (Mutalisk)", "Kukulza (Guardian)", "Yggdrasill (Overlord)", "Terran Valkyrie", "Mutalisk Cocoon",
-  "Protoss Corsair", "Protoss Dark Templar", "Zerg Devourer", "Protoss Dark Archon", "Protoss Probe",
-  "Protoss Zealot", "Protoss Dragoon", "Protoss High Templar", "Protoss Archon", "Protoss Shuttle",
-  "Protoss Scout", "Protoss Arbiter", "Protoss Carrier", "Protoss Interceptor", "Protoss Dark Templar (Hero)",
-  "Zeratul (Dark Templar)", "Tassadar/Zeratul (Archon)", "Fenix (Zealot)", "Fenix (Dragoon)", "Tassadar (Templar)",
-  "Mojo (Scout)", "Warbringer (Reaver)", "Gantrithor (Carrier)", "Protoss Reaver", "Protoss Observer",
-  "Protoss Scarab", "Danimoth (Arbiter)", "Aldaris (Templar)", "Artanis (Scout)", "Rhynadon (Badlands Critter)",
-  "Bengalaas (Jungle Critter)", "Cargo Ship (Unused)", "Mercenary Gunship (Unused)", "Scantid (Desert Critter)", "Kakaru (Twilight Critter)",
-  "Ragnasaur (Ashworld Critter)", "Ursadon (Ice World Critter)", "Lurker Egg", "Raszagal (Corsair)", "Samir Duran (Ghost)",
-  "Alexei Stukov (Ghost)", "Map Revealer", "Gerard DuGalle (Battlecruiser)", "Zerg Lurker", "Infested Duran",
-  "Disruption Web", "Terran Command Center", "Terran Comsat Station", "Terran Nuclear Silo", "Terran Supply Depot",
-  "Terran Refinery", "Terran Barracks", "Terran Academy", "Terran Factory", "Terran Starport",
-  "Terran Control Tower", "Terran Science Facility", "Terran Covert Ops", "Terran Physics Lab", "Starbase (Unused)",
-  "Terran Machine Shop", "Repair Bay (Unused)", "Terran Engineering Bay", "Terran Armory", "Terran Missile Turret",
-  "Terran Bunker", "Norad II (Crashed)", "Ion Cannon", "Uraj Crystal", "Khalis Crystal",
-  "Zerg Infested Command Center", "Zerg Hatchery", "Zerg Lair", "Zerg Hive", "Zerg Nydus Canal",
-  "Zerg Hydralisk Den", "Zerg Defiler Mound", "Zerg Greater Spire", "Zerg Queen's Nest", "Zerg Evolution Chamber",
-  "Zerg Ultralisk Cavern", "Zerg Spire", "Zerg Spawning Pool", "Zerg Creep Colony", "Zerg Spore Colony",
-  "Unused Zerg Building 1", "Zerg Sunken Colony", "Zerg Overmind (With Shell)", "Zerg Overmind", "Zerg Extractor",
-  "Mature Chrysalis", "Zerg Cerebrate", "Zerg Cerebrate Daggoth", "Unused Zerg Building 2", "Protoss Nexus",
-  "Protoss Robotics Facility", "Protoss Pylon", "Protoss Assimilator", "Unused Protoss Building 1", "Protoss Observatory",
-  "Protoss Gateway", "Unused Protoss Building 2", "Protoss Photon Cannon", "Protoss Citadel of Adun", "Protoss Cybernetics Core",
-  "Protoss Templar Archives", "Protoss Forge", "Protoss Stargate", "Stasis Cell/Prison", "Protoss Fleet Beacon",
-  "Protoss Arbiter Tribunal", "Protoss Robotics Support Bay", "Protoss Shield Battery", "Khaydarin Crystal Formation", "Protoss Temple",
-  "Xel'Naga Temple", "Mineral Field (Type 1)", "Mineral Field (Type 2)", "Mineral Field (Type 3)", "Cave (Unused)",
-  "Cave-in (Unused)", "Cantina (Unused)", "Mining Platform (Unused)", "Independent Command Center (Unused)", "Independent Starport (Unused)",
-  "Independent Jump Gate (Unused)", "Ruins (Unused)", "Khaydarin Crystal Formation (Unused)", "Vespene Geyser", "Warp Gate",
-  "Psi Disrupter", "Zerg Marker", "Terran Marker", "Protoss Marker", "Zerg Beacon",
-  "Terran Beacon", "Protoss Beacon", "Zerg Flag Beacon", "Terran Flag Beacon", "Protoss Flag Beacon",
-  "Power Generator", "Overmind Cocoon", "Dark Swarm", "Floor Missile Trap", "Floor Hatch (Unused)",
-  "Left Upper Level Door", "Right Upper Level Door", "Left Pit Door", "Right Pit Door", "Floor Gun Trap",
-  "Left Wall Missile Trap", "Left Wall Flame Trap", "Right Wall Missile Trap", "Right Wall Flame Trap", "Start Location",
-  "Flag", "Young Chrysalis", "Psi Emitter", "Data Disk", "Khaydarin Crystal",
-  "Mineral Cluster Type 1", "Mineral Cluster Type 2", "Protoss Vespene Gas Orb Type 1", "Protoss Vespene Gas Orb Type 2", "Zerg Vespene Gas Sac Type 1",
-  "Zerg Vespene Gas Sac Type 2", "Terran Vespene Gas Tank Type 1", "Terran Vespene Gas Tank Type 2",
+  msg("Terran Marine"), msg("Terran Ghost"), msg("Terran Vulture"), msg("Terran Goliath"), msg("Goliath Turret"),
+  msg("Terran Siege Tank (Tank Mode)"), msg("Siege Tank Turret (Tank Mode)"), msg("Terran SCV"), msg("Terran Wraith"), msg("Terran Science Vessel"),
+  msg("Gui Montag (Firebat)"), msg("Terran Dropship"), msg("Terran Battlecruiser"), msg("Spider Mine"), msg("Nuclear Missile"),
+  msg("Terran Civilian"), msg("Sarah Kerrigan (Ghost)"), msg("Alan Schezar (Goliath)"), msg("Alan Schezar Turret"), msg("Jim Raynor (Vulture)"),
+  msg("Jim Raynor (Marine)"), msg("Tom Kazansky (Wraith)"), msg("Magellan (Science Vessel)"), msg("Edmund Duke (Tank Mode)"), msg("Edmund Duke Turret (Tank Mode)"),
+  msg("Edmund Duke (Siege Mode)"), msg("Edmund Duke Turret (Siege Mode)"), msg("Arcturus Mengsk (Battlecruiser)"), msg("Hyperion (Battlecruiser)"), msg("Norad II (Battlecruiser)"),
+  msg("Terran Siege Tank (Siege Mode)"), msg("Siege Tank Turret (Siege Mode)"), msg("Terran Firebat"), msg("Scanner Sweep"), msg("Terran Medic"),
+  msg("Zerg Larva"), msg("Zerg Egg"), msg("Zerg Zergling"), msg("Zerg Hydralisk"), msg("Zerg Ultralisk"),
+  msg("Zerg Broodling"), msg("Zerg Drone"), msg("Zerg Overlord"), msg("Zerg Mutalisk"), msg("Zerg Guardian"),
+  msg("Zerg Queen"), msg("Zerg Defiler"), msg("Zerg Scourge"), msg("Torrasque (Ultralisk)"), msg("Matriarch (Queen)"),
+  msg("Infested Terran"), msg("Infested Kerrigan (Infested Terran)"), msg("Unclean One (Defiler)"), msg("Hunter Killer (Hydralisk)"), msg("Devouring One (Zergling)"),
+  msg("Kukulza (Mutalisk)"), msg("Kukulza (Guardian)"), msg("Yggdrasill (Overlord)"), msg("Terran Valkyrie"), msg("Mutalisk Cocoon"),
+  msg("Protoss Corsair"), msg("Protoss Dark Templar"), msg("Zerg Devourer"), msg("Protoss Dark Archon"), msg("Protoss Probe"),
+  msg("Protoss Zealot"), msg("Protoss Dragoon"), msg("Protoss High Templar"), msg("Protoss Archon"), msg("Protoss Shuttle"),
+  msg("Protoss Scout"), msg("Protoss Arbiter"), msg("Protoss Carrier"), msg("Protoss Interceptor"), msg("Protoss Dark Templar (Hero)"),
+  msg("Zeratul (Dark Templar)"), msg("Tassadar/Zeratul (Archon)"), msg("Fenix (Zealot)"), msg("Fenix (Dragoon)"), msg("Tassadar (Templar)"),
+  msg("Mojo (Scout)"), msg("Warbringer (Reaver)"), msg("Gantrithor (Carrier)"), msg("Protoss Reaver"), msg("Protoss Observer"),
+  msg("Protoss Scarab"), msg("Danimoth (Arbiter)"), msg("Aldaris (Templar)"), msg("Artanis (Scout)"), msg("Rhynadon (Badlands Critter)"),
+  msg("Bengalaas (Jungle Critter)"), msg("Cargo Ship (Unused)"), msg("Mercenary Gunship (Unused)"), msg("Scantid (Desert Critter)"), msg("Kakaru (Twilight Critter)"),
+  msg("Ragnasaur (Ashworld Critter)"), msg("Ursadon (Ice World Critter)"), msg("Lurker Egg"), msg("Raszagal (Corsair)"), msg("Samir Duran (Ghost)"),
+  msg("Alexei Stukov (Ghost)"), msg("Map Revealer"), msg("Gerard DuGalle (Battlecruiser)"), msg("Zerg Lurker"), msg("Infested Duran"),
+  msg("Disruption Web"), msg("Terran Command Center"), msg("Terran Comsat Station"), msg("Terran Nuclear Silo"), msg("Terran Supply Depot"),
+  msg("Terran Refinery"), msg("Terran Barracks"), msg("Terran Academy"), msg("Terran Factory"), msg("Terran Starport"),
+  msg("Terran Control Tower"), msg("Terran Science Facility"), msg("Terran Covert Ops"), msg("Terran Physics Lab"), msg("Starbase (Unused)"),
+  msg("Terran Machine Shop"), msg("Repair Bay (Unused)"), msg("Terran Engineering Bay"), msg("Terran Armory"), msg("Terran Missile Turret"),
+  msg("Terran Bunker"), msg("Norad II (Crashed)"), msg("Ion Cannon"), msg("Uraj Crystal"), msg("Khalis Crystal"),
+  msg("Zerg Infested Command Center"), msg("Zerg Hatchery"), msg("Zerg Lair"), msg("Zerg Hive"), msg("Zerg Nydus Canal"),
+  msg("Zerg Hydralisk Den"), msg("Zerg Defiler Mound"), msg("Zerg Greater Spire"), msg("Zerg Queen's Nest"), msg("Zerg Evolution Chamber"),
+  msg("Zerg Ultralisk Cavern"), msg("Zerg Spire"), msg("Zerg Spawning Pool"), msg("Zerg Creep Colony"), msg("Zerg Spore Colony"),
+  msg("Unused Zerg Building 1"), msg("Zerg Sunken Colony"), msg("Zerg Overmind (With Shell)"), msg("Zerg Overmind"), msg("Zerg Extractor"),
+  msg("Mature Chrysalis"), msg("Zerg Cerebrate"), msg("Zerg Cerebrate Daggoth"), msg("Unused Zerg Building 2"), msg("Protoss Nexus"),
+  msg("Protoss Robotics Facility"), msg("Protoss Pylon"), msg("Protoss Assimilator"), msg("Unused Protoss Building 1"), msg("Protoss Observatory"),
+  msg("Protoss Gateway"), msg("Unused Protoss Building 2"), msg("Protoss Photon Cannon"), msg("Protoss Citadel of Adun"), msg("Protoss Cybernetics Core"),
+  msg("Protoss Templar Archives"), msg("Protoss Forge"), msg("Protoss Stargate"), msg("Stasis Cell/Prison"), msg("Protoss Fleet Beacon"),
+  msg("Protoss Arbiter Tribunal"), msg("Protoss Robotics Support Bay"), msg("Protoss Shield Battery"), msg("Khaydarin Crystal Formation"), msg("Protoss Temple"),
+  msg("Xel'Naga Temple"), msg("Mineral Field (Type 1)"), msg("Mineral Field (Type 2)"), msg("Mineral Field (Type 3)"), msg("Cave (Unused)"),
+  msg("Cave-in (Unused)"), msg("Cantina (Unused)"), msg("Mining Platform (Unused)"), msg("Independent Command Center (Unused)"), msg("Independent Starport (Unused)"),
+  msg("Independent Jump Gate (Unused)"), msg("Ruins (Unused)"), msg("Khaydarin Crystal Formation (Unused)"), msg("Vespene Geyser"), msg("Warp Gate"),
+  msg("Psi Disrupter"), msg("Zerg Marker"), msg("Terran Marker"), msg("Protoss Marker"), msg("Zerg Beacon"),
+  msg("Terran Beacon"), msg("Protoss Beacon"), msg("Zerg Flag Beacon"), msg("Terran Flag Beacon"), msg("Protoss Flag Beacon"),
+  msg("Power Generator"), msg("Overmind Cocoon"), msg("Dark Swarm"), msg("Floor Missile Trap"), msg("Floor Hatch (Unused)"),
+  msg("Left Upper Level Door"), msg("Right Upper Level Door"), msg("Left Pit Door"), msg("Right Pit Door"), msg("Floor Gun Trap"),
+  msg("Left Wall Missile Trap"), msg("Left Wall Flame Trap"), msg("Right Wall Missile Trap"), msg("Right Wall Flame Trap"), msg("Start Location"),
+  msg("Flag"), msg("Young Chrysalis"), msg("Psi Emitter"), msg("Data Disk"), msg("Khaydarin Crystal"),
+  msg("Mineral Cluster Type 1"), msg("Mineral Cluster Type 2"), msg("Protoss Vespene Gas Orb Type 1"), msg("Protoss Vespene Gas Orb Type 2"), msg("Zerg Vespene Gas Sac Type 1"),
+  msg("Zerg Vespene Gas Sac Type 2"), msg("Terran Vespene Gas Tank Type 1"), msg("Terran Vespene Gas Tank Type 2"),
 ];
 
 export const UNIT_TYPE_COUNT = UNIT_NAMES.length;
@@ -86,6 +87,15 @@ export function unitName(id: number): string {
   return loadedNames?.units[id] ?? UNIT_NAMES[id] ?? `Unit #${id}`;
 }
 
+/**
+ * `unitName` in the user's language, for the chrome. The English name stays the
+ * vocabulary of the text trigger format and the plugin API (`unitName`); a name the
+ * game data supplied has no catalogue entry and shows as the data spells it.
+ */
+export const unitLabel = (id: number) => translate(unitName(id));
+export const upgradeLabel = (id: number) => translate(upgradeName(id));
+export const techLabel = (id: number) => translate(techName(id));
+
 export interface UnitGroup {
   race: RaceKey;
   label: string;
@@ -95,40 +105,40 @@ export interface UnitGroup {
 
 /** SCMDraft-style palette grouping. Every id 0–227 appears exactly once (see tests/dat.test.ts). */
 export const UNIT_GROUPS: UnitGroup[] = [
-  { race: "terran", label: "Terran Units", units: [0, 1, 2, 3, 5, 30, 7, 8, 9, 11, 12, 32, 34, 58, 15, 13, 14] },
-  { race: "terran", label: "Terran Buildings", units: [106, 107, 108, 109, 110, 111, 112, 113, 120, 114, 115, 116, 117, 118, 122, 123, 124, 125] },
-  { race: "terran", label: "Terran Heroes", units: [20, 19, 16, 21, 22, 28, 29, 17, 10, 23, 25, 27, 99, 100, 102] },
-  { race: "zerg", label: "Zerg Units", units: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50, 103, 62, 59, 97] },
-  { race: "zerg", label: "Zerg Buildings", units: [131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 146, 149, 130] },
-  { race: "zerg", label: "Zerg Heroes", units: [48, 49, 51, 52, 53, 54, 55, 56, 57, 104] },
-  { race: "protoss", label: "Protoss Units", units: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 83, 85, 84, 61, 63, 60] },
-  { race: "protoss", label: "Protoss Buildings", units: [154, 155, 156, 157, 159, 160, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172] },
-  { race: "protoss", label: "Protoss Heroes", units: [74, 75, 76, 77, 78, 79, 80, 81, 82, 86, 87, 88, 98] },
-  { race: "neutral", label: "Critters", units: [89, 90, 93, 94, 95, 96] },
-  { race: "neutral", label: "Resources", units: [176, 177, 178, 188] },
-  { race: "neutral", label: "Powerups", units: [215, 216, 217, 218, 219, 128, 129, 220, 221, 222, 223, 224, 225, 226, 227] },
+  { race: "terran", label: msg("Terran Units"), units: [0, 1, 2, 3, 5, 30, 7, 8, 9, 11, 12, 32, 34, 58, 15, 13, 14] },
+  { race: "terran", label: msg("Terran Buildings"), units: [106, 107, 108, 109, 110, 111, 112, 113, 120, 114, 115, 116, 117, 118, 122, 123, 124, 125] },
+  { race: "terran", label: msg("Terran Heroes"), units: [20, 19, 16, 21, 22, 28, 29, 17, 10, 23, 25, 27, 99, 100, 102] },
+  { race: "zerg", label: msg("Zerg Units"), units: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50, 103, 62, 59, 97] },
+  { race: "zerg", label: msg("Zerg Buildings"), units: [131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 146, 149, 130] },
+  { race: "zerg", label: msg("Zerg Heroes"), units: [48, 49, 51, 52, 53, 54, 55, 56, 57, 104] },
+  { race: "protoss", label: msg("Protoss Units"), units: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 83, 85, 84, 61, 63, 60] },
+  { race: "protoss", label: msg("Protoss Buildings"), units: [154, 155, 156, 157, 159, 160, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172] },
+  { race: "protoss", label: msg("Protoss Heroes"), units: [74, 75, 76, 77, 78, 79, 80, 81, 82, 86, 87, 88, 98] },
+  { race: "neutral", label: msg("Critters"), units: [89, 90, 93, 94, 95, 96] },
+  { race: "neutral", label: msg("Resources"), units: [176, 177, 178, 188] },
+  { race: "neutral", label: msg("Powerups"), units: [215, 216, 217, 218, 219, 128, 129, 220, 221, 222, 223, 224, 225, 226, 227] },
   {
     race: "neutral",
-    label: "Special",
+    label: msg("Special"),
     units: [214, 101, 183, 194, 195, 196, 197, 198, 199, 191, 192, 193, 175, 174, 190, 127, 148, 147, 201, 151, 152, 173, 189, 200, 150, 168, 126, 202, 105, 33],
   },
   {
     race: "neutral",
-    label: "Installation Doodads",
+    label: msg("Installation Doodads"),
     units: [186, 203, 209, 210, 211, 212, 213, 205, 206, 207, 208, 204, 187],
   },
   {
     race: "neutral",
-    label: "Turrets & Unused",
+    label: msg("Turrets & Unused"),
     units: [4, 6, 18, 24, 26, 31, 91, 92, 119, 121, 145, 153, 158, 161, 179, 180, 181, 182, 184, 185],
   },
 ];
 
 export const RACE_LABEL: Record<RaceKey, string> = {
-  terran: "Terran",
-  zerg: "Zerg",
-  protoss: "Protoss",
-  neutral: "Neutral",
+  terran: msg("Terran"),
+  zerg: msg("Zerg"),
+  protoss: msg("Protoss"),
+  neutral: msg("Neutral"),
 };
 
 /**
@@ -138,28 +148,28 @@ export const RACE_LABEL: Record<RaceKey, string> = {
  * Shields at 15 — an earlier table had Plasma Shields at 7, which shifted ids 7–15 by one.
  */
 export const UPGRADE_NAMES: readonly string[] = [
-  "Terran Infantry Armor", "Terran Vehicle Plating", "Terran Ship Plating", "Zerg Carapace", "Zerg Flyer Carapace",
-  "Protoss Ground Armor", "Protoss Air Armor", "Terran Infantry Weapons", "Terran Vehicle Weapons", "Terran Ship Weapons",
-  "Zerg Melee Attacks", "Zerg Missile Attacks", "Zerg Flyer Attacks", "Protoss Ground Weapons", "Protoss Air Weapons",
-  "Protoss Plasma Shields", "U-238 Shells", "Ion Thrusters", "Burst Lasers (Unused)", "Titan Reactor",
-  "Ocular Implants", "Moebius Reactor", "Apollo Reactor", "Colossus Reactor", "Ventral Sacs",
-  "Antennae", "Pneumatized Carapace", "Metabolic Boost", "Adrenal Glands", "Muscular Augments",
-  "Grooved Spines", "Gamete Meiosis", "Metasynaptic Node", "Singularity Charge", "Leg Enhancements",
-  "Scarab Damage", "Reaver Capacity", "Gravitic Drive", "Sensor Array", "Gravitic Boosters",
-  "Khaydarin Amulet", "Apial Sensors", "Gravitic Thrusters", "Carrier Capacity", "Khaydarin Core",
-  "Unused (45)", "Unused (46)", "Argus Jewel", "Unused (48)", "Argus Talisman",
-  "Unused (50)", "Caduceus Reactor", "Chitinous Plating", "Anabolic Synthesis", "Charon Boosters",
-  "Unused (55)", "Unused (56)", "Unused (57)", "Unused (58)", "Unused (59)", "Unused (60)",
+  msg("Terran Infantry Armor"), msg("Terran Vehicle Plating"), msg("Terran Ship Plating"), msg("Zerg Carapace"), msg("Zerg Flyer Carapace"),
+  msg("Protoss Ground Armor"), msg("Protoss Air Armor"), msg("Terran Infantry Weapons"), msg("Terran Vehicle Weapons"), msg("Terran Ship Weapons"),
+  msg("Zerg Melee Attacks"), msg("Zerg Missile Attacks"), msg("Zerg Flyer Attacks"), msg("Protoss Ground Weapons"), msg("Protoss Air Weapons"),
+  msg("Protoss Plasma Shields"), msg("U-238 Shells"), msg("Ion Thrusters"), msg("Burst Lasers (Unused)"), msg("Titan Reactor"),
+  msg("Ocular Implants"), msg("Moebius Reactor"), msg("Apollo Reactor"), msg("Colossus Reactor"), msg("Ventral Sacs"),
+  msg("Antennae"), msg("Pneumatized Carapace"), msg("Metabolic Boost"), msg("Adrenal Glands"), msg("Muscular Augments"),
+  msg("Grooved Spines"), msg("Gamete Meiosis"), msg("Metasynaptic Node"), msg("Singularity Charge"), msg("Leg Enhancements"),
+  msg("Scarab Damage"), msg("Reaver Capacity"), msg("Gravitic Drive"), msg("Sensor Array"), msg("Gravitic Boosters"),
+  msg("Khaydarin Amulet"), msg("Apial Sensors"), msg("Gravitic Thrusters"), msg("Carrier Capacity"), msg("Khaydarin Core"),
+  msg("Unused (45)"), msg("Unused (46)"), msg("Argus Jewel"), msg("Unused (48)"), msg("Argus Talisman"),
+  msg("Unused (50)"), msg("Caduceus Reactor"), msg("Chitinous Plating"), msg("Anabolic Synthesis"), msg("Charon Boosters"),
+  msg("Unused (55)"), msg("Unused (56)"), msg("Unused (57)"), msg("Unused (58)"), msg("Unused (59)"), msg("Unused (60)"),
 ];
 
 /** StarEdit's technology names by techdata.dat id (0–43); 24 exist in the original game. */
 export const TECH_NAMES: readonly string[] = [
-  "Stim Packs", "Lockdown", "EMP Shockwave", "Spider Mines", "Scanner Sweep", "Tank Siege Mode", "Defensive Matrix",
-  "Irradiate", "Yamato Gun", "Cloaking Field", "Personnel Cloaking", "Burrowing", "Infestation", "Spawn Broodlings",
-  "Dark Swarm", "Plague", "Consume", "Ensnare", "Parasite", "Psionic Storm", "Hallucination", "Recall", "Stasis Field",
-  "Archon Warp", "Restoration", "Disruption Web", "Unused (26)", "Mind Control", "Dark Archon Meld", "Feedback",
-  "Optical Flare", "Maelstrom", "Lurker Aspect", "Unused (33)", "Healing",
-  "Unused (35)", "Unused (36)", "Unused (37)", "Unused (38)", "Unused (39)", "Unused (40)", "Unused (41)", "Unused (42)", "Unused (43)",
+  msg("Stim Packs"), msg("Lockdown"), msg("EMP Shockwave"), msg("Spider Mines"), msg("Scanner Sweep"), msg("Tank Siege Mode"), msg("Defensive Matrix"),
+  msg("Irradiate"), msg("Yamato Gun"), msg("Cloaking Field"), msg("Personnel Cloaking"), msg("Burrowing"), msg("Infestation"), msg("Spawn Broodlings"),
+  msg("Dark Swarm"), msg("Plague"), msg("Consume"), msg("Ensnare"), msg("Parasite"), msg("Psionic Storm"), msg("Hallucination"), msg("Recall"), msg("Stasis Field"),
+  msg("Archon Warp"), msg("Restoration"), msg("Disruption Web"), msg("Unused (26)"), msg("Mind Control"), msg("Dark Archon Meld"), msg("Feedback"),
+  msg("Optical Flare"), msg("Maelstrom"), msg("Lurker Aspect"), msg("Unused (33)"), msg("Healing"),
+  msg("Unused (35)"), msg("Unused (36)"), msg("Unused (37)"), msg("Unused (38)"), msg("Unused (39)"), msg("Unused (40)"), msg("Unused (41)"), msg("Unused (42)"), msg("Unused (43)"),
 ];
 
 export const upgradeName = (id: number) => loadedNames?.upgrades[id] ?? UPGRADE_NAMES[id] ?? `Upgrade #${id}`;

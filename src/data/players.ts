@@ -2,31 +2,32 @@
 
 import { ColorMode, PlayerRace, PlayerType, type PlayerRgb } from "../formats/chk/sections/players";
 import { TEAM_COLOR_ROWS, type TeamColorSpec } from "../formats/units/teamColor";
+import { msg } from "../i18n";
 
 /** OWNR controller bytes as StarEdit's Player Settings lists them, with the rest for maps that use them. */
 export const PLAYER_TYPES: { value: number; label: string; hint?: string }[] = [
-  { value: PlayerType.Inactive, label: "Inactive", hint: "The slot does not exist" },
-  { value: PlayerType.Human, label: "Human", hint: "Open slot in the lobby" },
-  { value: PlayerType.Computer, label: "Computer", hint: "AI-controlled" },
-  { value: PlayerType.Rescuable, label: "Rescuable", hint: "Units join whoever reaches them" },
-  { value: PlayerType.Neutral, label: "Neutral", hint: "Owned by no one; players 9–12 are usually this" },
-  { value: PlayerType.ComputerGame, label: "Computer (game)", hint: "Set by the game once it starts; rarely stored" },
-  { value: PlayerType.Occupied, label: "Occupied", hint: "Set by the game for a joined human; rarely stored" },
-  { value: PlayerType.ComputerUnused, label: "Computer (unused)" },
-  { value: PlayerType.Closed, label: "Closed", hint: "Lobby slot closed" },
-  { value: PlayerType.Observer, label: "Observer" },
+  { value: PlayerType.Inactive, label: msg("Inactive"), hint: msg("The slot does not exist") },
+  { value: PlayerType.Human, label: msg("Human"), hint: msg("Open slot in the lobby") },
+  { value: PlayerType.Computer, label: msg("Computer"), hint: msg("AI-controlled") },
+  { value: PlayerType.Rescuable, label: msg("Rescuable"), hint: msg("Units join whoever reaches them") },
+  { value: PlayerType.Neutral, label: msg("Neutral"), hint: msg("Owned by no one; players 9–12 are usually this") },
+  { value: PlayerType.ComputerGame, label: msg("Computer (game)"), hint: msg("Set by the game once it starts; rarely stored") },
+  { value: PlayerType.Occupied, label: msg("Occupied"), hint: msg("Set by the game for a joined human; rarely stored") },
+  { value: PlayerType.ComputerUnused, label: msg("Computer (unused)") },
+  { value: PlayerType.Closed, label: msg("Closed"), hint: msg("Lobby slot closed") },
+  { value: PlayerType.Observer, label: msg("Observer") },
 ];
 
 /** SIDE race bytes, in StarEdit's order. */
 export const PLAYER_RACES: { value: number; label: string }[] = [
-  { value: PlayerRace.Zerg, label: "Zerg" },
-  { value: PlayerRace.Terran, label: "Terran" },
-  { value: PlayerRace.Protoss, label: "Protoss" },
-  { value: PlayerRace.UserSelectable, label: "User Selectable" },
-  { value: PlayerRace.Random, label: "Random" },
-  { value: PlayerRace.Independent, label: "Independent" },
-  { value: PlayerRace.Neutral, label: "Neutral" },
-  { value: PlayerRace.Inactive, label: "Inactive" },
+  { value: PlayerRace.Zerg, label: msg("Zerg") },
+  { value: PlayerRace.Terran, label: msg("Terran") },
+  { value: PlayerRace.Protoss, label: msg("Protoss") },
+  { value: PlayerRace.UserSelectable, label: msg("User Selectable") },
+  { value: PlayerRace.Random, label: msg("Random") },
+  { value: PlayerRace.Independent, label: msg("Independent") },
+  { value: PlayerRace.Neutral, label: msg("Neutral") },
+  { value: PlayerRace.Inactive, label: msg("Inactive") },
 ];
 
 export const playerTypeLabel = (v: number) => PLAYER_TYPES.find((t) => t.value === v)?.label ?? `Type ${v}`;
@@ -40,28 +41,28 @@ export interface PlayerColor {
 
 /** The classic StarCraft player colour table (COLR indices). */
 export const PLAYER_COLORS: PlayerColor[] = [
-  { id: 0, name: "Red", hex: "#f40404" },
-  { id: 1, name: "Blue", hex: "#0c48cc" },
-  { id: 2, name: "Teal", hex: "#2cb494" },
-  { id: 3, name: "Purple", hex: "#88409c" },
-  { id: 4, name: "Orange", hex: "#f88c14" },
-  { id: 5, name: "Brown", hex: "#703014" },
-  { id: 6, name: "White", hex: "#cce0d0" },
-  { id: 7, name: "Yellow", hex: "#fcfc38" },
-  { id: 8, name: "Green", hex: "#088008" },
-  { id: 9, name: "Pale Yellow", hex: "#fcfc7c" },
-  { id: 10, name: "Tan", hex: "#ecc4b0" },
-  { id: 11, name: "Dark Aqua", hex: "#4068d4" },
-  { id: 12, name: "Pale Green", hex: "#74a47c" },
-  { id: 13, name: "Bluish Grey", hex: "#9090b8" },
-  { id: 14, name: "Pale Yellow II", hex: "#fcfc7c" },
-  { id: 15, name: "Cyan", hex: "#00e4fc" },
-  { id: 16, name: "Pink", hex: "#ffc4e4" },
-  { id: 17, name: "Olive", hex: "#787800" },
-  { id: 18, name: "Lime", hex: "#d2f53c" },
-  { id: 19, name: "Navy", hex: "#0000e6" },
-  { id: 20, name: "Dark Green", hex: "#006400" },
-  { id: 21, name: "Black", hex: "#141414" },
+  { id: 0, name: msg("Red"), hex: "#f40404" },
+  { id: 1, name: msg("Blue"), hex: "#0c48cc" },
+  { id: 2, name: msg("Teal"), hex: "#2cb494" },
+  { id: 3, name: msg("Purple"), hex: "#88409c" },
+  { id: 4, name: msg("Orange"), hex: "#f88c14" },
+  { id: 5, name: msg("Brown"), hex: "#703014" },
+  { id: 6, name: msg("White"), hex: "#cce0d0" },
+  { id: 7, name: msg("Yellow"), hex: "#fcfc38" },
+  { id: 8, name: msg("Green"), hex: "#088008" },
+  { id: 9, name: msg("Pale Yellow"), hex: "#fcfc7c" },
+  { id: 10, name: msg("Tan"), hex: "#ecc4b0" },
+  { id: 11, name: msg("Dark Aqua"), hex: "#4068d4" },
+  { id: 12, name: msg("Pale Green"), hex: "#74a47c" },
+  { id: 13, name: msg("Bluish Grey"), hex: "#9090b8" },
+  { id: 14, name: msg("Pale Yellow II"), hex: "#fcfc7c" },
+  { id: 15, name: msg("Cyan"), hex: "#00e4fc" },
+  { id: 16, name: msg("Pink"), hex: "#ffc4e4" },
+  { id: 17, name: msg("Olive"), hex: "#787800" },
+  { id: 18, name: msg("Lime"), hex: "#d2f53c" },
+  { id: 19, name: msg("Navy"), hex: "#0000e6" },
+  { id: 20, name: msg("Dark Green"), hex: "#006400" },
+  { id: 21, name: msg("Black"), hex: "#141414" },
 ];
 
 /**

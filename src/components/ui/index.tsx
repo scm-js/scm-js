@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Tabs as RTabs, Tooltip as RTooltip } from "radix-ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { t, translate } from "../../i18n";
 
 /* ── Button ─────────────────────────────────────────────── */
 
@@ -59,11 +60,11 @@ export function Select({ options, className = "", ...rest }: SelectProps) {
       {options.map((o) =>
         typeof o === "string" ? (
           <option key={o} value={o}>
-            {o}
+            {translate(o)}
           </option>
         ) : (
           <option key={o.value} value={o.value}>
-            {o.label}
+            {translate(o.label)}
           </option>
         ),
       )}
@@ -97,10 +98,10 @@ export function NumberInput({ value, onChange, min = -Infinity, max = Infinity, 
         onChange={(e) => onChange(clamp(Number(e.target.value)))}
       />
       <span className="spin">
-        <button type="button" tabIndex={-1} disabled={disabled} onClick={() => onChange(clamp(value + step))} aria-label="Increment">
+        <button type="button" tabIndex={-1} disabled={disabled} onClick={() => onChange(clamp(value + step))} aria-label={t("Increment")}>
           <ChevronUp size={10} />
         </button>
-        <button type="button" tabIndex={-1} disabled={disabled} onClick={() => onChange(clamp(value - step))} aria-label="Decrement">
+        <button type="button" tabIndex={-1} disabled={disabled} onClick={() => onChange(clamp(value - step))} aria-label={t("Decrement")}>
           <ChevronDown size={10} />
         </button>
       </span>
@@ -172,7 +173,7 @@ export function ListBox<T>({ items, selected, onSelect, render, showIndex, class
   return (
     <div className={`listbox ${className}`} style={style} tabIndex={0} role="listbox">
       {header && <div className="header">{header}</div>}
-      {items.length === 0 && <div className="empty">{empty ?? "Nothing here yet."}</div>}
+      {items.length === 0 && <div className="empty">{empty ?? t("Nothing here yet.")}</div>}
       {items.map((it, i) => (
         <div
           key={i}

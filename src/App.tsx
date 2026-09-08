@@ -5,6 +5,7 @@ import { panelsAtom } from "./atoms/uiAtoms";
 import { pluginPanelsAtom } from "./atoms/pluginAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useApplyPreferences } from "./hooks/useApplyPreferences";
+import { useLocale } from "./i18n/react";
 import { useMapFileActions } from "./hooks/useMapFileActions";
 import type { PendingAction } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
@@ -59,6 +60,9 @@ export default function App() {
   // First, so it is listening before the preload and the plugins are.
   useErrorCapture();
   useApplyPreferences();
+  // Every string in the tree is `t()`'d at render; a new key remounts it all when the
+  // language changes, which is rare enough that per-component subscriptions are not worth their weight.
+  const locale = useLocale();
   useHotkeys();
   useDevDeepLinks();
   usePreload();
@@ -134,7 +138,7 @@ export default function App() {
   };
 
   return (
-    <TooltipProvider>
+    <TooltipProvider key={locale}>
       <div
         className={`app${dropTarget ? " drop-target" : ""}`}
         aria-hidden={screen === "splash"}

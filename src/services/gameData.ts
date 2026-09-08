@@ -24,6 +24,7 @@ import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource
 import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store";
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
 import { clearComposedImages } from "../plugins/graphics";
+import { t } from "../i18n";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -65,7 +66,7 @@ export async function listDataSets(): Promise<GameDataProfile[]> {
  * answers. A set with no copy falls back to the game's own (the chain says so in `tried`).
  */
 export async function switchDataSet(store: Store, id: string): Promise<AssetSource> {
-  if (!isProfileId(id)) throw new InstallError(`"${id}" is not a data set id.`);
+  if (!isProfileId(id)) throw new InstallError(t("\"{id}\" is not a data set id.", { id }));
   const before = store.get(gameDataSourceAtom);
   store.set(gameDataProfileAtom, { profile: id });
   resetAssetSource();

@@ -10,6 +10,7 @@ import { desktopBridge } from "../gamedata/desktop";
 import { currentAssetSource, onAssetSource } from "../gamedata/source";
 import { runPreload, warmRemainingTilesets, type PreloadTask } from "../services/preload";
 import type { getDefaultStore } from "jotai";
+import { t } from "../i18n";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -20,7 +21,7 @@ type Store = ReturnType<typeof getDefaultStore>;
  */
 function documentReady(store: Store): PreloadTask {
   return {
-    label: "Preparing workspace",
+    label: t("Preparing workspace"),
     run: () => new Promise<void>((resolve) => {
       if (store.get(scenarioAtom)) { resolve(); return; }
       const off = store.sub(scenarioAtom, () => {

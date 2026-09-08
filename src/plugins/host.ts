@@ -7,7 +7,7 @@
  * — the path a brush stroke takes — so a plugin edit undoes, marks sections dirty,
  * lifts stranded doodads and units, and repaints exactly like the built-in tools.
  */
-import { locale as currentLocale, makeTranslator } from "../i18n";
+import { locale as currentLocale, makeTranslator, t } from "../i18n";
 import type { createStore } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
@@ -265,9 +265,9 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     return [...(cells as Iterable<number>)].filter((at) => at >= 0 && at < w * h);
   };
   const flatOf = (terrainId: number) => {
-    if (!loaded) { notes.push("terrain painting needs the tileset graphics"); return null; }
+    if (!loaded) { notes.push(t("terrain painting needs the tileset graphics")); return null; }
     const type = terrainTypes(loaded.tileset, names).find((t) => t.id === terrainId);
-    if (!type) { notes.push(`terrain ${terrainId} is not a flat terrain of this tileset`); return null; }
+    if (!type) { notes.push(t("terrain {terrainId} is not a flat terrain of this tileset", { terrainId })); return null; }
     return type;
   };
   const applyTiles = (changes: TileChange[]) => { applyChanges(scn, changes); tiles.add(changes); return changes.length; };
@@ -319,7 +319,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       return true;
     },
     rebuildIsom: () => {
-      if (!loaded) { notes.push("rebuilding the ISOM needs the tileset graphics"); return null; }
+      if (!loaded) { notes.push(t("rebuilding the ISOM needs the tileset graphics")); return null; }
       const rebuilt = rebuildIsomFromTiles(scn, loaded.tileset);
       const base = { diamonds: rebuilt.diamonds, unresolved: rebuilt.unresolved };
       if (hasIsom(scn) && scn.isom.length === rebuilt.isom.length && !createdIsom) {
@@ -363,7 +363,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
 
     placeDoodad: (doodadId, tx0, ty0, owner = 0) => {
       const def = loaded?.doodads.byId.get(doodadId);
-      if (!def) { notes.push(`doodad ${doodadId} is not in this tileset`); return -1; }
+      if (!def) { notes.push(t("doodad {doodadId} is not in this tileset", { doodadId })); return -1; }
       if (tx0 < 0 || ty0 < 0 || tx0 + def.width > w || ty0 + def.height > h) return -1;
       const edit = placeDoodad(scn, def, tx0, ty0, owner);
       applyChanges(scn, edit.tiles, "do", "mtxm");
@@ -452,7 +452,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     },
 
     replaceTerrain: (from, to, rect) => {
-      if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) { notes.push("replacing a terrain type needs the tileset graphics"); return 0; }
+      if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) { notes.push(t("replacing a terrain type needs the tileset graphics")); return 0; }
       return applyTiles(replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect));
     },
     fillArea: (x, y, fill, match = "terrainId" in fill ? "terrain" : "tile") => {
@@ -460,7 +460,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       const seed = scn.tiles[y * w + x];
       let region: Set<number>;
       if (match === "terrain") {
-        if (!loaded) { notes.push("a terrain fill needs the tileset graphics"); return 0; }
+        if (!loaded) { notes.push(t("a terrain fill needs the tileset graphics")); return 0; }
         const groups = loaded.tileset.groups;
         const typeOf = (id: number) => groups[id >> 4]?.index ?? -1;
         const seedType = typeOf(seed);
@@ -481,7 +481,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       return true;
     },
     tilesFromIsom: () => {
-      if (!hasIsom(scn) || !loaded) { notes.push("regenerating the tiles needs ISOM and the tileset graphics"); return null; }
+      if (!hasIsom(scn) || !loaded) { notes.push(t("regenerating the tiles needs ISOM and the tileset graphics")); return null; }
       const edit = tilesFromIsom(scn, loaded.tileset);
       applyChanges(scn, edit.tiles);
       tiles.add(edit.tiles);
@@ -891,14 +891,14 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
       intern: (text) => withStrings(() => internString(scn, text)),
       import: (text) => {
         const parsed = parseStringTable(text);
-        for (const e of parsed.errors) notes.push(`line ${e.line}: ${e.message}`);
+        for (const e of parsed.errors) notes.push(t("line {line}: {message}", { line: e.line, message: e.message }));
         const before = scn.strings.strings.slice();
         const r = withStrings(() => applyStringImport(scn, parsed.entries));
         if (r.replaced > 0 || r.added > 0 || before.some((v, i) => v !== scn.strings.strings[i])) touch(strSection());
         return r;
       },
       set: (index, text) => {
-        if (index <= 0) { notes.push("string 0 is reserved; use intern to add one"); return; }
+        if (index <= 0) { notes.push(t("string 0 is reserved; use intern to add one")); return; }
         if (getString(scn.strings, index) === text) return;
         setString(scn.strings, index, text);
         markDirty(scn, strSection());
@@ -911,7 +911,7 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
       names: () => readSwitchNames(scn),
       setName: (index, name) => {
         const list = readSwitchNames(scn);
-        if (index < 0 || index >= list.length) { notes.push(`there is no switch ${index}`); return; }
+        if (index < 0 || index >= list.length) { notes.push(t("there is no switch {index}", { index })); return; }
         list[index] = name;
         withStrings(() => { if (applySwitchNames(scn, list)) touch("SWNM"); });
       },
@@ -962,7 +962,7 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
         const member = path.includes("\\") || path.includes("/") ? path.replace(/\//g, "\\") : wavMemberName(path);
         const wavs = readWavs(scn);
         const slot = withStrings(() => addSound(scn, wavs, member));
-        if (slot < 0) { notes.push("all 512 sound slots are taken"); return -1; }
+        if (slot < 0) { notes.push(t("all 512 sound slots are taken")); return -1; }
         tracked(() => (applySounds(scn, wavs) ? ["WAV "] : []));
         if (bytes) {
           const extras = new Map(store.get(archiveExtrasAtom));
@@ -1432,24 +1432,24 @@ function clipboardApi(store: Store): ClipboardApi {
   return {
     clip: () => store.get(clipboardAtom),
     setClip: (clip) => store.set(clipboardAtom, clip),
-    copy: (source) => { const t = take(source); if (t) store.set(clipboardAtom, t.clip); return t?.clip ?? null; },
+    copy: (source) => { const taken = take(source); if (taken) store.set(clipboardAtom, taken.clip); return taken?.clip ?? null; },
     capture: (source, options = {}) => take(source, options.parts)?.clip ?? null,
     cut: (source) => {
       const scn = scenario();
-      const t = take(source);
-      if (!scn || !t) return null;
-      store.set(clipboardAtom, t.clip);
+      const taken = take(source);
+      if (!scn || !taken) return null;
+      store.set(clipboardAtom, taken.clip);
       const { catalogue, tileset } = graphics();
       const parts = store.get(clipPartsAtom);
-      const all = "rect" in t.src ? regionObjectsOf(scn, t.src.rect, catalogue) : t.src.sel;
+      const all = "rect" in taken.src ? regionObjectsOf(scn, taken.src.rect, catalogue) : taken.src.sel;
       const sel: ObjectSelection = { units: parts.units ? all.units : [], sprites: parts.sprites ? all.sprites : [], doodads: parts.doodads ? all.doodads : [], locations: parts.locations ? all.locations : [] };
       const n = selectionSize(sel);
       if (n > 0) {
         const edit = removeObjects(scn, sel, catalogue, tileset);
         store.set(selectedUnitsAtom, []); store.set(selectedSpritesAtom, []); store.set(selectedDoodadsAtom, []); store.set(selectedLocationsAtom, []);
-        store.set(commitEditAtom, { label: `Cut ${n} object${n === 1 ? "" : "s"}`, ...edit });
+        store.set(commitEditAtom, { label: t("Cut {n, plural, one {# object} other {# objects}}", { n }), ...edit });
       }
-      return t.clip;
+      return taken.clip;
     },
     paste: (tx, ty, options = {}) => {
       const scn = scenario();
@@ -1460,7 +1460,7 @@ function clipboardApi(store: Store): ClipboardApi {
       const c = result.counts;
       if (c.tiles + c.doodads + c.units + c.sprites + c.locations + c.fog + c.removed > 0) {
         store.set(selectedUnitsAtom, []); store.set(selectedSpritesAtom, []); store.set(selectedDoodadsAtom, []); store.set(selectedLocationsAtom, []);
-        store.set(commitEditAtom, { label: `Paste ${clipSummary(clip)}`, ...result.edit });
+        store.set(commitEditAtom, { label: t("Paste {clipSummary}", { clipSummary: clipSummary(clip) }), ...result.edit });
         store.set(clipSelectionAtom, { x0: Math.max(0, tx), y0: Math.max(0, ty), x1: Math.min(scn.width, tx + clip.width), y1: Math.min(scn.height, ty + clip.height) });
       }
       return result;
@@ -1832,9 +1832,9 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       playerGroup: (value) => PLAYER_GROUP_CHOICES.find((c) => c.value === value)?.label ?? `Group ${value}`,
       playerGroups: () => PLAYER_GROUP_CHOICES.map((c) => ({ value: c.value, label: c.label })),
       condition: (type) => (type === 0 ? "None" : conditionDef(type)?.name ?? `Condition ${type}`),
-      conditions: () => [{ value: 0, label: "None" }, ...CONDITION_DEFS.map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
+      conditions: () => [{ value: 0, label: t("None") }, ...CONDITION_DEFS.map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
       action: (type, briefing = false) => (type === 0 ? "None" : actionDef(type, briefing)?.name ?? `Action ${type}`),
-      actions: (briefing = false) => [{ value: 0, label: "None" }, ...(briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS).map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
+      actions: (briefing = false) => [{ value: 0, label: t("None") }, ...(briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS).map((d) => ({ value: d.type, label: d.name })).sort((a, b) => a.value - b.value)],
       aiScript: aiScriptName,
       string: (index) => { const scn = scenario(); return scn ? getString(scn.strings, index) : null; },
       location: (index) => { const scn = scenario(); return scn ? locationName(scn, index) : `Location ${index}`; },

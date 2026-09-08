@@ -9,7 +9,8 @@
 import { markDirty, scenarioDescription, scenarioName, strSectionName, type Scenario } from "../formats/chk/scenario";
 import type { ActionRecord } from "../formats/chk/sections/triggers";
 import { actionStrings } from "./triggers";
-import { unitName } from "../data/units";
+import { unitLabel } from "../data/units";
+import { t } from "../i18n";
 
 export type StringUsageKind = "name" | "description" | "force" | "location" | "unit" | "switch" | "trigger" | "briefing" | "wav";
 
@@ -35,16 +36,16 @@ export function stringUsages(scn: Scenario): Map<number, StringUsage[]> {
     else out.set(index, [usage]);
   };
 
-  add(scn.nameIndex, { kind: "name", ref: 0, label: "Scenario name" });
-  add(scn.descriptionIndex, { kind: "description", ref: 0, label: "Scenario description" });
-  scn.forces.nameIndex.forEach((i, f) => add(i, { kind: "force", ref: f, label: `Force ${f + 1} name` }));
-  scn.locations.forEach((l, i) => add(l.nameIndex, { kind: "location", ref: i, label: `Location ${i} name` }));
-  scn.unitSettings?.nameIndex.forEach((i, id) => add(i, { kind: "unit", ref: id, label: `Unit name: ${unitName(id)}` }));
-  scn.switchNames?.forEach((i, s) => add(i, { kind: "switch", ref: s, label: `Switch ${s + 1} name` }));
-  scn.wavs?.forEach((i, slot) => add(i, { kind: "wav", ref: slot, label: `Sound ${slot}` }));
+  add(scn.nameIndex, { kind: "name", ref: 0, label: t("Scenario name") });
+  add(scn.descriptionIndex, { kind: "description", ref: 0, label: t("Scenario description") });
+  scn.forces.nameIndex.forEach((i, f) => add(i, { kind: "force", ref: f, label: t("Force {v} name", { v: f + 1 }) }));
+  scn.locations.forEach((l, i) => add(l.nameIndex, { kind: "location", ref: i, label: t("Location {i} name", { i }) }));
+  scn.unitSettings?.nameIndex.forEach((i, id) => add(i, { kind: "unit", ref: id, label: t("Unit name: {unitName}", { unitName: unitLabel(id) }) }));
+  scn.switchNames?.forEach((i, s) => add(i, { kind: "switch", ref: s, label: t("Switch {v} name", { v: s + 1 }) }));
+  scn.wavs?.forEach((i, slot) => add(i, { kind: "wav", ref: slot, label: t("Sound {slot}", { slot }) }));
 
   const actions = (kind: "trigger" | "briefing", list: { actions: ActionRecord[] }[]) => {
-    const noun = kind === "trigger" ? "Trigger" : "Briefing";
+    const noun = kind === "trigger" ? t("Trigger") : t("Briefing");
     list.forEach((t, ti) => {
       for (const a of t.actions) {
         for (const s of actionStrings(a, kind === "briefing")) add(s.index, { kind, ref: ti, label: `${noun} ${ti + 1}: ${s.action}${s.kind === "wav" ? " (WAV)" : ""}` });

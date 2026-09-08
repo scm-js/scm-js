@@ -11,6 +11,7 @@
  * Nothing here touches the store or React: it is a DOM helper library, tested as one.
  */
 import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SelectOption, SelectOptions, SkeletonOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi, FoldElement, FoldOptions, StepHandle, StepsElement, StepsOptions } from "./api";
+import { t } from "../i18n";
 
 /** Attributes `el` maps onto the element rather than setting as a property. */
 const ATTRS = new Set(["type", "role", "name", "placeholder", "min", "max", "step", "colspan", "rowspan", "for", "href", "target", "src", "alt", "aria-label"]);
@@ -335,10 +336,10 @@ export function createWidgets(): WidgetsApi {
         const handle: StepHandle = {
           element: row,
           set(l, t) { text.textContent = l; if (t !== undefined) row.title = t; },
-          start: (d) => state("running", null, d),
-          done: (d) => state("done", "✓", d),
-          fail: (d) => state("failed", "✗", d),
-          skip: (d) => state("skipped", "–", d),
+          start: (d) => state(t("running"), null, d),
+          done: (d) => state(t("done"), "✓", d),
+          fail: (d) => state(t("failed"), "✗", d),
+          skip: (d) => state(t("skipped"), "–", d),
           detail: (d) => { detail.textContent = d; detail.title = d; },
           append: (node) => { row.append(el("div", { className: "step-extra" }, node)); },
         };

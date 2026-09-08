@@ -38,6 +38,7 @@ import {
 import { addLocation, applyLocationChanges, boundsOf, ensureLocationSlots, locationName, removeLocations, type LocationChange } from "./locations";
 import { applyFogChanges, ensureMask } from "./fog";
 import type { HistoryEdit } from "./history";
+import { t } from "../i18n";
 
 /* ── Model ───────────────────────────────────────────────── */
 
@@ -314,14 +315,14 @@ export function pasteClip(scn: Scenario, clip: Clip, tx: number, ty: number, opt
   const counts: PasteCounts = { tiles: 0, doodads: 0, units: 0, sprites: 0, locations: 0, fog: 0, removed: 0 };
   const notes: string[] = [];
   const target = clampRect({ x0: tx, y0: ty, x1: tx + clip.width, y1: ty + clip.height }, scn);
-  if (rectEmpty(target)) return { edit, counts, notes: ["The clip lies entirely off the map"] };
+  if (rectEmpty(target)) return { edit, counts, notes: [t("The clip lies entirely off the map")] };
   const ox = tx * TILE_PX, oy = ty * TILE_PX;
   const mapW = scn.width * TILE_PX, mapH = scn.height * TILE_PX;
   const onMap = (x: number, y: number) => x >= 0 && y >= 0 && x < mapW && y < mapH;
 
   const sameTileset = clip.era === tilesetIndex(scn);
   if (!sameTileset && ((parts.terrain && clip.tiles) || (parts.doodads && clip.doodads.length > 0))) {
-    notes.push("terrain and doodads come from a different tileset and were not pasted");
+    notes.push(t("terrain and doodads come from a different tileset and were not pasted"));
   }
   const wantTerrain = sameTileset && parts.terrain && clip.tiles !== null && clip.ground !== null;
   const wantDoodads = sameTileset && parts.doodads && clip.doodads.length > 0;
@@ -421,7 +422,7 @@ export function pasteClip(scn: Scenario, clip: Clip, tx: number, ty: number, opt
     if (doodads.length > 0) edit.doodads = push(edit.doodads, doodads);
     if (sprites.length > 0) edit.sprites = push(edit.sprites, sprites);
     counts.doodads = doodads.length;
-    if (skipped > 0) notes.push(`${skipped} doodad${skipped === 1 ? "" : "s"} ${skipped === 1 ? "was" : "were"} not pasted (off the map or unknown to this tileset)`);
+    if (skipped > 0) notes.push(t("{n, plural, one {# doodad was} other {# doodads were}} not pasted (off the map or unknown to this tileset)", { n: skipped }));
   }
 
   // 4. Sprites and units, each where it lands on the map.
@@ -436,7 +437,7 @@ export function pasteClip(scn: Scenario, clip: Clip, tx: number, ty: number, opt
     applySpriteChanges(scn, sprites);
     if (sprites.length > 0) edit.sprites = push(edit.sprites, sprites);
     counts.sprites = sprites.length;
-    if (skipped > 0) notes.push(`${skipped} sprite${skipped === 1 ? "" : "s"} off the map`);
+    if (skipped > 0) notes.push(t("{skipped, plural, one {# sprite} other {# sprites}} off the map", { skipped }));
   }
   if (wantUnits) {
     const units: UnitChange[] = [];
@@ -459,7 +460,7 @@ export function pasteClip(scn: Scenario, clip: Clip, tx: number, ty: number, opt
     applyUnitChanges(scn, units);
     if (units.length > 0) edit.units = push(edit.units, units);
     counts.units = units.length;
-    if (skipped > 0) notes.push(`${skipped} unit${skipped === 1 ? "" : "s"} off the map`);
+    if (skipped > 0) notes.push(t("{skipped, plural, one {# unit} other {# units}} off the map", { skipped }));
   }
 
   // 5. Locations take free slots; the table is the one thing a paste can fill up.
@@ -476,7 +477,7 @@ export function pasteClip(scn: Scenario, clip: Clip, tx: number, ty: number, opt
       counts.locations++;
     }
     if (locations.length > 0) edit.locations = locations;
-    if (full > 0) notes.push(`${full} location${full === 1 ? "" : "s"} not pasted — every slot is in use`);
+    if (full > 0) notes.push(t("{full, plural, one {# location} other {# locations}} not pasted — every slot is in use", { full }));
   }
 
   // 6. Fog bytes, creating the section when the map had none.

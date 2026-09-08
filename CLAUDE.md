@@ -121,12 +121,15 @@ an addition up with `npm update @scm-js/plugin-api`. Anything a plugin needs at 
 arrive on `api` (the npm package is types only, so a value imported from it is undefined). There is
 no sandbox: a plugin runs with the page's privileges.
 
-**Translations.** UI text goes through `t("English text", params)` from `src/i18n` (`useT()` in a
-component; `msg()` to mark a string in a table and `translate()` to show it), with a string
-literal always — the extractor reads the source. `npm run i18n -- --write` after adding one, then
-fill the Korean in `src/i18n/ko.json`; `tests/i18n.test.ts` fails on a key the catalogue lacks or
-no longer needs. Only the Map Revision dialog is translated so far; the rest stays plain English
-literals until moved over. Map text is never translated. See `i18n.md`.
+**Translations.** Every user-visible string goes through `t("English text", params)` from
+`src/i18n` — a literal always, the extractor reads the source — and `App` remounts on a language
+change, so a plain `t` import works anywhere. A string kept in a table is `msg("…")` where written
+and `translate(value)` where shown (`unitLabel` / `upgradeLabel` / `techLabel` for the game's
+names; `unitName` stays English for the text trigger format and the plugin API). Never `t()` at
+module scope. `npm run i18n -- --write` after adding a string, then fill the Korean in
+`src/i18n/ko.json`; `tests/i18n.test.ts` fails on a key the catalogue lacks or no longer needs.
+`--export ko file.csv` / `--import ko file.csv` are the reviewer's round trip. Map text is never
+translated. See `i18n.md`.
 
 **Documentation.** `README.md` and `docs/*.md` are written for *readers* — map makers, mod makers,
 contributors — not as implementation notes. A `src/` path may appear only in a guide's closing

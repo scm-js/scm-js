@@ -14,6 +14,7 @@ import { hashNoise } from "../viewport/noise";
 import { locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { megatileForTile } from "../../formats/tileset/decode";
+import { t } from "../../i18n";
 
 export default function MinimapPanel() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -180,7 +181,7 @@ export default function MinimapPanel() {
       <canvas
         ref={ref}
         className="minimap"
-        title="Minimap — click or drag to move the view"
+        title={t("Minimap — click or drag to move the view")}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

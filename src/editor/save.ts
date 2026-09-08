@@ -215,19 +215,19 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
       index, name: s.name, what: spec?.what ?? null, size: s.data.length, fate: "kept", dirty: scn.dirty.has(s.name), editorOnly: spec?.editorOnly === true,
     };
     if (options.stripTerrainEditing && TERRAIN_EDITING_SECTIONS.includes(s.name)) {
-      planned.fate = "dropped"; planned.reason = "terrain editing data";
+      planned.fate = "dropped"; planned.reason = t("terrain editing data");
     } else if (options.stripBookkeeping && BOOKKEEPING_SECTIONS.includes(s.name)) {
-      planned.fate = "dropped"; planned.reason = "editor bookkeeping";
+      planned.fate = "dropped"; planned.reason = t("editor bookkeeping");
     } else if (options.stripUnknown && !spec) {
-      planned.fate = "dropped"; planned.reason = "not in the format reference";
+      planned.fate = "dropped"; planned.reason = t("not in the format reference");
     } else if (options.mergeRepeats && spec && (occurrences.get(s.name) ?? 0) > 1) {
       if (merged.has(s.name)) {
-        planned.fate = "dropped"; planned.reason = "merged into the first occurrence";
+        planned.fate = "dropped"; planned.reason = t("merged into the first occurrence");
       } else {
         merged.add(s.name);
         const data = combine(source, s.name, spec.mode, sizeOf(spec, dim)) ?? s.data;
         planned.fate = "merged";
-        planned.reason = `${occurrences.get(s.name)} occurrences combined as the game reads them`;
+        planned.reason = t("{n} occurrences combined as the game reads them", { n: occurrences.get(s.name) ?? 0 });
         planned.size = data.length;
         out.push({ ...s, data, declaredSize: data.length, truncated: undefined });
       }
@@ -250,28 +250,28 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
 
   const warnings: string[] = [];
   if (options.stripTerrainEditing && counts.terrainEditing > 0) {
-    warnings.push("Without ISOM, TILE and DD2 the isometric brush and the Doodads layer have nothing to work with when the file is opened in an editor again. The map plays the same.");
+    warnings.push(t("Without ISOM, TILE and DD2 the isometric brush and the Doodads layer have nothing to work with when the file is opened in an editor again. The map plays the same."));
   }
   if (options.stripBookkeeping && counts.bookkeeping > 0) {
-    warnings.push("Switch names and the sound list are lost to editors; the game does not read them.");
+    warnings.push(t("Switch names and the sound list are lost to editors; the game does not read them."));
   }
   if (options.stripUnknown && counts.unknown > 0) {
-    warnings.push(`${counts.unknown} section${counts.unknown === 1 ? "" : "s"} with names the format reference does not know are left out. Another editor or a protector may have put them there.`);
+    warnings.push(t("{unknown, plural, one {# section} other {# sections}} with names the format reference does not know are left out. Another editor or a protector may have put them there.", { unknown: counts.unknown }));
   }
   if (options.format === "chk" && (extras.size > 0 || stored)) {
-    warnings.push("A bare .chk is the scenario alone: the archive's other files are not written.");
+    warnings.push(t("A bare .chk is the scenario alone: the archive's other files are not written."));
   }
   if (stored?.kept) {
     const n = stored.count;
-    warnings.push(`${n} archive member${n === 1 ? " has" : "s have"} no name the editor knows${stored.members.unreadable.length > 0 ? ", or could not be decoded" : ""}; ${n === 1 ? "it is" : "they are"} written back exactly as stored, and the archive keeps its ${stored.members.sectorSize}-byte sectors${options.compression === "zlib" && stored.members.sectorSize !== 0x10000 ? " (zlib would otherwise use 64 KB ones)" : ""}.`);
+    warnings.push(t("{n, plural, one {# archive member has no name the editor knows{decoded}; it is} other {# archive members have no name the editor knows{decoded}; they are}} written back exactly as stored, and the archive keeps its {sectorSize}-byte sectors{zlib}.", { n, decoded: stored.members.unreadable.length > 0 ? t(", or could not be decoded") : "", sectorSize: stored.members.sectorSize, zlib: options.compression === "zlib" && stored.members.sectorSize !== 0x10000 ? t(" (zlib would otherwise use 64 KB ones)") : "" }));
   }
   const sounds = planned.filter((e) => e.kind === "sound" && !e.kept && options.format !== "chk").length;
-  if (sounds > 0) warnings.push(`${sounds} sound file${sounds === 1 ? "" : "s"} left out will not play.`);
+  if (sounds > 0) warnings.push(t("{n, plural, one {# sound file} other {# sound files}} left out will not play.", { n: sounds }));
   if (planned.some((e) => e.kind === "script" && !e.kept && options.format !== "chk")) {
-    warnings.push("Without the TrigScript files the generated triggers stay but their source is gone.");
+    warnings.push(t("Without the TrigScript files the generated triggers stay but their source is gone."));
   }
   if (options.compression === "zlib" && options.format !== "chk") {
-    warnings.push("zlib needs StarCraft 1.16.1 or Remastered; older builds do not read it.");
+    warnings.push(t("zlib needs StarCraft 1.16.1 or Remastered; older builds do not read it."));
   }
   const lost = unencodableStrings(scn.strings).length;
   if (lost > 0) {

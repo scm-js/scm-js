@@ -31,6 +31,7 @@ import {
 } from "../../editor/textColors";
 import { escapeControls, unescapeControls } from "../../editor/strings";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
+import { t, translate } from "../../i18n";
 
 /**
  * Whether previews follow 1.16.1's rule (the colour resets at every line break) or
@@ -65,7 +66,7 @@ export function ColorCodeBar({ onInsert, disabled, className = "" }: ColorCodeBa
           key={t.byte}
           type="button"
           className={t.rgb ? "code-chip" : "code-chip is-effect"}
-          title={`${t.code} — ${t.label}${t.rgb ? ` (${t.rgb})` : ""}`}
+          title={`${t.code} — ${translate(t.label)}${t.rgb ? ` (${t.rgb})` : ""}`}
           disabled={disabled}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onInsert(t.code)}
@@ -125,7 +126,7 @@ function Run({ run }: { run: TextRun }) {
     <span
       className={run.invisible ? "is-hidden" : undefined}
       style={{ color: run.color }}
-      title={run.invisible ? "Hidden in game" : undefined}
+      title={run.invisible ? t("Hidden in game") : undefined}
     >
       {run.text}
     </span>
@@ -326,7 +327,7 @@ export function ColorTextField({
       role="textbox"
       aria-readonly="true"
       tabIndex={disabled ? -1 : 0}
-      title={title ?? "Click to edit the text and its <XX> codes"}
+      title={title ?? t("Click to edit the text and its <XX> codes")}
       onFocus={() => { if (!disabled) setEditing(true); }}
       onMouseDown={(e) => { if (!disabled) { e.preventDefault(); setEditing(true); } }}
     >
@@ -343,8 +344,8 @@ export function ColorTextField({
             type="button"
             className="btn icon sm color-text-codes"
             disabled={disabled}
-            title="Insert a text colour or layout code"
-            aria-label="Insert a text colour code"
+            title={t("Insert a text colour or layout code")}
+            aria-label={t("Insert a text colour code")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => { if (!showInput) setEditing(true); setBarOpen((o) => !o); }}
           >
@@ -372,7 +373,7 @@ export function ColorTextField({
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
               <ColorCodeBar onInsert={insert} disabled={disabled} />
-              <p className="hint" style={{ margin: "6px 0 0" }}>Inserted at the caret. Codes may also be typed as &lt;XX&gt;.</p>
+              <p className="hint" style={{ margin: "6px 0 0" }}>{t("Inserted at the caret. Codes may also be typed as <XX>.")}</p>
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>

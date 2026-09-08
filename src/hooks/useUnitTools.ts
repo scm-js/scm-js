@@ -12,9 +12,10 @@ import { mirrorPixel } from "../editor/symmetry";
 import type { UnitRecord } from "../formats/chk/sections/objects";
 import type { UnitsDat } from "../formats/dat/dat";
 import { peekTileset } from "../formats/tileset/load";
-import { unitName } from "../data/units";
+import { unitLabel } from "../data/units";
 import type { MapPoint } from "./useTerrainTools";
 import { useUnitAssets } from "./useUnitAssets";
+import { t } from "../i18n";
 
 export interface UnitGhost {
   unitId: number;
@@ -30,7 +31,7 @@ export interface UnitGhost {
 
 function describeProblem(tables: UnitsDat | null, unitId: number, verdict: { problem: PlacementProblem | null; blocker: number }, scn: { units: UnitRecord[] }): string {
   const reason = placementReason(tables, unitId, verdict.problem, verdict.blocker, scn.units);
-  return `Can't place ${unitName(unitId)} here: ${reason} (Placement ▸ Check ${verdict.problem === "terrain" ? "terrain" : "collision"})`;
+  return `Can't place ${unitLabel(unitId)} here: ${reason} (Placement ▸ Check ${verdict.problem === "terrain" ? "terrain" : "collision"})`;
 }
 
 /**
@@ -100,8 +101,8 @@ export function useUnitTools() {
       units.push(...list);
     }
     const n = units.length;
-    commit({ label: n === 1 ? `Place ${unitName(ghost.unitId)}` : `Place ${n} × ${unitName(ghost.unitId)}`, changes: [], units });
-    setStatus(`Placed ${n === 1 ? "" : `${n} × `}${unitName(ghost.unitId)} for Player ${ghost.owner + 1} at ${ghost.x}, ${ghost.y}${skipped ? ` (${skipped} mirror image${skipped === 1 ? "" : "s"} refused)` : ""} — Esc or right-click to stop placing`);
+    commit({ label: n === 1 ? t("Place {unitName}", { unitName: unitLabel(ghost.unitId) }) : t("Place {n} × {unitName}", { n, unitName: unitLabel(ghost.unitId) }), changes: [], units });
+    setStatus(t("Placed {count}{unit} for Player {player} at {x}, {y}{refused} — Esc or right-click to stop placing", { count: n === 1 ? "" : `${n} × `, unit: unitLabel(ghost.unitId), player: ghost.owner + 1, x: ghost.x, y: ghost.y, refused: skipped ? t(" ({n, plural, one {# mirror image} other {# mirror images}} refused)", { n: skipped }) : "" }));
     return true;
   }, [store, tables, tilesetOf, ghostsAt, commit, setStatus]);
 
@@ -114,7 +115,7 @@ export function useUnitTools() {
   const stopPlacing = useCallback(() => {
     if (!store.get(unitPlacingAtom)) return false;
     setPlacing(false);
-    setStatus("Stopped placing — click a unit to select it, or pick one in the palette to place");
+    setStatus(t("Stopped placing — click a unit to select it, or pick one in the palette to place"));
     return true;
   }, [store, setPlacing, setStatus]);
 
@@ -201,8 +202,8 @@ export function useUnitTools() {
     if (units.length === 0) return false;
     // The records are already in place; commit just records the step and marks the file dirty.
     applyUnitChanges(scn, units);
-    commit({ label: `Move ${units.length} unit${units.length === 1 ? "" : "s"}`, changes: [], units });
-    setStatus(`Moved ${units.length} unit${units.length === 1 ? "" : "s"}`);
+    commit({ label: t("Move {length, plural, one {# unit} other {# units}}", { length: units.length }), changes: [], units });
+    setStatus(t("Moved {length, plural, one {# unit} other {# units}}", { length: units.length }));
     return true;
   }, [store, tables, commit, setStatus, bump, dragProblem]);
 
@@ -220,12 +221,12 @@ export function useUnitTools() {
   }, [store, commit, setSelected]);
 
   const setOwner = useCallback((owner: number) => {
-    updateSelected(`Set owner to Player ${owner + 1}`, () => ({ owner }));
+    updateSelected(t("Set owner to Player {n}", { n: owner + 1 }), () => ({ owner }));
   }, [updateSelected]);
 
   const deleteSelected = useCallback(() => {
     const n = deleteSelectedUnits();
-    if (n > 0) setStatus(`Deleted ${n} unit${n === 1 ? "" : "s"}`);
+    if (n > 0) setStatus(t("Deleted {n, plural, one {# unit} other {# units}}", { n }));
     return n;
   }, [deleteSelectedUnits, setStatus]);
 

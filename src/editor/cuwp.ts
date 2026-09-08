@@ -11,6 +11,7 @@ import {
   CUWP_SLOTS, CuwpField, CuwpState, CuwpValid, cuwpSlotActive, defaultCuwp, defaultCuwpUsed, describeCuwpSlot, emptyCuwpSlot, type CuwpSlot,
 } from "../formats/chk/sections/cuwp";
 import { ActionType } from "../formats/chk/sections/triggers";
+import { t } from "../i18n";
 
 export { CUWP_SLOTS, CuwpField, CuwpState, CuwpValid, cuwpSlotActive, describeCuwpSlot, emptyCuwpSlot, type CuwpSlot };
 
@@ -75,7 +76,7 @@ export function applyCuwp(scn: Scenario, table: CuwpTable): string[] {
 export function cuwpSlotLabel(index: number, slot: CuwpSlot | undefined, used?: boolean): string {
   const n = index + 1;
   if (!slot) return `Slot ${n}`;
-  if (!cuwpSlotActive(slot)) return used ? `Slot ${n} · in use, nothing set` : `Slot ${n} · empty`;
+  if (!cuwpSlotActive(slot)) return used ? t("Slot {n} · in use, nothing set", { n }) : t("Slot {n} · empty", { n });
   return `Slot ${n} · ${describeCuwpSlot(slot)}`;
 }
 

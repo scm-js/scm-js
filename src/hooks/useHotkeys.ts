@@ -14,6 +14,7 @@ import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom }
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
 import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
+import { t } from "../i18n";
 
 const LAYER_KEYS: Record<string, EditorLayer> = { t: "terrain", d: "doodads", u: "units", s: "sprites", l: "locations", f: "fog", c: "clipboard" };
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -57,10 +58,10 @@ export function useHotkeys() {
       // Mid-composition keystrokes (Hangul, kana, pinyin): the IME owns them, and the
       // key it reports is not the character being typed.
       if (e.isComposing || e.keyCode === 229) return;
-      const t = e.target as HTMLElement | null;
+      const target = e.target as HTMLElement | null;
       // A tick box or radio button keeps focus after a click but has no text to edit, so the hotkeys still apply there.
-      const textInput = t?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((t as HTMLInputElement).type);
-      const typing = !!t && (textInput || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      const textInput = target?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((target as HTMLInputElement).type);
+      const typing = !!target && (textInput || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
       const mod = e.ctrlKey || e.metaKey;
 
       if (e.key === "F1") { e.preventDefault(); open("shortcuts"); return; }
@@ -86,8 +87,8 @@ export function useHotkeys() {
           n: () => open("newMap"),
           o: () => open("openMap"),
           s: () => { void save(); },
-          z: () => { const l = undo(); setStatus(l ? `Undid: ${l}` : "Nothing to undo"); },
-          y: () => { const l = redo(); setStatus(l ? `Redid: ${l}` : "Nothing to redo"); },
+          z: () => { const l = undo(); setStatus(l ? t("Undid: {l}", { l }) : t("Nothing to undo")); },
+          y: () => { const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); },
           x: () => { clipTools.cut(); },
           c: () => { clipTools.copy(); },
           v: () => { clipTools.paste(); },
@@ -116,7 +117,7 @@ export function useHotkeys() {
       if (mod && e.shiftKey) {
         const k = e.key.toLowerCase();
         if (k === "s") { e.preventDefault(); open("saveAs"); }
-        if (k === "z" && !typing) { e.preventDefault(); const l = redo(); setStatus(l ? `Redid: ${l}` : "Nothing to redo"); }
+        if (k === "z" && !typing) { e.preventDefault(); const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); }
         if (k === ")" || k === "0") { e.preventDefault(); zoomToFit(); }
         return;
       }
@@ -131,21 +132,21 @@ export function useHotkeys() {
         }
         if (activeLayer === "doodads") {
           const n = deleteDoodads();
-          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} doodad${n === 1 ? "" : "s"}`); }
+          if (n > 0) { e.preventDefault(); setStatus(t("Deleted {n, plural, one {# doodad} other {# doodads}}", { n })); }
           return;
         }
         if (activeLayer === "sprites") {
           const n = deleteSprites();
-          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} sprite${n === 1 ? "" : "s"}`); }
+          if (n > 0) { e.preventDefault(); setStatus(t("Deleted {n, plural, one {# sprite} other {# sprites}}", { n })); }
           return;
         }
         if (activeLayer === "locations") {
           const n = deleteLocations();
-          if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} location${n === 1 ? "" : "s"}`); }
+          if (n > 0) { e.preventDefault(); setStatus(t("Deleted {n, plural, one {# location} other {# locations}}", { n })); }
           return;
         }
         const n = deleteUnits();
-        if (n > 0) { e.preventDefault(); setStatus(`Deleted ${n} unit${n === 1 ? "" : "s"}`); }
+        if (n > 0) { e.preventDefault(); setStatus(t("Deleted {n, plural, one {# unit} other {# units}}", { n })); }
         return;
       }
       if (e.key === "Escape") {
@@ -157,17 +158,17 @@ export function useHotkeys() {
           return;
         }
         if (activeLayer === "doodads") {
-          if (placingDoodad) { setPlacingDoodad(false); setStatus("Stopped placing — click a doodad to select it, or pick one in the palette to place"); }
+          if (placingDoodad) { setPlacingDoodad(false); setStatus(t("Stopped placing — click a doodad to select it, or pick one in the palette to place")); }
           else setSelectedDoodads([]);
           return;
         }
         if (activeLayer === "sprites") {
-          if (placingSprite) { setPlacingSprite(false); setStatus("Stopped placing — click a sprite to select it, or pick one in the palette to place"); }
+          if (placingSprite) { setPlacingSprite(false); setStatus(t("Stopped placing — click a sprite to select it, or pick one in the palette to place")); }
           else setSelectedSprites([]);
           return;
         }
         if (activeLayer === "locations") { setSelectedLocations([]); return; }
-        if (placing) { setPlacing(false); setStatus("Stopped placing — click a unit to select it, or pick one in the palette to place"); }
+        if (placing) { setPlacing(false); setStatus(t("Stopped placing — click a unit to select it, or pick one in the palette to place")); }
         else setSelectedUnits([]);
         return;
       }
@@ -177,7 +178,7 @@ export function useHotkeys() {
       if (arrow) {
         const step = e.shiftKey ? 1 : locationSnap || 32;
         const n = nudgeLocations({ dx: arrow[0] * step, dy: arrow[1] * step });
-        if (n > 0) { e.preventDefault(); setStatus(`Moved ${n} location${n === 1 ? "" : "s"} by ${step} px`); }
+        if (n > 0) { e.preventDefault(); setStatus(t("Moved {n, plural, one {# location} other {# locations}} by {step} px", { n, step })); }
         return;
       }
 

@@ -19,6 +19,7 @@ import { pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { useSetAtom } from "jotai";
 import { clearLog, formatData, formatLog, logDropped, logEntries, stamp, subscribeLog, type LogEntry, type LogLevel } from "../../editor/log";
 import { saveBlob } from "../../services/mapIo";
+import { t } from "../../i18n";
 
 /** Rows put in the DOM. Everything older is in the buffer and in a copy; it is not on screen. */
 const SHOWN = 400;
@@ -76,16 +77,16 @@ export default function DebugConsole() {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text());
-      setStatus("The log was copied — it names the map file, the plugins and the build.");
+      setStatus(t("The log was copied — it names the map file, the plugins and the build."));
     } catch {
-      pushToast({ kind: "warn", title: "Could not copy the log", detail: "The browser refused the clipboard. Save it to a file instead." });
+      pushToast({ kind: "warn", title: t("Could not copy the log"), detail: t("The browser refused the clipboard. Save it to a file instead.") });
     }
   };
 
   const save = async () => {
     const stampName = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const out = await saveBlob(new Blob([text()], { type: "text/plain" }), `scm-js-log-${stampName}.txt`);
-    if (out) setStatus(`Log written to ${out.fileName}`);
+    if (out) setStatus(t("Log written to {fileName}", { fileName: out.fileName }));
   };
 
   // The grip on the top edge; the height is remembered like the docks' widths.
@@ -102,34 +103,34 @@ export default function DebugConsole() {
   if (!open) return null;
 
   return (
-    <section className="debug-console" style={{ height }} aria-label="Debug console">
+    <section className="debug-console" style={{ height }} aria-label={t("Debug console")}>
       <div className="console-grip" onPointerDown={drag} role="separator" aria-orientation="horizontal" />
       <header className="console-head">
-        <span className="console-title">Debug Console</span>
-        <div className="console-filters" role="group" aria-label="Level">
+        <span className="console-title">{t("Debug Console")}</span>
+        <div className="console-filters" role="group" aria-label={t("Level")}>
           {(["all", "warn", "error"] as const).map((f) => (
             <button key={f} type="button" className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>
-              {f === "all" ? "All" : f === "warn" ? "Warnings" : "Errors"}
+              {f === "all" ? t("All") : f === "warn" ? t("Warnings") : t("Errors")}
             </button>
           ))}
         </div>
         <input
           className="console-find"
           type="search"
-          placeholder="Filter"
+          placeholder={t("Filter")}
           value={needle}
           onChange={(e) => setNeedle(e.target.value)}
-          aria-label="Filter the log"
+          aria-label={t("Filter the log")}
         />
-        <label className="console-check" title="Also record every plugin API call and every edit. Off between sessions.">
+        <label className="console-check" title={t("Also record every plugin API call and every edit. Off between sessions.")}>
           <input type="checkbox" checked={verbose} onChange={(e) => setVerboseFlag(e.target.checked)} />
-          Verbose
+          {t("Verbose")}
         </label>
         <span className="console-spacer" />
-        <button type="button" onClick={() => { clearLog(); bump((n) => n + 1); }}>Clear</button>
-        <button type="button" onClick={copy} title="Copy the whole log, with the build, the game data source and the plugins above it">Copy</button>
-        <button type="button" onClick={save}>Save…</button>
-        <button type="button" className="console-close" onClick={() => setOpen(false)} aria-label="Close the debug console">×</button>
+        <button type="button" onClick={() => { clearLog(); bump((n) => n + 1); }}>{t("Clear")}</button>
+        <button type="button" onClick={copy} title={t("Copy the whole log, with the build, the game data source and the plugins above it")}>{t("Copy")}</button>
+        <button type="button" onClick={save}>{t("Save…")}</button>
+        <button type="button" className="console-close" onClick={() => setOpen(false)} aria-label={t("Close the debug console")}>×</button>
       </header>
       <div
         className="console-body"
@@ -141,7 +142,7 @@ export default function DebugConsole() {
       >
         {entries.length === 0 ? (
           <p className="console-empty">
-            {needle || filter !== "all" ? "Nothing in the log matches." : "Nothing logged yet. Opens, saves, plugin activity and any error land here."}
+            {needle || filter !== "all" ? t("Nothing in the log matches.") : t("Nothing logged yet. Opens, saves, plugin activity and any error land here.")}
           </p>
         ) : (
           entries.map((e) => (

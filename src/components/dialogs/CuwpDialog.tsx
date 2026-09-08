@@ -9,6 +9,7 @@ import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, Group, ListBox, NumberInput, Tick } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t } from "../../i18n";
 
 /**
  * Triggers ▸ Unit Properties Slots…: the 64 Create Unit with Properties slots (UPRP), each
@@ -29,8 +30,8 @@ export function CuwpDialog({ entry }: DialogProps) {
 
   if (!scenario || !table) {
     return (
-      <DialogFrame dialogKey={entry.key} title="Unit Properties Slots" icon={<PackagePlus size={14} />} size="sm">
-        <p className="hint">Open or create a map first.</p>
+      <DialogFrame dialogKey={entry.key} title={t("Unit Properties Slots")} icon={<PackagePlus size={14} />} size="sm">
+        <p className="hint">{t("Open or create a map first.")}</p>
       </DialogFrame>
     );
   }
@@ -75,7 +76,7 @@ export function CuwpDialog({ entry }: DialogProps) {
         <span className={on ? "" : "unused"}>{label}</span>
         <NumberInput value={slot[key]} onChange={(v) => setNumber(key, bit, v)} min={0} max={max} />
         <span className="dim">{unit}</span>
-        <Tick checked={on} onChange={(e) => setField(bit, e.target.checked)} aria-label={`${label} applied`} title="Applied to the created units; unticked, they keep the unit type's default" />
+        <Tick checked={on} onChange={(e) => setField(bit, e.target.checked)} aria-label={t("{label} applied", { label })} title={t("Applied to the created units; unticked, they keep the unit type's default")} />
       </Fragment>
     );
   };
@@ -84,9 +85,9 @@ export function CuwpDialog({ entry }: DialogProps) {
     return (
       <div className="row" key={label} style={{ gap: 10 }} title={hint}>
         <span style={{ width: 110 }}>{label}</span>
-        <Check radio label="Default" checked={mode === "default"} onChange={() => setState(valid, bit, "default")} />
-        <Check radio label="On" checked={mode === "on"} onChange={() => setState(valid, bit, "on")} />
-        <Check radio label="Off" checked={mode === "off"} onChange={() => setState(valid, bit, "off")} />
+        <Check radio label={t("Default")} checked={mode === "default"} onChange={() => setState(valid, bit, "default")} />
+        <Check radio label={t("On")} checked={mode === "on"} onChange={() => setState(valid, bit, "on")} />
+        <Check radio label={t("Off")} checked={mode === "off"} onChange={() => setState(valid, bit, "off")} />
       </div>
     );
   };
@@ -94,13 +95,13 @@ export function CuwpDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Unit Properties Slots"
+      title={t("Unit Properties Slots")}
       icon={<PackagePlus size={14} />}
       size="lg"
       tall
       showApply
       onOk={apply}
-      footerLeft={<span>{CUWP_SLOTS} slots · {active} set · {referenced} named by triggers</span>}
+      footerLeft={<span>{t("{CUWP_SLOTS} slots · {active} set · {referenced} named by triggers", { CUWP_SLOTS, active, referenced })}</span>}
     >
       <div className="split" style={{ ["--split" as string]: "300px" }}>
         <ListBox
@@ -110,43 +111,43 @@ export function CuwpDialog({ entry }: DialogProps) {
           render={(s, i) => (
             <>
               <span className="idx">{i + 1}</span>
-              {cuwpSlotActive(s) ? <span>{describeCuwpSlot(s)}</span> : <span className="faint">{table.used[i] ? "in use, nothing set" : "empty"}</span>}
+              {cuwpSlotActive(s) ? <span>{describeCuwpSlot(s)}</span> : <span className="faint">{table.used[i] ? t("in use, nothing set") : t("empty")}</span>}
               <span className="row" style={{ marginLeft: "auto", gap: 4 }}>
-                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title="Create Unit with Properties actions naming this slot">{usage[i]} use{usage[i] === 1 ? "" : "s"}</span>}
-                {table.used[i] && <span className="badge teal">in use</span>}
+                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title={t("Create Unit with Properties actions naming this slot")}>{usage[i]} use{usage[i] === 1 ? "" : "s"}</span>}
+                {table.used[i] && <span className="badge teal">{t("in use")}</span>}
               </span>
             </>
           )}
         />
         <div className="col" style={{ gap: 10, flex: "none", minWidth: 340 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <strong>Slot {sel + 1}</strong>
+            <strong>{t("Slot {v}", { v: sel + 1 })}</strong>
             <span className="row" style={{ gap: 6 }}>
-              <Check label="In use" checked={table.used[sel]} onChange={(e) => { const used = table.used.slice(); used[sel] = e.target.checked; setTable({ ...table, used }); }} title="StarEdit's tick (UPUS); the game reads the slot either way" />
-              <Button size="sm" onClick={clear} disabled={!cuwpSlotActive(slot) && !table.used[sel]} title="Empty the slot and clear its tick"><Eraser size={12} /> Clear</Button>
+              <Check label={t("In use")} checked={table.used[sel]} onChange={(e) => { const used = table.used.slice(); used[sel] = e.target.checked; setTable({ ...table, used }); }} title={t("StarEdit's tick (UPUS); the game reads the slot either way")} />
+              <Button size="sm" onClick={clear} disabled={!cuwpSlotActive(slot) && !table.used[sel]} title={t("Empty the slot and clear its tick")}><Eraser size={12} /> {" "}{t("Clear")}</Button>
             </span>
           </div>
-          <Group title="Vitals">
+          <Group title={t("Vitals")}>
             <div className="form" style={{ gridTemplateColumns: "max-content 1fr max-content max-content" }}>
-              {vital("Hit points", "hitPointsPercent", CuwpField.HitPoints, 100, "%")}
-              {vital("Shields", "shieldsPercent", CuwpField.Shields, 100, "%")}
-              {vital("Energy", "energyPercent", CuwpField.Energy, 100, "%")}
-              {vital("Resources", "resources", CuwpField.Resources, 4294967295, "")}
-              {vital("Hangar", "hangar", CuwpField.Hangar, 65535, "units")}
+              {vital(t("Hit points"), "hitPointsPercent", CuwpField.HitPoints, 100, "%")}
+              {vital(t("Shields"), "shieldsPercent", CuwpField.Shields, 100, "%")}
+              {vital(t("Energy"), "energyPercent", CuwpField.Energy, 100, "%")}
+              {vital(t("Resources"), "resources", CuwpField.Resources, 4294967295, "")}
+              {vital(t("Hangar"), "hangar", CuwpField.Hangar, 65535, "units")}
             </div>
-            <p className="hint">Percentages of the unit type's maximum. Resources apply to mineral fields and geysers, hangar to carriers and reavers.</p>
+            <p className="hint">{t("Percentages of the unit type's maximum. Resources apply to mineral fields and geysers, hangar to carriers and reavers.")}</p>
           </Group>
-          <Group title="Special states">
+          <Group title={t("Special states")}>
             <div className="col" style={{ gap: 4 }}>
-              {state("Cloaked", CuwpValid.Cloak, CuwpState.Cloaked, "Units that can cloak")}
-              {state("Burrowed", CuwpValid.Burrow, CuwpState.Burrowed, "Units that can burrow")}
-              {state("In transit", CuwpValid.InTransit, CuwpState.InTransit, "Landed buildings lift off")}
-              {state("Hallucinated", CuwpValid.Hallucinated, CuwpState.Hallucinated, "Takes double damage and does none")}
-              {state("Invincible", CuwpValid.Invincible, CuwpState.Invincible, "Cannot be damaged")}
+              {state(t("Cloaked"), CuwpValid.Cloak, CuwpState.Cloaked, t("Units that can cloak"))}
+              {state(t("Burrowed"), CuwpValid.Burrow, CuwpState.Burrowed, t("Units that can burrow"))}
+              {state(t("In transit"), CuwpValid.InTransit, CuwpState.InTransit, t("Landed buildings lift off"))}
+              {state(t("Hallucinated"), CuwpValid.Hallucinated, CuwpState.Hallucinated, t("Takes double damage and does none"))}
+              {state(t("Invincible"), CuwpValid.Invincible, CuwpState.Invincible, t("Cannot be damaged"))}
             </div>
           </Group>
           <p className="hint">
-            A trigger's <em>Create Unit with Properties</em> names a slot by number; this is what the slot applies to every unit it creates. Used by {usage[sel] > 0 ? `${usage[sel]} action${usage[sel] === 1 ? "" : "s"}` : "no trigger"}.
+            {t("A trigger's")}{" "}<em>{t("Create Unit with Properties")}</em> {" "}{t("names a slot by number; this is what the slot applies to every unit it creates. Used by")}{" "}{usage[sel] > 0 ? t("{v, plural, one {# action} other {# actions}}", { v: usage[sel] }) : t("no trigger")}.
           </p>
         </div>
       </div>

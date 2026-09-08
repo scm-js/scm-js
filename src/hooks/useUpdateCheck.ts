@@ -7,6 +7,7 @@ import {
   checkForUpdatesAtom, lastUpdateCheckAtom, updateDownloadedAtom, updateFailedAtom, updateProgressAtom,
 } from "../atoms/updateAtoms";
 import { shouldCheckOnStart } from "../editor/updates";
+import { t } from "../i18n";
 
 /**
  * The desktop build's startup update check, and the one subscription to the updater's
@@ -50,10 +51,10 @@ export function useUpdateCheck() {
             if (state.phase !== "available") return;
             store.set(pushToastAtom, {
               kind: "info",
-              title: `scmJS ${state.info.version} is available`,
-              detail: `You have ${state.current}.`,
+              title: t("scmJS {version} is available", { version: state.info.version }),
+              detail: t("You have {current}.", { current: state.current }),
               ttl: 0,
-              action: { label: "Download", run: () => store.set(openDialogAtom, "update") },
+              action: { label: t("Download"), run: () => store.set(openDialogAtom, "update") },
             });
           });
         }, STARTUP_DELAY_MS);

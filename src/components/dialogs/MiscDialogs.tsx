@@ -31,7 +31,7 @@ import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import type { LanguagePreference, PluginUpdateMode } from "../../editor/preferences";
-import { LOCALES } from "../../i18n";
+import { LOCALES, msg, t, translate } from "../../i18n";
 import {
   archiveExtrasAtom,
   doodadsRevisionAtom,
@@ -60,7 +60,7 @@ import {
   storedSize,
   storedValue,
 } from "../../atoms/storage";
-import { unitName } from "../../data/units";
+import { unitLabel } from "../../data/units";
 import { spriteCatalogue } from "../../data/sprites";
 import {
   findInScenario,
@@ -112,23 +112,23 @@ interface StoredEntry {
 }
 
 const STORED_LABELS: Record<string, string> = {
-  "scmjs.prefs": "Preferences",
-  "scmjs.grid": "Grid look",
-  "scmjs.gridSize": "Grid spacing",
-  "scmjs.locationSnap": "Location snap",
-  "scmjs.placement": "Unit placement options",
-  "scmjs.doodadPlacement": "Doodad placement options",
-  "scmjs.panels": "Panels shown",
-  "scmjs.docks": "Panel widths",
-  "scmjs.console": "Debug console shown",
-  "scmjs.consoleHeight": "Debug console height",
-  "scmjs.recents": "Recent files",
-  "scmjs.plugins": "Installed plugins",
-  "scmjs.plugin-code": "Plugin code copies",
-  "scmjs.plugin-manifests": "Plugin manifests",
-  "scmjs.plugin-registries": "Plugin sources",
-  "scmjs.plugin-registry": "Browse Plugins cache",
-  "scmjs.plugin-updates": "Last plugin update check",
+  "scmjs.prefs": msg("Preferences"),
+  "scmjs.grid": msg("Grid look"),
+  "scmjs.gridSize": msg("Grid spacing"),
+  "scmjs.locationSnap": msg("Location snap"),
+  "scmjs.placement": msg("Unit placement options"),
+  "scmjs.doodadPlacement": msg("Doodad placement options"),
+  "scmjs.panels": msg("Panels shown"),
+  "scmjs.docks": msg("Panel widths"),
+  "scmjs.console": msg("Debug console shown"),
+  "scmjs.consoleHeight": msg("Debug console height"),
+  "scmjs.recents": msg("Recent files"),
+  "scmjs.plugins": msg("Installed plugins"),
+  "scmjs.plugin-code": msg("Plugin code copies"),
+  "scmjs.plugin-manifests": msg("Plugin manifests"),
+  "scmjs.plugin-registries": msg("Plugin sources"),
+  "scmjs.plugin-registry": msg("Browse Plugins cache"),
+  "scmjs.plugin-updates": msg("Last plugin update check"),
 };
 
 /**
@@ -148,7 +148,7 @@ function storedEntries(): StoredEntry[] {
       else byPlugin.set(id, [key]);
     } else {
       rows.push({
-        label: STORED_LABELS[key] ?? key,
+        label: translate(STORED_LABELS[key] ?? key),
         detail: key,
         keys: [key],
         size: storedSize(key),
@@ -157,8 +157,8 @@ function storedEntries(): StoredEntry[] {
   }
   for (const [id, keys] of [...byPlugin].sort(([a], [b]) => a.localeCompare(b)))
     rows.push({
-      label: `Plugin data · ${id}`,
-      detail: `${keys.length} entr${keys.length === 1 ? "y" : "ies"} kept by the plugin`,
+      label: t("Plugin data · {id}", { id }),
+      detail: t("{length, plural, one {# entry} other {# entries}} kept by the plugin", { length: keys.length }),
       keys,
       size: keys.reduce((n, key) => n + storedSize(key), 0),
     });
@@ -200,7 +200,7 @@ function StoredRow({
         <button
           className="stored-toggle"
           aria-expanded={open}
-          title={open ? "Hide what is stored" : "Show what is stored"}
+          title={open ? t("Hide what is stored") : t("Show what is stored")}
           onClick={() => setOpen((v) => !v)}
         >
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -218,8 +218,8 @@ function StoredRow({
           size="sm"
           icon
           variant="ghost"
-          title={`Clear ${entry.label}`}
-          aria-label={`Clear ${entry.label}`}
+          title={t("Clear {label}", { label: entry.label })}
+          aria-label={t("Clear {label}", { label: entry.label })}
           onClick={onClear}
         >
           <Trash2 size={11} />
@@ -276,15 +276,15 @@ function StorageSection({
     setCleared(
       asking.keys
         ? `Cleared ${asking.what}.`
-        : `Cleared ${gone} entr${gone === 1 ? "y" : "ies"}. The default plugins load again.`,
+        : t("Cleared {n, plural, one {# entry} other {# entries}}. The default plugins load again.", { n: gone }),
     );
     setRun((n) => n + 1);
     onCleared(asking.keys ?? ownedStoredKeys());
   };
   return (
-    <Group title={`${host.Noun} storage`}>
+    <Group title={t("{Noun} storage", { Noun: host.Noun })}>
       <div className="listbox stored-list">
-        {entries.length === 0 && <div className="empty">Nothing stored.</div>}
+        {entries.length === 0 && <div className="empty">{t("Nothing stored.")}</div>}
         {entries.map((e) => (
           <StoredRow
             key={e.detail}
@@ -300,26 +300,20 @@ function StorageSection({
         {asking ? (
           <>
             <span className="hint">
-              {asking.keys
-                ? `Clear ${asking.what}?`
-                : "Clear the preferences, grid settings, installed plugins and plugin data?"}
+              {asking.keys ? t("Clear {what}?", { what: asking.what }) : t("Clear the preferences, grid settings, installed plugins and plugin data?")}
             </span>
             <span className="grow" />
             <Button size="sm" onClick={() => setAsking(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button size="sm" variant="danger" onClick={doClear}>
-              <Trash2 size={11} /> Clear
+              <Trash2 size={11} /> {" "}{t("Clear")}
             </Button>
           </>
         ) : (
           <>
             <span className="hint">
-              {cleared !== null
-                ? cleared
-                : entries.length === 0
-                  ? `Nothing is stored in ${host.here}.`
-                  : `${bytes(total)} stored in ${host.here}. The open map is never kept here, so it is not affected.`}
+              {cleared !== null ? cleared : entries.length === 0 ? t("Nothing is stored in {here}.", { here: host.here }) : t("{bytes} stored in {here}. The open map is never kept here, so it is not affected.", { bytes: bytes(total), here: host.here })}
             </span>
             <span className="grow" />
             <Button
@@ -331,15 +325,14 @@ function StorageSection({
                 setAsking({ what: "everything", keys: null });
               }}
             >
-              <Trash2 size={11} /> Clear all data…
+              <Trash2 size={11} /> {" "}{t("Clear all data…")}
             </Button>
           </>
         )}
       </div>
       {!storagePersists() && (
         <p className="hint" style={{ marginTop: 4 }}>
-          {host.Here} is not letting the editor store anything, so settings last
-          only until the {host.desktop ? "app is closed" : "tab closes"}.
+          {t("{Here} is not letting the editor store anything, so settings last only until the", { Here: host.Here })}{" "}{host.desktop ? t("app is closed") : t("tab closes")}.
         </p>
       )}
     </Group>
@@ -355,19 +348,17 @@ function GameDataSection() {
       ? `${source.profile.name} · `
       : "";
   return (
-    <Group title="Game data">
+    <Group title={t("Game data")}>
       <div className="row" style={{ alignItems: "baseline" }}>
         <span className="grow dim">
-          {source ? `${set}${source.label}` : "Locating…"}
+          {source ? `${set}${source.label}` : t("Locating…")}
         </span>
         <Button size="sm" onClick={() => open("gameData")}>
-          <HardDrive size={11} /> Game Data…
+          <HardDrive size={11} /> {" "}{t("Game Data…")}
         </Button>
       </div>
       <p className="hint" style={{ marginTop: 4 }}>
-        {source?.kind === "none"
-          ? "The editor is drawing flat terrain colours and marker units. Game Data… installs StarCraft's graphics."
-          : "Where the terrain and unit graphics are coming from. Game Data… is where to change it."}
+        {source?.kind === "none" ? t("The editor is drawing flat terrain colours and marker units. Game Data… installs StarCraft's graphics.") : t("Where the terrain and unit graphics are coming from. Game Data… is where to change it.")}
       </p>
     </Group>
   );
@@ -377,28 +368,28 @@ function GameDataSection() {
 
 const HOTKEYS: [string, string][] = [
   ["New / Open / Save", "Ctrl+N · Ctrl+O · Ctrl+S"],
-  ["Save As", "Ctrl+Shift+S"],
-  ["Map Properties", "Alt+Enter"],
-  ["Undo / Redo", "Ctrl+Z · Ctrl+Y or Ctrl+Shift+Z"],
+  [msg("Save As"), "Ctrl+Shift+S"],
+  [msg("Map Properties"), "Alt+Enter"],
+  [msg("Undo / Redo"), "Ctrl+Z · Ctrl+Y or Ctrl+Shift+Z"],
   ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
-  ["Find", "Ctrl+F"],
-  ["Toggle grid", "Ctrl+G"],
-  ["Zoom in / out / 100%", "Ctrl++ · Ctrl+− · Ctrl+0"],
-  ["Zoom to fit", "Ctrl+Shift+0"],
+  [msg("Find"), "Ctrl+F"],
+  [msg("Toggle grid"), "Ctrl+G"],
+  [msg("Zoom in / out / 100%"), "Ctrl++ · Ctrl+− · Ctrl+0"],
+  [msg("Zoom to fit"), "Ctrl+Shift+0"],
   ["Layer: Terrain / Doodads / Units", "T · D · U"],
   ["Layer: Sprites / Locations / Fog", "S · L · F"],
   ["Layer: Cut/Copy/Paste", "C"],
-  ["Brush smaller / larger", "[ · ]"],
-  ["Nudge selected locations (snap step / 1 px)", "Arrows · Shift+Arrows"],
-  ["Delete selection / stop placing, clear selection", "Del · Esc"],
-  ["Cancel a plugin's map pick or tool", "Esc · right-click"],
-  ["Trigger Editor", "Ctrl+T"],
-  ["Test Map", "Ctrl+F5"],
-  ["Next / previous open map (desktop app)", "Ctrl+Tab · Ctrl+Shift+Tab"],
-  ["Close map (desktop app)", "Ctrl+W"],
-  ["Preferences", "Ctrl+,"],
-  ["Keyboard shortcuts", "F1"],
-  ["Full screen", "F11"],
+  [msg("Brush smaller / larger"), "[ · ]"],
+  [msg("Nudge selected locations (snap step / 1 px)"), "Arrows · Shift+Arrows"],
+  [msg("Delete selection / stop placing, clear selection"), "Del · Esc"],
+  [msg("Cancel a plugin's map pick or tool"), "Esc · right-click"],
+  [msg("Trigger Editor"), "Ctrl+T"],
+  [msg("Test Map"), "Ctrl+F5"],
+  [msg("Next / previous open map (desktop app)"), "Ctrl+Tab · Ctrl+Shift+Tab"],
+  [msg("Close map (desktop app)"), "Ctrl+W"],
+  [msg("Preferences"), "Ctrl+,"],
+  [msg("Keyboard shortcuts"), "F1"],
+  [msg("Full screen"), "F11"],
 ];
 
 /** One animation-speed slider: the range picks a step of `ANIMATION_SPEEDS`. */
@@ -421,7 +412,7 @@ function SpeedField({
           max={ANIMATION_SPEEDS.length - 1}
           value={index}
           onChange={(e) => onChange(ANIMATION_SPEEDS[Number(e.target.value)])}
-          aria-label={`${label} animation speed`}
+          aria-label={t("{label} animation speed", { label })}
         />
         <span className="mono hint" style={{ width: 44 }}>
           {ANIMATION_SPEEDS[index]}×
@@ -445,7 +436,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Preferences"
+      title={t("Preferences")}
       icon={<Settings2 size={14} />}
       size="lg"
       tall
@@ -453,7 +444,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
       onOk={apply}
       footerLeft={
         <Button size="sm" onClick={() => setLocal(DEFAULT_PREFERENCES)}>
-          <RotateCcw size={11} /> Reset to defaults
+          <RotateCcw size={11} /> {" "}{t("Reset to defaults")}
         </Button>
       }
     >
@@ -462,40 +453,37 @@ export function PreferencesDialog({ entry }: DialogProps) {
         tabs={[
           {
             value: "general",
-            label: "General",
+            label: t("General"),
             content: (
               <div className="stack">
-                <Group title="Startup">
+                <Group title={t("Startup")}>
                   <div className="col" style={{ gap: 2 }}>
                     <Check
-                      label="Show the splash screen while the game data loads"
+                      label={t("Show the splash screen while the game data loads")}
                       checked={local.splash}
                       onChange={(e) => patch({ splash: e.target.checked })}
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Off starts straight on the editor; terrain and units fill in
-                    as they arrive.
+                    {t("Off starts straight on the editor; terrain and units fill in as they arrive.")}
                   </p>
                 </Group>
-                <Group title="Open maps">
+                <Group title={t("Open maps")}>
                   <div className="col" style={{ gap: 2 }}>
                     <Check
-                      label="Open each map in its own tab, keeping the others open"
+                      label={t("Open each map in its own tab, keeping the others open")}
                       checked={local.multipleMaps}
                       onChange={(e) => patch({ multipleMaps: e.target.checked })}
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Off opens a map in place of the one that is open, as StarEdit does.
-                    Either way the first map opened takes the place of the blank map the
-                    editor starts on.
+                    {t("Off opens a map in place of the one that is open, as StarEdit does. Either way the first map opened takes the place of the blank map the editor starts on.")}
                   </p>
                 </Group>
-                <Group title="Unsaved changes">
+                <Group title={t("Unsaved changes")}>
                   <div className="col" style={{ gap: 2 }}>
                     <Check
-                      label="Ask before closing or replacing a map with unsaved changes"
+                      label={t("Ask before closing or replacing a map with unsaved changes")}
                       checked={local.confirmClose}
                       onChange={(e) =>
                         patch({ confirmClose: e.target.checked })
@@ -503,15 +491,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Applies to File ▸ Close, to closing a tab, to leaving the editor, and
-                    to File ▸ New, Open and a dropped file when they replace the open map.
+                    {t("Applies to File ▸ Close, to closing a tab, to leaving the editor, and to File ▸ New, Open and a dropped file when they replace the open map.")}
                   </p>
                 </Group>
                 {isDesktop() && (
-                  <Group title="Updates">
+                  <Group title={t("Updates")}>
                     <div className="col" style={{ gap: 2 }}>
                       <Check
-                        label="Check for updates when scmJS starts"
+                        label={t("Check for updates when scmJS starts")}
                         checked={local.updates.checkOnStart}
                         onChange={(e) =>
                           patch({
@@ -523,7 +510,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                         }
                       />
                       <Check
-                        label="Include nightly builds"
+                        label={t("Include nightly builds")}
                         checked={local.updates.nightly}
                         onChange={(e) =>
                           patch({
@@ -536,17 +523,13 @@ export function PreferencesDialog({ entry }: DialogProps) {
                       />
                     </div>
                     <p className="hint" style={{ marginTop: 4 }}>
-                      A new version is offered in a notice, never installed on
-                      its own. Nightly builds come from the latest commit and
-                      are untested; going back to a numbered release means
-                      downloading it by hand, since the updater will not offer
-                      an older version.
+                      {t("A new version is offered in a notice, never installed on its own. Nightly builds come from the latest commit and are untested; going back to a numbered release means downloading it by hand, since the updater will not offer an older version.")}
                     </p>
                   </Group>
                 )}
-                <Group title="Plugins">
+                <Group title={t("Plugins")}>
                   <div className="form wide">
-                    <Field label="Plugin updates">
+                    <Field label={t("Plugin updates")}>
                       <Select
                         value={local.plugins.updates}
                         onChange={(e) =>
@@ -558,28 +541,23 @@ export function PreferencesDialog({ entry }: DialogProps) {
                           })
                         }
                         options={[
-                          { value: "notify", label: "Tell me" },
-                          { value: "manual", label: "Do nothing" },
-                          { value: "auto", label: "Install them" },
+                          { value: "notify", label: t("Tell me") },
+                          { value: "manual", label: t("Do nothing") },
+                          { value: "auto", label: t("Install them") },
                         ]}
                       />
                     </Field>
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    What to do when an installed plugin has a newer version.{" "}
-                    <em>Tell me</em> looks a few seconds after the plugins start
-                    and raises a notice with a button to the rows offering the
-                    update. <em>Do nothing</em> asks only when you press{" "}
-                    <em>Check for update</em> on a row. <em>Install them</em>{" "}
-                    installs what it finds, for the plugins you added; a default
-                    moves with scmJS's own releases and is only named in the
-                    notice. Whatever the choice, an update pressed on a row
-                    shows what it is before anything changes.
+                    {t("What to do when an installed plugin has a newer version.")}{" "}
+                    <em>{t("Tell me")}</em> {" "}{t("looks a few seconds after the plugins start and raises a notice with a button to the rows offering the update.")}{" "}<em>{t("Do nothing")}</em> {" "}{t("asks only when you press")}{" "}
+                    <em>{t("Check for update")}</em> {" "}{t("on a row.")}{" "}<em>{t("Install them")}</em>{" "}
+                    {t("installs what it finds, for the plugins you added; a default moves with scmJS's own releases and is only named in the notice. Whatever the choice, an update pressed on a row shows what it is before anything changes.")}
                   </p>
                 </Group>
-                <Group title="New scenario defaults">
+                <Group title={t("New scenario defaults")}>
                   <div className="form wide">
-                    <Field label="Tileset">
+                    <Field label={t("Tileset")}>
                       <Select
                         value={local.newMap.tileset}
                         onChange={(e) =>
@@ -591,7 +569,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                         }))}
                       />
                     </Field>
-                    <Field label="Size">
+                    <Field label={t("Size")}>
                       <div className="row">
                         <Select
                           style={{ width: 90 }}
@@ -614,7 +592,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     </Field>
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Also the map the editor opens on.
+                    {t("Also the map the editor opens on.")}
                   </p>
                 </Group>
                 <GameDataSection />
@@ -629,20 +607,20 @@ export function PreferencesDialog({ entry }: DialogProps) {
           },
           {
             value: "display",
-            label: "Display",
+            label: t("Display"),
             content: (
               <div className="stack">
-                <Group title="Animation on startup">
+                <Group title={t("Animation on startup")}>
                   <div className="col" style={{ gap: 2 }}>
                     <Check
-                      label="Animate water (palette cycling)"
+                      label={t("Animate water (palette cycling)")}
                       checked={local.animateWater}
                       onChange={(e) =>
                         patch({ animateWater: e.target.checked })
                       }
                     />
                     <Check
-                      label="Animate units (idle animations)"
+                      label={t("Animate units (idle animations)")}
                       checked={local.animateUnits}
                       onChange={(e) =>
                         patch({ animateUnits: e.target.checked })
@@ -650,46 +628,45 @@ export function PreferencesDialog({ entry }: DialogProps) {
                     />
                   </div>
                 </Group>
-                <Group title="Animation speed">
+                <Group title={t("Animation speed")}>
                   <div className="form wide">
                     <SpeedField
-                      label="Water"
+                      label={t("Water")}
                       value={local.animateWaterSpeed}
                       onChange={(v) => patch({ animateWaterSpeed: v })}
                     />
                     <SpeedField
-                      label="Units"
+                      label={t("Units")}
                       value={local.animateUnitsSpeed}
                       onChange={(v) => patch({ animateUnitsSpeed: v })}
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    1× is the speed the game itself runs at.
+                    {t("1× is the speed the game itself runs at.")}
                   </p>
                 </Group>
-                <Group title="Language">
+                <Group title={t("Language")}>
                   <div className="row">
                     <Select
                       value={local.language}
-                      options={[{ value: "auto", label: "Same as the browser" }, ...LOCALES.map((l) => ({ value: l.id, label: l.label }))]}
+                      options={[{ value: "auto", label: t("Same as the browser") }, ...LOCALES.map((l) => ({ value: l.id, label: l.label }))]}
                       onChange={(e) => patch({ language: e.target.value as LanguagePreference })}
                       style={{ minWidth: 200 }}
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
-                    The editor's own words. A map's text is the map's, whatever language this is.
+                    {t("The editor's own words. A map's text is the map's, whatever language this is.")}
                   </p>
                 </Group>
-                <Group title="Text colours">
+                <Group title={t("Text colours")}>
                   <Check
-                    label="Preview strings the way 1.16.1 drew them"
-                    title="1.16.1 reset the text colour at every line break; Remastered carries it onto the next line. This changes only what the editor draws — never the map."
+                    label={t("Preview strings the way 1.16.1 drew them")}
+                    title={t("1.16.1 reset the text colour at every line break; Remastered carries it onto the next line. This changes only what the editor draws — never the map.")}
                     checked={local.classicText}
                     onChange={(e) => patch({ classicText: e.target.checked })}
                   />
                   <p className="hint" style={{ marginTop: 4 }}>
-                    Every preview of a string follows this — Map Properties, the
-                    String Editor, force and unit names, trigger text.
+                    {t("Every preview of a string follows this — Map Properties, the String Editor, force and unit names, trigger text.")}
                   </p>
                 </Group>
               </div>
@@ -697,14 +674,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
           },
           {
             value: "hotkeys",
-            label: "Hotkeys",
+            label: t("Hotkeys"),
             content: (
               <div className="listbox hotkeys" style={{ height: "100%" }}>
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Command</th>
-                      <th style={{ width: 240 }}>Shortcut</th>
+                      <th>{t("Command")}</th>
+                      <th style={{ width: 240 }}>{t("Shortcut")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -738,12 +715,12 @@ export function ShortcutsDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Keyboard Shortcuts"
+      title={t("Keyboard Shortcuts")}
       icon={<Keyboard size={14} />}
       size="md"
       footer={
         <Button variant="primary" onClick={() => close(entry.key)}>
-          Close
+          {t("Close")}
         </Button>
       }
     >
@@ -847,7 +824,7 @@ export function ValidateMapDialog({ entry }: DialogProps) {
   }, [scenario, extras, isom, only, run]);
   const counts = issueCounts(issues);
   const listed = issues.filter((i) => show[i.level]);
-  const title = only ? "Validate Triggers" : "Check Map";
+  const title = only ? t("Validate Triggers") : t("Check Map");
 
   return (
     <DialogFrame
@@ -858,48 +835,46 @@ export function ValidateMapDialog({ entry }: DialogProps) {
       tall
       footer={
         <>
-          <Button onClick={() => setRun((n) => n + 1)}>Re-check</Button>
+          <Button onClick={() => setRun((n) => n + 1)}>{t("Re-check")}</Button>
           <Button variant="primary" onClick={() => close(entry.key)}>
-            Close
+            {t("Close")}
           </Button>
         </>
       }
       footerLeft={
         <span>
-          {counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
-          warning{counts.warn === 1 ? "" : "s"} · {counts.info} note
+          {t("{error} error", { error: counts.error })}{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
+          {t("warning")}{counts.warn === 1 ? "" : "s"} {" "}{t("· {info} note", { info: counts.info })}
           {counts.info === 1 ? "" : "s"}
         </span>
       }
     >
       <div className="row">
         <Check
-          label="Errors"
+          label={t("Errors")}
           checked={show.error}
           onChange={(e) => setShow({ ...show, error: e.target.checked })}
         />
         <Check
-          label="Warnings"
+          label={t("Warnings")}
           checked={show.warn}
           onChange={(e) => setShow({ ...show, warn: e.target.checked })}
         />
         <Check
-          label="Notes"
+          label={t("Notes")}
           checked={show.info}
           onChange={(e) => setShow({ ...show, info: e.target.checked })}
         />
         <span className="grow" />
         {only && (
-          <span className="hint">triggers, briefings and switches only</span>
+          <span className="hint">{t("triggers, briefings and switches only")}</span>
         )}
       </div>
       <div className="listbox grow" style={{ minHeight: 200 }}>
-        {!scenario && <div className="empty">Open or create a map first.</div>}
+        {!scenario && <div className="empty">{t("Open or create a map first.")}</div>}
         {scenario && listed.length === 0 && (
           <div className="empty">
-            {issues.length === 0
-              ? "Nothing to report."
-              : "Nothing at the selected levels."}
+            {issues.length === 0 ? t("Nothing to report.") : t("Nothing at the selected levels.")}
           </div>
         )}
         {listed.map((i, n) => (
@@ -907,16 +882,16 @@ export function ValidateMapDialog({ entry }: DialogProps) {
             key={n}
             className={`issue ${i.level}${i.target ? " jump" : ""}`}
             onDoubleClick={() => i.target && jump(i.target)}
-            title={i.target ? "Double-click to go there" : undefined}
+            title={i.target ? t("Double-click to go there") : undefined}
           >
             {LEVEL_ICON[i.level]}
             <span>{i.text}</span>
-            <span className="where">{i.where}</span>
+            <span className="where">{translate(i.where)}</span>
           </div>
         ))}
       </div>
       <p className="hint">
-        Double-click an issue to go to the unit, location or dialog it is about.
+        {t("Double-click an issue to go to the unit, location or dialog it is about.")}
       </p>
     </DialogFrame>
   );
@@ -952,7 +927,7 @@ export function FindDialog({ entry }: DialogProps) {
   const results = useMemo(() => {
     if (!scenario) return [];
     const spriteName = (r: SpriteRecord) => {
-      if (spriteKind(r) === "unit") return unitName(r.spriteId);
+      if (spriteKind(r) === "unit") return unitLabel(r.spriteId);
       return catalogue?.entries[r.spriteId]?.label ?? `Sprite #${r.spriteId}`;
     };
     const doodads = peekTileset(tilesetName)?.doodads;
@@ -1009,7 +984,7 @@ export function FindDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Find"
+      title={t("Find")}
       icon={<Search size={14} />}
       size="sm"
       footer={
@@ -1019,21 +994,19 @@ export function FindDialog({ entry }: DialogProps) {
             disabled={!current}
             onClick={() => current && goTo(current)}
           >
-            Go To
+            {t("Go To")}
           </Button>
-          <Button onClick={() => close(entry.key)}>Close</Button>
+          <Button onClick={() => close(entry.key)}>{t("Close")}</Button>
         </>
       }
       footerLeft={
         <span>
-          {q
-            ? `${results.length} result${results.length === 1 ? "" : "s"}`
-            : "Type to search"}
+          {q ? t("{length, plural, one {# result} other {# results}}", { length: results.length }) : t("Type to search")}
         </span>
       }
     >
       <div className="form wide">
-        <Field label="Find in">
+        <Field label={t("Find in")}>
           <Select
             value={kind}
             onChange={(e) => {
@@ -1043,7 +1016,7 @@ export function FindDialog({ entry }: DialogProps) {
             options={FIND_KINDS}
           />
         </Field>
-        <Field label="Search">
+        <Field label={t("Search")}>
           <TextInput
             autoFocus
             value={q}
@@ -1052,21 +1025,17 @@ export function FindDialog({ entry }: DialogProps) {
               setSel(null);
             }}
             placeholder={
-              kind === "units"
-                ? "Unit name, id or 'player 3'…"
-                : kind === "triggers"
-                  ? "Text in a trigger, or its number…"
-                  : "Name, number or text…"
+              kind === "units" ? t("Unit name, id or 'player 3'…") : kind === "triggers" ? t("Text in a trigger, or its number…") : t("Name, number or text…")
             }
             onKeyDown={(e) => {
               if (e.key === "Enter" && results[0]) goTo(results[sel ?? 0]);
             }}
           />
         </Field>
-        <Field label="Options">
+        <Field label={t("Options")}>
           <div className="row wrap">
             <Check
-              label="Match case"
+              label={t("Match case")}
               checked={matchCase}
               onChange={(e) => setMatchCase(e.target.checked)}
             />
@@ -1079,11 +1048,7 @@ export function FindDialog({ entry }: DialogProps) {
         onSelect={(i) => setSel(i)}
         style={{ height: 200 }}
         empty={
-          !scenario
-            ? "Open or create a map first."
-            : q
-              ? "No matches."
-              : "Type to search."
+          !scenario ? t("Open or create a map first.") : q ? t("No matches.") : t("Type to search.")
         }
         render={(r) => (
           <>
@@ -1115,8 +1080,7 @@ export function FindDialog({ entry }: DialogProps) {
         )}
       />
       <p className="hint">
-        Double-click or Go To selects the result on the map and switches to its
-        layer.
+        {t("Double-click or Go To selects the result on the map and switches to its layer.")}
       </p>
     </DialogFrame>
   );
@@ -1125,24 +1089,24 @@ export function FindDialog({ entry }: DialogProps) {
 /* ── About ──────────────────────────────────────────────── */
 
 const STACK = [
-  ["React 19 · TypeScript", "the UI; tsc is the type check, oxlint the linter"],
-  ["Jotai", "every piece of editor state; no context layering"],
-  ["Vite 8 · Vitest", "dev server, bundler and the test runner"],
-  ["Radix UI · lucide-react", "dialog and menu primitives, icons"],
-  ["Canvas 2D", "terrain atlas, sprites, minimap, splash, this background"],
+  ["React 19 · TypeScript", msg("the UI; tsc is the type check, oxlint the linter")],
+  ["Jotai", msg("every piece of editor state; no context layering")],
+  ["Vite 8 · Vitest", msg("dev server, bundler and the test runner")],
+  ["Radix UI · lucide-react", msg("dialog and menu primitives, icons")],
+  ["Canvas 2D", msg("terrain atlas, sprites, minimap, splash, this background")],
   ["mopaq", "MPQ read and write, PKWARE included, for .scm / .scx"],
-  ["Web Workers", "the MPQ extraction, and TypeScript for plugin files"],
+  ["Web Workers", msg("the MPQ extraction, and TypeScript for plugin files")],
   [
     "OPFS · IndexedDB · localStorage",
-    "extracted graphics, file handles, preferences",
+    msg("extracted graphics, file handles, preferences"),
   ],
   [
     "File System Access",
-    "open and save in place; picker and download fallbacks",
+    msg("open and save in place; picker and download fallbacks"),
   ],
-  ["Web Audio", "imported sounds converted to formats the game reads"],
-  ["DecompressionStream", "the zip reader, over HTTP range requests"],
-  ["Electron · electron-builder", "the desktop build"],
+  ["Web Audio", msg("imported sounds converted to formats the game reads")],
+  ["DecompressionStream", msg("the zip reader, over HTTP range requests")],
+  ["Electron · electron-builder", msg("the desktop build")],
 ];
 
 export function AboutDialog({ entry }: DialogProps) {
@@ -1190,13 +1154,13 @@ export function AboutDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="About scmJS"
+      title={t("About scmJS")}
       icon={<Info size={14} />}
       size="md"
       tall
       footer={
         <Button variant="primary" onClick={() => close(entry.key)}>
-          OK
+          {t("OK")}
         </Button>
       }
     >
@@ -1215,21 +1179,18 @@ export function AboutDialog({ entry }: DialogProps) {
           {/* <div className="about-tagline">
             StarCraft · Brood War · Remastered
           </div> */}
-          <div className="about-desc">Starcraft 1 Map Editor</div>
+          <div className="about-desc">{t("Starcraft 1 Map Editor")}</div>
           <div className="about-rule" />
           <div className="about-meta">
-            By Jeany <i>(aka MindArchon)</i>
+            {t("By Jeany")}{" "}<i>{t("(aka MindArchon)")}</i>
           </div>
         </div>
       </div>
 
       <div className="about-group">
-        <h3>Acknowledgements</h3>
+        <h3>{t("Acknowledgements")}</h3>
         <div className="what" style={{ color: "#ffffff" }}>
-          Over the course of thirty years, we've gone from hacking custom
-          versions of StarEdit to understanding the inner workings of the game,
-          the map file format, and creating sophisticated tools through a
-          dedicated community effort.
+          {t("Over the course of thirty years, we've gone from hacking custom versions of StarEdit to understanding the inner workings of the game, the map file format, and creating sophisticated tools through a dedicated community effort.")}
         </div>
 
         {/* {CREDITS.map((group) => (
@@ -1266,45 +1227,38 @@ export function AboutDialog({ entry }: DialogProps) {
         className="about-group"
         style={{ fontWeight: 600, color: "#ff5fa2" }}
       >
-        Special thanks (in no particular order)
+        {t("Special thanks (in no particular order)")}
       </div>
       <div className="about-group">
         <div
           className="what"
           style={{ color: "#ffffff", paddingBottom: "10px" }}
         >
-          <h4>Clan Unknown</h4>
+          <h4>{t("Clan Unknown")}</h4>
           <div className="about-what">
-            Unknown pushed map making to its absolute limit, inspiring map
-            makers to really see what was possible. Thanks to <b>Bolt_Head</b>,{" "}
-            <b>Kenoli</b>, <b>SwaP</b>, <b>Shmidley</b>, <b>PickleWeezle</b> and
-            everyone else for keeping the clan alive and active.
+            {t("Unknown pushed map making to its absolute limit, inspiring map makers to really see what was possible. Thanks to")}{" "}<b>{t("Bolt_Head")}</b>,{" "}
+            <b>{t("Kenoli")}</b>, <b>{t("SwaP")}</b>, <b>{t("Shmidley")}</b>, <b>{t("PickleWeezle")}</b> {" "}{t("and everyone else for keeping the clan alive and active.")}
           </div>
         </div>
 
         <div className="what" style={{ color: "#ffffff" }}>
-          <h4>Staredit.net</h4>
+          <h4>{t("Staredit.net")}</h4>
           <div className="about-what">
-            Our map making hub. Thanks to <b>YoshiDaSnipa</b>,{" "}
-            <b>Shadowflare</b>, <b>Heimdal</b> for showing us we can make our
-            own editor, <b>Suicidal Insanity</b> for creating SCMDraft and
-            blowing us all away, <b>Clokr_</b> for their tools, <b>jjf28</b> for
-            finally reverse engineering the sections we didn't understand,{" "}
-            <b>Heinermann</b> for their technical knowledge, <b>poiuy_qwert</b>{" "}
-            for their modding tools, <b>Ladislav Zezula</b> for StormLib and
-            showing us we can edit MPQs, and <b>FaRTy1billion</b>, <b>rockz</b>,{" "}
-            <b>yoonkwun</b>, <b>trgk</b>, and <b>Armoha</b> for their work on
-            EUDs and modern tooling.
+            {t("Our map making hub. Thanks to")}{" "}<b>{t("YoshiDaSnipa")}</b>,{" "}
+            <b>{t("Shadowflare")}</b>, <b>{t("Heimdal")}</b> {" "}{t("for showing us we can make our own editor,")}{" "}<b>{t("Suicidal Insanity")}</b> {" "}{t("for creating SCMDraft and blowing us all away,")}{" "}<b>{t("Clokr_")}</b> {" "}{t("for their tools,")}{" "}<b>{t("jjf28")}</b> {" "}{t("for finally reverse engineering the sections we didn't understand,")}{" "}
+            <b>{t("Heinermann")}</b> {" "}{t("for their technical knowledge,")}{" "}<b>{t("poiuy_qwert")}</b>{" "}
+            {t("for their modding tools,")}{" "}<b>{t("Ladislav Zezula")}</b> {" "}{t("for StormLib and showing us we can edit MPQs, and")}{" "}<b>{t("FaRTy1billion")}</b>, <b>{t("rockz")}</b>,{" "}
+            <b>{t("yoonkwun")}</b>, <b>{t("trgk")}</b>{t(", and")}{" "}<b>{t("Armoha")}</b> {" "}{t("for their work on EUDs and modern tooling.")}
           </div>
         </div>
       </div>
 
       <div>
-        And of course, <b>Quetz</b>, for putting up with me ❤️.
+        {t("And of course,")}{" "}<b>{t("Quetz")}</b>{t(", for putting up with me ❤️.")}
       </div>
 
       <details className="about-details">
-        <summary>Under the hood</summary>
+        <summary>{t("Under the hood")}</summary>
         <div className="about-details-body">
           <dl className="about-stack">
             {STACK.map(([name, note]) => (
@@ -1315,54 +1269,41 @@ export function AboutDialog({ entry }: DialogProps) {
             ))}
           </dl>
           <p>
-            Reads and writes real <code>.scm</code> / <code>.scx</code>{" "}
-            archives. CHK sections the editor does not model are copied back
-            byte for byte, and so are archive members it has no use for, so a
-            map only loses what you deliberately change.
+            {t("Reads and writes real")}{" "}<code>.scm</code> / <code>.scx</code>{" "}
+            {t("archives. CHK sections the editor does not model are copied back byte for byte, and so are archive members it has no use for, so a map only loses what you deliberately change.")}
           </p>
           <p>
-            Terrain and units are drawn from the game's own files. None of
-            Blizzard's data is redistributed here: the editor extracts it from
-            an installed copy of Brood War, or from the free StarEdit download
-            Blizzard still serves, and keeps the result in {hostTerms().here}{" "}
-            for next time.
+            {t("Terrain and units are drawn from the game's own files. None of Blizzard's data is redistributed here: the editor extracts it from an installed copy of Brood War, or from the free StarEdit download Blizzard still serves, and keeps the result in {here}", { here: hostTerms().here })}{" "}
+            {t("for next time.")}
           </p>
           <p>
-            There is no server behind any of this — the web build is static
-            files on GitHub Pages, and the one service it talks to is a
-            Cloudflare Worker that adds a CORS header to Blizzard's download.
-            Plugins are fetched from their repositories, compiled in a worker if
-            they are TypeScript, and run with the page's own privileges; there
-            is no sandbox around them.
+            {t("There is no server behind any of this — the web build is static files on GitHub Pages, and the one service it talks to is a Cloudflare Worker that adds a CORS header to Blizzard's download. Plugins are fetched from their repositories, compiled in a worker if they are TypeScript, and run with the page's own privileges; there is no sandbox around them.")}
           </p>
           <p>
-            The isometric terrain brush is a port of Chkdraft's
-            reverse-engineering of StarEdit (MIT). Palette-cycling tables and
-            tileset names come from Chkdraft as well.
+            {t("The isometric terrain brush is a port of Chkdraft's reverse-engineering of StarEdit (MIT). Palette-cycling tables and tileset names come from Chkdraft as well.")}
           </p>
           <div className="about-links">
             <button
               className="about-link"
               onClick={() => projectPage("/#readme")}
             >
-              Docs
+              {t("Docs")}
             </button>
             <button
               className="about-link"
               onClick={() => projectPage("/blob/main/ATTRIBUTION.md")}
             >
-              Attribution
+              {t("Attribution")}
             </button>
             <button className="about-link" onClick={() => projectPage("")}>
-              Source
+              {t("Source")}
             </button>
           </div>
         </div>
       </details>
 
       <p className="about-disclaimer">
-        StarCraft is a trademark of Blizzard Entertainment. Not affiliated with
-        or endorsed by Blizzard.
+        {t("StarCraft is a trademark of Blizzard Entertainment. Not affiliated with or endorsed by Blizzard.")}
       </p>
     </DialogFrame>
   );

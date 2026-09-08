@@ -13,6 +13,7 @@ import type { UpdateProgress } from "../gamedata/desktop";
 import { INITIAL_UPDATE_STATE, stateFrom, updateInfo, type UpdateState } from "../editor/updates";
 
 export type { UpdateState } from "../editor/updates";
+import { t } from "../i18n";
 
 export const updateStateAtom = atom<UpdateState>(INITIAL_UPDATE_STATE);
 
@@ -60,7 +61,7 @@ export const downloadUpdateAtom = atom(null, async (get, set) => {
   set(updateStateAtom, { phase: "downloading", current: state.current, info, progress: null });
   const result = await bridge.updates.download();
   if (!result.ok) {
-    set(updateStateAtom, { phase: "error", current: state.current, message: result.message ?? "The download failed.", support: info.support });
+    set(updateStateAtom, { phase: "error", current: state.current, message: result.message ?? t("The download failed."), support: info.support });
   }
 });
 

@@ -32,7 +32,8 @@ describe("format", () => {
 
   it("selects, nests, and formats numbers for the locale", () => {
     expect(format("{kind, select, scm {a StarCraft map} other {a Brood War map}} with {n, plural, one {# unit} other {# units}}", { kind: "scm", n: 2 }, "en")).toBe("a StarCraft map with 2 units");
-    expect(format("{n}", { n: 1000000 }, "en")).toBe("1,000,000");
+    expect(format("{n}", { n: 1000000 }, "en")).toBe("1000000");
+    expect(format("{n, plural, other {#}}", { n: 1000000 }, "en")).toBe("1,000,000");
   });
 
   it("appends the Korean particle that agrees with the value", () => {

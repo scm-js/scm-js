@@ -21,6 +21,7 @@ import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, t
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
+import { msg, t, translate } from "../../i18n";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
 
@@ -31,11 +32,11 @@ const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
  */
 function NoTileset({ what, loading }: { what: string; loading: boolean }) {
   const open = useSetAtom(openDialogAtom);
-  if (loading) return <div className="hint" style={{ padding: 12 }}>Loading tileset…</div>;
+  if (loading) return <div className="hint" style={{ padding: 12 }}>{t("Loading tileset…")}</div>;
   return (
     <div className="hint" style={{ padding: 12, display: "grid", gap: 8, justifyItems: "start" }}>
-      <span>No tileset graphics installed — {what}</span>
-      <Button size="sm" onClick={() => open("gameData")}>Set up game data…</Button>
+      <span>{t("No tileset graphics installed — {what}", { what })}</span>
+      <Button size="sm" onClick={() => open("gameData")}>{t("Set up game data…")}</Button>
     </div>
   );
 }
@@ -50,19 +51,19 @@ function SymmetryNote({ applies }: { applies: boolean }) {
   if (mode === "none") return null;
   const ok = scenario ? symmetryAvailable(mode, scenario.width, scenario.height) : true;
   const text = !ok
-    ? `Symmetry "${symmetryLabel(mode)}" needs a square map — strokes paint normally.`
+    ? t("Symmetry \"{mode}\" needs a square map — strokes paint normally.", { mode: symmetryLabel(mode) })
     : applies
-      ? `Symmetry: ${symmetryLabel(mode)} — every stroke is mirrored.`
-      : `Symmetry (${symmetryLabel(mode)}) does not apply to this brush — only Rect, Tile and Fog strokes are mirrored.`;
-  return <div className={`palette-footer sub ${ok && applies ? "" : "warn"}`} title="Tools ▸ Symmetry…"><span>{text}</span></div>;
+      ? t("Symmetry: {mode} — every stroke is mirrored.", { mode: symmetryLabel(mode) })
+      : t("Symmetry ({mode}) does not apply to this brush — only Rect, Tile and Fog strokes are mirrored.", { mode: symmetryLabel(mode) });
+  return <div className={`palette-footer sub ${ok && applies ? "" : "warn"}`} title={t("Tools ▸ Symmetry…")}><span>{text}</span></div>;
 }
 
 export function BrushSelect({ bare }: { bare?: boolean } = {}) {
   const [brush, setBrush] = useAtom(brushSizeAtom);
   return (
     <>
-      {!bare && <span className="lbl">Brush</span>}
-      <select className="select" style={{ width: 64 }} value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label="Brush size">
+      {!bare && <span className="lbl">{t("Brush")}</span>}
+      <select className="select" style={{ width: 64 }} value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label={t("Brush size")}>
         {BRUSH_SIZES.map((n) => <option key={n} value={n}>{n}×{n}</option>)}
       </select>
     </>
@@ -98,15 +99,7 @@ function IsomTab() {
         <BrushSelect />
         <span className="grow" />
         <span className="lbl">
-          {status.kind === "missing"
-            ? "no ISOM"
-            : report
-              ? report.stale
-                ? `ISOM stale (${stalePct}%)`
-                : inherentPct > 0
-                  ? `ISOM ok (${inherentPct}% hand-laid)`
-                  : "ISOM ok"
-              : ""}
+          {status.kind === "missing" ? t("no ISOM") : report ? report.stale ? t("ISOM stale ({stalePct}%)", { stalePct }) : inherentPct > 0 ? t("ISOM ok ({inherentPct}% hand-laid)", { inherentPct }) : t("ISOM ok") : ""}
         </span>
       </div>
       <div className="palette-scroll">
@@ -114,40 +107,35 @@ function IsomTab() {
           {list.map((t) => (
             <div key={t.id} className={`item ${active === t.id ? "selected" : ""}`} onClick={() => setActive(t.id)}>
               <TileThumb loaded={loaded} id={t.group >= 0 ? t.group << 4 : 0} size={18} className="swatch" />
-              <span>{t.name}</span>
+              <span>{translate(t.name)}</span>
               <span className="elev">{heightLabel(t.height)}</span>
             </div>
           ))}
         </div>
-        {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>Loading tileset…</div>}
+        {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>{t("Loading tileset…")}</div>}
         {status.kind === "no-tileset" && (
           <div className="hint" style={{ padding: "8px 10px" }}>
-            The isometric brush needs the tileset graphics — Help ▸ Game Data…
+            {t("The isometric brush needs the tileset graphics — Help ▸ Game Data…")}
           </div>
         )}
         {status.kind === "missing" && (
           <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
             <span>
-              This map has no <strong>ISOM</strong> section, so the isometric brush is off. StarCraft never reads ISOM — it is
-              the editor's own record of the diamond lattice — but the brush cannot work without one.
+              {t("This map has no")}{" "}<strong>ISOM</strong> {" "}{t("section, so the isometric brush is off. StarCraft never reads ISOM — it is the editor's own record of the diamond lattice — but the brush cannot work without one.")}
             </span>
             <span>
-              The Repair plugin rebuilds it from the tiles (Tools ▸ Repair Map…): exact for terrain that was laid down
-              isometrically, a best guess under doodads and for hand-placed tiles.
+              {t("The Repair plugin rebuilds it from the tiles (Tools ▸ Repair Map…): exact for terrain that was laid down isometrically, a best guess under doodads and for hand-placed tiles.")}
             </span>
           </div>
         )}
         {report?.stale && (
           <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
             <span>
-              The ISOM is behind the tiles on about {stalePct}% of the map — terrain edited with the Rect or Tile brush, or
-              another tool. Isometric strokes near those areas will not join up until it is rebuilt (Tools ▸ Repair Map…, from
-              the Repair plugin).
+              {t("The ISOM is behind the tiles on about {stalePct}% of the map — terrain edited with the Rect or Tile brush, or another tool. Isometric strokes near those areas will not join up until it is rebuilt (Tools ▸ Repair Map…, from the Repair plugin).", { stalePct })}
             </span>
             {inherentPct > 0 && (
               <span>
-                A rebuild leaves about {inherentPct}% that no diamond lattice describes; that part cannot be brought back in
-                step by any tool.
+                {t("A rebuild leaves about {inherentPct}% that no diamond lattice describes; that part cannot be brought back in step by any tool.", { inherentPct })}
               </span>
             )}
           </div>
@@ -155,14 +143,12 @@ function IsomTab() {
         {report && !report.stale && inherentPct > 0 && (
           <div className="hint" style={{ padding: "8px 10px", display: "grid", gap: 8 }}>
             <span>
-              About {inherentPct}% of the map is terrain no diamond lattice describes — hand-placed tiles, blends, or ground
-              another editor laid. Isometric strokes there will not join up, and rebuilding the lattice will not change that.
-              The Rect, Tile and Blend brushes work as usual.
+              {t("About {inherentPct}% of the map is terrain no diamond lattice describes — hand-placed tiles, blends, or ground another editor laid. Isometric strokes there will not join up, and rebuilding the lattice will not change that. The Rect, Tile and Blend brushes work as usual.", { inherentPct })}
             </span>
           </div>
         )}
       </div>
-      <div className="palette-footer"><span>{list.length} terrain types</span><span>{info.name}</span></div>
+      <div className="palette-footer"><span>{t("{length} terrain types", { length: list.length })}</span><span>{info.name}</span></div>
       <SymmetryNote applies={false} />
     </>
   );
@@ -186,12 +172,12 @@ function RectTab() {
       <div className="palette-toolbar">
         <BrushSelect />
         <span className="grow" />
-        <span className="lbl">{current ? `${current.buildable ? "Buildable" : "Unbuildable"} · ${heightLabel(current.height)}` : ""}</span>
+        <span className="lbl">{current ? `${current.buildable ? t("Buildable") : t("Unbuildable")} · ${heightLabel(current.height)}` : ""}</span>
       </div>
       {current && loaded && (
-        <div className="variation-strip" role="radiogroup" aria-label="Variation">
-          <Tip label="Random variation (StarEdit's mix)">
-            <button className={`variation ${chosen < 0 ? "is-active" : ""}`} onClick={() => setVariation(-1)} aria-label="Random variation">
+        <div className="variation-strip" role="radiogroup" aria-label={t("Variation")}>
+          <Tip label={t("Random variation (StarEdit's mix)")}>
+            <button className={`variation ${chosen < 0 ? "is-active" : ""}`} onClick={() => setVariation(-1)} aria-label={t("Random variation")}>
               <Shuffle size={13} />
             </button>
           </Tip>
@@ -204,21 +190,21 @@ function RectTab() {
       )}
       <div className="palette-scroll">
         {types.length === 0 && (
-          <NoTileset loading={!error} what="the Rect brush needs them to know which tiles make up each terrain." />
+          <NoTileset loading={!error} what={t("the Rect brush needs them to know which tiles make up each terrain.")} />
         )}
         <div className="listbox terrain-list" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
           {types.map((t) => (
             <div key={t.id} className={`item ${current?.id === t.id ? "selected" : ""}`} onClick={() => { setActive(t.id); setVariation(-1); }}>
               <TileThumb loaded={loaded} id={t.group << 4} size={18} className="swatch" />
-              <span>{t.name}</span>
+              <span>{translate(t.name)}</span>
               <span className="elev">{heightLabel(t.height)}{t.buildable ? "" : " · ✕"}</span>
             </div>
           ))}
         </div>
       </div>
       <div className="palette-footer">
-        <span>{current ? `${current.name} · groups ${current.group}/${current.group + 1}` : "—"}</span>
-        <span>{chosen < 0 ? "random variation" : `variation ${chosen}`}</span>
+        <span>{current ? t("{name} · groups {group}/{v}", { name: current.name, group: current.group, v: current.group + 1 }) : "—"}</span>
+        <span>{chosen < 0 ? t("random variation") : t("variation {chosen}", { chosen })}</span>
       </div>
       <SymmetryNote applies />
     </>
@@ -228,11 +214,11 @@ function RectTab() {
 /* ── Tile: any single megatile, browsed or typed ────────── */
 
 const KIND_FILTERS: { value: GroupKind | "all"; label: string }[] = [
-  { value: "all", label: "All groups" },
-  { value: "terrain", label: "Flat terrain" },
-  { value: "edge", label: "Cliffs & edges" },
-  { value: "doodad", label: "Doodad tiles" },
-  { value: "other", label: "Unlisted" },
+  { value: "all", label: msg("All groups") },
+  { value: "terrain", label: msg("Flat terrain") },
+  { value: "edge", label: msg("Cliffs & edges") },
+  { value: "doodad", label: msg("Doodad tiles") },
+  { value: "other", label: msg("Unlisted") },
 ];
 
 /**
@@ -261,7 +247,7 @@ function SelectedTileFooter({ id }: { id: number }) {
   return (
     <div className="palette-footer">
       <span className="mono">{id} · {hexTile(id)}</span>
-      <span>{ti ? `${ti.label} · g${ti.group} s${ti.slot}` : `group ${id >> 4} · slot ${id & 15}`}</span>
+      <span>{ti ? t("{label} · g{group} s{slot}", { label: ti.label, group: ti.group, slot: ti.slot }) : `group ${id >> 4} · slot ${id & 15}`}</span>
     </div>
   );
 }
@@ -296,7 +282,7 @@ function TileTab() {
   return (
     <>
       <div className="palette-toolbar">
-        <span className="lbl">Tile #</span>
+        <span className="lbl">{t("Tile #")}</span>
         <input
           className="input mono"
           style={{ width: 72 }}
@@ -304,19 +290,19 @@ function TileTab() {
           onChange={(e) => setText(e.target.value)}
           onBlur={commitText}
           onKeyDown={(e) => { if (e.key === "Enter") commitText(); if (e.key === "Escape") setText(null); }}
-          aria-label="Tile id (decimal or 0x hex)"
+          aria-label={t("Tile id (decimal or 0x hex)")}
         />
         <span className="mono dim" style={{ fontSize: 11 }}>{hexTile(active)}</span>
       </div>
       <div className="tile-info">
         <TileThumb loaded={loaded} id={active} size={64} className="preview" />
         <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
-          <span className="k">Group</span><span><NumberInput value={active >> 4} onChange={(g) => setActive((g << 4) | (active & 15))} min={0} max={4095} width={84} /></span>
-          <span className="k">Slot</span><span><NumberInput value={active & 15} onChange={(s) => setActive((active & ~15) | s)} min={0} max={15} width={84} /></span>
-          <span className="k">Brush</span><span><BrushSelect bare /></span>
-          <span className="k">MegaTile</span><span className="mono">{ti ? (ti.megatile >= 0 ? ti.megatile : "none") : "—"}</span>
-          <span className="k">Ground</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
-          <span className="k">Walkable</span><span>{ti ? `${ti.walkable} / 16` : "—"}</span>
+          <span className="k">{t("Group")}</span><span><NumberInput value={active >> 4} onChange={(g) => setActive((g << 4) | (active & 15))} min={0} max={4095} width={84} /></span>
+          <span className="k">{t("Slot")}</span><span><NumberInput value={active & 15} onChange={(s) => setActive((active & ~15) | s)} min={0} max={15} width={84} /></span>
+          <span className="k">{t("Brush")}</span><span><BrushSelect bare /></span>
+          <span className="k">{t("MegaTile")}</span><span className="mono">{ti ? (ti.megatile >= 0 ? ti.megatile : "none") : "—"}</span>
+          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
+          <span className="k">{t("Walkable")}</span><span>{ti ? `${ti.walkable} / 16` : "—"}</span>
         </div>
       </div>
       <div className="palette-toolbar">
@@ -327,19 +313,19 @@ function TileTab() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
-            placeholder="Search groups…"
-            aria-label="Search tile groups"
+            placeholder={t("Search groups…")}
+            aria-label={t("Search tile groups")}
           />
-          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><X size={11} /></button>}
+          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label={t("Clear search")}><X size={11} /></button>}
         </div>
-        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label="Group filter">
-          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label={t("Group filter")}>
+          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{translate(f.label)}</option>)}
         </select>
-        <Tip label="Grouped rows">
-          <Button icon size="sm" active={view === "groups"} onClick={() => setView("groups")} aria-label="Grouped rows"><Rows3 size={13} /></Button>
+        <Tip label={t("Grouped rows")}>
+          <Button icon size="sm" active={view === "groups"} onClick={() => setView("groups")} aria-label={t("Grouped rows")}><Rows3 size={13} /></Button>
         </Tip>
-        <Tip label="All tiles in one grid">
-          <Button icon size="sm" active={view === "grid"} onClick={() => setView("grid")} aria-label="All tiles in one grid"><LayoutGrid size={13} /></Button>
+        <Tip label={t("All tiles in one grid")}>
+          <Button icon size="sm" active={view === "grid"} onClick={() => setView("grid")} aria-label={t("All tiles in one grid")}><LayoutGrid size={13} /></Button>
         </Tip>
       </div>
       {loaded ? (
@@ -348,14 +334,14 @@ function TileTab() {
           : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={setActive} />
       ) : (
         <div className="palette-scroll">
-          <NoTileset loading={!error} what="nothing to browse. Ids still paint; the map shows flat colour until they are installed." />
+          <NoTileset loading={!error} what={t("nothing to browse. Ids still paint; the map shows flat colour until they are installed.")} />
         </div>
       )}
       <SelectedTileFooter id={active} />
       {loaded && (
         <div className="palette-footer sub">
-          <span>{view === "grid" ? `${tiles.length} tiles` : `${groups.length} / ${all.length} groups`}</span>
-          <span>Alt+click map picks</span>
+          <span>{view === "grid" ? t("{length} tiles", { length: tiles.length }) : t("{length} / {length2} groups", { length: groups.length, length2: all.length })}</span>
+          <span>{t("Alt+click map picks")}</span>
         </div>
       )}
       <SymmetryNote applies />
@@ -365,7 +351,7 @@ function TileTab() {
 
 /* ── Blend: tiles whose edges continue the one you picked ── */
 
-const SIDE_LABEL: Record<Side, string> = { left: "Left", top: "Top", right: "Right", bottom: "Bottom" };
+const SIDE_LABEL: Record<Side, string> = { left: msg("Left"), top: msg("Top"), right: msg("Right"), bottom: msg("Bottom") };
 
 /** One side's matches as a wrapping strip of thumbnails, best seam first. */
 function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCandidate[]; loaded: NonNullable<ReturnType<typeof useTileset>["loaded"]>; onPick: (side: Side, id: number) => void }) {
@@ -373,7 +359,7 @@ function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCand
     <section className="blend-side">
       <header>
         <span>{SIDE_LABEL[side]}</span>
-        <span className="dim">{list.length === 0 ? "no match" : `${list.length} match${list.length === 1 ? "" : "es"}`}</span>
+        <span className="dim">{list.length === 0 ? t("no match") : t("{length, plural, one {# match} other {# matches}}", { length: list.length })}</span>
       </header>
       {list.length > 0 && (
         <div className="blend-grid">
@@ -382,7 +368,7 @@ function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCand
               key={c.id}
               className={`blend-tile ${c.distance < 2 ? "exact" : ""}`}
               onClick={() => onPick(side, c.id)}
-              title={`${hexTile(c.id)} · group ${c.id >> 4} slot ${c.id & 15} · Δ ${c.distance.toFixed(1)} — place ${side} of the anchor`}
+              title={t("{tile} · group {group} slot {slot} · Δ {distance} — place {side} of the anchor", { tile: hexTile(c.id), group: c.id >> 4, slot: c.id & 15, distance: c.distance.toFixed(1), side: translate(SIDE_LABEL[side]).toLowerCase() })}
             >
               <TileThumb loaded={loaded} id={c.id} size={28} />
               <span className="d mono">{c.distance < 9.95 ? c.distance.toFixed(1) : Math.round(c.distance)}</span>
@@ -419,41 +405,41 @@ function BlendTab() {
   return (
     <>
       <div className="palette-toolbar">
-        <span className="lbl">Tolerance</span>
-        <Tip label="Largest edge difference still listed (0 = pixel-identical seams only)">
+        <span className="lbl">{t("Tolerance")}</span>
+        <Tip label={t("Largest edge difference still listed (0 = pixel-identical seams only)")}>
           <span><NumberInput value={tolerance} onChange={setTolerance} min={0} max={128} width={64} /></span>
         </Tip>
-        <Check label="Follow" title="After placing a match, move the anchor onto it so the next pick continues the seam" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label="Match filter">
-          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        <Check label={t("Follow")} title={t("After placing a match, move the anchor onto it so the next pick continues the seam")} checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label={t("Match filter")}>
+          {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{translate(f.label)}</option>)}
         </select>
       </div>
       <div className="tile-info blend-anchor">
         <TileThumb loaded={loaded} id={anchorId ?? 0} size={64} className="preview" style={{ opacity: anchorId === null ? 0.3 : 1 }} />
         <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
-          <span className="k">Anchor</span>
-          <span>{at && anchorId !== null ? <span className="mono">{hexTile(anchorId)} <span className="dim">at {at.x}, {at.y}</span></span> : <span className="dim">click a tile on the map</span>}</span>
-          <span className="k">Group</span><span>{ti ? `${ti.label} · g${ti.group} s${ti.slot}` : "—"}</span>
-          <span className="k">Ground</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
+          <span className="k">{t("Anchor")}</span>
+          <span>{at && anchorId !== null ? <span className="mono">{hexTile(anchorId)} <span className="dim">at {at.x}, {at.y}</span></span> : <span className="dim">{t("click a tile on the map")}</span>}</span>
+          <span className="k">{t("Group")}</span><span>{ti ? t("{label} · g{group} s{slot}", { label: ti.label, group: ti.group, slot: ti.slot }) : "—"}</span>
+          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
           <span className="k" />
-          <span>{at && <Button size="sm" onClick={() => setAnchor(null)}>Clear</Button>}</span>
+          <span>{at && <Button size="sm" onClick={() => setAnchor(null)}>{t("Clear")}</Button>}</span>
         </div>
       </div>
       <div className="palette-scroll">
         {!loaded && (
-          <NoTileset loading={!error} what="the Blend brush compares tile pixels, so it needs them." />
+          <NoTileset loading={!error} what={t("the Blend brush compares tile pixels, so it needs them.")} />
         )}
         {loaded && !sides && (
           <div className="hint" style={{ padding: 12, display: "grid", gap: 8 }}>
-            <span>Click a tile on the map to blend from it. Each side then lists the tiles whose facing edge continues that tile's pixels — the joins the cliff sets never had.</span>
-            <span>Clicking a match places it next to the anchor on that side; with <strong>Follow</strong> on, the anchor moves onto it so you can walk a seam one tile at a time.</span>
+            <span>{t("Click a tile on the map to blend from it. Each side then lists the tiles whose facing edge continues that tile's pixels — the joins the cliff sets never had.")}</span>
+            <span>{t("Clicking a match places it next to the anchor on that side; with")}{" "}<strong>{t("Follow")}</strong> {" "}{t("on, the anchor moves onto it so you can walk a seam one tile at a time.")}</span>
           </div>
         )}
         {loaded && sides && SIDES.map((s) => <BlendSide key={s} side={s} list={sides[s]} loaded={loaded} onPick={tools.blendAt} />)}
       </div>
       <div className="palette-footer">
-        <span>{sides ? `${total} matches ≤ Δ${tolerance}` : "—"}</span>
-        <span>Δ = mean edge colour difference</span>
+        <span>{sides ? t("{total} matches ≤ Δ{tolerance}", { total, tolerance }) : "—"}</span>
+        <span>{t("Δ = mean edge colour difference")}</span>
       </div>
       <SymmetryNote applies={false} />
     </>
@@ -474,7 +460,7 @@ export default function TerrainPalette() {
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
-    { label: mode === "tile" ? "Fill Map with This Tile" : "Fill Map with This Terrain", disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
+    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
   ];
   const pluginRows = pluginContextRows(pluginItems, "terrainPalette", { surface: "terrainPalette", tile: null, point: null, layer, terrainMode: mode, terrain: activeTerrain, markedArea });
   if (pluginRows.length > 0) rows.push({ label: "", sep: true }, ...pluginRows);
@@ -483,10 +469,10 @@ export default function TerrainPalette() {
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
         <div className="terrain-palette" style={{ display: "contents" }}>
-      <div className="placement-options" title="What a terrain edit does to the units on it">
+      <div className="placement-options" title={t("What a terrain edit does to the units on it")}>
         <Check
-          label="Remove stranded units"
-          title="When the new terrain can no longer hold a unit standing on it (e.g. water under a base, unbuildable ground under a building), delete it as part of the same edit"
+          label={t("Remove stranded units")}
+          title={t("When the new terrain can no longer hold a unit standing on it (e.g. water under a base, unbuildable ground under a building), delete it as part of the same edit")}
           checked={placement.removeStranded}
           onChange={(e) => setPlacement({ ...placement, removeStranded: e.target.checked })}
         />
@@ -496,10 +482,10 @@ export default function TerrainPalette() {
         value={mode}
         onValueChange={(v) => setMode(v as TerrainMode)}
         tabs={[
-          { value: "isom", label: "Isometric", content: <IsomTab /> },
-          { value: "rect", label: "Rect", content: <RectTab /> },
-          { value: "tile", label: "Tile", content: <TileTab /> },
-          { value: "blend", label: "Blend", content: <BlendTab /> },
+          { value: "isom", label: t("Isometric"), content: <IsomTab /> },
+          { value: "rect", label: t("Rect"), content: <RectTab /> },
+          { value: "tile", label: t("Tile"), content: <TileTab /> },
+          { value: "blend", label: t("Blend"), content: <BlendTab /> },
         ]}
       />
         </div>

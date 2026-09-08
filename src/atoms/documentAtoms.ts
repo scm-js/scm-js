@@ -35,6 +35,7 @@ import { NO_DOODADS } from "../formats/tileset/doodads";
 import { resizeScenario, type ResizeResult } from "../editor/resize";
 import { changeTileset, type ChangeTilesetResult } from "../editor/tileset";
 import { baseTerrain } from "../formats/tileset/terrain";
+import { t } from "../i18n";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -580,7 +581,7 @@ export const commitTerrainAtom = atom(null, (get, set, req: { entry: HistoryEntr
       applyUnitChanges(scn, removed);
       entry.units = [...(entry.units ?? []), ...removed];
       set(selectedUnitsAtom, []);
-      note += `, removed ${stranded.length} stranded unit${stranded.length === 1 ? "" : "s"}`;
+      note += t(", removed {n, plural, one {# stranded unit} other {# stranded units}}", { n: stranded.length });
     }
   }
   set(commitEditAtom, entry);
@@ -753,7 +754,7 @@ export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   applySpriteChanges(scn, edit.sprites);
   set(selectedDoodadsAtom, []);
   const n = edit.doodads.length;
-  set(commitEditAtom, { label: `Delete ${n} doodad${n === 1 ? "" : "s"}`, changes: [], doodadTiles: edit.tiles, doodads: edit.doodads, sprites: edit.sprites });
+  set(commitEditAtom, { label: t("Delete {n, plural, one {# doodad} other {# doodads}}", { n }), changes: [], doodadTiles: edit.tiles, doodads: edit.doodads, sprites: edit.sprites });
   return n;
 });
 
@@ -772,7 +773,7 @@ export const convertSelectedDoodadsAtom = atom(null, (get, set) => {
   applyDoodadChanges(scn, edit.doodads);
   set(selectedDoodadsAtom, []);
   const n = edit.doodads.length;
-  set(commitEditAtom, { label: `Convert ${n} doodad${n === 1 ? "" : "s"} to terrain`, changes: edit.tiles, doodads: edit.doodads });
+  set(commitEditAtom, { label: t("Convert {n, plural, one {# doodad} other {# doodads}} to terrain", { n }), changes: edit.tiles, doodads: edit.doodads });
   return n;
 });
 
@@ -786,7 +787,7 @@ export const deleteSelectedSpritesAtom = atom(null, (get, set) => {
   const sprites = removeSprites(scn, selected);
   applySpriteChanges(scn, sprites);
   set(selectedSpritesAtom, []);
-  set(commitEditAtom, { label: `Delete ${sprites.length} sprite${sprites.length === 1 ? "" : "s"}`, changes: [], sprites });
+  set(commitEditAtom, { label: t("Delete {length, plural, one {# sprite} other {# sprites}}", { length: sprites.length }), changes: [], sprites });
   return sprites.length;
 });
 
@@ -800,7 +801,7 @@ export const deleteSelectedUnitsAtom = atom(null, (get, set) => {
   const units = removeUnits(scn, selected);
   applyUnitChanges(scn, units);
   set(selectedUnitsAtom, []);
-  set(commitEditAtom, { label: `Delete ${units.length} unit${units.length === 1 ? "" : "s"}`, changes: [], units });
+  set(commitEditAtom, { label: t("Delete {length, plural, one {# unit} other {# units}}", { length: units.length }), changes: [], units });
   return units.length;
 });
 
@@ -813,7 +814,7 @@ export const deleteSelectedLocationsAtom = atom(null, (get, set) => {
   if (!scn || selected.length === 0) return 0;
   const locations = removeLocations(scn, selected);
   if (locations.length === 0) return 0;
-  const label = locations.length === 1 ? `Delete location ${locationName(scn, locations[0].index)}` : `Delete ${locations.length} locations`;
+  const label = locations.length === 1 ? t("Delete location {name}", { name: locationName(scn, locations[0].index) }) : t("Delete {n} locations", { n: locations.length });
   applyLocationChanges(scn, locations);
   set(selectedLocationsAtom, []);
   set(commitEditAtom, { label, changes: [], locations });
@@ -828,6 +829,6 @@ export const nudgeSelectedLocationsAtom = atom(null, (get, set, d: { dx: number;
   const locations = moveLocations(scn, selected, d.dx, d.dy);
   if (locations.length === 0) return 0;
   applyLocationChanges(scn, locations);
-  set(commitEditAtom, { label: locations.length === 1 ? `Move location ${locationName(scn, locations[0].index)}` : `Move ${locations.length} locations`, changes: [], locations });
+  set(commitEditAtom, { label: locations.length === 1 ? t("Move location {locationName}", { locationName: locationName(scn, locations[0].index) }) : t("Move {length} locations", { length: locations.length }), changes: [], locations });
   return locations.length;
 });

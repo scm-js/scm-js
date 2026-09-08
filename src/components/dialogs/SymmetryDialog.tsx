@@ -7,6 +7,7 @@ import { scenarioAtom } from "../../atoms/documentAtoms";
 import { Check, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t, translate } from "../../i18n";
 
 /**
  * Tools ▸ Symmetry…: the mirror mode the brushes paint and the palettes place under (see
@@ -28,37 +29,34 @@ export function SymmetryDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Symmetry Tool"
+      title={t("Symmetry Tool")}
       icon={<FlipHorizontal2 size={14} />}
       size="sm"
       onOk={apply}
       showApply
-      footerLeft={<span className="hint">{mode === "none" ? "Symmetry off" : `Current: ${symmetryLabel(mode)}`}{square ? "" : ` · ${w} × ${h} map: rotational 90° and the diagonals need a square map`}</span>}
+      footerLeft={<span className="hint">{mode === "none" ? t("Symmetry off") : t("Current: {symmetryLabel}", { symmetryLabel: symmetryLabel(mode) })}{square ? "" : t(" · {w} × {h} map: rotational 90° and the diagonals need a square map", { w, h })}</span>}
     >
-      <Group title="Mode">
+      <Group title={t("Mode")}>
         <div className="col" style={{ gap: 4 }}>
           {SYMMETRY_MODES.map((m) => {
             const disabled = m.square === true && !square;
             return (
-              <label key={m.id} className="check" style={{ height: "auto", alignItems: "flex-start", opacity: disabled ? 0.55 : 1 }} title={disabled ? "Needs a square map" : m.hint}>
+              <label key={m.id} className="check" style={{ height: "auto", alignItems: "flex-start", opacity: disabled ? 0.55 : 1 }} title={disabled ? t("Needs a square map") : translate(m.hint)}>
                 <input type="radio" name="sym" checked={chosen === m.id} disabled={disabled} onChange={() => setLocal(m.id)} style={{ marginTop: 3 }} />
-                <span><div>{m.label}</div><div className="hint">{disabled ? "Needs a square map" : m.hint}</div></span>
+                <span><div>{translate(m.label)}</div><div className="hint">{disabled ? t("Needs a square map") : translate(m.hint)}</div></span>
               </label>
             );
           })}
         </div>
       </Group>
-      <Group title="Applies to">
+      <Group title={t("Applies to")}>
         <div className="col" style={{ gap: 2 }}>
-          <Check label="Terrain — Isometric, Rect and Tile brushes, and the fills" checked disabled />
-          <Check label="Fog of War brush and fill" checked disabled />
-          <Check label="Placing units, sprites, doodads and locations" checked disabled />
+          <Check label={t("Terrain — Isometric, Rect and Tile brushes, and the fills")} checked disabled />
+          <Check label={t("Fog of War brush and fill")} checked disabled />
+          <Check label={t("Placing units, sprites, doodads and locations")} checked disabled />
         </div>
         <p className="hint" style={{ marginTop: 6 }}>
-          Every cell a stroke covers is painted on its mirror images too, and a unit, sprite, doodad or location you place lands on
-          each image of the spot as well (checked against the placement rules one by one; a doodad that would have to turn is
-          skipped) — one undo step each time. Moving and deleting objects is not mirrored, and neither is the Blend brush, which
-          places from a picked anchor. The axes show on the map while a mode is active.
+          {t("Every cell a stroke covers is painted on its mirror images too, and a unit, sprite, doodad or location you place lands on each image of the spot as well (checked against the placement rules one by one; a doodad that would have to turn is skipped) — one undo step each time. Moving and deleting objects is not mirrored, and neither is the Blend brush, which places from a picked anchor. The axes show on the map while a mode is active.")}
         </p>
       </Group>
     </DialogFrame>

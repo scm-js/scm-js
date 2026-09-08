@@ -79,7 +79,7 @@ import { locationAt } from "../../editor/locations";
 import type { PickedObject } from "../../plugins/api";
 import type { TileRect } from "../../editor/doodads";
 import { doodadOrigin } from "../../formats/tileset/doodads";
-import { START_LOCATION, unitName } from "../../data/units";
+import { START_LOCATION, unitLabel } from "../../data/units";
 import { linePoints } from "../../editor/terrain";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
 import { diamondAt } from "../../editor/isom";
@@ -90,6 +90,7 @@ import { LAYERS } from "../chrome/MenuBar";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex, playerTeamColor } from "../../data/players";
 import { hashNoise } from "./noise";
+import { t, translate } from "../../i18n";
 
 const TILE = 32;
 
@@ -891,7 +892,7 @@ export default function MapViewport() {
       let label = "";
       if (ph.kind === "unit") {
         const u = scenario.units[ph.index];
-        if (u) { box = unitBox(unitGeometry(unitAssets?.units ?? null, u.unitId), u.x, u.y); label = unitName(u.unitId); }
+        if (u) { box = unitBox(unitGeometry(unitAssets?.units ?? null, u.unitId), u.x, u.y); label = unitLabel(u.unitId); }
       } else {
         const l = locations.find((x) => x.index === ph.index);
         if (l) { box = l; label = l.name; }
@@ -1463,20 +1464,20 @@ export default function MapViewport() {
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
-    const t = tileAt(e);
-    if (!inMap(t)) return;
+    const tile = tileAt(e);
+    if (!inMap(tile)) return;
     // A layer locked in the Layers panel takes no edits; a plugin's tool or pick still runs.
     if (!tooling && !picking && lockedLayers[layer]) {
-      setStatus(`The ${LAYERS.find((l) => l.id === layer)?.label ?? layer} layer is locked — unlock it in the Layers panel to edit`);
+      setStatus(t("The {layer} layer is locked — unlock it in the Layers panel to edit", { layer: translate(LAYERS.find((l) => l.id === layer)?.label ?? layer) }));
       return;
     }
     if (tooling) {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       toolDownRef.current = true;
-      hoverRef.current = t;
+      hoverRef.current = tile;
       hoverPointRef.current = pointAt(e);
-      setCursor(t);
+      setCursor(tile);
       callTool("onDown", toolPointer(e, true));
       scheduleDraw();
       return;
@@ -1492,7 +1493,7 @@ export default function MapViewport() {
         return;
       }
       e.currentTarget.setPointerCapture(e.pointerId);
-      pickGestureRef.current = { from: t, to: t };
+      pickGestureRef.current = { from: tile, to: tile };
       scheduleDraw();
       return;
     }
@@ -1500,7 +1501,7 @@ export default function MapViewport() {
       const p = pointAt(e);
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      const hit = doodadTools.pickAt(t.x, t.y);
+      const hit = doodadTools.pickAt(tile.x, tile.y);
       if (hit >= 0) {
         // Clicking a doodad selects it (shift toggles) and starts dragging the selection.
         if (e.shiftKey) doodadTools.select([hit], true);
@@ -1574,31 +1575,31 @@ export default function MapViewport() {
     }
     if (clipEditing) {
       e.preventDefault();
-      if (clipPasting) { clipTools.pasteAt(t.x, t.y); scheduleDraw(); return; }
+      if (clipPasting) { clipTools.pasteAt(tile.x, tile.y); scheduleDraw(); return; }
       // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
       e.currentTarget.setPointerCapture(e.pointerId);
-      clipGestureRef.current = { from: t, to: t };
-      setClipSelection(tileRect(t, t));
+      clipGestureRef.current = { from: tile, to: tile };
+      setClipSelection(tileRect(tile, tile));
       scheduleDraw();
       return;
     }
     if (fogPainting) {
       // Alt-click reads the tile's fog into the player ticks; Shift paints the opposite of the palette's mode.
-      if (e.altKey) { fogTools.pickAt(t.x, t.y); return; }
+      if (e.altKey) { fogTools.pickAt(tile.x, tile.y); return; }
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      strokeRef.current = t;
-      fogTools.beginStroke(t.x, t.y, e.shiftKey);
+      strokeRef.current = tile;
+      fogTools.beginStroke(tile.x, tile.y, e.shiftKey);
       scheduleDraw();
       return;
     }
-    if (blending) { tools.pickAt(t.x, t.y); return; }
+    if (blending) { tools.pickAt(tile.x, tile.y); return; }
     if (!painting) return;
-    if (e.altKey) { tools.pickAt(t.x, t.y, pointAt(e)); return; }
+    if (e.altKey) { tools.pickAt(tile.x, tile.y, pointAt(e)); return; }
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    strokeRef.current = t;
-    tools.beginStroke(t.x, t.y, pointAt(e));
+    strokeRef.current = tile;
+    tools.beginStroke(tile.x, tile.y, pointAt(e));
   };
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1888,19 +1889,19 @@ export default function MapViewport() {
     ...(layer === "units"
       ? [
           {
-            label: "Unit Properties…",
+            label: t("Unit Properties…"),
             disabled: selectedUnits.length === 0,
             onSelect: () => open("unitProperties", { indices: selectedUnits }),
           },
-          { label: `Delete ${selectedUnits.length > 1 ? `${selectedUnits.length} Units` : "Unit"}`, disabled: selectedUnits.length === 0, onSelect: () => unitTools.deleteSelected() },
+          { label: t("Delete {n, plural, one {Unit} other {# Units}}", { n: selectedUnits.length }), disabled: selectedUnits.length === 0, onSelect: () => unitTools.deleteSelected() },
         ]
       : []),
     ...(layer === "doodads"
       ? [
-          { label: `Delete ${selectedDoodads.length > 1 ? `${selectedDoodads.length} Doodads` : "Doodad"}`, disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.deleteSelected() },
-          { label: `Convert ${selectedDoodads.length > 1 ? `${selectedDoodads.length} Doodads` : "Doodad"} to Terrain`, disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.convertSelected() },
+          { label: t("Delete {n, plural, one {Doodad} other {# Doodads}}", { n: selectedDoodads.length }), disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.deleteSelected() },
+          { label: t("Convert {n, plural, one {Doodad} other {# Doodads}} to Terrain", { n: selectedDoodads.length }), disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.convertSelected() },
           {
-            label: "Pick Doodad Here",
+            label: t("Pick Doodad Here"),
             disabled: !scenario || !menuTileRef.current || doodadTools.pickAt(menuTileRef.current.x, menuTileRef.current.y) < 0,
             onSelect: withMenuTile((x, y) => {
               const hit = doodadTools.pickAt(x, y);
@@ -1912,38 +1913,38 @@ export default function MapViewport() {
       : []),
     ...(layer === "fog"
       ? [
-          { label: fogMode === "fog" ? "Fill Area with Fog" : "Clear Fog in Area", onSelect: withMenuTile(fogTools.fillAt), disabled: !fogPainting },
-          { label: "Pick Fogged Players Here", onSelect: withMenuTile(fogTools.pickAt), disabled: !fogPainting },
+          { label: fogMode === "fog" ? t("Fill Area with Fog") : t("Clear Fog in Area"), onSelect: withMenuTile(fogTools.fillAt), disabled: !fogPainting },
+          { label: t("Pick Fogged Players Here"), onSelect: withMenuTile(fogTools.pickAt), disabled: !fogPainting },
         ]
       : []),
     ...(layer === "locations"
       ? [
-          { label: "Location Properties…", disabled: selectedLocations.length === 0, onSelect: () => open("locationProperties", { index: selectedLocations[0] }) },
-          { label: `Delete ${selectedLocations.length > 1 ? `${selectedLocations.length} Locations` : "Location"}`, disabled: !selectedLocations.some((i) => i !== ANYWHERE_INDEX), onSelect: () => locationTools.deleteSelected() },
-          { label: "New Location Here", disabled: !locationsEditing, onSelect: withMenuTile((x, y) => locationTools.create({ left: x * TILE, top: y * TILE, right: (x + 4) * TILE, bottom: (y + 4) * TILE })) },
+          { label: t("Location Properties…"), disabled: selectedLocations.length === 0, onSelect: () => open("locationProperties", { index: selectedLocations[0] }) },
+          { label: t("Delete {n, plural, one {Location} other {# Locations}}", { n: selectedLocations.length }), disabled: !selectedLocations.some((i) => i !== ANYWHERE_INDEX), onSelect: () => locationTools.deleteSelected() },
+          { label: t("New Location Here"), disabled: !locationsEditing, onSelect: withMenuTile((x, y) => locationTools.create({ left: x * TILE, top: y * TILE, right: (x + 4) * TILE, bottom: (y + 4) * TILE })) },
         ]
       : []),
     ...(layer === "sprites"
       ? [
-          { label: "Sprite Properties…", disabled: selectedSprites.length === 0, onSelect: () => open("spriteProperties", { indices: selectedSprites }) },
-          { label: `Delete ${selectedSprites.length > 1 ? `${selectedSprites.length} Sprites` : "Sprite"}`, disabled: selectedSprites.length === 0, onSelect: () => spriteTools.deleteSelected() },
+          { label: t("Sprite Properties…"), disabled: selectedSprites.length === 0, onSelect: () => open("spriteProperties", { indices: selectedSprites }) },
+          { label: t("Delete {n, plural, one {Sprite} other {# Sprites}}", { n: selectedSprites.length }), disabled: selectedSprites.length === 0, onSelect: () => spriteTools.deleteSelected() },
         ]
       : []),
     ...(layer === "terrain"
       ? [
-          { label: terrainMode === "rect" || terrainMode === "isom" ? "Pick Terrain" : terrainMode === "blend" ? "Blend From Here" : "Pick Tile", onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
-          { label: "Fill Area", onSelect: withMenuTile(tools.fillAt), disabled: !painting || terrainMode === "isom" },
+          { label: terrainMode === "rect" || terrainMode === "isom" ? t("Pick Terrain") : terrainMode === "blend" ? t("Blend From Here") : t("Pick Tile"), onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
+          { label: t("Fill Area"), onSelect: withMenuTile(tools.fillAt), disabled: !painting || terrainMode === "isom" },
         ]
       : []),
     { label: "", sep: true },
-    { label: "Cut", disabled: !clipTools.source(), onSelect: () => { clipTools.cut(); } },
-    { label: "Copy", disabled: !clipTools.source(), onSelect: () => { clipTools.copy(); } },
+    { label: t("Cut"), disabled: !clipTools.source(), onSelect: () => { clipTools.cut(); } },
+    { label: t("Copy"), disabled: !clipTools.source(), onSelect: () => { clipTools.copy(); } },
     // Paste Here stamps at the clicked tile straight away; Paste arms the layer so the clip follows the pointer.
-    { label: "Paste Here", disabled: !scenario || !clip, onSelect: withMenuTile((x, y) => { clipTools.pasteAt(x, y); }) },
-    { label: "Paste", disabled: !scenario || !clip, onSelect: () => { clipTools.paste(); } },
+    { label: t("Paste Here"), disabled: !scenario || !clip, onSelect: withMenuTile((x, y) => { clipTools.pasteAt(x, y); }) },
+    { label: t("Paste"), disabled: !scenario || !clip, onSelect: () => { clipTools.paste(); } },
     { label: "", sep: true },
-    { label: "Center View Here", disabled: !scenario, onSelect: withMenuTile((x, y) => clearCenterOn({ x: x + 0.5, y: y + 0.5 })) },
-    { label: "Map Properties…", onSelect: () => open("mapProperties") },
+    { label: t("Center View Here"), disabled: !scenario, onSelect: withMenuTile((x, y) => clearCenterOn({ x: x + 0.5, y: y + 0.5 })) },
+    { label: t("Map Properties…"), onSelect: () => open("mapProperties") },
   ];
   // What plugins registered for the map, after their own separator.
   const pluginRows = pluginContextRows(pluginContextItems, "viewport", {
@@ -1998,42 +1999,42 @@ export default function MapViewport() {
       {scenario && tilesetLoading && (
         <div className="viewport-loading" role="status" aria-live="polite">
           <Loader2 size={16} className="spin" aria-hidden />
-          <span>Loading {tileset.name} terrain…</span>
+          <span>{t("Loading {name} terrain…", { name: translate(tileset.name) })}</span>
         </div>
       )}
       <div className="viewport-notices">
       {unitError && (layer === "units" || layer === "sprites") && scenario && (
         <div className="viewport-notice" role="status">
-          <span><strong>No unit graphics.</strong> Units are drawn as player-coloured markers until the editor has the game's unit files.</span>
-          <button type="button" className="btn sm" onClick={() => open("gameData")}>Set up game data…</button>
+          <span><strong>{t("No unit graphics.")}</strong> {" "}{t("Units are drawn as player-coloured markers until the editor has the game's unit files.")}</span>
+          <button type="button" className="btn sm" onClick={() => open("gameData")}>{t("Set up game data…")}</button>
         </div>
       )}
       {tilesetError && (
         <div className="viewport-notice" role="status">
-          <span><strong>No tileset graphics.</strong> Terrain is drawn as flat colour until the editor has the game's tileset files.</span>
-          <button type="button" className="btn sm" onClick={() => open("gameData")}>Set up game data…</button>
+          <span><strong>{t("No tileset graphics.")}</strong> {" "}{t("Terrain is drawn as flat colour until the editor has the game's tileset files.")}</span>
+          <button type="button" className="btn sm" onClick={() => open("gameData")}>{t("Set up game data…")}</button>
         </div>
       )}
       </div>
       <PluginPanels />
       <div className="map-hud">
-        <span className="hud-chip"><b>{tileset.name}</b></span>
+        <span className="hud-chip"><b>{translate(tileset.name)}</b></span>
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
-        {tilesetLoading && <span className="hud-chip">loading tileset…</span>}
-        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? "drag a rectangle" : mapPick.kind === "tile" ? "click a tile" : "click a unit or a location"} · Esc cancels</span>}
-        {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} · Esc / right-click to stop</span>}
-        {unitPlacing && !tooling && <span className="hud-chip">placing <b>{unitName(activeUnit)}</b> · Esc / right-click to stop</span>}
-        {spritePlacing && !tooling && <span className="hud-chip">placing sprite <b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? " · flipped" : ""} · Esc / right-click to stop</span>}
-        {doodadPlacing && !tooling && doodadTools.activeDef() && <span className="hud-chip">placing <b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? " · anywhere" : ""} · Esc / right-click to stop</span>}
-        {locationsEditing && <span className="hud-chip">locations · drag empty ground to create · snap <b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
+        {tilesetLoading && <span className="hud-chip">{t("loading tileset…")}</span>}
+        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? t("drag a rectangle") : mapPick.kind === "tile" ? t("click a tile") : t("click a unit or a location")} {" "}{t("· Esc cancels")}</span>}
+        {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} {" "}{t("· Esc / right-click to stop")}</span>}
+        {unitPlacing && !tooling && <span className="hud-chip">{t("placing")}{" "}<b>{unitLabel(activeUnit)}</b> {" "}{t("· Esc / right-click to stop")}</span>}
+        {spritePlacing && !tooling && <span className="hud-chip">{t("placing sprite")}{" "}<b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? t(" · flipped") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
+        {doodadPlacing && !tooling && doodadTools.activeDef() && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
+        {locationsEditing && <span className="hud-chip">{t("locations · drag empty ground to create · snap")}{" "}<b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
         {clipEditing && !clipPasting && (
           <span className="hud-chip">
-            cut / copy / paste · drag to mark an area{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} · Ctrl+C copies{clip && " · Ctrl+V pastes"}
+            {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
           </span>
         )}
-        {clipPasting && clip && !tooling && <span className="hud-chip">pasting <b>{clipSummary(clip)}</b> · click to stamp · Esc / right-click to stop</span>}
-        {showFog && <span className="hud-chip">fog of war <b>P{fogViewPlayer + 1}</b>{fogPainting && <> · {fogMode === "fog" ? "painting" : "clearing"} · Shift inverts</>}</span>}
+        {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · Esc / right-click to stop")}</span>}
+        {showFog && <span className="hud-chip">{t("fog of war")}{" "}<b>{t("P{v}", { v: fogViewPlayer + 1 })}</b>{fogPainting && <> · {fogMode === "fog" ? t("painting") : t("clearing")} {" "}{t("· Shift inverts")}</>}</span>}
       </div>
     </div>
   );

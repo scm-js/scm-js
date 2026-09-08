@@ -14,6 +14,7 @@
  * never an exception: `UpdateAvailability` carries `status: "error"` rather than throwing.
  */
 import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "../gamedata/desktop";
+import { t } from "../i18n";
 
 export type UpdateState =
   /** Nothing asked yet. */
@@ -110,27 +111,27 @@ export interface Headline {
 export function headline(state: UpdateState): Headline {
   switch (state.phase) {
     case "idle":
-      return { title: "Check for updates" };
+      return { title: t("Check for updates") };
     case "checking":
-      return { title: "Checking for updates…" };
+      return { title: t("Checking for updates…") };
     case "current":
-      return { title: "scmJS is up to date", detail: `You have ${state.current}.` };
+      return { title: t("scmJS is up to date"), detail: t("You have {current}.", { current: state.current }) };
     case "available":
-      return { title: `scmJS ${state.info.version} is available`, detail: `You have ${state.current}.` };
+      return { title: t("scmJS {version} is available", { version: state.info.version }), detail: t("You have {current}.", { current: state.current }) };
     case "downloading":
-      return { title: `Downloading scmJS ${state.info.version}`, detail: progressLabel(state.progress) };
+      return { title: t("Downloading scmJS {version}", { version: state.info.version }), detail: progressLabel(state.progress) };
     case "downloaded":
-      return { title: `scmJS ${state.info.version} is ready to install`, detail: "It will be applied when scmJS restarts." };
+      return { title: t("scmJS {version} is ready to install", { version: state.info.version }), detail: t("It will be applied when scmJS restarts.") };
     case "error":
-      return { title: "Could not check for updates", detail: state.message };
+      return { title: t("Could not check for updates"), detail: state.message };
     case "unsupported":
-      return { title: "Updates are not available in this build", detail: state.support.reason };
+      return { title: t("Updates are not available in this build"), detail: state.support.reason };
   }
 }
 
 /** "58% · 71.4 of 122 MB · 4.2 MB/s", or the empty-ish start of a download. */
 export function progressLabel(progress: UpdateProgress | null): string {
-  if (!progress || !progress.total) return "Starting…";
+  if (!progress || !progress.total) return t("Starting…");
   const parts = [`${Math.round(progress.percent)}%`, `${formatBytes(progress.transferred, false)} of ${formatBytes(progress.total)}`];
   if (progress.bytesPerSecond > 0) parts.push(`${formatBytes(progress.bytesPerSecond)}/s`);
   return parts.join(" · ");

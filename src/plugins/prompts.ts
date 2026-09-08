@@ -12,6 +12,7 @@
  */
 import { createWidgets, el } from "./widgets";
 import type { ConfirmOptions, DialogHandle, DialogSpec, PanelHandle, PanelSpec, ProgressHandle, ProgressOptions, PromptOptions } from "./api";
+import { t } from "../i18n";
 
 type OpenDialog = (spec: DialogSpec) => DialogHandle;
 type OpenPanel = (spec: PanelSpec) => PanelHandle;
@@ -30,15 +31,15 @@ export function confirmDialog(open: OpenDialog, text: string, options: ConfirmOp
     let answer = false;
     let settle = () => resolve(answer);
     open({
-      title: options.title ?? "Confirm",
+      title: options.title ?? t("Confirm"),
       size: "sm",
       mount: (body) => {
         body.append(message(text));
         return () => { settle(); settle = () => {}; };
       },
       buttons: [
-        { label: options.cancelLabel ?? "Cancel" },
-        { label: options.confirmLabel ?? "OK", primary: true, run: () => { answer = true; } },
+        { label: options.cancelLabel ?? t("Cancel") },
+        { label: options.confirmLabel ?? t("OK"), primary: true, run: () => { answer = true; } },
       ],
     });
   });
@@ -48,13 +49,13 @@ export function alertDialog(open: OpenDialog, text: string, options: ConfirmOpti
   return new Promise((resolve) => {
     let settle = () => resolve();
     open({
-      title: options.title ?? "Note",
+      title: options.title ?? t("Note"),
       size: "sm",
       mount: (body) => {
         body.append(message(text));
         return () => { settle(); settle = () => {}; };
       },
-      buttons: [{ label: options.confirmLabel ?? "OK", primary: true }],
+      buttons: [{ label: options.confirmLabel ?? t("OK"), primary: true }],
     });
   });
 }
@@ -65,7 +66,7 @@ export function promptDialog(open: OpenDialog, text: string, options: PromptOpti
     let answer: string | null = null;
     let settle = () => resolve(answer);
     open({
-      title: options.title ?? "Enter a value",
+      title: options.title ?? t("Enter a value"),
       size: "sm",
       mount: (body, dialog) => {
         const field = options.multiline
@@ -87,8 +88,8 @@ export function promptDialog(open: OpenDialog, text: string, options: PromptOpti
         return () => { settle(); settle = () => {}; };
       },
       buttons: [
-        { label: options.cancelLabel ?? "Cancel" },
-        { label: options.confirmLabel ?? "OK", primary: true, run: () => { answer = value; } },
+        { label: options.cancelLabel ?? t("Cancel") },
+        { label: options.confirmLabel ?? t("OK"), primary: true, run: () => { answer = value; } },
       ],
     });
   });

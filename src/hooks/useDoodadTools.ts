@@ -15,6 +15,7 @@ import type { Scenario } from "../formats/chk/scenario";
 import { doodadOrigin, NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
 import { useTileset } from "./useTileset";
 import type { MapPoint } from "./useTerrainTools";
+import { t } from "../i18n";
 
 /** A doodad drawn where it would land, with the verdict on whether it may. */
 export interface DoodadGhost {
@@ -31,10 +32,10 @@ export function doodadLabel(def: DoodadDef): string {
 }
 
 function describeRefusal(def: DoodadDef, v: DoodadVerdict, hasPlacementData: boolean): string {
-  if (v.outOfBounds) return `Can't place ${doodadLabel(def)} here: it would leave the map`;
+  if (v.outOfBounds) return t("Can't place {doodad} here: it would leave the map", { doodad: doodadLabel(def) });
   const cells = v.bad.length;
-  const needs = hasPlacementData ? "this doodad needs the terrain it was drawn for under it" : "another doodad is in the way";
-  return `Can't place ${doodadLabel(def)} here: ${cells} tile${cells === 1 ? "" : "s"} of its footprint ${cells === 1 ? "doesn't" : "don't"} match — ${needs} (Doodads ▸ Place anywhere)`;
+  const needs = hasPlacementData ? t("this doodad needs the terrain it was drawn for under it") : t("another doodad is in the way");
+  return t("Can't place {doodad} here: {n, plural, one {# tile of its footprint doesn't match} other {# tiles of its footprint don't match}} — {needs} (Doodads ▸ Place anywhere)", { doodad: doodadLabel(def), n: cells, needs });
 }
 
 /**
@@ -131,8 +132,8 @@ export function useDoodadTools() {
     }
     setSelected([]);
     const label = placed === 1 ? `Place ${doodadLabel(ghost.def)}` : `Place ${placed} × ${doodadLabel(ghost.def)}`;
-    commit(opts.asTerrain ? { label: `${label} as terrain`, changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
-    setStatus(`Placed ${placed === 1 ? "" : `${placed} × `}${doodadLabel(ghost.def)} (${ghost.def.width}×${ghost.def.height})${opts.asTerrain ? " as terrain" : ""} at tile ${ghost.x}, ${ghost.y} — Esc or right-click to stop placing`);
+    commit(opts.asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
+    setStatus(t("Placed {count}{doodad} ({w}×{h}){asTerrain} at tile {x}, {y} — Esc or right-click to stop placing", { count: placed === 1 ? "" : `${placed} × `, doodad: doodadLabel(ghost.def), w: ghost.def.width, h: ghost.def.height, asTerrain: opts.asTerrain ? t(" as terrain") : "", x: ghost.x, y: ghost.y }));
     return true;
   }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
 
@@ -145,7 +146,7 @@ export function useDoodadTools() {
   const stopPlacing = useCallback(() => {
     if (!store.get(doodadPlacingAtom)) return false;
     setPlacing(false);
-    setStatus("Stopped placing — click a doodad to select it, or pick one in the palette to place");
+    setStatus(t("Stopped placing — click a doodad to select it, or pick one in the palette to place"));
     return true;
   }, [store, setPlacing, setStatus]);
 
@@ -272,10 +273,10 @@ export function useDoodadTools() {
       placedIndices.push(...edit.doodads.map((c) => c.index));
     }
     const n = moving.length;
-    commit({ label: `Move ${n} doodad${n === 1 ? "" : "s"}`, changes: [], doodadTiles: tiles.finish(), doodads, sprites });
+    commit({ label: t("Move {n, plural, one {# doodad} other {# doodads}}", { n }), changes: [], doodadTiles: tiles.finish(), doodads, sprites });
     // The moved doodads are new records at the end of the list; keep them selected.
     setSelected(placedIndices);
-    setStatus(`Moved ${n} doodad${n === 1 ? "" : "s"} by ${d.dx}, ${d.dy} tiles`);
+    setStatus(t("Moved {n, plural, one {# doodad} other {# doodads}} by {dx}, {dy} tiles", { n, dx: d.dx, dy: d.dy }));
     return true;
   }, [store, tileset, catalogue, dragGhosts, commit, setSelected, setStatus]);
 
@@ -294,19 +295,19 @@ export function useDoodadTools() {
     return edit.doodads.length;
   }, [store, catalogue, apply, commit, setSelected]);
 
-  const setOwner = useCallback((owner: number) => updateSelected(`Set doodad owner to Player ${owner + 1}`, { owner }), [updateSelected]);
-  const setDisabled = useCallback((disabled: boolean) => updateSelected(disabled ? "Disable doodad" : "Enable doodad", { disabled: disabled ? 1 : 0 }), [updateSelected]);
+  const setOwner = useCallback((owner: number) => updateSelected(t("Set doodad owner to Player {n}", { n: owner + 1 }), { owner }), [updateSelected]);
+  const setDisabled = useCallback((disabled: boolean) => updateSelected(disabled ? t("Disable doodad") : t("Enable doodad"), { disabled: disabled ? 1 : 0 }), [updateSelected]);
 
   const deleteSelected = useCallback(() => {
     const n = deleteSelectedDoodads();
-    if (n > 0) setStatus(`Deleted ${n} doodad${n === 1 ? "" : "s"}`);
+    if (n > 0) setStatus(t("Deleted {n, plural, one {# doodad} other {# doodads}}", { n }));
     return n;
   }, [deleteSelectedDoodads, setStatus]);
 
   /** The selection becomes plain terrain: records gone, tiles kept in both sections, overlays left as sprites. */
   const convertSelected = useCallback(() => {
     const n = convertSelectedDoodads();
-    if (n > 0) setStatus(`Converted ${n} doodad${n === 1 ? "" : "s"} to terrain`);
+    if (n > 0) setStatus(t("Converted {n, plural, one {# doodad} other {# doodads}} to terrain", { n }));
     return n;
   }, [convertSelectedDoodads, setStatus]);
 

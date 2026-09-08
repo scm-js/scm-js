@@ -57,7 +57,7 @@ import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex } from "../../data/players";
-import { RACE_LABEL, UNIT_GROUPS, unitName, type RaceKey } from "../../data/units";
+import { RACE_LABEL, UNIT_GROUPS, unitLabel, type RaceKey } from "../../data/units";
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
@@ -71,17 +71,18 @@ import type { DoodadCategory, DoodadDef } from "../../formats/tileset/doodads";
 import { useDoodadTools } from "../../hooks/useDoodadTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { ALL_CLIP_PARTS, CLIP_PARTS, clipSummary, DEFAULT_CLIP_PARTS, type ClipPart } from "../../editor/clipboard";
+import { msg, t, translate } from "../../i18n";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
 const RAIL: { id: EditorLayer; label: string; key: string; icon: typeof Mountain }[] = [
-  { id: "terrain", label: "Terrain", key: "T", icon: Mountain },
-  { id: "doodads", label: "Doodads", key: "D", icon: TreePine },
-  { id: "units", label: "Units", key: "U", icon: Users },
-  { id: "sprites", label: "Sprites", key: "S", icon: Sparkles },
-  { id: "locations", label: "Locations", key: "L", icon: SquareDashed },
-  { id: "fog", label: "Fog of War", key: "F", icon: CloudFog },
-  { id: "clipboard", label: "Cut / Copy / Paste", key: "C", icon: Clipboard },
+  { id: "terrain", label: msg("Terrain"), key: "T", icon: Mountain },
+  { id: "doodads", label: msg("Doodads"), key: "D", icon: TreePine },
+  { id: "units", label: msg("Units"), key: "U", icon: Users },
+  { id: "sprites", label: msg("Sprites"), key: "S", icon: Sparkles },
+  { id: "locations", label: msg("Locations"), key: "L", icon: SquareDashed },
+  { id: "fog", label: msg("Fog of War"), key: "F", icon: CloudFog },
+  { id: "clipboard", label: msg("Cut / Copy / Paste"), key: "C", icon: Clipboard },
 ];
 
 export const RAIL_ICON = Object.fromEntries(RAIL.map((r) => [r.id, r.icon])) as Record<EditorLayer, typeof Mountain>;
@@ -100,7 +101,7 @@ export function shade(hex: string, amt: number) {
 /** What a doodad's overlay draws — the unit's name, or the sprite's label (unit / GRP file name). */
 function doodadOverlayLabel(assets: UnitAssets | null, d: DoodadDef): string | null {
   if (!d.overlay) return null;
-  return d.overlay.kind === "unit" ? unitName(d.overlay.id) : spriteLabel(assets, d.overlay.id);
+  return d.overlay.kind === "unit" ? unitLabel(d.overlay.id) : spriteLabel(assets, d.overlay.id);
 }
 
 /**
@@ -150,9 +151,9 @@ function DoodadPalette() {
 
   return (
     <>
-      <div className="owner-strip" title="Owner of the doodads you place (matters for Installation doors and traps)">
+      <div className="owner-strip" title={t("Owner of the doodads you place (matters for Installation doors and traps)")}>
         {Array.from({ length: 12 }, (_, i) => (
-          <Tip key={i} label={`Player ${i + 1}`} side="right">
+          <Tip key={i} label={t("Player {v}", { v: i + 1 })} side="right">
             <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
@@ -167,42 +168,42 @@ function DoodadPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
-            placeholder="Search doodads… (ramp, bridge, #12)"
-            aria-label="Search doodads"
+            placeholder={t("Search doodads… (ramp, bridge, #12)")}
+            aria-label={t("Search doodads")}
             disabled={categories.length === 0}
           />
-          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><X size={11} /></button>}
+          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label={t("Clear search")}><X size={11} /></button>}
         </div>
         <select
           className="select grow"
           value={current?.name ?? ""}
           onChange={(e) => { setCategory(e.target.value); setQuery(""); }}
-          aria-label="Doodad category"
+          aria-label={t("Doodad category")}
           disabled={categories.length === 0}
-          title={q ? "Searching every category — pick one to browse it instead" : undefined}
+          title={q ? t("Searching every category — pick one to browse it instead") : undefined}
         >
           {categories.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.doodads.length})</option>)}
         </select>
       </div>
-      <div className="placement-options" title="Placement options">
-        {option("placeAnywhere", "Place anywhere", "Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground.")}
-        {option("snapToGrid", "Snap to grid", "Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for. This is not the View ▸ Grid Settings spacing — it is always two tiles.")}
-        {option("asTerrain", "Place as terrain", "Lay the doodad's tiles down as plain terrain, with no doodad record: the same as placing it and then choosing Convert to Terrain. An overlay is placed as an ordinary sprite. The tiles can then be painted over piece by piece, but the doodad cannot be selected or moved as one.")}
+      <div className="placement-options" title={t("Placement options")}>
+        {option("placeAnywhere", t("Place anywhere"), t("Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground."))}
+        {option("snapToGrid", t("Snap to grid"), t("Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for. This is not the View ▸ Grid Settings spacing — it is always two tiles."))}
+        {option("asTerrain", t("Place as terrain"), t("Lay the doodad's tiles down as plain terrain, with no doodad record: the same as placing it and then choosing Convert to Terrain. An overlay is placed as an ordinary sprite. The tiles can then be painted over piece by piece, but the doodad cannot be selected or moved as one."))}
       </div>
       <div className="palette-scroll">
         {!loaded && (
           <div className="hint" style={{ padding: 8 }}>
-            Doodads come from the tileset graphics. Help ▸ Game Data… installs them from a StarCraft installation.
+            {t("Doodads come from the tileset graphics. Help ▸ Game Data… installs them from a StarCraft installation.")}
           </div>
         )}
         {loaded && !catalogue.hasPlacementData && (
           <div className="hint" style={{ padding: "8px 8px 0" }}>
-            No <code>{loaded.name}.dddata.bin</code> — install the game data again (Help ▸ Game Data…) to get StarEdit's placement rules; until then nothing is refused for its ground.
+            {t("No")}{" "}<code>{loaded.name}.dddata.bin</code> {" "}{t("— install the game data again (Help ▸ Game Data…) to get StarEdit's placement rules; until then nothing is refused for its ground.")}
           </div>
         )}
         {loaded && q && shown.length === 0 && (
           <div className="hint" style={{ padding: 8 }}>
-            No doodads match <b>{query.trim()}</b> in {tileset.name}. Try a category word (ramp, bridge, cliff, rock), a size like 4×2, or an id like #12.
+            {t("No doodads match")}{" "}<b>{query.trim()}</b> {" "}{t("in {name}. Try a category word (ramp, bridge, cliff, rock), a size like 4×2, or an id like #12.", { name: tileset.name })}
           </div>
         )}
         {shown.map((c) => (
@@ -221,7 +222,7 @@ function DoodadPalette() {
                     key={d.id}
                     className={`doodad ${active === d.id ? "selected" : ""}`}
                     onClick={() => pick(d.id)}
-                    title={`${d.category} #${d.id} — ${d.width}×${d.height} tiles${d.ramp ? ", ramp" : ""}${overlay ? `, ${d.overlay!.kind} overlay: ${overlay}` : ""}${d.required.some((r) => r !== 0) ? "" : ", any ground"} — click to place`}
+                    title={t("{category} #{id} — {w}×{h} tiles{ramp}{overlay}{ground} — click to place", { category: d.category, id: d.id, w: d.width, h: d.height, ramp: d.ramp ? t(", ramp") : "", overlay: overlay ? `, ${d.overlay!.kind} overlay: ${overlay}` : "", ground: d.required.some((r) => r !== 0) ? "" : t(", any ground") })}
                   >
                     <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={56} height={40} /></span>
                     <span className="lbl">#{d.id} · {d.width}×{d.height}</span>
@@ -235,10 +236,10 @@ function DoodadPalette() {
       <div className="palette-footer">
         <span>
           {activeDef
-            ? placing ? <>Placing {activeDef.category} #{activeDef.id} <span className="faint">· Esc stops</span></> : <>{activeDef.category} #{activeDef.id} <span className="faint">· select mode</span></>
-            : <>{catalogue.doodads.length} doodads</>}
+            ? placing ? <>{t("Placing {category} #{id}", { category: activeDef.category, id: activeDef.id })}{" "}<span className="faint">{t("· Esc stops")}</span></> : <>{activeDef.category} #{activeDef.id} <span className="faint">{t("· select mode")}</span></>
+            : <>{t("{length} doodads", { length: catalogue.doodads.length })}</>}
         </span>
-        <span>{q ? <>{matchCount} of {catalogue.doodads.length} match · </> : null}{tileset.name}</span>
+        <span>{q ? <>{t("{matchCount} of {length} match ·", { matchCount, length: catalogue.doodads.length })}</> : null}{tileset.name}</span>
       </div>
     </>
   );
@@ -265,7 +266,7 @@ function UnitPalette() {
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     return UNIT_GROUPS
-      .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitName(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
+      .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitLabel(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
       .filter((g) => g.units.length > 0);
     // The revision is a dependency for the names: they follow the loaded data set.
   }, [query, dataRevision]);
@@ -274,9 +275,9 @@ function UnitPalette() {
 
   return (
     <>
-      <div className="owner-strip" title="Unit owner">
+      <div className="owner-strip" title={t("Unit owner")}>
         {Array.from({ length: 12 }, (_, i) => (
-          <Tip key={i} label={`Player ${i + 1}`} side="right">
+          <Tip key={i} label={t("Player {v}", { v: i + 1 })} side="right">
             <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
@@ -285,12 +286,12 @@ function UnitPalette() {
       </div>
       <div className="palette-toolbar">
         <Search size={12} className="faint" />
-        <input className="input grow" placeholder="Search units…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="input grow" placeholder={t("Search units…")} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <div className="placement-options" title="Placement checks">
-        {option("checkCollision", "No overlap", "Refuse to place or drop a ground unit or building on top of another")}
-        {option("checkTerrain", "Check terrain", "Refuse unwalkable ground for units and unbuildable tiles for buildings")}
-        {option("snapToGrid", "Snap to grid", "Buildings snap their placement box to the tile grid, as StarEdit always does, and everything else snaps its centre to the nearest tile centre. Off, both land exactly at the pointer. View ▸ Grid Settings has the doodad and location snaps.")}
+      <div className="placement-options" title={t("Placement checks")}>
+        {option("checkCollision", t("No overlap"), t("Refuse to place or drop a ground unit or building on top of another"))}
+        {option("checkTerrain", t("Check terrain"), t("Refuse unwalkable ground for units and unbuildable tiles for buildings"))}
+        {option("snapToGrid", t("Snap to grid"), t("Buildings snap their placement box to the tile grid, as StarEdit always does, and everything else snaps its centre to the nearest tile centre. Off, both land exactly at the pointer. View ▸ Grid Settings has the doodad and location snaps."))}
       </div>
       <div className="palette-scroll tree">
         {races.map((race) => {
@@ -301,7 +302,7 @@ function UnitPalette() {
               <div className="node group">
                 <span className="twisty" />
                 <span className="swatch" style={{ background: race === "terran" ? "#5b8fd9" : race === "zerg" ? "#b25ad0" : race === "protoss" ? "#e6b95c" : "#8a94a6" }} />
-                {RACE_LABEL[race]}
+                {translate(RACE_LABEL[race])}
               </div>
               {rg.map((g) => {
                 const isOpen = query ? true : (open[g.label] ?? false);
@@ -313,8 +314,8 @@ function UnitPalette() {
                       <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.units.length}</span>
                     </div>
                     {isOpen && g.units.map((id) => (
-                      <div key={id} className={`node ${active === id ? "selected" : ""}`} style={{ paddingLeft: 40 }} onClick={() => pick(id)} title={`Unit #${id} — click to place`}>
-                        {unitName(id)}
+                      <div key={id} className={`node ${active === id ? "selected" : ""}`} style={{ paddingLeft: 40 }} onClick={() => pick(id)} title={t("Unit #{id} — click to place", { id })}>
+                        {unitLabel(id)}
                       </div>
                     ))}
                   </div>
@@ -325,8 +326,8 @@ function UnitPalette() {
         })}
       </div>
       <div className="palette-footer">
-        <span>{placing ? <>Placing {unitName(active)} <span className="faint">· Esc stops</span></> : <>{unitName(active)} <span className="mono">#{active}</span> <span className="faint">· select mode</span></>}</span>
-        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />P{owner + 1}</span>
+        <span>{placing ? <>{t("Placing {unitName}", { unitName: unitLabel(active) })}{" "}<span className="faint">{t("· Esc stops")}</span></> : <>{unitLabel(active)} <span className="mono">#{active}</span> <span className="faint">{t("· select mode")}</span></>}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />{t("P{v}", { v: owner + 1 })}</span>
       </div>
     </>
   );
@@ -345,7 +346,7 @@ function GroupedPicker({ groups, active, onPick, query, defaultOpen, title }: { 
     .filter((g) => g.items.length > 0);
   return (
     <div className="palette-scroll tree">
-      {shown.length === 0 && <div className="hint" style={{ padding: 8 }}>Nothing matches "{query}".</div>}
+      {shown.length === 0 && <div className="hint" style={{ padding: 8 }}>{t("Nothing matches \"{query}\".", { query })}</div>}
       {shown.map((g) => {
         const isOpen = q ? true : (open[g.label] ?? defaultOpen(g.label));
         return (
@@ -387,12 +388,12 @@ function SpritePalette() {
   const colors = scenario?.playerColors;
 
   const pureGroups = useMemo<PickerGroup[]>(() => {
-    if (!assets) return [{ label: "Sprites", items: Array.from({ length: SPRITE_COUNT }, (_, id) => ({ id, label: `Sprite #${id}` })) }];
+    if (!assets) return [{ label: t("Sprites"), items: Array.from({ length: SPRITE_COUNT }, (_, id) => ({ id, label: t("Sprite #{id}", { id }) })) }];
     const cat = spriteCatalogue(assets);
     return cat.groups.map((g) => ({ label: g.label, items: g.ids.map((id) => ({ id, label: cat.entries[id].label })) }));
   }, [assets]);
   // `assets` for the names, which follow the loaded data set.
-  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitName(id) })) })), [assets]);
+  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: translate(g.label), items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
   const activeId = kind === "pure" ? active : activeUnit;
@@ -401,9 +402,9 @@ function SpritePalette() {
 
   return (
     <>
-      <div className="owner-strip" title="Sprite owner">
+      <div className="owner-strip" title={t("Sprite owner")}>
         {Array.from({ length: 12 }, (_, i) => (
-          <Tip key={i} label={`Player ${i + 1}`} side="right">
+          <Tip key={i} label={t("Player {v}", { v: i + 1 })} side="right">
             <button className={`owner-chip ${owner === i ? "is-active" : ""}`} style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }} onClick={() => setOwner(i)}>
               {i + 1}
             </button>
@@ -412,11 +413,11 @@ function SpritePalette() {
       </div>
       <div className="palette-toolbar">
         <Search size={12} className="faint" />
-        <input className="input grow" placeholder="Search sprites…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="input grow" placeholder={t("Search sprites…")} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <div className="placement-options" title="Flags on newly placed sprites">
-        <Check label="Flipped" title="Mirror the graphic left-to-right (THG2 flag 0x2000)" checked={options.flipped} onChange={(e) => setOptions({ ...options, flipped: e.target.checked })} />
-        <Check label="Disabled" title="Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (THG2 flag 0x8000)" checked={options.disabled} disabled={kind !== "unit"} onChange={(e) => setOptions({ ...options, disabled: e.target.checked })} />
+      <div className="placement-options" title={t("Flags on newly placed sprites")}>
+        <Check label={t("Flipped")} title={t("Mirror the graphic left-to-right (THG2 flag 0x2000)")} checked={options.flipped} onChange={(e) => setOptions({ ...options, flipped: e.target.checked })} />
+        <Check label={t("Disabled")} title={t("Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (THG2 flag 0x8000)")} checked={options.disabled} disabled={kind !== "unit"} onChange={(e) => setOptions({ ...options, disabled: e.target.checked })} />
       </div>
       <Tabs
         compact
@@ -425,30 +426,30 @@ function SpritePalette() {
         tabs={[
           {
             value: "pure",
-            label: "Pure Sprites",
+            label: t("Pure Sprites"),
             content: (
               <>
-                {error && <div className="hint" style={{ padding: "4px 8px" }}>Unit data not installed — sprites are listed by id and drawn as markers.</div>}
-                <GroupedPicker groups={pureGroups} active={active} onPick={(id) => pick("pure", id)} query={query} defaultOpen={(l) => l === "Units" || l === `Doodads · ${tileset.name}`} title={(id) => `Sprite #${id} — click to place`} />
-                <div className="palette-footer"><span>{count} pure sprite{count === 1 ? "" : "s"} on the map</span><span>THG2</span></div>
+                {error && <div className="hint" style={{ padding: "4px 8px" }}>{t("Unit data not installed — sprites are listed by id and drawn as markers.")}</div>}
+                <GroupedPicker groups={pureGroups} active={active} onPick={(id) => pick("pure", id)} query={query} defaultOpen={(l) => l === "Units" || l === `Doodads · ${tileset.name}`} title={(id) => t("Sprite #{id} — click to place", { id })} />
+                <div className="palette-footer"><span>{t("{count} pure sprite", { count })}{count === 1 ? "" : "s"} {" "}{t("on the map")}</span><span>THG2</span></div>
               </>
             ),
           },
           {
             value: "unit",
-            label: "Unit Sprites",
+            label: t("Unit Sprites"),
             content: (
               <>
-                <GroupedPicker groups={unitGroups} active={activeUnit} onPick={(id) => pick("unit", id)} query={query} defaultOpen={(l) => l === "Special"} title={(id) => `Unit #${id} as a sprite — click to place`} />
-                <div className="palette-footer"><span>{scenario ? scenario.sprites.length - count : 0} unit sprite{scenario && scenario.sprites.length - count === 1 ? "" : "s"} on the map</span><span>becomes a unit on load</span></div>
+                <GroupedPicker groups={unitGroups} active={activeUnit} onPick={(id) => pick("unit", id)} query={query} defaultOpen={(l) => l === "Special"} title={(id) => t("Unit #{id} as a sprite — click to place", { id })} />
+                <div className="palette-footer"><span>{scenario ? scenario.sprites.length - count : 0} {" "}{t("unit sprite")}{scenario && scenario.sprites.length - count === 1 ? "" : "s"} {" "}{t("on the map")}</span><span>{t("becomes a unit on load")}</span></div>
               </>
             ),
           },
         ]}
       />
       <div className="palette-footer">
-        <span>{placing ? <>Placing {activeLabel} <span className="faint">· Esc stops</span></> : <>{activeLabel} <span className="mono">#{activeId}</span> <span className="faint">· select mode</span></>}</span>
-        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />P{owner + 1}</span>
+        <span>{placing ? <>{t("Placing {activeLabel}", { activeLabel })}{" "}<span className="faint">{t("· Esc stops")}</span></> : <>{activeLabel} <span className="mono">#{activeId}</span> <span className="faint">{t("· select mode")}</span></>}</span>
+        <span className="row" style={{ gap: 4 }}><span className="swatch" style={{ background: displayColorHex(colors, scenario?.playerRgb, owner), width: 10, height: 10 }} />{t("P{v}", { v: owner + 1 })}</span>
       </div>
     </>
   );
@@ -484,14 +485,14 @@ function LocationPalette() {
   return (
     <>
       <div className="palette-toolbar">
-        <Tip label="New location — 4×4 tiles in the middle of the view (or drag on the map)"><Button size="sm" icon disabled={!scenario} onClick={() => tools.createInView()}><Plus size={12} /></Button></Tip>
-        <Tip label="Location properties"><Button size="sm" icon disabled={first === undefined} onClick={() => open("locationProperties", { index: first })}><Pencil size={12} /></Button></Tip>
-        <Tip label="Delete"><Button size="sm" icon disabled={!selected.some((i) => i !== ANYWHERE_INDEX)} onClick={() => tools.deleteSelected()}><Trash2 size={12} /></Button></Tip>
+        <Tip label={t("New location — 4×4 tiles in the middle of the view (or drag on the map)")}><Button size="sm" icon disabled={!scenario} onClick={() => tools.createInView()}><Plus size={12} /></Button></Tip>
+        <Tip label={t("Location properties")}><Button size="sm" icon disabled={first === undefined} onClick={() => open("locationProperties", { index: first })}><Pencil size={12} /></Button></Tip>
+        <Tip label={t("Delete")}><Button size="sm" icon disabled={!selected.some((i) => i !== ANYWHERE_INDEX)} onClick={() => tools.deleteSelected()}><Trash2 size={12} /></Button></Tip>
         <span className="grow" />
-        <label className="row" style={{ gap: 4 }} title="The grid a create, move or resize snaps to">
-          <span className="faint" style={{ fontSize: 11 }}>Snap</span>
-          <select className="select" aria-label="Location snap" value={snap} onChange={(e) => setSnap(Number(e.target.value))} style={{ width: 66 }}>
-            {LOCATION_SNAPS.map((s) => <option key={s} value={s}>{s === 0 ? "off" : s === 32 ? "tile" : `${s} px`}</option>)}
+        <label className="row" style={{ gap: 4 }} title={t("The grid a create, move or resize snaps to")}>
+          <span className="faint" style={{ fontSize: 11 }}>{t("Snap")}</span>
+          <select className="select" aria-label={t("Location snap")} value={snap} onChange={(e) => setSnap(Number(e.target.value))} style={{ width: 66 }}>
+            {LOCATION_SNAPS.map((s) => <option key={s} value={s}>{s === 0 ? "off" : s === 32 ? t("tile") : `${s} px`}</option>)}
           </select>
         </label>
       </div>
@@ -501,10 +502,10 @@ function LocationPalette() {
             className={`loc-row anywhere ${selected.includes(ANYWHERE_INDEX) ? "selected" : ""}`}
             onClick={(e) => pick(ANYWHERE_INDEX, e)}
             onDoubleClick={() => open("locationProperties", { index: ANYWHERE_INDEX })}
-            title="Slot 63 — the 64th location, every trigger's “Anywhere”. Fixed to the map; it cannot be moved, resized or deleted."
+            title={t("Slot 63 — the 64th location, every trigger's “Anywhere”. Fixed to the map; it cannot be moved, resized or deleted.")}
           >
             <span className="n">63</span>
-            <span className="name"><Lock size={10} />{locationName(scenario!, ANYWHERE_INDEX)}{!intact && <span className="badge warn">off map</span>}</span>
+            <span className="name"><Lock size={10} />{locationName(scenario!, ANYWHERE_INDEX)}{!intact && <span className="badge warn">{t("off map")}</span>}</span>
             <span className="coords">{scenario!.width}×{scenario!.height}</span>
           </div>
         )}
@@ -514,16 +515,16 @@ function LocationPalette() {
             className={`loc-row ${selected.includes(l.index) ? "selected" : ""}`}
             onClick={(e) => pick(l.index, e)}
             onDoubleClick={() => open("locationProperties", { index: l.index })}
-            title={`${l.name} — slot ${l.index}${l.elevationFlags ? " · some elevations excluded" : ""}${l.inverted ? " · stored inverted" : ""}`}
+            title={`${l.name} — ${t("slot {n}", { n: l.index })}${l.elevationFlags ? t(" · some elevations excluded") : ""}${l.inverted ? t(" · stored inverted") : ""}`}
           >
             <span className="n">{l.index}</span>
             <span className="name">{l.name}{l.elevationFlags !== 0 && <span className="elev">▲</span>}</span>
             <span className="coords">{fmtTile(l.x)},{fmtTile(l.y)} {fmtTile(l.w)}×{fmtTile(l.h)}</span>
           </div>
         ))}
-        {scenario && locations.length === 0 && <div className="hint" style={{ padding: "10px 8px" }}>No locations yet — drag on empty ground to create one.</div>}
+        {scenario && locations.length === 0 && <div className="hint" style={{ padding: "10px 8px" }}>{t("No locations yet — drag on empty ground to create one.")}</div>}
       </div>
-      <div className="palette-footer"><span>{locations.length} / {capacity} locations</span><span>slot 63 is Anywhere</span></div>
+      <div className="palette-footer"><span>{t("{length} / {capacity} locations", { length: locations.length, capacity })}</span><span>{t("slot 63 is Anywhere")}</span></div>
     </>
   );
 }
@@ -566,15 +567,15 @@ function FogPalette() {
   return (
     <>
       <div className="fog-head">
-        <span className="lbl">Players</span>
-        <span className="faint">{selectedCount === 0 ? "none selected" : selectedCount === FOG_PLAYERS ? "all selected" : `${selectedCount} selected`}</span>
+        <span className="lbl">{t("Players")}</span>
+        <span className="faint">{selectedCount === 0 ? t("none selected") : selectedCount === FOG_PLAYERS ? t("all selected") : t("{selectedCount} selected", { selectedCount })}</span>
         <span className="grow" />
-        <Button size="sm" onClick={() => setPlayers(ALL_FOG_PLAYERS)} disabled={players === ALL_FOG_PLAYERS} title="Select all eight players">All</Button>
-        <Button size="sm" onClick={() => setPlayers(0)} disabled={players === 0} title="Deselect every player">None</Button>
+        <Button size="sm" onClick={() => setPlayers(ALL_FOG_PLAYERS)} disabled={players === ALL_FOG_PLAYERS} title={t("Select all eight players")}>{t("All")}</Button>
+        <Button size="sm" onClick={() => setPlayers(0)} disabled={players === 0} title={t("Deselect every player")}>{t("None")}</Button>
       </div>
-      <div className="owner-strip fog-players" role="group" aria-label="Selected players" title="Click a player to select or deselect them">
+      <div className="owner-strip fog-players" role="group" aria-label={t("Selected players")} title={t("Click a player to select or deselect them")}>
         {selected.map((on, i) => (
-          <Tip key={i} label={`Player ${i + 1} — ${on ? "selected" : "not selected"}`} side="right">
+          <Tip key={i} label={on ? t("Player {n} — selected", { n: i + 1 }) : t("Player {n} — not selected", { n: i + 1 })} side="right">
             <button
               className={`owner-chip ${on ? "is-active" : ""}`}
               style={{ ["--c" as string]: displayColorHex(colors, scenario?.playerRgb, i) }}
@@ -586,62 +587,60 @@ function FogPalette() {
           </Tip>
         ))}
       </div>
-      <div className="hint fog-note">Each player has their own fog. The brush, area fills and the buttons below edit it for the selected players.</div>
+      <div className="hint fog-note">{t("Each player has their own fog. The brush, area fills and the buttons below edit it for the selected players.")}</div>
       <div className="palette-toolbar">
         <BrushSelect />
         <span className="grow" />
-        <span className="seg" role="radiogroup" aria-label="Brush mode">
-          <Button size="sm" active={mode === "fog"} onClick={() => setMode("fog")} title="Left-drag lays fog (tiles start unexplored); Shift-drag clears">Fog</Button>
-          <Button size="sm" active={mode === "clear"} onClick={() => setMode("clear")} title="Left-drag clears fog (tiles start explored); Shift-drag lays it">Clear</Button>
+        <span className="seg" role="radiogroup" aria-label={t("Brush mode")}>
+          <Button size="sm" active={mode === "fog"} onClick={() => setMode("fog")} title={t("Left-drag lays fog (tiles start unexplored); Shift-drag clears")}>{t("Fog")}</Button>
+          <Button size="sm" active={mode === "clear"} onClick={() => setMode("clear")} title={t("Left-drag clears fog (tiles start explored); Shift-drag lays it")}>{t("Clear")}</Button>
         </span>
       </div>
       <div className="palette-toolbar">
-        <span className="lbl">View</span>
-        <select className="select" style={{ width: 84 }} value={view} onChange={(e) => setView(Number(e.target.value))} aria-label="Player whose fog is shown">
-          {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>Player {i + 1}</option>)}
+        <span className="lbl">{t("View")}</span>
+        <select className="select" style={{ width: 84 }} value={view} onChange={(e) => setView(Number(e.target.value))} aria-label={t("Player whose fog is shown")}>
+          {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>{t("Player {v}", { v: i + 1 })}</option>)}
         </select>
         <span className="grow" />
-        <Check label="Show" title="Draw the fog overlay (View ▸ Fog of War)" checked={flags.fog} onChange={(e) => setFlags({ ...flags, fog: e.target.checked })} />
+        <Check label={t("Show")} title={t("Draw the fog overlay (View ▸ Fog of War)")} checked={flags.fog} onChange={(e) => setFlags({ ...flags, fog: e.target.checked })} />
       </div>
       <div className="palette-scroll">
         <div className="fog-actions">
           <fieldset className="group">
-            <legend>Whole map</legend>
+            <legend>{t("Whole map")}</legend>
             <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("fog")} title="Every tile starts unexplored for the selected players">Fog all</Button>
-              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("clear")} title="Every tile starts explored for the selected players">Clear all</Button>
-              <Button size="sm" disabled={!hasMap || players === 0} onClick={tools.invert} title="Swap fogged and explored tiles for the selected players">Invert</Button>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("fog")} title={t("Every tile starts unexplored for the selected players")}>{t("Fog all")}</Button>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={() => tools.setAll("clear")} title={t("Every tile starts explored for the selected players")}>{t("Clear all")}</Button>
+              <Button size="sm" disabled={!hasMap || players === 0} onClick={tools.invert} title={t("Swap fogged and explored tiles for the selected players")}>{t("Invert")}</Button>
             </div>
           </fieldset>
           <fieldset className="group">
-            <legend>Copy fog</legend>
+            <legend>{t("Copy fog")}</legend>
             <div className="row" style={{ gap: 6 }}>
-              <span className="lbl">From</span>
-              <select className="select" style={{ width: 84 }} value={copySource} onChange={(e) => setCopySource(Number(e.target.value))} aria-label="Player to copy fog from">
-                {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>Player {i + 1}</option>)}
+              <span className="lbl">{t("From")}</span>
+              <select className="select" style={{ width: 84 }} value={copySource} onChange={(e) => setCopySource(Number(e.target.value))} aria-label={t("Player to copy fog from")}>
+                {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>{t("Player {v}", { v: i + 1 })}</option>)}
               </select>
             </div>
             <div className="row" style={{ marginTop: 6 }}>
-              <Button size="sm" disabled={!hasMap || copyTargets === 0} onClick={() => tools.copyFrom(copySource)} title="Give every selected player exactly this player's fog">
-                Copy to selected players
+              <Button size="sm" disabled={!hasMap || copyTargets === 0} onClick={() => tools.copyFrom(copySource)} title={t("Give every selected player exactly this player's fog")}>
+                {t("Copy to selected players")}
               </Button>
             </div>
           </fieldset>
         </div>
         <div style={{ padding: "0 8px 8px" }} className="hint">
-          Drag to paint; <b>Shift</b> paints the opposite of the mode, <b>Alt</b>-click selects the players that have
-          fog on a tile. Fogged tiles start the game unexplored and are drawn under the game's own fog darkening;
-          the rest start explored. Right-click for area fills.
+          {t("Drag to paint;")}{" "}<b>{t("Shift")}</b> {" "}{t("paints the opposite of the mode,")}{" "}<b>{t("Alt")}</b>{t("-click selects the players that have fog on a tile. Fogged tiles start the game unexplored and are drawn under the game's own fog darkening; the rest start explored. Right-click for area fills.")}
         </div>
         {hasMap && !scenario.mask && (
           <div style={{ padding: "0 8px 8px" }} className="hint">
-            This map has no <strong>MASK</strong> section, which the game reads as fog everywhere; the first stroke adds one.
+            {t("This map has no")}{" "}<strong>MASK</strong> {" "}{t("section, which the game reads as fog everywhere; the first stroke adds one.")}
           </div>
         )}
       </div>
       <div className="palette-footer">
-        <span>{hasMap ? <>P{view + 1} · {fogged.toLocaleString()} / {total.toLocaleString()} fogged ({pct}%)</> : "No map open"}</span>
-        <span>{mode === "fog" ? "Fog" : "Clear"}</span>
+        <span>{hasMap ? <>P{view + 1} · {fogged.toLocaleString()} / {total.toLocaleString()} fogged ({pct}%)</> : t("No map open")}</span>
+        <span>{mode === "fog" ? t("Fog") : t("Clear")}</span>
       </div>
     </>
   );
@@ -649,7 +648,7 @@ function FogPalette() {
 
 /* ── Clipboard ──────────────────────────────────────────── */
 
-const CLIP_PART_LABELS: Record<ClipPart, string> = { terrain: "Terrain", doodads: "Doodads", units: "Units", sprites: "Sprites", locations: "Locations", fog: "Fog of War" };
+const CLIP_PART_LABELS: Record<ClipPart, string> = { terrain: msg("Terrain"), doodads: msg("Doodads"), units: msg("Units"), sprites: msg("Sprites"), locations: msg("Locations"), fog: msg("Fog of War") };
 
 /**
  * The Cut / Copy / Paste layer (editor/clipboard.ts): the marked area, what a copy takes
@@ -667,45 +666,45 @@ function ClipboardPalette() {
   return (
     <>
       <div className="palette-toolbar">
-        <span className="lbl">Area</span>
+        <span className="lbl">{t("Area")}</span>
         <span className="mono dim" style={{ fontSize: 11 }}>{selection ? `${w} × ${h} at ${selection.x0}, ${selection.y0}` : "— × —"}</span>
       </div>
       <div className="palette-toolbar">
-        <Button size="sm" onClick={() => { tools.cut(); }} disabled={!selection} title="Copy the marked area and remove its objects (Ctrl+X)">Cut</Button>
-        <Button size="sm" onClick={() => { tools.copy(); }} disabled={!selection} title="Copy the marked area (Ctrl+C)">Copy</Button>
-        <Button size="sm" active={pasting} onClick={() => { if (pasting) tools.stopPasting(); else tools.paste(); }} disabled={!clip || !hasMap} title="Stamp the clip where you click (Ctrl+V)">Paste</Button>
+        <Button size="sm" onClick={() => { tools.cut(); }} disabled={!selection} title={t("Copy the marked area and remove its objects (Ctrl+X)")}>{t("Cut")}</Button>
+        <Button size="sm" onClick={() => { tools.copy(); }} disabled={!selection} title={t("Copy the marked area (Ctrl+C)")}>{t("Copy")}</Button>
+        <Button size="sm" active={pasting} onClick={() => { if (pasting) tools.stopPasting(); else tools.paste(); }} disabled={!clip || !hasMap} title={t("Stamp the clip where you click (Ctrl+V)")}>{t("Paste")}</Button>
         <span className="grow" />
-        <Button size="sm" onClick={tools.selectAll} disabled={!hasMap} title="Mark the whole map (Ctrl+A)">All</Button>
-        <Button size="sm" onClick={tools.clearSelection} disabled={!selection} title="Unmark (Esc)">None</Button>
+        <Button size="sm" onClick={tools.selectAll} disabled={!hasMap} title={t("Mark the whole map (Ctrl+A)")}>{t("All")}</Button>
+        <Button size="sm" onClick={tools.clearSelection} disabled={!selection} title={t("Unmark (Esc)")}>{t("None")}</Button>
       </div>
       <div className="palette-scroll" style={{ padding: 8 }}>
         <fieldset className="group">
-          <legend>Include</legend>
+          <legend>{t("Include")}</legend>
           <div className="col" style={{ gap: 2 }}>
             {CLIP_PARTS.map((p) => (
-              <Check key={p} label={CLIP_PART_LABELS[p]} checked={parts[p]} onChange={(e) => setParts({ ...parts, [p]: e.target.checked })} />
+              <Check key={p} label={translate(CLIP_PART_LABELS[p])} checked={parts[p]} onChange={(e) => setParts({ ...parts, [p]: e.target.checked })} />
             ))}
           </div>
           <div className="row" style={{ gap: 4, marginTop: 6 }}>
-            <Button size="sm" onClick={() => setParts(ALL_CLIP_PARTS)} title="Terrain, doodads, units, sprites, locations and fog">Everything</Button>
-            <Button size="sm" onClick={() => setParts(DEFAULT_CLIP_PARTS)} title="The picture and what stands on it; locations and fog left out">Default</Button>
+            <Button size="sm" onClick={() => setParts(ALL_CLIP_PARTS)} title={t("Terrain, doodads, units, sprites, locations and fog")}>{t("Everything")}</Button>
+            <Button size="sm" onClick={() => setParts(DEFAULT_CLIP_PARTS)} title={t("The picture and what stands on it; locations and fog left out")}>{t("Default")}</Button>
           </div>
-          <div className="hint" style={{ marginTop: 6 }}>What a copy takes and a paste lays down. Terrain carries the ground under its doodads, so a paste without them shows plain ground.</div>
+          <div className="hint" style={{ marginTop: 6 }}>{t("What a copy takes and a paste lays down. Terrain carries the ground under its doodads, so a paste without them shows plain ground.")}</div>
         </fieldset>
         <fieldset className="group" style={{ marginTop: 10 }}>
-          <legend>Paste</legend>
+          <legend>{t("Paste")}</legend>
           <div className="col" style={{ gap: 2 }}>
-            <Check radio name="paste" label="Merge with what is there" checked={mode === "merge"} onChange={() => setMode("merge")} />
-            <Check radio name="paste" label="Replace objects in the area" checked={mode === "replace"} onChange={() => setMode("replace")} />
+            <Check radio name="paste" label={t("Merge with what is there")} checked={mode === "merge"} onChange={() => setMode("merge")} />
+            <Check radio name="paste" label={t("Replace objects in the area")} checked={mode === "replace"} onChange={() => setMode("replace")} />
           </div>
-          <div className="hint" style={{ marginTop: 6 }}>Replace clears the units, sprites and doodads under the clip first; locations are always kept. Either way, a doodad the new ground cuts through is removed.</div>
+          <div className="hint" style={{ marginTop: 6 }}>{t("Replace clears the units, sprites and doodads under the clip first; locations are always kept. Either way, a doodad the new ground cuts through is removed.")}</div>
         </fieldset>
         <fieldset className="group" style={{ marginTop: 10 }}>
-          <legend>Clipboard</legend>
-          <div className={clip ? "mono" : "hint"} style={{ fontSize: 11 }}>{clip ? clipSummary(clip) : "Empty — mark an area and press Ctrl+C, or select objects on their own layer and copy them."}</div>
+          <legend>{t("Clipboard")}</legend>
+          <div className={clip ? "mono" : "hint"} style={{ fontSize: 11 }}>{clip ? clipSummary(clip) : t("Empty — mark an area and press Ctrl+C, or select objects on their own layer and copy them.")}</div>
         </fieldset>
       </div>
-      <div className="palette-footer"><span>{pasting ? "Click on the map to stamp the clip · Esc stops" : "Drag on the map to mark an area · Ctrl+X / Ctrl+C / Ctrl+V"}</span></div>
+      <div className="palette-footer"><span>{pasting ? t("Click on the map to stamp the clip · Esc stops") : t("Drag on the map to mark an area · Ctrl+X / Ctrl+C / Ctrl+V")}</span></div>
     </>
   );
 }
@@ -726,11 +725,11 @@ export default function PalettePanel() {
 
   return (
     <div className="palette">
-      <div className="layer-rail" role="tablist" aria-label="Layers">
+      <div className="layer-rail" role="tablist" aria-label={t("Layers")}>
         {RAIL.map((r, i) => (
           <span key={r.id} style={{ display: "contents" }}>
             {i === 6 && <span className="rail-sep" />}
-            <Tip label={r.label} shortcut={r.key} side="right">
+            <Tip label={translate(r.label)} shortcut={r.key} side="right">
               <button className={`rail-btn ${layer === r.id ? "is-active" : ""}`} onClick={() => setLayer(r.id)} role="tab" aria-selected={layer === r.id}>
                 <r.icon size={16} />
               </button>

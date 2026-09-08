@@ -6,6 +6,7 @@ import type { LoadedDocument } from "../atoms/documentAtoms";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, type MapFormat, type SaveOptions } from "../editor/save";
 
 export type { MapFormat } from "../editor/save";
+import { t, msg } from "../i18n";
 
 export const MAP_FILE_ACCEPT = ".scm,.scx,.chk";
 
@@ -36,7 +37,7 @@ export async function openMapFile(file: File, handle: MapFileHandle | null = nul
     : { extras: new Map<string, Uint8Array>(), stored: null };
   if (stored) {
     const n = stored.members.length - stored.unreadable.length;
-    if (n > 0) scenario.warnings.push(`${n} archive member${n === 1 ? " has" : "s have"} no name the editor knows${loaded.files ? "" : " (the archive has no file list)"}; ${n === 1 ? "it is" : "they are"} kept in a saved copy exactly as stored.`);
+    if (n > 0) scenario.warnings.push(t("{n, plural, one {# archive member has no name the editor knows{list}; it is} other {# archive members have no name the editor knows{list}; they are}} kept in a saved copy exactly as stored.", { n, list: loaded.files ? "" : t(" (the archive has no file list)") }));
   }
   return { scenario, extras, stored, fileName: file.name, handle, origin: loaded.scenarioInfo };
 }
@@ -61,7 +62,7 @@ export interface PickedMapFile {
   handle: MapFileHandle | null;
 }
 
-const MAP_TYPES = [{ description: "StarCraft scenario", accept: { "application/octet-stream": [".scm", ".scx", ".chk"] } }];
+const MAP_TYPES = [{ description: msg("StarCraft scenario"), accept: { "application/octet-stream": [".scm", ".scx", ".chk"] } }];
 /** Lets the browser remember the directory between the open and save pickers. */
 const PICKER_ID = "scmjs-maps";
 
@@ -187,7 +188,7 @@ async function writeThrough(handle: MapFileHandle, blob: Blob): Promise<boolean>
 function pickerTypes(fileName: string) {
   const ext = fileName.split(".").pop()?.toLowerCase();
   if (ext === "scm" || ext === "scx" || ext === "chk") return MAP_TYPES;
-  if (ext === "png") return [{ description: "PNG image", accept: { "image/png": [".png"] } }];
+  if (ext === "png") return [{ description: t("PNG image"), accept: { "image/png": [".png"] } }];
   return undefined;
 }
 

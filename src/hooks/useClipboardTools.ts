@@ -12,6 +12,7 @@ import {
 import type { Rect } from "../editor/terrain";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
+import { t } from "../i18n";
 
 /** What Cut / Copy act on: the rectangle marked on the clipboard layer, or an object layer's selection. */
 export type ClipSource = { kind: "region"; rect: Rect } | { kind: "objects"; sel: ObjectSelection };
@@ -76,11 +77,11 @@ export function useClipboardTools() {
     const src = source();
     const clip = src && take(src);
     if (!clip) {
-      setStatus(store.get(scenarioAtom) ? "Nothing to copy — mark an area on the Cut / Copy / Paste layer, or select objects on their layer" : "No map open");
+      setStatus(store.get(scenarioAtom) ? t("Nothing to copy — mark an area on the Cut / Copy / Paste layer, or select objects on their layer") : t("No map open"));
       return false;
     }
     setClip(clip);
-    setStatus(`Copied ${clipSummary(clip)}`);
+    setStatus(t("Copied {clipSummary}", { clipSummary: clipSummary(clip) }));
     return true;
   }, [store, source, take, setClip, setStatus]);
 
@@ -107,12 +108,12 @@ export function useClipboardTools() {
     const src = source();
     const clip = src && take(src);
     if (!src || !clip) {
-      setStatus(store.get(scenarioAtom) ? "Nothing to cut — mark an area on the Cut / Copy / Paste layer, or select objects on their layer" : "No map open");
+      setStatus(store.get(scenarioAtom) ? t("Nothing to cut — mark an area on the Cut / Copy / Paste layer, or select objects on their layer") : t("No map open"));
       return false;
     }
     setClip(clip);
     const n = remove(src, "Cut");
-    setStatus(`Cut ${clipSummary(clip)}${n === 0 ? " — copied; terrain and fog stay on the map" : ""}`);
+    setStatus(t("Cut {what}", { what: clipSummary(clip) }) + (n === 0 ? t(" — copied; terrain and fog stay on the map") : ""));
     return true;
   }, [store, source, take, remove, setClip, setStatus]);
 
@@ -120,26 +121,26 @@ export function useClipboardTools() {
   const deleteRegion = useCallback((): number => {
     const rect = store.get(clipSelectionAtom);
     if (!rect) return 0;
-    const n = remove({ kind: "region", rect }, "Delete");
-    setStatus(n > 0 ? `Deleted ${plural(n, "object")} in the marked area` : "No objects in the marked area (terrain and fog are not deleted)");
+    const n = remove({ kind: "region", rect }, t("Delete"));
+    setStatus(n > 0 ? t("Deleted {plural} in the marked area", { plural: plural(n, "object") }) : t("No objects in the marked area (terrain and fog are not deleted)"));
     return n;
   }, [store, remove, setStatus]);
 
   /** Arm pasting: the clipboard layer shows the clip under the pointer until a click stamps it. */
   const paste = useCallback((): boolean => {
     const clip = store.get(clipboardAtom);
-    if (!store.get(scenarioAtom)) { setStatus("No map open"); return false; }
-    if (!clip) { setStatus("Nothing to paste — copy something first"); return false; }
+    if (!store.get(scenarioAtom)) { setStatus(t("No map open")); return false; }
+    if (!clip) { setStatus(t("Nothing to paste — copy something first")); return false; }
     if (store.get(activeLayerAtom) !== "clipboard") setLayer("clipboard");
     setPasting(true);
-    setStatus(`Pasting ${clipSummary(clip)} — click where its top-left corner goes; Esc or right-click to stop`);
+    setStatus(t("Pasting {clipSummary} — click where its top-left corner goes; Esc or right-click to stop", { clipSummary: clipSummary(clip) }));
     return true;
   }, [store, setLayer, setPasting, setStatus]);
 
   const stopPasting = useCallback((): boolean => {
     if (!store.get(clipPastingAtom)) return false;
     setPasting(false);
-    setStatus("Stopped pasting — drag on the map to mark an area");
+    setStatus(t("Stopped pasting — drag on the map to mark an area"));
     return true;
   }, [store, setPasting, setStatus]);
 
@@ -153,18 +154,18 @@ export function useClipboardTools() {
     const c = result.counts;
     const placed = c.tiles + c.doodads + c.units + c.sprites + c.locations + c.fog;
     if (placed === 0 && c.removed === 0) {
-      setStatus(`Nothing pasted${result.notes.length ? ` — ${result.notes.join("; ")}` : ""}`);
+      setStatus(t("Nothing pasted") + (result.notes.length ? ` — ${result.notes.join("; ")}` : ""));
       return false;
     }
     clearObjectSelections();
-    commit({ label: `Paste ${clipSummary(clip)}`, ...result.edit });
+    commit({ label: t("Paste {clipSummary}", { clipSummary: clipSummary(clip) }), ...result.edit });
     setSelection({ x0: Math.max(0, tx), y0: Math.max(0, ty), x1: Math.min(scn.width, tx + clip.width), y1: Math.min(scn.height, ty + clip.height) });
     const bits = [
       c.tiles > 0 ? plural(c.tiles, "tile") : null, c.doodads > 0 ? plural(c.doodads, "doodad") : null, c.units > 0 ? plural(c.units, "unit") : null,
       c.sprites > 0 ? plural(c.sprites, "sprite") : null, c.locations > 0 ? plural(c.locations, "location") : null, c.fog > 0 ? "fog" : null,
       c.removed > 0 ? `${plural(c.removed, "object")} removed` : null,
     ].filter((b): b is string => b !== null);
-    setStatus(`Pasted ${bits.join(", ")} at ${tx}, ${ty}${result.notes.length ? ` — ${result.notes.join("; ")}` : ""} · Esc to stop pasting`);
+    setStatus(t("Pasted {what} at {x}, {y}", { what: bits.join(", "), x: tx, y: ty }) + (result.notes.length ? ` — ${result.notes.join("; ")}` : "") + t(" · Esc to stop pasting"));
     return true;
   }, [store, graphics, commit, clearObjectSelections, setSelection, setStatus]);
 
@@ -173,7 +174,7 @@ export function useClipboardTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     setSelection({ x0: 0, y0: 0, x1: scn.width, y1: scn.height });
-    setStatus(`Marked the whole map — ${scn.width}×${scn.height} tiles`);
+    setStatus(t("Marked the whole map — {width}×{height} tiles", { width: scn.width, height: scn.height }));
   }, [store, setSelection, setStatus]);
 
   const clearSelection = useCallback(() => setSelection(null), [setSelection]);

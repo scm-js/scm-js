@@ -1540,7 +1540,8 @@ F1 lists every shortcut. The ones worth knowing up front:
 ![Preferences](docs/images/preferences.webp)
 
 Preferences (Ctrl+,) are kept in the browser: the editor's language (English or Korean;
-the default follows the browser's, and a map's own text is untouched by it), the splash
+the default follows the browser's, a change applies at once, and a map's own text is
+untouched by it), the splash
 screen, whether to ask before
 replacing a modified map (the same tick decides whether closing the tab or quitting the
 desktop app asks about unsaved changes), the tileset and size a new map starts with,
@@ -1650,7 +1651,7 @@ you expected, and a copied log.
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
 | Text encodings | The encoding is guessed on open and chosen in Scenario ▸ Map Revision: UTF-8, Korean (EUC-KR / CP949), Japanese (Shift_JIS), Chinese (GBK, Big5), Cyrillic and Western Windows code pages. Written back in the same encoding on save. |
-| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the menus, toolbar, status bar, layers panel, dialog buttons and the Map Revision dialog so far; the other dialogs and panels are English until translated (see [docs/development.md](docs/development.md#translations)). |
+| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the whole editor: menus, panels, every dialog, status messages, Check Map's findings, and the game's own vocabulary (unit, upgrade, technology, tileset and terrain names) as the editor shows it. The Korean was written by the editor's author with a dictionary, not by a native speaker, and reads like it; a review is invited (see [docs/development.md](docs/development.md#translations)). A map's own text, the text trigger format and the plugin API keep English names. |
 | Switch names | Yes |
 | Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
 

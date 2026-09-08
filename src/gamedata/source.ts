@@ -29,6 +29,7 @@ import { desktopBridge, type DesktopBridge } from "./desktop";
 import { hostTerms } from "../editor/platform";
 import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfile } from "./profiles";
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
+import { t } from "../i18n";
 
 export type SourceKind = "bundled" | "stored" | "none";
 
@@ -84,7 +85,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
   }
 
   // 1. This build's own files.
-  if (await bundled()) return { kind: "bundled", profile, base: deps.bundledBase, label: "Bundled with this build", tried };
+  if (await bundled()) return { kind: "bundled", profile, base: deps.bundledBase, label: t("Bundled with this build"), tried };
   tried.push("Nothing bundled with this build");
 
   // 2. A copy an earlier install left here.
@@ -100,7 +101,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
     const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, label));
     try {
       const found = await deps.desktop.gameData.locate();
-      if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: `Extracted from ${found.from}`, tried, desktop: true };
+      if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: t("Extracted from {from}", { from: found.from }), tried, desktop: true };
       tried.push(found.status === "missing" ? `No StarCraft archives in ${found.searched.length} places on this computer` : `Extraction failed: ${found.message}`);
     } catch (err) {
       tried.push(`Desktop search failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -109,7 +110,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
     }
   }
 
-  return { kind: "none", profile, label: "No game data", tried };
+  return { kind: "none", profile, label: t("No game data"), tried };
 }
 
 /** `install.ts`'s progress shape, repeated so this module does not import it. */

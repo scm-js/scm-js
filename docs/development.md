@@ -678,14 +678,27 @@ its look and Hangul falls through to a face that has it.
 `t` and `tc` over them, `language`, and the `"language"` event — and can run the same
 extractor over their own source; see [docs/plugins.md](plugins.md#apii18n).
 
-**What is translated so far.** The menu bar, toolbar, status bar, tab strip, layers
-panel, every dialog's OK / Cancel / Apply, and the Map Revision dialog with the messages
-about text encodings. A menu label is an item's identity as well as its text — plugins
-place items by the English label — so the menu model keeps the English and translates
-as it draws (`msg()` on the label, `translate()` in the renderer), which is the pattern
-for any table of named things. The dialogs and panels beyond those are still plain
-English literals and show in English whatever the language; moving one over is wrapping
-its strings in `t()`, running `npm run i18n -- --write` and filling in the Korean.
+**Tables of named things.** A menu label is an item's identity as well as its text —
+plugins place items by the English label — so the menu model keeps the English and
+translates as it draws: `msg()` on the label where the table is written, `translate()`
+where it is shown. The same holds for every table the editor keeps: the layer names,
+the unit, upgrade and technology names (`unitLabel` is the translated `unitName`; the
+English name stays the vocabulary of the text trigger format and the plugin API), the
+tileset and terrain names, the player colours, the trigger editor's choices, the
+section descriptions in the Save dialog. The `Select` control translates its option
+labels itself, so a table handed to it needs nothing more. A string that is not a
+literal at the point of use must never go through `t()` — the extractor cannot see it
+and the catalogue would drift — and a `t()` at module scope runs before the language
+is known, so a module-level table uses `msg()` and is translated where it is read.
+
+**Reviewing the Korean.** `npm run i18n -- --export ko ko.csv` writes the catalogue as
+a spreadsheet: the English, the Korean, and the source files each string appears in, so
+a term can be checked in context. A reviewer edits the Translation column; `npm run
+i18n -- --import ko ko.csv` reads it back, matching rows by their English. The whole
+editor is translated, but by its author with a dictionary rather than by a native
+speaker: the vocabulary follows the Korean StarCraft community's transliterations
+(마린, 저글링, 질럿; 장식물 for doodads, 로케이션 for locations, 세력 for forces), and
+every sentence would benefit from a native reader.
 
 ## Contributing
 

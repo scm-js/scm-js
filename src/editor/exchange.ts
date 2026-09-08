@@ -17,6 +17,7 @@ import { setString, type StringTable } from "../formats/chk/sections/strings";
 import { decodeTriggers, encodeTriggers, TRIGGER_STRIDE, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { formatTriggers, parseTriggers } from "../formats/triggers/text";
 import { triggerNames } from "./triggers";
+import { t } from "../i18n";
 
 /* ── Triggers ────────────────────────────────────────────── */
 
@@ -110,9 +111,9 @@ export function parseStringTable(text: string): StringImport {
     const line = raw.replace(/^﻿/, "");
     if (line.trim() === "" || line.startsWith("#") || line.startsWith("//")) return;
     const m = /^(\d+)\t(.*)$/.exec(line);
-    if (!m) { errors.push({ line: i + 1, message: "expected <index><TAB><text>" }); return; }
+    if (!m) { errors.push({ line: i + 1, message: t("expected <index><TAB><text>") }); return; }
     const index = Number(m[1]);
-    if (index < 1 || index > 0xffff) { errors.push({ line: i + 1, message: `string index ${index} is out of range (1–65535)` }); return; }
+    if (index < 1 || index > 0xffff) { errors.push({ line: i + 1, message: t("string index {index} is out of range (1–65535)", { index }) }); return; }
     entries.push({ index, text: unescapeStringText(m[2]) });
   });
   return { entries, errors };

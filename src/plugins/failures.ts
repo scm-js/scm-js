@@ -17,6 +17,7 @@
  */
 import type { Toast } from "../editor/view";
 import type { CachedManifest, PluginInstall, PluginRuntime } from "../atoms/pluginAtoms";
+import { t } from "../i18n";
 
 export interface PluginFailure {
   spec: string;
@@ -95,6 +96,6 @@ export function failureToast(failures: readonly PluginFailure[], openPlugins: ()
     title,
     detail: `${plural ? `${failures[0].name}: ` : ""}${sentence(failures[0].error)}${where} Everything else in the editor works.`,
     ttl: 0,
-    action: { label: "Plugins…", run: openPlugins },
+    action: { label: t("Plugins…"), run: openPlugins },
   };
 }

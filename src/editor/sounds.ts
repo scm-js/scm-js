@@ -11,6 +11,7 @@ import { actionStrings } from "./triggers";
 import type { TriggerRecord } from "../formats/chk/sections/triggers";
 import { internString } from "./settings";
 import { MANIFEST_MEMBER, SCRIPT_MEMBER } from "./save";
+import { t } from "../i18n";
 
 export type Extras = ReadonlyMap<string, Uint8Array>;
 
@@ -54,8 +55,8 @@ export function wavUsage(scn: Scenario, stringIndex: number): string[] {
       for (const a of t.actions) for (const s of actionStrings(a, briefing)) if (s.kind === "wav" && s.index === stringIndex) out.push(`${noun} ${i + 1}: ${s.action}`);
     });
   };
-  scan("Trigger", scn.triggers, false);
-  scan("Briefing", scn.briefing, true);
+  scan(t("Trigger"), scn.triggers, false);
+  scan(t("Briefing"), scn.briefing, true);
   return out;
 }
 

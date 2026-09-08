@@ -14,8 +14,9 @@ import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { Button, Field, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t, translate } from "../../i18n";
 
-const na = (v: number | null) => (v === null ? <span className="faint">n/a</span> : v);
+const na = (v: number | null) => (v === null ? <span className="faint">{t("n/a")}</span> : v);
 
 /** Tools ▸ Statistics: the map's contents counted up, read-only. */
 export function StatisticsDialog({ entry }: DialogProps) {
@@ -33,7 +34,7 @@ export function StatisticsDialog({ entry }: DialogProps) {
   }, [scenario, tileset, assets, info, ...revisions]);
 
   if (!scenario || !stats) {
-    return <DialogFrame dialogKey={entry.key} title="Statistics" icon={<BarChart3 size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+    return <DialogFrame dialogKey={entry.key} title={t("Statistics")} icon={<BarChart3 size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
   const copy = async () => {
@@ -50,42 +51,42 @@ export function StatisticsDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Statistics"
+      title={t("Statistics")}
       icon={<BarChart3 size={14} />}
       size="lg"
       tall
-      footer={<><Button onClick={() => { void copy(); }}><Copy size={12} /> {copied ? "Copied" : "Copy as text"}</Button><Button variant="primary" onClick={() => close(entry.key)}>Close</Button></>}
-      footerLeft={<span className="hint">{s.width} × {s.height} {s.tileset} · {s.revision} · {s.sections} sections</span>}
+      footer={<><Button onClick={() => { void copy(); }}><Copy size={12} /> {copied ? t("Copied") : t("Copy as text")}</Button><Button variant="primary" onClick={() => close(entry.key)}>{t("Close")}</Button></>}
+      footerLeft={<span className="hint">{t("{width} × {height}  {tileset} · {revision} · {sections} sections", { width: s.width, height: s.height, tileset: s.tileset, revision: s.revision, sections: s.sections })}</span>}
     >
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <div className="stack">
-          <Group title="Objects">
+          <Group title={t("Objects")}>
             <div className="form">
-              <Field label="Units"><span className="mono">{s.units.total}{s.units.buildings !== null && <span className="faint"> · {s.units.buildings} buildings, {s.units.total - s.units.buildings} mobile</span>}{s.unownedUnits > 0 && <span className="faint"> · {s.unownedUnits} owned past player 12</span>}</span></Field>
-              <Field label="Resources"><span className="mono">{s.resources.minerals.toLocaleString()} minerals <span className="faint">({s.resources.fields} fields)</span> · {s.resources.gas.toLocaleString()} gas <span className="faint">({s.resources.geysers} geysers)</span></span></Field>
-              <Field label="Doodads"><span className="mono">{s.doodads}</span></Field>
-              <Field label="Sprites"><span className="mono">{s.sprites.pure + s.sprites.unit} <span className="faint">· {s.sprites.pure} pure, {s.sprites.unit} unit</span></span></Field>
-              <Field label="Locations"><span className="mono">{s.locations} <span className="faint">+ Anywhere</span></span></Field>
-              <Field label="Triggers"><span className="mono">{s.triggers.count} <span className="faint">· {s.triggers.conditions} conditions, {s.triggers.actions} actions, {s.triggers.preserved} preserved, {s.triggers.disabled} disabled</span></span></Field>
-              <Field label="Briefing"><span className="mono">{s.briefings.count} <span className="faint">· {s.briefings.actions} actions</span></span></Field>
-              <Field label="Strings"><span className="mono">{s.strings.set} <span className="faint">of {s.strings.slots} slots ({s.strings.extended ? "STRx" : "STR"})</span></span></Field>
-              <Field label="Switches"><span className="mono">{s.switchesNamed} <span className="faint">named</span></span></Field>
-              <Field label="Sounds"><span className="mono">{s.sounds} <span className="faint">in the WAV table</span></span></Field>
+              <Field label={t("Units")}><span className="mono">{s.units.total}{s.units.buildings !== null && <span className="faint"> · {t("{b} buildings, {m} mobile", { b: s.units.buildings, m: s.units.total - s.units.buildings })}</span>}{s.unownedUnits > 0 && <span className="faint"> · {t("{n} owned past player 12", { n: s.unownedUnits })}</span>}</span></Field>
+              <Field label={t("Resources")}><span className="mono">{t("{toLocaleString} minerals", { toLocaleString: s.resources.minerals.toLocaleString() })}{" "}<span className="faint">({s.resources.fields} fields)</span> · {s.resources.gas.toLocaleString()} gas <span className="faint">({s.resources.geysers} geysers)</span></span></Field>
+              <Field label={t("Doodads")}><span className="mono">{s.doodads}</span></Field>
+              <Field label={t("Sprites")}><span className="mono">{s.sprites.pure + s.sprites.unit} <span className="faint">· {s.sprites.pure} pure, {s.sprites.unit} unit</span></span></Field>
+              <Field label={t("Locations")}><span className="mono">{s.locations} <span className="faint">+ Anywhere</span></span></Field>
+              <Field label={t("Triggers")}><span className="mono">{s.triggers.count} <span className="faint">· {s.triggers.conditions} conditions, {s.triggers.actions} actions, {s.triggers.preserved} preserved, {s.triggers.disabled} disabled</span></span></Field>
+              <Field label={t("Briefing")}><span className="mono">{s.briefings.count} <span className="faint">· {s.briefings.actions} actions</span></span></Field>
+              <Field label={t("Strings")}><span className="mono">{s.strings.set} <span className="faint">of {s.strings.slots} slots ({s.strings.extended ? "STRx" : "STR"})</span></span></Field>
+              <Field label={t("Switches")}><span className="mono">{s.switchesNamed} <span className="faint">named</span></span></Field>
+              <Field label={t("Sounds")}><span className="mono">{s.sounds} <span className="faint">{t("in the WAV table")}</span></span></Field>
             </div>
           </Group>
-          <Group title="Most placed unit types" flush>
+          <Group title={t("Most placed unit types")} flush>
             <table className="table dense">
               <tbody>
-                {s.units.top.map((t) => <tr key={t.id}><td className="num" style={{ width: 60 }}>{t.count}</td><td>{t.name} <span className="faint">#{t.id}</span></td></tr>)}
-                {s.units.top.length === 0 && <tr><td className="hint">No units on the map.</td></tr>}
+                {s.units.top.map((t) => <tr key={t.id}><td className="num" style={{ width: 60 }}>{t.count}</td><td>{translate(t.name)} <span className="faint">#{t.id}</span></td></tr>)}
+                {s.units.top.length === 0 && <tr><td className="hint">{t("No units on the map.")}</td></tr>}
               </tbody>
             </table>
           </Group>
         </div>
         <div className="stack">
-          <Group title="Players" flush>
+          <Group title={t("Players")} flush>
             <table className="table dense" style={{ width: "100%", tableLayout: "fixed" }}>
-              <thead><tr><th style={{ width: 44 }}>#</th><th>Type</th><th>Race</th><th style={{ width: 44 }} title="Units">Units</th><th style={{ width: 44 }} title="Buildings">Bldg</th><th style={{ width: 44 }} title="Start locations">Start</th></tr></thead>
+              <thead><tr><th style={{ width: 44 }}>#</th><th>{t("Type")}</th><th>{t("Race")}</th><th style={{ width: 44 }} title={t("Units")}>{t("Units")}</th><th style={{ width: 44 }} title={t("Buildings")}>{t("Bldg")}</th><th style={{ width: 44 }} title={t("Start locations")}>{t("Start")}</th></tr></thead>
               <tbody>
                 {s.players.map((p) => (
                   <tr key={p.slot} className={p.type === "Inactive" && p.units === 0 ? "faint" : ""}>
@@ -98,15 +99,15 @@ export function StatisticsDialog({ entry }: DialogProps) {
               </tbody>
             </table>
           </Group>
-          <Group title="Terrain" flush>
+          <Group title={t("Terrain")} flush>
             {s.terrain ? (
               <table className="table dense">
                 <tbody>
-                  {s.terrain.slice(0, 10).map((t) => <tr key={t.name}><td className="num" style={{ width: 70 }}>{t.tiles}</td><td>{t.name} <span className="faint">{Math.round((t.tiles / (s.width * s.height)) * 100)}%</span></td></tr>)}
-                  {s.terrain.length > 10 && <tr><td className="num">{s.terrain.slice(10).reduce((n, t) => n + t.tiles, 0)}</td><td className="faint">{s.terrain.length - 10} other types</td></tr>}
+                  {s.terrain.slice(0, 10).map((t) => <tr key={t.name}><td className="num" style={{ width: 70 }}>{t.tiles}</td><td>{translate(t.name)} <span className="faint">{Math.round((t.tiles / (s.width * s.height)) * 100)}%</span></td></tr>)}
+                  {s.terrain.length > 10 && <tr><td className="num">{s.terrain.slice(10).reduce((n, t) => n + t.tiles, 0)}</td><td className="faint">{t("{v} other types", { v: s.terrain.length - 10 })}</td></tr>}
                 </tbody>
               </table>
-            ) : <p className="hint" style={{ padding: 8 }}>Terrain by type needs the tileset graphics (Help ▸ Game Data…).</p>}
+            ) : <p className="hint" style={{ padding: 8 }}>{t("Terrain by type needs the tileset graphics (Help ▸ Game Data…).")}</p>}
           </Group>
         </div>
       </div>

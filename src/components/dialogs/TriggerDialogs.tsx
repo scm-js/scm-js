@@ -19,7 +19,7 @@ import {
   ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
 } from "../../data/triggerDefs";
-import { UNIT_NAMES, unitName } from "../../data/units";
+import { UNIT_NAMES, unitLabel } from "../../data/units";
 import type { Scenario } from "../../formats/chk/scenario";
 import {
   ActionFlag, ConditionFlag, ConditionType, MAX_ACTIONS, MAX_CONDITIONS, PlayerGroup, SWITCH_COUNT, cloneTrigger,
@@ -39,6 +39,7 @@ import { ColorTextField } from "../ui/ColorCodes";
 import { escapeControls } from "../../editor/strings";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
+import { t } from "../../i18n";
 
 /* ── Shared ─────────────────────────────────────────────── */
 
@@ -54,7 +55,7 @@ function useNames(scenario: Scenario | null): TriggerNames | null {
 function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: ReactNode }) {
   return (
     <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
-      <p className="hint">Open or create a map first.</p>
+      <p className="hint">{t("Open or create a map first.")}</p>
     </DialogFrame>
   );
 }
@@ -79,7 +80,7 @@ interface ArgProps {
 /** A select whose current value is kept selectable even when the table does not list it. */
 function ChoiceSelect({ value, onChange, options, width }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; width?: number }) {
   const opts = options.map((o) => ({ value: String(o.value), label: o.label }));
-  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: `${value} (raw)` });
+  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: t("{value} (raw)", { value }) });
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
 }
 
@@ -108,12 +109,12 @@ function PlayerArg({ value, onChange }: { value: number; onChange: (v: number) =
   return (
     <span className="row" style={{ gap: 6 }}>
       <ChoiceSelect value={value} onChange={onChange} options={PLAYER_GROUP_CHOICES} width={200} />
-      <Button size="sm" onClick={() => { setEditing(!editing); setText(raw ? addressOfEpd(value).toString(16).toUpperCase() : ""); }} title={raw ? `EUD: this player value reads memory at 0x${addressOfEpd(value).toString(16).toUpperCase()} through the deaths table` : "EUD: set the player to the value that reaches a memory address through the deaths table (Deaths and Set Deaths only)"}>EPD…</Button>
+      <Button size="sm" onClick={() => { setEditing(!editing); setText(raw ? addressOfEpd(value).toString(16).toUpperCase() : ""); }} title={raw ? t("EUD: this player value reads memory at 0x{toUpperCase} through the deaths table", { toUpperCase: addressOfEpd(value).toString(16).toUpperCase() }) : t("EUD: set the player to the value that reaches a memory address through the deaths table (Deaths and Set Deaths only)")}>{t("EPD…")}</Button>
       {editing && (
         <span className="row" style={{ gap: 4 }}>
           <TextInput className="mono" style={{ width: 110 }} placeholder="58A364" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && parsed !== null) { onChange(epdOf(parsed)); setEditing(false); } }} />
-          <Button size="sm" disabled={parsed === null} onClick={() => { onChange(epdOf(parsed!)); setEditing(false); }}>Set</Button>
-          <span className="hint">{parsed === null ? "hex address" : `player ${epdOf(parsed)}`}</span>
+          <Button size="sm" disabled={parsed === null} onClick={() => { onChange(epdOf(parsed!)); setEditing(false); }}>{t("Set")}</Button>
+          <span className="hint">{parsed === null ? t("hex address") : t("player {epdOf}", { epdOf: epdOf(parsed) })}</span>
         </span>
       )}
     </span>
@@ -125,11 +126,11 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
   switch (kind) {
     case "cuwp": {
       // The action stores the slot 1-based; 0 is what StarEdit writes for "no slot yet".
-      const options = [{ value: 0, label: "No slot" }, ...Array.from({ length: CUWP_SLOTS }, (_, i) => ({ value: i + 1, label: cuwpSlotLabel(i, scenario.cuwp?.[i], scenario.cuwpUsed?.[i]) }))];
+      const options = [{ value: 0, label: t("No slot") }, ...Array.from({ length: CUWP_SLOTS }, (_, i) => ({ value: i + 1, label: cuwpSlotLabel(i, scenario.cuwp?.[i], scenario.cuwpUsed?.[i]) }))];
       return (
         <span className="row" style={{ gap: 6 }}>
           <ChoiceSelect value={value} onChange={onChange} options={options} width={300} />
-          <Button size="sm" onClick={() => open("cuwpEditor", { slot: value > 0 ? value : 1 })} title="Edit the slots (Triggers ▸ Unit Properties Slots…)">Edit…</Button>
+          <Button size="sm" onClick={() => open("cuwpEditor", { slot: value > 0 ? value : 1 })} title={t("Edit the slots (Triggers ▸ Unit Properties Slots…)")}>{t("Edit…")}</Button>
         </span>
       );
     }
@@ -140,19 +141,19 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
         ...UNIT_CLASS_CHOICES,
         // An `<option>` cannot carry the colours, so a custom name's codes show escaped
         // rather than as the raw bytes the browser draws as tofu.
-        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitName(id)) })),
+        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitLabel(id)) })),
       ];
       return <ChoiceSelect value={value} onChange={onChange} options={options} width={260} />;
     }
     case "location": {
-      const options = [{ value: 0, label: "No Location" }, ...usedLocations(scenario).map((i) => ({ value: i + 1, label: names.location(i + 1) }))];
+      const options = [{ value: 0, label: t("No Location") }, ...usedLocations(scenario).map((i) => ({ value: i + 1, label: names.location(i + 1) }))];
       return <ChoiceSelect value={value} onChange={onChange} options={options} width={200} />;
     }
     case "switch":
       return <ChoiceSelect value={value} onChange={onChange} options={Array.from({ length: SWITCH_COUNT }, (_, i) => ({ value: i, label: names.switch(i) }))} width={200} />;
     case "aiScript": {
       const options = AI_SCRIPT_CHOICES.map((s) => ({ value: aiScriptCode(s.id), label: s.name }));
-      if (!options.some((o) => o.value === value)) options.push({ value, label: `${aiScriptId(value)} (raw)` });
+      if (!options.some((o) => o.value === value)) options.push({ value, label: t("{aiScriptId} (raw)", { aiScriptId: aiScriptId(value) }) });
       return <ChoiceSelect value={value} onChange={onChange} options={options} width={280} />;
     }
     // Display text and the like are drawn by the game, so they take the colour codes; a
@@ -162,7 +163,7 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
         <ColorTextField
           wrapStyle={{ width: 360 }}
           value={names.string(value) ?? ""}
-          placeholder="Text"
+          placeholder={t("Text")}
           onChange={(v) => onChange(names.intern(v))}
         />
       );
@@ -171,12 +172,12 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
         <TextInput
           style={{ width: 360 }}
           value={names.string(value) ?? ""}
-          placeholder="sound\\file.wav"
+          placeholder={t("sound\\\\file.wav")}
           onChange={(e) => onChange(names.intern(e.target.value))}
         />
       );
     case "textFlags":
-      return <Check label="Always display" checked={(value & ActionFlag.AlwaysDisplay) !== 0} onChange={(e) => onChange(e.target.checked ? ActionFlag.AlwaysDisplay : 0)} />;
+      return <Check label={t("Always display")} checked={(value & ActionFlag.AlwaysDisplay) !== 0} onChange={(e) => onChange(e.target.checked ? ActionFlag.AlwaysDisplay : 0)} />;
     case "count":
       return (
         <span className="row" style={{ gap: 6 }}>
@@ -201,7 +202,7 @@ function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onC
   names: TriggerNames;
   scenario: Scenario;
 }) {
-  if (!def) return <p className="hint">Unknown type {record.type}; edit it through the text editor.</p>;
+  if (!def) return <p className="hint">{t("Unknown type {type}; edit it through the text editor.", { type: record.type })}</p>;
   const r = record as unknown as Record<string, number>;
   const set = (arg: ArgDef<string>, v: number) => {
     const next = { ...record } as unknown as Record<string, number>;
@@ -211,7 +212,7 @@ function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onC
   };
   return (
     <div className="trig-args">
-      {def.args.length === 0 && <span className="hint">No arguments.</span>}
+      {def.args.length === 0 && <span className="hint">{t("No arguments.")}</span>}
       {def.args.map((arg, i) => (
         <label key={i} className="trig-arg">
           <span className="lbl">{arg.label}</span>
@@ -276,7 +277,7 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
         items={items}
         selected={sel}
         onSelect={setSel}
-        empty={`No ${kind}s. ${kind === "condition" ? "A trigger with no conditions never fires." : ""}`}
+        empty={kind === "condition" ? t("No conditions. A trigger with no conditions never fires.") : t("No actions.")}
         render={(r) => {
           const text = line(r);
           const m = /^;?([^(]+)\((.*)\);$/.exec(text);
@@ -291,12 +292,12 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
       />
       <div className="row" style={{ gap: 4 }}>
         <Select style={{ width: 240 }} value={String(addType)} onChange={(e) => setAddType(Number(e.target.value))} options={defs.map((d) => ({ value: String(d.type), label: d.name }))} />
-        <Button size="sm" onClick={add} disabled={items.length >= max} title={items.length >= max ? `At most ${max} ${kind}s` : undefined}><Plus size={11} /> Add</Button>
-        <Button size="sm" onClick={remove} disabled={sel === null}><Trash2 size={11} /> Delete</Button>
+        <Button size="sm" onClick={add} disabled={items.length >= max} title={items.length >= max ? t("At most {max} {kind}s", { max, kind }) : undefined}><Plus size={11} /> {" "}{t("Add")}</Button>
+        <Button size="sm" onClick={remove} disabled={sel === null}><Trash2 size={11} /> {" "}{t("Delete")}</Button>
         <span className="grow" />
         <span className="hint">{items.length} / {max}</span>
-        <Button size="sm" icon title="Move up" onClick={() => move(-1)} disabled={sel === null || sel === 0}><ArrowUp size={11} /></Button>
-        <Button size="sm" icon title="Move down" onClick={() => move(1)} disabled={sel === null || sel >= items.length - 1}><ArrowDown size={11} /></Button>
+        <Button size="sm" icon title={t("Move up")} onClick={() => move(-1)} disabled={sel === null || sel === 0}><ArrowUp size={11} /></Button>
+        <Button size="sm" icon title={t("Move down")} onClick={() => move(1)} disabled={sel === null || sel >= items.length - 1}><ArrowDown size={11} /></Button>
       </div>
       {cur && sel !== null && (
         <div className="trig-item-editor">
@@ -305,9 +306,9 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
               style={{ width: 240 }}
               value={String(cur.type)}
               onChange={(e) => replace(sel, (kind === "condition" ? newCondition(Number(e.target.value)) : newAction(Number(e.target.value), briefing)) as R)}
-              options={[...defs.map((d) => ({ value: String(d.type), label: d.name })), ...(defOf(cur) ? [] : [{ value: String(cur.type), label: `${cur.type} (raw)` }])]}
+              options={[...defs.map((d) => ({ value: String(d.type), label: d.name })), ...(defOf(cur) ? [] : [{ value: String(cur.type), label: t("{type} (raw)", { type: cur.type }) }])]}
             />
-            <Check label="Disabled" checked={(cur.flags & disabledBit) !== 0} onChange={(e) => replace(sel, { ...cur, flags: e.target.checked ? cur.flags | disabledBit : cur.flags & ~disabledBit })} />
+            <Check label={t("Disabled")} checked={(cur.flags & disabledBit) !== 0} onChange={(e) => replace(sel, { ...cur, flags: e.target.checked ? cur.flags | disabledBit : cur.flags & ~disabledBit })} />
           </div>
           <ItemEditor record={cur} def={defOf(cur)} onChange={(r) => replace(sel, r)} names={names} scenario={scenario} />
         </div>
@@ -386,7 +387,7 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
   return (
     <div className="split" style={{ ["--split" as string]: "180px", flex: 1, minHeight: 0 }}>
       <div className="col" style={{ gap: 6, minHeight: 0 }}>
-        <div className="panel-head" style={{ borderRadius: 3 }}>Players</div>
+        <div className="panel-head" style={{ borderRadius: 3 }}>{t("Players")}</div>
         <div className="listbox" style={{ flex: 1, padding: 4, overflow: "auto" }}>
           <div className="col" style={{ gap: 0 }}>
             {groups.map((g) => (
@@ -404,52 +405,52 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
           </div>
         </div>
         <div className="row" style={{ gap: 4 }}>
-          <Button size="sm" className="grow" onClick={() => setFilter(null)}>All</Button>
-          <Button size="sm" className="grow" onClick={() => setFilter(new Set())}>None</Button>
+          <Button size="sm" className="grow" onClick={() => setFilter(null)}>{t("All")}</Button>
+          <Button size="sm" className="grow" onClick={() => setFilter(new Set())}>{t("None")}</Button>
         </div>
       </div>
 
       <div className="split" style={{ ["--split" as string]: "minmax(280px, 34%)", minHeight: 0 }}>
         <div className="col" style={{ gap: 6, minHeight: 0 }}>
-          <TextInput placeholder={`Filter ${label}s…`} value={q} onChange={(e) => setQ(e.target.value)} />
+          <TextInput placeholder={t("Filter {label}s…", { label })} value={q} onChange={(e) => setQ(e.target.value)} />
           <ListBox
             className="trig-list"
             style={{ flex: 1 }}
             items={shown}
             selected={sel !== null ? shown.indexOf(sel) : null}
             onSelect={(_, i) => setSel(i)}
-            empty={list.length ? `No ${label}s match the current filter.` : `No ${label}s yet.`}
+            empty={list.length ? t("No {label}s match the current filter.", { label }) : t("No {label}s yet.", { label })}
             render={(i) => {
-              const t = list[i];
-              const s = summarizeTrigger(t, names, briefing);
-              const comment = triggerComment(t, names);
+              const trig = list[i];
+              const s = summarizeTrigger(trig, names, briefing);
+              const comment = triggerComment(trig, names);
               return (
                 <div className="body">
-                  <span className="who">{i + 1}. {s.players || <span className="faint">no players</span>}{comment ? <span className="faint"> — {escapeControls(comment)}</span> : null}{(() => { const r = rangeAt(i); return r ? <span className="badge teal" title={`Generated by ${r.claim.spec.label}`}>{claimBadge(r)}</span> : null; })()}</span>
+                  <span className="who">{i + 1}. {s.players || <span className="faint">{t("no players")}</span>}{comment ? <span className="faint"> — {escapeControls(comment)}</span> : null}{(() => { const r = rangeAt(i); return r ? <span className="badge teal" title={t("Generated by {label}", { label: r.claim.spec.label })}>{claimBadge(r)}</span> : null; })()}</span>
                   {!briefing && <span className="summary">if {escapeControls(s.conditions) || "—"}</span>}
-                  <span className="summary">{briefing ? "" : "then "}{escapeControls(s.actions) || "—"}</span>
+                  <span className="summary">{briefing ? "" : t("then ")}{escapeControls(s.actions) || "—"}</span>
                 </div>
               );
             }}
           />
           <div className="row" style={{ gap: 4 }}>
-            <Button size="sm" onClick={create}><Plus size={11} /> New</Button>
-            <Button size="sm" onClick={duplicate} disabled={!cur || locked}><Copy size={11} /> Duplicate</Button>
-            <Button size="sm" onClick={remove} disabled={!cur || locked}><Trash2 size={11} /> Delete</Button>
+            <Button size="sm" onClick={create}><Plus size={11} /> {" "}{t("New")}</Button>
+            <Button size="sm" onClick={duplicate} disabled={!cur || locked}><Copy size={11} /> {" "}{t("Duplicate")}</Button>
+            <Button size="sm" onClick={remove} disabled={!cur || locked}><Trash2 size={11} /> {" "}{t("Delete")}</Button>
             <span className="grow" />
-            <Button size="sm" icon title="Move up" onClick={() => move(-1)} disabled={sel === null || sel === 0 || locked}><ArrowUp size={11} /></Button>
-            <Button size="sm" icon title="Move down" onClick={() => move(1)} disabled={sel === null || sel >= list.length - 1 || locked}><ArrowDown size={11} /></Button>
+            <Button size="sm" icon title={t("Move up")} onClick={() => move(-1)} disabled={sel === null || sel === 0 || locked}><ArrowUp size={11} /></Button>
+            <Button size="sm" icon title={t("Move down")} onClick={() => move(1)} disabled={sel === null || sel >= list.length - 1 || locked}><ArrowDown size={11} /></Button>
           </div>
         </div>
 
         <div className="col" style={{ gap: 8, minHeight: 0 }}>
           {cur && sel !== null && lockedRange ? (
             <div className="trig-generated">
-              <div className="row"><span className="badge gold">Trigger {sel + 1}</span><span className="badge teal">{claimBadge(lockedRange)}</span></div>
+              <div className="row"><span className="badge gold">{t("Trigger {v}", { v: sel + 1 })}</span><span className="badge teal">{claimBadge(lockedRange)}</span></div>
               <span>{claimDescription(lockedRange, sel, list)}</span>
               {lockedRange.claim.spec.open && (
                 <Button size="sm" onClick={() => { try { lockedRange.claim.spec.open!(sel, list); } catch (err) { console.error(`[${lockedRange.claim.pluginName}] trigger claim open failed`, err); } }}>
-                  <Code2 size={11} /> {lockedRange.claim.spec.openLabel ?? `Open ${lockedRange.claim.pluginName}`}
+                  <Code2 size={11} /> {lockedRange.claim.spec.openLabel ?? t("Open {pluginName}", { pluginName: lockedRange.claim.pluginName })}
                 </Button>
               )}
             </div>
@@ -457,17 +458,17 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
             <>
               <div className="row between">
                 <div className="row">
-                  <span className="badge gold">{briefing ? "Briefing" : "Trigger"} {sel + 1}</span>
+                  <span className="badge gold">{briefing ? t("Briefing") : t("Trigger")} {sel + 1}</span>
                   {!briefing && (
                     <TextInput
-                      placeholder="Comment"
+                      placeholder={t("Comment")}
                       value={triggerComment(cur, names) ?? ""}
                       onChange={(e) => replace(withComment(cur, e.target.value, names))}
                       style={{ width: 260 }}
                     />
                   )}
                 </div>
-                {!briefing && <Check label="Preserve trigger" checked={isPreserved(cur)} onChange={(e) => replace(setPreserved(cur, e.target.checked))} />}
+                {!briefing && <Check label={t("Preserve trigger")} checked={isPreserved(cur)} onChange={(e) => replace(setPreserved(cur, e.target.checked))} />}
               </div>
               <Tabs
                 key={sel}
@@ -476,7 +477,7 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
                 tabs={[
                   {
                     value: "players",
-                    label: "Players",
+                    label: t("Players"),
                     content: (
                       <div className="listbox" style={{ padding: 8, overflow: "auto" }}>
                         <div className="player-check-grid">
@@ -494,19 +495,19 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
                   },
                   ...(briefing ? [] : [{
                     value: "conditions",
-                    label: `Conditions (${cur.conditions.length})`,
+                    label: t("Conditions ({length})", { length: cur.conditions.length }),
                     content: <ItemList items={cur.conditions} setItems={(c) => replace({ ...cur, conditions: c })} kind="condition" briefing={false} names={names} scenario={scenario} />,
                   }]),
                   {
                     value: "actions",
-                    label: `Actions (${cur.actions.length})`,
+                    label: t("Actions ({length})", { length: cur.actions.length }),
                     content: <ItemList items={cur.actions} setItems={(a) => replace({ ...cur, actions: a })} kind="action" briefing={briefing} names={names} scenario={scenario} />,
                   },
                 ]}
               />
             </>
           ) : (
-            <div className="props-empty">Select a {label}.</div>
+            <div className="props-empty">{t("Select a {label}.", { label })}</div>
           )}
         </div>
       </div>
@@ -523,20 +524,20 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const names = useNames(scenario);
   const [local, setLocal] = useScenarioForm(scenario, readTriggers);
-  if (!scenario || !local || !names) return <NoMap entry={entry} title="Trigger Editor" icon={<Zap size={14} />} />;
+  if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Trigger Editor")} icon={<Zap size={14} />} />;
 
   const apply = () => { applyTriggers(scenario, local); commit(); };
 
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Trigger Editor"
+      title={t("Trigger Editor")}
       icon={<Zap size={14} />}
       size="full"
       onOk={apply}
       showApply
       slot={{ dialog: "triggerEditor" }}
-      footerLeft={<span>{local.length} trigger{local.length === 1 ? "" : "s"}</span>}
+      footerLeft={<span>{t("{length} trigger", { length: local.length })}{local.length === 1 ? "" : "s"}</span>}
     >
       <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} claims={claims} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
     </DialogFrame>
@@ -551,20 +552,20 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const names = useNames(scenario);
   const [local, setLocal] = useScenarioForm(scenario, readBriefing);
-  if (!scenario || !local || !names) return <NoMap entry={entry} title="Mission Briefing" icon={<MessageSquare size={14} />} />;
+  if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Mission Briefing")} icon={<MessageSquare size={14} />} />;
 
   const apply = () => { applyBriefing(scenario, local); commit(); };
 
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title="Mission Briefing"
+      title={t("Mission Briefing")}
       icon={<MessageSquare size={14} />}
       size="full"
       onOk={apply}
       showApply
       slot={{ dialog: "missionBriefing" }}
-      footerLeft={<span>{local.length} briefing{local.length === 1 ? "" : "s"} · one per player, played before the map starts</span>}
+      footerLeft={<span>{t("{length} briefing", { length: local.length })}{local.length === 1 ? "" : "s"} {" "}{t("· one per player, played before the map starts")}</span>}
     >
       <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
     </DialogFrame>

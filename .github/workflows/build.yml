@@ -201,7 +201,11 @@ jobs:
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-      - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      # `--allow-same-version` because a stable build is the tag's version and release.yml
+      # committed exactly that into package.json before tagging it, so this stamp has
+      # nothing to change — and npm calls changing nothing an error ("Version not
+      # changed"). The other channels never meet it: their version carries a run number.
+      - run: npm version --no-git-tag-version --allow-same-version "${{ needs.channel.outputs.version }}"
       - run: npm run lint
       - run: npm test
       # The default plugins are compiled into the bundle rather than fetched at startup
@@ -424,7 +428,7 @@ jobs:
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-      - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      - run: npm version --no-git-tag-version --allow-same-version "${{ needs.channel.outputs.version }}"
       # `build:docs` bundles the declarations first, so the reference is this tag's
       # contract rather than whatever happens to be on disk.
       - name: Build
@@ -473,7 +477,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm version --no-git-tag-version "${{ needs.channel.outputs.version }}"
+      - run: npm version --no-git-tag-version --allow-same-version "${{ needs.channel.outputs.version }}"
       # The first step of this is `scripts/vendor-plugins.mjs`, which fetches the default
       # plugins at the versions `src/plugins/defaults.ts` pins and writes them into
       # `plugins/` for the bundler: an installed application should not need the network

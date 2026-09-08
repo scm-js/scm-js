@@ -375,9 +375,17 @@ both the `scmjs` and `plugin` topics, is listed with the `plugin.json` at its ne
 version tag (an untagged repository falls back to its default branch). It refreshes hourly
 and within about a minute of a plugin repository saying it changed.
 
-For a plugin outside the organisation, open a pull request against that repository's
-`plugins.json`; its README has the shape of an entry. Any URL serving a file of that shape
-is a registry, and a user can add one under Sources.
+For a plugin anywhere else, fill in the
+[submission form](https://github.com/scm-js/registry/issues/new?template=submit-plugin.yml):
+the address of your repository, and the words you want the editor's search to match.
+Nothing else — the listing reads its name, version, description, author and icon from your
+own `plugin.json`. A bot checks the repository as soon as you post it and says in a comment
+what it found, reading it the same way the index does, so you can fix anything it names and
+edit the issue rather than wait to be told. Being listed is then someone here reading the
+code and deciding to: the editor has no sandbox, and the list is what the editor offers.
+
+That registry is not the only one there can be. Any URL serving a file of that shape is a
+registry, and a user can add one under Sources.
 
 ## The API, group by group
 

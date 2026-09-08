@@ -268,6 +268,31 @@ Install goes through the ordinary `inspectPlugin` → `ConfirmPluginDialog` → 
 path, so the manifest is read from the plugin and the pin resolved at install time — a
 registry decides what is listed, never what is trusted. `clearStoredDataAtom` resets both
 atoms; `.listbox .plugin-row` is shared by the Installed, Browse and Sources lists.
+**Getting into that list** is the registry repository's own half, and it is split the way
+the trust is. Inside the organisation listing is automatic and opt-out; from outside it is
+a person's decision, because Browse is what the editor *offers* and there is no sandbox. So
+a plugin from anywhere else is offered on an issue form
+(`.github/ISSUE_TEMPLATE/submit-plugin.yml`, which applies the `submission` label), and
+`.github/workflows/submission.yml` has two halves: `check` runs on every open and edit,
+never writes anything but **one** comment it rewrites (a comment per attempt buries the
+answer that still counts, and it is matched by an HTML marker *and* the bot's own login, so
+a submitter pasting the marker cannot make the workflow try to PATCH a comment it may not
+touch), and `list` runs only on the `approved` label — GitHub already decides who may label
+an issue, so the label *is* the authorisation and nothing else is checked — re-reads the
+form, appends the `{repo, dir?, tags?}` entry to `plugins.json` on a `submit/owner-name`
+branch, opens the PR, and takes the label back off with a comment if any of that failed.
+Merging starts `build-index.yml` as an ordinary push. `scripts/check-submission.mjs` reads
+the repository through `scripts/lib/plugins.mjs`, extracted from `build-index.mjs` for this
+and the reason the two cannot disagree: a submitter is told what the index will say about
+their plugin, not a second opinion written beside it. What blocks is only what makes a row
+impossible — no manifest at that commit, a repository GitHub will not serve anonymously, an
+entry file that is not there (probed in the loader's own order, `build ?? entry` then
+`plugin.ts` / `plugin.js`), an `api` above `PLUGIN_API_VERSION`; untagged, no author, no
+licence and a bundle whose longest line is over 2000 characters are warnings, because a
+plugin nobody can find is the worse failure. The editor's side of the same seam is one
+link in `docs/plugins.md`; the editor could pre-fill that form from a spec it has already
+resolved with `previewPlugin`, which is not built.
+
 The list is the registries' entries **plus** `registry.ts#unlistedInstalls` — a row per
 installed plugin no registry carries, built from the manifest in `pluginRuntimesAtom`,
 badged `not listed` and matched on `pluginKey` (passed in, so the module stays free of the

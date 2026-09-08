@@ -379,44 +379,6 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 2px 8px;
 }
-.code-editor {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  box-shadow: var(--bevel-sunken);
-  border-radius: var(--radius);
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 18px;
-}
-.code-editor .gutter {
-  padding: 8px 6px;
-  text-align: right;
-  color: var(--text-faint);
-  background: var(--bg-1);
-  border-right: 1px solid var(--border);
-  overflow: hidden;
-  white-space: pre;
-  user-select: none;
-}
-.code-editor textarea {
-  resize: none;
-  border: none;
-  outline: none;
-  background: transparent;
-  padding: 8px 10px;
-  color: var(--text);
-  white-space: pre;
-  overflow: auto;
-  tab-size: 4;
-  font: inherit;
-  line-height: inherit;
-}
-
 /* about — fully pink-themed, mirroring the splash screen */
 .about-space {
   flex: none;
@@ -811,12 +773,6 @@
 .trig-arg .lbl {
   color: var(--text-dim);
   font-size: var(--fs-xs);
-}
-.trig-error {
-  color: var(--danger, #ff7a7a);
-}
-.code-editor.wrap textarea {
-  white-space: pre-wrap;
 }
 
 /* ── Script editor ───────────────────────────────────────── */

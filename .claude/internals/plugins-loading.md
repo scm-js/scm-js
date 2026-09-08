@@ -20,7 +20,9 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigScript (a default since 2026-09-07, on) and
+scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit (the Text Trigger Editor, moved out 2026-09-07 and
+listed before TrigScript so the latter's `after: "Text Trigger Editor…"` finds its anchor when activation follows the list),
+TrigScript (a default since 2026-09-07, on), Stamp Library and
 scmjs.dev (off), each pinned to a tag; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard
 and Section Explorer are published in the registry but are not defaults — plus any built-in, each a

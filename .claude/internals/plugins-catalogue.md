@@ -188,3 +188,16 @@ full-size `renderClip` scaled to `view.tilePx`; a click is one `document.edit` w
 rect then marked as a paste marks it. It captures every part (`ALL_PARTS`) and lets the stamping ticks
 choose, so nothing is lost at save time; a foreign-tileset stamp can still lay down its objects.
 
+**TrigEdit** (`github.com/scm-js/plugin-trigedit`, a default that starts on since 2026-09-07) is the Text Trigger
+Editor, moved out of `TriggerDialogs.tsx` as a ~100-line dialog over the editor-owned format: `text.ts` there is the
+pure half (the comment fencing over `api.triggers.claims`, the error line off `TriggerTextError.line`, the gutter and
+status words; tests), `plugin.ts` the dialog — radios, Compile / Format / Reload, word wrap, a `<textarea>` with a
+gutter, the `Compile & Close` / `Cancel` / `Apply` footer — compiling with `tx.triggers.fromText(text, { replace: true })`
+(or `tx.briefing`) inside one `document.update`, so a parse error leaves the map untouched. It is the worked example
+for the two host additions it asked for, `triggers.claims()` and `DialogSpec.slot` (it offers `"trigedit.text"` with a
+live `text` field and a `briefing` payload getter, which is where scmjs.dev ≥ 1.14.5 mounts Explain / Write / Ask).
+Menu item `Triggers ▸ Text Trigger Editor…` with `after: "Trigger Editor…"` and the `Ctrl+Shift+T` hotkey, both
+formerly the editor's; TrigScript's `after: "Text Trigger Editor…"` anchors on it, hence its place before TrigScript in
+`defaults.ts`. The `trigedit.open` command takes `{ briefing?: boolean }`. No bundle weight moved (a textarea), so the
+case for the move is the growth it allows — highlighting, completion, Monaco — without the editor carrying it; if it
+grows Monaco it should take TrigScript's loaded copy through `api.services` rather than download a second one.

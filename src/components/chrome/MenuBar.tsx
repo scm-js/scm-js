@@ -374,7 +374,6 @@ function useMenus(): Menu[] {
       label: "Triggers",
       items: [
         dlg("Trigger Editor…", "triggerEditor", "Ctrl+T"),
-        dlg("Text Trigger Editor…", "textTriggerEditor", "Ctrl+Shift+T"),
         dlg("Mission Briefing Editor…", "missionBriefing"),
         dlg("Unit Properties Slots…", "cuwpEditor"),
         sep,

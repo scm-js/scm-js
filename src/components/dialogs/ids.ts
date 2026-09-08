@@ -21,7 +21,6 @@ export type DialogId =
   | "locationProperties"
   | "spriteProperties"
   | "triggerEditor"
-  | "textTriggerEditor"
   | "missionBriefing"
   | "cuwpEditor"
   | "replaceTerrain"

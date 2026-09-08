@@ -52,9 +52,10 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.0.1", enabled: true },
+  { spec: "github:scm-js/plugin-trigedit@v1.0.0", enabled: true },
   { spec: "github:scm-js/plugin-trigscript@v2.5.1", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.0.0", enabled: true },
-  { spec: "github:scm-js/plugin-scmjs-dev@v1.14.4", enabled: false },
+  { spec: "github:scm-js/plugin-scmjs-dev@v1.14.5", enabled: false },
 ];
 
 /**

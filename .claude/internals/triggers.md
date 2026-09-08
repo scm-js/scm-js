@@ -17,7 +17,14 @@ install's Maps folder) carry briefings, and `tests/briefing.test.ts` decodes, ro
 the text format and re-encodes them; StarEdit sets hint bits (0x04 and the unit-type hints) on every
 briefing action that text cannot carry, so that test masks them. `editor/triggers.ts#actionStrings`
 is the one walker over an action's text / WAV arguments (the String Editor's usage list, the Sound
-Editor and Find all read it). The Text Trigger Editor's Briefing mode edits MBRF in the same syntax.
+Editor and Find all read it). The Text Trigger Editor is the **TrigEdit plugin** (`github.com/scm-js/plugin-trigedit`, a
+default since 2026-09-07, pinned in `defaults.ts`) over `api.triggers.text` / `tx.triggers.fromText({ replace })`; it
+moved out because the growth it wants — highlighting, completion, Monaco — is exactly what the editor stopped bundling,
+and the format stayed here because Import / Export, the plugin API and the AI all read it. Its Briefing mode edits MBRF in
+the same syntax. `api.triggers.claims(list?)` is what it fences the generated runs with, and its dialog offers the
+`"trigedit.text"` slot (`DialogSpec.slot`) in place of the `textTriggerEditor` `SlottedDialogId` the built-in had; the
+scmjs.dev plugin's Explain / Write / Ask buttons register there. `DialogId` no longer has `textTriggerEditor` — the one
+non-additive change the move made to the typings, with no consumer outside the organisation.
 The Classic editor's player pick carries an EPD box (`epdOf` / `addressOfEpd` over
 `DEATHS_TABLE_ADDRESS`) for EUD work.
 

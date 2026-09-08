@@ -114,7 +114,6 @@ export function useHotkeys() {
         const k = e.key.toLowerCase();
         if (k === "s") { e.preventDefault(); open("saveAs"); }
         if (k === "z" && !typing) { e.preventDefault(); const l = redo(); setStatus(l ? `Redid: ${l}` : "Nothing to redo"); }
-        if (k === "t") { e.preventDefault(); open("textTriggerEditor"); }
         if (k === ")" || k === "0") { e.preventDefault(); zoomToFit(); }
         return;
       }

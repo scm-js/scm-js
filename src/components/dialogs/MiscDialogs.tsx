@@ -392,7 +392,6 @@ const HOTKEYS: [string, string][] = [
   ["Delete selection / stop placing, clear selection", "Del · Esc"],
   ["Cancel a plugin's map pick or tool", "Esc · right-click"],
   ["Trigger Editor", "Ctrl+T"],
-  ["Text Trigger Editor", "Ctrl+Shift+T"],
   ["Test Map", "Ctrl+F5"],
   ["Next / previous open map (desktop app)", "Ctrl+Tab · Ctrl+Shift+Tab"],
   ["Close map (desktop app)", "Ctrl+W"],

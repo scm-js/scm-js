@@ -450,7 +450,9 @@ trigger* is the flag that keeps a trigger firing more than once.
 
 Ctrl+Shift+T. The same triggers as text, in SCMDraft 2's TrigEdit syntax, so text from
 SCMDraft pastes in and text from here pastes back out. Compile checks it and reports the
-first line that does not parse.
+first line that does not parse. It is a plugin, on from the start ([TrigEdit](https://github.com/scm-js/plugin-trigedit));
+the text format itself stays in the editor, and File ▸ Import / Export Triggers read and
+write the same text.
 
 ![The Text Trigger Editor](docs/images/text-triggers.webp)
 

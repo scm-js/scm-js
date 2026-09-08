@@ -70,8 +70,7 @@ already open, in its own tab (see [The editor window](#the-editor-window)); the 
 exception is the blank map the editor starts on, which the first map opened takes the
 place of. File ▸ Open Recent lists what you have had open before; in Chrome, Edge and the desktop app it reopens the file
 from disk directly. File ▸ Find on scmscx.com… searches the community map archive and
-opens the map you pick, when the editor can reach the site (see
-[Plugins](#plugins)). File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
+opens the map you pick (see [Plugins](#plugins)). File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
 account, every revision you saved there (see [Your scmjs.dev account](#your-scmjsdev-account)).
 
 ## The editor window
@@ -1488,7 +1487,7 @@ and the addresses it will fetch from.
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
 | [Repair](https://github.com/scm-js/plugin-repair) | on open, Tools ▸ Repair Map… | Reads a map the way the game does and lists what is missing, damaged, repeated or the wrong size, each with the repair and what the game does without it. Rebuilds a stripped isometric record. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
-| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) and opens the map you pick. The site does not yet allow a page served elsewhere to read it, so today the dialog explains and links to the site instead. |
+| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; Plugins ▸ scmscx.com Settings… holds its address and how many minimaps to ask for. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game as death-counter state machines. See [TrigScript](#trigscript). |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |

@@ -18,7 +18,8 @@ the text format and re-encodes them; StarEdit sets hint bits (0x04 and the unit-
 briefing action that text cannot carry, so that test masks them. `editor/triggers.ts#actionStrings`
 is the one walker over an action's text / WAV arguments (the String Editor's usage list, the Sound
 Editor and Find all read it). The Text Trigger Editor is the **TrigEdit plugin** (`github.com/scm-js/plugin-trigedit`, a
-default since 2026-09-07, pinned in `defaults.ts`) over `api.triggers.text` / `tx.triggers.fromText({ replace })`; it
+default since 2026-09-07 that starts off, pinned in `defaults.ts`; Ctrl+Shift+T is its, so the hotkey is dead until it is
+ticked on, while Import / Export Triggers are the editor's and are not) over `api.triggers.text` / `tx.triggers.fromText({ replace })`; it
 moved out because the growth it wants — highlighting, completion, Monaco — is exactly what the editor stopped bundling,
 and the format stayed here because Import / Export, the plugin API and the AI all read it. Its Briefing mode edits MBRF in
 the same syntax. `api.triggers.claims(list?)` is what it fences the generated runs with, and its dialog offers the

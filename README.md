@@ -448,11 +448,13 @@ trigger* is the flag that keeps a trigger firing more than once.
 
 ### The Text Trigger Editor
 
-Ctrl+Shift+T. The same triggers as text, in SCMDraft 2's TrigEdit syntax, so text from
-SCMDraft pastes in and text from here pastes back out. Compile checks it and reports the
-first line that does not parse. It is a plugin, on from the start ([TrigEdit](https://github.com/scm-js/plugin-trigedit));
-the text format itself stays in the editor, and File ▸ Import / Export Triggers read and
-write the same text.
+The same triggers as text, in SCMDraft 2's TrigEdit syntax, so text from SCMDraft pastes
+in and text from here pastes back out. Compile checks it and reports the first line that
+does not parse. It is a plugin ([TrigEdit](https://github.com/scm-js/plugin-trigedit)),
+installed but starting *off*: tick it on in Plugins ▸ Manage Plugins… and Triggers ▸ Text
+Trigger Editor… and its Ctrl+Shift+T appear. The text format itself stays in the editor,
+so File ▸ Import / Export Triggers read and write the same text whether the plugin is on
+or not.
 
 ![The Text Trigger Editor](docs/images/text-triggers.webp)
 
@@ -1463,10 +1465,12 @@ inside the editor's dialogs. Your account and the maps stored on it stay.
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
 Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library and the
-scmscx.com search are installed and on from the start. scmjs.dev — the account and the AI — is installed too
-but starts *off*, because an account and a trial are yours to ask for: tick it on in
-Plugins ▸ Manage Plugins… and its Account menu, its File entries and Tools ▸ AI appear.
-Melee Wizard and Section Explorer are a click away.
+scmscx.com search are installed and on from the start. Two more are installed but start
+*off*: scmjs.dev — the account and the AI, because an account and a trial are yours to ask
+for — and TrigEdit, the Text Trigger Editor, which is for text carried in from SCMDraft
+rather than for every map. Tick either on in Plugins ▸ Manage Plugins… and what it adds
+appears: scmjs.dev's Account menu, its File entries and Tools ▸ AI; TrigEdit's Triggers ▸
+Text Trigger Editor…. Melee Wizard and Section Explorer are a click away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -1617,7 +1621,7 @@ you expected, and a copied log.
 | | Status |
 | --- | --- |
 | Classic editor: every condition and action, per-item disable | Yes |
-| Text editor in SCMDraft's TrigEdit syntax | Yes |
+| Text editor in SCMDraft's TrigEdit syntax | Yes, as a plugin (TrigEdit, installed but starting off): tick it on in Manage Plugins for Triggers ▸ Text Trigger Editor…. File ▸ Import / Export Triggers read and write the same text without it. |
 | Scripting: TypeScript that builds into triggers | Yes, as a plugin (TrigScript, on by default): Triggers ▸ TrigScript…. Loops, helpers and tables to write triggers with, `program()` bodies that run in the game, checked against the map's names as you type, a simulator, and an editor beside the map. See [TrigScript](#trigscript). |
 | Import and export `.trg` and text triggers | Yes |
 | Validate triggers | Yes |

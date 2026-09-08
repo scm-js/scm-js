@@ -30,9 +30,9 @@ on one and the editor shows where the code comes from and asks before it adds an
 Plugins ▸ **Manage Plugins…** lists what is installed, turns each plugin on or off, and
 takes the address of any plugin that is not on the list.
 
-Seven plugins are *defaults* (one of them, scmjs.dev, starts off). They are on the list
-from the start and compiled into the editor, so a fresh install has them without touching
-the network. They are ordinary
+Nine plugins are *defaults* (two of them, TrigEdit and scmjs.dev, start off). They are on
+the list from the start and compiled into the editor, so a fresh install has them without
+touching the network. They are ordinary
 plugins from their own repositories and can be turned off, but not removed.
 
 An address can take any of these forms:

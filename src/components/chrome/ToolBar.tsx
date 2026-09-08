@@ -28,6 +28,8 @@ import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { Tip } from "../ui";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
+import { translate } from "../../i18n";
+import { useT } from "../../i18n/react";
 
 function TB({ icon: Icon, label, shortcut, onClick, active, disabled, accent, text }: { icon: ComponentType<{ size?: number }>; label: string; shortcut?: string; onClick?: () => void; active?: boolean; disabled?: boolean; accent?: boolean; text?: ReactNode }) {
   return (
@@ -43,6 +45,7 @@ function TB({ icon: Icon, label, shortcut, onClick, active, disabled, accent, te
 const Sep = () => <span className="tb-sep" />;
 
 export default function ToolBar() {
+  const t = useT();
   const open = useSetAtom(openDialogAtom);
   const zoomToFit = useSetAtom(zoomToFitAtom);
   const setStatus = useSetAtom(statusMessageAtom);
@@ -61,29 +64,29 @@ export default function ToolBar() {
 
   return (
     <div className="toolbar" role="toolbar">
-      <TB icon={FilePlus2} label="New Map" shortcut="Ctrl+N" onClick={dlg("newMap")} />
-      <TB icon={FolderOpen} label="Open Map" shortcut="Ctrl+O" onClick={dlg("openMap")} />
-      <TB icon={Save} label="Save Map" shortcut="Ctrl+S" onClick={() => { void save(); }} />
+      <TB icon={FilePlus2} label={t("New Map")} shortcut="Ctrl+N" onClick={dlg("newMap")} />
+      <TB icon={FolderOpen} label={t("Open Map")} shortcut="Ctrl+O" onClick={dlg("openMap")} />
+      <TB icon={Save} label={t("Save Map")} shortcut="Ctrl+S" onClick={() => { void save(); }} />
       <Sep />
-      <TB icon={Undo2} label={undoLabel ? `Undo ${undoLabel}` : "Undo"} shortcut="Ctrl+Z" disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(`Undid: ${l}`); }} />
-      <TB icon={Redo2} label={redoLabel ? `Redo ${redoLabel}` : "Redo"} shortcut="Ctrl+Y" disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(`Redid: ${l}`); }} />
+      <TB icon={Undo2} label={undoLabel ? t("Undo {what}", { what: undoLabel }) : t("Undo")} shortcut="Ctrl+Z" disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); }} />
+      <TB icon={Redo2} label={redoLabel ? t("Redo {what}", { what: redoLabel }) : t("Redo")} shortcut="Ctrl+Y" disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); }} />
       <Sep />
-      <TB icon={Scissors} label="Cut" shortcut="Ctrl+X" onClick={() => { clipTools.cut(); }} />
-      <TB icon={Copy} label="Copy" shortcut="Ctrl+C" onClick={() => { clipTools.copy(); }} />
-      <TB icon={ClipboardPaste} label="Paste" shortcut="Ctrl+V" onClick={() => { clipTools.paste(); }} />
+      <TB icon={Scissors} label={t("Cut")} shortcut="Ctrl+X" onClick={() => { clipTools.cut(); }} />
+      <TB icon={Copy} label={t("Copy")} shortcut="Ctrl+C" onClick={() => { clipTools.copy(); }} />
+      <TB icon={ClipboardPaste} label={t("Paste")} shortcut="Ctrl+V" onClick={() => { clipTools.paste(); }} />
       <Sep />
       <div className="tb-group">
-        <span className="lbl">Layer</span>
-        <select className="select" value={layer} onChange={(e) => setLayer(e.target.value as EditorLayer)} aria-label="Active layer">
+        <span className="lbl">{t("Layer")}</span>
+        <select className="select" value={layer} onChange={(e) => setLayer(e.target.value as EditorLayer)} aria-label={t("Active layer")}>
           {LAYERS.map((l) => (
-            <option key={l.id} value={l.id}>{l.label}</option>
+            <option key={l.id} value={l.id}>{translate(l.label)}</option>
           ))}
         </select>
       </div>
       {(layer === "terrain" || layer === "fog") && (
         <div className="tb-group">
-          <span className="lbl">Brush</span>
-          <select className="select narrow" value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label="Brush size">
+          <span className="lbl">{t("Brush")}</span>
+          <select className="select narrow" value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label={t("Brush size")}>
             {[1, 2, 3, 4, 5, 6, 7].map((n) => (
               <option key={n} value={n}>{n}×{n}</option>
             ))}
@@ -91,22 +94,22 @@ export default function ToolBar() {
         </div>
       )}
       <Sep />
-      <TB icon={Grid3x3} label="Toggle Grid" shortcut="Ctrl+G" active={flags.grid} onClick={() => setFlags({ ...flags, grid: !flags.grid })} />
-      <TB icon={SquareDashed} label="Toggle Locations" active={flags.locations} onClick={() => setFlags({ ...flags, locations: !flags.locations })} />
-      <TB icon={CloudFog} label="Toggle Fog of War" active={flags.fog} onClick={() => setFlags({ ...flags, fog: !flags.fog })} />
+      <TB icon={Grid3x3} label={t("Toggle Grid")} shortcut="Ctrl+G" active={flags.grid} onClick={() => setFlags({ ...flags, grid: !flags.grid })} />
+      <TB icon={SquareDashed} label={t("Toggle Locations")} active={flags.locations} onClick={() => setFlags({ ...flags, locations: !flags.locations })} />
+      <TB icon={CloudFog} label={t("Toggle Fog of War")} active={flags.fog} onClick={() => setFlags({ ...flags, fog: !flags.fog })} />
       <Sep />
-      <TB icon={FlipHorizontal2} label="Symmetry…" onClick={dlg("symmetry")} />
-      <TB icon={Search} label="Find…" shortcut="Ctrl+F" onClick={dlg("find")} />
+      <TB icon={FlipHorizontal2} label={t("Symmetry…")} onClick={dlg("symmetry")} />
+      <TB icon={Search} label={t("Find…")} shortcut="Ctrl+F" onClick={dlg("find")} />
       <Sep />
-      <TB icon={ZoomOut} label="Zoom Out" shortcut="Ctrl+−" onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
+      <TB icon={ZoomOut} label={t("Zoom Out")} shortcut="Ctrl+−" onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
       <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
-      <TB icon={ZoomIn} label="Zoom In" shortcut="Ctrl++" onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
-      <TB icon={Maximize} label="Zoom to Fit" shortcut="Ctrl+Shift+0" onClick={() => { zoomToFit(); }} />
+      <TB icon={ZoomIn} label={t("Zoom In")} shortcut="Ctrl++" onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
+      <TB icon={Maximize} label={t("Zoom to Fit")} shortcut="Ctrl+Shift+0" onClick={() => { zoomToFit(); }} />
       <span className="tb-spacer" />
-      <TB icon={Users} label="Player Settings…" onClick={dlg("playerSettings")} text="Players" />
-      <TB icon={Zap} label="Trigger Editor…" shortcut="Ctrl+T" onClick={dlg("triggerEditor")} text="Triggers" accent />
+      <TB icon={Users} label={t("Player Settings…")} onClick={dlg("playerSettings")} text={t("Players")} />
+      <TB icon={Zap} label={t("Trigger Editor…")} shortcut="Ctrl+T" onClick={dlg("triggerEditor")} text={t("Triggers")} accent />
       <Sep />
-      <TB icon={Play} label="Test Map — write the map where StarCraft lists it" shortcut="Ctrl+F5" onClick={() => open("testMap", { run: true })} text="Test" />
+      <TB icon={Play} label={t("Test Map — write the map where StarCraft lists it")} shortcut="Ctrl+F5" onClick={() => open("testMap", { run: true })} text={t("Test")} />
     </div>
   );
 }

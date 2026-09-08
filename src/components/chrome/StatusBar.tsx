@@ -9,10 +9,13 @@ import { hexTile } from "../../formats/tileset/palette";
 import { tileGroup, tileSubIndex } from "../../formats/chk/sections/terrain";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { LAYERS } from "./MenuBar";
+import { msg, translate } from "../../i18n";
+import { useT } from "../../i18n/react";
 
-const VERSION_LABEL = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", broodwar: "Brood War", remastered: "Remastered" } as const;
+const VERSION_LABEL = { original: msg("StarCraft 1.00"), hybrid: msg("Hybrid 1.04"), broodwar: msg("Brood War"), remastered: msg("Remastered") } as const;
 
 export default function StatusBar() {
+  const t = useT();
   const cursor = useAtomValue(cursorTileAtom);
   const pixel = useAtomValue(cursorPixelAtom);
   const w = useAtomValue(mapWidthAtom);
@@ -20,7 +23,7 @@ export default function StatusBar() {
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const layer = useAtomValue(activeLayerAtom);
   const zoom = useAtomValue(zoomAtom);
-  const msg = useAtomValue(statusMessageAtom);
+  const status = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
@@ -30,40 +33,40 @@ export default function StatusBar() {
 
   return (
     <footer className="statusbar">
-      <span className="status-cell" title="Cursor tile">
-        <span className="k">Tile</span>
+      <span className="status-cell" title={t("Cursor tile")}>
+        <span className="k">{t("Tile")}</span>
         <span className="v">{cursor.x}, {cursor.y}</span>
       </span>
-      <span className="status-cell" title="Cursor position in map pixels">
-        <span className="k">Px</span>
+      <span className="status-cell" title={t("Cursor position in map pixels")}>
+        <span className="k">{t("Px")}</span>
         <span className="v">{pixel.x}, {pixel.y}</span>
       </span>
-      <span className="status-cell" title="MTXM tile id under the cursor (group · slot)">
-        <span className="k">Id</span>
+      <span className="status-cell" title={t("MTXM tile id under the cursor (group · slot)")}>
+        <span className="k">{t("Id")}</span>
         <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId)}:${tileSubIndex(tileId)}`}</span>
       </span>
-      <span className="status-cell" title="Map dimensions">
-        <span className="k">Map</span>
+      <span className="status-cell" title={t("Map dimensions")}>
+        <span className="k">{t("Map")}</span>
         <span className="v">{w} × {h}</span>
       </span>
-      <span className="status-cell" title="Tileset">
+      <span className="status-cell" title={t("Tileset")}>
         <span className="swatch" style={{ background: tileset.color }} />
         <span>{tileset.name}</span>
       </span>
-      <span className="status-cell" title="Active layer">
-        <span className="k">Layer</span>
-        <span>{LAYERS.find((l) => l.id === layer)?.label}</span>
+      <span className="status-cell" title={t("Active layer")}>
+        <span className="k">{t("Layer")}</span>
+        <span>{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span>
       </span>
-      <span className="status-cell" title="Zoom">
+      <span className="status-cell" title={t("Zoom")}>
         <span className="v">{Math.round(zoom * 100)}%</span>
       </span>
       {symmetry !== "none" && (
-        <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? "Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)" : "This symmetry mode needs a square map — brushes paint normally"}>
-          <span className="k">Sym</span>
+        <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? t("Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)") : t("This symmetry mode needs a square map — brushes paint normally")}>
+          <span className="k">{t("Sym")}</span>
           <span className={`badge ${symmetryAvailable(symmetry, w, h) ? "teal" : "warn"}`}>{symmetryLabel(symmetry)}</span>
         </span>
       )}
-      <span className="status-cell grow msg">{msg}</span>
+      <span className="status-cell grow msg">{status}</span>
       {pluginItems.map((item) => (
         <span
           key={item.key}
@@ -74,12 +77,12 @@ export default function StatusBar() {
           onClick={item.spec.onClick}
           onKeyDown={item.spec.onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); item.spec.onClick?.(); } } : undefined}
         >
-          {item.spec.busy ? <span className="status-spinner" aria-label="working" /> : <PluginIconView icon={item.plugin.icon} size={11} />}
+          {item.spec.busy ? <span className="status-spinner" aria-label={t("working")} /> : <PluginIconView icon={item.plugin.icon} size={11} />}
           <span>{item.spec.text}</span>
         </span>
       ))}
-      <span className="status-cell" title="Map revision">
-        <span className="badge gold">{VERSION_LABEL[version]}</span>
+      <span className="status-cell" title={t("Map revision")}>
+        <span className="badge gold">{translate(VERSION_LABEL[version])}</span>
       </span>
     </footer>
   );

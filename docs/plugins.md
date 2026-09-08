@@ -1222,9 +1222,12 @@ Walkability is the worked example.
 
 - `menu.add(path, item)`: `path` is a top-level menu (`"File"`, `"Edit"`, `"View"`,
   `"Layer"`, `"Scenario"`, `"Triggers"`, `"Tools"`, `"Plugins"`, `"Help"`) or a submenu
-  by label (`"File/Import"`). Plugin items appear after a separator at the end of that
-  menu, unless `after` names a built-in item or submenu (`after: "Open Recent"`), in
-  which case the item sits directly under it. A last segment that names no submenu gets
+  by label (`"File/Import"`). Labels are the English ones whatever language the editor
+  is showing — a label is an item's identity, and the menu translates it as it draws it,
+  so a plugin's own label shows as written and a built-in's shows in the user's language.
+  Plugin items appear after a separator at the end of that menu, unless `after` names a
+  built-in item or submenu (`after: "Open Recent"`), in which case the item sits directly
+  under it. A last segment that names no submenu gets
   one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
   items can keep them together, and a first segment that names no top-level menu gets
   one made for the plugin, placed before Help (`"Account"`); `separator: true` on an

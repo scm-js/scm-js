@@ -5,6 +5,7 @@ import { leftDockWidthAtom, panelsAtom, rightDockWidthAtom } from "../../atoms/u
 import { useDockResize } from "../../hooks/useDockResize";
 import { Button, Tip } from "../ui";
 import { LAYERS } from "../chrome/MenuBar";
+import { translate } from "../../i18n";
 import PalettePanel from "./PalettePanel";
 import MinimapPanel from "./MinimapPanel";
 import LayersPanel from "./LayersPanel";
@@ -29,7 +30,7 @@ export function LeftDock() {
     <aside className="dock left" style={{ width }}>
       <div className="panel grow">
         <PanelHead
-          title={<>Palette <span className="faint">·</span> <span className="gold">{LAYERS.find((l) => l.id === layer)?.label}</span></>}
+          title={<>Palette <span className="faint">·</span> <span className="gold">{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span></>}
           right={<Tip label="Hide palette"><Button icon onClick={() => setPanels({ ...panels, palette: false })}><PanelLeftClose size={13} /></Button></Tip>}
         />
         <PalettePanel />

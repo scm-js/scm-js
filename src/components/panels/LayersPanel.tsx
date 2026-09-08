@@ -4,19 +4,23 @@ import { activeLayerAtom, lockedLayersAtom, viewFlagsAtom, type EditorLayer, typ
 import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { RAIL_ICON } from "./PalettePanel";
+import { translate } from "../../i18n";
+import { useT } from "../../i18n/react";
+import { LAYERS } from "../chrome/MenuBar";
 
-/** The editor's layers, each with the View flag its eye toggles; Terrain and the clipboard are always drawn. */
-const ROWS: { id: EditorLayer; label: string; flag?: keyof ViewFlags; lockable?: boolean }[] = [
-  { id: "terrain", label: "Terrain", lockable: true },
-  { id: "doodads", label: "Doodads", flag: "doodads", lockable: true },
-  { id: "units", label: "Units", flag: "units", lockable: true },
-  { id: "sprites", label: "Sprites", flag: "sprites", lockable: true },
-  { id: "locations", label: "Locations", flag: "locations", lockable: true },
-  { id: "fog", label: "Fog of War", flag: "fog", lockable: true },
-  { id: "clipboard", label: "Cut / Copy / Paste" },
+/** The editor's layers (named as `LAYERS` names them), each with the View flag its eye toggles; Terrain and the clipboard are always drawn. */
+const ROWS: { id: EditorLayer; flag?: keyof ViewFlags; lockable?: boolean }[] = [
+  { id: "terrain", lockable: true },
+  { id: "doodads", flag: "doodads", lockable: true },
+  { id: "units", flag: "units", lockable: true },
+  { id: "sprites", flag: "sprites", lockable: true },
+  { id: "locations", flag: "locations", lockable: true },
+  { id: "fog", flag: "fog", lockable: true },
+  { id: "clipboard" },
 ];
 
 export default function LayersPanel() {
+  const t = useT();
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [locked, setLocked] = useAtom(lockedLayersAtom);
@@ -36,7 +40,7 @@ export default function LayersPanel() {
               ? (
                 <button
                   className={`eye ${visible ? "" : "off"}`}
-                  title={visible ? "Hide layer" : "Show layer"}
+                  title={visible ? t("Hide layer") : t("Show layer")}
                   onClick={(e) => { e.stopPropagation(); setFlags({ ...flags, [r.flag!]: !visible }); }}
                 >
                   {visible ? <Eye size={13} /> : <EyeOff size={13} />}
@@ -44,19 +48,19 @@ export default function LayersPanel() {
               )
               : <span className="eye placeholder" aria-hidden />}
             <span className="ico"><Icon size={13} /></span>
-            <span>{r.label}</span>
+            <span>{translate(LAYERS.find((l) => l.id === r.id)?.label ?? r.id)}</span>
             {r.lockable && (
-              <button className={`lock ${isLocked ? "" : "off"}`} title={isLocked ? "Unlock layer — its tools change the map again" : "Lock layer — its tools stop changing the map"} onClick={(e) => { e.stopPropagation(); setLocked({ ...locked, [r.id]: !isLocked }); }}>
+              <button className={`lock ${isLocked ? "" : "off"}`} title={isLocked ? t("Unlock layer — its tools change the map again") : t("Lock layer — its tools stop changing the map")} onClick={(e) => { e.stopPropagation(); setLocked({ ...locked, [r.id]: !isLocked }); }}>
                 {isLocked ? <Lock size={12} /> : <LockOpen size={12} />}
               </button>
             )}
           </div>
         );
       })}
-      {overlays.length > 0 && <div className="layer-group">Overlays</div>}
+      {overlays.length > 0 && <div className="layer-group">{t("Overlays")}</div>}
       {overlays.map((o) => (
         <div key={o.key} className="layer-row is-overlay" title={`${o.spec.name} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
-          <button className={`eye ${o.visible ? "" : "off"}`} title={o.visible ? "Hide overlay" : "Show overlay"} onClick={(e) => { e.stopPropagation(); setOverlayVisible(o.key, !o.visible); }}>
+          <button className={`eye ${o.visible ? "" : "off"}`} title={o.visible ? t("Hide overlay") : t("Show overlay")} onClick={(e) => { e.stopPropagation(); setOverlayVisible(o.key, !o.visible); }}>
             {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
           <span className="ico"><PluginIconView icon={o.plugin.icon} size={13} /></span>

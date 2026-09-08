@@ -34,11 +34,20 @@ import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
+import { msg, translate } from "../../i18n";
+import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
 
 /* ── Menu model ─────────────────────────────────────────── */
 
+/**
+ * A `label` is the item's English name and its identity: plugins place items by it
+ * (`api.menu.add("File/Import", { after: "Open Recent" })`), whatever language the menu
+ * is showing, and the renderer shows `translate(label)`. Built-in labels are marked with
+ * `msg()` so the extractor lists them; a label built at run time (Undo *what*, a recent
+ * file) is translated where it is built and passes through `translate` unchanged.
+ */
 type Item =
   | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; icon?: PluginIcon; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
   | { kind: "check"; label: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
@@ -143,19 +152,21 @@ function safely<T>(fn: () => T, fallback: T): T {
   try { return fn(); } catch (err) { console.error("[plugins] menu item failed", err); return fallback; }
 }
 
+/** The layers by id, `label` English (show it through `translate`). */
 export const LAYERS: { id: EditorLayer; label: string; key: string }[] = [
-  { id: "terrain", label: "Terrain", key: "T" },
-  { id: "doodads", label: "Doodads", key: "D" },
-  { id: "units", label: "Units", key: "U" },
-  { id: "sprites", label: "Sprites", key: "S" },
-  { id: "locations", label: "Locations", key: "L" },
-  { id: "fog", label: "Fog of War", key: "F" },
-  { id: "clipboard", label: "Cut / Copy / Paste", key: "C" },
+  { id: "terrain", label: msg("Terrain"), key: "T" },
+  { id: "doodads", label: msg("Doodads"), key: "D" },
+  { id: "units", label: msg("Units"), key: "U" },
+  { id: "sprites", label: msg("Sprites"), key: "S" },
+  { id: "locations", label: msg("Locations"), key: "L" },
+  { id: "fog", label: msg("Fog of War"), key: "F" },
+  { id: "clipboard", label: msg("Cut / Copy / Paste"), key: "C" },
 ];
 
 export const ZOOM_LEVELS = ZOOM_STEPS;
 
 function useMenus(): Menu[] {
+  const t = useT();
   const open = useSetAtom(openDialogAtom);
   const pluginItems = useAtomValue(pluginMenuItemsAtom);
   const overlays = useAtomValue(pluginOverlaysAtom);
@@ -163,8 +174,8 @@ function useMenus(): Menu[] {
   const setStatus = useSetAtom(statusMessageAtom);
   const copyDiagnostics = () => {
     void navigator.clipboard.writeText(diagnostics).then(
-      () => setStatus("Diagnostics copied — the build, the game data source and the plugins."),
-      () => setStatus("The browser did not allow copying; open View ▸ Debug Console and save the log instead."),
+      () => setStatus(t("Diagnostics copied — the build, the game data source and the plugins.")),
+      () => setStatus(t("The browser did not allow copying; open View ▸ Debug Console and save the log instead.")),
     );
   };
   const store = useStore();
@@ -213,14 +224,21 @@ function useMenus(): Menu[] {
   const deleteSelection = () => {
     if (layer === "clipboard") { clipTools.deleteRegion(); return; }
     const n = layer === "doodads" ? deleteDoodads() : layer === "sprites" ? deleteSprites() : layer === "locations" ? deleteLocations() : deleteUnits();
-    setStatus(n > 0 ? `Deleted ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}` : "Nothing selected");
+    if (n === 0) { setStatus(t("Nothing selected")); return; }
+    setStatus(layer === "doodads" ? t("Deleted {n, plural, one {# doodad} other {# doodads}}", { n })
+      : layer === "sprites" ? t("Deleted {n, plural, one {# sprite} other {# sprites}}", { n })
+        : layer === "locations" ? t("Deleted {n, plural, one {# location} other {# locations}}", { n })
+          : t("Deleted {n, plural, one {# unit} other {# units}}", { n }));
   };
   const selectAll = () => {
     if (!store.get(scenarioAtom)) return;
     if (layer === "clipboard") { clipTools.selectAll(); return; }
     const n = store.set(selectAllAtom, layer);
     if (!["doodads", "sprites", "locations", "units"].includes(layer)) setLayer("units");
-    setStatus(`Selected ${n} ${layer === "doodads" ? "doodad" : layer === "sprites" ? "sprite" : layer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
+    setStatus(layer === "doodads" ? t("Selected {n, plural, one {# doodad} other {# doodads}}", { n })
+      : layer === "sprites" ? t("Selected {n, plural, one {# sprite} other {# sprites}}", { n })
+        : layer === "locations" ? t("Selected {n, plural, one {# location} other {# locations}}", { n })
+          : t("Selected {n, plural, one {# unit} other {# units}}", { n }));
   };
   const deselect = () => {
     clipTools.stopPasting();
@@ -235,208 +253,208 @@ function useMenus(): Menu[] {
 
   const menus: Menu[] = [
     {
-      label: "File",
+      label: msg("File"),
       items: [
-        dlg("New…", "newMap", "Ctrl+N"),
-        dlg("Open…", "openMap", "Ctrl+O"),
+        dlg(msg("New…"), "newMap", "Ctrl+N"),
+        dlg(msg("Open…"), "openMap", "Ctrl+O"),
         {
           kind: "sub",
-          label: "Open Recent",
+          label: msg("Open Recent"),
           items: [
             // An entry reopens from the handle kept for it (Chromium, the desktop app); without one the name is a reminder and Open… is the way.
             ...(recent.length > 0
-              ? recent.map<Item>((r) => ({ kind: "item", label: r.handleKey ? r.name : `${r.name} (open with File ▸ Open…)`, disabled: !r.handleKey, onSelect: () => { void openRecent(r); } }))
-              : [{ kind: "item", label: "Nothing opened yet", disabled: true } as Item]),
+              ? recent.map<Item>((r) => ({ kind: "item", label: r.handleKey ? r.name : t("{name} (open with File ▸ Open…)", { name: r.name }), disabled: !r.handleKey, onSelect: () => { void openRecent(r); } }))
+              : [{ kind: "item", label: msg("Nothing opened yet"), disabled: true } as Item]),
             sep,
-            { kind: "item", label: "Clear Recent", disabled: recent.length === 0, onSelect: () => clearRecents(store) },
+            { kind: "item", label: msg("Clear Recent"), disabled: recent.length === 0, onSelect: () => clearRecents(store) },
           ],
         },
         sep,
-        { kind: "item", label: "Save", shortcut: "Ctrl+S", onSelect: () => { void save(); } },
-        dlg("Save As…", "saveAs", "Ctrl+Shift+S"),
-        dlgWith("Save Copy As…", "saveAs", { copy: true }),
+        { kind: "item", label: msg("Save"), shortcut: "Ctrl+S", onSelect: () => { void save(); } },
+        dlg(msg("Save As…"), "saveAs", "Ctrl+Shift+S"),
+        dlgWith(msg("Save Copy As…"), "saveAs", { copy: true }),
         sep,
         {
           kind: "sub",
-          label: "Import",
+          label: msg("Import"),
           items: [
-            dlgWith("Triggers (.trg)…", "importTriggers", { format: "trg" }),
-            dlgWith("Text Triggers (.txt)…", "importTriggers", { format: "txt" }),
-            dlg("Strings (.txt)…", "importStrings"),
+            dlgWith(msg("Triggers (.trg)…"), "importTriggers", { format: "trg" }),
+            dlgWith(msg("Text Triggers (.txt)…"), "importTriggers", { format: "txt" }),
+            dlg(msg("Strings (.txt)…"), "importStrings"),
           ],
         },
         {
           kind: "sub",
-          label: "Export",
+          label: msg("Export"),
           items: [
-            { kind: "item", label: "Image (.png)…", onSelect: () => open("exportImage") },
+            { kind: "item", label: msg("Image (.png)…"), onSelect: () => open("exportImage") },
             sep,
-            dlgWith("Triggers (.trg)…", "exportTriggers", { format: "trg" }),
-            dlgWith("Text Triggers (.txt)…", "exportTriggers", { format: "txt" }),
-            dlg("Strings (.txt)…", "exportStrings"),
+            dlgWith(msg("Triggers (.trg)…"), "exportTriggers", { format: "trg" }),
+            dlgWith(msg("Text Triggers (.txt)…"), "exportTriggers", { format: "txt" }),
+            dlg(msg("Strings (.txt)…"), "exportStrings"),
           ],
         },
         sep,
-        dlg("Map Properties…", "mapProperties", "Alt+Enter"),
+        dlg(msg("Map Properties…"), "mapProperties", "Alt+Enter"),
         sep,
         // Ctrl+W is the browser's own (it closes the tab); only the desktop build can take it.
-        dlg("Close Map", "confirmClose", desktop ? "Ctrl+W" : undefined),
+        dlg(msg("Close Map"), "confirmClose", desktop ? "Ctrl+W" : undefined),
         // A browser tab cannot close itself; the desktop build quits through the same unsaved-changes gate as its close button, one open map at a time.
-        ...(desktop ? [sep, { kind: "item", label: "Exit", shortcut: desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4", onSelect: () => { void quitGuard(store, true).then((quit) => { if (quit) desktop.window.respondClose(true); }); } } as Item] : []),
+        ...(desktop ? [sep, { kind: "item", label: msg("Exit"), shortcut: desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4", onSelect: () => { void quitGuard(store, true).then((quit) => { if (quit) desktop.window.respondClose(true); }); } } as Item] : []),
       ],
     },
     {
-      label: "Edit",
+      label: msg("Edit"),
       items: [
-        { kind: "item", label: undoLabel ? `Undo ${undoLabel}` : "Undo", shortcut: "Ctrl+Z", disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(`Undid: ${l}`); } },
-        { kind: "item", label: redoLabel ? `Redo ${redoLabel}` : "Redo", shortcut: "Ctrl+Y", disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(`Redid: ${l}`); } },
+        { kind: "item", label: undoLabel ? t("Undo {what}", { what: undoLabel }) : msg("Undo"), shortcut: "Ctrl+Z", disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); } },
+        { kind: "item", label: redoLabel ? t("Redo {what}", { what: redoLabel }) : msg("Redo"), shortcut: "Ctrl+Y", disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); } },
         sep,
-        { kind: "item", label: "Cut", shortcut: "Ctrl+X", disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
-        { kind: "item", label: "Copy", shortcut: "Ctrl+C", disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
-        { kind: "item", label: "Paste", shortcut: "Ctrl+V", disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
-        { kind: "item", label: "Delete", shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
+        { kind: "item", label: msg("Cut"), shortcut: "Ctrl+X", disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
+        { kind: "item", label: msg("Copy"), shortcut: "Ctrl+C", disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
+        { kind: "item", label: msg("Paste"), shortcut: "Ctrl+V", disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
+        { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
         sep,
-        { kind: "item", label: "Select All", shortcut: "Ctrl+A", disabled: !hasMap, onSelect: selectAll },
-        { kind: "item", label: "Deselect", shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
+        { kind: "item", label: msg("Select All"), shortcut: "Ctrl+A", disabled: !hasMap, onSelect: selectAll },
+        { kind: "item", label: msg("Deselect"), shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
         sep,
-        dlg("Find…", "find", "Ctrl+F"),
+        dlg(msg("Find…"), "find", "Ctrl+F"),
         sep,
-        dlg("Preferences…", "preferences", "Ctrl+,"),
+        dlg(msg("Preferences…"), "preferences", "Ctrl+,"),
       ],
     },
     {
-      label: "View",
+      label: msg("View"),
       items: [
-        { kind: "item", label: "Zoom In", shortcut: "Ctrl++", onSelect: zoomIn },
-        { kind: "item", label: "Zoom Out", shortcut: "Ctrl+−", onSelect: zoomOut },
+        { kind: "item", label: msg("Zoom In"), shortcut: "Ctrl++", onSelect: zoomIn },
+        { kind: "item", label: msg("Zoom Out"), shortcut: "Ctrl+−", onSelect: zoomOut },
         {
           kind: "sub",
-          label: "Zoom",
+          label: msg("Zoom"),
           items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => setZoom(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? "Ctrl+0" : undefined })) }],
         },
-        { kind: "item", label: "Zoom to Fit", shortcut: "Ctrl+Shift+0", onSelect: () => { zoomToFit(); } },
+        { kind: "item", label: msg("Zoom to Fit"), shortcut: "Ctrl+Shift+0", onSelect: () => { zoomToFit(); } },
         sep,
-        flag("grid", "Grid", "Ctrl+G"),
-        dlg("Grid Settings…", "gridSettings"),
+        flag("grid", msg("Grid"), "Ctrl+G"),
+        dlg(msg("Grid Settings…"), "gridSettings"),
         sep,
-        flag("units", "Units"),
-        flag("doodads", "Doodads"),
-        flag("sprites", "Sprites"),
-        flag("locations", "Locations"),
-        flag("locationNames", "Location Names"),
-        flag("startLocations", "Start Locations"),
-        flag("fog", "Fog of War"),
-        flag("animateWater", "Animate Water"),
-        flag("animateUnits", "Animate Units"),
+        flag("units", msg("Units")),
+        flag("doodads", msg("Doodads")),
+        flag("sprites", msg("Sprites")),
+        flag("locations", msg("Locations")),
+        flag("locationNames", msg("Location Names")),
+        flag("startLocations", msg("Start Locations")),
+        flag("fog", msg("Fog of War")),
+        flag("animateWater", msg("Animate Water")),
+        flag("animateUnits", msg("Animate Units")),
         sep,
-        flag("elevation", "Elevation Overlay"),
-        flag("buildability", "Buildability Overlay"),
+        flag("elevation", msg("Elevation Overlay")),
+        flag("buildability", msg("Buildability Overlay")),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
         ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
-        { kind: "sub", label: "Panels", items: [panel("palette", "Palette"), panel("minimap", "Minimap"), panel("layers", "Layers"), panel("properties", "Properties"), sep, panel("toolbar", "Toolbar"), panel("statusbar", "Status Bar")] },
+        { kind: "sub", label: msg("Panels"), items: [panel("palette", msg("Palette")), panel("minimap", msg("Minimap")), panel("layers", msg("Layers")), panel("properties", msg("Properties")), sep, panel("toolbar", msg("Toolbar")), panel("statusbar", msg("Status Bar"))] },
         // Not in Panels: it is not one of the map's panels, and it is off unless something is wrong.
-        { kind: "check", label: "Debug Console", checked: consoleOpen, onChange: setConsoleOpen },
+        { kind: "check", label: msg("Debug Console"), checked: consoleOpen, onChange: setConsoleOpen },
         sep,
-        { kind: "item", label: "Full Screen", shortcut: "F11", onSelect: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen(); } },
+        { kind: "item", label: msg("Full Screen"), shortcut: "F11", onSelect: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen(); } },
       ],
     },
     {
-      label: "Layer",
+      label: msg("Layer"),
       items: [
         { kind: "radio-group", value: layer, onChange: (v) => setLayer(v as EditorLayer), items: LAYERS.map((l) => ({ value: l.id, label: l.label, shortcut: l.key })) },
       ],
     },
     {
-      label: "Scenario",
+      label: msg("Scenario"),
       items: [
-        dlg("Map Properties…", "mapProperties"),
-        dlg("Resize / Crop Map…", "resizeMap"),
-        dlg("Map Revision…", "mapRevision"),
+        dlg(msg("Map Properties…"), "mapProperties"),
+        dlg(msg("Resize / Crop Map…"), "resizeMap"),
+        dlg(msg("Map Revision…"), "mapRevision"),
         sep,
-        dlg("Player Settings…", "playerSettings"),
-        dlg("Force Settings…", "forceSettings"),
-        dlg("Player Colors…", "playerColors"),
+        dlg(msg("Player Settings…"), "playerSettings"),
+        dlg(msg("Force Settings…"), "forceSettings"),
+        dlg(msg("Player Colors…"), "playerColors"),
         sep,
-        dlg("Unit Settings…", "unitSettings"),
-        dlg("Upgrade Settings…", "upgradeSettings"),
-        dlg("Technology Settings…", "techSettings"),
+        dlg(msg("Unit Settings…"), "unitSettings"),
+        dlg(msg("Upgrade Settings…"), "upgradeSettings"),
+        dlg(msg("Technology Settings…"), "techSettings"),
         sep,
-        dlg("String Editor…", "stringEditor"),
-        dlg("Sound Editor…", "soundEditor"),
-        dlg("Switches…", "switches"),
-        dlg("Locations…", "locationList"),
+        dlg(msg("String Editor…"), "stringEditor"),
+        dlg(msg("Sound Editor…"), "soundEditor"),
+        dlg(msg("Switches…"), "switches"),
+        dlg(msg("Locations…"), "locationList"),
         sep,
-        dlg("Mission Briefing…", "missionBriefing"),
+        dlg(msg("Mission Briefing…"), "missionBriefing"),
       ],
     },
     {
-      label: "Triggers",
+      label: msg("Triggers"),
       items: [
-        dlg("Trigger Editor…", "triggerEditor", "Ctrl+T"),
-        dlg("Mission Briefing Editor…", "missionBriefing"),
-        dlg("Unit Properties Slots…", "cuwpEditor"),
+        dlg(msg("Trigger Editor…"), "triggerEditor", "Ctrl+T"),
+        dlg(msg("Mission Briefing Editor…"), "missionBriefing"),
+        dlg(msg("Unit Properties Slots…"), "cuwpEditor"),
         sep,
-        dlg("Import Triggers…", "importTriggers"),
-        dlg("Export Triggers…", "exportTriggers"),
+        dlg(msg("Import Triggers…"), "importTriggers"),
+        dlg(msg("Export Triggers…"), "exportTriggers"),
         sep,
-        dlgWith("Validate Triggers", "validateMap", { only: "triggers" }),
+        dlgWith(msg("Validate Triggers"), "validateMap", { only: "triggers" }),
       ],
     },
     {
-      label: "Tools",
+      label: msg("Tools"),
       items: [
-        dlg("Symmetry…", "symmetry"),
-        { kind: "sub", label: "Brush Size", items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
+        dlg(msg("Symmetry…"), "symmetry"),
+        { kind: "sub", label: msg("Brush Size"), items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,
-        { kind: "item", label: "Fill Terrain", disabled: !hasMap, onSelect: fillMap },
-        dlg("Replace Terrain…", "replaceTerrain"),
-        dlg("Auto-place Start Locations…", "autoStarts"),
+        { kind: "item", label: msg("Fill Terrain"), disabled: !hasMap, onSelect: fillMap },
+        dlg(msg("Replace Terrain…"), "replaceTerrain"),
+        dlg(msg("Auto-place Start Locations…"), "autoStarts"),
         sep,
-        dlg("Check Map…", "validateMap"),
-        dlg("Statistics…", "statistics"),
+        dlg(msg("Check Map…"), "validateMap"),
+        dlg(msg("Statistics…"), "statistics"),
         sep,
-        dlgWith("Test Map", "testMap", { run: true }, "Ctrl+F5"),
-        dlg("Test Map Settings…", "testMap"),
+        dlgWith(msg("Test Map"), "testMap", { run: true }, "Ctrl+F5"),
+        dlg(msg("Test Map Settings…"), "testMap"),
       ],
     },
     {
-      label: "Plugins",
+      label: msg("Plugins"),
       items: [
-        dlgWith("Browse Plugins…", "plugins", { tab: "browse" }),
-        dlg("Manage Plugins…", "plugins"),
+        dlgWith(msg("Browse Plugins…"), "plugins", { tab: "browse" }),
+        dlg(msg("Manage Plugins…"), "plugins"),
       ],
     },
     {
-      label: "Window",
+      label: msg("Window"),
       items: [
         // Ctrl+Tab belongs to the browser's own tabs; only the desktop build can take it.
-        { kind: "item", label: "Next Map", shortcut: desktop ? "Ctrl+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, 1); } },
-        { kind: "item", label: "Previous Map", shortcut: desktop ? "Ctrl+Shift+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, -1); } },
+        { kind: "item", label: msg("Next Map"), shortcut: desktop ? "Ctrl+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, 1); } },
+        { kind: "item", label: msg("Previous Map"), shortcut: desktop ? "Ctrl+Shift+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, -1); } },
         sep,
         ...(tabs.length > 0
           ? [{
             kind: "radio-group", value: String(activeId ?? ""), onChange: (v) => { activateDocumentIn(store, Number(v)); },
             items: tabs.map((t) => ({ value: String(t.id), label: `${t.modified ? "*" : ""}${t.fileName ?? t.name}` })),
           } as Item]
-          : [{ kind: "item", label: "No map open", disabled: true } as Item]),
+          : [{ kind: "item", label: msg("No map open"), disabled: true } as Item]),
       ],
     },
     {
-      label: "Help",
+      label: msg("Help"),
       items: [
-        dlg("Keyboard Shortcuts…", "shortcuts", "F1"),
-        dlg("Game Data…", "gameData"),
+        dlg(msg("Keyboard Shortcuts…"), "shortcuts", "F1"),
+        dlg(msg("Game Data…"), "gameData"),
         // Desktop only: the web build has nothing to update.
-        ...(isDesktop() ? [dlg("Check for Updates…", "update")] : []),
-        link("Documentation", `${REPO_URL}#readme`),
+        ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),
+        link(msg("Documentation"), `${REPO_URL}#readme`),
         sep,
         // The half of a bug report that is worth more than the log: the build, the game
         // data source and the plugins. Beside Report an Issue, which is where it is pasted.
-        { kind: "item", label: "Copy Diagnostics", onSelect: copyDiagnostics },
-        link("Report an Issue…", `${REPO_URL}/issues/new`),
+        { kind: "item", label: msg("Copy Diagnostics"), onSelect: copyDiagnostics },
+        link(msg("Report an Issue…"), `${REPO_URL}/issues/new`),
         sep,
-        dlg("About scmJS…", "about"),
+        dlg(msg("About scmJS…"), "about"),
       ],
     },
   ];
@@ -452,12 +470,12 @@ function Items({ items }: { items: Item[] }): ReactNode {
       case "sep":
         return <Menubar.Separator key={i} className="menu-separator" />;
       case "label":
-        return <Menubar.Label key={i} className="menu-label">{it.label}</Menubar.Label>;
+        return <Menubar.Label key={i} className="menu-label">{translate(it.label)}</Menubar.Label>;
       case "item":
         return (
           <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog, it.payload) : it.onSelect?.())}>
             {it.icon && <span className="indicator menu-icon"><PluginIconView icon={it.icon} size={14} /></span>}
-            {it.label}
+            {translate(it.label)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.Item>
         );
@@ -465,7 +483,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return (
           <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} onCheckedChange={it.onChange}>
             <Menubar.ItemIndicator className="indicator"><Check size={12} /></Menubar.ItemIndicator>
-            {it.label}
+            {translate(it.label)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.CheckboxItem>
         );
@@ -475,7 +493,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
             {it.items.map((r) => (
               <Menubar.RadioItem key={r.value} value={r.value} className="menu-item">
                 <Menubar.ItemIndicator className="indicator"><Dot size={18} strokeWidth={4} /></Menubar.ItemIndicator>
-                {r.label}
+                {translate(r.label)}
                 {r.shortcut && <span className="shortcut">{r.shortcut}</span>}
               </Menubar.RadioItem>
             ))}
@@ -485,7 +503,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return (
           <Menubar.Sub key={i}>
             <Menubar.SubTrigger className="menu-item">
-              {it.label}
+              {translate(it.label)}
               <ChevronRight className="chev" size={13} />
             </Menubar.SubTrigger>
             <Menubar.Portal>
@@ -513,7 +531,7 @@ export default function MenuBar() {
       {menus.map((m) => (
         <Fragment key={m.label}>
           <Menubar.Menu>
-            <Menubar.Trigger className="menu-trigger">{m.label}</Menubar.Trigger>
+            <Menubar.Trigger className="menu-trigger">{translate(m.label)}</Menubar.Trigger>
             <Menubar.Portal>
               <Menubar.Content className="menu-content" align="start" sideOffset={1}>
                 <Items items={m.items} />
@@ -522,7 +540,7 @@ export default function MenuBar() {
           </Menubar.Menu>
         </Fragment>
       ))}
-      <div className="menubar-doc" title={modified ? "Unsaved changes" : "No unsaved changes"}>
+      <div className="menubar-doc" title={modified ? translate("Unsaved changes") : translate("No unsaved changes")}>
         <span className={`dot ${modified ? "" : "clean"}`} />
         <span>{name}{modified ? " *" : ""}</span>
       </div>

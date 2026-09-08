@@ -1650,7 +1650,7 @@ you expected, and a copied log.
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
 | Text encodings | The encoding is guessed on open and chosen in Scenario ▸ Map Revision: UTF-8, Korean (EUC-KR / CP949), Japanese (Shift_JIS), Chinese (GBK, Big5), Cyrillic and Western Windows code pages. Written back in the same encoding on save. |
-| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the Map Revision dialog and the messages about text encodings so far; the rest of the chrome is English until translated (see [docs/development.md](docs/development.md#translations)). |
+| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the menus, toolbar, status bar, layers panel, dialog buttons and the Map Revision dialog so far; the other dialogs and panels are English until translated (see [docs/development.md](docs/development.md#translations)). |
 | Switch names | Yes |
 | Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
 

@@ -2752,8 +2752,9 @@ export interface MenuItemSpec {
    */
   icon?: "plugin" | PluginIcon;
   /**
-   * Where in the menu: the label of the built-in item or submenu to sit directly under
-   * (`"Open Recent"`). Without it, or when nothing has that label, the item goes to the
+   * Where in the menu: the English label of the built-in item or submenu to sit directly
+   * under (`"Open Recent"`) — labels are identities, and the same whatever language the
+   * menu is showing. Without it, or when nothing has that label, the item goes to the
    * end of the menu after a separator.
    */
   after?: string;

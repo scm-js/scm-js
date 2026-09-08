@@ -678,11 +678,14 @@ its look and Hangul falls through to a face that has it.
 `t` and `tc` over them, `language`, and the `"language"` event — and can run the same
 extractor over their own source; see [docs/plugins.md](plugins.md#apii18n).
 
-**What is translated so far.** The Map Revision dialog and the messages about text
-encodings, as the worked example of the pattern. Everything else in the chrome is still
-written as plain English literals and shows in English whatever the language; moving a
-dialog over is wrapping its strings in `t()`, running `npm run i18n -- --write` and
-filling in the Korean.
+**What is translated so far.** The menu bar, toolbar, status bar, tab strip, layers
+panel, every dialog's OK / Cancel / Apply, and the Map Revision dialog with the messages
+about text encodings. A menu label is an item's identity as well as its text — plugins
+place items by the English label — so the menu model keeps the English and translates
+as it draws (`msg()` on the label, `translate()` in the renderer), which is the pattern
+for any table of named things. The dialogs and panels beyond those are still plain
+English literals and show in English whatever the language; moving one over is wrapping
+its strings in `t()`, running `npm run i18n -- --write` and filling in the Korean.
 
 ## Contributing
 

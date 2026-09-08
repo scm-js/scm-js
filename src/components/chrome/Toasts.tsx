@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { dismissToastAtom, toastsAtom, type Toast } from "../../atoms/uiAtoms";
+import { useT } from "../../i18n/react";
 
 const ICONS = { ok: CircleCheck, info: Info, warn: TriangleAlert, error: CircleAlert } as const;
 
@@ -17,6 +18,7 @@ export default function Toasts() {
 }
 
 function ToastView({ toast }: { toast: Toast }) {
+  const t = useT();
   const dismiss = useSetAtom(dismissToastAtom);
   useEffect(() => {
     if (toast.ttl <= 0) return;
@@ -40,7 +42,7 @@ function ToastView({ toast }: { toast: Toast }) {
           {toast.action.label}
         </button>
       )}
-      <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => dismiss(toast.id)}><X size={12} /></button>
+      <button type="button" className="toast-close" aria-label={t("Dismiss")} onClick={() => dismiss(toast.id)}><X size={12} /></button>
     </div>
   );
 }

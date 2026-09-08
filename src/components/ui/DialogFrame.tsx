@@ -5,6 +5,7 @@ import { useSetAtom } from "jotai";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { Button } from "./index";
 import DialogSlots, { type DialogSlotProps } from "./DialogSlots";
+import { useT } from "../../i18n/react";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
 
@@ -47,14 +48,15 @@ export default function DialogFrame({
   children,
   footer,
   footerLeft,
-  okLabel = "OK",
-  cancelLabel = "Cancel",
+  okLabel,
+  cancelLabel,
   onOk,
   okDisabled,
   showApply,
   onEscapeKeyDown,
   slot,
 }: DialogFrameProps) {
+  const t = useT();
   const close = useSetAtom(closeDialogAtom);
   const dismiss = () => close(dialogKey);
 
@@ -89,7 +91,7 @@ export default function DialogFrame({
               <h2>{title}</h2>
             </Dialog.Title>
             <Dialog.Close asChild>
-              <button className="dlg-close" aria-label="Close">
+              <button className="dlg-close" aria-label={t("Close")}>
                 <X size={14} />
               </button>
             </Dialog.Close>
@@ -107,10 +109,10 @@ export default function DialogFrame({
               {footer ?? (
                 <>
                   <Button variant="primary" disabled={okDisabled} onClick={() => { onOk?.(); dismiss(); }}>
-                    {okLabel}
+                    {okLabel ?? t("OK")}
                   </Button>
-                  <Button onClick={dismiss}>{cancelLabel}</Button>
-                  {showApply && <Button disabled={okDisabled} onClick={onOk}>Apply</Button>}
+                  <Button onClick={dismiss}>{cancelLabel ?? t("Cancel")}</Button>
+                  {showApply && <Button disabled={okDisabled} onClick={onOk}>{t("Apply")}</Button>}
                 </>
               )}
             </div>

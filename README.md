@@ -11,7 +11,7 @@ deliberately change.
 
 ![The editor with Big Game Hunters open on the Terrain layer](docs/images/editor-plain.webp)
 
-> **Beta.** Nothing here has shipped a campaign yet. Keep backups of maps you care
+> **Beta.** This editor needs to be extensively tested. Keep backups of maps you care
 > about, and check anything important in-game before you rely on it.
 
 This guide is for map makers. It starts with getting the editor running, walks through

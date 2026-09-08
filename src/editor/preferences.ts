@@ -4,8 +4,13 @@
  * name them without the atoms.
  */
 import type { TilesetId } from "../data/tilesets";
+import type { LanguagePreference } from "../i18n";
+
+export type { LanguagePreference };
 
 export interface Preferences {
+  /** The editor's own language: `"auto"` follows the browser's, else one of `LOCALES`. Applied live. */
+  language: LanguagePreference;
   /** Show the splash while the game data loads; off starts straight on the editor. */
   splash: boolean;
   /** Ask before closing or replacing a map with unsaved changes. */
@@ -65,6 +70,7 @@ export interface Preferences {
 export type PluginUpdateMode = "notify" | "manual" | "auto";
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  language: "auto",
   splash: true,
   confirmClose: true,
   multipleMaps: true,

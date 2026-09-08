@@ -7,6 +7,7 @@
  * — the path a brush stroke takes — so a plugin edit undoes, marks sections dirty,
  * lifts stranded doodads and units, and repaints exactly like the built-in tools.
  */
+import { locale as currentLocale, makeTranslator } from "../i18n";
 import type { createStore } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
@@ -22,7 +23,7 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { claimBadge, locateClaims } from "./claims";
-import { gridLookAtom, preferencesAtom } from "../atoms/preferencesAtoms";
+import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
@@ -68,7 +69,7 @@ import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, trigger
 import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
 import { bleedingLines, DEFAULT_TEXT_COLOR, escapeCode, fixBleeding, INSERTABLE_CODES, plainText, runsOf, TEXT_CODES, textCode } from "../editor/textColors";
 import {
-  changeMapVersion, forceViews, internString, mapVersionView, patchForce, patchPlayer, patchTech, patchUnitType, patchUpgrade, playerSlotViews, techView, unitTypeView, upgradeView,
+  changeMapVersion, changeTextEncoding, forceViews, internString, mapVersionView, patchForce, patchPlayer, patchTech, patchUnitType, patchUpgrade, playerSlotViews, techView, unitTypeView, upgradeView,
 } from "../editor/settings";
 import { addSound, applySounds, findMember, readWavs, removeSound, soundList, wavMemberName } from "../editor/sounds";
 import { TECHS_BW, UNIT_TYPES, UPGRADES_BW } from "../formats/chk/sections/settings";
@@ -987,6 +988,9 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     setVersion: (version, extendedStrings) => {
       tracked(() => changeMapVersion(scn, version, extendedStrings));
     },
+    setTextEncoding: (encoding) => {
+      tracked(() => changeTextEncoding(scn, encoding));
+    },
 
     note: (text) => { notes.push(text); },
   };
@@ -1475,6 +1479,7 @@ function clipboardApi(store: Store): ClipboardApi {
 
 const EVENT_ATOMS = {
   document: [scenarioAtom],
+  language: [localeAtom],
   terrain: [terrainRevisionAtom],
   units: [unitsRevisionAtom],
   doodads: [doodadsRevisionAtom],
@@ -1837,6 +1842,30 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       player: (slot) => `Player ${slot + 1}`,
       tile: (id) => { const l = loaded(); return l ? tileInfo(l.tileset, names(), id).label : null; },
     },
+
+    // The plugin's own catalogues, over the editor's translator (`i18n/index.ts`): the
+    // same key rule and placeholder grammar as the chrome, so a plugin repository can run
+    // the same extractor. Registered catalogues merge per language, later over earlier.
+    i18n: (() => {
+      const catalogues = new Map<string, Record<string, string>[]>();
+      const merged = (loc: string) => {
+        const list = catalogues.get(loc);
+        return list && list.length > 0 ? Object.assign({}, ...list) as Record<string, string> : undefined;
+      };
+      const translator = makeTranslator(merged);
+      return {
+        get language() { return currentLocale(); },
+        register: (added: Record<string, Record<string, string>>) => {
+          const entries = Object.entries(added);
+          for (const [loc, catalogue] of entries) catalogues.set(loc, [...(catalogues.get(loc) ?? []), catalogue]);
+          return bag.add(() => {
+            for (const [loc, catalogue] of entries) catalogues.set(loc, (catalogues.get(loc) ?? []).filter((c) => c !== catalogue));
+          });
+        },
+        t: translator.t,
+        tc: translator.tc,
+      };
+    })(),
 
     // Pure and map-independent: the whole of it is `editor/textColors.ts`, handed over so
     // a plugin that shows or rewrites map text does not carry its own copy of the table.

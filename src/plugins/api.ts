@@ -46,6 +46,7 @@ import type {
   ForcePatch, ForceView, MapVersionView, PlayerPatch, PlayerSlotView, TechPatch, TechView, UnitTypePatch, UnitTypeView, UpgradePatch, UpgradeView, WeaponView,
 } from "../editor/settings";
 import type { MapVersion } from "../formats/chk/scenario";
+import type { TextEncoding } from "../formats/text/encoding";
 import type { ResizeResult } from "../editor/resize";
 import type { SoundRow } from "../editor/sounds";
 import type { CuwpSlotPatch, CuwpSlotView } from "../editor/cuwp";
@@ -67,7 +68,7 @@ export type {
   UnitsDat, WeaponsDat, UpgradesDat, TechdataDat, SpritesDat, FlingyDat, ImagesDat, Race, ViewFlags,
 };
 export type {
-  PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, ResizeResult, SoundRow,
+  PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, TextEncoding, ResizeResult, SoundRow,
   CuwpSlotView, CuwpSlotPatch, SaveOptions, ChangeTilesetResult, TerrainPick, SymmetryMode, PlacementOptions, DoodadPlacementOptions, DoodadVerdict, StartLayout, StartPlacementResult,
   BlendCandidate, BlendOptions, Side, Clip, ClipParts, PasteMode, PasteResult, Toast, Preferences, StringImport,
 };
@@ -228,6 +229,8 @@ export interface PluginApi {
   readonly commands: CommandsApi;
   /** Live objects one plugin holds out for others to use, found by name and watched for arriving. */
   readonly services: ServicesApi;
+  /** The plugin's words in the editor's language: its own catalogues, and a `t` over them. */
+  readonly i18n: I18nApi;
   readonly events: EventsApi;
   /**
    * A small key-value store of the plugin's own, kept in the browser's local storage under
@@ -842,6 +845,12 @@ export interface UpdateTransaction {
   readonly cuwp: CuwpUpdate;
   /** Scenario ▸ Map Revision: VER / TYPE and, moving to or from Remastered, the string table's width. */
   setVersion(version: MapVersion, extendedStrings?: boolean): void;
+  /**
+   * Scenario ▸ Map Revision: how the string table's text is written to bytes. A map's
+   * file carries no note of it; the editor guesses on open (`document.version().textEncoding`)
+   * and this is the correction. The strings are unchanged; the table is re-encoded on save.
+   */
+  setTextEncoding(encoding: TextEncoding): void;
   /** A line for the status bar, appended to the label. */
   note(text: string): void;
 }
@@ -2816,6 +2825,8 @@ export interface HotkeyApi {
 export type PluginEvent =
   /** A map was opened, closed or replaced. */
   | "document"
+  /** The editor's language changed (Preferences ▸ Display): re-label what is showing through `api.i18n.t`. */
+  | "language"
   /** Any committed edit (every `document.edit`, stroke, undo and redo bumps it, terrain or not), and a fog edit. */
   | "terrain"
   | "units"
@@ -2870,6 +2881,29 @@ export interface DocumentEvent {
   fileName: string | null;
   /** `document.id()` after the change: the map now in front, or null after a close. */
   id: number | null;
+}
+
+/**
+ * The plugin's words in the editor's language. The editor's own chrome is translated
+ * the same way — English text as the key, a flat catalogue per language — and a plugin
+ * brings its catalogues and gets a `t` over them: an untranslated string is its own
+ * English. Placeholders are `{name}`, `{n, plural, one {…} other {…}}`,
+ * `{x, select, …}` and, for Korean, `{name|을}` (the particle agrees with the value).
+ *
+ * @example
+ * api.i18n.register({ ko: { "Count units\u2026": "유닛 세기…", "{n} units": "유닛 {n}개" } });
+ * api.menu.add("Tools", { label: api.i18n.t("Count units\u2026"), run: () => api.ui.alert(api.i18n.t("{n} units", { n: 3 })) });
+ * api.events.on("language", () => relabel());
+ */
+export interface I18nApi {
+  /** The editor's language, a BCP 47 primary tag: `"en"`, `"ko"`. */
+  readonly language: string;
+  /** Add catalogues, keyed by language; a later one overrides earlier entries. */
+  register(catalogues: Record<string, Record<string, string>>): Disposable;
+  /** The text in the current language, placeholders filled; the text itself when there is no translation. */
+  t(text: string, params?: Record<string, string | number>): string;
+  /** `t` with a context, for the same English words meant differently in two places. */
+  tc(context: string, text: string, params?: Record<string, string | number>): string;
 }
 
 /**

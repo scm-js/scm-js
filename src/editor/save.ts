@@ -20,6 +20,9 @@
 import { combine, serializeChk, type ChkFile, type ChkSection } from "../formats/chk/reader";
 import { SECTION_SPECS, sizeOf, specFor } from "../formats/chk/sections/registry";
 import type { Scenario } from "../formats/chk/scenario";
+import { unencodableStrings } from "../formats/chk/sections/strings";
+import { textEncodingInfo } from "../formats/text/encoding";
+import { t, translate } from "../i18n";
 import { requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
 
 /**
@@ -269,6 +272,10 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
   }
   if (options.compression === "zlib" && options.format !== "chk") {
     warnings.push("zlib needs StarCraft 1.16.1 or Remastered; older builds do not read it.");
+  }
+  const lost = unencodableStrings(scn.strings).length;
+  if (lost > 0) {
+    warnings.push(t("{n, plural, one {# string has} other {# strings have}} characters {encoding} cannot hold; they are written as '?'. Scenario ▸ Map Revision chooses the text encoding.", { n: lost, encoding: translate(textEncodingInfo(scn.strings.encoding).label) }));
   }
 
   const chkSize = out.reduce((n, s) => n + 8 + s.data.length, 0) + (file.trailing?.length ?? 0);

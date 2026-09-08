@@ -94,3 +94,9 @@ button {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+/* Korean breaks lines between words, not syllables; without this a hint wraps mid-word. The
+   document's lang follows the language preference (useApplyPreferences). */
+:lang(ko) {
+  word-break: keep-all;
+}

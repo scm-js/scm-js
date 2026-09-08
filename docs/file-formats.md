@@ -109,6 +109,20 @@ table on save; a string that stops being used is blanked, not removed. `STR ` ad
 its strings with 16-bit offsets, so the whole table has to fit in 64 KB; `STRx` uses
 32-bit offsets and has no such limit.
 
+Neither table says how its bytes spell characters. StarEdit wrote the code page of the
+Windows it ran on — EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
+Chinese, Windows-1251 for Russian, Windows-1252 for the rest — and 1.16.1 reads a file in
+the code page of the machine it runs on. Remastered writes UTF-8 (always in `STRx`) and
+reads `STR ` as UTF-8 when the bytes are valid UTF-8, falling back to the local code
+page when they are not. The editor follows the same reading: a table that is valid
+UTF-8 is UTF-8; otherwise every legacy encoding that decodes the bytes without error is
+scored by how much of the non-ASCII text falls in its own script, and the best guess is
+shown in Scenario ▸ Map Revision for the user to correct. Korean and Chinese bytes are
+often valid in each other's encoding, so a tie goes to Korean. The table is written back
+in the encoding chosen, `?` standing in for a character it cannot hold, which Check Map
+and the Save dialog report first. `stat_txt.tbl` and the other game tables are read the
+same way, so a localized install names its units in its own language.
+
 ## Sections
 
 Every section the editor knows. *Modelled* sections are decoded into the editor's own
@@ -249,7 +263,8 @@ Brood War the other. Blizzard's own Brood War maps carry only the `x` layouts.
 The editor keeps one model at the Brood War width and writes whichever layouts the
 file's revision calls for, plus any the file already carried, so a hybrid map stays a
 hybrid. Changing the revision in Scenario ▸ Map Revision rewrites `VER ` and `TYPE`,
-switches the string table between `STR ` and `STRx` for Remastered, and leaves every
+switches the string table between `STR ` and `STRx` for Remastered (and the text to
+UTF-8 with it), sets the text encoding the table is written in, and leaves every
 string index where it was, so triggers and locations keep pointing at the right text.
 It does not discard the tables the new revision no longer needs; the Save dialog lists
 what will be written.

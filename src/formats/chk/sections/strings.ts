@@ -1,4 +1,5 @@
 import { Writer } from "../binary";
+import { decodeText, detectTextEncoding, encodeText, unencodable, type TextEncoding } from "../../text/encoding";
 
 /**
  * STR/STRx string table.
@@ -7,24 +8,30 @@ import { Writer } from "../binary";
  * MRGN, SPRP and friends — several of which we round-trip as raw bytes — so the table
  * must keep its index space stable across a save. Entries are therefore addressed by
  * position, never renumbered.
+ *
+ * The bytes carry no note of their encoding (see `text/encoding.ts`): `decodeStrings`
+ * guesses one from the whole table's bytes unless told, and `encodeStrings` writes the
+ * table's, so a file opened and saved keeps its bytes and a Korean file edited on a
+ * Korean game stays readable there.
  */
 export interface StringTable {
   /** `strings[i]` is string index `i`; slot 0 is always null. */
   strings: (string | null)[];
   /** True when the source section was STRx (Remastered, 32-bit count and offsets). */
   extended: boolean;
+  /** How the text is written to bytes; guessed on open, a setting afterwards. */
+  encoding: TextEncoding;
 }
 
-const decoder = new TextDecoder("latin1");
-
-export function decodeStrings(data: Uint8Array, extended: boolean): StringTable {
+export function decodeStrings(data: Uint8Array, extended: boolean, encoding?: TextEncoding): StringTable {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const width = extended ? 4 : 2;
   const read = (at: number) => (extended ? view.getUint32(at, true) : view.getUint16(at, true));
 
-  if (data.length < width) return { strings: [null], extended };
+  if (data.length < width) return { strings: [null], extended, encoding: encoding ?? detectTextEncoding(data) };
   const count = read(0);
   const strings: (string | null)[] = [null];
+  const spans: [number, number][] = [];
 
   for (let i = 1; i <= count; i++) {
     const at = i * width;
@@ -33,14 +40,44 @@ export function decodeStrings(data: Uint8Array, extended: boolean): StringTable 
     if (offset >= data.length) { strings.push(null); continue; }
     let end = offset;
     while (end < data.length && data[end] !== 0) end++;
-    strings.push(decoder.decode(data.subarray(offset, end)));
+    strings.push("");
+    spans.push([offset, end]);
   }
 
-  return { strings, extended };
+  // The guess reads every string's bytes at once, so one Hangul name among ASCII
+  // triggers is enough to tip it and one stray high byte is not.
+  if (!encoding) {
+    const total = spans.reduce((n, [a, b]) => n + (b - a), 0);
+    const all = new Uint8Array(total);
+    let n = 0;
+    for (const [a, b] of spans) { all.set(data.subarray(a, b), n); n += b - a; }
+    encoding = detectTextEncoding(all);
+  }
+  let s = 0;
+  for (let i = 1; i <= count; i++) {
+    if (strings[i] === "") { const [a, b] = spans[s++]; strings[i] = decodeText(data.subarray(a, b), encoding); }
+  }
+
+  return { strings, extended, encoding };
+}
+
+/**
+ * Every string with a character the table's encoding cannot hold — what `encodeStrings`
+ * would write as `?` — by index, with the characters themselves.
+ */
+export function unencodableStrings(table: StringTable): { index: number; chars: string[] }[] {
+  const out: { index: number; chars: string[] }[] = [];
+  for (let i = 1; i < table.strings.length; i++) {
+    const s = table.strings[i];
+    if (s === null || s === undefined) continue;
+    const chars = unencodable(s, table.encoding);
+    if (chars.length > 0) out.push({ index: i, chars });
+  }
+  return out;
 }
 
 export function encodeStrings(table: StringTable): Uint8Array {
-  const { strings, extended } = table;
+  const { strings, extended, encoding } = table;
   const count = strings.length - 1;
   const width = extended ? 4 : 2;
   const headerSize = width * (count + 1);
@@ -58,7 +95,7 @@ export function encodeStrings(table: StringTable): Uint8Array {
     if (at === undefined) {
       at = headerSize + body.length;
       blobs.set(s, at);
-      for (let c = 0; c < s.length; c++) body.u8(s.charCodeAt(c) & 0xff);
+      body.bytes(encodeText(s, encoding));
       body.u8(0);
     }
     offsets.push(at);

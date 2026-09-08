@@ -1083,6 +1083,18 @@ the remaster can draw in colours its author never chose; the *1.16.1 colours* ti
 in Preferences ▸ Display) switches every preview to the old rendering, and the Repair
 plugin offers to write the reset the old game used to supply.
 
+A map file does not say what encoding its text is in. StarEdit wrote whatever code page
+Windows was using — EUC-KR on a Korean machine, Shift_JIS on a Japanese one,
+Windows-1252 nearly everywhere else — and 1.16.1 still reads the file that way;
+Remastered writes UTF-8 and, reading, tries UTF-8 first and then the code page of the
+machine it is running on. The editor guesses the encoding from the file's bytes when a
+map opens and shows the guess in **Scenario ▸ Map Revision**, where it can be corrected:
+Korean text that opened as garbage is a wrong guess, and choosing *Korean* there fixes
+every string at once. The same choice decides how the text is written on save, so a map
+made for 1.16.1 on a Korean Windows stays readable there; a new map is UTF-8, and moving
+a map to Remastered's STRx table makes it UTF-8 too. A character the chosen encoding
+cannot hold is written as `?`, and Check Map and the Save dialog both say so beforehand.
+
 ### Sounds and switches
 
 The **Sound Editor** joins the map's sound table with the `.wav` files in the archive:
@@ -1527,7 +1539,9 @@ F1 lists every shortcut. The ones worth knowing up front:
 
 ![Preferences](docs/images/preferences.webp)
 
-Preferences (Ctrl+,) are kept in the browser: the splash screen, whether to ask before
+Preferences (Ctrl+,) are kept in the browser: the editor's language (English or Korean;
+the default follows the browser's, and a map's own text is untouched by it), the splash
+screen, whether to ask before
 replacing a modified map (the same tick decides whether closing the tab or quitting the
 desktop app asks about unsaved changes), the tileset and size a new map starts with,
 whether water and units animate and how fast, Test Map's folder, what to do when an
@@ -1635,6 +1649,8 @@ you expected, and a copied log.
 | Map properties, players, forces, colours (including Remastered RGB) | Yes |
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
+| Text encodings | The encoding is guessed on open and chosen in Scenario ▸ Map Revision: UTF-8, Korean (EUC-KR / CP949), Japanese (Shift_JIS), Chinese (GBK, Big5), Cyrillic and Western Windows code pages. Written back in the same encoding on save. |
+| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the Map Revision dialog and the messages about text encodings so far; the rest of the chrome is English until translated (see [docs/development.md](docs/development.md#translations)). |
 | Switch names | Yes |
 | Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
 

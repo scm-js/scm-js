@@ -1,6 +1,11 @@
+import { decodeText, detectTextEncoding } from "../text/encoding";
+
 /**
  * Blizzard `.tbl` string tables (images.tbl, stat_txt.tbl, …): a u16 count, that many u16
- * offsets from the start of the file, and NUL-terminated latin1 strings at those offsets.
+ * offsets from the start of the file, and NUL-terminated strings at those offsets. The
+ * text is in whatever the game's own language used — the original files are Windows-1252,
+ * a Remastered install's localized `stat_txt.tbl` is UTF-8, a Korean 1.16.1's is
+ * EUC-KR — so the encoding is guessed from the whole file, as a map's string table is.
  */
 export function decodeTbl(data: Uint8Array): string[] {
   return decodeTblEntries(data).map((parts) => parts[0] ?? "");
@@ -17,7 +22,7 @@ export function decodeTblEntries(data: Uint8Array): string[][] {
   if (data.length < 2) return [];
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const count = view.getUint16(0, true);
-  const decoder = new TextDecoder("latin1");
+  const encoding = detectTextEncoding(data.subarray(Math.min(2 + count * 2, data.length)));
   const out: string[][] = [];
   const offsets: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -31,7 +36,7 @@ export function decodeTblEntries(data: Uint8Array): string[][] {
     // back would make the "next offset" end before the start, so fall back to the file end.
     const next = offsets[i + 1];
     const end = next !== undefined && next > start ? next : data.length;
-    const parts = decoder.decode(data.subarray(start, end)).split("\0");
+    const parts = decodeText(data.subarray(start, end), encoding).split("\0");
     if (parts.length > 1 && parts[parts.length - 1] === "") parts.pop();
     out.push(parts);
   }

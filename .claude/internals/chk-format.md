@@ -21,6 +21,24 @@
   them at the end instead left a map that got its ISOM back with the lattice past FORC, which no
   editor writes and the Repair plugin then reported as out of order. Any mutation of scenario state must call
   `markDirty(scn, "NAME", ...)` for every section it affects, or the change is silently dropped on save.
+- **Text encoding.** `StringTable.encoding` (`text/encoding.ts`, `TextEncoding`) is how the string
+  table's bytes spell characters — the file carries no note of it. `decodeStrings` guesses from the
+  whole table's bytes unless told (`detectTextEncoding`: valid UTF-8 wins outright, else every legacy
+  encoding that decodes cleanly is scored by the share of non-ASCII text in its own script; the two
+  single-byte pages, which decode anything, are told apart by where the high bytes sit in a word;
+  Korean beats Chinese on a tie by table order and a `preferred` list can move that), `encodeStrings`
+  writes the table's encoding and `?` for a character it lacks (`unencodableStrings` lists them for
+  Check Map, the Save plan and the dialog). Decoding is `TextDecoder`; encoding is a reverse table
+  built once per encoding by decoding every byte and lead/trail pair (`reverseTable`). **Node's ICU
+  decoders differ from the browser's WHATWG ones**: Node's `euc-kr` is KS X 1001 without the CP949
+  extension (8822 syllables silently dropped) and its `windows-1252` maps 0x80–0x9F to C1 controls —
+  the latter is pinned by hand (`WINDOWS_1252_HIGH`) so tests and the browser agree, the former is
+  skipped in the test (`tests/encoding.test.ts`) and works in Chromium. Before this the table was
+  latin1 both ways and the encoder dropped every character to its low byte, so Korean text opened as
+  mojibake and typing Korean wrote garbage. `setExtendedStrings(true)` moves the encoding to UTF-8
+  (Remastered reads STRx as UTF-8 and nothing else reads it); `setTextEncoding` marks the STR/STRx
+  section dirty. `create.ts` starts a new map UTF-8. `decodeTbl` (`dat/tbl.ts`) guesses the same way,
+  so a localized `stat_txt.tbl` names units in its own language.
 - To model a new section: add a codec in `sections/`, decode it in `parseScenario`, add a case to
   `encodeSection`, and add a `tests/chk.test.ts` round-trip.
 - `create.ts` builds a fresh scenario (File ▸ New) with every section the game requires: the three the

@@ -27,6 +27,7 @@
     "extract:tilesets": "node scripts/extract-tilesets.mjs",
     "extract:units": "node scripts/extract-units.mjs",
     "check:assets": "node scripts/extract-assets.mjs --check",
+    "i18n": "node scripts/i18n.mjs",
     "build:plugin-types": "node scripts/build-plugin-types.mjs",
     "build:docs": "node scripts/build-plugin-types.mjs && node scripts/build-docs.mjs",
     "publish:plugin-types": "node scripts/publish-plugin-api.mjs"

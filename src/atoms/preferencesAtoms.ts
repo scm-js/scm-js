@@ -10,6 +10,7 @@
 import { atom, type Setter } from "jotai";
 import { atomWithStorage, RESET } from "jotai/utils";
 import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
+import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, mergedStorage, removeStoredKeys, storedKeys } from "./storage";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
@@ -52,6 +53,13 @@ export const DEFAULT_GRID_LOOK: GridLook = { color: "#000000", opacity: 28, styl
 
 // getOnInit: the startup hooks read these through `store.get` before anything subscribes.
 export const preferencesAtom = atomWithStorage<Preferences>("scmjs.prefs", DEFAULT_PREFERENCES, mergedStorage(DEFAULT_PREFERENCES), { getOnInit: true });
+
+/**
+ * The language the preference resolves to — what `useApplyPreferences` hands
+ * `setLocale`, and the atom behind the plugin `"language"` event. Derived, so it
+ * changes exactly when the preference does.
+ */
+export const localeAtom = atom((get) => resolveLocale(get(preferencesAtom).language, typeof navigator === "undefined" ? undefined : navigator.language));
 export const gridLookAtom = atomWithStorage<GridLook>("scmjs.grid", DEFAULT_GRID_LOOK, mergedStorage(DEFAULT_GRID_LOOK), { getOnInit: true });
 
 /**

@@ -54,6 +54,9 @@ export function useHotkeys() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Mid-composition keystrokes (Hangul, kana, pinyin): the IME owns them, and the
+      // key it reports is not the character being typed.
+      if (e.isComposing || e.keyCode === 229) return;
       const t = e.target as HTMLElement | null;
       // A tick box or radio button keeps focus after a click but has no text to edit, so the hotkeys still apply there.
       const textInput = t?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((t as HTMLInputElement).type);

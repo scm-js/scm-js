@@ -618,7 +618,8 @@ touched (`["TRIG", "STR "]`), so `changed` is false when every operation was a n
 | `tx.techs` | `get(techId)` gives a `TechView` (effective costs, `defaults`, `state`: the default column and each player's effective `{ available, researched, usesDefault }`). `set(techId, { useDefault?, mineralCost?, gasCost?, researchTime?, energyCost?, state? })` with `state: [{ player, available?, researched?, useDefault? }]`. |
 | `tx.sounds` | `list()` gives the WAV slots in use as `SoundRow`s (`slot`, `path`, `present`, `size`, `usedBy`). `add(path, bytes?)` takes the first free slot, or the slot the path already has; with `bytes` the file goes into the archive under `staredit\wav\`. `remove(slot, deleteFile?)`. |
 | `tx.cuwp` | Triggers ▸ Unit Properties Slots. `list()` / `get(index)` give `CuwpSlotView`s: 0-based `index`; `hitPointsPercent`, `shieldsPercent`, `energyPercent`, `resources`, `hangar` as numbers, or null where the created units keep the type's default; `cloaked` … `invincible` as booleans or null; `used`, `references`, `summary`. `set(index, patch, used?)`: a number sets the field and its "applied" bit, null clears it; a boolean forces a state, null leaves it. `clear(index)`. The *Create Unit with Properties* action stores the slot 1-based in `target`. |
-| `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"`. Sets VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered. |
+| `tx.setVersion(version, extendedStrings?)` | Scenario ▸ Map Revision: `"original"`, `"hybrid"`, `"broodwar"` or `"remastered"`. Sets VER and TYPE, and the string table's width (STR ↔ STRx) when moving to or from Remastered (the text becomes UTF-8 with STRx). |
+| `tx.setTextEncoding(encoding)` | Scenario ▸ Map Revision's text encoding: `"utf-8"`, `"euc-kr"`, `"shift_jis"`, `"gbk"`, `"big5"`, `"windows-1251"` or `"windows-1252"` (`TextEncoding`). The file carries no note of it, so the editor guesses on open — `settings.version().textEncoding` — and this is the correction; the strings are unchanged and the table is re-encoded on save. |
 
 Ids are the game's: units.dat ids for `unitTypes`, upgrades.dat and techdata.dat ids for
 the other two (`api.names.units()` / `upgrades()` / `techs()` list them with their names).
@@ -652,7 +653,7 @@ transaction: `players()` / `player(slot)`, `forces()`, `unitType(id)` / `unitTyp
 (every type with a name), `upgrade(id)` / `upgrades()`, `tech(id)` / `techs()`,
 `sounds()`, `unitAvailable(player, unitId)` (resolved against its default), `cuwpSlots()`
 / `cuwpSlot(index)`, and `version()` (`{ version, label, fileVersion, type,
-extendedStrings, extension }`). Empty lists and nulls with no map. Writing goes through
+extendedStrings, textEncoding, extension }`). Empty lists and nulls with no map. Writing goes through
 `document.update`.
 
 ### `api.triggers`
@@ -1243,6 +1244,32 @@ Walkability is the worked example.
   their own; see `api.commands`. A context item's command is called with the
   `ContextMenuContext` as its argument.
 
+### `api.i18n`
+
+The plugin's words in the editor's language, done the way the editor's own chrome is:
+the English text is the key, a catalogue is a flat object per language, and an
+untranslated string is its own English. `register({ ko: {…} })` adds catalogues (a
+later one overrides earlier entries; the `Disposable` removes them), `t(text, params?)`
+gives the text in the current language with its placeholders filled, `tc(context, text,
+params?)` is the same with a context for the same English words meant differently in
+two places, and `language` is the current language's primary tag (`"en"`, `"ko"`). The
+`"language"` event fires when it changes, for relabelling what is already showing.
+
+Placeholders are a small subset of ICU MessageFormat: `{name}`; `{n, plural, one {# unit}
+other {# units}}`, with `=0`-style exact matches and `#` the number formatted for the
+language (Korean has one plural category and writes only `other`); `{x, select, a {…}
+other {…}}`. For Korean, `{name|을}` appends the particle that agrees with the value —
+을/를, 이/가, 은/는, 과/와, 으로/로 — so a translation never writes "{name}(을)를".
+
+```ts
+api.i18n.register({ ko: { "Count units…": "유닛 세기…", "{n, plural, one {# unit} other {# units}}": "유닛 {n, plural, other {#개}}" } });
+api.menu.add("Tools", { label: api.i18n.t("Count units…"), run: () => api.ui.alert(api.i18n.t("{n, plural, one {# unit} other {# units}}", { n: api.query.unitsOf(0).length })) });
+```
+
+The editor's `scripts/i18n.mjs` extracts `t("…")` / `tc("…", "…")` / `msg("…")` calls
+from a source tree and keeps a catalogue's key set equal to them; a plugin repository
+can run the same over its own `src/` (see [docs/development.md](development.md#translations)).
+
 ### `api.events`
 
 `on(event, fn)` returns a `Disposable`. Listeners are notifications, not a pipeline: they
@@ -1271,6 +1298,7 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 | `"commands"` | A plugin registered or removed a command. This is how a plugin that calls another's by id learns it has arrived, since plugins activate in no fixed order; check `commands.has` in the listener. |
 | `"services"` | A plugin provided or withdrew a service. `services.watch(name, fn)` is the usual way to hear this for one name. |
 | `"gameData"` | The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now, and everything drawn or named from the data is worth redoing. |
+| `"language"` | The editor's language changed (Preferences ▸ Display). `i18n.language` says what it is now; relabel what is showing through `i18n.t`. |
 
 ### `api.storage`
 

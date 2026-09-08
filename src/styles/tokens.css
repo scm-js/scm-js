@@ -43,7 +43,8 @@
   --focus: 0 0 0 1px var(--teal);
 
   /* type */
-  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  /* The Korean faces come after the Latin ones: Inter has no Hangul, so Latin text keeps its look and Hangul falls through to a system face that has it. */
+  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace;
   --fs-xs: 10.5px;
   --fs-sm: 11.5px;

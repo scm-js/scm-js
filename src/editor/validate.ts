@@ -8,7 +8,9 @@ import { MAP_VERSIONS, mapVersionOf, type Scenario } from "../formats/chk/scenar
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { PlayerType } from "../formats/chk/sections/players";
-import { getString } from "../formats/chk/sections/strings";
+import { getString, unencodableStrings } from "../formats/chk/sections/strings";
+import { textEncodingInfo } from "../formats/text/encoding";
+import { t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitName } from "../data/units";
@@ -111,6 +113,12 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   const count = scn.strings.strings.length - 1;
   const capacity = scn.strings.extended ? STRX_CAPACITY : STR_CAPACITY;
   if (count > capacity) add("error", `${count} strings — the ${scn.strings.extended ? "STRx" : "STR"} table holds ${capacity}.`, "Strings", { kind: "dialog", id: "stringEditor" });
+  const lost = unencodableStrings(scn.strings);
+  if (lost.length > 0) {
+    const chars = [...new Set(lost.flatMap((l) => l.chars))];
+    const shown = chars.slice(0, 8).join(" ") + (chars.length > 8 ? " …" : "");
+    add("error", t("{n, plural, one {# string uses} other {# strings use}} characters {encoding} cannot hold ({chars}); they will be saved as '?'. Choose a text encoding that holds them (Scenario ▸ Map Revision).", { n: lost.length, encoding: translate(textEncodingInfo(scn.strings.encoding).label), chars: shown }), "Strings", { kind: "dialog", id: "mapRevision" });
+  }
 
   // ── Triggers ──
   const tested = new Set<number>();

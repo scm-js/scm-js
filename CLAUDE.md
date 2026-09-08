@@ -33,6 +33,7 @@ reach, and the traps in them are not visible from the code.
 | `src/editor/save.ts`, `services/mapIo.ts`, `saveDocument`, `SaveMapDialog` | `saving.md` |
 | `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
 | `src/editor/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
+| `src/i18n/**`, `scripts/i18n.mjs`, `ko.json`, any user-visible string through `t()`, `api.i18n` | `i18n.md` |
 | `src/plugins/{host,api}.ts`, `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces | `plugins-host.md` |
 | `src/plugins/{loader,builtin,defaults,registry,updates}.ts`, `vendor-plugins.mjs`, `*-plugin-types.mjs` | `plugins-loading.md` |
 | A specific plugin repository, or which plugin is the worked example for an API | `plugins-catalogue.md` |
@@ -56,6 +57,7 @@ npx vitest run -t "flood fill"            # tests matching a name
 npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons/upgrades/techdata.dat), game, scripts, unit (BrooDat required)
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"    # or explicit .mpq paths
 npm run check:assets   # what is on disk, no archives touched (predev/prebuild run this with --warn)
+npm run i18n           # the language catalogues against the source (-- --write brings them up to date)
 npm run build:image    # web bundle + docker/Dockerfile -> the `scmjs` image (nginx, no game data)
 node scripts/extract-tilesets.mjs         # just the tilesets
 node scripts/extract-units.mjs            # just the unit data
@@ -118,6 +120,13 @@ and **stays there** — do not bump it for additions; the API is additive and a 
 an addition up with `npm update @scm-js/plugin-api`. Anything a plugin needs at *run time* must
 arrive on `api` (the npm package is types only, so a value imported from it is undefined). There is
 no sandbox: a plugin runs with the page's privileges.
+
+**Translations.** UI text goes through `t("English text", params)` from `src/i18n` (`useT()` in a
+component; `msg()` to mark a string in a table and `translate()` to show it), with a string
+literal always — the extractor reads the source. `npm run i18n -- --write` after adding one, then
+fill the Korean in `src/i18n/ko.json`; `tests/i18n.test.ts` fails on a key the catalogue lacks or
+no longer needs. Only the Map Revision dialog is translated so far; the rest stays plain English
+literals until moved over. Map text is never translated. See `i18n.md`.
 
 **Documentation.** `README.md` and `docs/*.md` are written for *readers* — map makers, mod makers,
 contributors — not as implementation notes. A `src/` path may appear only in a guide's closing

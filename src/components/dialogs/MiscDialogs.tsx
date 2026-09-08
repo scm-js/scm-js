@@ -30,7 +30,8 @@ import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../hooks/useDoodadTools";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
-import type { PluginUpdateMode } from "../../editor/preferences";
+import type { LanguagePreference, PluginUpdateMode } from "../../editor/preferences";
+import { LOCALES } from "../../i18n";
 import {
   archiveExtrasAtom,
   doodadsRevisionAtom,
@@ -664,6 +665,19 @@ export function PreferencesDialog({ entry }: DialogProps) {
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>
                     1× is the speed the game itself runs at.
+                  </p>
+                </Group>
+                <Group title="Language">
+                  <div className="row">
+                    <Select
+                      value={local.language}
+                      options={[{ value: "auto", label: "Same as the browser" }, ...LOCALES.map((l) => ({ value: l.id, label: l.label }))]}
+                      onChange={(e) => patch({ language: e.target.value as LanguagePreference })}
+                      style={{ minWidth: 200 }}
+                    />
+                  </div>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    The editor's own words. A map's text is the map's, whatever language this is.
                   </p>
                 </Group>
                 <Group title="Text colours">

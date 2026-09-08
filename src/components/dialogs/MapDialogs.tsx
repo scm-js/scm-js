@@ -8,9 +8,13 @@ import { gridLookAtom, type GridStyle } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
 import { useTileset } from "../../hooks/useTileset";
-import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, setTextEncoding, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { isTextEncoding, TEXT_ENCODINGS, textEncodingInfo, type TextEncoding } from "../../formats/text/encoding";
+import { unencodableStrings } from "../../formats/chk/sections/strings";
 import { PLAYER_TYPES } from "../../data/players";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
+import { translate } from "../../i18n";
+import { useT } from "../../i18n/react";
 import { PlayerType } from "../../formats/chk/sections/players";
 import { isLocationUsed } from "../../formats/chk/sections/objects";
 import { MAP_SIZES, TILESET_BY_ID, TILESETS, type TilesetId } from "../../data/tilesets";
@@ -253,36 +257,48 @@ const REVISION_PAIRS: [string, string, string][] = [
 ];
 
 /**
- * VER / TYPE, and the string table's width. Changing the revision does not convert the
- * settings sections — a hybrid map legitimately carries both UNIS and UNIx, and the
- * settings dialogs write whichever the new revision reads the next time they apply.
+ * VER / TYPE, the string table's width and its text encoding. Changing the revision does
+ * not convert the settings sections — a hybrid map legitimately carries both UNIS and
+ * UNIx, and the settings dialogs write whichever the new revision reads the next time
+ * they apply.
  */
 export function MapRevisionDialog({ entry }: DialogProps) {
+  const t = useT();
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ v: mapVersionOf(scn.fileVersion), strx: scn.strings.extended }));
+  const [form, setForm] = useScenarioForm(scenario, (scn) => ({ v: mapVersionOf(scn.fileVersion), strx: scn.strings.extended, enc: scn.strings.encoding }));
   const v: MapVersion = form?.v ?? "broodwar";
   const strx = form?.strx ?? false;
-  const setStrx = (on: boolean) => { if (form) setForm({ ...form, strx: on }); };
+  const enc: TextEncoding = form?.enc ?? "utf-8";
+  // STRx is read by Remastered alone, and Remastered reads it as UTF-8.
+  const setStrx = (on: boolean) => { if (form) setForm({ ...form, strx: on, enc: on ? "utf-8" : form.enc }); };
+  const setEnc = (id: string) => { if (form && isTextEncoding(id)) setForm({ ...form, enc: id }); };
+  const encodingOptions = TEXT_ENCODINGS.map((e) => ({ value: e.id, label: translate(e.label) }));
+  // What the chosen encoding would write as '?', counted against the live table.
+  const lost = useMemo(() => (scenario ? unencodableStrings({ ...scenario.strings, encoding: enc }) : []), [scenario, enc]);
   const opts: { id: MapVersion; hint: string }[] = [
-    { id: "original", hint: "original unit set only, no Brood War units" },
-    { id: "hybrid", hint: "loads in both StarCraft and Brood War" },
-    { id: "broodwar", hint: "full Brood War unit set (recommended)" },
-    { id: "remastered", hint: "extended unit / string limits (STRx)" },
+    { id: "original", hint: t("original unit set only, no Brood War units") },
+    { id: "hybrid", hint: t("loads in both StarCraft and Brood War") },
+    { id: "broodwar", hint: t("full Brood War unit set (recommended)") },
+    { id: "remastered", hint: t("extended unit / string limits (STRx)") },
   ];
   // A new map's CHK is empty until its first save; what it will write is in the dirty set.
   const has = (name: string) => (scenario?.chk.sections.some((s) => s.name === name) || scenario?.dirty.has(name)) ?? false;
-  const pick = (id: MapVersion) => { if (form) setForm({ v: id, strx: id === "remastered" && (strx || scenario?.strings.extended === false) }); };
-  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); commit(); } };
+  const pick = (id: MapVersion) => {
+    if (!form) return;
+    const on = id === "remastered" && (strx || scenario?.strings.extended === false);
+    setForm({ v: id, strx: on, enc: on && !strx ? "utf-8" : form.enc });
+  };
+  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); setTextEncoding(scenario, v === "remastered" && strx ? "utf-8" : enc); commit(); } };
 
   if (!scenario) {
-    return <DialogFrame dialogKey={entry.key} title="Map Revision" icon={<ScrollText size={14} />} size="sm"><p className="hint">Open or create a map first.</p></DialogFrame>;
+    return <DialogFrame dialogKey={entry.key} title={t("Map Revision")} icon={<ScrollText size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
   return (
-    <DialogFrame dialogKey={entry.key} title="Map Revision" icon={<ScrollText size={14} />} size="sm" onOk={apply} showApply footerLeft={<span className="mono hint">VER {scenario.fileVersion} · {scenario.type} · {scenario.strings.extended ? "STRx" : "STR"}</span>}>
-      <Group title="Scenario version">
+    <DialogFrame dialogKey={entry.key} title={t("Map Revision")} icon={<ScrollText size={14} />} size="sm" onOk={apply} showApply footerLeft={<span className="mono hint">VER {scenario.fileVersion} · {scenario.type} · {scenario.strings.extended ? "STRx" : "STR"} · {scenario.strings.encoding}</span>}>
+      <Group title={t("Scenario version")}>
         <div className="col" style={{ gap: 6 }}>
           {opts.map((o) => {
             const m = MAP_VERSIONS[o.id];
@@ -295,24 +311,33 @@ export function MapRevisionDialog({ entry }: DialogProps) {
           })}
         </div>
       </Group>
-      <Group title="String table">
-        <Check label="Write the extended string table (STRx, 32-bit offsets)" disabled={v !== "remastered"} checked={v === "remastered" && strx} onChange={(e) => setStrx(e.target.checked)} />
+      <Group title={t("String table")}>
+        <Check label={t("Write the extended string table (STRx, 32-bit offsets)")} disabled={v !== "remastered"} checked={v === "remastered" && strx} onChange={(e) => setStrx(e.target.checked)} />
         <p className="hint" style={{ marginTop: 4 }}>
           {scenario.strings.extended && v !== "remastered"
-            ? "This file has STRx; leaving Remastered converts it back to STR. Strings past 65535 or offsets past 64 KB would not fit."
-            : "Only Remastered reads STRx. The table's indices are unchanged either way; triggers and locations keep pointing where they did."}
+            ? t("This file has STRx; leaving Remastered converts it back to STR. Strings past 65535 or offsets past 64 KB would not fit.")
+            : t("Only Remastered reads STRx. The table's indices are unchanged either way; triggers and locations keep pointing where they did.")}
+        </p>
+        <div className="row" style={{ marginTop: 8 }}>
+          <span>{t("Text encoding")}</span>
+          <Select value={enc} options={encodingOptions} onChange={(e) => setEnc(e.target.value)} disabled={v === "remastered" && strx} style={{ flex: 1 }} />
+        </div>
+        <p className="hint" style={{ marginTop: 4 }}>
+          {lost.length > 0
+            ? t("{n, plural, one {# string uses} other {# strings use}} characters {encoding} cannot hold; they would be saved as '?'.", { n: lost.length, encoding: translate(textEncodingInfo(enc).label) })
+            : t("The file does not say how its text is encoded, so this was guessed from its bytes. {hint}. Remastered reads UTF-8 and falls back to the code page of the machine it runs on; 1.16.1 reads only that code page.", { hint: translate(textEncodingInfo(enc).hint) })}
         </p>
       </Group>
-      <Group title="In this file">
+      <Group title={t("In this file")}>
         <table className="table dense">
-          <thead><tr><th></th><th>Original</th><th>Brood War</th></tr></thead>
+          <thead><tr><th></th><th>{t("Original")}</th><th>{t("Brood War")}</th></tr></thead>
           <tbody>
             {REVISION_PAIRS.map(([label, a, b]) => (
               <tr key={label}><td>{label}</td><td className={has(a) ? "" : "faint"}>{a.trim()}{has(a) ? "" : " —"}</td><td className={has(b) ? "" : "faint"}>{b}{has(b) ? "" : " —"}</td></tr>
             ))}
           </tbody>
         </table>
-        <p className="hint" style={{ marginTop: 6 }}>Sections the editor does not model are written back byte for byte whatever the revision.</p>
+        <p className="hint" style={{ marginTop: 6 }}>{t("Sections the editor does not model are written back byte for byte whatever the revision.")}</p>
       </Group>
     </DialogFrame>
   );

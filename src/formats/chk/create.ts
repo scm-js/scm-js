@@ -14,6 +14,7 @@ import {
   defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
 } from "./sections/settings";
 import { defaultWavs } from "./sections/sounds";
+import { DEFAULT_TEXT_ENCODING } from "../text/encoding";
 import { defaultCuwp, defaultCuwpUsed } from "./sections/cuwp";
 import { defaultVcod } from "./sections/vcod";
 import type { ChkSection } from "./reader";
@@ -88,6 +89,7 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
   const strings = {
     strings: [null, name, description, "Force 1", "Force 2", "Force 3", "Force 4", "Anywhere"],
     extended: false,
+    encoding: DEFAULT_TEXT_ENCODING,
   };
 
   return {

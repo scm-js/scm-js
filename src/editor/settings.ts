@@ -6,11 +6,12 @@
  * the caller bumps `settingsRevisionAtom` (`commitSettingsAtom`) so the chrome re-reads.
  */
 import {
-  MAP_VERSIONS, mapVersionOf, markDirty, setMapVersion, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections,
+  MAP_VERSIONS, mapVersionOf, markDirty, setMapVersion, setTextEncoding, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections,
   type MapVersion, type Scenario,
 } from "../formats/chk/scenario";
 import { ColorMode, FORCE_SLOTS, ForceFlag, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
 import { getString, findString, setString } from "../formats/chk/sections/strings";
+import type { TextEncoding } from "../formats/text/encoding";
 import {
   cloneTechRestrictions, cloneTechSettings, cloneUnitAvailability, cloneUnitSettings, cloneUpgradeRestrictions, cloneUpgradeSettings,
   defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
@@ -691,6 +692,8 @@ export interface MapVersionView {
   type: string;
   /** Whether the string table is STRx. */
   extendedStrings: boolean;
+  /** How the string table's text is written to bytes. */
+  textEncoding: TextEncoding;
   /** The file extension StarEdit would give it. */
   extension: string;
 }
@@ -698,7 +701,7 @@ export interface MapVersionView {
 export function mapVersionView(scn: Scenario): MapVersionView {
   const version = mapVersionOf(scn.fileVersion);
   const v = MAP_VERSIONS[version];
-  return { version, label: v.label, fileVersion: scn.fileVersion, type: scn.type, extendedStrings: scn.strings.extended, extension: v.extension };
+  return { version, label: v.label, fileVersion: scn.fileVersion, type: scn.type, extendedStrings: scn.strings.extended, textEncoding: scn.strings.encoding, extension: v.extension };
 }
 
 /** `setMapVersion` reporting the sections it changed. */
@@ -710,5 +713,13 @@ export function changeMapVersion(scn: Scenario, version: MapVersion, extendedStr
   if (before.fileVersion !== after.fileVersion) out.push("VER ");
   if (before.type !== after.type) out.push("TYPE");
   if (before.extendedStrings !== after.extendedStrings) out.push("STR ", "STRx");
+  else if (before.textEncoding !== after.textEncoding) out.push(strSectionName(scn));
   return out;
+}
+
+/** `setTextEncoding` reporting the section it changed. */
+export function changeTextEncoding(scn: Scenario, encoding: TextEncoding): string[] {
+  if (scn.strings.encoding === encoding) return [];
+  setTextEncoding(scn, encoding);
+  return [strSectionName(scn)];
 }

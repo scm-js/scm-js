@@ -2,6 +2,7 @@ import { Reader } from "./binary";
 import { combine, parseChk, serializeChk, type ChkFile, type ChkSection } from "./reader";
 import { sizeOf, specFor } from "./sections/registry";
 import { decodeStrings, encodeStrings, getString, setString, type StringTable } from "./sections/strings";
+import { DEFAULT_TEXT_ENCODING, type TextEncoding } from "../text/encoding";
 import {
   decodeDoodads, decodeLocations, decodeSprites, decodeUnits,
   encodeDoodads, encodeLocations, encodeSprites, encodeUnits,
@@ -187,7 +188,20 @@ export function setMapVersion(scn: Scenario, version: MapVersion, extendedString
 export function setExtendedStrings(scn: Scenario, extended: boolean) {
   if (scn.strings.extended === extended) return;
   scn.strings.extended = extended;
+  // Remastered reads STRx as UTF-8 and nothing else reads STRx at all, so moving to it
+  // moves the text too; moving back keeps UTF-8, which Remastered still reads from STR.
+  if (extended) scn.strings.encoding = "utf-8";
   markDirty(scn, "STR ", "STRx");
+}
+
+/**
+ * How the string table's text is written to bytes (Scenario ▸ Map Revision). The
+ * strings themselves are unchanged; the whole table is re-encoded on save.
+ */
+export function setTextEncoding(scn: Scenario, encoding: TextEncoding) {
+  if (scn.strings.encoding === encoding) return;
+  scn.strings.encoding = encoding;
+  markDirty(scn, strSectionName(scn));
 }
 
 /**
@@ -257,7 +271,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     ? decodeStrings(strxData, true)
     : strData
       ? decodeStrings(strData, false)
-      : { strings: [null], extended: false };
+      : { strings: [null], extended: false, encoding: DEFAULT_TEXT_ENCODING };
 
   const sprpData = take("SPRP");
   const sprp = sprpData && sprpData.length >= 4 ? new Reader(sprpData) : null;

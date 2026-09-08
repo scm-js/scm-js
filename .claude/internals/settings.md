@@ -54,6 +54,13 @@ for the dialogs come from `assets.upgrades` / `assets.techs` (`upgrades.dat`, `t
 in `dat.ts`, optional like `weapons.dat`). `tests/data-settings.test.ts` pins the codecs, the
 re-striding, the new-map section set and byte-for-byte re-encoding of the fixture maps. `setMapVersion` rewrites VER/TYPE and flips `strings.extended` (STR ↔ STRx: both names go
 dirty and the inapplicable one encodes to `null`, which `serializeScenario` treats as "drop").
+The Map Revision dialog also carries the text encoding (`MapVersionView.textEncoding`,
+`changeTextEncoding`, `tx.setTextEncoding` on the plugin API): the select is disabled with STRx
+ticked (UTF-8 is forced), and the hint under it counts what the *chosen* encoding would lose
+against the live table (`unencodableStrings` over `{ ...scenario.strings, encoding }`). See
+`chk-format.md` for the model. This dialog is also the worked example of the translation
+pattern (`i18n.md`): every string goes through `useT()`'s `t`, the encoding labels through
+`translate()`.
 Map Properties also changes the tileset: `editor/tileset.ts#changeTileset` (ERA, the terrain laid
 again with `flatTerrain` and ISOM to match, the doodads and their overlay sprites dropped — or
 `keepTiles` for ERA alone) through `changeTilesetAtom`, a whole-document transaction like Resize

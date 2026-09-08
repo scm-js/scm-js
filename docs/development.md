@@ -629,6 +629,61 @@ answers written in advance for the fixture maps. Those pictures show the editor'
 around example content, not a model's output; when a dialog changes, change the scene,
 and when a canned answer no longer fits the map it is written for, change the mock.
 
+## Translations
+
+The editor's own words — menus, dialogs, hints, Check Map's findings — can be shown in
+another language; a map's text is the map's and is never touched by this. English and
+Korean exist today, chosen in Preferences ▸ Display or following the browser. The
+scheme is deliberately small and has no library behind it: the browser's own `Intl`
+does the parts that need data (plural rules, number formatting), and the rest is a
+hundred lines.
+
+**Writing a string.** The English text is the key. A component calls `t("Save {name}",
+{ name })` and reads as it always did; an untranslated string falls back to itself; and
+editing the English deliberately orphans the Korean, which is the right failure — a
+translation of words that are no longer there should not survive them. Where one
+English word means two things (*Open* as a menu label and as an adjective), `tc("menu",
+"Open")` gives it a context. A string kept in a table rather than said at the point of
+use is marked with `msg("…")` where it is written and shown through `translate(value)`,
+so the extractor sees the text and the table keeps its English. The argument must be a
+string literal — never a variable or a template with `${}` in it — because the extractor
+reads the source, not the running program.
+
+Placeholders are a small subset of ICU MessageFormat. `{name}` is filled from the
+parameters; `{n, plural, one {# map} other {# maps}}` picks a branch by the language's
+plural rules, with `=0`-style exact matches first and `#` the number formatted for the
+language; `{x, select, a {…} other {…}}` picks by value. Korean has no plural forms and
+writes only `other`, and its particles agree with the word before them, so a Korean
+translation writes `{name|을}` (or 이/가, 은/는, 과/와, 으로/로) and gets 맵을 or 위치를
+by the value's last syllable rather than "{name}(을)를".
+
+**The catalogues.** One flat JSON object per language under `src/i18n/` — `ko.json` —
+with the English text as the key and the translation as the value. `npm run i18n` reads
+every `t()`, `tc()` and `msg()` in `src/` with the TypeScript compiler and reports what
+each catalogue is missing, no longer needs, or has wrong (a translation whose
+placeholders are not the source's); `npm run i18n -- --write` brings the files up to
+date, adding a new key with an empty value and dropping keys nothing asks for. An empty
+value is allowed and shows in English, so a string can be added before its translation
+exists; the test suite fails on a missing key, an unused key, a placeholder mismatch or
+a `t()` whose argument is not a literal, so the catalogues cannot drift from the source.
+Translating is filling in the empty values — the report lists them — and a native
+reader's review of the wording is worth more than any of the machinery.
+
+Adding a language is an entry in `LOCALES`, a `src/i18n/<tag>.json`, and its name in the
+script's list. A language that needs its own fonts adds them after the Latin ones in
+the font stack, the way the Korean faces are: Inter has no Hangul, so Latin text keeps
+its look and Hangul falls through to a face that has it.
+
+**Plugins** get the same translator on `api.i18n` — `register` their own catalogues,
+`t` and `tc` over them, `language`, and the `"language"` event — and can run the same
+extractor over their own source; see [docs/plugins.md](plugins.md#apii18n).
+
+**What is translated so far.** The Map Revision dialog and the messages about text
+encodings, as the worked example of the pattern. Everything else in the chrome is still
+written as plain English literals and shows in English whatever the language; moving a
+dialog over is wrapping its strings in `t()`, running `npm run i18n -- --write` and
+filling in the Korean.
+
 ## Contributing
 
 - **Keep the documents current.** `README.md`, `docs/file-formats.md`, `docs/game-data.md`,

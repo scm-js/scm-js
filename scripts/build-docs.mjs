@@ -32,6 +32,7 @@ import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/d
 
 const root = resolve(import.meta.dirname, "..");
 const EDITOR_URL = "https://editor.scmjs.dev";
+const SITE_URL = "https://scmjs.dev/";
 const API_DTS = join(root, "plugin-api/index.d.ts");
 
 /**
@@ -139,6 +140,7 @@ function main(argv) {
       version,
       editorUrl: EDITOR_URL,
       repoUrl: REPO_URL,
+      siteUrl: SITE_URL,
       base,
     });
     write(out, opts.url, html);

@@ -57,7 +57,7 @@ export function codeBlock(code, opts) {
  * The shell. `nav` is the whole site's tree with the current page marked, so every page
  * carries the same sidebar and nothing has to be generated per section.
  */
-export function page({ title, description, url, body, nav, toc = "", version = "", editorUrl, repoUrl, base = "" }) {
+export function page({ title, description, url, body, nav, toc = "", version = "", editorUrl, repoUrl, siteUrl, base = "" }) {
   const heading = title === "scmJS documentation" ? title : `${title} — scmJS documentation`;
   return `<!doctype html>
 <html lang="en">
@@ -87,6 +87,7 @@ export function page({ title, description, url, body, nav, toc = "", version = "
   </div>
   <label class="menu-button" for="menu" aria-label="Menu">Menu</label>
   <nav class="top-links">
+    <a href="${siteUrl}#download">Download</a>
     <a href="${editorUrl}">Editor</a>
     <a href="${repoUrl}">GitHub</a>
   </nav>

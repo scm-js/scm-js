@@ -28,6 +28,7 @@ import {
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
+import { BUG_REPORT_BUDGET, formatLog, logDropped, logEntries } from "../../editor/log";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
@@ -172,9 +173,11 @@ function useMenus(): Menu[] {
   const overlays = useAtomValue(pluginOverlaysAtom);
   const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
   const setStatus = useSetAtom(statusMessageAtom);
-  const copyDiagnostics = () => {
-    void navigator.clipboard.writeText(diagnostics).then(
-      () => setStatus(t("Diagnostics copied — the build, the game data source and the plugins.")),
+  // Beside Report an Issue, and the only copy most map makers will find — so it carries the
+  // log as well as the header, capped at what a GitHub issue body will take (`log.ts`).
+  const copyBugReport = () => {
+    void navigator.clipboard.writeText(formatLog(logEntries(), diagnostics, logDropped(), BUG_REPORT_BUDGET)).then(
+      () => setStatus(t("Bug report copied — the build, the game data source, the plugins and the log.")),
       () => setStatus(t("The browser did not allow copying; open View ▸ Debug Console and save the log instead.")),
     );
   };
@@ -449,9 +452,9 @@ function useMenus(): Menu[] {
         ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),
         link(msg("Documentation"), `${REPO_URL}#readme`),
         sep,
-        // The half of a bug report that is worth more than the log: the build, the game
-        // data source and the plugins. Beside Report an Issue, which is where it is pasted.
-        { kind: "item", label: msg("Copy Diagnostics"), onSelect: copyDiagnostics },
+        // The whole of a bug report: the build, the game data source, the plugins and the
+        // log. Beside Report an Issue, which is where it is pasted.
+        { kind: "item", label: msg("Copy Bug Report"), onSelect: copyBugReport },
         link(msg("Report an Issue…"), `${REPO_URL}/issues/new`),
         sep,
         dlg(msg("About scmJS…"), "about"),

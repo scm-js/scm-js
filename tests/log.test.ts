@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  baseName, clearLog, formatData, formatEntry, formatLog, log, logDropped, logEntries, logError,
-  LOG_CAPACITY, resetLogForTests, stamp, subscribeLog,
+  baseName, BUG_REPORT_BUDGET, clearLog, formatData, formatEntry, formatLog, log, logDropped,
+  logEntries, logError, LOG_CAPACITY, resetLogForTests, scrubFrame, stamp, subscribeLog,
 } from "../src/editor/log";
 import { diagnosticsHeader, shortAgent } from "../src/editor/diagnostics";
 
@@ -174,6 +174,70 @@ describe("rendering", () => {
     const lines = formatLog(logEntries()).split("\n");
     expect(lines[0]).toContain("× app: Uncaught error: boom");
     expect(lines[1]).toMatch(/^ {9}Error: boom/);
+  });
+});
+
+describe("the copy a bug report gets", () => {
+  it("keeps the newest entries within the budget and says what it left out", () => {
+    for (let i = 0; i < 200; i++) log("info", "app", `line ${i} ${"x".repeat(80)}`);
+    const text = formatLog(logEntries(), "scm-js 0.1.0 · browser", 0, 2000);
+    expect(text.length).toBeLessThan(2000 + 200);
+    // The tail is what is kept, and the count is of what is not.
+    expect(text).toContain("app: line 199");
+    expect(text).not.toContain("app: line 100 ");
+    const omitted = /… (\d+) earlier entries left out/.exec(text);
+    expect(omitted).not.toBeNull();
+    expect(Number(omitted?.[1])).toBeGreaterThan(150);
+    expect(text).toContain("Debug Console ▸ Save…");
+  });
+
+  it("adds what the ring dropped to what the budget cut", () => {
+    for (let i = 0; i < 50; i++) log("info", "app", `line ${i} ${"x".repeat(80)}`);
+    const text = formatLog(logEntries(), "", 12, 500);
+    const omitted = Number(/… (\d+) earlier entries left out/.exec(text)?.[1]);
+    expect(omitted).toBeGreaterThan(12 + 40);
+  });
+
+  it("keeps the whole log when it fits, and says nothing about trimming", () => {
+    log("info", "app", "one");
+    const text = formatLog(logEntries(), "", 0, BUG_REPORT_BUDGET);
+    expect(text).toContain("app: one");
+    expect(text).not.toContain("left out");
+  });
+
+  it("keeps one entry however big it is, rather than copying nothing", () => {
+    log("info", "app", "x".repeat(500));
+    const text = formatLog(logEntries(), "", 0, 10);
+    expect(text).toContain("x".repeat(500));
+  });
+
+  it("does not copy without a budget", () => {
+    for (let i = 0; i < 100; i++) log("info", "app", `line ${i} ${"x".repeat(80)}`);
+    expect(formatLog(logEntries())).toContain("app: line 0");
+  });
+});
+
+describe("a stack frame in a shared log", () => {
+  it("keeps the file, the line and the column and drops the folders in front of them", () => {
+    expect(scrubFrame("at draw (file:///C:/Users/someone/scm-js/dist/index.js:12:5)")).toBe("at draw (index.js:12:5)");
+    expect(scrubFrame("at http://localhost:5173/src/editor/log.ts:120:9")).toBe("at log.ts:120:9");
+    expect(scrubFrame("at run (/home/someone/app/main.js:3:1)")).toBe("at run (main.js:3:1)");
+    expect(scrubFrame("at open (C:\\Users\\someone\\app\\main.js:3:1)")).toBe("at open (main.js:3:1)");
+  });
+
+  it("leaves alone what is not a path", () => {
+    expect(scrubFrame("Error: bad ratio 3/4")).toBe("Error: bad ratio 3/4");
+    expect(scrubFrame("at new Promise (<anonymous>)")).toBe("at new Promise (<anonymous>)");
+    expect(scrubFrame("at Object.<anonymous>")).toBe("at Object.<anonymous>");
+  });
+
+  it("scrubs the stack a copied log carries", () => {
+    const err = new Error("boom");
+    err.stack = "Error: boom\n    at draw (file:///C:/Users/someone/app/index.js:12:5)";
+    logError("app", "Uncaught error", err);
+    const text = formatLog(logEntries());
+    expect(text).toContain("at draw (index.js:12:5)");
+    expect(text).not.toContain("someone");
   });
 });
 

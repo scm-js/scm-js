@@ -58,11 +58,33 @@ mirrored: the always-on tier would fill a developer's console with the editor's 
 **The header is worth more than the entries.** Most support questions are answered by
 `diagnostics.ts` alone — build, browser or desktop, where the game data resolved (a missing
 or partial extraction explains a whole class of "the map draws wrong"), the map's shape, and
-the plugins with versions and errors. Hence **Help ▸ Copy Diagnostics**, which copies the
-header without the log. What it deliberately leaves out: full file paths (`log.ts#baseName`
-trims them — a desktop path carries the user's own name), the user agent beyond its engine
-and OS (`shortAgent`), and anything from a plugin's stored settings. The README says what a
-copy contains before anyone copies it; keep that promise if you add a fact here.
+the plugins with versions and errors. What it deliberately leaves out: full file paths
+(`log.ts#baseName` trims them — a desktop path carries the user's own name), the user agent
+beyond its engine and OS (`shortAgent`), and anything from a plugin's stored settings. The
+README says what a copy contains before anyone copies it; keep that promise if you add a
+fact here.
+
+**Help ▸ Copy Bug Report carries the log too, capped.** It used to copy the header alone,
+which had the discoverability backwards: the item beside Report an Issue… is the only copy
+most map makers will ever find, and it produced the weaker artifact while the full one hid
+behind View ▸ Debug Console ▸ Copy. The reason it was header-only was size — a GitHub issue
+body stops at 65536 characters and a paste over that is *rejected*, not trimmed, so a bad
+session was a report that could not be filed. `formatLog`'s fourth argument is a character
+budget (`BUG_REPORT_BUDGET`, 48000) over the entries, never the header; it renders newest
+first, stops when the next entry would not fit, and folds what it left out into the same
+`… N earlier entries` line the ring's own drops use, with a different wording and a pointer
+at Save…. It keeps one entry however big, since a copy of nothing helps nobody. The
+always-on tier is tens of lines a session, so it cuts nothing in the ordinary case; it bites
+on verbose and on error floods. The console's own Copy stays uncapped — that is the
+deliberate hunter's path, and Save… has no paste to fit inside.
+
+**Stacks are scrubbed on the way out, not on the way in.** `e.stack` is the one long string
+an entry may hold and the third door a user's own name can reach a shared log through, after
+the map path and the user agent: a desktop frame is `file:///C:/Users/<name>/…`.
+`scrubFrame` cuts each frame's paths to their base name, keeping `:line:col`, and
+`formatLog` applies it — so Copy and Save are clean while the `console.warn`/`console.error`
+mirror keeps the clickable path a developer needs. A run with one separator and no scheme or
+drive letter in front is left alone, or `bad ratio 3/4` becomes `bad ratio 4`.
 
 **Instrumentation is one walk, not two hundred call sites.** `host.ts#instrument` wraps
 every function on the API object at the bottom of `createPluginApi`. That works because the

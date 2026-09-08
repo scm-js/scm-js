@@ -1568,12 +1568,15 @@ still shows what happened — you do not have to make the problem occur again to
 The last couple of thousand lines are kept; older ones fall off the end, and **Clear** is
 there for starting from a clean slate before reproducing something.
 
-**Copy** puts the whole log on the clipboard with a short header above it: the version, the
-browser or desktop app, where the game data came from, the map's size and tileset, and the
-plugins with their versions. That header is most of what a bug report needs, and **Help ▸
-Copy Diagnostics** copies it on its own without the log. **Save…** writes the same text to a
-file. Both name the map *file* you have open, the plugins you have installed and the build
-you are running — nothing else about you, and never the folder the map is in.
+**Help ▸ Copy Bug Report** is the one to reach for when something has gone wrong: it puts
+the log on the clipboard with a short header above it — the version, the browser or desktop
+app, where the game data came from, the map's size and tileset, and the plugins with their
+versions — ready to paste into an issue. A long session is trimmed to its most recent lines
+so the paste fits in an issue; when it is, it says so.
+
+The console's own **Copy** does the same thing without the trim, and **Save…** writes it to
+a file. All three name the map *file* you have open, the plugins you have installed and the
+build you are running — nothing else about you, and never the folder the map is in.
 
 **Warnings** and **Errors** narrow the list to what went wrong; the box beside them filters
 on any text. **Verbose** adds a line for every edit and every call a plugin makes into the

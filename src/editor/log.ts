@@ -241,18 +241,79 @@ export function formatEntry(e: LogEntry): string {
 }
 
 /**
+ * Characters of entries Help ▸ Copy Bug Report will put on the clipboard, the header not
+ * counted. A GitHub issue body is capped at 65536 characters and a paste over that is
+ * rejected rather than trimmed, so an unbounded copy of a bad session — 2000 entries with
+ * twelve stack lines under some of them — is a report that cannot be filed at all. The
+ * always-on tier writes tens of lines a session, so in practice this cuts nothing; it
+ * bites on a verbose session or an error flood, which are also the sessions where the tail
+ * is the part worth reading. Debug Console ▸ Save… stays uncapped for those.
+ */
+export const BUG_REPORT_BUDGET = 48_000;
+
+const PATHY = /^[([<]*(?:[a-z][a-z\d+.-]*:\/\/|[a-z]:[\\/]|[\\/])/i;
+
+/**
+ * One stack frame with the directories taken out of it, keeping the file, the line and the
+ * column: `at draw (file:///C:/Users/someone/…/dist/index.js:12:5)` becomes
+ * `at draw (index.js:12:5)`. A stack is the one long string an entry holds and the one
+ * place a user's own name can still reach a shared log — `baseName` covers the map file
+ * and `shortAgent` the browser, and this is the third door. Done here rather than at
+ * capture, so the console mirror keeps the clickable path a developer needs.
+ */
+export function scrubFrame(line: string): string {
+  return line.replace(/\S*[\\/]\S*/g, (run) => {
+    // A lone slash between two words is arithmetic or prose, not a path; two of them, or a
+    // scheme or a drive letter in front, is one. `bad ratio 3/4` survives, `a/b/c` does not.
+    if (!PATHY.test(run) && (run.match(/[\\/]/g) ?? []).length < 2) return run;
+    const open = (/^[([<]*/.exec(run) ?? [""])[0];
+    const close = (/[)\]>]*$/.exec(run) ?? [""])[0];
+    const parts = run.slice(open.length, run.length - close.length).split(/[\\/]/).filter(Boolean);
+    const last = parts[parts.length - 1];
+    return last ? `${open}${last}${close}` : run;
+  });
+}
+
+/**
  * The whole log as text, with a header above it. This is what Copy and Save produce, and
  * it is meant to be pasted into a bug report as it stands — plain, one line an entry,
  * stacks indented under theirs.
+ *
+ * `budget` caps the *entries* at that many characters, keeping the newest and saying how
+ * many it left out; the header is never cut, since it is the half of a report that answers
+ * most questions. Without one the copy is the whole buffer.
  */
-export function formatLog(entries: readonly LogEntry[], header = "", droppedCount = 0): string {
+export function formatLog(entries: readonly LogEntry[], header = "", droppedCount = 0, budget = Infinity): string {
+  // Render newest first into a budget, then turn it back the right way round: the tail is
+  // what a reader wants, and an entry costs what its stack costs, which is not knowable
+  // from the count.
+  const body: string[] = [];
+  let used = 0;
+  let cut = 0;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    const block = [formatEntry(e)];
+    if (e.stack) for (const line of e.stack.split("\n").slice(0, 12)) block.push(`         ${scrubFrame(line.trim())}`);
+    const size = block.reduce((n, l) => n + l.length + 1, 0);
+    // Always keep one entry, however big: a copy with nothing in it helps no one.
+    if (used + size > budget && body.length > 0) { cut = i + 1; break; }
+    used += size;
+    for (let j = block.length - 1; j >= 0; j--) body.push(block[j]);
+  }
+  body.reverse();
+
   const lines: string[] = [];
   if (header) lines.push(header, "");
-  if (droppedCount > 0) lines.push(`… ${droppedCount} earlier ${droppedCount === 1 ? "entry" : "entries"} dropped (the log keeps the last ${LOG_CAPACITY})`, "");
-  for (const e of entries) {
-    lines.push(formatEntry(e));
-    if (e.stack) for (const line of e.stack.split("\n").slice(0, 12)) lines.push(`         ${line.trim()}`);
+  const omitted = droppedCount + cut;
+  if (omitted > 0) {
+    lines.push(
+      cut > 0
+        ? `… ${omitted} earlier ${omitted === 1 ? "entry" : "entries"} left out — View ▸ Debug Console ▸ Save… writes the whole log`
+        : `… ${omitted} earlier ${omitted === 1 ? "entry" : "entries"} dropped (the log keeps the last ${LOG_CAPACITY})`,
+      "",
+    );
   }
+  lines.push(...body);
   return `${lines.join("\n")}\n`;
 }
 

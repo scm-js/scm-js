@@ -83,5 +83,5 @@ export const diagnosticsFactsAtom = atom<DiagnosticsFacts>((get) => {
   };
 });
 
-/** The header as text — what Copy puts above the entries, and what Help ▸ Copy Diagnostics copies on its own. */
+/** The header as text — what the console's Copy and Help ▸ Copy Bug Report both put above the entries. */
 export const diagnosticsTextAtom = atom((get) => diagnosticsHeader(get(diagnosticsFactsAtom)));

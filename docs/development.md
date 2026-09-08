@@ -395,8 +395,9 @@ fetching it. Reload drops the copy and fetches again; turning the option off dro
 
 ### Defaults and vendoring
 
-The default plugins (scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigScript
-and scmjs.dev) are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
+The default plugins (scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit,
+TrigScript, Stamp Library and scmjs.dev, of which TrigEdit and scmjs.dev are installed but
+start off) are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
 to a **tag**, never a branch, so that a push to a plugin repository cannot change every
 editor already in use and any release can be rebuilt as it shipped. Moving a default
 forward is a commit that changes the tag there. A plugin's identity is its repository,
@@ -462,7 +463,9 @@ version is cut:
 
 The cron exits early when `main` has not moved since the last nightly. The nightly is
 updated in place: its `nightly` tag is force-moved and its assets replaced, never deleted
-and recreated, so there is one prerelease in the list however many nights run.
+and recreated, so there is one prerelease in the list however many nights run. Its notes
+link `nightly.editor.scmjs.dev`, which is that same build running, so the release page is
+somewhere to try it from as well as somewhere to download it from.
 
 ### Download links
 
@@ -555,7 +558,8 @@ prerelease identifiers as strings.
 
 The hosted editor is a release like every other way of running the editor: the site, the
 installers, the image and the notes are one tag. The nightly site is the nightly's own
-web zip unpacked, never a second build. To put `editor.scmjs.dev` back on an older
+web zip unpacked, never a second build, which is why the nightly's notes can point at it:
+the page and the installers on that release are the same version. To put `editor.scmjs.dev` back on an older
 version, dispatch Build on that tag; the deploy is the only thing a re-run rewrites.
 
 The two editors are separate origins on purpose. The extracted game data lives in the

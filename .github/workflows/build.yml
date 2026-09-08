@@ -12,7 +12,9 @@
 #             download counts survive and nobody watching releases is re-notified. The
 #             cron exits early when main has not moved since the last one. That same web
 #             zip is unpacked onto nightly.editor.scmjs.dev, so the hosted nightly and the
-#             nightly installers are one build carrying one version string.
+#             nightly installers are one build carrying one version string — and the
+#             prerelease's notes link that site, so someone who opens the release can try
+#             the build before deciding to download it.
 #   vX.Y.Z    a tag — a permanent release with the same assets, the container image on
 #             GHCR, the GitHub Pages deploy of editor.scmjs.dev, and notes: `docs/releases/<version>.md` from the tag's own tree (or
 #             the `notes` dispatch input, which wins) above GitHub's generated list of
@@ -593,6 +595,11 @@ jobs:
           TAG: ${{ needs.channel.outputs.tag }}
           VERSION: ${{ needs.channel.outputs.version }}
           NOTES: ${{ inputs.notes }}
+          # The nightly site's domain, but only when the token that deploys it is there
+          # too: exactly the pair the `nightly-site` job skips without, so the notes
+          # cannot offer a link to a site this repository never pushed. The secret is
+          # tested here rather than passed, so it stays out of the environment.
+          SITE: ${{ secrets.NIGHTLY_PAT != '' && vars.NIGHTLY_DOMAIN || '' }}
         run: |
           set -euo pipefail
           if [[ "$CHANNEL" == "stable" ]]; then
@@ -621,12 +628,19 @@ jobs:
           # tag moves.
           git tag -f nightly "$GITHUB_SHA"
           git push -f origin refs/tags/nightly
-          # printf, not a multi-line string literal: this block is indented inside the
-          # YAML, and the leading spaces would reach the notes and make GitHub render the
-          # second paragraph as a code block.
-          notes=$(printf '%s\n\n%s' \
-            "Built from main at ${GITHUB_SHA:0:7} on $(date -u +%Y-%m-%d)." \
-            "Replaced by the next nightly. For a version that stays put, take a numbered release.")
+          # printf over an array, one paragraph per element — not a multi-line string
+          # literal: this block is indented inside the YAML, and the leading spaces would
+          # reach the notes and make GitHub render the later paragraphs as code blocks.
+          paragraphs=("Built from main at ${GITHUB_SHA:0:7} on $(date -u +%Y-%m-%d).")
+          if [[ -n "${SITE:-}" ]]; then
+            # The same build, running: the `nightly-site` job puts this run's web zip up
+            # unchanged, so nobody has to install anything to see what changed. It is a
+            # separate origin from the stable editor, which is worth saying — the game
+            # data, preferences and plugins over there are its own.
+            paragraphs+=("Running at https://$SITE — the web build from this same run, nothing to install. It is a separate site from the stable editor, so it asks for the game data again and keeps its own preferences and plugins.")
+          fi
+          paragraphs+=("Replaced by the next nightly. For a version that stays put, take a numbered release.")
+          notes=$(printf '%s\n\n' "${paragraphs[@]}")
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly assets/* --clobber
             gh release edit nightly --title "Nightly ($VERSION)" --notes "$notes" --prerelease --latest=false

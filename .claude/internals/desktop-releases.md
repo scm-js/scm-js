@@ -63,7 +63,13 @@ numbered releases, the only ones that accumulate).
 main's HEAD, which was the one artifact whose version nobody could get back to), and the
 `nightly-site` job unpacks the nightly's own web zip — never a second build — onto
 `nightly.editor.scmjs.dev` as one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch,
-carrying the `CNAME` a branch-served Pages site keeps its domain in. Rolling the site back is
+carrying the `CNAME` a branch-served Pages site keeps its domain in. The nightly prerelease's notes
+carry a paragraph linking that site — the release page is the only thing most people open, and the
+site is the same run's zip, so it is the cheapest way to try a nightly. That paragraph is written
+only when `NIGHTLY_DOMAIN` *and* `NIGHTLY_PAT` are both set (`SITE:` in the `release` job's env is
+that pair collapsed to the domain-or-empty; the secret is tested in the expression rather than put
+in the environment), which is exactly the condition `nightly-site` deploys under — a fork whose
+nightly site was skipped must not be offered a link to a site nobody pushed. Rolling the site back is
 dispatching build.yml on an older tag. They are separate origins deliberately: OPFS and every
 `scmjs.` key are per origin, so the nightly asks for the game data again and keeps its own
 preferences, plugins and recents rather than writing a stored shape the stable build reads back.

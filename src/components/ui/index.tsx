@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
-import { Tabs as RTabs, Tooltip as RTooltip } from "radix-ui";
+import { Select as RSelect, Tabs as RTabs, Tooltip as RTooltip } from "radix-ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { t, translate } from "../../i18n";
 
@@ -69,6 +69,61 @@ export function Select({ options, className = "", ...rest }: SelectProps) {
         ),
       )}
     </select>
+  );
+}
+
+export interface IconOption {
+  value: string;
+  label: string;
+  /** Drawn to the left of the label, in the list and in the closed control. */
+  icon?: ReactNode;
+}
+
+/**
+ * A select whose rows can carry a drawing — a native `<option>` holds text and nothing else,
+ * so this is radix's Select wearing `.select`'s clothes and the menu's list. Plain option
+ * lists stay on `Select` above: this one is a popup, and behaves like one.
+ */
+export function IconSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+  width,
+  "aria-label": ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly IconOption[];
+  disabled?: boolean;
+  width?: number | string;
+  "aria-label"?: string;
+}) {
+  const current = options.find((o) => o.value === value);
+  return (
+    <RSelect.Root value={value} onValueChange={onChange} disabled={disabled}>
+      <RSelect.Trigger className="select icon-select" style={{ width }} aria-label={ariaLabel}>
+        <RSelect.Value>
+          {options.some((o) => o.icon) && <span className="opt-icon">{current?.icon}</span>}
+          {current ? translate(current.label) : ""}
+        </RSelect.Value>
+        <RSelect.Icon className="chev">
+          <ChevronDown size={12} />
+        </RSelect.Icon>
+      </RSelect.Trigger>
+      <RSelect.Portal>
+        <RSelect.Content className="menu-content select-content" position="popper" sideOffset={4}>
+          <RSelect.Viewport>
+            {options.map((o) => (
+              <RSelect.Item key={o.value} value={o.value} className="menu-item select-item">
+                {options.some((x) => x.icon) && <span className="opt-icon">{o.icon}</span>}
+                <RSelect.ItemText>{translate(o.label)}</RSelect.ItemText>
+              </RSelect.Item>
+            ))}
+          </RSelect.Viewport>
+        </RSelect.Content>
+      </RSelect.Portal>
+    </RSelect.Root>
   );
 }
 

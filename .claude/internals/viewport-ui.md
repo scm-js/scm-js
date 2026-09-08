@@ -25,6 +25,11 @@ read in the first effect pass is still null.
 ### UI
 
 - All state is Jotai; there is no context/provider layering beyond the default store.
+- The kit is `src/components/ui/index.tsx`. `Select` is a native `<select>` and stays the default;
+  `IconSelect` is radix's Select dressed as one, for the single case a native control cannot do —
+  a row with a drawing in it (the language picker's flags, `FlagIcon.tsx`). It renders through a
+  portal, so it works inside a dialog, and `.opt-icon` holds the icon column open for a row without
+  one so the labels line up.
 - Dialogs: `DialogId` union in `src/atoms/uiAtoms.ts`, a stack (`openDialogAtom`/`closeDialogAtom`),
   and a `REGISTRY` of `React.lazy` components in `src/components/dialogs/DialogHost.tsx`, one
   `import()` per dialog module (dialogs sharing a file share a chunk, each entry rendered in its own

@@ -9,7 +9,7 @@ import type { LanguagePreference } from "../i18n";
 export type { LanguagePreference };
 
 export interface Preferences {
-  /** The editor's own language: `"auto"` follows the browser's, else one of `LOCALES`. Applied live. */
+  /** The editor's own language: `"auto"` follows the browser's (the system's, in the desktop app), else one of `LOCALES`. Applied live. */
   language: LanguagePreference;
   /** Show the splash while the game data loads; off starts straight on the editor. */
   splash: boolean;

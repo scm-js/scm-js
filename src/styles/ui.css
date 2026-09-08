@@ -178,6 +178,63 @@ input[type="range"] {
   font-size: var(--fs-sm);
 }
 
+/* IconSelect: .select's face on a popup list, so a row can hold a drawing. */
+.select.icon-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background-image: none;
+  padding-right: 8px;
+  text-align: left;
+  cursor: default;
+}
+.select.icon-select[data-state="open"] {
+  border-color: var(--teal-dim);
+}
+.select.icon-select > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select.icon-select .chev {
+  margin-left: auto;
+  display: grid;
+  color: var(--text-faint);
+}
+.select-content {
+  min-width: var(--radix-select-trigger-width);
+}
+.select-item {
+  padding-left: 10px;
+  cursor: default;
+}
+.opt-globe {
+  color: var(--text-faint);
+}
+/* The icon column is kept even for a row without one, so the labels line up. */
+.opt-icon {
+  flex: none;
+  width: 24px;
+  display: inline-grid;
+  place-items: center;
+}
+.select-item[data-state="checked"] {
+  color: var(--gold);
+}
+.select-item[data-state="checked"][data-highlighted] {
+  color: #fff;
+}
+
+/* A drawn flag (FlagIcon): the ring keeps a white field off the button behind it. */
+.flag {
+  flex: none;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
 /* checkbox / radio */
 .check {
   display: inline-flex;

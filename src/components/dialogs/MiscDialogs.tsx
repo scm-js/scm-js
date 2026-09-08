@@ -5,6 +5,7 @@ import {
   ChevronRight,
   CircleX,
   Database,
+  Globe,
   HardDrive,
   Info,
   Keyboard,
@@ -89,11 +90,13 @@ import {
   Check,
   Field,
   Group,
+  IconSelect,
   ListBox,
   Select,
   Tabs,
   TextInput,
 } from "../ui";
+import FlagIcon from "../ui/FlagIcon";
 import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
@@ -647,11 +650,15 @@ export function PreferencesDialog({ entry }: DialogProps) {
                 </Group>
                 <Group title={t("Language")}>
                   <div className="row">
-                    <Select
+                    <IconSelect
                       value={local.language}
-                      options={[{ value: "auto", label: t("Same as the browser") }, ...LOCALES.map((l) => ({ value: l.id, label: l.label }))]}
-                      onChange={(e) => patch({ language: e.target.value as LanguagePreference })}
-                      style={{ minWidth: 200 }}
+                      aria-label={t("Language")}
+                      width={200}
+                      options={[
+                        { value: "auto", label: hostTerms().desktop ? t("Same as the system") : t("Same as the browser"), icon: <Globe size={13} className="opt-globe" /> },
+                        ...LOCALES.map((l) => ({ value: l.id, label: l.label, icon: <FlagIcon locale={l.id} /> })),
+                      ]}
+                      onChange={(v) => patch({ language: v as LanguagePreference })}
                     />
                   </div>
                   <p className="hint" style={{ marginTop: 4 }}>

@@ -376,13 +376,14 @@ version tag (an untagged repository falls back to its default branch). It refres
 and within about a minute of a plugin repository saying it changed.
 
 For a plugin anywhere else, fill in the
-[submission form](https://github.com/scm-js/registry/issues/new?template=submit-plugin.yml):
-the address of your repository, and the words you want the editor's search to match.
-Nothing else — the listing reads its name, version, description, author and icon from your
-own `plugin.json`. A bot checks the repository as soon as you post it and says in a comment
-what it found, reading it the same way the index does, so you can fix anything it names and
-edit the issue rather than wait to be told. Being listed is then someone here reading the
-code and deciding to: the editor has no sandbox, and the list is what the editor offers.
+[submission form](https://github.com/scm-js/registry/issues/new?template=submit-plugin.yml).
+It asks for the address of your repository and the words you want the editor's search to
+match, and nothing else: the listing reads your name, version, description, author and icon
+from your own `plugin.json`. A bot checks the repository as soon as you post the form and
+replies with what it found, reading it the same way the index does, so you can fix what it
+names and edit the issue rather than wait to be told. Someone here then reads the code and
+decides whether to list it, because a plugin runs unsandboxed and the list is what the editor
+offers.
 
 That registry is not the only one there can be. Any URL serving a file of that shape is a
 registry, and a user can add one under Sources.

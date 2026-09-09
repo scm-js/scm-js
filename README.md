@@ -1,12 +1,12 @@
 # scmJS
 
-A map editor for StarCraft and Brood War that runs in a browser tab, modelled on
+A map editor for StarCraft and Brood War available in the browser and as a desktop app, modelled on
 StarEdit, SCMDraft 2 and StarForge.
 
-It opens the game's own `.scm` and `.scx` maps (and a bare `.chk` scenario), draws them
+It opens the game's `.scm` and `.scx` maps (and a bare `.chk` scenario), draws them
 with the game's terrain and unit graphics, and saves maps the game plays. Whatever it
-does not understand in a file is copied through untouched — an unknown section, a
-malformed one, an archive member it cannot name — so a map only loses what you
+does not understand in a file is copied through untouched - an unknown section, a
+malformed one, an archive member it cannot name - so a map only loses what you
 deliberately change.
 
 ![The editor with Big Game Hunters open on the Terrain layer](docs/images/editor-plain.webp)
@@ -24,17 +24,17 @@ own, listed at the [end](#documentation).
 Three ways to run the editor:
 
 - **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest
-  numbered release. Nothing to install; your maps stay on your own disk, and nothing is
-  sent anywhere unless you ask for it — a copy kept on your scmjs.dev account, or a
+  numbered release. There is nothing to install; your maps stay on your own disk, and nothing is
+  sent anywhere unless you use a network feature - a copy kept on your scmjs.dev account, or a
   question for the AI, both described further down. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
-  every night from the latest changes, for trying what is coming; being a separate site
+  every night from the latest changes, for trying what is in development; being a separate site
   it keeps its own settings and asks for the graphics again.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,
   macOS and Linux, and a Windows zip to unpack and run without installing. The app finds
   a StarCraft installation on its own, registers `.scm` / `.scx` / `.chk` so a
   double-click opens a map, can start the game for Test Map, and offers new versions in a
-  notice when they come out — never installing one on its own.
-- **In a container**, for a server on your own network: `docker run --rm -p 8080:80
+  notice when they come out.
+- **In a container**, for a server on your own network or locally - `docker run --rm -p 8080:80
   ghcr.io/scm-js/scm-js:latest`, then open `http://localhost:8080`.
 
 Building from source is covered in [docs/development.md](docs/development.md).

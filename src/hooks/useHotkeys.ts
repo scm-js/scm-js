@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activeLayerAtom, brushSizeAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, zoomAtom, zoomToFitAtom,
+  activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
   type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
@@ -173,12 +173,22 @@ export function useHotkeys() {
         return;
       }
 
-      // The arrow keys nudge the selected locations by the snap step (a tile when snapping is off); Shift moves a pixel.
-      const arrow = activeLayer === "locations" ? ARROWS[e.key] : undefined;
+      const arrow = ARROWS[e.key];
       if (arrow) {
-        const step = e.shiftKey ? 1 : locationSnap || 32;
-        const n = nudgeLocations({ dx: arrow[0] * step, dy: arrow[1] * step });
-        if (n > 0) { e.preventDefault(); setStatus(t("Moved {n, plural, one {# location} other {# locations}} by {step} px", { n, step })); }
+        e.preventDefault();
+        // On the Locations layer with something selected the arrows nudge it by the snap
+        // step (a tile when snapping is off), Shift by a pixel. Otherwise they scroll the
+        // view — two tiles, or half a screen with Shift.
+        if (activeLayer === "locations" && store.get(selectedLocationsAtom).length > 0) {
+          const step = e.shiftKey ? 1 : locationSnap || 32;
+          const n = nudgeLocations({ dx: arrow[0] * step, dy: arrow[1] * step });
+          if (n > 0) setStatus(t("Moved {n, plural, one {# location} other {# locations}} by {step} px", { n, step }));
+          return;
+        }
+        const v = store.get(viewportRectAtom);
+        const dx = arrow[0] * (e.shiftKey ? Math.max(1, Math.round(v.w / 2)) : 2);
+        const dy = arrow[1] * (e.shiftKey ? Math.max(1, Math.round(v.h / 2)) : 2);
+        store.set(centerViewOnAtom, { x: v.x + v.w / 2 + dx, y: v.y + v.h / 2 + dy });
         return;
       }
 

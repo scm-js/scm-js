@@ -109,8 +109,11 @@ undo history, selection and view, so switching back lands where you left off. Wi
 open there is no row: the window looks as it always has. Preferences ▸ General can turn
 this off, and then Open and New replace the open map as StarEdit does.
 
-Scroll with the mouse wheel (Shift for sideways) or the scrollbars, or click on the
-minimap. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
+Scroll with the mouse wheel (Shift for sideways), the arrow keys (Shift for half a
+screen), a middle-button drag, or the scrollbars, or click on the minimap. A drag that
+reaches the edge of the window scrolls the view along with it, so a stroke, a marquee or
+a unit being moved can carry on past what is on screen; it speeds up the further past the
+edge you push and stops when you let go. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
 Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings sets its
 size. The panels can be hidden from View ▸ Panels and their widths dragged.
 
@@ -358,7 +361,7 @@ A melee map needs none.
 ![The Locations layer with two locations](docs/images/locations.webp)
 
 Drag on empty ground to create one, drag the eight handles to resize, drag inside to
-move, arrow keys to nudge. *Snap* is off, 8 or 16 pixels, one tile or 64 px, and a move
+move, arrow keys to nudge the selected ones (with nothing selected they scroll the view). *Snap* is off, 8 or 16 pixels, one tile or 64 px, and a move
 snaps the box's corner rather than the pointer, so a box picked up off-grid lands on
 it. The palette lists every location in use, and Scenario ▸ Locations is the same list
 as a sortable table.

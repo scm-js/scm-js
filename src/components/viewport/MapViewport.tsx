@@ -95,6 +95,33 @@ import { t, translate } from "../../i18n";
 const TILE = 32;
 
 /**
+ * A drag that reaches the edge of the window scrolls the view under it: `EDGE_BAND` px
+ * inside the scroller is the band where the pan starts, the speed ramps to `PAN_MAX` px/s
+ * as the pointer pushes past it (a capture keeps the events coming well outside the
+ * window, where it just runs at full speed). Screen pixels, not tiles, so the view moves
+ * at the same rate however far out the map is zoomed.
+ */
+const EDGE_BAND = 28;
+const PAN_MIN = 120;
+const PAN_MAX = 1200;
+
+/**
+ * What the move path needs of a pointer event. A React `PointerEvent` satisfies it, and so
+ * does the snapshot the auto-pan keeps, which is how a tick replays the last move against
+ * a scroll position the pointer itself never moved through.
+ */
+interface MoveEvent {
+  clientX: number;
+  clientY: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  buttons: number;
+  currentTarget: HTMLDivElement;
+}
+
+/**
  * Entering a layer switches its overlay on; leaving switches it back off if the layer
  * was what turned it on. The View toggle stays in charge in between, so unticking it
  * hides the overlay even while editing.
@@ -175,6 +202,12 @@ export default function MapViewport() {
   const pickHoverRef = useRef<PickedObject | null>(null);
   /** Whether a plugin's map tool holds the primary button (see `mapToolAtom`). */
   const toolDownRef = useRef(false);
+  /** The last pointer move, kept so an auto-pan frame can replay it after it scrolls. */
+  const lastMoveRef = useRef<MoveEvent | null>(null);
+  /** The auto-pan in progress: its speed in px/s and the sub-pixel remainder each axis carries. */
+  const panRef = useRef<{ raf: number; vx: number; vy: number; dx: number; dy: number; last: number } | null>(null);
+  /** A middle-button drag panning the view: where the pointer was at the last move. */
+  const panDragRef = useRef<{ x: number; y: number } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
   /** The terrain blits, cached between paints; see the terrain block in `draw`. */
@@ -1396,7 +1429,7 @@ export default function MapViewport() {
     };
     raf = requestAnimationFrame(frame);
   }, [centerOn, clearCenterOn, draw]);
-  useEffect(() => () => glideRef.current?.cancel(), []);
+  useEffect(() => () => { glideRef.current?.cancel(); if (panRef.current) cancelAnimationFrame(panRef.current.raf); }, []);
 
   /* keep the view centred when zooming */
   const prevZoom = useRef(zoom);
@@ -1444,7 +1477,7 @@ export default function MapViewport() {
   const clampToMap = (t: { x: number; y: number }) => ({ x: Math.min(mapW - 1, Math.max(0, t.x)), y: Math.min(mapH - 1, Math.max(0, t.y)) });
 
   /** What a plugin's map tool sees: the pointer in map pixels and tiles, kept on the map while it drags. */
-  const toolPointer = (e: React.PointerEvent<HTMLDivElement>, down: boolean, inside = true): MapPointer => {
+  const toolPointer = (e: MoveEvent, down: boolean, inside = true): MapPointer => {
     const raw = pointAt(e);
     const p = down || !inside ? clampPoint(raw) : raw;
     const t = clampToMap(tileAt(e));
@@ -1462,7 +1495,85 @@ export default function MapViewport() {
     }
   };
 
+  /* ── the view follows a drag that reaches the edge ───── */
+
+  /** Whether a drag the view should follow is in progress. */
+  const gestureLive = () =>
+    !!strokeRef.current || !!unitGestureRef.current || !!doodadGestureRef.current || !!spriteGestureRef.current ||
+    !!locationGestureRef.current || !!clipGestureRef.current || !!pickGestureRef.current || toolDownRef.current;
+
+  const stopAutoPan = () => {
+    if (!panRef.current) return;
+    cancelAnimationFrame(panRef.current.raf);
+    panRef.current = null;
+  };
+
+  /**
+   * One auto-pan frame: scroll by what the last move asked for, then run that move again at
+   * the new scroll position. The pointer is standing still, so nothing else would tell the
+   * gesture that the ground under it had moved — the stroke would paint one edge tile for
+   * as long as the view slid past. The speed carries a sub-pixel remainder between frames,
+   * or the slowest push would never round up to a whole pixel and nothing would move.
+   */
+  const panFrame = (now: number) => {
+    const pan = panRef.current;
+    const el = scrollerRef.current;
+    if (!pan || !el) return;
+    if (!gestureLive()) { stopAutoPan(); return; }
+    const dt = Math.min(0.05, (now - pan.last) / 1000);
+    pan.last = now;
+    pan.dx += pan.vx * dt;
+    pan.dy += pan.vy * dt;
+    const stepX = Math.trunc(pan.dx), stepY = Math.trunc(pan.dy);
+    pan.dx -= stepX;
+    pan.dy -= stepY;
+    const wasLeft = el.scrollLeft, wasTop = el.scrollTop;
+    if (stepX) el.scrollLeft = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + stepX));
+    if (stepY) el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, el.scrollTop + stepY));
+    pan.raf = requestAnimationFrame(panFrame);
+    // At the map's edge the scroll stops moving; the gesture has already seen this position.
+    if (el.scrollLeft === wasLeft && el.scrollTop === wasTop) return;
+    if (lastMoveRef.current) onMove(lastMoveRef.current);
+  };
+
+  /** How fast one axis pans: nothing inside the band, ramping to `PAN_MAX` as the pointer pushes past it. */
+  const panSpeed = (pos: number, min: number, max: number) => {
+    const over = pos < min + EDGE_BAND ? pos - (min + EDGE_BAND) : pos > max - EDGE_BAND ? pos - (max - EDGE_BAND) : 0;
+    if (over === 0) return 0;
+    const f = Math.min(1, Math.abs(over) / EDGE_BAND);
+    return Math.sign(over) * (PAN_MIN + (PAN_MAX - PAN_MIN) * f * f);
+  };
+
+  /** Book (or drop) the auto-pan for where this move left the pointer. */
+  const autoPanFrom = (e: MoveEvent) => {
+    const el = scrollerRef.current;
+    if (!el || !gestureLive()) { stopAutoPan(); return; }
+    const r = el.getBoundingClientRect();
+    // On a view too small to hold three bands the two sides would overlap and fight.
+    const vx = r.width > EDGE_BAND * 3 ? panSpeed(e.clientX, r.left, r.right) : 0;
+    const vy = r.height > EDGE_BAND * 3 ? panSpeed(e.clientY, r.top, r.bottom) : 0;
+    if (vx === 0 && vy === 0) { stopAutoPan(); return; }
+    const pan = panRef.current;
+    if (pan) { pan.vx = vx; pan.vy = vy; return; }
+    // The view belongs to the gesture now: a glide from the minimap or a plugin gives way.
+    glideRef.current?.cancel();
+    const started = { raf: 0, vx, vy, dx: 0, dy: 0, last: performance.now() };
+    panRef.current = started;
+    started.raf = requestAnimationFrame(panFrame);
+  };
+
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      // The middle button pans the view, on every layer and whatever the tool is doing.
+      // Cancelling the press also suppresses the compatibility mouse event Chromium's own
+      // middle-click autoscroll rides on.
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      panDragRef.current = { x: e.clientX, y: e.clientY };
+      e.currentTarget.style.cursor = "grabbing";
+      glideRef.current?.cancel();
+      return;
+    }
     if (e.button !== 0) return;
     const tile = tileAt(e);
     if (!inMap(tile)) return;
@@ -1602,7 +1713,25 @@ export default function MapViewport() {
     tools.beginStroke(tile.x, tile.y, pointAt(e));
   };
 
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const onMove = (e: MoveEvent) => {
+    // Kept whole (never the React event itself, which is reused) so an auto-pan frame can
+    // replay this move against a scroll position the pointer never travelled through.
+    lastMoveRef.current = {
+      clientX: e.clientX, clientY: e.clientY, buttons: e.buttons,
+      shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
+      currentTarget: e.currentTarget,
+    };
+    const drag = panDragRef.current;
+    if (drag) {
+      // A middle-button drag pans: the ground follows the pointer.
+      const el = scrollerRef.current!;
+      el.scrollLeft = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft - (e.clientX - drag.x)));
+      el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, el.scrollTop - (e.clientY - drag.y)));
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+      return;
+    }
+    autoPanFrom(e);
     const t = tileAt(e);
     const point = pointAt(e);
     setCursorPixel({ x: Math.max(0, Math.min(worldW, Math.round(point.px))), y: Math.max(0, Math.min(worldH, Math.round(point.py))) });
@@ -1733,6 +1862,13 @@ export default function MapViewport() {
   };
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    stopAutoPan();
+    if (panDragRef.current) {
+      panDragRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      e.currentTarget.style.cursor = "";
+      return;
+    }
     if (toolDownRef.current) {
       toolDownRef.current = false;
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);

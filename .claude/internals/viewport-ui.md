@@ -53,6 +53,30 @@ read in the first effect pass is still null.
   (which serves a booked request instead of painting twice). The object layers' ghosts follow
   the pointer in pixels, so `onMove` schedules a paint on every move there — a terrain or fog
   brush is tile-shaped and only repaints on the crossings.
+- **The view follows a drag** (2026-09-09). A gesture that reaches the edge used to do nothing:
+  the surface takes pointer capture on the press, and the stroke clamps to the map
+  (`clampToMap`, "like StarEdit"), so a drag past the window repainted one edge tile forever
+  while the view stood still. `autoPanFrom(e)` at the top of `onMove` books a rAF loop
+  (`panRef`) whenever any gesture is live — `strokeRef`, the four object gestures, the clip
+  and pick gestures, or a plugin tool's `toolDownRef` — and the pointer is inside the
+  `EDGE_BAND` (28 px) of the scroller's client rect or beyond it. The speed ramps
+  quadratically from `PAN_MIN` to `PAN_MAX` px/s with how far past the band the pointer
+  pushed, in *screen* pixels, so the view moves at the same rate at every zoom; each frame
+  carries the sub-pixel remainder (`pan.dx/dy`) or the slowest push would never round up to a
+  whole pixel. The point of the loop is the last line of `panFrame`: after it scrolls it
+  **replays the last move**, because the pointer is not moving and nothing else would tell
+  the gesture that the ground under it had changed. That is what `MoveEvent` is for — `onMove`
+  and `toolPointer` take the shape rather than a `React.PointerEvent`, and `lastMoveRef` keeps
+  a snapshot of the last one (never the event itself). `onUp` stops the pan, and it stops
+  itself when the gesture ends or the scroll clamps at the map's edge. It cancels a `glide`
+  in progress rather than fighting it.
+- **Panning without a drag.** The middle button pans (`panDragRef`, ground follows the pointer);
+  the press is cancelled, which also suppresses the compatibility mouse event Chromium's own
+  middle-click autoscroll rides on. The arrow keys scroll the view two tiles, half a screen with
+  Shift, through `viewportRectAtom` + `centerViewOnAtom` in `useHotkeys` — on the Locations layer
+  they still nudge, but only while something is selected. Verified headlessly 2026-09-09: a rect
+  stroke carried 950 px past the edge as one continuous line, the pan stopped on release, hovering
+  the band with no button did nothing.
 - `src/editor/platform.ts` is what the chrome says about the shell it is in: `isDesktop()`
   (the Electron bridge is there) and `hostTerms()`, which answers the words — "browser" /
   "app", "this browser" / "this app", "Browser" / "Application" for a heading, and where a

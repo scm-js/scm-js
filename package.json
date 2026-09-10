@@ -1,7 +1,7 @@
 {
   "name": "scm-js",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "main": "desktop/dist/main.cjs",
   "repository": "github:scm-js/scm-js",

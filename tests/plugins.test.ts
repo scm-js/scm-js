@@ -1644,6 +1644,17 @@ describe("plugin text codes", () => {
     expect(colors(false)).toEqual(colors(true));
   });
 
+  it("finds and flattens the lines the old game stacked", () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    const RIGHT = "\x12";
+    expect(api.text.stackedLines(`Name${RIGHT}by Author`)).toEqual([{ line: 0, pieces: 2 }]);
+    // A code at the head places the line; that is not a stack.
+    expect(api.text.stackedLines(`${RIGHT}Right-aligned`)).toEqual([]);
+    const flat = api.text.flattenStacks(`Name${RIGHT}by Author`);
+    expect(flat).toBe("Name by Author");
+    expect(api.text.stackedLines(flat)).toEqual([]);
+  });
+
   it("needs no map", () => {
     const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
     expect(() => api.text.runs("anything")).not.toThrow();

@@ -8,7 +8,9 @@ import {
   NEWLINE_MARK,
   plainText,
   RESET_CODE,
+  flattenStacks,
   runsOf,
+  stackedLines,
   textCode,
   TEXT_CODES,
 } from "../src/editor/textColors";
@@ -231,5 +233,68 @@ describe("fixBleeding", () => {
   it("leaves what the string says untouched", () => {
     const text = `${b(0x06)}red\nplain\nmore`;
     expect(plainText(fixBleeding(text))).toBe(plainText(text));
+  });
+});
+
+describe("stacked text", () => {
+  const RIGHT = b(0x12), CENTRE = b(0x13);
+
+  it("finds a line drawn at more than one alignment", () => {
+    expect(stackedLines(`Name${RIGHT}by Author`)).toEqual([{ line: 0, pieces: 2 }]);
+    expect(stackedLines(`a${RIGHT}b${CENTRE}c`)).toEqual([{ line: 0, pieces: 3 }]);
+  });
+
+  it("leaves a line that only places itself alone", () => {
+    // The code is at the head: it puts the whole line in the centre, which every renderer does.
+    expect(stackedLines(`${CENTRE}Centred name`)).toEqual([]);
+    expect(stackedLines(`${CENTRE}${b(0x06)}Centred and red`)).toEqual([]);
+    // Nothing follows this one, so there is no second piece to stack.
+    expect(stackedLines(`Name${RIGHT}`)).toEqual([]);
+    expect(stackedLines("no codes at all")).toEqual([]);
+  });
+
+  it("counts lines separately, and only the stacked ones", () => {
+    expect(stackedLines(`plain\na${RIGHT}b\n${CENTRE}c`)).toEqual([{ line: 1, pieces: 2 }]);
+  });
+
+  it("does not read text the game never draws as a stack", () => {
+    // 0x0B hides the rest of the string, so the piece after the alignment code is not drawn.
+    expect(stackedLines(`Name${b(0x0b)}hidden${RIGHT}marker`)).toEqual([]);
+    // 0x0C stops the line; what follows on it is gone too.
+    expect(stackedLines(`Name${b(0x0c)}gone${RIGHT}also gone`)).toEqual([]);
+    // Spaces are not something drawn: a piece of them alone does not stack a line.
+    expect(stackedLines(`Name${RIGHT}   `)).toEqual([]);
+  });
+
+  it("lays the pieces out left to right, in the order they are written", () => {
+    expect(flattenStacks(`Name${RIGHT}by Author`)).toBe("Name by Author");
+    expect(flattenStacks(`a${RIGHT}b${CENTRE}c`)).toBe("a b c");
+  });
+
+  it("keeps the head code, the colours and every other byte", () => {
+    expect(flattenStacks(`${CENTRE}${b(0x06)}Red${RIGHT}${b(0x04)}White`)).toBe(`${CENTRE}${b(0x06)}Red ${b(0x04)}White`);
+  });
+
+  it("does not add a space where the pieces already have one", () => {
+    expect(flattenStacks(`Name ${RIGHT}by Author`)).toBe("Name by Author");
+    expect(flattenStacks(`Name${RIGHT} by Author`)).toBe("Name by Author");
+  });
+
+  it("leaves the lines it did not flag exactly as they were", () => {
+    const text = `${CENTRE}head\na${RIGHT}b\r\nplain`;
+    expect(flattenStacks(text)).toBe(`${CENTRE}head\na b\r\nplain`);
+    expect(flattenStacks("nothing to do")).toBe("nothing to do");
+  });
+
+  it("is idempotent, and leaves one alignment for the line", () => {
+    const once = flattenStacks(`a${RIGHT}b${CENTRE}c`);
+    expect(flattenStacks(once)).toBe(once);
+    expect(stackedLines(once)).toEqual([]);
+    expect(runsOf(once)[0].align).toBe("left");
+  });
+
+  it("loses where the pieces sat, not what they say", () => {
+    const text = `Name${RIGHT}by Author`;
+    expect(plainText(flattenStacks(text)).replace(/\s+/g, "")).toBe(plainText(text).replace(/\s+/g, ""));
   });
 });

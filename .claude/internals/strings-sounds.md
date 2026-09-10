@@ -38,7 +38,10 @@ the String Editor and Preferences ▸ Display. The whole
 module is on the plugin API as **`api.text`** (`TextApi` in `plugins/api.ts`,
 `host.ts#text`), so no plugin carries a copy of the numbering — the Repair plugin's string
 finding is `bleedingLines` / `fixBleeding` over `api.query.strings()`, injected into its
-pure `analyze` as `TextHelpers`. `tests/text-colors.test.ts` covers the module and
+pure `analyze` as `TextHelpers`, and its stacked-text finding is `stackedLines` /
+`flattenStacks` the same way (the lines 1.16.1 drew at more than one alignment at once,
+and those lines laid out left to right; a head-of-line alignment code places the line and
+is not a stack). `tests/text-colors.test.ts` covers the module and
 `tests/plugins.test.ts` the API group. `editor/sounds.ts`
 joins `scn.wavs` with `archiveExtrasAtom` (`soundList`, `orphanSounds`, member names normalised for
 case and slashes); the Sound Editor's working copy carries both the table and a new extras `Map`, and

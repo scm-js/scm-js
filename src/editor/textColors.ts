@@ -23,6 +23,12 @@ import { msg } from "../i18n";
  * default colour, so a string written before the remaster can render differently now —
  * `bleedingLines` finds exactly that case, and the Repair plugin turns it into a finding
  * offering to write the reset the old game supplied for free.
+ *
+ * `runsOf` is a modern renderer in the other way too: it takes one alignment for a whole
+ * line, where 1.16.1 obeyed every alignment code on it and stacked the pieces between
+ * them in one place. `stackedLines` finds the lines that were drawn that way and
+ * `flattenStacks` lays them out left to right — the one rewrite here that loses something
+ * (where each piece sat), which is why the Repair plugin offers it unticked.
  */
 
 /** What a control byte does. Colours carry an `rgb`; the rest are layout or visibility. */
@@ -319,4 +325,112 @@ export function fixBleeding(text: string): string {
     out += bleeding.has(line) ? RESET_CODE + part : part;
   }
   return out;
+}
+
+/* ── Stacked text ────────────────────────────────────────── */
+
+/**
+ * A line the game draws in more than one place at once. 0x12 and 0x13 move the text that
+ * follows them to the right or the centre of the line they are on, and 1.16.1 honoured
+ * every one of them: `Name<12>by Author` drew `Name` at the left and `by Author` at the
+ * right of the same line. Lobby names, unit names and briefings were built out of that —
+ * the "stacked" text a classic map shows and a renderer that takes one alignment for the
+ * whole line does not.
+ *
+ * `runsOf` is one of those renderers: `TextLine.align` holds a single alignment, the last
+ * one the line set, so every piece before it lands somewhere its author did not choose.
+ */
+export interface StackedLine {
+  /** 0-based index of the line within the string. */
+  line: number;
+  /** How many pieces of text the line draws, each at its own alignment. */
+  pieces: number;
+}
+
+/**
+ * The lines of `text` that draw at more than one alignment. A line whose only alignment
+ * code sits at its head is not one of them — that code places the line, which is what
+ * every renderer does with it.
+ *
+ * Text the game never draws does not count: an invisible run (0x0B / 0x14, which hide the
+ * rest of the string) or one past a 0x0C, so a hidden marker left after a name does not
+ * read as a stack.
+ */
+export function stackedLines(text: string): StackedLine[] {
+  const out: StackedLine[] = [];
+  let invisible = false;
+  text.split(/\r\n|\n|\r/).forEach((line, index) => {
+    let clipped = false;
+    let pieces = 0;
+    let drawn = false;
+    for (const ch of line) {
+      const b = ch.charCodeAt(0);
+      if (b >= 0x20) {
+        if (!invisible && !clipped && ch !== " ") drawn = true;
+        continue;
+      }
+      const def = BY_BYTE.get(b);
+      if (!def) continue;
+      if (def.effect === "invisible") invisible = true;
+      else if (def.effect === "clip") clipped = true;
+      else if (def.effect === "align") { if (drawn) pieces++; drawn = false; }
+    }
+    if (drawn) pieces++;
+    if (pieces > 1) out.push({ line: index, pieces });
+  });
+  return out;
+}
+
+/**
+ * `text` with every stacked line laid out left to right instead: the alignment codes that
+ * split it are dropped and its pieces joined, in the order they are written, with a space
+ * where they would otherwise run together. A code at the head of a line stays — it places
+ * the line rather than stacking it — and every other byte, colours included, is left
+ * alone. Nothing the string *says* is lost; where each piece sat is.
+ *
+ * Idempotent: a flattened line has no alignment code left to stack it.
+ */
+export function flattenStacks(text: string): string {
+  const stacked = new Set(stackedLines(text).map((s) => s.line));
+  if (stacked.size === 0) return text;
+  const parts = text.split(/(\r\n|\n|\r)/);
+  let line = 0;
+  let out = "";
+  for (const part of parts) {
+    if (part === "\r\n" || part === "\n" || part === "\r") { out += part; line++; continue; }
+    out += stacked.has(line) ? flattenLine(part) : part;
+  }
+  return out;
+}
+
+/** One line's pieces, in writing order, on a single line. */
+function flattenLine(line: string): string {
+  const pieces: string[] = [""];
+  let head = "";
+  let drawn = false;
+  for (const ch of line) {
+    const b = ch.charCodeAt(0);
+    const def = b < 0x20 ? BY_BYTE.get(b) : undefined;
+    if (def?.effect === "align") {
+      // Before anything is drawn it is the line's own placement, not a stack; keep the first.
+      if (!drawn) { if (!head) head = ch; continue; }
+      pieces.push("");
+      continue;
+    }
+    if (b >= 0x20 && ch !== " ") drawn = true;
+    pieces[pieces.length - 1] += ch;
+  }
+  let out = head;
+  pieces.forEach((piece, i) => {
+    if (i > 0 && runsTogether(out, piece)) out += " ";
+    out += piece;
+  });
+  return out;
+}
+
+/** Whether joining these two would push one piece's last word against the next's first. */
+function runsTogether(before: string, after: string): boolean {
+  const visible = (s: string) => [...s].filter((ch) => ch.charCodeAt(0) >= 0x20);
+  const a = visible(before), b = visible(after);
+  return a.length > 0 && b.length > 0 && a[a.length - 1] !== " " && b[0] !== " ";
 }

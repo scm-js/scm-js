@@ -1034,6 +1034,7 @@ classic player palette.
 | `runs(text, options?)` | The string split into lines of coloured runs, the way the game draws it: `TextLine { runs, align }`, `TextRun { text, color, invisible, clipped }`. `invisible` marks what an `<0B>` / `<14>` hides rather than dropping it, `clipped` what an `<0C>` cut off, and `align` reads `<12>` / `<13>`. |
 | `plain(text)` | The text with every control byte removed: what the string actually says. |
 | `bleedingLines(text)` / `fixBleeding(text)` | See below. |
+| `stackedLines(text)` / `flattenStacks(text)` | See below. |
 
 **The Remastered newline change.** StarCraft 1.16.1 reset the text colour at every line
 break; Remastered carries it onto the next line of the same string. So a multi-line string
@@ -1045,9 +1046,27 @@ that differ (`{ line, carried }`, `carried` being the whole `TextCode` inherited
 draw the string alike. It is idempotent and never changes what the string says. The
 Repair plugin's string finding is exactly these two functions over `api.query.strings()`.
 
-Text *stacking*, the 1.16.1 trick of drawing lines on top of each other, is a different
-thing, and there is nothing here for it: Remastered does not render the overlap at all,
-and the intended picture *was* the overlap, so there is nothing to restore it to.
+**Stacked text.** The other thing the old game did that nothing does now. `<12>` and
+`<13>` move the text after them to the right or the centre of the line they are on, and
+1.16.1 obeyed every one of them, so `Name<12>by Author` drew two pieces in two places at
+once — the trick behind classic lobby names, unit names and briefings. Remastered does
+not draw the overlap, and neither does `runs`: `TextLine.align` is one alignment for the
+whole line, the last the line sets, so every piece before it lands somewhere its author
+did not choose.
+
+`stackedLines(text)` returns the lines drawn at more than one alignment (`{ line, pieces }`);
+a line whose only alignment code sits at its head is not one of them, since that code
+places the line rather than stacking it, and text the game never draws — past an `<0B>` /
+`<14>` or an `<0C>` — does not count. `flattenStacks(text)` lays those lines out left to
+right: the codes that split them dropped, the pieces joined in writing order with a space
+between two that would otherwise run together, every colour and every word kept. It is
+idempotent.
+
+Note what flattening cannot do: the intended picture *was* the overlap, so there is
+nothing to restore it to, and what the flat line loses is where each piece sat. That makes
+it a repair to offer rather than to recommend — the Repair plugin's stacked-text finding
+is these two functions over `api.query.strings()`, reported with the map name and unit
+names it affects (`api.query.stringUsage()`) and never ticked by default.
 
 ### `api.ui`
 

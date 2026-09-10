@@ -67,7 +67,7 @@ import {
 } from "../editor/triggers";
 import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
 import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
-import { bleedingLines, DEFAULT_TEXT_COLOR, escapeCode, fixBleeding, INSERTABLE_CODES, plainText, runsOf, TEXT_CODES, textCode } from "../editor/textColors";
+import { bleedingLines, DEFAULT_TEXT_COLOR, escapeCode, fixBleeding, flattenStacks, INSERTABLE_CODES, plainText, runsOf, stackedLines, TEXT_CODES, textCode } from "../editor/textColors";
 import {
   changeMapVersion, changeTextEncoding, forceViews, internString, mapVersionView, patchForce, patchPlayer, patchTech, patchUnitType, patchUpgrade, playerSlotViews, techView, unitTypeView, upgradeView,
 } from "../editor/settings";
@@ -1879,6 +1879,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       escape: escapeCode,
       bleedingLines,
       fixBleeding,
+      stackedLines,
+      flattenStacks,
     },
 
     terrain: {

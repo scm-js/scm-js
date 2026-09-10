@@ -23,7 +23,7 @@ import type { SpriteKind } from "../editor/sprites";
 import type { UnitGroup } from "../data/units";
 import type { SpriteGroup } from "../data/sprites";
 import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../editor/view";
-import type { Align, BleedingLine, CodeEffect, RunOptions, TextCode, TextLine, TextRun } from "../editor/textColors";
+import type { Align, BleedingLine, CodeEffect, RunOptions, StackedLine, TextCode, TextLine, TextRun } from "../editor/textColors";
 import type { DialogId } from "../components/dialogs/ids";
 import type { MapImageOptions } from "../services/mapImage";
 import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
@@ -1886,7 +1886,7 @@ export interface NamesApi {
   tile(id: number): string | null;
 }
 
-export type { Align, BleedingLine, CodeEffect, RunOptions, TextCode, TextLine, TextRun };
+export type { Align, BleedingLine, CodeEffect, RunOptions, StackedLine, TextCode, TextLine, TextRun };
 
 /**
  * Bytes 0x01–0x1F in a string are colour and layout codes. This is the editor's own table
@@ -1904,6 +1904,11 @@ export type { Align, BleedingLine, CodeEffect, RunOptions, TextCode, TextLine, T
  * remaster can draw in colours its author never chose — `bleedingLines` finds exactly
  * those lines and `fixBleeding` writes the reset the old game supplied. Pass
  * `resetPerLine` to `runs` to see the old rendering.
+ *
+ * The other thing the old game did and a modern renderer does not is honour every
+ * alignment code on a line, stacking the pieces between them in one place: `stackedLines`
+ * finds those lines and `flattenStacks` lays them out left to right. `runs` is one of the
+ * renderers that cannot show them — `TextLine.align` is one alignment for the whole line.
  */
 export interface TextApi {
   /** Every byte the game gives a meaning, in order; `rgb` is set for the colours only. */
@@ -1930,6 +1935,19 @@ export interface TextApi {
    * games draw it alike. Idempotent, and never changes what the string says.
    */
   fixBleeding(text: string): string;
+  /**
+   * The lines of `text` that 1.16.1 drew at more than one alignment at once — the
+   * "stacked" lobby and unit names a classic map is built with. A line whose only
+   * alignment code sits at its head is not one: that code places the line.
+   */
+  stackedLines(text: string): StackedLine[];
+  /**
+   * `text` with every stacked line laid out left to right: the alignment codes that split
+   * it dropped and its pieces joined in writing order, a space between two that would
+   * otherwise run together. Colours and every other byte survive, so nothing the string
+   * says is lost — only where each piece sat. Idempotent.
+   */
+  flattenStacks(text: string): string;
 }
 
 /* ── UI ─────────────────────────────────────────────────── */

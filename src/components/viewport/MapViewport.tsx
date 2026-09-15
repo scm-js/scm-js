@@ -180,6 +180,7 @@ export default function MapViewport() {
   /** Tile under the pointer when the context menu opened. */
   const menuTileRef = useRef<{ x: number; y: number } | null>(null);
   const menuPointRef = useRef<MapPoint | null>(null);
+  const [ctxMenuOpen, setCtxMenuOpen] = useState(false);
   /**
    * A Units-layer gesture in progress: moving the selection, a click that places (or, in
    * select mode, clears the selection) unless it grows into a marquee.
@@ -2083,7 +2084,11 @@ export default function MapViewport() {
     { label: t("Map Properties…"), onSelect: () => open("mapProperties") },
   ];
   // What plugins registered for the map, after their own separator.
-  const pluginRows = pluginContextRows(pluginContextItems, "viewport", {
+  // The menu's open state is Radix's own, so opening it does not re-render this component by
+  // itself; mirroring it here does, after `onContextMenu` has recorded the tile and pixel — a
+  // plugin's `visible` and `label` then see the pointer's context, and run only while the menu
+  // is open rather than on every hover.
+  const pluginRows = ctxMenuOpen ? pluginContextRows(pluginContextItems, "viewport", {
     surface: "viewport",
     tile: menuTileRef.current,
     point: menuPointRef.current,
@@ -2091,7 +2096,7 @@ export default function MapViewport() {
     terrainMode,
     terrain: activeTerrain,
     markedArea: clipSelection,
-  });
+  }) : [];
   if (pluginRows.length > 0) ctxItems.push({ label: "", sep: true }, ...pluginRows.map((r) => ({ label: r.label, disabled: r.disabled, onSelect: r.onSelect })));
 
   return (
@@ -2099,7 +2104,7 @@ export default function MapViewport() {
       <div className="ruler-corner"><Crosshair size={11} /></div>
       <div className="ruler top"><canvas ref={topRef} /></div>
       <div className="ruler left"><canvas ref={leftRef} /></div>
-      <ContextMenu.Root>
+      <ContextMenu.Root onOpenChange={setCtxMenuOpen}>
         <ContextMenu.Trigger asChild>
           <div ref={scrollerRef} className="scroller" onScroll={scheduleDraw} tabIndex={0}>
             <div

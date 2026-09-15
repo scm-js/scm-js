@@ -175,7 +175,12 @@ arrive on `api`), `api.graphics`
 `MapImageOptions` grew a `rect` — `renderMapImage` clamps its terrain loop to it and translates the
 context, everything else already drew in map coordinates) and `api.commands`
 (`pluginCommandsAtom`; ids are namespaced under the plugin unless they carry a dot, and
-`menu.add` / `contextMenu.add` / `hotkeys.add` take `command` in place of `run`).
+`menu.add` / `contextMenu.add` / `hotkeys.add` take `command` in place of `run`). A context item's
+`visible` / `label` / `enabled` run when the menu **opens**, not on every hover: Radix owns the menu's open
+state, so `MapViewport` mirrors it (`ctxMenuOpen`, from `onOpenChange`) and builds `pluginContextRows` only
+then, after `onContextMenu` has recorded the tile and pixel. Before 2026-09-15 the rows were built on every
+render and saw the *previous* render's context — null on a fresh map — so any item whose `visible` looked at
+`ctx.point` never showed (found by Magenta's right-click starters).
 The `"document"` event carries a `DocumentEvent { reason, fileName, id }` (`host.ts#documentEvent` over
 `documentChangeAtom`, which `loadDocumentAtom` — `reason` on `LoadedDocument`, `"open"` by default, `"new"`
 from File ▸ New, `"replace"` from `replaceScenarioAtom`, `"switch"` from `activateDocumentAtom` and from

@@ -1152,8 +1152,8 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships nine defaults in order, TrigEdit and scmjs.dev starting off, each pinned to a version", () => {
-    // Which nine, in which order, and which of them start on — the versions deliberately
+  it("ships ten defaults in order, TrigEdit and scmjs.dev starting off, each pinned to a version", () => {
+    // Which ten, in which order, and which of them start on — the versions deliberately
     // not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-scm-scx",
@@ -1162,6 +1162,7 @@ describe("plugin lifecycle", () => {
       "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-trigedit",
+      "github:scm-js/plugin-eudplib",
       "github:scm-js/plugin-trigscript",
       "github:scm-js/plugin-stamp-library",
       "github:scm-js/plugin-scmjs-dev",
@@ -1178,6 +1179,7 @@ describe("plugin lifecycle", () => {
       ["github:scm-js/plugin-image-to-terrain", true],
       ["github:scm-js/plugin-paint", true],
       ["github:scm-js/plugin-trigedit", false],
+      ["github:scm-js/plugin-eudplib", true],
       ["github:scm-js/plugin-trigscript", true],
       ["github:scm-js/plugin-stamp-library", true],
       ["github:scm-js/plugin-scmjs-dev", false],

@@ -24,7 +24,7 @@ scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit (the Text T
 **off** since 2026-09-07 — with it off, TrigScript's `after: "Text Trigger Editor…"` finds no anchor and its item lands at
 the end of the Triggers menu after a separator, which is `menu.add`'s answer for any missing anchor; it stays listed before
 TrigScript so the anchor works for anyone who ticks it on),
-TrigScript (a default since 2026-09-07, on), Stamp Library and
+eudplib (a default since 2026-09-17, on — TrigScript requires it), TrigScript (a default since 2026-09-07, on), Stamp Library and
 scmjs.dev (off), each pinned to a tag; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard
 and Section Explorer are published in the registry but are not defaults — plus any built-in, each a

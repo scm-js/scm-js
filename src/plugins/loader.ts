@@ -125,6 +125,22 @@ export function validateManifest(raw: unknown, where: string): PluginManifest {
   for (const k of ["entry", "build"] as const) {
     if (out[k] && /^(?:[a-z]+:)?\/\//i.test(out[k])) throw new PluginLoadError(`${where}: "${k}" must be a path relative to the manifest.`);
   }
+  // `requires` is read with the same tolerance as the other optional fields — anything that
+  // is not a list of strings is ignored — but a string that *is* there has to be a usable
+  // spec, canonicalised the way Manage Plugins would store it, since the editor is going to
+  // install it: a typo here would otherwise surface as an odd failure on somebody else's row.
+  if (Array.isArray(m.requires)) {
+    const requires: string[] = [];
+    for (const r of m.requires) {
+      if (typeof r !== "string" || r.trim() === "") continue;
+      let spec: string;
+      try { spec = canonicalSpec(parseSpec(r)); } catch (err) {
+        throw new PluginLoadError(`${where}: "requires" names a plugin location the editor cannot use, "${r}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (!requires.includes(spec)) requires.push(spec);
+    }
+    if (requires.length > 0) out.requires = requires;
+  }
   return out;
 }
 

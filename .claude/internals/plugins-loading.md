@@ -317,6 +317,23 @@ Both the version and the icon come through `runtimeOf`, which looks the runtime 
 *installed* spec: `runtimes[entry.spec]` never hit for anything pinned, so every installed
 row had been falling back to `entryIcon` since the defaults were pinned to tags.
 
+**`requires` (2026-09-17).** `PluginManifest.requires` is a list of specs, canonicalised by
+`validateManifest` (an unusable one fails the manifest, naming it). `plugins/requires.ts` is the
+pure half — `requiredInstalls`, `neededBy` (only *enabled* dependents hold a plugin),
+`activationOrder` (depth-first, requirements first, cycles and unknown specs reported through a
+callback and skipped) — every match by `pluginKey`, since a manifest names the repository and the
+row names a version of it. The host wires it in four places: `installPlugin` installs the
+requirements first with the same options (the confirmation passes the previews it fetched to list
+them; a caller with none has them read; one already listed is only enabled; a set guards
+recursion), `enableWithRequirements` is the one enable path both the Manage Plugins tick and
+Browse's *Turn on* call, `InstalledPane` disables the tick and Remove of a held row and says who
+holds it, and `usePlugins` activates `orderedInstalls`. `loadAndRun` logs a requirement not in the
+list and starts the plugin anyway — `services.watch` copes with a provider that never comes, and
+the install path is what adds them. Version compatibility is deliberately **not** in the manifest:
+the provider passes a `version` to `services.provide` and the consumer checks `ServiceInfo.version`;
+a range in the manifest would have the editor arbitrate a contract it never reads. First user:
+Magenta requiring `plugin-eudplib`. `tests/plugin-requires.test.ts`.
+
 **A vendored plugin cannot hand its own module to a worker.** Found when TrigScript became a default
 (2026-09-07): its compile worker `import()`s the compiler by `import.meta.url`, which is the module's
 `blob:` URL when the loader fetched the plugin and works from a same-origin worker. Compiled in by Vite,

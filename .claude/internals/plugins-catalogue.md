@@ -202,7 +202,51 @@ carrying its cell, so Duplicate and Paste re-home them on fresh cells, a row's �
 still carries, Delete prunes; the store forgets its undo on any external change (a snapshot is the whole list); an
 unreadable `magenta\magenta.json` (newer version / bad JSON) blocks writes behind a notice instead of decoding empty;
 hooks are sent to the build server in list order; the local-read (`local: true` catalogue entries) and
-deferred-location checks; the key recipe went onto MSQC.
+deferred-location checks; the key recipe went onto MSQC. 0.8.0 (same day): `src/model/preflight.ts` — a source revision (FNV over trigger
+fingerprints + the sidecar's build parts + the host's locations/units/strings strings) kept as `settings.lastBuild`
+so the head's Build button says built / stale / not built; a preflight (MSQC's reserved player/unit/location slots,
+rows' locations, chat messages, camera name, music present, the server's `/health` `magentaSpec` + plugin list +
+maxMapBytes) that blocks the build on errors with Show links; eud-server reports `magentaSpec` (uncommitted there).
+Dock: `PanelSpec.dock: "right"` + `grow` behind a `layout` storage record (`src/ui/layout.ts`), a draggable
+`.mg-divider` (row or stacked under 440 px), ☰ hides the list; a docked root needs `height: 100%` because the dock's
+body is a scrolling block, not a flex column.
+0.8.1 (2026-09-17, uncommitted): the revision check — Magenta never reads the map's VER otherwise; `check()` takes
+`fileVersion` / `versionLabel` / `magentaRow(kind, index)` and, below 206, puts an `info` problem with `code: "revision"`
+under every EUD row, counter step, comparison and build row (one per grouped entry, none on a disabled row); the editor
+renders those lines under its private rows too and adds one offer line with a Set revision to Remastered button
+(`host.setRemastered()` → `tx.setVersion("remastered")`, STRx by default as the dialog does); the panel re-renders on the
+`settings` event so Scenario ▸ Map Revision clears the lines. `info` on purpose: Remastered plays VER 205 maps with EUD
+fine (SCMDraft writes 205), so the list's badge stays quiet and the lines only say the map is *marked* for an older client.
+0.9.0 (2026-09-17, uncommitted): the build server is gone. `plugin.json` `requires: ["github:scm-js/plugin-eudplib"]`
+(the host's new manifest field); `src/ui/build.ts` takes `api.services.get("eudplib.build")` (contract vendored as
+`vendor/eudplib.ts`, `import type` only), calls `ensure({ reason })` — the library's own install dialog — then `build({ map,
+plugins, sources: { magenta: MAGENTA_PY } })`; `python/magenta.py` moved in from eud-server and `scripts/embed-python.mts`
+writes it into `src/generated/magentaPy.ts` (`tests/python.test.ts` fails on drift and pins its `SPEC_VERSION` to
+`MAGENTA_SPEC_VERSION`, so the two halves of the spec ship together and the old `/health magentaSpec` preflight is
+unnecessary); `preflight.ts` `ServerHealth` → `Runtime | null` (one error when the library is off), `LastBuild` lost
+`server`; Settings lost the Build server field; the dialog watches the service so Manage Plugins toggles re-render it.
+The probe-map script's `--build URL` still speaks the old server's route — to move onto the library's Node runner.
+
+**eudplib** (`github.com/scm-js/plugin-eudplib`, not a default, 2026-09-17, v0.1.0 tagged and on jsDelivr) is the library
+plugin behind every EUD build: eudplib 0.81.0 compiled for Pyodide (`wheel/eudplib-wasm.patch` gates the StormLib
+wrapper behind a `stormlib` cargo feature and drops the epscript/babel build steps — build config only, the recipe and
+the Docker toolchain are in `wheel/`; the spike that proved it is `~/github/eudplib-wasm`, byte-identical CHKs against
+the native euddraft on 3 of 4 captured Magenta payloads, the 4th a hash-seed ordering swap), euddraft's `pluginLoader.py`
+and eight bundled plugins at a00aef1, `python/driver.py` (LoadMap → hooks → CompressPayload → SaveMap, no freeze, no
+message boxes) and `python/mpqshim.py` (the eight-method archive class over an in-memory registry, set onto the
+extension module through a fake `eudplib` package entry before the real import; `platform.system` answers Linux while
+eudplib imports). The service is `eudplib.build` (`contract.d.ts`; `provide("build", …, { version: 1 })`): `versions`,
+`state()`, `downloadBytes`, `ensure({ reason })` — the modal install dialog, one shared in-flight install, decline not
+remembered — and `build({ map, plugins, sources, options })`. mopaq is bundled for the archive halves (`src/archive.ts`);
+the Python is inlined into `dist/worker.js`; the worker is a `blob:` bootstrap that `import()`s `dist/worker.js` from the
+plugin's own tag on jsDelivr (the vendored-worker trap), Pyodide 314.0.7 from its CDN, `typing-extensions` from
+Pyodide's distribution; the eight download files (14.7 MB) go into `caches.open("eudplib-<versions>")` as the "installed"
+state and the worker's own fetches hit the HTTP cache. **One build per worker**: eudplib keeps the map and the game
+loop in module state and a second `LoadMap` fails with "Game loop start is already set", so every build starts a fresh
+Python (~2 s from cache; a probe map builds in 3.7 s in the browser, measured headlessly 2026-09-17 through Magenta's
+dialog on the v0.1.0 tag). A caller's `sources` land in `/ed/plugins/<name>.py`, so a caller can shadow a bundled plugin
+— Magenta ships `magenta.py` this way and eud-server (Cloud Run, `eud.scmjs.dev`) is superseded. `scripts/smoke.mts`
+runs the built worker under Node with the `pyodide` npm package as the CDN stand-in.
 
 **TrigEdit** (`github.com/scm-js/plugin-trigedit`, a default since 2026-09-07 that starts **off**: the text syntax is for
 people carrying triggers in from SCMDraft, and the Trigger Editor and TrigScript cover the rest) is the Text Trigger

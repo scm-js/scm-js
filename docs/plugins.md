@@ -348,6 +348,28 @@ Three things follow from **What you are trusting** above and are worth writing f
 - **They may be running a copy saved in their browser.** That copy is replaced only when
   they press Reload.
 
+### Requiring another plugin
+
+A plugin can lean on another one: a trigger editor that needs a compiler plugin
+running, say. Name it in the manifest, with the same location you would paste into
+Manage Plugins:
+
+```json
+{ "name": "Magenta", "requires": ["github:scm-js/plugin-eudplib"] }
+```
+
+The editor then treats the two as a pair. Adding your plugin adds the required one first,
+with the same choices (pinned, kept as a copy) and the confirmation screen lists it under
+*Also installs*. Turning yours on turns the required one on. At startup the required
+plugin is started before yours. And while yours is on, the required plugin cannot be
+turned off or removed; its row says who needs it.
+
+Which *version* of the required plugin is enough is not written in the manifest. The
+two meet through `api.services`: the required plugin provides a service with a version,
+and yours checks that version in its `watch` and says, in its own dialog, when it is too
+old. A required plugin that is missing does not stop yours from starting, since the
+install path is what adds it; your `watch` simply sees no provider.
+
 ### Talking to a server
 
 The editor puts nothing between your plugin and the network — you call `fetch` yourself —
@@ -1379,6 +1401,7 @@ above. Read the one nearest to what you are writing.
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | `document.open` with bytes fetched from a third party, what a site with no CORS headers means for a plugin, and the waiting kit end to end: a `statusLine` carrying a download's progress and its Cancel, `busy` over the list being replaced, `skeleton` rows and pictures, and `AbortSignal` on every request. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | `triggers.claim`, a dialog that keeps Escape for its own editor, the same workspace as a resizable panel beside the map (`ui.panel` with `resizable`), `ui.pickObject` to put a clicked location or unit into the code, `view.goTo` and `view.flash` from a Ctrl+click, a folder of files kept with the map through `document.extras`, and commands published for other plugins. |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | A library kept in `api.storage` (one record per item, an index, and the quota answer from `set`); `clipboard.capture` for a clip that leaves the user's clipboard alone, `tx.paste` to lay it down as one undo step, `graphics.renderClip` for thumbnails and the ghost a `ui.mapTool` draws under the pointer; a floating panel that can move into the dock and back; JSON export and import, and one item as a line of text through the system clipboard. |
-| [Magenta](https://github.com/scm-js/plugin-magenta) | A sentence-based trigger editor in a floating panel: `ui.panel` with `resizable`, `ui.pickObject` and `view.flash` behind chips, `document.update` with `tx.triggers` and `tx.strings.intern` for one-record writes, `document.extras` for a member of its own, `triggers.claim` on the runs it generates for counter copies and comparisons, `triggers.epd` / `addressOf` and `consts.triggers.maskedRecord` for its EUD catalogue. |
+| [Magenta](https://github.com/scm-js/plugin-magenta) | `requires` the eudplib plugin and builds through its service; a sentence-based trigger editor in a floating panel: `ui.panel` with `resizable`, `ui.pickObject` and `view.flash` behind chips, `document.update` with `tx.triggers` and `tx.strings.intern` for one-record writes, `document.extras` for a member of its own, `triggers.claim` on the runs it generates for counter copies and comparisons, `triggers.epd` / `addressOf` and `consts.triggers.maskedRecord` for its EUD catalogue. |
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | The Text Trigger Editor as a plugin: `triggers.text` print and parse, `tx.triggers.fromText` with `replace`, `triggers.claims` to fence the runs other plugins generate, and a dialog that offers a slot of its own (`DialogSpec.slot`, `"trigedit.text"`) so the scmjs.dev buttons still have a place in it. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, `view.reveal` to follow the assistant's tool calls around the map with the `"view"` event as the sign the user took the view back, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |
+| [eudplib](https://github.com/scm-js/plugin-eudplib) | A library plugin: no editor of its own, one service (`eudplib.build`, provided with a version through `api.services`) that runs eudplib in a Web Worker with Pyodide; a runtime downloaded once into the Cache API after a modal dialog with the widgets' progress bar; a worker bootstrapped from a `blob:` URL that imports the real module from the plugin's own tag on jsDelivr. The first plugin others name in `requires`. |

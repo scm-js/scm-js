@@ -142,6 +142,20 @@ export interface PluginManifest {
   icon?: string;
   /** The `PLUGIN_API_VERSION` the plugin was written against. */
   api?: number;
+  /**
+   * Plugins this one needs running, as the specs Manage Plugins takes
+   * (`"github:owner/repo"`, `"github:owner/repo@v1.2.0"`, a URL to a `plugin.json`,
+   * `"builtin:name"`). Adding this plugin installs them first, enabling it enables them,
+   * and the editor starts them before it; a required plugin cannot be turned off or
+   * removed while something enabled needs it.
+   *
+   * Which *version* of the required plugin is enough is not said here. The two plugins
+   * meet through `api.services`: the required one provides a service with a `version`
+   * (`ServiceOptions`), and this one checks `ServiceInfo.version` in its `watch` and says
+   * so in its own words when it is too old. A version range in the manifest would have
+   * the editor arbitrate a contract it never reads.
+   */
+  requires?: string[];
 }
 
 /** What `activate` may hand back: nothing, a cleanup function, or a Disposable. */

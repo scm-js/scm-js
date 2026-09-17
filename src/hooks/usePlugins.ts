@@ -3,7 +3,7 @@ import { useAtomValue, useStore } from "jotai";
 import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginUpdateCheckAtom } from "../atoms/pluginAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
-import { activatePlugin, activePluginSpecs, deactivatePlugin, effectiveInstalls } from "../plugins/host";
+import { activatePlugin, activePluginSpecs, deactivatePlugin, effectiveInstalls, orderedInstalls } from "../plugins/host";
 import { failureToast, pluginFailures } from "../plugins/failures";
 import { autoUpdateToast, runUpdatePass, shouldCheckPlugins, updateToast } from "../plugins/updates";
 
@@ -45,7 +45,9 @@ export function usePlugins() {
   useEffect(() => {
     const wanted = effectiveInstalls(installed);
     const pass: Promise<void>[] = [];
-    for (const p of wanted) {
+    // A plugin after what it requires: the provider's `services.provide` then lands before
+    // the consumer's `watch` asks, which is only an order — `watch` would hear a later arrival too.
+    for (const p of orderedInstalls(store, wanted)) {
       if (p.enabled) pass.push(activatePlugin(store, p.spec));
       else deactivatePlugin(store, p.spec);
     }

@@ -6,7 +6,8 @@ import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, pluginUpdatesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime, type PluginUpdateAnswer } from "../../atoms/pluginAtoms";
-import { activatePlugin, checkForUpdate, deactivatePlugin, describePlugin, effectiveInstalls, inspectPlugin, installPlugin, isPluginActive, reloadPlugin, setInstalled } from "../../plugins/host";
+import { checkForUpdate, deactivatePlugin, describePlugin, effectiveInstalls, enableWithRequirements, inspectPlugin, installPlugin, isPluginActive, manifestLookup, reloadPlugin, setInstalled, type RequirementPreview } from "../../plugins/host";
+import { neededBy, requirementsOf } from "../../plugins/requires";
 import { defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../../plugins/defaults";
 import {
   addRegistry, entryIcon, groupByInstall, hostOf, isDefaultRegistry, loadRegistries, loadRegistry, mergeRegistries, registryUrls, removeRegistry, searchRegistry, unlistedInstalls,
@@ -210,6 +211,10 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
   const [pin, setPin] = useState(true);
   const [local, setLocal] = useState(previous?.local === true);
   const [busy, setBusy] = useState(false);
+  // What the manifest requires, read the same way this plugin was (one plugin.json each,
+  // no code) so the list can name them; null while they are being read. A requirement the
+  // editor already has is shown as such rather than as something about to be installed.
+  const [requirements, setRequirements] = useState<RequirementPreview[] | null>(null);
 
   useEffect(() => {
     if (given) return;
@@ -223,11 +228,28 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
     return () => { live = false; };
   }, [spec, given]);
 
+  const required = requirementsOf(preview?.manifest);
+  useEffect(() => {
+    if (required.length === 0) { setRequirements(null); return; }
+    let live = true;
+    setRequirements(null);
+    void Promise.all(required.map(async (r): Promise<RequirementPreview> => ({ spec: r, preview: await inspectPlugin(r).catch(() => null) })))
+      .then((list) => { if (live) setRequirements(list); });
+    return () => { live = false; };
+    // The specs are the manifest's; the array is rebuilt on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [required.join("\n")]);
+  const have = effectiveInstalls(installed);
+  const requirementState = (r: RequirementPreview): "installed" | "off" | "new" => {
+    const found = have.find((p) => pluginKey(p.spec) === pluginKey(r.spec));
+    return !found ? "new" : found.enabled ? "installed" : "off";
+  };
+
   const install = async () => {
     if (!preview) return;
     setBusy(true);
     try {
-      await installPlugin(store, preview, { enabled: enable, pin, local, replaces });
+      await installPlugin(store, preview, { enabled: enable, pin, local, replaces, requirements: requirements ?? undefined });
       store.set(pushToastAtom, { kind: "ok", title: replaces ? t("Plugin updated") : t("Plugin installed"), detail: `${preview.manifest?.name ?? preview.spec}${preview.manifest?.version ? ` ${preview.manifest.version}` : ""}${enable ? "" : t(" — off until you turn it on in Manage Plugins")}` });
       onAdded?.();
       close(entry.key);
@@ -300,6 +322,32 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                   {t("Replacing the installed")}{" "}<span className="mono">{replacedVersion(replaces)}</span>{t(". This is newer code, so give it the same look over you would give a plugin you are adding for the first time.")}
                 </p>
               ))}
+
+            {required.length > 0 && (
+              <div className="plugin-requires">
+                <strong>{t("Also installs")}</strong>
+                <span className="hint">{t("This plugin needs the plugins below. They are added with the same choices as this one, and start before it.")}</span>
+                <ul>
+                  {required.map((r) => {
+                    const read = requirements?.find((x) => x.spec === r);
+                    const m = read?.preview?.manifest ?? null;
+                    const state = read ? requirementState(read) : "new";
+                    return (
+                      <li key={r} className="row" style={{ gap: 8 }}>
+                        <PluginIconView icon={read?.preview?.icon} />
+                        <strong>{m?.name ?? r}</strong>
+                        {m?.version && <span className="dim">v{m.version}</span>}
+                        {requirements === null && <span className="badge dim"><LoaderCircle size={9} className="spin" />{t("reading…")}</span>}
+                        {read && !read.preview?.manifest && <span className="badge warn" title={read.preview?.problem ?? undefined}>{t("could not be read")}</span>}
+                        {state === "installed" && <span className="badge dim">{t("already installed")}</span>}
+                        {state === "off" && <span className="badge dim">{t("installed, off — will be turned on")}</span>}
+                        {m?.name && <span className="hint mono" style={{ opacity: 0.7 }}>{r}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
 
             <div className="plugin-warning">
               <ShieldAlert size={15} />
@@ -695,8 +743,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
   const enable = (spec: string) => {
     const found = installOf(spec);
     if (!found) return;
-    setInstalled(store, found.spec, { enabled: true });
-    void activatePlugin(store, found.spec);
+    void enableWithRequirements(store, found.spec);
   };
 
   // The Installed tab holds the pinned spec, which is not the one the registry lists.
@@ -877,9 +924,15 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   }, [spec, looking, list, store]);
 
   const toggle = (s: string, enabled: boolean) => {
+    if (enabled) { void enableWithRequirements(store, s); return; }
     setInstalled(store, s, { enabled });
-    if (enabled) void activatePlugin(store, s); else deactivatePlugin(store, s);
+    deactivatePlugin(store, s);
   };
+  // Which rows are holding which: a plugin something enabled requires keeps its tick and
+  // its Remove button, and says who is asking. Read from the manifests the editor has,
+  // so a row whose manifest is not in yet holds nothing until it is.
+  const needed = neededBy(list, manifestLookup(store), pluginKey);
+  const nameOf = (s: string) => runtimes[s]?.manifest?.name ?? (s.startsWith("builtin:") ? s.slice("builtin:".length) : s);
   // Turning the copy on has to fetch the plugin once to make it, which is what Reload does;
   // turning it off drops the copy (`setInstalled`) and the running plugin is left alone.
   const toggleLocal = (s: string, local: boolean) => {
@@ -1027,9 +1080,12 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           const named = rt?.manifest != null || builtinPlugin;
           const status = statusLabel(rt, p.enabled);
           const answered = checked[p.spec];
+          const holders = (needed.get(p.spec) ?? []).map(nameOf);
+          const held = holders.length > 0;
+          const heldTitle = held ? t("{names} {n, plural, one {needs} other {need}} this plugin; turn {n, plural, one {it} other {them}} off first.", { names: holders.join(", "), n: holders.length }) : undefined;
           return (
             <div key={p.spec} className="item plugin-row" role="listitem" data-spec={p.spec}>
-              <Check label="" checked={p.enabled} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={t("Enable {name}", { name })} />
+              <Check label="" checked={p.enabled} disabled={held} title={heldTitle} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={t("Enable {name}", { name })} />
               <PluginIconView icon={rt?.icon} />
               <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
@@ -1043,6 +1099,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                 {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
                 {rt?.status === "error" && rt.error && <span className="error-text">{rt.error}</span>}
                 {rt?.status === "active" && <span className="hint">{contributionSummary(rt)}</span>}
+                {held && <span className="hint" title={heldTitle}>{t("Needed by {names}", { names: holders.join(", ") })}</span>}
               </div>
               <div className="plugin-row-actions">
                 <div className="row" style={{ gap: 4 }}>
@@ -1066,7 +1123,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                       </Button>
                     ))}
                   <Button size="sm" title={t("Fetch the plugin again from its address (and replace any copy kept here)")} disabled={!p.enabled} onClick={() => { void reloadPlugin(store, p.spec); }}><RefreshCw size={11} /> {" "}{t("Reload")}</Button>
-                  {!isDefault && <Button size="sm" title={t("Remove from the list")} onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
+                  {!isDefault && <Button size="sm" title={held ? heldTitle : t("Remove from the list")} disabled={held} onClick={() => remove(p.spec)}><Trash2 size={11} /></Button>}
                   {shipped !== undefined && shipped !== p.spec && (
                     <Button
                       size="sm"

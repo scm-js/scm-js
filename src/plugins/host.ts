@@ -32,6 +32,7 @@ import {
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
+import { activationOrder, installFor, requiredInstalls, requirementsOf, type ManifestLookup } from "./requires";
 import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
@@ -2412,6 +2413,11 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
     // this editor cannot run has its top-level code never evaluated.
     const { manifest, icon, module } = await loadPlugin(spec, local.deps, { accept: checkApiVersion });
     if (!stillWanted()) return;
+    // A requirement that is not in the list is the install path's job, not a reason to
+    // refuse the plugin: it starts, and its `services.watch` sees no provider.
+    for (const r of requirementsOf(manifest)) {
+      if (!installFor(r, effectiveInstalls(store.get(installedPluginsAtom)), pluginKey)) logWarn("plugins", `${manifest.name} requires ${r}, which is not installed`, { spec, required: r });
+    }
     if (local.files) storeSnapshot(store, spec, local.files);
     const info: PluginInfo = { id: pluginIdOf(manifest), name: manifest.name, source: spec, version: manifest.version, icon };
     setRuntime(store, spec, { manifest, icon: icon ?? null });
@@ -2664,9 +2670,30 @@ export function inspectPlugin(spec: string, deps: Pick<LoaderDeps, "fetchText" |
 export async function installPlugin(
   store: Store,
   preview: PluginPreview,
-  opts: { enabled?: boolean; pin?: boolean; local?: boolean; replaces?: string; deps?: LoaderDeps } = {},
+  opts: { enabled?: boolean; pin?: boolean; local?: boolean; replaces?: string; deps?: LoaderDeps; requirements?: readonly RequirementPreview[]; seen?: Set<string> } = {},
 ) {
   const enabled = opts.enabled !== false;
+  const deps = opts.deps ?? browserLoaderDeps();
+  // What this plugin requires goes in first, with the same choices, so the plugin never
+  // runs a moment without its provider. One already in the list is not installed again —
+  // only turned on, if it was off and this one is going on. The confirmation hands over the
+  // previews it fetched to show; a caller with none gets them read here. A requirement
+  // that cannot be read is still added, so its failure is on a row in Manage Plugins
+  // rather than nowhere.
+  const seen = opts.seen ?? new Set<string>([preview.spec]);
+  for (const required of requirementsOf(preview.manifest)) {
+    if (seen.has(required)) continue;
+    seen.add(required);
+    const found = installFor(required, effectiveInstalls(store.get(installedPluginsAtom)), pluginKey);
+    if (found) {
+      if (enabled && !found.enabled) await enableWithRequirements(store, found.spec, deps);
+      continue;
+    }
+    const given = opts.requirements?.find((r) => r.spec === required)?.preview;
+    const rp = given ?? await previewPlugin(required, deps).catch(() => null);
+    if (!rp) { logWarn("plugins", `${preview.manifest?.name ?? preview.spec} requires ${required}, which could not be read`, { required }); continue; }
+    await installPlugin(store, rp, { enabled, pin: opts.pin, local: opts.local, deps, requirements: opts.requirements, seen });
+  }
   // Pinning is what actually gets stored: `github:owner/repo@<sha>` instead of a ref that moves.
   const pinned = opts.pin !== false && preview.pin !== null;
   const spec = pinned ? preview.pin!.spec : preview.spec;
@@ -2678,7 +2705,45 @@ export async function installPlugin(
   }
   if (preview.manifest) rememberManifest(store, spec, preview.manifest, preview.icon);
   setInstalled(store, spec, { enabled, local: opts.local === true });
-  if (enabled) await activatePlugin(store, spec, opts.deps ?? browserLoaderDeps());
+  if (enabled) await activatePlugin(store, spec, deps);
+}
+
+/** A required plugin as the confirmation read it: its spec and the preview, or null when it could not be read. */
+export interface RequirementPreview {
+  spec: string;
+  preview: PluginPreview | null;
+}
+
+/** The manifest the editor holds for a spec — the running one, else the last one read for the row. */
+export function manifestLookup(store: Store): ManifestLookup {
+  const runtimes = store.get(pluginRuntimesAtom);
+  const cache = store.get(pluginManifestCacheAtom);
+  return (spec) => runtimes[spec]?.manifest ?? cache[spec]?.manifest ?? null;
+}
+
+/**
+ * Turn a plugin on, and with it whatever it requires. The one rule behind the Manage
+ * Plugins tick and Browse's *Turn on*: a plugin enabled without its provider would sit
+ * with a dead button, and neither screen should have to know what it needs. Works from
+ * the manifests the editor has read — a plugin whose manifest is not in yet enables
+ * alone, and its load logs what is missing.
+ */
+export async function enableWithRequirements(store: Store, spec: string, deps: LoaderDeps = browserLoaderDeps(), seen = new Set<string>()): Promise<void> {
+  if (seen.has(spec)) return;
+  seen.add(spec);
+  const installs = effectiveInstalls(store.get(installedPluginsAtom));
+  for (const r of requiredInstalls(spec, installs, manifestLookup(store), pluginKey)) {
+    if (!r.enabled) await enableWithRequirements(store, r.spec, deps, seen);
+  }
+  setInstalled(store, spec, { enabled: true });
+  await activatePlugin(store, spec, deps);
+}
+
+/** The installed list in the order to start it: each plugin after the ones it requires (`plugins/requires.ts`). */
+export function orderedInstalls(store: Store, installs: readonly PluginInstall[]): PluginInstall[] {
+  return activationOrder(installs, manifestLookup(store), pluginKey, (problem) => {
+    logWarn("plugins", problem.kind === "cycle" ? `${specLabel(problem.spec)} and ${problem.required} require each other` : `${specLabel(problem.spec)} requires ${problem.required}, which is not installed`, { spec: problem.spec, required: problem.required });
+  });
 }
 
 /** Add, remove or toggle a plugin in the persisted list (Remove also drops its copy). */

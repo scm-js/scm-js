@@ -237,7 +237,9 @@ message boxes) and `python/mpqshim.py` (the eight-method archive class over an i
 extension module through a fake `eudplib` package entry before the real import; `platform.system` answers Linux while
 eudplib imports). The service is `eudplib.build` (`contract.d.ts`; `provide("build", …, { version: 1 })`): `versions`,
 `state()`, `downloadBytes`, `ensure({ reason })` — the modal install dialog, one shared in-flight install, decline not
-remembered — and `build({ map, plugins, sources, options })`. mopaq is bundled for the archive halves (`src/archive.ts`);
+remembered — and `build({ map, plugins, sources, files, options })` (`files`, 0.2.0: data files written to `/work/files/<name>`
+for a plugin setting to name — TrigScript's IR goes this way; the value rule forbids only backslash paths, so a forward-slash
+path is a legal setting). mopaq is bundled for the archive halves (`src/archive.ts`);
 the Python is inlined into `dist/worker.js`; the worker is a `blob:` bootstrap that `import()`s `dist/worker.js` from the
 plugin's own tag on jsDelivr (the vendored-worker trap), Pyodide 314.0.7 from its CDN, `typing-extensions` from
 Pyodide's distribution; the eight download files (14.7 MB) go into `caches.open("eudplib-<versions>")` as the "installed"

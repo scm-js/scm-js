@@ -53,7 +53,9 @@ runs `useMapFileActions.ts#openFileInto` (the store-level half of the hook's `op
 `PendingAction` in the Close Scenario dialog: `runPending` answers through its `done` callback, and a
 dismissal (Cancel, Escape, the ×) is seen from `dialogStackAtom` — the entry leaves without `taken`,
 which `proceed` sets before closing (an unmount effect ran once at mount under React's dev double-mount). `document.export()` is `writeMapBytes` with the archive extras as a `File`,
-`document.renderImage()` is `exportMapImage` (null without the tileset or a canvas), and
+`document.test(bytes, fileName, { launch })` (2026-09-17, for TrigScript's Build & Test) is `services/testMap.ts#writeTestFile` — `runTestMap`'s
+body over given bytes, `noDownload` so a browser with no test folder answers null rather than downloading a copy the plugin already
+saved — `document.renderImage()` is `exportMapImage` (null without the tileset or a canvas), and
 `document.extras` reads and writes `archiveExtrasAtom` (setting marks the map modified) so a plugin
 can keep a file of its own in the archive. `MenuItemSpec.icon` (`"plugin"` resolves to the manifest
 icon at `menu.add`, so `PluginMenuItem.icon` is always a `PluginIcon`) draws through `PluginIconView`

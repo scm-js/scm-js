@@ -3373,3 +3373,14 @@ describe("plugin trigger EUD helpers, fingerprints and usage", () => {
     expect(api.triggers.usage([eud]).cells).toEqual([]);
   });
 });
+
+describe("document.test", async () => {
+  const { testFileNameFor } = await import("../src/services/testMap");
+  it("names the file the way the game lists it", () => {
+    expect(testFileNameFor("a-eud.scx")).toBe("a-eud.scx");
+    expect(testFileNameFor("dir/sub\\map.chk")).toBe("map.scx");
+    expect(testFileNameFor("no extension")).toBe("no extension.scx");
+    expect(testFileNameFor("bad:name?.scm")).toBe("bad_name_.scm");
+    expect(testFileNameFor("")).toBe("map.scx");
+  });
+});

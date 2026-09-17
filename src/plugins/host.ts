@@ -123,6 +123,7 @@ import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "./transpileClient";
 import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { defaultSaveOptions } from "../editor/save";
+import { writeTestFile } from "../services/testMap";
 import { saveBlob } from "../services/mapIo";
 import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
 import { floodRegion, flatGroupOf, replaceTerrain } from "../editor/terrain";
@@ -1697,6 +1698,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const height = Math.max(1, Math.min(256, Math.round(options.height)));
         const anchor = Math.max(0, Math.min(8, Math.round(options.anchor ?? 4)));
         return store.set(resizeDocumentAtom, { width, height, anchor, terrainId: options.terrainId, clampLocations: options.clampLocations ?? true });
+      },
+      test: async (bytes, fileName, options = {}) => {
+        if (gone("document.test")) return null;
+        if (!(bytes instanceof Uint8Array) || !bytes.length) throw new Error("document.test needs the map's bytes.");
+        return writeTestFile(store, bytes, String(fileName || "map.scx"), { launch: options.launch, noDownload: true });
       },
       export: async (options = {}) => {
         const scn = scenario();

@@ -111,6 +111,24 @@ export async function runTestMap(store: Store, req: TestMapRequest = {}): Promis
   const name = testFileName(store);
   const bytes = await testMapBytes(store);
   if (!name || !bytes) return null;
+  return writeTestFile(store, bytes, name, req);
+}
+
+/** A file name the game will list: the extension made an archive's, unsafe characters dropped. */
+export function testFileNameFor(fileName: string): string {
+  let name = fileName.split(/[\\/]/).pop()!.replace(/[<>:"|?*]/g, "_").replace(/[^\x20-\uffff]/g, "").trim() || "map";
+  if (/\.chk$/i.test(name)) name = name.replace(/\.chk$/i, ".scx");
+  if (!/\.(scx|scm)$/i.test(name)) name += ".scx";
+  return name;
+}
+
+/**
+ * `runTestMap` for bytes that are not the open map — a plugin's built output. With
+ * `noDownload`, a browser that has no test folder answers null instead of offering a
+ * download, so a caller that has already saved the file does not hand out a second copy.
+ */
+export async function writeTestFile(store: Store, bytes: Uint8Array, fileName: string, req: TestMapRequest & { noDownload?: boolean } = {}): Promise<TestMapOutcome | null> {
+  const name = testFileNameFor(fileName);
   const prefs = store.get(preferencesAtom);
   const bridge = desktopBridge();
   if (bridge) {
@@ -118,6 +136,7 @@ export async function runTestMap(store: Store, req: TestMapRequest = {}): Promis
     return { route: "desktop", path: r.path, launched: r.launched, message: r.message };
   }
   if (req.download || !canPickTestFolder()) {
+    if (req.noDownload) return null;
     const outcome = await saveBytes(bytes, name, null);
     return outcome ? { route: outcome.route === "download" ? "download" : "folder", path: outcome.fileName, launched: false } : null;
   }

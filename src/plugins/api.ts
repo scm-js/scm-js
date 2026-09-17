@@ -26,6 +26,7 @@ import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../editor/view"
 import type { Align, BleedingLine, CodeEffect, RunOptions, StackedLine, TextCode, TextLine, TextRun } from "../editor/textColors";
 import type { DialogId } from "../components/dialogs/ids";
 import type { MapImageOptions } from "../services/mapImage";
+import type { TestMapOutcome } from "../services/testMap";
 import type { RebuildResult, SectionInfo, SectionKnowledge } from "../editor/sections";
 import type { CombineMode } from "../formats/chk/reader";
 import type { ActionRecord, ConditionRecord, TriggerRecord } from "../formats/chk/sections/triggers";
@@ -512,6 +513,16 @@ export interface DocumentApi {
    * a map, null.
    */
   renderImage(options?: Partial<MapImageOptions>): Promise<Blob | null>;
+  /**
+   * Tools ▸ Test Map for bytes of the plugin's own — a built map that is not the open
+   * one. On the desktop the file is written into the game's `Maps\scmJS` folder and, with
+   * `launch` (the preference when omitted), the game is started; in a browser it is
+   * written into the test folder the user picked once. It never downloads: a browser
+   * with no folder answers null, so a plugin that has already saved the file says "open
+   * it with Test Map" instead of handing out a second copy. `fileName` gets an archive's
+   * extension if it lacks one.
+   */
+  test(bytes: Uint8Array, fileName: string, options?: { launch?: boolean }): Promise<TestMapOutcome | null>;
   /**
    * Scenario ▸ Resize / Crop Map: a transaction outside the undo model that drops both
    * history stacks (as the dialog does). Content keeps its place relative to `anchor`

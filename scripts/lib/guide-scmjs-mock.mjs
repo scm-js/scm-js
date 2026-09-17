@@ -389,6 +389,12 @@ const RECIPES = {
       const text = "Done. Two cliff-walled lanes from the north spawns to the south goal, a yard and a hire pad per player; Spawn 1 reaches the Goal on foot, and every player owns something. Add the waves with ums_build when you are ready.";
       return { cost: 0.01, inputTokens: 7600, outputTokens: 90, text, output: { stopReason: "end_turn", content: [{ type: "text", text }] } };
     }
+    // An answer that ran past the output limit, as the server reports it: the panel
+    // should show the turn as stopped, not done, and offer Continue.
+    if (/cut off/i.test(asked) && !results.length) {
+      const text = "The map has three bases in the north and two in the south. The northern ones are";
+      return { cost: 0.01, inputTokens: 7600, outputTokens: 4000, text, output: { stopReason: "max_tokens", content: [{ type: "text", text }] } };
+    }
     // A long turn, to exercise the panel: reasoning, narration, reads, a screenshot, a
     // call that fails, edits — seven steps before the answer.
     if (/exercise/i.test(asked)) {

@@ -80,7 +80,14 @@ language and its internals. What stays here is generic:
   manifest's `files` list and `readMembers`' second pass (`more`) probes those too — the one thing the
   editor reads out of the plugin's members.
 - `data/triggerDefs.ts#DEATHS_TABLE_ADDRESS` is the EPD base the Classic editor's player pick uses
-  (the plugin's compiler carries its own copy).
+  (the plugin's compiler carries its own copy). `editor/triggers.ts` holds `epdOf` / `addressOfEpd`
+  (the Classic editor re-exports them), `fingerprintTrigger` (FNV-1a over the numbers, bookkeeping
+  bits masked) and `triggerUsage` (every cell and switch a list touches, `playerSlotsOf` expanding
+  the groups the way TrigScript's `reserve` does); `api.triggers.epd / addressOf / fingerprint /
+  usage` and `consts.triggers.maskedRecord` (0x4353, Remastered's masked-record word) expose them,
+  added 2026-09-12 for the Magenta plugin (`github.com/scm-js/plugin-magenta`), which carries
+  its own pure copies so its tests run without the editor. The `+ 0x2000` the docs used to give
+  in the EPD formula was wrong; `epdOf` never added it.
 - TypeScript stays a runtime dependency for one job: `plugins/transpile.worker.ts` +
   `transpileClient.ts` turn a `.ts` plugin into JavaScript for the loader (idle-terminated after
   `WORKER_IDLE_MS`, main-thread fallback when the worker cannot start). A plugin cannot transpile the

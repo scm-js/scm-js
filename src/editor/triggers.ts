@@ -11,11 +11,11 @@ import { markDirty, type Scenario } from "../formats/chk/scenario";
 import { getString } from "../formats/chk/sections/strings";
 import { ANYWHERE_INDEX } from "../formats/chk/sections/objects";
 import {
-  ActionFlag, ActionType, Comparison, ConditionFlag, SetModifier, SwitchAction, SwitchState, UnitClass, UnitState,
-  cloneTrigger, emptyAction, emptyCondition, emptyTrigger, PlayerGroup, SWITCH_COUNT,
+  ActionFlag, ActionType, Comparison, ConditionFlag, ConditionType, SetModifier, SwitchAction, SwitchState, UnitClass, UnitState,
+  cloneTrigger, emptyAction, emptyCondition, emptyTrigger, PlayerGroup, PLAYER_GROUP_COUNT, SWITCH_COUNT, TriggerFlag,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
 } from "../formats/chk/sections/triggers";
-import { actionDef, conditionDef, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
+import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
 import { UNIT_NAMES, unitName } from "../data/units";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
@@ -231,4 +231,72 @@ export function triggersFor(list: TriggerRecord[], groups: number[]): number[] {
   const out: number[] = [];
   list.forEach((t, i) => { if (groups.some((g) => t.players[g])) out.push(i); });
   return out;
+}
+
+/* ── EUD arithmetic, fingerprints and usage ──────────────── */
+
+/** The player value a Deaths condition or Set Deaths action needs to reach a memory address (EUD): the address's offset into the deaths table, in dwords. */
+export function epdOf(address: number): number {
+  return (((address & ~3) - DEATHS_TABLE_ADDRESS) / 4) >>> 0;
+}
+
+/** The address a (player, unit) pair reaches through the deaths table: `table + player × 4 + unit × 48`. */
+export function addressOfEpd(player: number, unit = 0): number {
+  return (DEATHS_TABLE_ADDRESS + player * 4 + unit * 48) >>> 0;
+}
+
+/**
+ * A content fingerprint of a trigger (FNV-1a over its numbers), the same wherever it
+ * sits in the list and whatever the game's bookkeeping bits say — what a plugin that
+ * generates triggers finds its run by, and what an editor keeps a selection by.
+ */
+export function fingerprintTrigger(trigger: TriggerRecord): string {
+  let h = 0x811c9dc5;
+  const mix = (n: number) => {
+    for (let i = 0; i < 4; i++) {
+      h ^= (n >>> (i * 8)) & 0xff;
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+  };
+  for (const c of trigger.conditions) { mix(c.type); mix(c.location); mix(c.player); mix(c.amount); mix(c.unitId); mix(c.comparison); mix(c.resource); mix(c.flags & ~ConditionFlag.Unknown); mix(c.mask); }
+  mix(0xffff);
+  for (const a of trigger.actions) { mix(a.type); mix(a.location); mix(a.text); mix(a.wav); mix(a.time); mix(a.player); mix(a.target); mix(a.unitId); mix(a.modifier); mix(a.flags & ~ActionFlag.IgnoreWaitOnce); mix(a.mask); }
+  mix(0xfffe);
+  mix(trigger.flags & ~TriggerFlag.ConditionsMet);
+  for (const p of trigger.players) mix(p);
+  return h.toString(16).padStart(8, "0");
+}
+
+/** The player slots a record's player field can mean, given the trigger's owners: a slot itself; `Current Player` the owners; a group all twelve; None and an EUD address nothing. */
+export function playerSlotsOf(player: number, owners: readonly number[]): number[] {
+  if (player < 12) return [player];
+  if (player >= PLAYER_GROUP_COUNT || player === PlayerGroup.None) return [];
+  if (player === PlayerGroup.CurrentPlayer) {
+    const out = new Set<number>();
+    for (const o of owners) for (const p of playerSlotsOf(o, [])) out.add(p);
+    return [...out].sort((a, b) => a - b);
+  }
+  return Array.from({ length: 12 }, (_, i) => i);
+}
+
+/**
+ * Every death-counter cell and switch the triggers read or write — what a plugin that
+ * allocates counters of its own must keep clear of. A cell is `[player, unit]`; deaths
+ * of a unit class (`Any unit`, `Men`, …) are a sum the game computes and count for nothing.
+ */
+export function triggerUsage(list: readonly TriggerRecord[]): { cells: [player: number, unit: number][]; switches: number[] } {
+  const cells = new Set<number>();
+  const switches = new Set<number>();
+  for (const t of list) {
+    const owners = t.players.flatMap((on, i) => (on ? [i] : []));
+    for (const c of t.conditions) {
+      if (c.type === ConditionType.Deaths && c.unitId < UnitClass.Any) for (const p of playerSlotsOf(c.player, owners)) cells.add(c.unitId * 12 + p);
+      if (c.type === ConditionType.Switch) switches.add(c.resource);
+    }
+    for (const a of t.actions) {
+      if (a.type === ActionType.SetDeaths && a.unitId < UnitClass.Any) for (const p of playerSlotsOf(a.player, owners)) cells.add(a.unitId * 12 + p);
+      if (a.type === ActionType.SetSwitch) switches.add(a.target);
+    }
+  }
+  return { cells: [...cells].sort((a, b) => a - b).map((k) => [k % 12, Math.floor(k / 12)]), switches: [...switches].sort((a, b) => a - b) };
 }

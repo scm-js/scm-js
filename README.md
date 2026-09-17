@@ -183,6 +183,12 @@ Scenario ▸ Player Settings is where each slot's controller, race and colour li
 map needs *Human* and *User Selectable* on every slot that has a start location; that is
 what a new map is set to already. Force Settings groups them into teams for the lobby.
 
+A Use Map Settings map is different: give each player a fixed race there. A player left on
+*User Selectable* is treated as a melee player by the game, which hands them a base and
+workers at their start location and removes every unit you placed for them. Units of a
+human slot that nobody takes in the lobby are removed too, so put decorations such as
+beacons on Player 12, the neutral one.
+
 ### 5. Check the map
 
 Tools ▸ Check Map lists what the game would object to: a start location with no player,

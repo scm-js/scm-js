@@ -188,6 +188,22 @@ full-size `renderClip` scaled to `view.tilePx`; a click is one `document.edit` w
 rect then marked as a paste marks it. It captures every part (`ALL_PARTS`) and lets the stamping ticks
 choose, so nothing is lost at save time; a foreign-tileset stamp can still lay down its objects.
 
+**Magenta** (`github.com/scm-js/plugin-magenta`, not a default, 2026-09-12): the UX-first trigger editor — sentences with
+chips in a resizable floating panel, one search row for native types + its EUD catalogue (`src/catalogue/eud.json`, 43
+Remastered entries lowered to plain Deaths / Set Deaths records with the masked word) + Tier A+ counter copies /
+comparisons / per-player copies as generated runs it claims. Its `docs/plan.md` is the design. It keeps pure copies
+of `epdOf` / fingerprint / usage so its tests run without the editor; the host grew `api.triggers.epd / addressOf /
+fingerprint / usage` and `consts.triggers.maskedRecord` for everyone else that day. 0.5.0 (2026-09-15) added the two
+readouts: *In plain words* (prose + what the trigger shares with the list) and *Dry run*, a second panel that runs the
+list from the map's state without the game (`src/model/simulate.ts` there), reporting what it cannot know instead of
+guessing. Both are plugin-side only; no host addition. 0.7.0 (2026-09-17, after the `~/magenta.md` review) is the
+trust pass, plugin-side only: `src/model/ownership.ts` there — a hook / scan / counter step is private to the trigger
+carrying its cell, so Duplicate and Paste re-home them on fresh cells, a row's ✕ keeps a definition another trigger
+still carries, Delete prunes; the store forgets its undo on any external change (a snapshot is the whole list); an
+unreadable `magenta\magenta.json` (newer version / bad JSON) blocks writes behind a notice instead of decoding empty;
+hooks are sent to the build server in list order; the local-read (`local: true` catalogue entries) and
+deferred-location checks; the key recipe went onto MSQC.
+
 **TrigEdit** (`github.com/scm-js/plugin-trigedit`, a default since 2026-09-07 that starts **off**: the text syntax is for
 people carrying triggers in from SCMDraft, and the Trigger Editor and TrigScript cover the rest) is the Text Trigger
 Editor, moved out of `TriggerDialogs.tsx` as a ~100-line dialog over the editor-owned format: `text.ts` there is the

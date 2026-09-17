@@ -62,7 +62,7 @@ import { applySwitchNames, readSwitchNames, switchUsage } from "../editor/switch
 import { applyCuwp, cuwpSlotView, cuwpSlotViews, patchCuwp, readCuwp } from "../editor/cuwp";
 import { emptyCuwpSlot } from "../formats/chk/sections/cuwp";
 import {
-  applyBriefing, applyTriggers, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers, removeTriggers, sameTriggers,
+  addressOfEpd, applyBriefing, applyTriggers, epdOf, fingerprintTrigger, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers, removeTriggers, sameTriggers, triggerUsage,
   setPreserved, triggerNames, triggersFor,
 } from "../editor/triggers";
 import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
@@ -1070,6 +1070,10 @@ export function triggersApi(store: Store): Omit<TriggersApi, "claim"> {
     triggersFor,
     summarize: (trigger, briefing = false) => summarizeTrigger(trigger, names(), briefing),
     comment: (trigger) => triggerComment(trigger, names()),
+    epd: epdOf,
+    addressOf: addressOfEpd,
+    fingerprint: fingerprintTrigger,
+    usage: (list) => triggerUsage(list ?? (scenario() ? readTriggers(scenario()!) : [])),
   };
 }
 
@@ -1811,6 +1815,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         actionFlags: ActionFlag,
         triggerFlags: TriggerFlag,
         deathsTable: DEATHS_TABLE_ADDRESS,
+        maskedRecord: 0x4353,
       },
       isResource,
     },

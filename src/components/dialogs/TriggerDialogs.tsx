@@ -16,7 +16,7 @@ import { pluginTriggerClaimsAtom, type PluginTriggerClaim } from "../../atoms/pl
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims, type ClaimedRange } from "../../plugins/claims";
 import {
-  ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES,
+  ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
 } from "../../data/triggerDefs";
 import { UNIT_NAMES, unitLabel } from "../../data/units";
@@ -84,15 +84,8 @@ function ChoiceSelect({ value, onChange, options, width }: { value: number; onCh
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
 }
 
-/** The player value a Deaths condition or Set Deaths action needs to reach a memory address (EUD): the address's offset into the deaths table, in dwords. */
-export function epdOf(address: number): number {
-  return ((address - DEATHS_TABLE_ADDRESS) / 4) >>> 0;
-}
-
-/** The address a player value reaches through the deaths table, for the tooltip. */
-export function addressOfEpd(player: number): number {
-  return (DEATHS_TABLE_ADDRESS + player * 4) >>> 0;
-}
+import { addressOfEpd, epdOf } from "../../editor/triggers";
+export { addressOfEpd, epdOf };
 
 /**
  * The player pick, with an EUD helper: a raw value stands for a memory address in a Deaths

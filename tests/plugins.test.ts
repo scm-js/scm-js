@@ -3347,3 +3347,29 @@ describe("plugin api: editing additions", () => {
     api.storage.remove("k"); api.storage.remove("big");
   });
 });
+
+describe("plugin trigger EUD helpers, fingerprints and usage", () => {
+  const apiOf = (store: ReturnType<typeof createStore>) => createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+  it("does the EPD arithmetic both ways, masks nothing it should not", () => {
+    const api = apiOf(blankStore().store);
+    const table = api.consts.triggers.deathsTable;
+    expect(api.triggers.epd(table)).toBe(0);
+    expect(api.triggers.epd(0x662350)).toBe((0x662350 - table) / 4);
+    expect(api.triggers.epd(0x662351)).toBe((0x662350 - table) / 4);
+    expect(api.triggers.addressOf(api.triggers.epd(0x662350))).toBe(0x662350);
+    expect(api.triggers.addressOf(3, 2)).toBe(table + 12 + 96);
+    expect(api.consts.triggers.maskedRecord).toBe(0x4353);
+  });
+  it("fingerprints by content and lists the cells and switches a list uses", () => {
+    const api = apiOf(blankStore().store);
+    const a = api.triggers.newTrigger([0]);
+    a.conditions[0] = { ...api.triggers.newCondition(api.consts.triggers.condition.Deaths), player: api.consts.triggers.player.CurrentPlayer, unitId: 181, amount: 1 };
+    a.actions[0] = { ...api.triggers.newAction(api.consts.triggers.action.SetSwitch), target: 5, modifier: api.consts.triggers.switchAction.Set };
+    const b = { ...a, flags: a.flags | api.consts.triggers.triggerFlags.ConditionsMet };
+    expect(api.triggers.fingerprint(a)).toBe(api.triggers.fingerprint(b));
+    expect(api.triggers.fingerprint(a)).not.toBe(api.triggers.fingerprint(api.triggers.newTrigger([1])));
+    expect(api.triggers.usage([a])).toEqual({ cells: [[0, 181]], switches: [5] });
+    const eud = { ...a, conditions: [{ ...a.conditions[0], player: api.triggers.epd(0x662350) }] };
+    expect(api.triggers.usage([eud]).cells).toEqual([]);
+  });
+});

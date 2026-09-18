@@ -26,7 +26,7 @@ import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -110,7 +110,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1345,6 +1345,15 @@ export function addBuildStep(store: Store, bag: Contributions, info: PluginInfo,
   return bag.add(() => store.set(pluginBuildStepsAtom, store.get(pluginBuildStepsAtom).filter((e) => e.key !== key)));
 }
 
+/** `api.document.buildSteps.before`: kept on `pluginBeforeBuildAtom` until disposed or the plugin goes. */
+export function addBeforeBuild(store: Store, bag: Contributions, info: PluginInfo, spec: BeforeBuildSpec): Disposable {
+  if (!spec || typeof spec.id !== "string" || !spec.id || typeof spec.run !== "function") throw new Error("buildSteps.before needs an id and run().");
+  const key = nextContributionKey();
+  const others = store.get(pluginBeforeBuildAtom).filter((e) => !(e.plugin.id === info.id && e.spec.id === spec.id));
+  store.set(pluginBeforeBuildAtom, [...others, { key, plugin: info, spec: { ...spec, label: String(spec.label || info.name) } }]);
+  return bag.add(() => store.set(pluginBeforeBuildAtom, store.get(pluginBeforeBuildAtom).filter((e) => e.key !== key)));
+}
+
 /* ── Game data ──────────────────────────────────────────── */
 
 /** `api.data`: the decoded `.dat` tables, once they are in memory. */
@@ -1726,7 +1735,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         // A failed step answers the map without it, as Save does; the log has the reason.
         const bytes = options.built === false
           ? await writeMapBytes(scn, { format, extras, stored, options: saveOptions })
-          : (await buildOutgoing(store, { scenario: scn, extras, stored, options: saveOptions, fileName: name, purpose: "export" })).bytes;
+          : (await buildOutgoing(store, { options: saveOptions, fileName: name, purpose: "export" })).bytes;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
       },
       save: async (options = {}) => {
@@ -1780,6 +1789,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       sections: sectionsApi(store, () => !bag.disposed),
       buildSteps: {
         add: (spec) => addBuildStep(store, bag, info, spec),
+        before: (spec) => addBeforeBuild(store, bag, info, spec),
         builtBy: () => store.get(builtByAtom)?.map((b) => ({ ...b })) ?? null,
       },
     },

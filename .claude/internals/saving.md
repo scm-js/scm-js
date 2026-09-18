@@ -68,6 +68,15 @@ recurse. `builtByAtom` (per document: in `parkRegisters` / `installRegisters`, k
 `"replace"`) is what lets Save say, once, that the file was built by a step nothing provides now;
 it is set from the manifest on open and from the outcome on every non-copy save.
 
+`buildSteps.before({ id, label, applies?, run })` (`pluginBeforeBuildAtom`, added the same day for
+TrigScript 3) is the *document* half: handlers run first, inside the same `running` guard and under the
+same notice and button, and only then are the plain bytes planned and the steps asked whether they
+apply — which is why `buildOutgoing` reads the scenario, extras and stored members from the store
+itself rather than taking them from the caller (a handler replaces `archiveExtrasAtom`'s Map), and
+why the Save dialog's `plain` bytes are ignored once any handler applied. A handler that throws lands
+in `Outgoing.unprepared` (a toast per entry on Save, a throw on Test Map). `applies` exists so a
+default plugin with nothing to do does not flash the notice on every save of every map.
+
 Not done, on purpose or yet: the Save dialog does not mention steps or show the built size; there is
 no "leave the source out" tick for a release copy; nothing offers to open the stored source of a
 changed file. The write-plain-first-then-rewrite idea (so a handle save never waits) was dropped for

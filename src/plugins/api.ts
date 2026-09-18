@@ -364,8 +364,32 @@ export interface BuildStepSpec {
   run(input: BuildStepInput): Promise<Uint8Array>;
 }
 
+/**
+ * Work a plugin does on the *document* before the map's bytes are produced for Save, Test
+ * Map or `export` — the place to bring generated content up to date, such as writing a
+ * script's triggers into the trigger list with `document.update`. It runs before any
+ * build step is asked whether it applies, so a step can rely on what it did.
+ */
+export interface BeforeBuildSpec {
+  /** Unique within the plugin. */
+  id: string;
+  /** What a failure notice names: "TrigScript". */
+  label: string;
+  /** Whether there is anything to do for the open map. Cheap and synchronous; every save asks. Always, when omitted. */
+  applies?(): boolean;
+  /**
+   * May be asynchronous and may write to the document. A throw does not stop the save:
+   * the map is written as it stands and a notice shows the error's message, so word it
+   * for the user. Inside it `document.export()` answers the map as it stands, without
+   * running anything.
+   */
+  run(ctx: { purpose: BuildPurpose; signal: AbortSignal }): void | Promise<void>;
+}
+
 export interface BuildStepsApi {
   add(spec: BuildStepSpec): Disposable;
+  /** Run `spec.run` before the map's bytes are produced, every time the map leaves the editor. */
+  before(spec: BeforeBuildSpec): Disposable;
   /** The steps behind the file the open map came from or was last saved to; null for a plain map. */
   builtBy(): BuiltBy[] | null;
 }

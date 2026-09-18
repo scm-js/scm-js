@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -405,6 +405,15 @@ export interface PluginBuildStepEntry {
 }
 
 export const pluginBuildStepsAtom = atom<PluginBuildStepEntry[]>([]);
+
+/** One `api.document.buildSteps.before`: run over the document before its bytes are produced. */
+export interface PluginBeforeBuildEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: BeforeBuildSpec;
+}
+
+export const pluginBeforeBuildAtom = atom<PluginBeforeBuildEntry[]>([]);
 
 /* ── Dialog slots ───────────────────────────────────────── */
 

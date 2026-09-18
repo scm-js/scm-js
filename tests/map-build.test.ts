@@ -169,6 +169,29 @@ describe("build steps", () => {
     expect(sectionNames((await loadMap(plain)).chk)).not.toContain("EUD!");
   });
 
+  it("lets a plugin work on the document first, and the bytes and the steps see what it did", async () => {
+    const { store, api } = openStore();
+    const seen: string[] = [];
+    api.document.buildSteps.before({ id: "sync", label: "Script", applies: () => true, run: async () => { api.document.extras.set("script\\out.txt", new Uint8Array([5])); seen.push("before"); } });
+    api.document.buildSteps.before({ id: "idle", label: "Idle", applies: () => false, run: () => { seen.push("idle"); } });
+    api.document.buildSteps.add(step({ applies: () => { seen.push("applies"); return api.document.extras.get("script\\out.txt") !== null; } }));
+    const w = writer();
+    await save(store, w);
+    expect(seen).toEqual(["before", "applies"]);
+    const file = await loadMap(w.calls[0]);
+    expect(sectionNames(file.chk)).toContain("EUD!");
+    expect(file.files).toContain("script\\out.txt");
+  });
+
+  it("saves anyway when that work fails, and names whose it was", async () => {
+    const { store, api } = openStore();
+    api.document.buildSteps.before({ id: "sync", label: "TrigScript", run: () => { throw new Error("main.ts:3 — no such unit"); } });
+    const w = writer();
+    expect(await save(store, w)).toBe(true);
+    expect(store.get(toastsAtom).at(-1)).toMatchObject({ kind: "error", title: "TrigScript is not up to date in this file", detail: "main.ts:3 — no such unit." });
+    await expect(testMapBytes(store)).rejects.toThrow("TrigScript: main.ts:3");
+  });
+
   it("Test Map refuses a map whose step failed", async () => {
     const { store, api } = openStore();
     api.document.buildSteps.add(step({ run: async () => { throw new Error("broken"); } }));

@@ -621,8 +621,16 @@ aborts `signal` and saves the map without waiting. Test Map stops on a failure i
 since a map missing its built part is not the one to test. A bare `.chk` is never built:
 it has nowhere to keep the second scenario.
 
-Inside `run`, `document.export()` answers the map without the steps, so a step can never
-start itself. `builtBy()` lists the steps behind the file the open map came from or was
+`before({ id, label, applies?, run })` is for work on the *document* rather than on the
+bytes: bringing generated content up to date before the map is written, the way TrigScript
+writes its script's triggers into the trigger list. It runs before the bytes are produced
+and before any step is asked whether it applies, may be asynchronous, and may use
+`document.update` and `document.edit`. A throw does not stop the save either. The map is
+written as it stands and a notice names the plugin with the error's message; Test Map
+stops.
+
+Inside `run`, of a step or of `before`, `document.export()` answers the map as it stands,
+so neither can start itself. `builtBy()` lists the steps behind the file the open map came from or was
 last saved to (`[{ id: "plugin/step", label }]`), or null for a plain map. When a file
 names a step that no running plugin provides, Save says once that the built part is gone.
 

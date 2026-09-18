@@ -10,7 +10,7 @@
  * bare `.chk` becomes an `.scx`, since the game only opens archives.
  */
 import type { createStore } from "jotai";
-import { archiveExtrasAtom, archiveStoredAtom, scenarioAtom } from "../atoms/documentAtoms";
+import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapOriginAtom, saveOptionsAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { defaultSaveOptions } from "../editor/save";
@@ -58,8 +58,9 @@ export async function testMapBytes(store: Store): Promise<Uint8Array | null> {
   const options = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
   const format = options.format === "chk" ? "scx" : options.format;
   // The game should get what Save writes, build steps run; a map missing its built part is not the one to test.
-  const built = await buildOutgoing(store, { scenario: scn, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom), options: { ...options, format }, fileName: testFileName(store) ?? "map.scx", purpose: "test" });
-  if (built.problem) throw new Error(built.problem);
+  const built = await buildOutgoing(store, { options: { ...options, format }, fileName: testFileName(store) ?? "map.scx", purpose: "test" });
+  const failed = built.unprepared[0] ? `${built.unprepared[0].label}: ${built.unprepared[0].message}` : built.problem;
+  if (failed) throw new Error(failed);
   return built.bytes;
 }
 

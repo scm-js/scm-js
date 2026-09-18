@@ -1175,6 +1175,14 @@ The Save dialog is where the file's shape is decided:
 
 The options confirmed here are what Ctrl+S reuses for that map from then on.
 
+A plugin that compiles something into the map, as the eudplib plugin does for scripts
+that need Remastered, does it while the file is written. The file you save is the one
+the game plays, and it carries the map as you see it in the editor inside, which is what
+comes back when you open it again. A notice shows while the build runs, with a button to
+save without waiting for it. If the build fails, the map is still saved and the notice
+says what went wrong; the file then lacks the built part until a later save succeeds.
+Test Map builds the same way and stops on a failure instead.
+
 **Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
 scmjs.dev account as a numbered revision with a note — a backup with a history, and the
 way to reach the same map from another machine. It does not change where Ctrl+S writes.

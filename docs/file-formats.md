@@ -52,6 +52,22 @@ So do the *editor-only* sections of the scenario, explained under
 do sections the editor does not recognise and bytes left after the last section. None of
 those ticks change the map you have open, only the file being written.
 
+### Built maps
+
+A plugin can put a compiler between the map and the disk; the eudplib plugin does, for
+scripts that need Remastered's extended triggers. The file then holds two scenarios.
+`staredit\scenario.chk` is the compiler's output, which is what the game reads.
+`scmjs\source.chk` is the map as the editor shows it, and `scmjs\build.json` records
+which steps ran, which archive members they added, and the SHA-256 of the built scenario.
+Both are zlib-compressed whatever the dialog's compression says, since the game never
+opens them.
+
+Opening such a file gives back the map from `scmjs\source.chk`, so the trigger list
+shows your triggers and not the generated ones. That only happens while the built
+scenario still has the recorded hash. If another editor or a protector has changed it
+since, the editor cannot tell which of the two you mean, so it opens the file as it
+stands, says so, and leaves both members where they are. A bare `.chk` is never built.
+
 ## The scenario
 
 The scenario is a flat sequence of chunks. Each chunk is a four-character name, a length,
@@ -330,6 +346,7 @@ For developers. Everything above is implemented under `src/formats/chk/` and
 | `src/formats/chk/sections/*.ts` | The codecs: `terrain`, `objects` (units, sprites, doodads, locations), `players`, `strings`, `settings`, `triggers`, `cuwp`, `sounds`, and the `vcod` table. |
 | `src/formats/chk/create.ts` | File ▸ New, and `requiredSections(version)`, which Check Map tests a file against. |
 | `src/editor/save.ts` | The save plan: strip groups, merging repeats with the registry's mode, the sector size per compression, and the warnings the dialog shows. |
+| `src/editor/mapBuild.ts`, `src/services/mapBuild.ts` | Built maps: packing the step's output with the source beside it, restoring the source on open, and running the steps without letting one cost a save. |
 | `src/editor/sections.ts` | Section-level reads and writes for the Section Explorer plugin and `api.document.sections`. |
 | `src/editor/validate.ts` | Check Map. |
 | `src/data/triggerDefs.ts`, `src/formats/triggers/text.ts` | Which field of a trigger record holds which argument, and the text format. |

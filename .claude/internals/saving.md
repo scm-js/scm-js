@@ -35,3 +35,40 @@ in the hook: `"save"` with a path writes with the remembered options; otherwise 
 "saveAs", { copy })` opens `SaveMapDialog` and resolves when it calls `payload.done(true)` (after
 `taken`) or leaves the stack — so Close Scenario's Save waits for the whole thing. Save Copy As is the
 same dialog with `{ copy: true }`. `tests/save-flow.test.ts` covers the store half with a fake writer.
+
+### Build steps and built maps (`editor/mapBuild.ts`, `services/mapBuild.ts`, 2026-09-18)
+
+Decided with the user for TrigScript going Remastered-only: **one file, built on save**, not
+euddraft's source + `-eud.scx` pair (a map maker hosts the wrong one). `api.document.buildSteps.add`
+registers `{ id, label, applies(), run({ map, fileName, purpose, signal }) }` on `pluginBuildStepsAtom`;
+`services/mapBuild.ts#buildOutgoing` is the single place bytes leave the editor with steps run —
+`saveDocument` (the dialog's `req.bytes` are the *plain* bytes and go in as `plain`), `testMapBytes`,
+`document.export` (unless `built: false`). With no applicable step it is `buildMapFile` byte for byte
+(a test pins that). Steps chain in activation order, each over the last one's output.
+
+`packBuiltMap` does not trust the step's archive layout: it takes the output's **chk** and any
+member names the clean map lacks (`added`), and rewrites the archive with the user's save options,
+the plan's kept extras and stored members as they were — a step adds members, it cannot change one.
+`saveMap`'s `editorMembers` are always zlib and unencrypted (`scmjs\source.chk` = `buildChk(plan)`,
+i.e. the scenario *after* the user's strip ticks, same as an unbuilt save; `scmjs\build.json` =
+`{ version, chk: sha256 of the built chk, steps, added }`). `openMapFile` hints both names (a
+protector's missing listfile), reads `added` through `readMembers`' second pass, and
+`restoreBuiltMap` swaps in the source when the hash matches, dropping the editor's members and the
+steps' additions from the extras; a mismatch opens the file as it is with a warning and keeps the
+members (nothing is lost, the user can get `source.chk` out with any MPQ tool). The built scenario is
+parsed once for the sound hints and the source parsed after — two parses only for a built map.
+
+**A step can never cost a save.** Throw, a non-map return, or the notice's *Save without it*
+(an `AbortController`; the run is raced against it, since a step may ignore the signal) → the plain
+bytes are written, `saveDocument` still returns true and clears modified, and a ttl-0 toast says
+why. Test Map throws instead (`TestMapDialog` shows the reason). `.chk` is never built. A `running`
+WeakSet makes `export()` from inside a step answer the plain map — Magenta 0.9 and TrigScript 2.6
+both call `export()` to feed their own build, so without it the first step to be registered would
+recurse. `builtByAtom` (per document: in `parkRegisters` / `installRegisters`, kept across a
+`"replace"`) is what lets Save say, once, that the file was built by a step nothing provides now;
+it is set from the manifest on open and from the outcome on every non-copy save.
+
+Not done, on purpose or yet: the Save dialog does not mention steps or show the built size; there is
+no "leave the source out" tick for a release copy; nothing offers to open the stored source of a
+changed file. The write-plain-first-then-rewrite idea (so a handle save never waits) was dropped for
+the notice's button — two writes of one file is two chances to be interrupted.

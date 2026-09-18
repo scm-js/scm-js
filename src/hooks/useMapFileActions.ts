@@ -2,7 +2,7 @@ import { baseName, logError, logInfo } from "../editor/log";
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, archiveExtrasAtom, archiveStoredAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
+  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
   recentFilesAtom, redoStackAtom, scenarioAtom, terrainRevisionAtom, undoStackAtom, type RecentEntry,
 } from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
@@ -19,7 +19,8 @@ import { peekUnitAssets } from "../formats/units/load";
 import { DEFAULT_START_PLACEMENT, placeStartLocations, type StartLayout } from "../editor/startLocations";
 import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/tilesets";
 import { openMapFile, saveBytes, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
-import { buildMapFile, defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
+import { defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
+import { buildOutgoing } from "../services/mapBuild";
 import { hostTerms } from "../editor/platform";
 import { t, translate } from "../i18n";
 
@@ -293,7 +294,9 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   if (!scenario) { store.set(statusMessageAtom, "Nothing to save — open or create a map first."); return false; }
   const what = req.copy ? "copy" : "map";
   try {
-    const bytes = req.bytes ?? await buildMapFile(scenario, store.get(archiveExtrasAtom), req.options, undefined, store.get(archiveStoredAtom));
+    // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
+    const built = await buildOutgoing(store, { scenario, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom), options: req.options, fileName: req.fileName, purpose: "save", plain: req.bytes });
+    const bytes = built.bytes;
     const outcome = await write(bytes, req.fileName, req.handle);
     if (!outcome) { logInfo("document", `Save of the ${what} was dismissed`); return false; }
     const size = formatBytes(bytes.length);
@@ -302,6 +305,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       store.set(mapFilePathAtom, outcome.fileName);
       store.set(mapFileHandleAtom, outcome.handle ?? (outcome.route === "file" ? req.handle : null));
       store.set(saveOptionsAtom, req.options);
+      store.set(builtByAtom, built.builtBy);
       store.set(mapModifiedAtom, false);
       store.set(pushRecentAtom, { name: outcome.fileName, handle: outcome.handle ?? (outcome.route === "file" ? req.handle : null) });
     }
@@ -316,6 +320,11 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     } else {
       store.set(statusMessageAtom, `Saved ${outcome.fileName} — ${size}`);
       store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})` });
+    }
+    if (built.problem) {
+      store.set(pushToastAtom, { kind: built.stopped ? "warn" : "error", ttl: 0, title: t("Saved without the built part"), detail: t("{problem} The file holds the map as the editor shows it; what the build adds is not in it until a save goes through.", { problem: built.problem }) });
+    } else if (!built.builtBy && built.absent.length > 0) {
+      store.set(pushToastAtom, { kind: "warn", ttl: 0, title: t("Saved without the built part"), detail: t("This map was built by {labels} when it was opened. Nothing that is running does that now, so the file holds only the map as the editor shows it.", { labels: built.absent.map((b) => b.label).join(", ") }) });
     }
     return true;
   } catch (err) {

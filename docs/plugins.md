@@ -534,7 +534,7 @@ points to the three kinds of write.
 | `activate(id)` | Bring an open map to the front, as clicking its tab does: its history, selections and view come back as they were left, nothing is re-read, and the `"document"` event fires with reason `"switch"`. `true` once it is in front, `false` for an id that is not open. Do it for something the user asked for; a map changing under someone mid-stroke is not a plugin's call. |
 | `open(file, fileName?, { into? })` | Open a map file (`File`, `Blob` or bytes; `.scx`, `.scm` or `.chk`) as File ▸ Open does: beside the open map (`into: "new"`), in its place (`"current"`), or — omitted — as the editor's preference says (beside, by default, except over the untouched blank map it started on). In place of a modified map it goes through the Close Scenario dialog first when Preferences say to ask. Resolves `true` once the file is the map in front, `false` when the user kept the current map or the file could not be read (the status bar says which). |
 | `create({ width, height, tileset, name?, description?, terrainId?, startLocations?, startLayout?, into? })` | A blank map as File ▸ New makes one: flat ground of the tileset's default terrain (or `terrainId`), an ISOM lattice to match, and every section a fresh map needs; beside the open map or in its place as `open` decides, through the same unsaved-changes gate. `startLocations` lays one down for each of players 1..N as `tx.placeStartLocations` would (`"ring"` unless `startLayout` says `"corners"`); they are part of making the map, so there is no history entry to undo them from. |
-| `export({ format?, fileName?, saveOptions? })` | The open map as a `File`, as Save writes it: the save options last confirmed for this map (or their defaults), archive extras included, as `scx`, `scm` or a bare `chk`. `saveOptions` overrides compression, encryption and what is left out. Null with no map. Hand it to a `FormData` and it uploads. |
+| `export({ format?, fileName?, saveOptions? })` | The open map as a `File`, as Save writes it: the save options last confirmed for this map (or their defaults), archive extras included, as `scx`, `scm` or a bare `chk`. `saveOptions` overrides compression, encryption and what is left out. Build steps run, as they do on Save, unless `built: false` asks for the map without them. Null with no map. Hand it to a `FormData` and it uploads. |
 | `save({ copy? })` / `saveAs({ copy? })` | File ▸ Save and Save As. `save` writes back where the map came from with its remembered options, and a map with no file yet goes through the Save dialog; `saveAs` always opens it. `copy` writes a copy and leaves the document's name and clean state alone. Resolve `true` once written, `false` when the user dismissed a dialog or the write failed. |
 | `close(id?)` | File ▸ Close: the map in front, or the open map `id` names (brought to the front first, so the question is about what the user sees), through the same unsaved-changes gate as `open`. `true` once the map is gone — another open map is then in front, or `isOpen()` is false. |
 | `changeTileset({ tileset, terrainId?, keepTiles? })` | Map Properties' tileset change: the terrain is laid again with `terrainId` (the new tileset's default when omitted) after the new graphics load, the doodads go, and everything else stays. `keepTiles` changes only the tileset id. Outside the undo model; drops both history stacks, like `resize`. |
@@ -542,6 +542,7 @@ points to the three kinds of write.
 | `resize({ width, height, anchor?, terrainId?, clampLocations? })` | Scenario ▸ Resize / Crop Map: content keeps its place relative to the anchor (a 3 × 3 grid, 4 = centre), new ground is `terrainId` or the tileset's default, objects outside the new bounds are dropped and locations clamped. Outside the undo model; **drops both history stacks**, as the dialog does. Returns the `ResizeResult` (what was dropped), null with no map. |
 | `extras` | The files stored in the archive next to `staredit\scenario.chk`: custom sounds, and anything a plugin wants to keep with the map. `list()`, `get(name)`, `set(name, bytes)`, `remove(name)`. Names are archive paths with backslashes; keep yours under a folder of your own (`my-plugin\notes.json`). `set` and `remove` mark the map modified, and the members are written on the next Save. |
 | `sections` | The scenario at the byte level. See the next section. |
+| `buildSteps` | A compiler that runs when the map is saved. See [`api.document.buildSteps`](#apidocumentbuildsteps). |
 
 ### `api.document.sections`
 
@@ -577,6 +578,53 @@ inserted or removed before them, so take a fresh `list()` after every edit.
 | `required()` | The section names a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in place of `STR ` on a Remastered file). |
 | `defaults(name)` | The bytes File ▸ New would write for that section on a map of this size, tileset and revision: StarEdit's defaults for a settings table, the fixed VCOD, an empty list, null terrain. Null for a name the editor cannot produce. |
 | `rebuild(names?)` | Re-encode sections from the editor's model, the way Save writes a dirty one, and install the result like any other raw edit. Repeated occurrences collapse into one, a truncated or oversized section comes back at the size the model encodes to, and a string table whose offsets point nowhere is rewritten with every string the editor could read. Names the editor does not model, and modelled ones whose model is absent (no ISOM, no settings table), are left alone and missing from the result's `rebuilt`. Omit `names` for every modelled section the map has a model for. |
+
+### `api.document.buildSteps`
+
+For a plugin whose output is not something the user edits: a compiler that turns a script
+into generated triggers, or packs a payload into the string table. Without a build step
+such a plugin has to write a second file beside the map, and the user has to remember
+which of the two the game should get. With one, there is a single file. The editor keeps
+showing the map the user works on, and the step runs over the bytes whenever the map
+leaves the editor: File ▸ Save and its copies, Tools ▸ Test Map, and `document.export`.
+
+```ts
+api.document.buildSteps.add({
+  id: "compile",
+  label: "My Compiler",
+  applies: () => api.document.extras.get("my-plugin\\main.txt") !== null,
+  async run({ map, fileName, purpose, signal }) {
+    return compile(map);   // an .scx in, an .scx out
+  },
+});
+```
+
+`applies()` is asked on every save and has to be cheap; while it answers false, Save is
+exactly what it was. `run` gets the map as Save would have written it (an archive, the
+extras inside) and returns the built one. Steps from several plugins run in the order
+the plugins were activated, each over the one before's output. `purpose` is `"save"`,
+`"test"` or `"export"`.
+
+The editor takes the scenario from what `run` returns, and any members the step *added*.
+The map's own members are written as they were, and the archive is laid out with the
+user's save options, so a step need not care about compression. Next to the built
+scenario the editor stores the scenario from before the steps, and on open it gives that
+one back: the step's output never shows up in the trigger list or the string table. If
+something else has changed the file's scenario in between (another editor, a protector),
+the file opens as it is, with a warning, and the stored map stays inside it.
+[File formats](file-formats.md#built-maps) has the member names.
+
+A step cannot cost the user a save. If `run` throws, the map is saved without the steps
+and a notice shows the error's message, so word it for the user and name the line when
+there is one. While steps run, a notice carries a *Save without it* button; pressing it
+aborts `signal` and saves the map without waiting. Test Map stops on a failure instead,
+since a map missing its built part is not the one to test. A bare `.chk` is never built:
+it has nowhere to keep the second scenario.
+
+Inside `run`, `document.export()` answers the map without the steps, so a step can never
+start itself. `builtBy()` lists the steps behind the file the open map came from or was
+last saved to (`[{ id: "plugin/step", label }]`), or null for a plain map. When a file
+names a step that no running plugin provides, Save says once that the built part is gone.
 
 ### `EditTransaction`
 

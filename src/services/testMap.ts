@@ -13,7 +13,8 @@ import type { createStore } from "jotai";
 import { archiveExtrasAtom, archiveStoredAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapOriginAtom, saveOptionsAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { buildMapFile, defaultSaveOptions } from "../editor/save";
+import { defaultSaveOptions } from "../editor/save";
+import { buildOutgoing } from "./mapBuild";
 import { scenarioName } from "../formats/chk/scenario";
 import { desktopBridge, type DesktopGameInfo } from "../gamedata/desktop";
 import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHandle } from "./handleStore";
@@ -56,7 +57,10 @@ export async function testMapBytes(store: Store): Promise<Uint8Array | null> {
   if (!scn) return null;
   const options = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
   const format = options.format === "chk" ? "scx" : options.format;
-  return buildMapFile(scn, store.get(archiveExtrasAtom), { ...options, format }, undefined, store.get(archiveStoredAtom));
+  // The game should get what Save writes, build steps run; a map missing its built part is not the one to test.
+  const built = await buildOutgoing(store, { scenario: scn, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom), options: { ...options, format }, fileName: testFileName(store) ?? "map.scx", purpose: "test" });
+  if (built.problem) throw new Error(built.problem);
+  return built.bytes;
 }
 
 /** Whether this browser can ask for a folder (Chromium); else the browser route is a download. */

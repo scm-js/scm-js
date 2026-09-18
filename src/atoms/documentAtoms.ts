@@ -17,6 +17,7 @@ import {
   spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
 } from "./editorAtoms";
 import type { SaveOptions } from "../editor/save";
+import type { BuiltBy } from "../editor/mapBuild";
 import type { Rect } from "../editor/terrain";
 import type { OpenDocumentInfo } from "../plugins/api";
 import { START_LOCATION } from "../data/units";
@@ -48,6 +49,11 @@ export const archiveExtrasAtom = atom<Map<string, Uint8Array>>(new Map());
  * editable, since nothing about them can be read.
  */
 export const archiveStoredAtom = atom<StoredMembers | null>(null);
+/**
+ * The build steps behind the file the map was opened from or last saved to (`editor/mapBuild.ts`),
+ * null for a plain map. Save reads it to say so when one of them is no longer running.
+ */
+export const builtByAtom = atom<BuiltBy[] | null>(null);
 
 
 /**
@@ -223,6 +229,8 @@ export interface LoadedDocument {
   handle?: MapFileHandle | null;
   /** How the scenario was stored in the archive it came from. */
   origin?: MemberInfo | null;
+  /** The build steps the file names, when the map was restored from a built one. */
+  builtBy?: BuiltBy[] | null;
   /** How the document came to be installed; File ▸ Open when omitted. */
   reason?: DocumentChangeReason;
   /**
@@ -264,6 +272,7 @@ export interface ParkedDocument {
   fileName: string | null;
   handle: MapFileHandle | null;
   origin: MemberInfo | null;
+  builtBy: BuiltBy[] | null;
   saveOptions: SaveOptions | null;
   modified: boolean;
   blankFill: { terrainId: number } | null;
@@ -325,7 +334,7 @@ function parkRegisters(get: Getter): ParkedDocument | null {
   const v = get(viewportRectAtom);
   return {
     scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom),
-    saveOptions: get(saveOptionsAtom), modified: get(mapModifiedAtom), blankFill: get(blankFillAtom), undo: get(undoStackAtom), redo: get(redoStackAtom),
+    builtBy: get(builtByAtom), saveOptions: get(saveOptionsAtom), modified: get(mapModifiedAtom), blankFill: get(blankFillAtom), undo: get(undoStackAtom), redo: get(redoStackAtom),
     selected: { units: get(selectedUnitsAtom), doodads: get(selectedDoodadsAtom), sprites: get(selectedSpritesAtom), locations: get(selectedLocationsAtom) },
     clipSelection: get(clipSelectionAtom), zoom: get(zoomAtom),
     // The viewport has not measured itself before the first paint (w = h = 1): nothing to come back to.
@@ -361,6 +370,7 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   set(mapFilePathAtom, p.fileName);
   set(mapFileHandleAtom, p.handle);
   set(mapOriginAtom, p.origin);
+  set(builtByAtom, p.builtBy);
   set(saveOptionsAtom, p.saveOptions);
 
   set(mapNameAtom, scenarioName(scenario) ?? p.fileName ?? "Untitled Scenario");
@@ -420,6 +430,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
 
   installRegisters(get, set, {
     scenario: doc.scenario, extras: doc.extras, stored: doc.stored ?? null, fileName: doc.fileName, handle: doc.handle ?? null, origin: doc.origin ?? null,
+    builtBy: reason === "replace" ? get(builtByAtom) : doc.builtBy ?? null,
     // A re-parse keeps the options the user confirmed; a new document starts from the defaults.
     saveOptions: reason === "replace" ? get(saveOptionsAtom) : null,
     modified: false,
@@ -490,6 +501,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(mapFilePathAtom, null);
   set(mapFileHandleAtom, null);
   set(mapOriginAtom, null);
+  set(builtByAtom, null);
   set(saveOptionsAtom, null);
   set(mapModifiedAtom, false);
   set(blankFillAtom, null);

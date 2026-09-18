@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -394,6 +394,17 @@ export interface PluginStatusItemEntry {
 }
 
 export const pluginStatusItemsAtom = atom<PluginStatusItemEntry[]>([]);
+
+/* ── Build steps ────────────────────────────────────────── */
+
+/** One `api.document.buildSteps.add`; `services/mapBuild.ts` runs them in this order when the map leaves the editor. */
+export interface PluginBuildStepEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: BuildStepSpec;
+}
+
+export const pluginBuildStepsAtom = atom<PluginBuildStepEntry[]>([]);
 
 /* ── Dialog slots ───────────────────────────────────────── */
 

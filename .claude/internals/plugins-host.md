@@ -277,3 +277,9 @@ conveniences the AI features asked for: `document.history()` peeks at both stack
 `isom.ts#isomTerrainAt`, which resolves a cliff row to a joined terrain through its soft links), and
 `PlacementVerdict.reason` (`placement.ts#placementReason`, shared with the Units layer's status line) says the
 problem in words.
+
+`api.document.buildSteps` (2026-09-18) is the save-time compiler hook — `host.ts#addBuildStep` onto
+`pluginBuildStepsAtom` (same plugin + id replaces), `builtBy()` over `builtByAtom`, and
+`ExportOptions.built`. Everything about what it does to the file is in `saving.md`; the host half is
+only the registration. The eudplib plugin is meant to own the one real step, with its dependents
+(TrigScript 3, later Magenta) contributing sources to it, so a map using both builds once.

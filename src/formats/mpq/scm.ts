@@ -110,6 +110,12 @@ export interface SaveOptions {
    */
   extras?: Map<string, Uint8Array>;
   /**
+   * Members only the editor reads (a built map's source). Always zlib and never encrypted,
+   * whatever `compress` says: the game does not open them, so the method that keeps the
+   * file small is the right one even in an archive written for an old build.
+   */
+  editorMembers?: Map<string, Uint8Array>;
+  /**
    * Members carried as stored (`readMembers`). Forces `sectorSize` to theirs and lays the
    * hash table out over the one they came from.
    */
@@ -155,6 +161,7 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
     // StarEdit's own extras are encrypted with the offset-adjusted key; any reader takes both.
     creator.addFile(name, data, { compress: method, encrypt, adjustKey: encrypt });
   }
+  for (const [name, data] of options.editorMembers ?? []) creator.addFile(name, data, { compress: "zlib", encrypt: false });
   return creator.writeAsync();
 }
 

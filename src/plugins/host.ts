@@ -17,7 +17,7 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -26,7 +26,7 @@ import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -110,7 +110,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -122,7 +122,8 @@ import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "./transpileClient";
 import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
-import { defaultSaveOptions } from "../editor/save";
+import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
+import { buildOutgoing } from "../services/mapBuild";
 import { writeTestFile } from "../services/testMap";
 import { saveBlob } from "../services/mapIo";
 import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
@@ -1334,6 +1335,16 @@ export function addStatusItem(store: Store, bag: Contributions, info: PluginInfo
   return handle;
 }
 
+/** `api.document.buildSteps.add`: kept on `pluginBuildStepsAtom`, in activation order, until disposed or the plugin goes. */
+export function addBuildStep(store: Store, bag: Contributions, info: PluginInfo, spec: BuildStepSpec): Disposable {
+  if (!spec || typeof spec.id !== "string" || !spec.id || typeof spec.applies !== "function" || typeof spec.run !== "function") throw new Error("buildSteps.add needs an id, applies() and run().");
+  const key = nextContributionKey();
+  // The same id again replaces the earlier registration: a plugin re-registering after a settings change.
+  const others = store.get(pluginBuildStepsAtom).filter((e) => !(e.plugin.id === info.id && e.spec.id === spec.id));
+  store.set(pluginBuildStepsAtom, [...others, { key, plugin: info, spec: { ...spec, label: String(spec.label || info.name) } }]);
+  return bag.add(() => store.set(pluginBuildStepsAtom, store.get(pluginBuildStepsAtom).filter((e) => e.key !== key)));
+}
+
 /* ── Game data ──────────────────────────────────────────── */
 
 /** `api.data`: the decoded `.dat` tables, once they are in memory. */
@@ -1709,8 +1720,13 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         if (!scn) return null;
         const remembered = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
         const format = options.format ?? remembered.format;
-        const bytes = await writeMapBytes(scn, { format, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom), options: { ...remembered, ...options.saveOptions } });
         const name = options.fileName ?? store.get(mapFilePathAtom) ?? `${scenarioName(scn) || "Untitled Scenario"}.${format}`;
+        const saveOptions = { ...DEFAULT_SAVE_OPTIONS, ...remembered, ...options.saveOptions, format };
+        const extras = store.get(archiveExtrasAtom), stored = store.get(archiveStoredAtom);
+        // A failed step answers the map without it, as Save does; the log has the reason.
+        const bytes = options.built === false
+          ? await writeMapBytes(scn, { format, extras, stored, options: saveOptions })
+          : (await buildOutgoing(store, { scenario: scn, extras, stored, options: saveOptions, fileName: name, purpose: "export" })).bytes;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
       },
       save: async (options = {}) => {
@@ -1762,6 +1778,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         },
       },
       sections: sectionsApi(store, () => !bag.disposed),
+      buildSteps: {
+        add: (spec) => addBuildStep(store, bag, info, spec),
+        builtBy: () => store.get(builtByAtom)?.map((b) => ({ ...b })) ?? null,
+      },
     },
 
     triggers: {

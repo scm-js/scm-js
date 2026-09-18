@@ -52,6 +52,7 @@ import type { ResizeResult } from "../editor/resize";
 import type { SoundRow } from "../editor/sounds";
 import type { CuwpSlotPatch, CuwpSlotView } from "../editor/cuwp";
 import type { SaveOptions } from "../editor/save";
+import type { BuiltBy } from "../editor/mapBuild";
 import type { ChangeTilesetResult } from "../editor/tileset";
 import type { TerrainPick } from "../editor/terrain";
 import type { SymmetryMode } from "../editor/symmetry";
@@ -71,7 +72,7 @@ export type {
 export type {
   PlayerSlotView, PlayerPatch, ForceView, ForcePatch, UnitTypeView, UnitTypePatch, WeaponView, UpgradeView, UpgradePatch, TechView, TechPatch, MapVersionView, MapVersion, TextEncoding, ResizeResult, SoundRow,
   CuwpSlotView, CuwpSlotPatch, SaveOptions, ChangeTilesetResult, TerrainPick, SymmetryMode, PlacementOptions, DoodadPlacementOptions, DoodadVerdict, StartLayout, StartPlacementResult,
-  BlendCandidate, BlendOptions, Side, Clip, ClipParts, PasteMode, PasteResult, Toast, Preferences, StringImport,
+  BlendCandidate, BlendOptions, Side, Clip, ClipParts, PasteMode, PasteResult, Toast, Preferences, StringImport, BuiltBy,
 };
 export type { Scenario, UnitRecord, SpriteRecord, DoodadRecord, LocationRecord, LoadedTileset, TerrainType, TileInfo, TilesetId, Rect, Diamond, Bounds, LocationPatch, FogMode, SpriteKind, UnitGroup, SpriteGroup, EditorLayer, TerrainMode, DialogId, MapImageOptions, SectionInfo, SectionKnowledge, CombineMode, RebuildResult, IsomReport };
 
@@ -298,6 +299,12 @@ export interface ExportOptions {
    * an opened one), so the bytes are what Save would write unless you say otherwise.
    */
   saveOptions?: Partial<Omit<SaveOptions, "format">>;
+  /**
+   * False gives the map without its build steps (`document.buildSteps`): the scenario as the
+   * editor holds it. By default the file is the one Save would write, steps run — except
+   * from inside a step, where it is always the map without them.
+   */
+  built?: boolean;
 }
 
 /** `document.save` / `saveAs`. */
@@ -312,6 +319,55 @@ export interface ChangeTilesetOptions {
   terrainId?: number;
   /** Keep the tile numbers and change only ERA (what SCMDraft's switch does). */
   keepTiles?: boolean;
+}
+
+/** Why the map is leaving the editor: File ▸ Save (and its copies), Tools ▸ Test Map, or `document.export`. */
+export type BuildPurpose = "save" | "test" | "export";
+
+export interface BuildStepInput {
+  /**
+   * The map as Save would write it without the steps, or the step before this one's
+   * output: an `.scx` / `.scm` archive, the archive extras inside.
+   */
+  map: Uint8Array;
+  fileName: string;
+  purpose: BuildPurpose;
+  /** Aborted when the user chooses to save without waiting. */
+  signal: AbortSignal;
+}
+
+/**
+ * A compiler that stands between the map and the disk. The editor keeps showing the map
+ * the user edits; whenever the map leaves — Save, Test Map, `export` — every step that
+ * `applies` is run over the bytes, in the order the plugins were activated, and what the
+ * last one returns is what is written. The editor stores the map as it was *before* the
+ * steps inside the same file and gives that back on open, so a step's output (generated
+ * triggers, a payload in the string table) never shows up in the editor.
+ *
+ * A step that throws, or that the user stops waiting for, does not stop a save: the map is
+ * written without the steps and a notice says why. Test Map stops instead, since a map
+ * without its built part is not the one to test. A bare `.chk` is never built.
+ */
+export interface BuildStepSpec {
+  /** Unique within the plugin; the file remembers `plugin id/id`. */
+  id: string;
+  /** What the notice says is running: "eudplib". */
+  label: string;
+  /** Whether the open map has anything for this step. Cheap and synchronous; false leaves Save exactly as it was. */
+  applies(): boolean;
+  /**
+   * Build. Return an archive (or a bare scenario) — the editor takes the scenario and any
+   * *new* members from it and lays the final file out with the user's save options; the
+   * map's own members are written as they were. Throw an `Error` whose message says what
+   * is wrong in the user's terms.
+   */
+  run(input: BuildStepInput): Promise<Uint8Array>;
+}
+
+export interface BuildStepsApi {
+  add(spec: BuildStepSpec): Disposable;
+  /** The steps behind the file the open map came from or was last saved to; null for a plain map. */
+  builtBy(): BuiltBy[] | null;
 }
 
 /**
@@ -540,6 +596,7 @@ export interface DocumentApi {
   changeTileset(options: ChangeTilesetOptions): Promise<ChangeTilesetResult | null>;
   readonly extras: ExtrasApi;
   readonly sections: SectionsApi;
+  readonly buildSteps: BuildStepsApi;
 }
 
 /** What a raw section edit reported: the parser's remarks about the file it produced. */

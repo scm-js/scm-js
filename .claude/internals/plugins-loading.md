@@ -356,3 +356,6 @@ The same chunk has a second trap: on a **web** build its `import.meta.url` is
 wrong there. plugin-eudplib had exactly that (fixed in 0.3.0: `servedFromRepository` also wants
 the path to end in `plugin.ts` or `dist/plugin.js`) — on nightly and the container it looked
 for its worker under `/assets/dist/` instead of jsDelivr. The desktop hid it, being `app://`.
+A third, under `npm run dev`: the vendored source is served as `/plugins/<name>/plugin.ts`, which
+passes that path test, and `plugins/` holds no `dist/` — eudplib 0.3.1 also requires the module to
+be on **another origin than the page** before it counts as a repository served for development.

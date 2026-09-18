@@ -4,6 +4,9 @@
  * main process bundled by `desktop/vite.config.ts`, and electron-builder over the two —
  * with the packaging step's platform, architecture and targets picked on the command line.
  *
+ * After the web bundle, `scripts/bundle-plugin-runtimes.mjs` copies in the runtimes the
+ * default plugins fetch at run time (eudplib's), which the hosted editor leaves to the CDN.
+ *
  * The vendoring is what `npm run build` does in its `prebuild` hook too; it is repeated
  * here because this script runs tsc and vite directly rather than through that script.
  * It only fetches what is not already there at the pinned version, so after the first
@@ -128,6 +131,9 @@ if (!skipWeb) {
   run("type check", "node_modules/typescript/bin/tsc", ["-b"]);
   run("web bundle (desktop mode)", "node_modules/vite/bin/vite.js", ["build", "--mode", "desktop"]);
 }
+// After the bundle, since vite empties dist/: the runtimes the default plugins would
+// otherwise download on first use (eudplib's Pyodide and wheel), so the app needs no network.
+run("plugin runtimes", "scripts/bundle-plugin-runtimes.mjs", ["dist"]);
 if (!skipMain) run("main process", "node_modules/vite/bin/vite.js", ["build", "-c", "desktop/vite.config.ts"]);
 
 const builderArgs = [];

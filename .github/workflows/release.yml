@@ -181,6 +181,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node scripts/bundle-plugin-runtimes.mjs dist
           docker build -f docker/Dockerfile -t scmjs:check .
           id=$(docker run -d -p 8080:80 scmjs:check)
           trap 'docker rm -f "$id" >/dev/null' EXIT
@@ -191,7 +192,18 @@ jobs:
           curl -fsS -o /dev/null "http://127.0.0.1:8080$asset"
           # Blizzard's data is not redistributable: these paths must 404, not serve.
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/tileset/manifest.json)" = 404
-          echo "Image serves $asset and carries no game data."
+          # The default plugins' runtimes, served with types a module worker will load.
+          for manifest in $(cd dist && find plugin-runtime -name runtime.json); do
+            test "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/$manifest")" = 200
+            dir=$(dirname "$manifest")
+            for mjs in $(cd dist && find "$dir" -name '*.mjs' | head -1); do
+              curl -fsSI "http://127.0.0.1:8080/$mjs" | grep -qi '^content-type: text/javascript'
+            done
+            for wasm in $(cd dist && find "$dir" -name '*.wasm' | head -1); do
+              curl -fsSI "http://127.0.0.1:8080/$wasm" | grep -qi '^content-type: application/wasm'
+            done
+          done
+          echo "Image serves $asset, carries the plugin runtimes and no game data."
 
       - name: Commit and tag
         id: tag

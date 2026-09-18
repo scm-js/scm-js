@@ -16,6 +16,10 @@
 # So: `npm run build` first (or `npm run build:image`, which does both). `.dockerignore`
 # is what keeps Blizzard's extracted game data out of the context — `vite build` copies
 # `public/` into `dist/`, and a clone that ran `npm run extract` has it there.
+# The image also carries the default plugins' runtimes (eudplib's, about 15 MB) under
+# /plugin-runtime/, copied into dist/ by `scripts/bundle-plugin-runtimes.mjs` before the
+# build, so an editor on an intranet builds EUD maps without reaching jsDelivr. The hosted
+# editor and the release's web zip do not carry them.
 FROM nginx:1.29-alpine
 
 LABEL org.opencontainers.image.title="scmJS" \

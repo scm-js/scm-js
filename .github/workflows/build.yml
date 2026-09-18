@@ -526,6 +526,12 @@ jobs:
         with:
           name: web-zip
       - run: unzip -q scmJS-web.zip -d dist
+      # The image carries the default plugins' runtimes; the zip and the hosted editor do
+      # not (their plugins download from jsDelivr), so they go in here and nowhere else.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node scripts/bundle-plugin-runtimes.mjs dist
       # No RUN step in the Dockerfile and static files inside it, so both architectures
       # come out of one build with no emulation. buildx is still what writes the manifest
       # list; QEMU is not needed.

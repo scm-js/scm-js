@@ -26,5 +26,8 @@ fixtures/
 # Default plugins vendored into the desktop build (regenerate with `npm run vendor:plugins`)
 /plugins/
 
+# Plugin runtimes downloaded for the desktop and container builds (scripts/bundle-plugin-runtimes.mjs)
+/plugin-runtimes/
+
 # The documentation site (regenerate with `npm run build:docs`)
 /docs-site/

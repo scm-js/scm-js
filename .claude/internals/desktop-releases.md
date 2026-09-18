@@ -92,6 +92,28 @@ and the nginx config 404s those paths, so no image can carry Blizzard's data and
 step 4 of the resolver — mounting an extracted tree over them is how to serve your own.
 `npm run build:image` is the local build, and `release.yml` builds and *serves* the image in its
 pre-flight, before it tags.
+
+**Plugin runtimes** (`scripts/bundle-plugin-runtimes.mjs`, 2026-09-18). Vendoring compiles the
+defaults' *source* in, but eudplib's runtime (Pyodide + the wheel + its `dist/worker.js`, ~15 MB)
+was still fetched from jsDelivr on the first build — the one network dependency left in the
+desktop app and an intranet container. The script reads `runtime.json` at each pinned default's
+tag (raw.githubusercontent; a 404 means the plugin carries nothing), validates it
+(`checkManifest`: one-directory plugin/version names, paths that cannot leave their folder,
+https sources only), caches the files in the gitignored `plugin-runtimes/<owner>-<repo>@<ref>/`
+(`runtime.json` written last, so a half fetch is refetched) and copies them into
+`<dist>/plugin-runtime/<plugin>/<version>/` with the manifest beside them. It runs in
+`build-desktop.mjs` *after* vite (which empties `dist/`), in build.yml's `image` job after the
+zip is unpacked, in release.yml's image check (which also asserts `.mjs` is served as
+`text/javascript` and `.wasm` as `application/wasm` — `docker/nginx.conf`'s `/plugin-runtime/`
+location sets `types` itself rather than trusting nginx's mime.types), and in `build:image`.
+**Never** in the `web` job: Pages and the nightly site are the web zip, and 15 MB per user is
+the CDN's to serve, not Pages' 100 GB/month. `SCMJS_SKIP_VENDOR=1` skips it too. The plugin side
+is `plugin-eudplib`'s `findBundled`: it asks for `plugin-runtime/eudplib/<its own version>/runtime.json`
+relative to `document.baseURI` at activation, so an updated plugin whose version the editor
+does not carry goes back to the CDN (and on Pages that is one 404 per session). Verified
+end to end on 2026-09-18 with the image in headless Chromium and jsDelivr blocked: found,
+worker up in 1.5 s, status page "Carried by this editor". The desktop's `app://` path was not
+run under Electron; it is the same same-origin fetch through `protocol.handle`.
 The download buttons on the site are plain hrefs to
 `/releases/latest/download/<asset>`, which GitHub redirects to the newest **non-prerelease**
 release — so the nightly is invisible to them and nothing needs updating when a version ships;

@@ -52,7 +52,7 @@ export interface DefaultPlugin {
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   // The library TrigScript's Remastered target (and Magenta) build through; it requires it.
   // First, so the plugin other plugins lean on heads the Installed list.
-  { spec: "github:scm-js/plugin-eudplib@v0.2.0", enabled: true },
+  { spec: "github:scm-js/plugin-eudplib@v0.3.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.3.1", enabled: true },
   { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },

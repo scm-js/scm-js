@@ -76,6 +76,8 @@ and `import()` through `data:` URLs in Node; `describe.skipIf` unless
 of which gains a dependency, since the build already needs GitHub to vendor.
 `tests/vendor-plugins.test.ts` pins the parse, the file filter and the rule that no default
 may be unpinned.
+A default's *runtime* — files it fetches at run time, not source — is the separate step
+`scripts/bundle-plugin-runtimes.mjs`, desktop and container only; see `desktop-releases.md`.
 
 **A plugin repository's typings and its build.** The contract reaches the plugin
 repositories as `@scm-js/plugin-api`, a devDependency on `^1` holding one generated
@@ -349,3 +351,8 @@ one place the version is written as code, test-checked against the manifest), th
 TypeScript already arrive. Without that it silently fell back to compiling on the main thread — the
 probe is `typeof globalThis.ts === "undefined"` after a check, since only the fallback loads
 TypeScript into the page. Any plugin that starts a worker from its own module has the same trap.
+The same chunk has a second trap: on a **web** build its `import.meta.url` is
+`https://<host>/assets/plugin-<hash>.js`, so "an http(s) module URL means a dev server" is
+wrong there. plugin-eudplib had exactly that (fixed in 0.3.0: `servedFromRepository` also wants
+the path to end in `plugin.ts` or `dist/plugin.js`) — on nightly and the container it looked
+for its worker under `/assets/dist/` instead of jsDelivr. The desktop hid it, being `app://`.

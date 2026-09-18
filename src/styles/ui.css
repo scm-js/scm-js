@@ -286,8 +286,15 @@ input[type="range"] {
   outline: none;
   box-shadow: var(--bevel-sunken), var(--focus);
 }
+.check input:disabled,
+.tick:disabled,
 .check input:disabled + span {
   opacity: 0.45;
+}
+.check input:disabled,
+.tick:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
 }
 /* A tick whose label is a sentence: let it wrap instead of running off the dialog. */
 .check.wrap {

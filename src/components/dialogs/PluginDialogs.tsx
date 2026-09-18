@@ -491,12 +491,14 @@ function browseVersion(entry: RegistryEntry, have: string | undefined): { text?:
  * sense for it, and a line naming the state in words. A badge among the other badges —
  * which is all this used to be — is the one place the eye does not look.
  */
-function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onManage }: {
+function BrowseRow({ entry, icon, have, usedBy, state, busy, onInstall, onEnable, onManage }: {
   entry: RegistryEntry;
   /** The plugin's own icon when the editor has it loaded; the entry's own otherwise. */
   icon?: PluginIcon | null;
   /** The version of the copy this editor has, when it has one — see `browseVersion`. */
   have?: string;
+  /** The names of the enabled plugins that require this one — see `neededBy`. */
+  usedBy?: string[];
   state: InstallState;
   busy: boolean;
   onInstall: () => void;
@@ -507,12 +509,13 @@ function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onMana
   const version = browseVersion(entry, have);
   const tags = entry.tags ?? [];
   const hasMeta = entry.author !== undefined || tags.length > 0 || entry.updated !== undefined;
+  const held = usedBy !== undefined && usedBy.length > 0;
   return (
-    <div className={`item plugin-row browse-row is-${state}`} role="listitem">
+    <div className={`item plugin-row browse-row is-${state}${held ? " held" : ""}`} role="listitem">
       <PluginIconView icon={icon ?? entryIcon(entry)} />
       <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
-          <strong>{entry.name}</strong>
+          <strong className="plugin-name">{entry.name}</strong>
           {version.text && <span className="dim" title={version.mine ? t("The version you have") : t("The version the registry lists")}>v{version.text}</span>}
           {version.available && (
             <span className="badge gold" title={t("You have v{have}. Update it under Installed.", { have: have ?? "" })}>{t("v{available} available", { available: version.available })}</span>
@@ -537,6 +540,7 @@ function BrowseRow({ entry, icon, have, state, busy, onInstall, onEnable, onMana
           </div>
         )}
         <span className="hint mono" style={{ opacity: 0.7 }}>{entry.spec}</span>
+        {held && <span className="hint plugin-used-by">{t("Used by {names}", { names: usedBy.join(", ") })}</span>}
       </div>
       <div className="plugin-row-actions">
         <div className="row" style={{ gap: 4 }}>
@@ -706,6 +710,12 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
     const found = installOf(spec);
     return found ? runtimes[found.spec] : undefined;
   };
+  // The same holds Installed shows, so a library another plugin needs reads the same here.
+  const needed = neededBy(installs, manifestLookup(store), pluginKey);
+  const usedByOf = (spec: string): string[] | undefined => {
+    const found = installOf(spec);
+    return found ? needed.get(found.spec)?.map((s) => runtimes[s]?.manifest?.name ?? (s.startsWith("builtin:") ? s.slice("builtin:".length) : s)) : undefined;
+  };
   const state = (spec: string): InstallState => {
     const found = installOf(spec);
     return !found ? "new" : found.enabled ? "installed" : "disabled";
@@ -800,6 +810,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
                       entry={e}
                       icon={runtimeOf(e.spec)?.icon}
                       have={runtimeOf(e.spec)?.manifest?.version}
+                      usedBy={usedByOf(e.spec)}
                       state={state(e.spec)}
                       busy={busySpec === e.spec}
                       onInstall={() => { void install(e); }}
@@ -1084,12 +1095,12 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           const held = holders.length > 0;
           const heldTitle = held ? t("{names} {n, plural, one {needs} other {need}} this plugin; turn {n, plural, one {it} other {them}} off first.", { names: holders.join(", "), n: holders.length }) : undefined;
           return (
-            <div key={p.spec} className="item plugin-row" role="listitem" data-spec={p.spec}>
+            <div key={p.spec} className={`item plugin-row${held ? " held" : ""}`} role="listitem" data-spec={p.spec}>
               <Check label="" checked={p.enabled} disabled={held} title={heldTitle} onChange={(e) => toggle(p.spec, e.target.checked)} aria-label={t("Enable {name}", { name })} />
               <PluginIconView icon={rt?.icon} />
               <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
-                  <strong>{name}</strong>
+                  <strong className="plugin-name">{name}</strong>
                   {rt?.manifest?.version && <span className="dim">v{rt.manifest.version}</span>}
                   <span className={`badge ${status.className}`}>{status.busy && <LoaderCircle size={9} className="spin" />}{status.text}</span>
                   {isDefault && <span className="badge dim">{t("default")}</span>}
@@ -1099,7 +1110,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                 {named && <span className="hint mono" style={{ opacity: 0.7 }}>{p.spec}</span>}
                 {rt?.status === "error" && rt.error && <span className="error-text">{rt.error}</span>}
                 {rt?.status === "active" && <span className="hint">{contributionSummary(rt)}</span>}
-                {held && <span className="hint" title={heldTitle}>{t("Needed by {names}", { names: holders.join(", ") })}</span>}
+                {held && <span className="hint plugin-used-by" title={heldTitle}>{t("Used by {names}", { names: holders.join(", ") })}</span>}
               </div>
               <div className="plugin-row-actions">
                 <div className="row" style={{ gap: 4 }}>

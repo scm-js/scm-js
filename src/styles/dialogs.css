@@ -824,6 +824,16 @@
 .plugin-row .mono {
   overflow-wrap: anywhere;
 }
+/* A plugin another enabled plugin requires: it cannot be turned off or removed, and the
+   row says so before the greyed-out tick does. */
+.plugin-row.held .plugin-name {
+  color: var(--warn);
+}
+.plugin-row .plugin-used-by {
+  margin-top: 5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
 
 /* Browse and Installed are tabs in a `tall` dialog: the panel has to be a column for
    the pane inside it to take the slack the way it does on its own. */

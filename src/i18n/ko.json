@@ -1140,7 +1140,7 @@
   "Enable {name}": "{name} 켜기",
   "Loads one fixed commit": "고정된 커밋 하나를 불러옵니다",
   "pinned": "고정됨",
-  "Needed by {names}": "{names}{names|이} 필요로 함",
+  "Used by {names}": "{names}에서 사용 중",
   "Show what is in the newer version before switching to it": "전환하기 전에 새 버전의 내용을 보여 줍니다",
   "Update to": "업데이트:",
   "Ask {addressLabel} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.": "{addressLabel}에 새 버전이 있는지 묻고, 전환하기 전에 내용을 보여 줍니다. 누르기 전까지는 아무것도 내려받지 않습니다.",

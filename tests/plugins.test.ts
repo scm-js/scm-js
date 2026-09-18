@@ -1156,13 +1156,13 @@ describe("plugin lifecycle", () => {
     // Which ten, in which order, and which of them start on — the versions deliberately
     // not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
+      "github:scm-js/plugin-eudplib",
       "github:scm-js/plugin-scm-scx",
       "github:scm-js/plugin-repair",
       "github:scm-js/plugin-walkability",
       "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-trigedit",
-      "github:scm-js/plugin-eudplib",
       "github:scm-js/plugin-trigscript",
       "github:scm-js/plugin-stamp-library",
       "github:scm-js/plugin-scmjs-dev",
@@ -1173,13 +1173,13 @@ describe("plugin lifecycle", () => {
     // from SCMDraft. Both are still listed and badged *default*, and ticking one on is
     // remembered like any other change.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => [pluginIdentity(d.spec), d.enabled])).toEqual([
+      ["github:scm-js/plugin-eudplib", true],
       ["github:scm-js/plugin-scm-scx", true],
       ["github:scm-js/plugin-repair", true],
       ["github:scm-js/plugin-walkability", true],
       ["github:scm-js/plugin-image-to-terrain", true],
       ["github:scm-js/plugin-paint", true],
       ["github:scm-js/plugin-trigedit", false],
-      ["github:scm-js/plugin-eudplib", true],
       ["github:scm-js/plugin-trigscript", true],
       ["github:scm-js/plugin-stamp-library", true],
       ["github:scm-js/plugin-scmjs-dev", false],
@@ -1197,7 +1197,7 @@ describe("plugin lifecycle", () => {
     const tagOf = (spec: string) => spec.slice(spec.lastIndexOf("@") + 1);
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
-      manifestUrl: `https://raw.githubusercontent.com/scm-js/plugin-scm-scx/${tagOf(DEFAULT_REMOTE_PLUGINS[0].spec)}/plugin.json`,
+      manifestUrl: `https://raw.githubusercontent.com/scm-js/plugin-eudplib/${tagOf(DEFAULT_REMOTE_PLUGINS[0].spec)}/plugin.json`,
     });
     // Whether this build bundled them (`scripts/vendor-plugins.mjs`, which the desktop
     // build runs) or fetches them, every default is in the list exactly once and under

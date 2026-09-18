@@ -20,11 +20,12 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit (the Text Trigger Editor, moved out 2026-09-07;
+eudplib (a default since 2026-09-17, on — TrigScript requires it; first since 2026-09-18 so the library heads the
+Installed list, which also makes it activate first), scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit (the Text Trigger Editor, moved out 2026-09-07;
 **off** since 2026-09-07 — with it off, TrigScript's `after: "Text Trigger Editor…"` finds no anchor and its item lands at
 the end of the Triggers menu after a separator, which is `menu.add`'s answer for any missing anchor; it stays listed before
 TrigScript so the anchor works for anyone who ticks it on),
-eudplib (a default since 2026-09-17, on — TrigScript requires it), TrigScript (a default since 2026-09-07, on), Stamp Library and
+TrigScript (a default since 2026-09-07, on), Stamp Library and
 scmjs.dev (off), each pinned to a tag; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard
 and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
@@ -326,8 +327,9 @@ row names a version of it. The host wires it in four places: `installPlugin` ins
 requirements first with the same options (the confirmation passes the previews it fetched to list
 them; a caller with none has them read; one already listed is only enabled; a set guards
 recursion), `enableWithRequirements` is the one enable path both the Manage Plugins tick and
-Browse's *Turn on* call, `InstalledPane` disables the tick and Remove of a held row and says who
-holds it, and `usePlugins` activates `orderedInstalls`. `loadAndRun` logs a requirement not in the
+Browse's *Turn on* call, `InstalledPane` disables the tick and Remove of a held row, turns its name
+`--warn` orange and adds a "Used by …" line (`BrowsePane` runs the same `neededBy` over its installs and marks
+the row the same way; a disabled `.check`/`.tick` box itself dims since 2026-09-18, not only its label), and `usePlugins` activates `orderedInstalls`. `loadAndRun` logs a requirement not in the
 list and starts the plugin anyway — `services.watch` copes with a provider that never comes, and
 the install path is what adds them. Version compatibility is deliberately **not** in the manifest:
 the provider passes a `version` to `services.provide` and the consumer checks `ServiceInfo.version`;

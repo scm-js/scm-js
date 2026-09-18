@@ -50,14 +50,15 @@ export interface DefaultPlugin {
  * `menu.add` does for any anchor it cannot find.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
+  // The library TrigScript's Remastered target (and Magenta) build through; it requires it.
+  // First, so the plugin other plugins lean on heads the Installed list.
+  { spec: "github:scm-js/plugin-eudplib@v0.2.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.3.1", enabled: true },
   { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.0.1", enabled: true },
   { spec: "github:scm-js/plugin-trigedit@v1.0.0", enabled: false },
-  // The library TrigScript's Remastered target (and Magenta) build through; it requires it.
-  { spec: "github:scm-js/plugin-eudplib@v0.2.0", enabled: true },
   { spec: "github:scm-js/plugin-trigscript@v2.6.1", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.0.0", enabled: true },
   { spec: "github:scm-js/plugin-scmjs-dev@v1.22.0", enabled: false },

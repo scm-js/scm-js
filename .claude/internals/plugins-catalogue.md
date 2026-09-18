@@ -265,3 +265,10 @@ formerly the editor's; TrigScript's `after: "Text Trigger Editor…"` anchors on
 unfound anchor does anyway. The `trigedit.open` command takes `{ briefing?: boolean }`. No bundle weight moved (a textarea), so the
 case for the move is the growth it allows — highlighting, completion, Monaco — without the editor carrying it; if it
 grows Monaco it should take TrigScript's loaded copy through `api.services` rather than download a second one.
+
+**TrigScript 3.0.0 (2026-09-18)** dropped the death-counter back end: `program()` is Remastered only, built by the
+eudplib plugin at save time. It is the worked example for `buildSteps.before` (apply the script ahead of the bytes) and
+for contributing to the eudplib library's one build step (`eudplib.contribute`), and it no longer writes a `-eud.scx`
+beside the map or has a Build / target switch. `tests/trigscript-guide.test.ts` accepts an example that makes a program
+and no trigger. The guide's five pictures were taken on 2.x (cost hints, a Build button) and want regenerating with
+`scripts/guide-screenshots.mjs` once 3.0.0 is the pinned default.

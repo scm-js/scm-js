@@ -474,8 +474,8 @@ same syntax.
 
 Triggers ▸ TrigScript… is the third editor: triggers as code. It is a plugin, on from the
 start, and it has a [section of its own](#trigscript) below — TypeScript files kept inside
-the map, built into a block of ordinary triggers, with loops and helpers to write them
-and programs that run in the game as death-counter state machines.
+the map, turned into a block of ordinary triggers, with loops and helpers to write them,
+and programs that run in the game for a map made for StarCraft: Remastered.
 
 ### Mission briefings
 
@@ -507,71 +507,93 @@ restricted to them.
 
 ## TrigScript
 
-TrigScript is a way to write triggers as code. The code is TypeScript, it lives inside
-the map, and Build turns it into ordinary triggers — the same kind the Trigger Editor
-shows, with no EUD anywhere in them, so a map built with it plays on any version of the
-game. It is a plugin, on from the start: Triggers ▸ TrigScript… opens it as soon as a map
-is open.
+TrigScript is a way to write triggers as code. The code is TypeScript and it lives inside
+the map. It is a plugin, on from the start: Triggers ▸ TrigScript… opens it as soon as a
+map is open.
 
-Two ideas carry it. The files are real TypeScript and they *run* when you press Build:
-every `trigger()` call they make becomes one trigger of the map, so a helper that returns
-the ten triggers a shop needs, a loop over the players, a table of waves and the whole
-standard library are there to write triggers *with*. And code inside `program(() => { … })`
-runs *in the game* instead: its variables become death counters and switches, its `if`s
-and loops become a state machine of triggers, and a lives counter or a wave timer is
-written as a loop rather than as a dozen triggers with hand-numbered death counts.
+Two ideas carry it. The files are real TypeScript and they *run* when the script is
+applied: every `trigger()` call they make becomes one trigger of the map, so a helper
+that returns the ten triggers a shop needs, a loop over the players, a table of waves and
+the whole standard library are there to write triggers *with*. Those are ordinary
+triggers, the same kind the Trigger Editor shows, and a map made of them plays on any
+version of the game.
 
-![The TrigScript editor on a wave-defence script: the files on the left, the code checked as you type, and the cost of each line at its end](docs/images/trigscript.webp)
+Code inside `program(() => { … })` runs *in the game* instead: variables, loops,
+functions and `sleep`, so a lives counter or a wave timer is written as a loop rather
+than as a dozen triggers with hand-numbered death counts. Programs are built into the map
+by the eudplib plugin, another default, when the map is [saved](#saving), and **a map with a
+program in it needs StarCraft: Remastered**. A script that only calls `trigger()` never
+involves any of that.
+
+![The TrigScript editor on a wave-defence script: the files on the left and the code checked as you type](docs/images/trigscript.webp)
 
 ### Opening the script
 
 Triggers ▸ TrigScript… opens the map's script in a window. The list on the left is its
-files: `main.ts` is where a build starts, **New file** adds another, and a file's ✎ and ×
-rename and remove it. Edits are saved into the map as you type — the files are members
-of the map archive, like a sound — and only **Build** changes triggers.
+files: `main.ts` is where the script starts, **New file** adds another, and a file's ✎ and
+× rename and remove it. Edits are saved into the map as you type — the files are members
+of the map archive, like a sound.
 
 The code is checked as you type, against the map's own names: `locations.` completes to
 the locations the map has, `units.` to every unit type (and the map's custom names),
 `switches.` to the switches by number and by the names the map gives them, and
-`players.` to the forces. A location passed where a unit belongs is an error before you
-build, and so is a name the map no longer has. The line under the toolbar says *No
+`players.` to the forces. A location passed where a unit belongs is an error as you type
+it, and so is a name the map no longer has. The line under the toolbar says *No
 problems* or how many there are, and the list below the code says where.
 
 ![Completion on `locations.`, listing what the open map has](docs/images/trigscript-complete.webp)
 
-**Build** runs the script and puts the triggers it recorded into the map as one
-contiguous block of the trigger list, replacing the previous block or adding the first.
-**Build & Close** does that and closes. The Trigger Editor shows those triggers with a
-`script` badge and will not edit them; *Open TrigScript* there jumps to the file and line
-that made one. The Text Trigger Editor fences them in comments. Hand-made triggers around
-the block are left alone, and a hand-made trigger inserted before the block just moves
-it along.
+There is no build to remember. **Saving the map applies the script**, and so do Test Map
+and anything else that takes the map out of the editor: the script runs, the triggers it
+recorded go into the map as one contiguous block of the trigger list (replacing the
+previous block, or adding the first), and its programs, if it has any, are built into the
+file being written. If the script has an error the map is saved anyway, with the triggers
+from the last script that worked, and a notice names the file and the line.
 
-![The Trigger Editor on a built script: the generated rows badged, and the way back to the line that made one](docs/images/trigscript-triggers.webp)
+**Apply** does the first half when you ask, which is how to look at the triggers in the
+Trigger Editor without saving. **Apply & Close** does that and closes. **Test** applies
+the script, builds the map exactly as Save would and hands it to [Test Map](#test-map).
+The Trigger Editor shows the script's triggers with a `script` badge and will not edit
+them; *Open TrigScript* there jumps to the file and line that made one. The Text Trigger
+Editor fences them in comments. Hand-made triggers around the block are left alone, and a
+hand-made trigger inserted before the block just moves it along.
 
-Editing one of the generated triggers by hand makes the block *stale*, and the editor
-says so at the next open: how many of its triggers are still the build's and how many
-were changed. The next Build replaces the unchanged ones and keeps the edited ones as
+![The Trigger Editor on an applied script: the generated rows badged, and the way back to the line that made one](docs/images/trigscript-triggers.webp)
+
+Editing one of the script's triggers by hand makes the block *stale*, and the editor says
+so at the next open: how many of its triggers are still the script's and how many were
+changed. The next Apply replaces the unchanged ones and keeps the edited ones as
 hand-made triggers right after the block, so a wave system tuned in one trigger does not
 come back twice; *Append instead* on the notice leaves them all alone and adds a fresh
-block after them. **Import map triggers** goes the other way: it rewrites the map's
-hand-made triggers as `trigger()` calls, in their order, so a map made in the Trigger
-Editor can carry on as a script.
+block after them. While a block is stale, saving leaves the script unapplied and says so.
+**Import map triggers** goes the other way: it rewrites the map's hand-made triggers as
+`trigger()` calls, in their order, so a map made in the Trigger Editor can carry on as a
+script.
 
-**Simulate** runs the built triggers for thirty trigger cycles in a built-in interpreter
-and lists every action that ran, with its cycle and the source line, and the final
-value of every program variable. It models death counters, switches, preserve, list
-order and the game's counting (adding wraps, subtracting stops at zero); unit
-conditions answer "false", so it is a check on the logic, not on the units. The
-summary button on the toolbar lists the programs, how many triggers each cost and
-where each variable lives.
+**Simulate** runs the script for 480 frames, twenty seconds of the game at Fastest, in a
+built-in interpreter and lists every action that ran, with its frame and the source line,
+and the final value of every program variable. Triggers and programs run side by side in
+one world, so a death count a program sets is seen by a trigger. It models death
+counters, switches, preserve, list order and the game's arithmetic; unit conditions
+answer "false", so it is a check on the logic, not on the units.
 
-![Simulate: thirty cycles of the script, each action with its cycle and line](docs/images/trigscript-simulate.webp)
+![Simulate: the script's actions, each with its frame and line](docs/images/trigscript-simulate.webp)
 
-The files and a build record live in the map archive under `trigscript\` — `main.ts`,
-any other file, and `build.json` — next to the scenario, so they travel with the `.scx`.
-The [Save dialog](#saving) lists them under the archive's other files, each with a tick,
-so a copy for release can leave the source out; the triggers stay either way.
+**A map with a program is built when it is saved.** The first time, the eudplib plugin
+asks to download its runtime, about 15 MB, once; the desktop app and the container image
+carry it. A notice shows while the build runs (a few seconds) with a button to save
+without waiting. The file you get is the one to play and to share. It also holds the map
+as you see it in the editor, which is what comes back when you open it again, so the
+trigger list never fills with generated triggers. One thing changes for the whole map:
+the build makes the game run *every* trigger every frame, not every two seconds, the way
+hyper triggers do. A preserved trigger that adds a mineral does so twenty-four times a
+second in such a map.
+
+The files and a record of the last apply live in the map archive under `trigscript\` —
+`main.ts`, any other file, and `build.json` — next to the scenario, so they travel with
+the `.scx`. The [Save dialog](#saving) lists them under the archive's other files, each
+with a tick, so a copy for release can leave the source out; the triggers stay either
+way.
 
 ### Beside the map
 
@@ -633,7 +655,7 @@ and the other groups are under `players`: `players.Force1`, `players.Foes`,
 `players.Allies`. A raw number works wherever a name does, which is how an EUD player or
 an odd unit id gets in.
 
-The script is a program that runs when you build, and everything TypeScript offers at
+The script is a program that runs when it is applied, and everything TypeScript offers at
 that moment is fair game. A loop makes the same trigger for several players; a function
 returns a list of actions; a table holds the numbers; a template string builds the text:
 
@@ -666,7 +688,8 @@ import is needed, and also as the module `"trigscript"` for anyone who prefers
 `hyperTriggers(P8)` anywhere in the script emits the classic three preserved triggers of
 sixty-two waits, so the whole trigger list runs every frame instead of every two seconds.
 Give them to a player whose other triggers never wait — a computer slot, usually — since
-a Wait stalls every trigger of that player.
+a Wait stalls every trigger of that player. A map with a program does not need them: its
+build already makes the list run every frame.
 
 ### Programs
 
@@ -691,65 +714,62 @@ program(() => {
 }, { owner: P1 });
 ```
 
-**Variables are death counters.** A `let n = 0` takes a death counter on a unit that can
-never die (the "(Unused)" entries of the unit list), twelve players per unit, so there
-are hundreds to go round; a `let f = false` takes a switch; a `let p = { lives: 3, gold: 0 }`
-is a variable per field. Numbers are what a death counter holds, 0 to 4 294 967 295: a
-result below zero is stored as 0, and a `u8` or `u16` variable (`let lives: u8 = 3`)
-stays within 0 … 255 or 0 … 65 535 and is much cheaper to compare and copy. `+`, `-`,
-`*` by a constant, `/` and `%` by a constant, `Math.min`, `Math.max`, `Math.abs` and
-`clamp()` all work. The allocator keeps clear of every death counter and switch the
-map's hand-made triggers use, so a script can be added to a map that already has some.
+**A program runs every frame, from where it left off.** Its body runs until it reaches a
+`sleep()` or its end, all within one frame of the game, and the next frame it carries on
+from there. A body that ends stops for good. So the loop above is a game loop: it looks
+at the beacon, sends a wave if the alarm is up, and sleeps twenty seconds.
+
+**Variables** hold numbers and booleans, and a `let p = { lives: 3, gold: 0 }` is a
+variable per field. They live in the game while the map is played and take nothing from
+the map: no death counters, no switches, no triggers in the list. Numbers are whole, from
+0 to 4 294 967 295: a result below zero is stored as 0, and a `u8` or `u16` variable
+(`let lives: u8 = 3`) stays within 0 … 255 or 0 … 65 535. `+`, `-`, `*`, `/` and `%`
+work between variables, with `Math.min`, `Math.max`, `Math.abs` and `clamp()`; division
+is whole, and dividing by a variable that is 0 gives 0. A sum is worked out as a whole
+before it is stored, and a comparison is exact: `if (a - b < 0)` is true when `b` is
+larger.
 
 **Control flow is what it says.** `if`/`else`, `while`, `do`, `for`, `switch`, `break`,
 `continue` and `c ? a : b` all work. Conditions go in an `if` or a `while`; actions stand
-as statements. Straight-line code runs within one trigger cycle, and a loop's back edge
-waits for the next one, so `while (true) { … }` is a game loop running once per cycle —
-every two seconds at normal speed, every frame with hyper triggers. A `for` whose bounds
-are known when you build is unrolled and runs at once.
+as statements. A loop runs all its rounds at once, within the frame, which has one
+consequence to keep in mind: a loop that never ends and never sleeps would freeze the
+game. The editor refuses one and says where to put `sleep(frames(1))`. A `for` whose
+bounds are known when the script is applied is unrolled, and the editor says so at the
+end of the line.
 
-**Time is `sleep`.** `sleep(seconds(15))` pauses the program: what follows runs that
-much later, and nothing else of *this* program runs meanwhile, while other programs and
-the map's triggers carry on. `minutes()` and `cycles()` are the other units, and the
-count is worked out from whether the script emits hyper triggers. Something that runs on
-its own clock is another program — one program per concurrent activity. The game's own
-`wait()` is allowed but is a different thing: it stalls every trigger of that player,
-hyper triggers included, so use it for a short pause inside one cycle (a text, then a
-sound) and `sleep` to pass time.
+**Time is `sleep`.** `sleep(seconds(15))` gives the frame back and carries on that much
+later, while other programs and the map's triggers go on. `frames(n)` is the game's own
+clock, a second is twenty-four frames at Fastest, and `minutes()` is there too.
+Something that runs on its own clock is another program — one program per concurrent
+activity. The game's own `wait()` is allowed but is a different thing: it stalls every
+trigger of that player, so use it for a short pause (a text, then a sound) and `sleep`
+to pass time.
 
-**Edges.** `if (rose(bring(…)))` is true on the cycle the condition becomes true and not
+**Edges.** `if (rose(bring(…)))` is true on the frame the condition becomes true and not
 again until it has been false in between; `once(…)` is true the first time only.
 `random()` is a coin toss.
 
 **Functions** declared inside the program, or made with `game()` in any file, run in the
-game too. They are inlined at each call, arguments pass by value, and they may return a
-number or a boolean — `function canAfford(price: number) { return gold >= price; }`.
-There is no recursion.
+game too. They are inlined at each call, arguments pass by value, they may return a
+number or a boolean — `function canAfford(price: number) { return gold >= price; }` —
+and they may sleep. There is no recursion.
 
-**A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as one
-thread running as that player. `AllPlayers`, a force or a list of players makes a
-**per-player program**: the same code runs once for each of them at the same time,
-`CurrentPlayer` is that player, and every variable is per player, each with their own
-copy — which is how lives, scores and cooldowns are written once. `let total = shared(0)`
-is one cell they all share.
+**A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as that
+player, while that player is in the game. `AllPlayers`, a force or a list of players
+makes a **per-player program**: the same code runs for each of those players who is in
+the game, computers included, `CurrentPlayer` is that player, and every variable is per
+player, each with their own copy — which is how lives, scores and cooldowns are written
+once. `let total = shared(0)` is one value they all share.
 
-**Everything the body reads from outside is computed when you build.** A constant, a
-helper, a condition, an action: each is worked out once, when the script runs, and the
-editor underlines those parts with dots so the boundary is visible as you type. That is
-what lets a helper written outside the program emit actions inside it. It is also the
-one rule to keep in mind: a program variable can never reach a condition, an action or a
-helper, because those were computed before the game started. `createUnit(P8, unit, wave,
-at)` is an error saying so. The exceptions are the amount of `setResources`, `setDeaths`,
-`setScore` and `setCountdownTimer` and the unit count of `createUnit`, `killUnitAt`,
-`removeUnitAt` and `giveUnits`, which can be a variable or an expression over one — the
-action is done bit by bit.
-
-**Cost is shown where you write it.** Every line that generates more than one trigger gets
-its count at its end, and the `program(` line its total. `n += 5`, `n = 3` and a
-comparison with a number are one trigger each; an operation between two *variables*
-(`a = b`, `a < b`, `a += b`) is the classic binary decomposition, 66 triggers for a plain
-number and 19 for a `u8`, so declare the range on anything you compare or copy in a hot
-loop. Hover a variable to see where it lives.
+**Everything the body reads from outside is computed when the script is applied.** A
+constant, a helper, a condition, an action: each is worked out once, when the script
+runs, and the editor underlines those parts with dots so the boundary is visible as you
+type. That is what lets a helper written outside the program supply actions inside it.
+It is also the one rule to keep in mind: a program variable cannot reach a condition, an
+action or a helper, because those were computed before the game started. The exceptions
+are the amount of `setResources`, `setDeaths`, `setScore` and `setCountdownTimer` and the
+unit count of `createUnit`, `killUnitAt`, `removeUnitAt` and `giveUnits`, which can be a
+variable or an expression over one.
 
 ### Examples
 
@@ -768,7 +788,8 @@ trigger(AllPlayers, [always()], [
 ```
 
 **Hyper triggers.** One line, and the whole trigger list runs every frame. Player 8 is
-the computer slot here, and nothing else in the script makes that player wait.
+the computer slot here, and nothing else in the script makes that player wait. For a map
+of plain triggers; a map with a program runs every frame already.
 
 ```ts
 hyperTriggers(P8);
@@ -810,13 +831,12 @@ trigger(AllPlayers, [
 
 **Waves from a table.** The table is ordinary data; the program walks it, one wave every
 forty-five seconds, then waits for the last attacker to die. `for … of` over a list known
-when you build is unrolled, so `w.unit` and `w.n` are plain values in each copy. The
-program runs as Player 1, so `victory()` is Player 1's; a team needs a `trigger()` for
-the others.
+when the script is applied is unrolled, so `w.unit` and `w.n` are plain values in each
+copy. The program runs as Player 1, so `victory()` is Player 1's; a team needs a
+`trigger()` for the others. This one, and every example below with a `program`, makes a
+map for StarCraft: Remastered.
 
 ```ts
-hyperTriggers(P8);
-
 const waves = [
   { unit: units.ZergZergling, n: 8 },
   { unit: units.ZergHydralisk, n: 6 },
@@ -840,10 +860,11 @@ program(() => {
 });
 ```
 
-**Lives, per player.** One program, run once for every player: `lives` is a separate
-counter for each. When the hero dies the game's death count for it goes to 1; the
-program resets that count, takes a life, and either brings the hero back or ends the
-game for that player. `u8` keeps the counter cheap.
+**Lives, per player.** One program, run for every player: `lives` is a separate counter
+for each. When the hero dies the game's death count for it goes to 1; the program resets
+that count, takes a life, and either brings the hero back or ends the game for that
+player. The `sleep(frames(1))` at the end of the loop is what makes it a game loop: look
+once a frame.
 
 ```ts
 program(() => {
@@ -860,6 +881,7 @@ program(() => {
         displayText("Your hero returns.");
       }
     }
+    sleep(frames(1));
   }
 }, { owner: AllPlayers });
 ```
@@ -870,8 +892,6 @@ amount of `setScore` follows it; `players.Foes` is "anyone at war with the curre
 player", so the check is written once for everyone.
 
 ```ts
-hyperTriggers(P8);
-
 trigger(AllPlayers, [always()], [leaderboardPoints("Hill", "custom")]);
 
 program(() => {
@@ -892,7 +912,7 @@ program(() => {
 ```
 
 **Random events.** Every two minutes, a coin toss decides which of two things happens.
-`random()` is a randomized switch; `else` is the other side of it.
+`random()` is the coin; `else` is the other side of it.
 
 ```ts
 program(() => {
@@ -909,7 +929,7 @@ program(() => {
 });
 ```
 
-**A beacon that opens a gate, once.** `rose()` fires on the cycle the condition becomes
+**A beacon that opens a gate, once.** `rose()` fires on the frame the condition becomes
 true, `once()` only the first time it does, so this runs exactly once however long the
 unit stands there. Two things happen on their own clocks, so there are two programs.
 
@@ -921,6 +941,7 @@ program(() => {
       killUnitAt(P12, units.LeftUpperLevelDoor, "All", locations.Base);
       setSwitch(switches.Switch1, "set");
     }
+    sleep(frames(1));
   }
 });
 
@@ -929,14 +950,16 @@ program(() => {
     if (switchIs(switches.Switch1, "set")) {
       createUnit(P8, units.ZergHydralisk, 2, locations.Spawn);
       sleep(seconds(30));
+    } else {
+      sleep(seconds(1));
     }
   }
 });
 ```
 
 **A map that already has triggers.** Open TrigScript and press **Import map triggers**:
-every hand-made trigger comes back as a `trigger()` call in its order, and the next Build
-replaces the whole list with what the script makes. From there a repeated trigger becomes
+every hand-made trigger comes back as a `trigger()` call in its order, and applying the
+script replaces the whole list with what it makes. From there a repeated trigger becomes
 a loop, a number used in ten places becomes a constant, and the rest stays as it was.
 
 ### Reference
@@ -985,44 +1008,29 @@ Inside a program:
 
 | | |
 | --- | --- |
-| `program(body, options?)` | Code that runs in the game. Options: `owner` (a player, `AllPlayers`, a force, or a list — the last three run it once per player), `comments` (a comment naming the source line on every generated trigger; on by default), `variableUnits` (which unit types' death counters hold the variables). |
+| `program(body, options?)` | Code that runs in the game; the map then needs StarCraft: Remastered. The one option is `owner`: a player, `AllPlayers`, a force, or a list — the last three run it once per player. |
 | `game(fn)` | A function that runs in the game, for programs to call; it can live in any file and be imported. |
-| `let n = 0`, `let f = false`, `let p = { … }` | A death counter, a switch, a record of them. `const` is a build-time value when it can be. |
-| `u8`, `u16`, `u32` | The declared range of a number variable: `let lives: u8 = 3`. Narrower is cheaper, and saturates at its maximum. |
-| `shared(value)` | In a per-player program, one cell for all the players instead of one each. |
-| `sleep(duration)` | Pause this program. `seconds(n)`, `minutes(n)`, `cycles(n)` make a duration. |
-| `rose(condition)`, `once(condition)` | True on the cycle the condition becomes true; true the first time only. |
-| `random()` | A coin toss (a randomized switch). |
+| `let n = 0`, `let f = false`, `let p = { … }` | A number, a boolean, a record of them. `const` is a value worked out when the script is applied, when it can be. |
+| `u8`, `u16`, `u32` | The declared range of a number variable: `let lives: u8 = 3` stops at 255. |
+| `shared(value)` | In a per-player program, one value for all the players instead of one each. |
+| `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
+| `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
+| `random()` | A coin toss. |
 | `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs` | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
 | `wait(ms)` | The game's own Wait: allowed, stalls every trigger of the player, so prefer `sleep`. |
 
-What things cost, in triggers, for a plain number and for a `u8` (the editor shows the
-exact count at the end of each line):
-
-| | Plain number | `u8` |
-| --- | --- | --- |
-| `n += 5`, `n = 3`, `n++` | 1 | 1 |
-| `if (n >= 3) { … }` | 4 | 4 |
-| `a = b`, `a += b` (two variables) | 65 | 18 |
-| `if (a < b) { … }` (two variables) | 133 | 38 |
-| `c = a * 3` | as `c = a` | as `c = a` |
-| `c = a / 4`, `c = a % 4` | 157 | 40 |
-| `c = a * b` (two variables) | far more | 203 |
-| `if (rose(…)) { … }`, `if (once(…)) { … }` | 9 | 9 |
-| `setResources(p, "add", n, "ore")` | 65 | 18 |
-| `createUnit(p, unit, n, at)` | 74 | 18 |
-| `sleep(seconds(2))` | 4 | 4 |
-
 What a program cannot do:
 
-- A text, a location, a unit type or a player is fixed when you build; only the amounts
-  and counts listed above can follow a variable.
+- Play on a version of the game before Remastered. `trigger()` does; a program does not.
+- A text, a location, a unit type or a player is fixed when the script is applied; only
+  the amounts and counts listed above can follow a variable.
 - A condition cannot be tested against a variable — the game compares a quantity with a
   number it is given — so compare variables in the program's own statements.
-- No recursion, no division by a variable, no `for` unrolled more than 256 times (write a
-  `while`), and no sum past 4 294 967 295 in a plain number.
+- Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
+- No recursion, no `for` unrolled more than 256 times (write a `while`), and no sum past
+  4 294 967 295.
 - A program variable cannot reach a helper, a condition or an action, since those were
-  computed when the script was built.
+  computed when the script was applied.
 
 The full description of the language, its compiler and the commands it offers other
 plugins is in the plugin's own README at

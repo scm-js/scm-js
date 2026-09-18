@@ -55,7 +55,8 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
     for (const { line, code } of blocks) {
       const result = compileScript(ts, { "main.ts": code }, names, { lib });
       for (const d of result.diagnostics) failures.push(`README.md:${line} (${d.file}:${d.line}) ${d.message}`);
-      if (result.diagnostics.length === 0 && result.triggers.length === 0) failures.push(`README.md:${line}: the example makes no triggers`);
+      // A trigger() is a trigger of the map; a program() is IR, built into the saved file by the eudplib plugin.
+      if (result.diagnostics.length === 0 && result.triggers.length === 0 && (result.ir?.length ?? 0) === 0) failures.push(`README.md:${line}: the example makes neither a trigger nor a program`);
     }
     expect(failures).toEqual([]);
   });

@@ -1185,7 +1185,10 @@ two ways to draw on the map, and the pickers.
 **Dialogs.** `dialog(spec)` opens a dialog in the editor's chrome. `spec.mount(body,
 handle)` is called with an empty `<div>` inside the dialog body; return a cleanup
 function if you need one. `spec.buttons` draws the footer (`{ label, primary?,
-run?(handle), closes? }`); the default is a single Close. `spec.onPaste(transfer, handle)`
+run?(handle), closes? }`); the default is a single Close, and an empty list leaves the
+dialog without a footer, closed by its ×. `spec.flush` takes the padding off the body.
+The two together are for a dialog that is a workspace of its own, with its own bars and
+controls, as TrigScript's is. `spec.onPaste(transfer, handle)`
 fires for Ctrl+V anywhere in the dialog while it is the topmost one (a paste into one of
 your own text fields is left alone unless it carries files), and `spec.onDrop` for a drop
 on the body; a `DialogTransfer` is `{ files, text }`. Escape closes the dialog unless
@@ -1263,8 +1266,9 @@ pixels (260 by default) and the panel is as tall as its content, or `height` pix
 the ×. It opens at the top-right of the map and remembers where it was left for the
 session. `resizable: true` adds a grip at the bottom-right corner and remembers the size
 too; the body is then a column, so a root element with `flex: 1; min-height: 0` fills it —
-what a code editor or a long list beside the map wants. The handle has `close()`,
-`isOpen()` and `setTitle()`. Open as many as you like; they all close with the plugin.
+what a code editor or a long list beside the map wants. `flush: true` takes the padding
+off a floating panel's body, for content that draws its own frame. The handle has
+`close()`, `isOpen()` and `setTitle()`. Open as many as you like; they all close with the plugin.
 
 `dock: "right"` puts the panel in the right dock instead, under Minimap, Layers and
 Properties, with the same head and hide button the built-in panels have — the plugin's

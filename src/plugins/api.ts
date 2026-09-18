@@ -2112,8 +2112,14 @@ export interface DialogSpec {
   tall?: boolean;
   /** Fill `body` (an empty `<div>` inside the dialog); return a cleanup if you need one. */
   mount(body: HTMLElement, dialog: DialogHandle): void | (() => void);
-  /** Footer buttons, left to right; a single Close when omitted. */
+  /**
+   * Footer buttons, left to right; a single Close when omitted. An empty list leaves the
+   * dialog without a footer — for a dialog that is a workspace of its own, with its own
+   * controls, closed by the title strip's × (`setBusy` and a `slot` then have nowhere to show).
+   */
   buttons?: DialogButton[];
+  /** The body runs edge to edge, without the dialog's padding: for content that draws its own frame (an editor with its own bars). */
+  flush?: boolean;
   /**
    * Ctrl+V anywhere in the dialog (while it is the topmost one). Files come from the
    * clipboard's items — a screenshot pastes as one `image/png` file — and `text` is the
@@ -2188,6 +2194,8 @@ export interface PanelSpec {
   dock?: "float" | "right";
   /** A docked panel that takes the dock's spare height (a transcript, a long list); off by default. */
   grow?: boolean;
+  /** Floating only: the body runs edge to edge, without the panel's padding — for content that draws its own frame. */
+  flush?: boolean;
   /** Fill `body` (an empty `<div>` inside the panel); return a cleanup if you need one. */
   mount(body: HTMLElement, panel: PanelHandle): void | (() => void);
   /** The panel closed, whichever way. */

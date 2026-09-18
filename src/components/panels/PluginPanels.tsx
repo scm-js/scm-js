@@ -166,7 +166,7 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
   };
 
   return (
-    <div ref={frame} className={`plugin-panel${spec.resizable ? " resizable" : ""}`} style={{ left: pos.x, top: pos.y, width, ...(size.h ? { height: size.h } : {}) }} role="dialog" aria-label={title}>
+    <div ref={frame} className={`plugin-panel${spec.resizable ? " resizable" : ""}${spec.flush ? " flush" : ""}`} style={{ left: pos.x, top: pos.y, width, ...(size.h ? { height: size.h } : {}) }} role="dialog" aria-label={title}>
       <div className="dlg-title plugin-panel-title" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         <span className="icon-lead"><PluginIconView icon={plugin.icon} size={14} /></span>
         <h2>{title}</h2>

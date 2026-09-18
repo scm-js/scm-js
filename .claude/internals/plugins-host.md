@@ -104,7 +104,12 @@ goes through `setOverlayVisibleAtom` so `onToggle` fires once per change and
 `components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
 positions kept per plugin + title for the session, opens top-right; `PanelSpec.height` and
 `resizable` — a corner grip, sizes kept like positions, the body a flex column so the plugin's root
-can fill it — exist for a plugin that keeps an editor beside the map, TrigScript being the case) — hotkeys keep working since
+can fill it — exist for a plugin that keeps an editor beside the map, TrigScript being the case; `flush` on
+both specs drops the body's padding and `DialogSpec.buttons: []` drops the footer (`footer={null}`, so
+`setBusy`'s label and a `slot` have nowhere to show), which is what TrigScript 3.1's VS Code-style
+workspace mounts into. Note for anything else that draws its own key handling inside a dialog:
+`useHotkeys` returns early while any dialog is open — after F1 — so Ctrl+S does not save from inside
+one; TrigScript takes both keys itself on the capture phase) — hotkeys keep working since
 it is not in the dialog stack. `PanelSpec.dock: "right"` puts the same entry in the right dock
 instead (`DockedPluginPanels` in the same file, rendered by `Docks.tsx` after Properties as a
 `.panel.plugin-docked` with the built-in panel head; `App.tsx`'s `rightVisible` counts them, so

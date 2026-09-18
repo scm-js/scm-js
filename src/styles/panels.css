@@ -817,6 +817,10 @@
   display: flex;
   flex-direction: column;
 }
+/* `PanelSpec.flush`: the content draws its own frame. */
+.plugin-panel.flush .plugin-panel-body {
+  padding: 0;
+}
 .plugin-panel-grip {
   position: absolute;
   right: 0;

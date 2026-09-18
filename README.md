@@ -732,8 +732,9 @@ variable per field. They live in the game while the map is played and take nothi
 the map: no death counters, no switches, no triggers in the list. Numbers are whole, from
 0 to 4 294 967 295: a result below zero is stored as 0, and a `u8` or `u16` variable
 (`let lives: u8 = 3`) stays within 0 … 255 or 0 … 65 535. `+`, `-`, `*`, `/` and `%`
-work between variables, with `Math.min`, `Math.max`, `Math.abs` and `clamp()`; division
-is whole, and dividing by a variable that is 0 gives 0. A sum is worked out as a whole
+work between variables, with `Math.min`, `Math.max`, `Math.abs` and `clamp()`, and so do
+the bitwise `&`, `|`, `^`, `<<` and `>>`; division is whole, and dividing by a variable
+that is 0 gives 0. A sum is worked out as a whole
 before it is stored, and a comparison is exact: `if (a - b < 0)` is true when `b` is
 larger.
 
@@ -755,7 +756,60 @@ to pass time.
 
 **Edges.** `if (rose(bring(…)))` is true on the frame the condition becomes true and not
 again until it has been false in between; `once(…)` is true the first time only.
-`random()` is a coin toss.
+`random()` is a coin toss, and `random(n)` a whole number from 0 to n − 1.
+
+**Reads: what the game holds is a value.** Every condition that compares a quantity is
+also a read of it when the comparison and the amount are left out, and a read goes
+wherever a number goes:
+
+```ts
+program(() => {
+  let price = 50;
+  while (true) {
+    if (minerals(CurrentPlayer) >= price * 2 && bring(CurrentPlayer, units.AnyUnit, locations.Beacon) >= 1) {
+      setResources(CurrentPlayer, "subtract", price, "ore");
+      createUnit(CurrentPlayer, units.TerranMarine, 1, locations.Spawn);
+      price += deaths(CurrentPlayer, units.TerranMarine);
+    }
+    sleep(seconds(1));
+  }
+}, { owner: AllPlayers });
+```
+
+`deaths(p, unit)`, `kill(p, unit)`, `bring(p, unit, location)`, `command(p, unit)`,
+`accumulate(p, resource)`, `score(p, kind)`, `countdownTimer()` and `elapsedTime()` all
+read this way, and the common ones have plainer names: `minerals(p)`, `gas(p)`,
+`countUnits(p, unit, location?)`, `kills(p, unit)`, `countdown()`, `elapsed()` — those two
+in the game's own seconds, which at Fastest pass about one and a half times as fast as
+the seconds of `sleep`. A read means what its condition means — a force's minerals are the force's sum, `units.Men`
+counts what Bring counts — and it is taken when the line runs, so `let ore =
+minerals(P1)` keeps the number and `minerals(P1)` written twice reads twice. What to read
+— the player, the unit, the location — is fixed when the script is applied. About the
+players themselves there are `race(p)` (compare it with `races.Zerg`, `.Terran`,
+`.Protoss`), `slot(p)` (`slots.Human`, `.Computer`, `.Empty`), `isHuman(p)`,
+`hasLeft(p)` and `supply(p, "used" | "max" | "provided")` as the top bar shows it.
+
+**A text can hold the program's numbers.** Write it as a template literal:
+
+```ts
+program(() => {
+  let wave = 0;
+  while (true) {
+    wave += 1;
+    displayText(`Wave ${wave}: you have ${minerals(CurrentPlayer)} ore, ${name(CurrentPlayer)}.`);
+    print(`${color(P1)}${name(P1)}\x01 leads with ${kills(P1, units.AnyUnit)} kills`, { to: AllPlayers, position: "center" });
+    sleep(seconds(30));
+  }
+}, { owner: AllPlayers });
+```
+
+`name(p)` is the player's name and `color(p)` the colour code of their colour, filled in
+by the game. `displayText` shows the text to the current player, as it always has;
+`print(text, { to, position })` shows it to someone else — a player, `AllPlayers`, a
+force — or, with `position: "center"`, on the line in the middle of the screen where the
+game's own messages appear. Only these two take a text like that: a mission objective, a
+leaderboard's label or a transmission is fixed when the script is applied, and there are
+no text variables.
 
 **Functions** declared inside the program, or made with `game()` in any file, run in the
 game too. They are inlined at each call, arguments pass by value, they may return a
@@ -777,7 +831,7 @@ It is also the one rule to keep in mind: a program variable cannot reach a condi
 action or a helper, because those were computed before the game started. The exceptions
 are the amount of `setResources`, `setDeaths`, `setScore` and `setCountdownTimer` and the
 unit count of `createUnit`, `killUnitAt`, `removeUnitAt` and `giveUnits`, which can be a
-variable or an expression over one.
+variable or an expression over one, and the text of `displayText` and `print`.
 
 ### Examples
 
@@ -1023,17 +1077,24 @@ Inside a program:
 | `shared(value)` | In a per-player program, one value for all the players instead of one each. |
 | `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
 | `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
-| `random()` | A coin toss. |
-| `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs` | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
+| `random()`, `random(n)` | A coin toss; a whole number from 0 to n − 1. |
+| `deaths(p, unit)`, `bring(p, unit, location)`, `score(p, kind)`, … | A comparing condition without its comparison and amount: the number itself. |
+| `minerals(p)`, `gas(p)`, `resources(p, kind)`, `countUnits(p, unit, location?)`, `kills(p, unit)`, `countdown()`, `elapsed()` | The same reads by plainer names. |
+| `race(p)`, `slot(p)`, `isHuman(p)`, `hasLeft(p)`, `supply(p, of?, race?)` | The player: compare with `races.` and `slots.`; supply `"used"`, `"max"` or `"provided"`, as the top bar shows it. |
+| `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with the program's numbers, a player's name and the colour code of their colour in it, for the current player. |
+| `print(text, { to?, position? })` | The same for another player, `AllPlayers` or a force, in the `"chat"` area or the `"center"` line. |
+| `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs`, the bitwise operators | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
 | `wait(ms)` | The game's own Wait: allowed, stalls every trigger of the player, so prefer `sleep`. |
 
 What a program cannot do:
 
 - Play on a version of the game before Remastered. `trigger()` does; a program does not.
-- A text, a location, a unit type or a player is fixed when the script is applied; only
-  the amounts and counts listed above can follow a variable.
-- A condition cannot be tested against a variable — the game compares a quantity with a
-  number it is given — so compare variables in the program's own statements.
+- A location, a unit type or a player is fixed when the script is applied — also in a
+  read — and so is every text but `displayText`'s and `print`'s; only the amounts and
+  counts listed above can follow a variable.
+- A condition's own amount cannot be a variable — the game compares a quantity with a
+  number it is given — so read the quantity and compare it yourself: `minerals(P1) >= price`.
+- Keep a text: text is shown, not stored, and a boolean has no text of its own.
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
 - No recursion, no `for` unrolled more than 256 times (write a `while`), and no sum past
   4 294 967 295.

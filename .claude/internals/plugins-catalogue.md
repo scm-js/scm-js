@@ -280,3 +280,12 @@ menu), `editor.ts` the controller over it, one `commands` table feeding the capt
 Monaco's palette. Icons are codicons through the font Monaco's stylesheet already inlines. It is what the host's
 `DialogSpec.flush` / `buttons: []` and `PanelSpec.flush` exist for. The guide's scene drives it by keys (Ctrl+F5,
 Ctrl+Shift+B) and reads `.tsd-statusbar` / `.tsd-view .tsd-list`; the dialog is closed by `.dlg-close`.
+
+**TrigScript 3.2 (2026-09-18)** is slice 2 of its plan — reads, text with values, `random(n)`, the bitwise operators,
+IR version 3 — and touched nothing in the host. A read is a comparing condition called without its comparison and amount
+(plus plainer names and the player facts); its lowering reads the game's table where one is the value and otherwise
+searches with the condition itself, so a read means what the condition means. `name(p)` / `color(p)` travel inside a
+string as private-use marks, which only `displayText` / `print` inside a program accept. What the probe taught, for
+anyone reading the game's tables: a Use Map Settings computer's slot byte (0x57F1B4) is 5, a melee one's 1; Elapsed Time
+and the countdown count game seconds of sixteen frames. The guide's examples use the new calls, so
+`tests/trigscript-guide.test.ts` needs the vendored plugin at 3.2.0 or later. No picture changed.

@@ -308,6 +308,8 @@ const SCENES = [
       await p.page.keyboard.press("Enter"); await p.wait(400);
     }
     await p.page.click(rail(0)); await p.wait(300);
+    // A taller panel than the default, so the Simulate picture holds the whole run.
+    await p.page.evaluate(() => localStorage.setItem("scmjs.plugin.trigscript.layout.dialog", JSON.stringify({ panelHeight: 330 })));
     await p.menu("Triggers", /^TrigScript…/);
     await p.script(TRIGSCRIPT);
     await p.dialog("trigscript");
@@ -328,15 +330,18 @@ const SCENES = [
     await p.take("trigscript-complete", { x: left, y: Math.max(0, top), width: Math.min(1400 - left, box.x + box.width + 40 - left), height: bottom - top }, { lossless: true });
     await p.esc(); await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: TRIGSCRIPT }); await p.wait(2500);
 
-    await p.page.locator(".tsd button", { hasText: /^Simulate$/ }).click();
-    await p.page.locator(".tsd-run li").first().waitFor({ timeout: 30_000 }); await p.wait(800);
-    // The lower part of the window: the last lines of the code and the run beneath them.
-    const first = await p.page.locator(".tsd-run li").first().boundingBox();
+    await p.page.locator(".tsd .monaco-editor textarea, .tsd .monaco-editor .native-edit-context").first().focus();
+    await p.page.keyboard.press("Control+F5");
+    await p.page.locator(".tsd-view .tsd-list li").nth(1).waitFor({ timeout: 30_000 }); await p.wait(800);
+    // The lower part of the window: the last lines of the code, the run beneath them and the status bar.
+    const head = await p.page.locator(".tsd-panel-head").boundingBox();
     const dlg = await p.page.locator(".dlg").last().boundingBox();
-    const foot = await p.page.locator(".dlg .dlg-footer").last().boundingBox();
-    await p.take("trigscript-simulate", { x: dlg.x, y: first.y - 72, width: dlg.width, height: foot.y - (first.y - 72) }, { lossless: true });
+    await p.take("trigscript-simulate", { x: dlg.x, y: head.y - 72, width: dlg.width, height: dlg.y + dlg.height - (head.y - 72) }, { lossless: true });
 
-    await p.page.locator(".dlg-footer button", { hasText: /^Apply & Close$/ }).click();
+    // Apply, then close by the title strip: the workspace has no footer.
+    await p.page.keyboard.press("Control+Shift+KeyB");
+    await p.page.locator(".tsd-statusbar", { hasText: /triggers? at #/ }).waitFor({ timeout: 30_000 });
+    await p.page.locator(".dlg .dlg-close").last().click();
     await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(800);
     await p.menu("Triggers", /^Trigger Editor/); await p.wait(1200);
     await p.page.locator(".dlg .trig-list .item", { has: p.page.locator(".badge") }).first().click(); await p.wait(600);
@@ -548,7 +553,8 @@ function driver(page, mock) {
       await page.locator(".tsd .monaco-editor .view-lines").waitFor({ timeout: 120_000 }); await wait(1500);
       await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: text });
       await wait(2500);
-      await page.locator(".tsd > .row .hint", { hasText: /problem/ }).waitFor({ timeout: 60_000 }); await wait(1500);
+      // The problem count in the status bar says "No problems" in its tooltip once a check has come back.
+      await page.locator(".tsd-status-left button[title*='roblem']").first().waitFor({ timeout: 60_000 }); await wait(1500);
     },
   };
   return p;

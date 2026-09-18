@@ -273,3 +273,10 @@ beside the map or has a Build / target switch. `tests/trigscript-guide.test.ts` 
 and no trigger. Pinned as the default 2026-09-18 after the probe was played; the guide's five pictures were retaken the same day
 (`--scenes trigscript`), on a script that also has plain `trigger()` calls, since a program adds no row for the Trigger
 Editor picture to badge, with waves four seconds apart so Simulate's 480 frames reach the last one.
+
+**TrigScript 3.1 (2026-09-18)** relaid the workspace as VS Code lays one out — `shell.ts` is a script-agnostic frame
+(Explorer sections, tabs + icon actions, a bottom panel of views, status bar items, keyed corner notifications, a popup
+menu), `editor.ts` the controller over it, one `commands` table feeding the capture-phase key handler, the … menu and
+Monaco's palette. Icons are codicons through the font Monaco's stylesheet already inlines. It is what the host's
+`DialogSpec.flush` / `buttons: []` and `PanelSpec.flush` exist for. The guide's scene drives it by keys (Ctrl+F5,
+Ctrl+Shift+B) and reads `.tsd-statusbar` / `.tsd-view .tsd-list`; the dialog is closed by `.dlg-close`.

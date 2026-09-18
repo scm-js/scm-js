@@ -529,17 +529,23 @@ involves any of that.
 
 ### Opening the script
 
-Triggers ▸ TrigScript… opens the map's script in a window. The list on the left is its
-files: `main.ts` is where the script starts, **New file** adds another, and a file's ✎ and
-× rename and remove it. Edits are saved into the map as you type — the files are members
-of the map archive, like a sound.
+Triggers ▸ TrigScript… opens the map's script in a window laid out the way VS Code is,
+with the same keys. The **Explorer** on the left holds the script's files — `main.ts` is
+where the script starts, the *New file* icon adds another, and a file's pencil and bin
+rename and remove it — and, under them, the script's programs with their variables. Open
+files are tabs over the code, and the icons right of the tabs are what you run: **Test**
+(F5), **Simulate** (Ctrl+F5), **Apply** (Ctrl+Shift+B), *Pick from map*, the switch to
+[beside the map](#beside-the-map), and **…** for the rest. F1 lists every command. Edits
+are saved into the map as you type — the files are members of the map archive, like a
+sound — and Ctrl+S saves the map from here too.
 
 The code is checked as you type, against the map's own names: `locations.` completes to
 the locations the map has, `units.` to every unit type (and the map's custom names),
 `switches.` to the switches by number and by the names the map gives them, and
 `players.` to the forces. A location passed where a unit belongs is an error as you type
-it, and so is a name the map no longer has. The line under the toolbar says *No
-problems* or how many there are, and the list below the code says where.
+it, and so is a name the map no longer has. The status bar along the bottom counts the
+problems, and a click on the count opens **Problems**, the list of them, under the code
+(Ctrl+J shows and hides that panel).
 
 ![Completion on `locations.`, listing what the open map has](docs/images/trigscript-complete.webp)
 
@@ -551,8 +557,10 @@ file being written. If the script has an error the map is saved anyway, with the
 from the last script that worked, and a notice names the file and the line.
 
 **Apply** does the first half when you ask, which is how to look at the triggers in the
-Trigger Editor without saving. **Apply & Close** does that and closes. **Test** applies
-the script, builds the map exactly as Save would and hands it to [Test Map](#test-map).
+Trigger Editor without saving; the status bar says whether the script's triggers are in
+the map, and a click there applies it as well. **Test** applies the script, builds the map
+exactly as Save would and hands it to [Test Map](#test-map). What each of them reported
+is kept under **Output**.
 The Trigger Editor shows the script's triggers with a `script` badge and will not edit
 them; *Open TrigScript* there jumps to the file and line that made one. The Text Trigger
 Editor fences them in comments. Hand-made triggers around the block are left alone, and a
@@ -571,8 +579,8 @@ block after them. While a block is stale, saving leaves the script unapplied and
 script.
 
 **Simulate** runs the script for 480 frames, twenty seconds of the game at Fastest, in a
-built-in interpreter and lists every action that ran, with its frame and the source line,
-and the final value of every program variable. Triggers and programs run side by side in
+built-in interpreter and lists, under the code, every action that ran, with its frame and
+the source line, and the final value of every program variable. Triggers and programs run side by side in
 one world, so a death count a program sets is seen by a trigger. It models death
 counters, switches, preserve, list order and the game's arithmetic; unit conditions
 answer "false", so it is a check on the logic, not on the units.
@@ -597,8 +605,8 @@ way.
 
 ### Beside the map
 
-The editor opens two ways. The window is for writing; *Beside the map* — a button on its
-toolbar, or Triggers ▸ TrigScript beside the map — is a panel over the map that blocks
+The editor opens two ways. The window is for writing; *Beside the map* — an icon right of
+its tabs, or Triggers ▸ TrigScript beside the map — is a panel over the map that blocks
 nothing: drag it by its title, resize it by its corner, and keep placing units while the
 code sits next to them.
 
@@ -608,10 +616,10 @@ Beside the map, the names in the code and the objects on the map know about each
 
 - **Ctrl+click** on `locations.Beacon` scrolls the map to the location and flashes it.
   Hovering the name says where it is and how big.
-- **Pick from map** on the toolbar: click a location or a unit on the map, and its name
-  (`locations.Beacon`, `units.TerranMarine`) lands at the cursor. From the window, the
-  button first moves the editor beside the map.
-- When you rename a location or a switch the script mentions, a notice offers to
+- **Pick from map** (the target icon, or a right-click in the code): click a location or a
+  unit on the map, and its name (`locations.Beacon`, `units.TerranMarine`) lands at the
+  cursor. From the window, it first moves the editor beside the map.
+- When you rename a location or a switch the script mentions, a notification offers to
   **update the references** in every file. It follows the name the way the code does — an
   alias from `import { locations as L }` counts — and leaves comments, strings and
   anything merely spelled the same alone.

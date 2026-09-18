@@ -359,3 +359,6 @@ for its worker under `/assets/dist/` instead of jsDelivr. The desktop hid it, be
 A third, under `npm run dev`: the vendored source is served as `/plugins/<name>/plugin.ts`, which
 passes that path test, and `plugins/` holds no `dist/` — eudplib 0.3.1 also requires the module to
 be on **another origin than the page** before it counts as a repository served for development.
+eudplib 0.4.0 (2026-09-18) is the first default that registers a build step (`saving.md`): it owns the
+one eudplib step and other plugins contribute to it. With no contributor it never applies, so the pin
+by itself changes nothing a user sees.

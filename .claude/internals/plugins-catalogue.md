@@ -270,5 +270,6 @@ grows Monaco it should take TrigScript's loaded copy through `api.services` rath
 eudplib plugin at save time. It is the worked example for `buildSteps.before` (apply the script ahead of the bytes) and
 for contributing to the eudplib library's one build step (`eudplib.contribute`), and it no longer writes a `-eud.scx`
 beside the map or has a Build / target switch. `tests/trigscript-guide.test.ts` accepts an example that makes a program
-and no trigger. The guide's five pictures were taken on 2.x (cost hints, a Build button) and want regenerating with
-`scripts/guide-screenshots.mjs` once 3.0.0 is the pinned default.
+and no trigger. Pinned as the default 2026-09-18 after the probe was played; the guide's five pictures were retaken the same day
+(`--scenes trigscript`), on a script that also has plain `trigger()` calls, since a program adds no row for the Trigger
+Editor picture to badge, with waves four seconds apart so Simulate's 480 frames reach the last one.

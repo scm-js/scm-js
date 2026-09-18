@@ -313,7 +313,8 @@ const SCENES = [
     await p.dialog("trigscript");
 
     // Completion on `locations.`: a new statement typed on the blank line between the programs.
-    const line = TRIGSCRIPT.split("\n").findIndex((l, i) => i > 17 && l === "") + 1;
+    const blanks = TRIGSCRIPT.split("\n").flatMap((l, i) => (l === "" ? [i] : []));
+    const line = blanks[blanks.length - 2] + 1; // The text ends with a newline, so the last blank is the end of the file.
     await p.monaco((monaco, ed) => { ed.revealLineInCenter(line); ed.setPosition({ lineNumber: line, column: 1 }); ed.focus(); ed.trigger("keyboard", "type", { text: "trigger(P1, [elapsedTime(\">=\", 60)], [centerView(locations." }); }, { line });
     await p.page.locator(".suggest-widget .monaco-list-row").first().waitFor({ timeout: 15_000 }); await p.wait(800);
     // Open the list again once the editor has settled, so it sits at the cursor.
@@ -335,7 +336,7 @@ const SCENES = [
     const foot = await p.page.locator(".dlg .dlg-footer").last().boundingBox();
     await p.take("trigscript-simulate", { x: dlg.x, y: first.y - 72, width: dlg.width, height: foot.y - (first.y - 72) }, { lossless: true });
 
-    await p.page.locator(".dlg-footer button", { hasText: /^Build & Close$/ }).click();
+    await p.page.locator(".dlg-footer button", { hasText: /^Apply & Close$/ }).click();
     await p.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await p.wait(800);
     await p.menu("Triggers", /^Trigger Editor/); await p.wait(1200);
     await p.page.locator(".dlg .trig-list .item", { has: p.page.locator(".badge") }).first().click(); await p.wait(600);
@@ -356,23 +357,35 @@ const SCENES = [
 ];
 
 /**
- * The script in the TrigScript pictures: the guide's wave-defence example, on the three
- * locations the scene makes, without hyper triggers so that Simulate's thirty cycles
- * reach the last wave (a sleep of twenty seconds is ten cycles at the plain rate).
+ * The script in the TrigScript pictures: a few plain triggers (what the Trigger Editor
+ * picture shows badged — a program adds nothing to the trigger list) and the guide's
+ * wave-defence and lives programs, on the three locations the scene makes. The waves come
+ * four seconds apart so that Simulate's 480 frames, twenty seconds, reach the last one.
  */
-const TRIGSCRIPT = `const waves = [
+const TRIGSCRIPT = `trigger(AllPlayers, [always()], [
+  setResources(CurrentPlayer, "set", 500, "ore"),
+  displayText("Hold the hill against three waves."),
+]);
+
+for (const p of [P1, P2, P3, P4]) {
+  trigger(p, [deaths(p, units.TerranMarine, ">=", 10)], [
+    createUnit(p, units.TerranSiegeTankTankMode, 1, locations.Beacon),
+    setDeaths(p, units.TerranMarine, "subtract", 10),
+  ], { preserve: true });
+}
+
+const waves = [
   { unit: units.ZergZergling, n: 8 },
   { unit: units.ZergHydralisk, n: 6 },
   { unit: units.ZergUltralisk, n: 2 },
 ];
 
 program(() => {
-  displayText("The first wave arrives in twenty seconds.");
-  sleep(seconds(20));
+  sleep(seconds(4));
   for (const w of waves) {
     createUnit(P8, w.unit, w.n, locations.Spawn);
     order(P8, w.unit, locations.Spawn, locations.Hill, "attack");
-    sleep(seconds(20));
+    sleep(seconds(4));
   }
   while (command(P8, units.AnyUnit, ">=", 1)) {
     sleep(seconds(2));
@@ -390,6 +403,7 @@ program(() => {
       if (lives == 0) defeat();
       else createUnit(CurrentPlayer, units.JimRaynorMarine, 1, locations.Beacon);
     }
+    sleep(frames(1));
   }
 }, { owner: AllPlayers });
 `;

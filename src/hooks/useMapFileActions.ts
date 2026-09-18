@@ -322,7 +322,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})` });
     }
     if (built.problem) {
-      store.set(pushToastAtom, { kind: built.stopped ? "warn" : "error", ttl: 0, title: t("Saved without the built part"), detail: t("{problem} The file holds the map as the editor shows it; what the build adds is not in it until a save goes through.", { problem: built.problem }) });
+      store.set(pushToastAtom, { kind: built.stopped ? "warn" : "error", ttl: 0, title: t("Saved without the built part"), detail: t("{problem} The file holds the map as the editor shows it; what the build adds is not in it until a save goes through.", { problem: /[.!?…]$/.test(built.problem.trim()) ? built.problem.trim() : `${built.problem.trim()}.` }) });
     } else if (!built.builtBy && built.absent.length > 0) {
       store.set(pushToastAtom, { kind: "warn", ttl: 0, title: t("Saved without the built part"), detail: t("This map was built by {labels} when it was opened. Nothing that is running does that now, so the file holds only the map as the editor shows it.", { labels: built.absent.map((b) => b.label).join(", ") }) });
     }

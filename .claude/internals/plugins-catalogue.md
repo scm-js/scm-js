@@ -351,3 +351,23 @@ division is eudplib's `f_div_towards_zero` (a constant divisor goes in as a sign
 "-" or "" before the magnitude. Breaking for a script that counted on stopping at 0: the plugin's README says declare a
 `u8` / `u16` or write `Math.max(x - 1, 0)`. The probe (`probes/numbers.ts`, also a build fixture and checked line by
 line against the simulator) was played once, every line as expected. README and pin in one commit, as before.
+
+**TrigScript 3.6 (2026-09-18)** is slice 6: arrays, and with them a **heap**. A fixed array (`let hp = [10, 20, 30]`, a
+variable index, `for…of`, per player or `shared`) is static cells; a list the script made, indexed by a value of the
+program, is a read-only table in the map; and an array something pushes to is a handle on a block of a pool every program
+shares — powers of two, a full block exchanged for one twice the size, a given-back block kept for the next array of that
+size, and **a declaration first gives back what its handle held**, which is what stands in for a collector. The user
+turned down a declared capacity ("is it truly growable then?"), asked for the pool's size to be a setting — it is one of
+the *map's* (`trigscript\settings.json`, the workspace's Settings view, Ctrl+,), because the built map depends on it —
+and asked about a stack: the pool's top is reserved for slice 8's saved frames, and locals stay cells of their own because
+a condition or an action reaches a cell directly. The simulator counts blocks exactly as the lowering hands them out, so
+both run out at the same push; the probe's 20 000 pushes at 500 a frame did not stutter and stopped at 4 096 in both.
+`Record` / `Map` / `Set` keyed by the library's branded ids are arrays with a cell an id, front end only. One compiler
+change with reach: of a method call that is not known at build time the *object* is hoisted, not the method. The user
+then asked for the whole slice before shipping: **arrays of records** are an array a field with a record of one a
+binding of *cells* (so `w.delay = 9` writes the array and `const w = waves[i]` copies the index, not the record — a
+reference, as TypeScript's is), a list of records of the script is a table a field (the wave table), **arrays of units**
+are three arrays of numbers behind two IR nodes (`unitPart` gives a unit's pointer, EPD and uniqueness byte, `unitAt`
+makes the unit of three numbers again, re-checked like any kept unit — which is why a squad, unlike a loop over the game's
+units, may be kept across a `sleep()`), and `for…of` over a `Map` or a `Set` is a `for` over every id with the body under
+an `if`. IR 9.

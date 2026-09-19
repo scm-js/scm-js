@@ -741,6 +741,26 @@ from a plain number in arithmetic unless `u32(x)` or `i32(x)` says which is mean
 towards zero, and dividing by a variable that is 0 gives 0. Where the game takes nothing
 below zero — hit points, an amount, a unit count — a number below zero goes in as 0.
 
+**Arrays** hold numbers, booleans, records of those or units: `let hp = [10, 20, 30]`, `new Array(12).fill(3)`, an
+index that is a constant or a variable (`hp[i] += 7`), `.length`, `for (const x of xs)`,
+`fill`, `includes` and `indexOf`. An array that something pushes to grows —
+`const queue: number[] = []; queue.push(x); queue.pop() ?? 0` — with no size to declare: the
+cells come from a pool the map's programs share, and the workspace's **Settings** view
+(Ctrl+,) sets how large it is, a setting kept in the map. An index past the end reads 0 and
+stores nothing, and Simulate says where. An array of records — `let waves = [{ count: 4,
+delay: 2 }]`, `waves[i].count += 1`, `waves.push({ … })` — hands out its records by
+reference, as TypeScript does, and an array of units (`const squad: Unit[] = []`,
+`squad.push(u)`) may be kept across a `sleep()`. A list made outside the program —
+`const price = [50, 100, 150]`, or a wave table of records — can be looked up with a
+variable: `price[level]`, `waves[wave].count`.
+
+**Tables keyed by an id of the game** are arrays with a cell for every id, so a key of the
+game is one read: `const bounty: Record<UnitType, number> = { [units.ZergZergling]: 5 }` and
+`bounty[u.type]`, `new Map<UnitType, number>()` with `get` (`?? 0` for a key never set),
+`set`, `has`, `delete`, `clear` and `size`, `new Set<UnitType>()` with `add` and the same;
+`for (const [key, value] of lost)` goes through the keys that are there.
+The keys are unit types, players, locations, switches, weapons, upgrades or technologies.
+
 **Control flow is what it says.** `if`/`else`, `while`, `do`, `for`, `switch`, `break`,
 `continue` and `c ? a : b` all work. Conditions go in an `if` or a `while`; actions stand
 as statements. A loop runs all its rounds at once, within the frame, which has one
@@ -1187,6 +1207,8 @@ Inside a program:
 | `let n = 0`, `let f = false`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a unit of the game, a record of them. `const` is a value worked out when the script is applied, when it can be. |
 | `u8`, `u16`, `u32` | The declared range of a number variable that is never below zero: `let lives: u8 = 3` stops at 0 and at 255; a `u32` wraps at 4 294 967 295. A plain `number` is signed. |
 | `u32(x)`, `i32(x)` | The same 32 bits read the other way, for where a `u32` meets a plain number. |
+| `number[]`, `boolean[]`, `{ … }[]`, `Unit[]` | An array of a program; one that is pushed to grows. `push`, `pop`, `length`, `for…of`; of numbers and booleans also `fill`, `includes`, `indexOf`. |
+| `Record<K, V>`, `Map<K, V>`, `Set<K>` | A table keyed by an id of the game (`UnitType`, `Player`, `Location`, …): a cell for every id. |
 | `shared(value)` | In a per-player program, one value for all the players instead of one each. |
 | `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
 | `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
@@ -1225,6 +1247,8 @@ What a program cannot do:
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
 - No recursion, no `for` unrolled more than 256 times (write a `while`), and no number
   past 2 147 483 647 either way (4 294 967 295 for a `u32`): it wraps.
+- A `Map` or a `Set` is keyed by ids of the game, not by numbers of your own; an array does
+  not hold arrays, and a record in one has numbers and booleans for fields.
 - A program variable cannot reach a helper, a condition or an action, since those were
   computed when the script was applied.
 

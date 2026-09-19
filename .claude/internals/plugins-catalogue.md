@@ -289,3 +289,21 @@ string as private-use marks, which only `displayText` / `print` inside a program
 anyone reading the game's tables: a Use Map Settings computer's slot byte (0x57F1B4) is 5, a melee one's 1; Elapsed Time
 and the countdown count game seconds of sixteen frames. The guide's examples use the new calls, so
 `tests/trigscript-guide.test.ts` needs the vendored plugin at 3.2.0 or later. No picture changed.
+
+**TrigScript 3.3 (2026-09-18)** is slice 3 — units on the map as objects (`unitsAt` / `unitsOf` / `allUnits` loops,
+`first` / `nearest` / `randomUnit` picks, fields, verbs), `stats()` over the game's tables, IR version 4 — and again
+touched nothing in the host's API. The brand `Unit<n>` of a unit *type* became `UnitType<n>` and `Unit` is the instance
+(the plan had this in slice 1; it happened here, with a hint appended to the TypeScript error a script using the old
+name gets). `stats(x)` is one function for five tables: the index is a plain number when the script runs, so the
+compiler reads the `__kind` brand off the argument's type and hands it to the runtime as a second argument. A unit
+variable is pointer + EPD + the slot's uniqueness byte, checked before every use (sprite, order not "die", same byte);
+the unit of a loop's turn is not checked, which is why a `sleep()` inside a unit loop is an error and not a feature.
+The scans walk all 1700 slots with conditions whose address is bumped per slot (eudplib's EUDLoopUnit2 trick) and
+pass over dying units, so `first()` after `kill()` is the next unit. `compiler/tables.ts` is the one list of `stats()`
+fields, every one taken from Magenta's verified catalogue. Simulate now starts from the map's placed units and
+locations (`editor.ts#simulatedMap`). The guide's examples use the new calls, so `tests/trigscript-guide.test.ts` needs
+the vendored plugin at 3.3.0 or later: the README change and the pin land in one commit. **This slice found the unit
+classes one too low in the editor** (`UnitClass` had Any unit 228 … Factories 231; the game has 229 … 232, 228 being
+"None" — a Blizzard melee map's defeat trigger is "commands at most 0 of 231", Buildings): fixed in `sections/triggers.ts`,
+in both plugins' vendored copies, and `api.names.units()` gained a "None" entry at 228 so that an entry's place is
+still its value.

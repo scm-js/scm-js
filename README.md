@@ -789,6 +789,69 @@ players themselves there are `race(p)` (compare it with `races.Zerg`, `.Terran`,
 `.Protoss`), `slot(p)` (`slots.Human`, `.Computer`, `.Empty`), `isHuman(p)`,
 `hasLeft(p)` and `supply(p, "used" | "max" | "provided")` as the top bar shows it.
 
+**The units on the map are objects.** A loop runs over the ones that match, a pick finds
+one, and a unit has properties and things it can be told:
+
+```ts
+program(() => {
+  while (true) {
+    // Everything Player 2 has on the hill is worn down to half health.
+    for (const u of unitsAt(locations.Hill, { owner: P2 })) u.hp = u.maxHp / 2;
+
+    // The Marine nearest the beacon is sent to the base; nobody else moves.
+    const scout = nearest(units.TerranMarine, locations.Beacon, { owner: P1 });
+    if (scout) scout.order("move", locations.Base);
+
+    sleep(seconds(5));
+  }
+});
+```
+
+`unitsAt(location, filter?)`, `unitsOf(player, filter?)` and `allUnits(filter?)` are what
+a `for…of` runs over; `first(filter?)`, `nearest(type, location, filter?)` and
+`randomUnit(filter?)` give one unit, or `null` when nothing matches — so the `if (scout)`
+is required, and the editor says so when it is missing. A filter is `{ type, owner, at }`;
+`units.Men`, `units.Buildings` and `units.Factories` work as a type. A unit has `hp`,
+`shields` and `energy` in whole points, `maxHp` and `maxShields`, `owner`, `type`, `x`,
+`y`, `kills`, `cooldown`, `resources`, the spell timers (`stim`, `lockdown`, `stasis`, …)
+and `invincible`, `burrowed`, `cloaked`, `hallucinated`, `underAttack`. Hit points,
+shields, energy, kills, the cooldown, the timers and `invincible` can be written; the
+position, the owner and the rest are read only, and the editor marks a write to one as
+you type. A unit can be told `order("move" | "patrol" | "attack", location)`,
+`give(player)`, `kill()`, `remove()`, `damage(n)`, `heal(n)` — or `{ percent: 50 }` — and
+`locate(location)`, which centres a location on the unit so that the ordinary actions can
+happen where it stands.
+
+A variable can keep a unit across a `sleep`. Units die, and the game hands a dead unit's
+place to the next one made, so every use checks that the unit is still the same one:
+once it is gone its numbers read 0 and nothing written or told to it has any effect, and
+`if (u)` asks whether it is still there. A loop over units runs within one frame, so a
+`sleep` inside one is an error; to take units one at a time, find the next after each
+sleep. Each loop and each pick looks through all of the game's 1700 unit slots when its
+line runs, which is nothing a few times a second and worth a thought every frame: the
+editor writes *scans units* at the end of such a line.
+
+**`stats()` reaches the game's own tables**: what a unit type costs, what a weapon does,
+which upgrades a player has.
+
+```ts
+program(() => {
+  stats(units.TerranMarine).minerals = 25;
+  stats(units.TerranMarine).speed = 6.5;               // pixels a frame; a Marine walks at 4
+  stats(units.ZergZergling).name = "Dog";
+  stats(weapons.GaussRifle).damage += 2;
+  stats(P1).upgrades[upgrades.TerranInfantryWeapons] = 3;
+  stats(P3).color = "teal";
+});
+```
+
+A field reads as a number (or true / false) and takes `=` and `+=`. Unit types, weapons
+(`weapons.`), upgrades (`upgrades.`), technologies (`techs.`) and players each have their
+own fields, and the completion list after the dot is the list: only what was played and
+seen working in Remastered is offered, and the hover on each field says what it reaches —
+most unit-type fields apply to units made after the write, a weapon's to every unit
+using it, a colour at once. A write lasts for the game.
+
 **A text can hold the program's numbers.** Write it as a template literal:
 
 ```ts
@@ -813,7 +876,7 @@ no text variables.
 
 **Functions** declared inside the program, or made with `game()` in any file, run in the
 game too. They are inlined at each call, arguments pass by value, they may return a
-number or a boolean — `function canAfford(price: number) { return gold >= price; }` —
+number, a boolean or a unit — `function canAfford(price: number) { return gold >= price; }` —
 and they may sleep. There is no recursion.
 
 **A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as that
@@ -1064,6 +1127,7 @@ The names:
 | `locations.` | The map's locations by name; `Anywhere` and `NoLocation`. |
 | `switches.` | `Switch1` … `Switch256`, and any name the map sets. |
 | `aiScripts.` | The AI scripts by StarEdit name; a four-letter code as a string works too. |
+| `weapons.`, `upgrades.`, `techs.`, `colors.` | The game's weapons, upgrades and technologies, for `stats()`; the player colours. |
 | A number | Accepted wherever a name is: an EUD player, an unlisted unit id. |
 
 Inside a program:
@@ -1072,7 +1136,7 @@ Inside a program:
 | --- | --- |
 | `program(body, options?)` | Code that runs in the game; the map then needs StarCraft: Remastered. The one option is `owner`: a player, `AllPlayers`, a force, or a list — the last three run it once per player. |
 | `game(fn)` | A function that runs in the game, for programs to call; it can live in any file and be imported. |
-| `let n = 0`, `let f = false`, `let p = { … }` | A number, a boolean, a record of them. `const` is a value worked out when the script is applied, when it can be. |
+| `let n = 0`, `let f = false`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a unit of the game, a record of them. `const` is a value worked out when the script is applied, when it can be. |
 | `u8`, `u16`, `u32` | The declared range of a number variable: `let lives: u8 = 3` stops at 255. |
 | `shared(value)` | In a per-player program, one value for all the players instead of one each. |
 | `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
@@ -1081,6 +1145,12 @@ Inside a program:
 | `deaths(p, unit)`, `bring(p, unit, location)`, `score(p, kind)`, … | A comparing condition without its comparison and amount: the number itself. |
 | `minerals(p)`, `gas(p)`, `resources(p, kind)`, `countUnits(p, unit, location?)`, `kills(p, unit)`, `countdown()`, `elapsed()` | The same reads by plainer names. |
 | `race(p)`, `slot(p)`, `isHuman(p)`, `hasLeft(p)`, `supply(p, of?, race?)` | The player: compare with `races.` and `slots.`; supply `"used"`, `"max"` or `"provided"`, as the top bar shows it. |
+| `unitsAt(location, filter?)`, `unitsOf(player, filter?)`, `allUnits(filter?)` | The units a `for…of` runs over; a filter is `{ type, owner, at }`. No `sleep` inside the loop. |
+| `first(filter?)`, `nearest(type, location, filter?)`, `randomUnit(filter?)` | One unit, or `null`. |
+| `u.hp`, `u.shields`, `u.energy`, `u.kills`, `u.cooldown`, `u.resources`, `u.stim` …, `u.invincible` | Read and written. `u.hp = 0` kills. |
+| `u.maxHp`, `u.maxShields`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.orderId`, `u.burrowed`, `u.cloaked`, `u.hallucinated`, `u.underAttack` | Read only. |
+| `u.order(kind, location)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told; `damage` and `heal` also take `{ percent }`. |
+| `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables: fields to read, `=` and `+=`. |
 | `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with the program's numbers, a player's name and the colour code of their colour in it, for the current player. |
 | `print(text, { to?, position? })` | The same for another player, `AllPlayers` or a force, in the `"chat"` area or the `"center"` line. |
 | `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs`, the bitwise operators | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
@@ -1094,6 +1164,9 @@ What a program cannot do:
   counts listed above can follow a variable.
 - A condition's own amount cannot be a variable — the game compares a quantity with a
   number it is given — so read the quantity and compare it yourself: `minerals(P1) >= price`.
+- Move a unit by writing where it is, cloak it, or change one unit's speed: the game ends
+  at a position write and showed nothing for the other two, so they are not offered.
+  `order()` and the Move Unit action move units; `stats(type).speed` is a type's speed.
 - Keep a text: text is shown, not stored, and a boolean has no text of its own.
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
 - No recursion, no `for` unrolled more than 256 times (write a `while`), and no sum past

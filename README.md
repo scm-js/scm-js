@@ -1254,8 +1254,9 @@ What a program cannot do:
   `order()` and the Move Unit action move units; `stats(type).speed` is a type's speed.
 - Keep a text: text is shown, not stored, and a boolean has no text of its own.
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
-- No recursion, no `for` unrolled more than 256 times (write a `while`), and no number
-  past 2 147 483 647 either way (4 294 967 295 for a `u32`): it wraps.
+- No function that calls itself and sleeps, none more than 1 024 calls deep unless the
+  workspace's Settings raises it, no `for` unrolled more than 256 times (write a `while`),
+  and no number past 2 147 483 647 either way (4 294 967 295 for a `u32`): it wraps.
 - A `Map` or a `Set` is keyed by ids of the game, not by numbers of your own; an array does
   not hold arrays, and a record in one has numbers and booleans for fields.
 - A program variable cannot reach a helper, a condition or an action, since those were

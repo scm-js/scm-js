@@ -942,9 +942,14 @@ leaderboard's label or a transmission is fixed when the script is applied, and t
 no text variables.
 
 **Functions** declared inside the program, or made with `game()` in any file, run in the
-game too. They are inlined at each call, arguments pass by value, they may return a
-number, a boolean or a unit — `function canAfford(price: number) { return gold >= price; }` —
-and they may sleep. There is no recursion.
+game too. Arguments pass by value, they may return a number, a boolean or a unit —
+`function canAfford(price: number) { return gold >= price; }` — and they may sleep. A
+function used once is written into the program where it is called; one used more than
+once is a single copy in the built map that every call runs, which keeps a script with
+helpers small. The end of the function's line says which it got (*called ×3*, *inlined
+×2*), and hovering it says why: a function that sleeps, or whose parameter has to be
+known when the map is built (the player of `setResources(p, …)`), stays inlined. There is
+no recursion.
 
 **A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as that
 player, while that player is in the game. `AllPlayers`, a force or a list of players

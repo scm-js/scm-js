@@ -371,3 +371,21 @@ are three arrays of numbers behind two IR nodes (`unitPart` gives a unit's point
 makes the unit of three numbers again, re-checked like any kept unit — which is why a squad, unlike a loop over the game's
 units, may be kept across a `sleep()`), and `for…of` over a `Map` or a `Set` is a `for` over every id with the body under
 an `if`. IR 9.
+
+**TrigScript 3.7 (2026-09-19)** is slice 7: **functions that are called**. The decision is made while the body is walked,
+not before it: a function is inlined where it is first met, exactly as 3.6 did (so a function used once builds into what
+it always did — `spawn(3)` still unrolls), and met again *at the same arrays* the front end tries it with every parameter
+a variable, the attempt's diagnostics swapped out and thrown away. It fails when the function sleeps (the program wakes up
+inside it), holds a `rose()` / `once()` (a latch belongs to a place in the source), or does not compile that way (the
+player of `setResources(p, …)`); then it stays inlined and the hint on its line says why. When it holds, the *first*
+call's node is changed in place to match. After the walk, a function left with one call that is still part of the
+program is inlined there again, and arrays no node names are dropped. Turned down: two full passes (an array's identity
+differs between them, and a function that takes an array is a copy *an array passed*) and trying at the first call (a
+function used once would lose `n = 3` folding into its body). IR 10 is `Program.functions` and `Call.fn`; every argument
+is worked out before any parameter is set, since an argument may be a call of the same function. The lowering makes each
+an `EUDFunc` of **no arguments**: parameters and results are the program's own cells, a row a player, so nothing of
+eudplib's argument passing is used — which is also what slice 8's saved frames need. Ten calls of a fifteen-statement
+function measured 735 objects for 1462 and a built map of 53 KB for 81 KB. With it: the Simulate view lists the
+interpreter's faults first, and an array written empty is one that grows whoever pushes to it. The probe
+(`probes/functions.ts`, also a build fixture and checked line by line against the simulator) was played once, every line
+as expected, 2000 calls in one frame without a stutter. README and pin in one commit, as before.

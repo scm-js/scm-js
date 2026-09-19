@@ -389,3 +389,26 @@ function measured 735 objects for 1462 and a built map of 53 KB for 81 KB. With 
 interpreter's faults first, and an array written empty is one that grows whoever pushes to it. The probe
 (`probes/functions.ts`, also a build fixture and checked line by line against the simulator) was played once, every line
 as expected, 2000 calls in one frame without a stutter. README and pin in one commit, as before.
+
+**TrigScript 3.8 (2026-09-19)** is slice 8: **recursion**. A function's cells are the program's own, one of each, so a
+function that comes back into itself would write over what its outer run needs. The front end makes a function a called
+one the moment it meets it inside itself (no second call from outside needed; the outer inlined walk is thrown away),
+and `compiler/recursion.ts` — after the numbers are typed and after the program has been checked as the script wrote it,
+since a rewritten loop would trip the frozen-loop check — finds the cycles of the call graph and makes each function on
+one safe to re-enter. **Every call that may come back is a statement of its own**, because a backend computes an
+expression through temporaries no frame knows of: operands to its left go into temporaries, and `?:`, `&&`, `||` and
+loop conditions holding one become the `if`s they mean. Each such call carries `saves` — every variable of its function
+but the call's own result, no liveness on purpose — and the handles of the arrays declared in the function, which the
+pass makes growing ones so a frame keeps four cells and not the array. IR 11. **eudplib's `EUDFunc` cannot recurse** (one
+return address, and not callable until its body is whole), so the lowering gives a recursive function triggers of its
+own ended by one whose next-trigger field is the return address, kept a second time in a variable because reading
+memory back costs some thirty-five triggers and writing a variable out two. Decided with the user: the limit is a
+**depth in calls** in the workspace's Settings beside the heap's size (1 024; 16 to 65 536; the IR file's `stack`), and
+the stack is **an array of its own**, not the heap's top as slice 6 left it, so that an overflow never depends on what
+the arrays hold and Simulate and the game stop at the same call. The interpreter runs such a body apart from its caller
+(`ProgramRun.drive`): nested generators ended JavaScript's stack near a thousand deep. Refused: a function that sleeps
+and calls itself, such a call inside a loop over units, a function that calls itself on every path. Riders: a parameter
+given a plain value may be assigned, and `c ? 1 : 0` is a number. Not fixed, found on the way: the Python's `and` / `or`
+evaluate every side (EUDAnd over conditions already built) where the interpreter short-circuits. The probe
+(`probes/recursion.ts`) was played once: as expected, the overflow said in red. If `fib(20)` in one frame ever pauses too
+long, the plan has the faster stack (variable triggers chained frame by frame, a trigger a cell to bring back).

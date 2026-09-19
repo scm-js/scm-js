@@ -948,8 +948,12 @@ function used once is written into the program where it is called; one used more
 once is a single copy in the built map that every call runs, which keeps a script with
 helpers small. The end of the function's line says which it got (*called ×3*, *inlined
 ×2*), and hovering it says why: a function that sleeps, or whose parameter has to be
-known when the map is built (the player of `setResources(p, …)`), stays inlined. There is
-no recursion.
+known when the map is built (the player of `setResources(p, …)`), stays inlined. A
+function may call itself — `fib(n - 1) + fib(n - 2)`, a flood fill over an array — as long
+as it does not sleep: each run has its own parameters and locals, as in TypeScript. It may
+go 1 024 calls deep unless the workspace's Settings says otherwise; a call past that stops
+the program, and the game says where. Thousands of such calls within one frame make the
+game pause, since each keeps its function's variables while it runs.
 
 **A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as that
 player, while that player is in the game. `AllPlayers`, a force or a list of players

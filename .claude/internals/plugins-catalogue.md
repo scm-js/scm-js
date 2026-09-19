@@ -307,3 +307,29 @@ classes one too low in the editor** (`UnitClass` had Any unit 228 … Factories 
 "None" — a Blizzard melee map's defeat trigger is "commands at most 0 of 231", Buildings): fixed in `sections/triggers.ts`,
 in both plugins' vendored copies, and `api.names.units()` gained a "None" entry at 228 so that an entry's place is
 still its value.
+
+**TrigScript 3.4 (2026-09-18)** is slice 4 — what the players do: `keyPressed`, `clicked`, `mouse`, `underMouse`,
+`chatted(p, "-spawn {n} {what:unit}")` with captures typed from the pattern by template-literal types, and
+`centerLocation`; IR version 5; nothing in the host's API. The build gains two of the eudplib library's bundled euddraft
+plugins, composed by the compiler (`compiler/input.ts#buildPlugins`), in this order: chatEvent → trigscript → MSQC →
+eudTurbo. Both plugins take a *name* from eudplib's namespace wherever they take an address or a death-counter unit,
+so the lowering registers `EUDArray(12)`s / `EUDVariable`s (`tsin_*`) and nothing of the map's — no death counter,
+switch or string — is used (Magenta uses death counters because its rows are ordinary trigger conditions). chatEvent is
+given no messages: it only finds the local player's line, the lowering matches every pattern itself on that computer,
+and the pattern's number and up to three values go through MSQC's `val` to everyone (chatEvent's own result is local —
+it prints "desync" beside it). That is why a typed number stops at 2²⁰ − 1 and a pattern has at most three captures
+(a command unit per human each). What it does take: one free location among the first 63 for MSQC, eight more in a row
+when the mouse is read (allocated highest-first from the names the compile was given; a map with no room gets a
+diagnostic), unit type 58 and `QCPlayer: 11` — the values Magenta's probes were played with (MSQC reads 11 as
+0-based, so Player 12). An input is an `input` leaf expression that never counts as "moving" for the sleep rule;
+`chatted()` / `mouse()` initialisers become records of the program's numbers, the former with a `truth` boolean on the
+binding so `if (m)` and `m != null` work; the input functions throw while the script's own statements run
+(`Collector.running`), since `if (keyPressed(…))` outside a program would be a truthy object. An action's `variable`
+became `variables` (a unit type may be one, stopped at 228 in the lowering). **This slice found the lowering one frame
+slow**: `sleep(n)` set the wait to n and the frame entry spent a frame counting it down, so `sleep(frames(1))` ran every
+other frame — half of all one-frame inputs would have been missed; the wait is n − 1 now, as the simulator always had
+it. The interpreter has `press` / `click` / `type` / `moveMouse` for slice 5's `test()`; the editor's Simulate presses
+nothing and says so. The probe was played three times and everything passed but one key: **the game never reports F6**
+(silent when first in MSQC's settings and silent when third; F7, F8, `1`, Q, W, E answered), so `input.ts#DEAF_KEYS`
+keeps it out of the `Key` type and `keyPressed` says why to a script that gets past the types. As with 3.2 and 3.3 the guide's new examples need the vendored plugin at 3.4.0: README and pin in
+one commit.

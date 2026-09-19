@@ -852,6 +852,50 @@ seen working in Remastered is offered, and the hover on each field says what it 
 most unit-type fields apply to units made after the write, a weapon's to every unit
 using it, a colour at once. A write lasts for the game.
 
+**What the players do** is there to read: a key, a mouse button, where the mouse is, and
+what a player types.
+
+```ts
+program(() => {
+  while (true) {
+    if (keyPressed(CurrentPlayer, "F8")) createUnit(CurrentPlayer, units.TerranMarine, 1, locations.Anywhere);
+
+    if (clicked(CurrentPlayer, "right")) {
+      const at = mouse(CurrentPlayer);
+      displayText(`You clicked at ${at.x}, ${at.y}.`);
+    }
+
+    const m = chatted(CurrentPlayer, "-spawn {n} {what:unit}");
+    if (m) createUnit(CurrentPlayer, m.what, m.n, locations.Anywhere);
+
+    underMouse(CurrentPlayer, { owner: CurrentPlayer })?.heal(10);
+    sleep(frames(1));
+  }
+}, { owner: AllPlayers });
+```
+
+A key, a click and a typed line are true on the one frame they arrive, so look for them
+in a loop that sleeps one frame at a time. `keyPressed` is true once per press — not
+while the key is held, and not while the player is typing a message. `mouse(p)` is the
+place on the map under the player's cursor, in pixels (32 to a tile);
+`centerLocation(location, x, y)` moves a location there, so that a unit can be created
+under the cursor, and `underMouse(p)` is the unit nearest the cursor, or `null`.
+
+`chatted(p, pattern)` is `null` until the player sends a line that fits the pattern, and
+then holds what the pattern read out of it. The pattern's own words are matched exactly
+and the whole line has to fit; `{n}` reads a whole number, `{what:unit}` a unit type by
+its name (the rest of the line, so it comes last) and `{kind:ore|gas}` one of the listed
+words, as its place in the list. The editor knows the names in the pattern: after `m.` it
+offers `n` and `what`, and nothing else. A pattern starts with a word of its own, such as
+`-spawn`, so ordinary talk is left alone. A game played in single player has no chat, so
+try typed lines in a multiplayer game — hosting one alone is enough.
+
+All of this reaches every player's computer in step, a few frames after it happens. It
+costs the map a little, and only when a program reads input: one free location among the
+first 63 (nine when the mouse is read; the script is told when there is no room), and
+the Valkyrie and Player 12, which carry the input between computers and must be left
+alone.
+
 **A text can hold the program's numbers.** Write it as a template literal:
 
 ```ts
@@ -892,9 +936,10 @@ runs, and the editor underlines those parts with dots so the boundary is visible
 type. That is what lets a helper written outside the program supply actions inside it.
 It is also the one rule to keep in mind: a program variable cannot reach a condition, an
 action or a helper, because those were computed before the game started. The exceptions
-are the amount of `setResources`, `setDeaths`, `setScore` and `setCountdownTimer` and the
-unit count of `createUnit`, `killUnitAt`, `removeUnitAt` and `giveUnits`, which can be a
-variable or an expression over one, and the text of `displayText` and `print`.
+are the amount of `setResources`, `setDeaths`, `setScore` and `setCountdownTimer`, the
+unit count of `createUnit`, `killUnitAt`, `removeUnitAt` and `giveUnits` and an action's
+unit type, which can be variables or expressions over them, and the text of `displayText`
+and `print`.
 
 ### Examples
 
@@ -1151,6 +1196,9 @@ Inside a program:
 | `u.maxHp`, `u.maxShields`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.orderId`, `u.burrowed`, `u.cloaked`, `u.hallucinated`, `u.underAttack` | Read only. |
 | `u.order(kind, location)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told; `damage` and `heal` also take `{ percent }`. |
 | `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables: fields to read, `=` and `+=`. |
+| `keyPressed(p, key)`, `clicked(p, button?)` | True on the frame a press arrives. Keys: letters, digits, `"F1"` … `"F12"` (not `"F6"`, which the game keeps to itself), `"Space"`, `"Enter"`, `"Escape"`, the arrows and the rest of the list the editor offers; buttons `"left"`, `"right"`, `"middle"`. |
+| `mouse(p)`, `underMouse(p, filter?)`, `centerLocation(location, x, y)` | The cursor's place on the map as `x` and `y`; the unit nearest it (within 48 pixels, or the filter's `within`), or `null`; a location moved onto a point. |
+| `chatted(p, pattern)` | `null`, or the values of a typed line: `{n}` a number, `{what:unit}` a unit type, `{kind:ore|gas}` a word's place in its list. |
 | `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with the program's numbers, a player's name and the colour code of their colour in it, for the current player. |
 | `print(text, { to?, position? })` | The same for another player, `AllPlayers` or a force, in the `"chat"` area or the `"center"` line. |
 | `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs`, the bitwise operators | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
@@ -1159,9 +1207,11 @@ Inside a program:
 What a program cannot do:
 
 - Play on a version of the game before Remastered. `trigger()` does; a program does not.
-- A location, a unit type or a player is fixed when the script is applied — also in a
-  read — and so is every text but `displayText`'s and `print`'s; only the amounts and
-  counts listed above can follow a variable.
+- A location or a player is fixed when the script is applied — also in a read — and so is
+  every text but `displayText`'s and `print`'s; only the amounts, the counts and an
+  action's unit type, as listed above, can follow a variable.
+- Know that a key is being held, or read a key on a version before Remastered: the game
+  reports each press once.
 - A condition's own amount cannot be a variable — the game compares a quantity with a
   number it is given — so read the quantity and compare it yourself: `minerals(P1) >= price`.
 - Move a unit by writing where it is, cloak it, or change one unit's speed: the game ends

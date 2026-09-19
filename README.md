@@ -729,14 +729,17 @@ at the beacon, sends a wave if the alarm is up, and sleeps twenty seconds.
 
 **Variables** hold numbers and booleans, and a `let p = { lives: 3, gold: 0 }` is a
 variable per field. They live in the game while the map is played and take nothing from
-the map: no death counters, no switches, no triggers in the list. Numbers are whole, from
-0 to 4 294 967 295: a result below zero is stored as 0, and a `u8` or `u16` variable
-(`let lives: u8 = 3`) stays within 0 … 255 or 0 … 65 535. `+`, `-`, `*`, `/` and `%`
-work between variables, with `Math.min`, `Math.max`, `Math.abs` and `clamp()`, and so do
-the bitwise `&`, `|`, `^`, `<<` and `>>`; division is whole, and dividing by a variable
-that is 0 gives 0. A sum is worked out as a whole
-before it is stored, and a comparison is exact: `if (a - b < 0)` is true when `b` is
-larger.
+the map: no death counters, no switches, no triggers in the list. Numbers are whole and
+signed, as in TypeScript: `a - b` is below zero when `b` is larger, `while (i >= 0)` ends,
+and a number below zero is shown with its minus sign. A number runs from −2 147 483 648 to
+2 147 483 647 and wraps at either end. A `u8` or `u16` variable (`let lives: u8 = 3`) stays
+within 0 … 255 or 0 … 65 535 and stops at both ends, which is what lives and cooldowns
+want; a `u32` runs from 0 to 4 294 967 295, for bit masks and hashes, and is kept apart
+from a plain number in arithmetic unless `u32(x)` or `i32(x)` says which is meant. `+`,
+`-`, `*`, `/` and `%` work between variables, with `Math.min`, `Math.max`, `Math.abs` and
+`clamp()`, and so do the bitwise `&`, `|`, `^`, `<<`, `>>` and `>>>`; division is whole and
+towards zero, and dividing by a variable that is 0 gives 0. Where the game takes nothing
+below zero — hit points, an amount, a unit count — a number below zero goes in as 0.
 
 **Control flow is what it says.** `if`/`else`, `while`, `do`, `for`, `switch`, `break`,
 `continue` and `c ? a : b` all work. Conditions go in an `if` or a `while`; actions stand
@@ -1182,7 +1185,8 @@ Inside a program:
 | `program(body, options?)` | Code that runs in the game; the map then needs StarCraft: Remastered. The one option is `owner`: a player, `AllPlayers`, a force, or a list — the last three run it once per player. |
 | `game(fn)` | A function that runs in the game, for programs to call; it can live in any file and be imported. |
 | `let n = 0`, `let f = false`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a unit of the game, a record of them. `const` is a value worked out when the script is applied, when it can be. |
-| `u8`, `u16`, `u32` | The declared range of a number variable: `let lives: u8 = 3` stops at 255. |
+| `u8`, `u16`, `u32` | The declared range of a number variable that is never below zero: `let lives: u8 = 3` stops at 0 and at 255; a `u32` wraps at 4 294 967 295. A plain `number` is signed. |
+| `u32(x)`, `i32(x)` | The same 32 bits read the other way, for where a `u32` meets a plain number. |
 | `shared(value)` | In a per-player program, one value for all the players instead of one each. |
 | `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
 | `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
@@ -1219,8 +1223,8 @@ What a program cannot do:
   `order()` and the Move Unit action move units; `stats(type).speed` is a type's speed.
 - Keep a text: text is shown, not stored, and a boolean has no text of its own.
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
-- No recursion, no `for` unrolled more than 256 times (write a `while`), and no sum past
-  4 294 967 295.
+- No recursion, no `for` unrolled more than 256 times (write a `while`), and no number
+  past 2 147 483 647 either way (4 294 967 295 for a `u32`): it wraps.
 - A program variable cannot reach a helper, a condition or an action, since those were
   computed when the script was applied.
 

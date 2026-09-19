@@ -333,3 +333,21 @@ nothing and says so. The probe was played three times and everything passed but 
 (silent when first in MSQC's settings and silent when third; F7, F8, `1`, Q, W, E answered), so `input.ts#DEAF_KEYS`
 keeps it out of the `Key` type and `keyPressed` says why to a script that gets past the types. As with 3.2 and 3.3 the guide's new examples need the vendored plugin at 3.4.0: README and pin in
 one commit.
+
+**TrigScript 3.5 (2026-09-18)** is slice 5 of a plan whose order changed that day: the language before the tooling
+(5 signed numbers, 6 arrays and keyed tables, 7 functions that are called, 8 recursion, then 9 `test()` + debugger and
+10 examples — each of 5–8 changes what a debugger has to show, and each has a probe to play). A program's `number`
+is a **signed 32-bit integer** wrapping as `x | 0`, with `u32` beside it and `u8` / `u16` stopping at both ends;
+division is towards zero, `>>>` is apart from `>>`, a number below zero prints its minus sign. Programs are Remastered
+only since 3.0, so stopping at 0 — parity with a death counter — had nothing left to match. The design that keeps it
+cheap: `compiler/numbers.ts` is a pass over the IR (IR 6) that types every number once and writes `unsigned` into the
+five operations that care (a comparison — `true | "left" | "right"`, a number against a `u32` compared exactly —
+`/ %`, `min` / `max`, a printed number, and `>>` → `>>>`), so **neither backend works a type out**; it removes the
+casts (`u32(x)`, `i32(x)`, `x >>> 0`), refuses a number mixed with a `u32` in arithmetic, and writes `max(v, 0)` where
+a signed value goes into the game unless it can see the value is never below zero — including a variable into which
+only such values are ever stored (a fixpoint over a first pass that must *keep* the casts, or the second pass has lost
+the types). So the backends' stores are what they were. In the Python a signed order is both sides plus 0x80000000,
+division is eudplib's `f_div_towards_zero` (a constant divisor goes in as a signed int), a signed print is a `ptr2s` of
+"-" or "" before the magnitude. Breaking for a script that counted on stopping at 0: the plugin's README says declare a
+`u8` / `u16` or write `Math.max(x - 1, 0)`. The probe (`probes/numbers.ts`, also a build fixture and checked line by
+line against the simulator) was played once, every line as expected. README and pin in one commit, as before.

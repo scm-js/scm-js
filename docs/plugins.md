@@ -1087,7 +1087,7 @@ The names behind the numbers a map stores, so a plugin that shows raw values nee
 carry the game's tables.
 
 - The game's tables: `unit(id)` / `units()` (StarEdit's names, plus *Any unit*, *Men*,
-  *Buildings*, *Factories* for the trigger classes 228–231; under a mod's data set, the
+  *Buildings*, *Factories* for the trigger classes 229–232, and *None* for 228; under a mod's data set, the
   mod's own name for anything it renamed, by the rule in
   [docs/game-data.md](game-data.md#names)), `upgrade` / `upgrades`, `tech` / `techs`,
   `weapon` / `weapons`, `playerType` / `playerTypes` (OWNR controllers), `race` / `races`

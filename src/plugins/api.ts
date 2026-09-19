@@ -1985,7 +1985,7 @@ export interface NamedValue {
  * the editor's own tables — the same names StarEdit shows.
  */
 export interface NamesApi {
-  /** StarEdit's name for a units.dat id; `Any unit` / `Men` / `Buildings` / `Factories` for the trigger classes 228–231. */
+  /** StarEdit's name for a units.dat id; `Any unit` / `Men` / `Buildings` / `Factories` for the trigger classes 229–232 (228 is the game's `None`). */
   unit(id: number): string;
   units(): NamedValue[];
   upgrade(id: number): string;

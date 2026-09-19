@@ -1859,8 +1859,9 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     graphics: createGraphicsApi(store, bag),
 
     names: {
-      unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? unitName(id),
-      units: () => [...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
+      unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? (id === UNIT_NAMES.length ? "None" : unitName(id)),
+      // 228 is the game's "None", between the types and the classes: listed so that an entry's place is its value.
+      units: () => [...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), { value: UNIT_NAMES.length, label: "None" }, ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
       upgrade: upgradeName,
       upgrades: () => UPGRADE_NAMES.map((_, id) => ({ value: id, label: upgradeName(id) })),
       tech: techName,

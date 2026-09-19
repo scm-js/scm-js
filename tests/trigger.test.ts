@@ -240,6 +240,17 @@ const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
 const mapFiles = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.sc[mx]$/i.test(f)) : [];
 
 describe.skipIf(mapFiles.length === 0)("fixture maps", () => {
+  it("a melee map's own defeat trigger is about Buildings: the unit classes are where the game has them", async () => {
+    // Blizzard's stock triggers say "commands at most 0 buildings → defeat". Until 2026-09-18 the classes
+    // were one too low here and that read as "Factories".
+    const melee = mapFiles.find((f) => /Binary Burghs/i.test(f)) ?? mapFiles[0];
+    const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(join(MAPS, melee))))).chk);
+    const defeat = scn.triggers.find((t) => t.actions.some((a) => a.type === ActionType.Defeat) && t.conditions.some((c) => c.type === ConditionType.Command));
+    if (!defeat) return;
+    const command = defeat.conditions.find((c) => c.type === ConditionType.Command)!;
+    expect(command.unitId).toBe(UnitClass.Buildings);
+    expect(formatTriggers([defeat], triggerNames(scn))).toContain('"Buildings"');
+  });
   for (const file of mapFiles) {
     it(`${file}: triggers re-encode byte for byte, through text too`, async () => {
       const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(join(MAPS, file))))).chk);

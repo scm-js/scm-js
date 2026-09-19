@@ -16,7 +16,7 @@ import {
   type ActionRecord, type ConditionRecord, type TriggerRecord,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
-import { UNIT_NAMES, unitName } from "../data/units";
+import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName } from "../data/units";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
 import type { TriggerNames } from "../formats/triggers/text";
@@ -290,11 +290,11 @@ export function triggerUsage(list: readonly TriggerRecord[]): { cells: [player: 
   for (const t of list) {
     const owners = t.players.flatMap((on, i) => (on ? [i] : []));
     for (const c of t.conditions) {
-      if (c.type === ConditionType.Deaths && c.unitId < UnitClass.Any) for (const p of playerSlotsOf(c.player, owners)) cells.add(c.unitId * 12 + p);
+      if (c.type === ConditionType.Deaths && c.unitId < UNIT_TYPE_COUNT) for (const p of playerSlotsOf(c.player, owners)) cells.add(c.unitId * 12 + p);
       if (c.type === ConditionType.Switch) switches.add(c.resource);
     }
     for (const a of t.actions) {
-      if (a.type === ActionType.SetDeaths && a.unitId < UnitClass.Any) for (const p of playerSlotsOf(a.player, owners)) cells.add(a.unitId * 12 + p);
+      if (a.type === ActionType.SetDeaths && a.unitId < UNIT_TYPE_COUNT) for (const p of playerSlotsOf(a.player, owners)) cells.add(a.unitId * 12 + p);
       if (a.type === ActionType.SetSwitch) switches.add(a.target);
     }
   }

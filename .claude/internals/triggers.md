@@ -10,6 +10,9 @@ field, label }`, argument order = SCMDraft's TrigEdit). Everything that shows a 
 editor's widgets, the text printer/parser, later the script API's typings — reads that table; the
 codec knows no types. Decoding drops only *trailing* empty condition/action slots, so anything after
 a type-0 entry survives; encoding pads back to 16/64. `switchNames` is SWNM (null when absent).
+`UnitClass` — the unit ids past units.dat — is Any unit 229, Men 230, Buildings 231, Factories 232; 228 is the
+game's "None". It was one too low until 2026-09-18 (nobody had opened a Blizzard map's stock triggers and read the
+words: "commands at most 0 Factories" was the tell). A test on a real map's melee triggers would have caught it.
 
 `BRIEFING_ACTION_DEFS` puts the portrait slot in `player` (the first group): Blizzard's own maps
 say so — `fixtures/maps/(6)Ground Zero.scm` and `(4)Spring Thaw.scx` (gitignored copies from the

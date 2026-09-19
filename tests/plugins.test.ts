@@ -1566,9 +1566,10 @@ describe("plugin names", () => {
     const { store, scn } = blankStore();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
     expect(api.names.unit(0)).toBe("Terran Marine");
-    expect(api.names.unit(228)).toBe("Any unit");
-    expect(api.names.units().length).toBe(232);
-    expect(api.names.units()[231]).toEqual({ value: 231, label: "Factories" });
+    expect(api.names.unit(228)).toBe("None");
+    expect(api.names.unit(229)).toBe("Any unit");
+    expect(api.names.units().length).toBe(233);
+    expect(api.names.units()[232]).toEqual({ value: 232, label: "Factories" });
     expect(api.names.upgrade(16)).toBe("U-238 Shells");
     expect(api.names.upgrades()).toHaveLength(61);
     expect(api.names.tech(0)).toBe("Stim Packs");

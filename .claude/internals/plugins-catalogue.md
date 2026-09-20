@@ -412,3 +412,24 @@ given a plain value may be assigned, and `c ? 1 : 0` is a number. Not fixed, fou
 evaluate every side (EUDAnd over conditions already built) where the interpreter short-circuits. The probe
 (`probes/recursion.ts`) was played once: as expected, the overflow said in red. If `fib(20)` in one frame ever pauses too
 long, the plan has the faster stack (variable triggers chained frame by frame, a trigger a cell to bring back).
+
+**TrigScript 3.9 (2026-09-19)** is slice 8½, six parts and their leftovers, each with a probe that was played: **the
+array methods that take a function** (the arrow is copied into the loop the method becomes — front end only, which is why
+a function cannot be kept as a value), **patterns and spread** (front end only), **arrays inside things** (IR 12: a
+grid is one flat array read at `y * w + x`; rows that grow are four arrays of handles, the holder owning the block),
+**texts as values** (IR 13: a text only ever given literals is its number in the built map's string table, a made text
+is bytes in a heap block with its length kept in a third cell, a character is a code point; the objectives, a
+leaderboard's label, a transmission and a unit type's name take a made text through a string the build reserves per
+kind, written only on the computers of the players the action is for, because the game re-reads those on every draw —
+the spike that found this was played), **classes** (an instance is a record, a method a function handed the instance,
+the class of every instance settled at build time; IR 14 is a text in the cells of a row; an instance pushed to an array
+is constructed on its row) and **a `Map` / `Set` over any number or over units** (open addressing written as IR by the
+front end, no IR change, JavaScript's insertion order, tested against JavaScript itself; a unit's key is its place plus
+its uniqueness byte sixteen bits up). The last step before shipping was a documentation pass: the plugin README's
+*Programs* got headings, a contents table, *TrigScript beside TypeScript* and *What a program does not have*, with
+`tests/readme.test.ts` compiling every example; the guide's section here got the same features, four examples and a
+shorter copy of the comparison table — **keep the two tables in step**. Writing the examples found three front-end
+gaps, mended in the release: a loop emptied by the *value* of `pop()` was refused as never changing, a comma in a
+`for`'s update was refused, and `names.pop() ?? other` of an empty array of texts gave "" — the last changed the IR a
+text pop emits (a `textTernary` on the length), built through eudplib but not replayed in the game. Next is slice 9,
+`test()` and the debugger.

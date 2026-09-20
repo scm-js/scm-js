@@ -518,8 +518,8 @@ the whole standard library are there to write triggers *with*. Those are ordinar
 triggers, the same kind the Trigger Editor shows, and a map made of them plays on any
 version of the game.
 
-Code inside `program(() => { … })` runs *in the game* instead: variables, loops,
-functions and `sleep`, so a lives counter or a wave timer is written as a loop rather
+Code inside `program(() => { … })` runs *in the game* instead: variables, arrays, texts,
+functions, classes, loops and `sleep`, so a lives counter or a wave timer is written as a loop rather
 than as a dozen triggers with hand-numbered death counts. Programs are built into the map
 by the eudplib plugin, another default, when the map is [saved](#saving), and **a map with a
 program in it needs StarCraft: Remastered**. A script that only calls `trigger()` never
@@ -727,8 +727,8 @@ program(() => {
 from there. A body that ends stops for good. So the loop above is a game loop: it looks
 at the beacon, sends a wave if the alarm is up, and sleeps twenty seconds.
 
-**Variables** hold numbers and booleans, and a `let p = { lives: 3, gold: 0 }` is a
-variable per field. They live in the game while the map is played and take nothing from
+**Variables** hold numbers, booleans, texts and units of the game, and a
+`let p = { lives: 3, gold: 0 }` is a variable per field. They live in the game while the map is played and take nothing from
 the map: no death counters, no switches, no triggers in the list. Numbers are whole and
 signed, as in TypeScript: `a - b` is below zero when `b` is larger, `while (i >= 0)` ends,
 and a number below zero is shown with its minus sign. A number runs from −2 147 483 648 to
@@ -741,7 +741,7 @@ from a plain number in arithmetic unless `u32(x)` or `i32(x)` says which is mean
 towards zero, and dividing by a variable that is 0 gives 0. Where the game takes nothing
 below zero — hit points, an amount, a unit count — a number below zero goes in as 0.
 
-**Arrays** hold numbers, booleans, records of those or units: `let hp = [10, 20, 30]`, `new Array(12).fill(3)`, an
+**Arrays** hold numbers, booleans, texts, units, records or other arrays: `let hp = [10, 20, 30]`, `new Array(12).fill(3)`, an
 index that is a constant or a variable (`hp[i] += 7`), `.length`, `for (const x of xs)`,
 `fill`, `includes` and `indexOf`. An array that something pushes to grows —
 `const queue: number[] = []; queue.push(x); queue.pop() ?? 0` — with no size to declare: the
@@ -750,9 +750,37 @@ cells come from a pool the map's programs share, and the workspace's **Settings*
 stores nothing, and Simulate says where. An array of records — `let waves = [{ count: 4,
 delay: 2 }]`, `waves[i].count += 1`, `waves.push({ … })` — hands out its records by
 reference, as TypeScript does, and an array of units (`const squad: Unit[] = []`,
-`squad.push(u)`) may be kept across a `sleep()`. A list made outside the program —
-`const price = [50, 100, 150]`, or a wave table of records — can be looked up with a
-variable: `price[level]`, `waves[wave].count`.
+`squad.push(u)`) may be kept across a `sleep()`. A record in an array may hold a unit, a text, an array of its own
+(`squads[i].members.push(u)`) or another record. An array of arrays is a grid —
+`let grid = [[0, 0, 0], [0, 0, 0]]`, `grid[y][x] += 1` — or rows that each grow
+(`buckets[i].push(v)`), and `const names: string[] = []` is an array of texts. A list made
+outside the program — `const price = [50, 100, 150]`, or a wave table of records — can be
+looked up with a variable: `price[level]`, `waves[wave].count`.
+
+**The array methods that take a function** are there, written as in TypeScript: `forEach`,
+`some`, `every`, `find`, `findIndex`, `reduce`, `map`, `filter`, `sort` and `reverse`, and
+chains of them. `filter` over the units of the game is how to keep some of them:
+
+```ts
+program(() => {
+  while (true) {
+    // The three most hurt units at the base get 20 hit points, every two seconds.
+    const hurt = unitsAt(locations.Base, { owner: CurrentPlayer }).filter((u) => u.hp < u.maxHp);
+    hurt.sort((a, b) => a.hp - b.hp);
+    for (const u of hurt.slice(0, 3)) u.heal(20);
+    sleep(seconds(2));
+  }
+}, { owner: AllPlayers });
+```
+
+The function is written into the loop the method becomes, so it costs nothing and sees the
+program's variables — and for the same reason it cannot be kept in a variable: write it
+where it is used, or name a `function`. `sort` wants its function (`(a, b) => a - b`), runs
+within the frame, and is nothing for dozens of items and felt for hundreds every frame; the
+end of the line says *sorts in the frame*. `slice`, `concat`, `toSorted`, `toReversed` and
+`Array.from` make copies. Patterns and spread work as well: `const { x, y } = mouse(P1)`,
+`for (const { count, delay } of waves)`, `[a, b] = [b, a]`, `[...xs, 7]`,
+`waves.push({ ...w, count: 9 })`.
 
 **Tables keyed by an id of the game** are arrays with a cell for every id, so a key of the
 game is one read: `const bounty: Record<UnitType, number> = { [units.ZergZergling]: 5 }` and
@@ -760,6 +788,14 @@ game is one read: `const bounty: Record<UnitType, number> = { [units.ZergZerglin
 `set`, `has`, `delete`, `clear` and `size`, `new Set<UnitType>()` with `add` and the same;
 `for (const [key, value] of lost)` goes through the keys that are there.
 The keys are unit types, players, locations, switches, weapons, upgrades or technologies.
+
+**A `Map` and a `Set` over any number, or over units**, are for keys that are no id of the
+game: `new Map<number, number>()` for a tile packed into one number, `new Map<Unit,
+number>()` for a cooldown a unit, `new Set<Unit>()` for the units already dealt with. They
+go through their keys in the order the keys went in, as JavaScript's do. A key is looked
+for, a few steps where a table keyed by ids of the game is one read, and the values are
+numbers or booleans. A unit that died stays an entry until it is deleted; in a loop over
+the map it reads as no unit, which is the moment to delete it.
 
 **Control flow is what it says.** `if`/`else`, `while`, `do`, `for`, `switch`, `break`,
 `continue` and `c ? a : b` all work. Conditions go in an `if` or a `while`; actions stand
@@ -937,12 +973,36 @@ program(() => {
 by the game. `displayText` shows the text to the current player, as it always has;
 `print(text, { to, position })` shows it to someone else — a player, `AllPlayers`, a
 force — or, with `position: "center"`, on the line in the middle of the screen where the
-game's own messages appear. Only these two take a text like that: a mission objective, a
-leaderboard's label or a transmission is fixed when the script is applied, and there are
-no text variables.
+game's own messages appear.
+
+**A text is a value.** A `string` variable holds one, a function takes and returns one, a
+record has one for a field, and there is no length to declare:
+
+```ts
+program(() => {
+  let shown = "";
+  while (true) {
+    const slain = kills(P1, units.AnyUnit);
+    const rank = slain >= 50 ? "Veteran" : slain >= 10 ? "Soldier" : "Recruit";
+    const line = `${rank}: ${slain} kills, ${Math.max(50 - slain, 0)} to go`;
+    if (line != shown) { setMissionObjectives(line); shown = line; }
+    sleep(seconds(1));
+  }
+});
+```
+
+Texts take `+`, `+=`, templates, the comparisons, `length`, `s[i]`, `slice`, `indexOf`,
+`includes`, `startsWith`, `endsWith`, `padStart`, `padEnd`, `repeat` and
+`for (const ch of s)`; a character is a character, so `"저글링".length` is 3. The
+objectives, a leaderboard's label, a transmission's line and a unit type's name
+(`stats(units.ZergZergling).name = …`) take a text the program made, up to 255 bytes; what
+is on the screen is the text as it was when the action ran, so run the action again when
+the text changes, as above. A made text holds 1 023 bytes and is cut off past that, which
+the game says once in red. `split`, `replace`, `trim` and `parseInt` are not there: keep a
+number beside the text it was made into.
 
 **Functions** declared inside the program, or made with `game()` in any file, run in the
-game too. Arguments pass by value, they may return a number, a boolean or a unit —
+game too. Arguments pass by value, they may return a number, a boolean, a text or a unit —
 `function canAfford(price: number) { return gold >= price; }` — and they may sleep. A
 function used once is written into the program where it is called; one used more than
 once is a single copy in the built map that every call runs, which keeps a script with
@@ -954,6 +1014,37 @@ as it does not sleep: each run has its own parameters and locals, as in TypeScri
 go 1 024 calls deep unless the workspace's Settings says otherwise; a call past that stops
 the program, and the game says where. Thousands of such calls within one frame make the
 game pause, since each keeps its function's variables while it runs.
+
+**Classes** are TypeScript's, declared inside the program: fields, a constructor, methods,
+`get` and `set`, `static`, `private`, `extends` with `super`.
+
+```ts
+program(() => {
+  class Wave {
+    left: number;
+    constructor(public unit: UnitType, count: number) { this.left = count; }
+    get done() { return this.left == 0; }
+    send() {
+      createUnit(P8, this.unit, 1, locations.Spawn);
+      this.left--;
+    }
+  }
+  const waves = [new Wave(units.ZergZergling, 12), new Wave(units.ZergHydralisk, 6)];
+  for (const w of waves) {
+    print(`${w.left} are on their way`, { to: AllPlayers });
+    while (!w.done) { w.send(); sleep(seconds(1)); }
+    sleep(seconds(30));
+  }
+  victory();
+});
+```
+
+An instance is a record and a method a function handed the instance, so what holds for
+functions holds for methods. Which class an instance is, is settled when the script is
+applied — nothing of a class is left in the game — and the limits follow from that: an
+array of instances holds one class, a function can give back an instance only when every
+`return` gives the same one (`return this`, so calls chain, or `return new Wave(…)`), and a
+class a program writes to is declared inside it.
 
 **A program runs for its owner** (Player 1 unless `{ owner: … }` says otherwise), as that
 player, while that player is in the game. `AllPlayers`, a force or a list of players
@@ -970,8 +1061,42 @@ It is also the one rule to keep in mind: a program variable cannot reach a condi
 action or a helper, because those were computed before the game started. The exceptions
 are the amount of `setResources`, `setDeaths`, `setScore` and `setCountdownTimer`, the
 unit count of `createUnit`, `killUnitAt`, `removeUnitAt` and `giveUnits` and an action's
-unit type, which can be variables or expressions over them, and the text of `displayText`
-and `print`.
+unit type, which can be variables or expressions over them, and a text: `displayText` and
+`print` take any text the program made, and so do the objectives, a leaderboard's label, a
+transmission and a unit type's name.
+
+### TrigScript beside TypeScript
+
+Outside `program()` there is nothing to compare: the script is TypeScript, checked by the
+TypeScript compiler and run when it is applied, with the whole language and its standard
+library. This table is about the inside of a program, where what is written has to become
+something the game can do. *Same* means it is written and behaves as in TypeScript; what
+differs is said, and what is missing is refused with a message as you type, never passed
+over in silence.
+
+| TypeScript | In a program | What is different |
+| --- | --- | --- |
+| Types: annotations, `interface`, `type`, unions of literals, tuples, generic functions, `as`, `!` | Same | Erased, as in TypeScript. Some decide how a value is kept: `u8`, `u16` and `u32` are widths, and a `Map<UnitType, V>` is kept differently from a `Map<number, V>`. A class takes no type parameters. |
+| `let`, `const`, `var` | Same | A variable needs a first value (`let n = 0`). A `const` the script already knows is worked out when the script is applied and takes nothing from the map. |
+| `number` | Different | A whole number of 32 bits, signed, wrapping at its ends. No fractions, no `NaN`, no `bigint`. `/` is whole division towards zero, and dividing by 0 gives 0. `u8` and `u16` (which stop at their ends) and `u32` are added. |
+| `boolean` | Same | Assigned with `=` only: no `\|\|=` or `&&=`. |
+| `string` | Mostly | A value with no length to declare. `length`, `s[i]` and `slice` count characters, so they differ from JavaScript only for an emoji or a rare ideograph. A made text holds 1 023 bytes. No `split`, `replace`, `trim`, `toUpperCase`, `parseInt` or regular expressions. |
+| `null`, `undefined` | Units only | `Unit \| null` is real: `first(…)`, `if (u)`, `u?.kill()`. A number, a boolean or a text is never either, so where JavaScript would give `undefined` — `pop()`, `find()`, `get()` — say what it is then: `xs.pop() ?? 0`. No optional fields or parameters (`y?: number`); a parameter's default (`y = 1`) is there. |
+| Operators: `+ - * / %`, comparisons, `&&` `\|\|` `!`, `c ? a : b`, the bitwise ones, `??`, `?.`, `++` `--`, the compound assignments | Same | `==` and `===` are one thing, since nothing is coerced. Missing: `**`, `typeof`, `in`, `delete`. |
+| `if`, `while`, `do`, `for`, `for…of`, `switch`, `break`, `continue` | Same | A loop runs all its rounds within one frame of the game, so one that never ends must `sleep()` on every path — also a `while (true)` that is only left by a `break`. No `for…in`, no labels. |
+| Functions: parameters by value, defaults, rest parameters, recursion, generics | Same | A function that calls itself cannot `sleep()` and has a depth limit. One declared inside another does not see the outer one's variables, only the program's. It returns a number, a boolean, a text, a unit or an instance — not a record or an array it made: hand it the one to fill in. |
+| Arrow functions, closures, functions as values | Callbacks only | An arrow is written where a method takes it — `xs.map((x) => x + bonus)` — and sees every variable in reach. It cannot be kept in a variable, an array, a field or a return value. |
+| Object literals | Records | A variable a field: nested, passed by reference, spread, taken apart by patterns. The shape is fixed: no `p[key]` with a key that varies, no methods on a literal (a class has them), no `Object.keys`. |
+| Destructuring and spread | Same | `...rest` takes the tail of an array of numbers or booleans. |
+| Arrays | Mostly | Fixed or growing; of numbers, booleans, texts, units, records, instances and arrays. `push`, `pop`, `length`, `fill`, `includes`, `indexOf`, the methods that take a function, `sort`, `reverse`, `slice`, `concat`, `toSorted`, `toReversed`, `join` of texts, `Array.from`. No `shift`, `unshift`, `splice`, `at` or `flat`, and `map` makes numbers or booleans. `sort` wants its function. An index past the end reads 0 and stores nothing. `const b = a` is not a second name for an array. |
+| Classes: fields, constructor, methods, `get` / `set`, `static`, `private`, `readonly`, `extends`, `super`, `abstract`, `implements`, `instanceof` | Same | Declared inside the program. The class of every instance is settled when the script is applied: an array of instances holds one class, and a function gives back an instance only when every `return` gives the same one. No decorators, no class written as a value. |
+| `Map`, `Set` | Mostly | Keys are numbers, units or ids of the game; values are numbers or booleans. They go through their keys in the order the keys went in, as JavaScript's do — a table keyed by ids of the game goes by id. |
+| `enum` | Outside | Declared above the program, its members are numbers a program can use. |
+| `try` / `catch` / `throw` | Missing | The game has no exceptions. What is always a mistake — an index past the end, no room left for an array, a function that called itself too deep — the game says in red, and Simulate lists. |
+| `async` / `await`, promises, generators, timers | Missing | `sleep()` is how a program waits. Something on its own clock is another `program()`. |
+| `import` | Same | Between the script's files, and from `"trigscript"`; nothing else. A function that another file's program calls is made with `game()`. |
+| The standard library | A little | `Math.min`, `Math.max`, `Math.abs`, `String(n)`, `Array.from`, `new Array(n).fill(v)`. `print()` stands in for `console.log` and `random(n)` for `Math.random()`. No `JSON`, `Date` or `Object.*`, and no `Math.sqrt` on a variable: look the value up in a list the script worked out. |
+| — | Added | What TypeScript has no word for: `sleep`, `rose` and `once`, reads of the game (`minerals(p)`), units as objects and loops over them, `stats()`, keys, the mouse and chat, `shared()`, per-player programs. |
 
 ### Examples
 
@@ -1159,6 +1284,25 @@ program(() => {
 });
 ```
 
+**A heal that each Marine gets once every ten seconds.** A `Map` keyed by units keeps a
+number for each of them; a unit that has died reads as no unit in the loop over the map,
+which is where its entry is deleted.
+
+```ts
+program(() => {
+  const wait = new Map<Unit, number>();
+  while (true) {
+    for (const u of unitsAt(locations.Hill, { owner: P1, type: units.TerranMarine })) {
+      if (!wait.has(u)) { u.heal({ percent: 100 }); wait.set(u, 10); }
+    }
+    for (const [u, left] of wait) {
+      if (!u || left <= 1) wait.delete(u); else wait.set(u, left - 1);
+    }
+    sleep(seconds(1));
+  }
+});
+```
+
 **A map that already has triggers.** Open TrigScript and press **Import map triggers**:
 every hand-made trigger comes back as a `trigger()` call in its order, and applying the
 script replaces the whole list with what it makes. From there a repeated trigger becomes
@@ -1213,11 +1357,16 @@ Inside a program:
 | --- | --- |
 | `program(body, options?)` | Code that runs in the game; the map then needs StarCraft: Remastered. The one option is `owner`: a player, `AllPlayers`, a force, or a list — the last three run it once per player. |
 | `game(fn)` | A function that runs in the game, for programs to call; it can live in any file and be imported. |
-| `let n = 0`, `let f = false`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a unit of the game, a record of them. `const` is a value worked out when the script is applied, when it can be. |
+| `let n = 0`, `let f = false`, `let s = ""`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a text, a unit of the game, a record of them. `const` is a value worked out when the script is applied, when it can be. |
 | `u8`, `u16`, `u32` | The declared range of a number variable that is never below zero: `let lives: u8 = 3` stops at 0 and at 255; a `u32` wraps at 4 294 967 295. A plain `number` is signed. |
 | `u32(x)`, `i32(x)` | The same 32 bits read the other way, for where a `u32` meets a plain number. |
-| `number[]`, `boolean[]`, `{ … }[]`, `Unit[]` | An array of a program; one that is pushed to grows. `push`, `pop`, `length`, `for…of`; of numbers and booleans also `fill`, `includes`, `indexOf`. |
+| `number[]`, `boolean[]`, `string[]`, `{ … }[]`, `Unit[]`, `number[][]` | An array of a program; one that is pushed to grows. `push`, `pop`, `length`, `for…of`; of numbers and booleans also `fill`, `includes`, `indexOf`. |
+| `forEach`, `some`, `every`, `find`, `findIndex`, `reduce`, `map`, `filter`, `sort`, `reverse` | The array methods that take a function, on arrays and on the units of the game (`unitsOf(P1).filter(…)`). The function is written where it is used. |
+| `slice`, `concat`, `toSorted`, `toReversed`, `Array.from`, `[...xs]` | Copies: a new array that grows. |
+| `const { x, y } = p`, `const [a, ...rest] = xs`, `[a, b] = [b, a]`, `{ ...p, y: 9 }` | Patterns and spread, in declarations, `for…of`, parameters and assignments. |
+| `class`, `new`, `extends`, `get` / `set`, `static` | Classes declared inside the program. An instance is a record; its class is settled when the script is applied. |
 | `Record<K, V>`, `Map<K, V>`, `Set<K>` | A table keyed by an id of the game (`UnitType`, `Player`, `Location`, …): a cell for every id. |
+| `Map<number, V>`, `Set<number>`, `Map<Unit, V>`, `Set<Unit>` | A table over any number, or over units: keys in the order they went in; values are numbers or booleans. |
 | `shared(value)` | In a per-player program, one value for all the players instead of one each. |
 | `sleep(duration)` | Give the frame back and carry on later. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
 | `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
@@ -1236,15 +1385,16 @@ Inside a program:
 | `chatted(p, pattern)` | `null`, or the values of a typed line: `{n}` a number, `{what:unit}` a unit type, `{kind:ore|gas}` a word's place in its list. |
 | `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with the program's numbers, a player's name and the colour code of their colour in it, for the current player. |
 | `print(text, { to?, position? })` | The same for another player, `AllPlayers` or a force, in the `"chat"` area or the `"center"` line. |
+| `string`: `+`, `+=`, `==`, `<`, `length`, `s[i]`, `slice`, `indexOf`, `includes`, `startsWith`, `endsWith`, `padStart`, `padEnd`, `repeat`, `String(n)`, `for (const ch of s)` | A text as a value. The objectives, a leaderboard's label, a transmission and a unit type's name take one the program made. |
 | `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs`, the bitwise operators | Work on variables. `Math.floor` and its siblings are accepted around a division and change nothing, since division is whole. |
 | `wait(ms)` | The game's own Wait: allowed, stalls every trigger of the player, so prefer `sleep`. |
 
 What a program cannot do:
 
 - Play on a version of the game before Remastered. `trigger()` does; a program does not.
-- A location or a player is fixed when the script is applied — also in a read — and so is
-  every text but `displayText`'s and `print`'s; only the amounts, the counts and an
-  action's unit type, as listed above, can follow a variable.
+- A location or a player is fixed when the script is applied — also in a read; only the
+  amounts, the counts, an action's unit type and the texts listed above can follow a
+  variable. A sound's path or the next scenario's name is a text written in the script.
 - Know that a key is being held, or read a key on a version before Remastered: the game
   reports each press once.
 - A condition's own amount cannot be a variable — the game compares a quantity with a
@@ -1252,13 +1402,23 @@ What a program cannot do:
 - Move a unit by writing where it is, cloak it, or change one unit's speed: the game ends
   at a position write and showed nothing for the other two, so they are not offered.
   `order()` and the Move Unit action move units; `stats(type).speed` is a type's speed.
-- Keep a text: text is shown, not stored, and a boolean has no text of its own.
+- A boolean has no text of its own (`${alive ? "yes" : "no"}`), and a text has no `split`,
+  `replace`, `trim` or `parseInt`.
+- Fractions: every number is whole. `Math.sqrt` and the rest of `Math` beyond `min`, `max`
+  and `abs` work on what the script knows, not on a variable: look the value up in a list
+  the script worked out.
+- Keep a function in a variable, an array or a return value; write `function`, or the arrow
+  where the method takes it. No `try` / `catch` / `throw` — the game has no exceptions — no
+  `async`, no generators, no `for…in`.
+- On an array: no `shift`, `unshift` or `splice`; `map` makes numbers or booleans, so push
+  texts or records in a `for…of`. A function does not return a record or an array it made:
+  hand it the one to fill in.
 - Loop for ever without a `sleep()`: the editor refuses it, since the game would freeze.
 - No function that calls itself and sleeps, none more than 1 024 calls deep unless the
   workspace's Settings raises it, no `for` unrolled more than 256 times (write a `while`),
   and no number past 2 147 483 647 either way (4 294 967 295 for a `u32`): it wraps.
-- A `Map` or a `Set` is keyed by ids of the game, not by numbers of your own; an array does
-  not hold arrays, and a record in one has numbers and booleans for fields.
+- A `Map` holds numbers or booleans, and a text is not a key: for anything more, keep the
+  place of a row of an array of records in it.
 - A program variable cannot reach a helper, a condition or an action, since those were
   computed when the script was applied.
 

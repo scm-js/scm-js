@@ -144,6 +144,26 @@
         opacity: 0.6;
       }
     </style>
+    <!--
+      Cloudflare Web Analytics: visits and referrers, no cookies. Only on the two hosted
+      sites — the same bundle is the release zip, the container image and the desktop app
+      (served from `scmjs://`), and none of those may report, so the switch is the
+      hostname rather than a build flag. A fork on its own domain matches nothing either.
+    -->
+    <script>
+      (function () {
+        var token = {
+          "editor.scmjs.dev": "84b275d150b84a8294f735b811518112",
+          "nightly.editor.scmjs.dev": "3411da8934ed49829502fc55b16ff84b",
+        }[location.hostname];
+        if (!token) return;
+        var s = document.createElement("script");
+        s.defer = true;
+        s.src = "https://static.cloudflareinsights.com/beacon.min.js";
+        s.setAttribute("data-cf-beacon", JSON.stringify({ token: token }));
+        document.head.appendChild(s);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

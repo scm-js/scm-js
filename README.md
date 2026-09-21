@@ -26,7 +26,9 @@ Three ways to run the editor:
 - **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest
   numbered release. There is nothing to install; your maps stay on your own disk, and nothing is
   sent anywhere unless you use a network feature - a copy kept on your scmjs.dev account, or a
-  question for the AI, both described further down. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
+  question for the AI, both described further down. The hosted editor, the nightly and the
+  documentation site count visits with Cloudflare Web Analytics (no cookies, and nothing about
+  your maps); the desktop app and a copy you host yourself do not. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
   every night from the latest changes, for trying what is in development; being a separate site
   it keeps its own settings and asks for the graphics again.
 - **As a desktop app.** The [releases](../../releases) page has installers for Windows,

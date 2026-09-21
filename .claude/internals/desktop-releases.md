@@ -83,6 +83,16 @@ preferences, plugins and recents rather than writing a stored shape the stable b
 Repository variables `PAGES_BASE` (`/` for a custom domain; when it is not `/` the `web` job builds
 a second time for Pages) and `NIGHTLY_DOMAIN`, secret `NIGHTLY_PAT` (Contents: write on
 `<owner>/nightly`, the `PLUGIN_API_PAT` shape); the nightly deploy skips with a notice without them.
+**Analytics** are Cloudflare Web Analytics only (visits, referrers, countries, load timings; no
+cookies, no events): an inline script in `index.html` loads the beacon when `location.hostname` is
+`editor.scmjs.dev` or `nightly.editor.scmjs.dev`, each with its own token, and
+`scripts/lib/docs/render.mjs` does the same for `docs.scmjs.dev`. The switch is the hostname and not
+a build flag because the stable Pages site *is* the release zip, the container image and the desktop
+bundle (`scmjs://`), and none of those may report. Decided 2026-09-21: no editor event counter
+(saves, errors, versions) until someone needs the answer. The "real users" figure is the game data
+forwarder's own count of `HEAD /StarEdit.zip` (one per install started, web only — the desktop goes
+to Blizzard directly), written to its Analytics Engine dataset. The site's privacy page has to
+keep saying what is counted.
 A `v*` tag also pushes the **container image**: the `image` job downloads the `web` job's own zip,
 unzips it and builds `docker/Dockerfile` (nginx + `docker/nginx.conf`, no `RUN` step, so
 `linux/amd64,linux/arm64` is one buildx manifest and needs no QEMU) to `ghcr.io/<repo>` as `latest`,

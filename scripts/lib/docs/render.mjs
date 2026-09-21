@@ -54,6 +54,22 @@ export function codeBlock(code, opts) {
 }
 
 /**
+ * Cloudflare Web Analytics for docs.scmjs.dev: visits and referrers, no cookies. Keyed on
+ * the hostname, as the editor's is in `index.html`, so a fork's docs site or a local
+ * `build:docs` preview reports nothing.
+ */
+const BEACON = `<script>
+(function () {
+  if (location.hostname !== "docs.scmjs.dev") return;
+  var s = document.createElement("script");
+  s.defer = true;
+  s.src = "https://static.cloudflareinsights.com/beacon.min.js";
+  s.setAttribute("data-cf-beacon", '{"token": "f8c64ccade704612a5f2b8fe8194e363"}');
+  document.head.appendChild(s);
+})();
+</script>`;
+
+/**
  * The shell. `nav` is the whole site's tree with the current page marked, so every page
  * carries the same sidebar and nothing has to be generated per section.
  */
@@ -71,6 +87,7 @@ export function page({ title, description, url, body, nav, toc = "", version = "
 <meta property="og:type" content="website">
 <link rel="icon" href="${base}/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${base}/docs.css">
+${BEACON}
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>

@@ -338,6 +338,17 @@ const SCENES = [
     const dlg = await p.page.locator(".dlg").last().boundingBox();
     await p.take("trigscript-simulate", { x: dlg.x, y: head.y - 72, width: dlg.width, height: dlg.y + dlg.height - (head.y - 72) }, { lossless: true });
 
+    // Tests: the script with two of its own, one of which fails, the Testing view open and the failing one chosen.
+    await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: TRIGSCRIPT_TESTS });
+    await p.page.locator(".tsd-statusbar", { hasText: /1 failed/ }).waitFor({ timeout: 30_000 });
+    await p.page.locator('.tsd-activity button[title="Testing"]').click(); await p.wait(400);
+    await p.page.locator(".tsd-sidebar .tsd-rows li", { hasText: "second wave" }).click(); await p.wait(600);
+    const failing = TRIGSCRIPT_TESTS.split("\n").findIndex((l) => l.includes("toBe(7)")) + 1;
+    await p.monaco((monaco, ed) => { ed.revealLineInCenter(globalThis.__line); ed.setPosition({ lineNumber: globalThis.__line, column: 1 }); }, { __line: failing }); await p.wait(600);
+    await p.dialog("trigscript-tests");
+    await p.page.locator('.tsd-activity button[title="Explorer"]').click(); await p.wait(300);
+    await p.monaco((monaco, ed) => { ed.getModel().setValue(globalThis.__text); }, { __text: TRIGSCRIPT }); await p.wait(2500);
+
     // Apply, then close by the title strip: the workspace has no footer.
     await p.page.keyboard.press("Control+Shift+KeyB");
     await p.page.locator(".tsd-statusbar", { hasText: /triggers? at #/ }).waitFor({ timeout: 30_000 });
@@ -411,6 +422,27 @@ program(() => {
     sleep(frames(1));
   }
 }, { owner: AllPlayers });
+`;
+
+/**
+ * The same script with two tests of its own, for the Tests picture. The first passes: the
+ * waves come and, once the test has killed them (nothing fights in the simulator), the
+ * map is won. The second expects one Hydralisk too many, so the picture has a failure in it.
+ */
+const TRIGSCRIPT_TESTS = `import { test, expect } from "trigscript";
+
+${TRIGSCRIPT}
+test("the map is won when the last wave is dead", (sim) => {
+  sim.seconds(13);
+  expect(sim.count(P8, units.AnyUnit)).toBe(16);
+  for (const unit of sim.units({ owner: P8 })) sim.kill(unit);
+  sim.until(() => sim.printed().includes("The last wave is broken."), 240);
+});
+
+test("the second wave is six Hydralisks", (sim) => {
+  sim.seconds(9);
+  expect(sim.count(P8, units.ZergHydralisk, locations.Spawn)).toBe(7);
+});
 `;
 
 /**

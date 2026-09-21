@@ -6,7 +6,7 @@
  * stopped compiling after a language change would only be found by the reader who
  * pasted it. So every fenced `ts` block in the section is compiled here with the
  * plugin's real compiler, against a map that has the locations the section says it
- * assumes.
+ * assumes. An example that carries a `test()` has its tests run too, and they pass.
  *
  * The compiler is the vendored default's (`plugins/trigscript/`, written by
  * `scripts/vendor-plugins.mjs` at the pinned version), so the examples are checked
@@ -53,8 +53,12 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
     expect(blocks.length).toBeGreaterThan(8);
     const failures: string[] = [];
     for (const { line, code } of blocks) {
-      const result = compileScript(ts, { "main.ts": code }, names, { lib });
+      // An example that carries a test() is also run: each location a box of its own, side by side.
+      const tests = /\btest\(/.test(code) ? { world: { locations: Object.fromEntries(names.locations.entries.map((e: { value: number }) => [e.value, { left: e.value * 1000, top: 0, right: e.value * 1000 + 200, bottom: 200 }])) } } : undefined;
+      const result = compileScript(ts, { "main.ts": code }, names, { lib, ...(tests ? { tests } : {}) });
       for (const d of result.diagnostics) failures.push(`README.md:${line} (${d.file}:${d.line}) ${d.message}`);
+      if (tests && !result.tests?.results.length) failures.push(`README.md:${line}: the example's tests did not run`);
+      for (const t of result.tests?.results ?? []) if (t.status === "failed") failures.push(`README.md:${line}: the test "${t.id}" fails: ${t.message}`);
       // A trigger() is a trigger of the map; a program() is IR, built into the saved file by the eudplib plugin.
       if (result.diagnostics.length === 0 && result.triggers.length === 0 && (result.ir?.length ?? 0) === 0) failures.push(`README.md:${line}: the example makes neither a trigger nor a program`);
     }

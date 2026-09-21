@@ -530,10 +530,15 @@ involves any of that.
 ### Opening the script
 
 Triggers ▸ TrigScript… opens the map's script in a window laid out the way VS Code is,
-with the same keys. The **Explorer** on the left holds the script's files — `main.ts` is
-where the script starts, the *New file* icon adds another, and a file's pencil and bin
-rename and remove it — and, under them, the script's programs with their variables. Open
-files are tabs over the code, and the icons right of the tabs are what you run: **Test**
+with the same keys. The **Explorer** on the left holds the script's files as a tree —
+`main.ts` is where the script starts, the *New file* and *New folder* icons add to it, and
+a row's pencil and bin rename and remove it — and, under them, the script's programs with
+their variables. A file or a folder is moved by dragging it onto a folder, or by renaming
+it with a folder before its name, and the `import`s that pointed at what moved are
+rewritten with it; the notice that says so has an **Undo**. No folder means anything to
+TrigScript: `tests/` is a habit, not a rule. The strip at the far left switches the
+sidebar between the Explorer and **Testing**, the script's [own tests](#tests). Open
+files are tabs over the code, and the icons right of the tabs are what you run: **Play**
 (F5), **Simulate** (Ctrl+F5), **Apply** (Ctrl+Shift+B), *Pick from map*, the switch to
 [beside the map](#beside-the-map), and **…** for the rest. F1 lists every command. Edits
 are saved into the map as you type — the files are members of the map archive, like a
@@ -558,9 +563,9 @@ from the last script that worked, and a notice names the file and the line.
 
 **Apply** does the first half when you ask, which is how to look at the triggers in the
 Trigger Editor without saving; the status bar says whether the script's triggers are in
-the map, and a click there applies it as well. **Test** applies the script, builds the map
-exactly as Save would and hands it to [Test Map](#test-map). What each of them reported
-is kept under **Output**.
+the map, and a click there applies it as well. **Play** applies the script, builds the map
+exactly as Save would and hands it to [Test Map](#test-map), which starts it in the game.
+What each of them reported is kept under **Output**.
 The Trigger Editor shows the script's triggers with a `script` badge and will not edit
 them; *Open TrigScript* there jumps to the file and line that made one. The Text Trigger
 Editor fences them in comments. Hand-made triggers around the block are left alone, and a
@@ -582,8 +587,14 @@ script.
 built-in interpreter and lists, under the code, every action that ran, with its frame and
 the source line, and the final value of every program variable. Triggers and programs run side by side in
 one world, so a death count a program sets is seen by a trigger. It models death
-counters, switches, preserve, list order and the game's arithmetic; unit conditions
-answer "false", so it is a check on the logic, not on the units.
+counters, switches, preserve, list order, the game's arithmetic and the map's players —
+a program or a trigger of a force runs for each of its players, and each line says whose
+it is — and it has units: the ones placed on the map to start with, then whatever
+`createUnit` makes, `giveUnits` hands over, `moveUnit` moves and `killUnitAt` kills, which
+`bring` and `command` count. What it cannot know without the game it leaves out: nothing
+walks, nothing fights and nothing is built, so no unit dies unless the script kills it. A
+script that waits for the enemy to be dead waits for ever here. It is a check on the
+logic; the fight is what [tests](#tests) stand in for, and Play is for.
 
 ![Simulate: the script's actions, each with its frame and line](docs/images/trigscript-simulate.webp)
 
@@ -602,6 +613,75 @@ The files and a record of the last apply live in the map archive under `trigscri
 the `.scx`. The [Save dialog](#saving) lists them under the archive's other files, each
 with a tick, so a copy for release can leave the source out; the triggers stay either
 way.
+
+### Tests
+
+A script can test itself. A test is ordinary TypeScript that runs here, in the simulator,
+after every change that compiles. It never runs in the game and adds nothing to the map.
+If you have used Vitest or Jest, the names are the same ones — `test`, `describe`,
+`beforeEach`, `test.only`, `test.skip`, `test.each`, `expect` — imported from
+`"trigscript"`.
+
+```ts
+import { test, expect } from "trigscript";
+
+// A Marine on the beacon calls the next wave, each bigger than the last.
+program(() => {
+  let wave = 0;
+  while (true) {
+    if (countUnits(P1, units.TerranMarine, locations.Beacon) > 0) {
+      wave += 1;
+      createUnit(P8, units.ZergZergling, wave * 4, locations.Spawn);
+      print(`Wave ${wave}`);
+      killUnitAt(P1, units.TerranMarine, "All", locations.Beacon);
+    }
+    sleep(frames(1));
+  }
+}, { name: "waves" });
+
+test("the second wave is bigger", (sim) => {
+  sim.place(P1, units.TerranMarine, locations.Beacon);
+  sim.until(() => sim.program("waves").wave === 1);
+  sim.place(P1, units.TerranMarine, locations.Beacon);
+  sim.until(() => sim.program("waves").wave === 2);
+  expect(sim.count(P8, units.ZergZergling, locations.Spawn)).toBe(12);
+  expect(sim).toHavePrinted("Wave 2");
+});
+```
+
+Every test gets `sim`, a world of its own: the map's placed units, locations and players,
+the script's programs at their first frame and its triggers beside them, and the same
+`random()` every run. What a test does with it:
+
+| | |
+| --- | --- |
+| `sim.place(player, type, location, count?)`, `sim.kill(unit)`, `sim.remove(unit)`, `sim.give(unit, to)`, `sim.move(unit, to)` | Change the world. `place` hands the units back; `kill` is what a fight is in a test. |
+| `sim.frames(n)`, `sim.seconds(n)`, `sim.until(() => …)` | Let the game run. `until` fails the test if it is still not true after 2400 frames, so no test hangs. |
+| `sim.press("F2")`, `sim.click()`, `sim.type("-give 100")`, `sim.moveMouse(x, y)` | What a player does, found by the next frame. |
+| `sim.count(player, type, location?)`, `sim.units(filter?)`, `sim.resources(player)`, `sim.deaths(player, type)`, `sim.switch(n)` | Read the world back. |
+| `sim.program("waves").wave` | A program's variables by their names in the code: numbers, texts, arrays, a record as an object. The program is named by its options, `program(() => { … }, { name: "waves" })`; of a program that runs for several players, `sim.program("lives", P2)`. |
+| `sim.printed()`, `expect(sim).toHavePrinted("Wave 2")` | What was shown to the players. |
+
+A test fails when an `expect` does not hold, when it throws, and when a program does what
+is always a mistake and the game would pass over in silence, such as reading past the end
+of an array. A test that means to see that says `expect(sim).toHaveFaulted()`.
+
+Tests live beside what they test, as above, or in files whose name ends in `.test.ts`, in
+any folder. A test file can `import` the script's own functions and test them as plain
+TypeScript. It is never part of the map: `main.ts` cannot import one, and a `trigger()` or
+a `program()` inside one is an error.
+
+![A failing test: the mark in the margin, what was expected at the end of the line, and the Testing view](docs/images/trigscript-tests.webp)
+
+In the editor, every `test(` has a mark in the margin — passed, failed, not run — and a
+click on it runs that test. A failure is said where it happened, `expected 7, got 6` at
+the end of the line. The **Testing** view lists the tests by folder, file and `describe`,
+runs all of them, one of them or the ones that failed, and can show only the failing; the
+status bar keeps the count, and **Test Results** under the code has the chosen test's
+message, what it printed and what happened frame by frame. Tests run again by themselves
+after each change that compiles. A failing test is a warning, not an error: the map still
+saves and builds. **Settings ▸ Tests** has a tick, kept in the map, that makes a failing
+test refuse the build instead.
 
 ### Beside the map
 

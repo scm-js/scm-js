@@ -433,3 +433,20 @@ gaps, mended in the release: a loop emptied by the *value* of `pop()` was refuse
 `for`'s update was refused, and `names.pop() ?? other` of an empty array of texts gave "" — the last changed the IR a
 text pop emits (a `textTernary` on the length), built through eudplib but not replayed in the game. Next is slice 9,
 `test()` and the debugger.
+
+**TrigScript 3.10 (2026-09-20)** is slice 9, which changed nothing of the language and needed no probe (nothing reaches
+the Python): **folders in the Explorer** (`tree.ts`: the files as a tree; a move rewrites the imports that pointed at
+what moved, with an Undo on the notice), **a simulated world with units and players** (`compiler/world.ts`, shared by
+the trigger interpreter and the programs': `createUnit` makes units, the unit actions act on them, `bring` / `command`
+count them, a reused place of the unit table has another uniqueness byte; with the map's player settings a program or a
+trigger of a force runs for each of its players — so Simulate of a script that waits for the enemy to die now waits,
+where unit conditions used to be false) and **`test()`** (`compiler/testing.ts`: Vitest's names, imported from
+`"trigscript"` and never globals; a world of its own per test as `sim`; run in the compile worker after a compile that
+went through, the report plain data; margin marks, the failure at its line, a Testing view in a new activity bar, Test
+Results, a per-map setting that lets a failing test refuse the build). **Test (F5) became Play (F5)**, the user's
+decision, and a program takes a `name`. 3.10.1 the same day: what several players did alike in a frame is one Simulate
+row (`P1–P8 · …`) — found when the guide's Simulate picture, on an eight-player map, no longer held the waves. The guide
+has a *Tests* part and a sixth picture (`trigscript-tests`, a second script `TRIGSCRIPT_TESTS` in
+`scripts/guide-screenshots.mjs`); all six were taken again because the workspace gained the activity bar.
+`tests/trigscript-guide.test.ts` now runs the tests inside an example that has any, so it needs the vendored plugin at
+3.10.0 or later.

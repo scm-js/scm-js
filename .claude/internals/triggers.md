@@ -50,7 +50,8 @@ editor: it was moved out (as "Trigger Script", 2026-09-03) so the editor no long
 second TypeScript (the desktop download lost ~14 MB of the 18 MB those chunks weighed), and rewritten
 on 2026-09-07 as TrigScript: the script is ordinary TypeScript that *runs* when built (files, imports,
 helpers, the standard library), recording one trigger per `trigger()` call, and only `program(() => …)`
-bodies are compiled — into the same death-counter state machine as before. Its README documents the
+bodies are compiled — since TrigScript 3.0.0 (2026-09-18) into an IR that the eudplib plugin builds into the saved map
+(Remastered only; the death-counter state machine is gone). Its README documents the
 language and its internals. What stays here is generic:
 
 - `api.triggers.claim(spec)` (`host.ts`, `pluginTriggerClaimsAtom`, `plugins/claims.ts`): a plugin

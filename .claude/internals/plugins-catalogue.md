@@ -450,3 +450,12 @@ has a *Tests* part and a sixth picture (`trigscript-tests`, a second script `TRI
 `scripts/guide-screenshots.mjs`); all six were taken again because the workspace gained the activity bar.
 `tests/trigscript-guide.test.ts` now runs the tests inside an example that has any, so it needs the vendored plugin at
 3.10.0 or later.
+
+**3.10.2 (2026-09-20), after an outside review (`~/trigScriptReport.md`):** the variable hover says what a number is
+(`describeVariable` — it still said "never below 0", false since 3.5); **the compile never runs on the main thread** —
+blob module, then a fresh worker on the release's `dist/compiler.js`, then `CompilerUnavailable` with a 5 s memory, where
+there used to be a main-thread fallback that an endless build-time loop could freeze; a TrigScript fetched as its one
+built bundle (a registry install, not this compiled-in default) handed its worker a blob with no `compileScript` in it
+and every compile failed — the worker now reports that as fatal and the bundle route takes over; a failed Save build
+reads *Saved without its programs* and a good one *edited since* once the script changes. The shared plugin CI gained
+an `artifacts` input so `dist/compiler.js` is compared with its source at a tag as `dist/plugin.js` is.

@@ -78,6 +78,14 @@ always-on tier is tens of lines a session, so it cuts nothing in the ordinary ca
 on verbose and on error floods. The console's own Copy stays uncapped — that is the
 deliberate hunter's path, and Save… has no paste to fit inside.
 
+**Help ▸ Report an Issue… fills the form in.** `issueUrl` builds `issues/new?body=` from
+the three questions, the header and the log in a fence longer than any backtick run in it.
+A link is the tight limit here, not the 65536-character body: GitHub refuses a new-issue URL
+a little over 8 KB, so `ISSUE_URL_LIMIT` is 7500 characters of *encoded* URL. Encoding
+inflates by a factor that depends on the text (a Korean map name triples), so it shrinks the
+budget by the overflow and retries rather than guessing one; if not even one entry fits, the
+header goes alone with a "left out" line. Copy Bug Report stays beside it for the long log.
+
 **Stacks are scrubbed on the way out, not on the way in.** `e.stack` is the one long string
 an entry may hold and the third door a user's own name can reach a shared log through, after
 the map path and the user agent: a desktop frame is `file:///C:/Users/<name>/…`.

@@ -28,7 +28,7 @@ import {
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
-import { BUG_REPORT_BUDGET, formatLog, logDropped, logEntries } from "../../editor/log";
+import { BUG_REPORT_BUDGET, formatLog, issueUrl, logDropped, logEntries } from "../../editor/log";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
@@ -180,6 +180,17 @@ function useMenus(): Menu[] {
       () => setStatus(t("Bug report copied — the build, the game data source, the plugins and the log.")),
       () => setStatus(t("The browser did not allow copying; open View ▸ Debug Console and save the log instead.")),
     );
+  };
+  // The same report, inside the issue form: the build, the plugins and as much of the log
+  // as a link will carry, under the three questions a report has to answer.
+  const reportIssue = () => {
+    const intro = [
+      t("**What did you do?**"), "", "",
+      t("**What did you expect to happen?**"), "", "",
+      t("**What happened instead?**"), "", "",
+      t("**The bug report** (Help ▸ Copy Bug Report copies a longer log if this one was cut)"),
+    ].join("\n");
+    window.open(issueUrl(`${REPO_URL}/issues/new`, intro, logEntries(), diagnostics, logDropped()), "_blank", "noopener,noreferrer");
   };
   const store = useStore();
   const desktop = desktopBridge();
@@ -453,9 +464,9 @@ function useMenus(): Menu[] {
         link(msg("Documentation"), `${REPO_URL}#readme`),
         sep,
         // The whole of a bug report: the build, the game data source, the plugins and the
-        // log. Beside Report an Issue, which is where it is pasted.
+        // log. Report an Issue fills the form with it; this is for a log too long for a link.
         { kind: "item", label: msg("Copy Bug Report"), onSelect: copyBugReport },
-        link(msg("Report an Issue…"), `${REPO_URL}/issues/new`),
+        { kind: "item", label: msg("Report an Issue…"), onSelect: reportIssue },
         sep,
         dlg(msg("About scmJS…"), "about"),
       ],

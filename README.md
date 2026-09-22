@@ -2099,6 +2099,11 @@ app, where the game data came from, the map's size and tileset, and the plugins 
 versions — ready to paste into an issue. A long session is trimmed to its most recent lines
 so the paste fits in an issue; when it is, it says so.
 
+**Help ▸ Report an Issue…** opens a new issue on GitHub with the same report already in
+it, under three questions to answer: what you did, what you expected, and what happened. A
+link carries less than a paste, so the log in it is cut to its last few dozen lines; if the
+lines you need are older, use **Copy Bug Report** and paste over it.
+
 The console's own **Copy** does the same thing without the trim, and **Save…** writes it to
 a file. All three name the map *file* you have open, the plugins you have installed and the
 build you are running — nothing else about you, and never the folder the map is in.

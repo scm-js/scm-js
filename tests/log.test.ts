@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  baseName, BUG_REPORT_BUDGET, clearLog, formatData, formatEntry, formatLog, log, logDropped,
+  baseName, BUG_REPORT_BUDGET, clearLog, formatData, formatEntry, formatLog, ISSUE_URL_LIMIT, issueUrl, log, logDropped,
   logEntries, logError, LOG_CAPACITY, resetLogForTests, scrubFrame, stamp, subscribeLog,
 } from "../src/editor/log";
 import { diagnosticsHeader, shortAgent } from "../src/editor/diagnostics";
@@ -295,5 +295,41 @@ describe("the diagnostics header", () => {
     });
     expect(text).toContain("  Repair 1.2.0 — active");
     expect(text).toContain("  TrigScript — error: The fetch failed.");
+  });
+});
+
+describe("issueUrl", () => {
+  const NEW = "https://github.com/scm-js/scm-js/issues/new";
+  const body = (url: string) => new URL(url).searchParams.get("body") ?? "";
+
+  it("puts the questions, the header and the log in the body", () => {
+    log("info", "app", "opened map.scx");
+    const text = body(issueUrl(NEW, "**What did you do?**", logEntries(), "scm-js 0.1.0 · browser"));
+    expect(text.startsWith("**What did you do?**\n\n```text\nscm-js 0.1.0 · browser")).toBe(true);
+    expect(text).toContain("app: opened map.scx");
+    expect(text.trimEnd().endsWith("```")).toBe(true);
+  });
+
+  it("stays under the limit, keeping the newest entries and the header", () => {
+    for (let i = 0; i < 500; i++) log("info", "app", `line ${i} ${"x é".repeat(40)}`);
+    const url = issueUrl(NEW, "intro", logEntries(), "HEADER", 0);
+    expect(url.length).toBeLessThanOrEqual(ISSUE_URL_LIMIT);
+    const text = body(url);
+    expect(text).toContain("HEADER");
+    expect(text).toContain("line 499 ");
+    expect(text).toMatch(/… \d+ earlier entries left out/);
+  });
+
+  it("sends the header alone when one entry will not fit", () => {
+    log("info", "app", "y".repeat(20_000));
+    const text = body(issueUrl(NEW, "intro", logEntries(), "HEADER"));
+    expect(text).toContain("HEADER");
+    expect(text).not.toContain("yyyy");
+    expect(text).toContain("… 1 entry left out");
+  });
+
+  it("uses a fence the log cannot close", () => {
+    log("info", "app", "a ```` run");
+    expect(body(issueUrl(NEW, "", logEntries()))).toContain("`````text");
   });
 });

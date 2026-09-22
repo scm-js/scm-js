@@ -318,6 +318,39 @@ export function formatLog(entries: readonly LogEntry[], header = "", droppedCoun
 }
 
 /**
+ * Characters in a new-issue link, all of it. GitHub turns a longer one away rather than
+ * trimming it, and the limit sits a little above 8000; this leaves room under it.
+ */
+export const ISSUE_URL_LIMIT = 7500;
+
+/**
+ * A GitHub new-issue link with the body filled in: `intro` (the questions a reporter
+ * answers) and then the report in a code block. A link is far smaller than a paste, so the
+ * log is cut to what fits — newest kept, the header never cut — and `formatLog`'s "left
+ * out" line says where the rest is. When not even one entry fits, the header goes alone.
+ */
+export function issueUrl(
+  newIssue: string, intro: string, entries: readonly LogEntry[], header = "", droppedCount = 0, limit = ISSUE_URL_LIMIT,
+): string {
+  const build = (report: string): string => {
+    // A fence longer than any run of backticks in the report, so a log line cannot close it.
+    const longest = Math.max(0, ...(report.match(/`+/g) ?? []).map((r) => r.length));
+    const fence = "`".repeat(Math.max(3, longest + 1));
+    return `${newIssue}?body=${encodeURIComponent(`${intro}\n\n${fence}text\n${report}${fence}\n`)}`;
+  };
+  let budget = limit;
+  while (budget > 0) {
+    const url = build(formatLog(entries, header, droppedCount, budget));
+    if (url.length <= limit) return url;
+    // Encoding grows text by a varying amount, so shrink by what overflowed and try again.
+    budget = Math.floor(budget * (limit / url.length) * 0.9);
+  }
+  const n = droppedCount + entries.length;
+  const alone = build(`${header ? `${header}\n\n` : ""}… ${n} ${n === 1 ? "entry" : "entries"} left out — View ▸ Debug Console ▸ Save… writes the whole log\n`);
+  return alone.length <= limit ? alone : `${newIssue}?body=${encodeURIComponent(intro)}`;
+}
+
+/**
  * A file's name without the folders in front of it. Desktop paths carry the user's own
  * name, and a log is written to be shared; nothing here needs the rest of the path.
  */

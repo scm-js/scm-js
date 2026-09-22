@@ -237,7 +237,7 @@ short bands of the palette every eight game frames, about a third of a second at
 Fastest speed. The band tables per tileset are the game's own; Space Platform and
 Installation have none. The editor keeps a second small atlas of just the megatiles that
 touch those bands and redraws it on each step. View ▸ Animate Water turns it on, and
-Preferences ▸ Display sets the speed from a quarter to four times the game's. The minimap
+Preferences ▸ View sets the speed from a quarter to four times the game's. The minimap
 and the far zoom levels, which draw average tile colours, do not animate.
 
 ## How units are drawn
@@ -265,7 +265,7 @@ them.
 
 Placed units run their idle animations when View ▸ Animate Units is on. Every unit's
 script is stepped once per game frame, 42 ms at Fastest, on the same clock as the water,
-and Preferences ▸ Display scales the rate on its own.
+and Preferences ▸ View scales the rate on its own.
 
 Each unit is a stack of images, shadow, body and overlays, each with its own script.
 Buildings play their *Built* animation; tanks and Goliaths play *StarEditInit*,

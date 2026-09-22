@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Grid3x3, Maximize, ScrollText } from "lucide-react";
-import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
+import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Maximize, ScrollText } from "lucide-react";
+import { mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
 import { changeTilesetAtom, commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { ensureTileset, TILESET_FILENAMES } from "../../formats/tileset/load";
-import { gridLookAtom, type GridStyle } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
 import { useTileset } from "../../hooks/useTileset";
@@ -338,54 +337,6 @@ export function MapRevisionDialog({ entry }: DialogProps) {
           </tbody>
         </table>
         <p className="hint" style={{ marginTop: 6 }}>{t("Sections the editor does not model are written back byte for byte whatever the revision.")}</p>
-      </Group>
-    </DialogFrame>
-  );
-}
-
-/* ── Grid Settings ──────────────────────────────────────── */
-
-/** View ▸ Grid Settings: spacing, the grid's look (persisted) and what snaps to it. */
-export function GridSettingsDialog({ entry }: DialogProps) {
-  const [size, setSize] = useAtom(gridSizeAtom);
-  const [look, setLook] = useAtom(gridLookAtom);
-  const [locationSnap, setLocationSnap] = useAtom(locationSnapAtom);
-  const [doodadPlacement, setDoodadPlacement] = useAtom(doodadPlacementAtom);
-  const [local, setLocal] = useState(size);
-  const [localLook, setLocalLook] = useState(look);
-  const [snapLocations, setSnapLocations] = useState(locationSnap !== 0);
-  const [snapDoodads, setSnapDoodads] = useState(doodadPlacement.snapToGrid);
-  const apply = () => {
-    setSize(local);
-    setLook(localLook);
-    setLocationSnap(snapLocations ? local : 0);
-    if (doodadPlacement.snapToGrid !== snapDoodads) setDoodadPlacement({ ...doodadPlacement, snapToGrid: snapDoodads });
-  };
-  return (
-    <DialogFrame dialogKey={entry.key} title={t("Grid Settings")} icon={<Grid3x3 size={14} />} size="sm" onOk={apply} showApply>
-      <Group title={t("Grid")}>
-        <div className="form">
-          <Field label={t("Spacing")}>
-            <Select value={String(local)} onChange={(e) => setLocal(Number(e.target.value) as typeof size)} options={[{ value: "8", label: t("8 px (mini-tile)") }, { value: "16", label: t("16 px") }, { value: "32", label: t("32 px (tile)") }, { value: "64", label: t("64 px") }, { value: "128", label: t("128 px (isometric)") }]} />
-          </Field>
-          <Field label={t("Colour")}>
-            <div className="row">
-              <input type="color" className="input" value={localLook.color} onChange={(e) => setLocalLook({ ...localLook, color: e.target.value })} aria-label={t("Grid colour")} />
-              <input type="range" min={0} max={100} value={localLook.opacity} onChange={(e) => setLocalLook({ ...localLook, opacity: Number(e.target.value) })} aria-label={t("Grid opacity")} />
-              <span className="mono hint" style={{ width: 36 }}>{localLook.opacity}%</span>
-            </div>
-          </Field>
-          <Field label={t("Style")}><Select value={localLook.style} onChange={(e) => setLocalLook({ ...localLook, style: e.target.value as GridStyle })} options={[{ value: "lines", label: t("Lines") }, { value: "dots", label: t("Dots") }, { value: "crosses", label: t("Crosses") }]} /></Field>
-        </div>
-      </Group>
-      <Group title={t("Snapping")}>
-        <div className="col" style={{ gap: 2 }}>
-          <Check className="wrap" label={t("Snap locations to the grid ({local} px)", { local })} checked={snapLocations} onChange={(e) => setSnapLocations(e.target.checked)} />
-          <Check className="wrap" label={t("Snap doodads to the two-tile isometric grid")} checked={snapDoodads} onChange={(e) => setSnapDoodads(e.target.checked)} />
-        </div>
-        <p className="hint" style={{ marginTop: 6 }}>
-          {t("Locations snap to the spacing above; the Locations palette can pick a different step. A doodad's snap is always the two-tile grid StarEdit places them on, whatever the spacing is — the same tick as the Doodads palette's. Units have their own “Snap to grid” in the Units palette; sprites are always placed by the pixel.")}
-        </p>
       </Group>
     </DialogFrame>
   );

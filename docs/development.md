@@ -119,7 +119,7 @@ The conventions that everything else follows. Each is explained in more depth in
 
 **State is Jotai, and there is one store.** No context providers, no Redux. Persisted
 settings are `atomWithStorage` atoms under keys starting with `scmjs.`, listed in
-Preferences ▸ Browser storage; every such key has to be registered in the reset table in
+Preferences ▸ Storage; every such key has to be registered in the reset table in
 `src/atoms/preferencesAtoms.ts`, and a test fails when one is not.
 
 **The scenario is mutated in place.** `scenarioAtom` holds the parsed `Scenario` that is
@@ -645,7 +645,7 @@ and when a canned answer no longer fits the map it is written for, change the mo
 
 The editor's own words — menus, dialogs, hints, Check Map's findings — can be shown in
 another language; a map's text is the map's and is never touched by this. English and
-Korean exist today, chosen in Preferences ▸ Display or following the browser. The
+Korean exist today, chosen in Preferences ▸ General or following the browser. The
 scheme is deliberately small and has no library behind it: the browser's own `Intl`
 does the parts that need data (plural rules, number formatting), and the rest is a
 hundred lines.

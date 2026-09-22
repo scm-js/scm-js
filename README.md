@@ -116,8 +116,8 @@ screen), a middle-button drag, or the scrollbars, or click on the minimap. A dra
 reaches the edge of the window scrolls the view along with it, so a stroke, a marquee or
 a unit being moved can carry on past what is on screen; it speeds up the further past the
 edge you push and stops when you let go. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
-Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings sets its
-size. The panels can be hidden from View ▸ Panels and their widths dragged.
+Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings (the
+Editing page of Preferences) sets its spacing, colour and style. The panels can be hidden from View ▸ Panels and their widths dragged.
 
 Every layer has its own selection and its own palette. Undo is Ctrl+Z, two hundred steps
 deep and shared across all the layers, so a terrain stroke and the units it stranded
@@ -1569,7 +1569,7 @@ at its right-hand end.
 The previews follow Remastered's rule, where a colour set on one line carries onto the
 next. StarCraft 1.16.1 reset the colour at every line break, so a string written before
 the remaster can draw in colours its author never chose; the *1.16.1 colours* tick (also
-in Preferences ▸ Display) switches every preview to the old rendering, and the Repair
+in Preferences ▸ View) switches every preview to the old rendering, and the Repair
 plugin offers to write the reset the old game used to supply.
 
 A map file does not say what encoding its text is in. StarEdit wrote whatever code page
@@ -2045,20 +2045,31 @@ F1 lists every shortcut. The ones worth knowing up front:
 
 ![Preferences](docs/images/preferences.webp)
 
-Preferences (Ctrl+,) are kept in the browser: the editor's language (English or Korean;
-the default follows the browser's, a change applies at once, and a map's own text is
-untouched by it), the splash
-screen, whether to ask before
-replacing a modified map (the same tick decides whether closing the tab or quitting the
-desktop app asks about unsaved changes), the tileset and size a new map starts with,
-whether water and units animate and how fast, Test Map's folder, what to do when an
-installed plugin has a newer version (a notice, nothing, or install it — see
-[docs/plugins.md](docs/plugins.md#keeping-a-plugin-up-to-date)), and — in the desktop app
-— whether to check for updates at startup. The grid, the snaps, the placement options,
-the panels and the recent files are remembered too. Its *Browser storage* box lists
-everything the editor keeps, one row per setting or cache, with a plugin's own data under
-its name; each row can be cleared on its own, or **Clear all data** throws the lot away.
-The map you have open is never kept there and is not touched by any of it.
+Preferences (Ctrl+,) are kept in the browser. The pages down the left:
+
+- **General** — the editor's language (English or Korean; the default follows the
+  browser's, a change applies at once, and a map's own text is untouched by it), the splash
+  screen, whether each map opens in its own tab, whether to ask before replacing a modified
+  map (the same tick decides whether closing the tab or quitting the desktop app asks about
+  unsaved changes), and the tileset and size a new map starts with. The desktop app adds
+  whether to check for updates at startup.
+- **Editing** — the grid's spacing, colour and style, and what snaps to it. View ▸ Grid
+  Settings opens this page.
+- **View** — whether water and units animate and how fast, and whether string previews
+  follow Remastered's colour rule or 1.16.1's.
+- **Testing** — Test Map's folder, and in the desktop app whether the game starts after
+  the map is written.
+- **Plugins** — what to do when an installed plugin has a newer version (a notice, nothing,
+  or install it — see [docs/plugins.md](docs/plugins.md#keeping-a-plugin-up-to-date)),
+  and a plugin's own settings when it has a page here.
+- **Storage** — where the game data comes from, and a list of everything the editor keeps
+  in the browser, one row per setting or cache, with a plugin's own data under its name;
+  each row can be cleared on its own, or **Clear all data** throws the lot away. The map
+  you have open is never kept there and is not touched by any of it.
+- **Hotkeys** — the shortcut table.
+
+Nothing is written until OK or Apply; **Reset to defaults** puts every page back. The
+placement options, the panels and the recent files are remembered too.
 
 ## When something goes wrong
 
@@ -2160,7 +2171,7 @@ you expected, and a copied log.
 | Unit, upgrade and technology settings, with per-player availability | Yes |
 | String editor with a usage list, and unused-string cleanup | Yes |
 | Text encodings | The encoding is guessed on open and chosen in Scenario ▸ Map Revision: UTF-8, Korean (EUC-KR / CP949), Japanese (Shift_JIS), Chinese (GBK, Big5), Cyrillic and Western Windows code pages. Written back in the same encoding on save. |
-| Interface language | English and Korean, in Preferences ▸ Display; the default follows the browser. Korean covers the whole editor: menus, panels, every dialog, status messages, Check Map's findings, and the game's own vocabulary (unit, upgrade, technology, tileset and terrain names) as the editor shows it. The Korean was written by the editor's author with a dictionary, not by a native speaker, and reads like it; a review is invited (see [docs/development.md](docs/development.md#translations)). A map's own text, the text trigger format and the plugin API keep English names. |
+| Interface language | English and Korean, in Preferences ▸ General; the default follows the browser. Korean covers the whole editor: menus, panels, every dialog, status messages, Check Map's findings, and the game's own vocabulary (unit, upgrade, technology, tileset and terrain names) as the editor shows it. The Korean was written by the editor's author with a dictionary, not by a native speaker, and reads like it; a review is invited (see [docs/development.md](docs/development.md#translations)). A map's own text, the text trigger format and the plugin API keep English names. |
 | Switch names | Yes |
 | Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
 

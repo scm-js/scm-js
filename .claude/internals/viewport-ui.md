@@ -37,6 +37,19 @@ read in the first effect pass is still null.
   statically from anything on the startup path or Vite folds them back into the main chunk (Vite
   says so: `INEFFECTIVE_DYNAMIC_IMPORT`) — which is why `PluginIconView` lives in `components/ui/`,
   not in `PluginDialogs.tsx`. Splitting them took the main chunk from 1140 KB to 537 KB.
+- Preferences (`dialogs/PreferencesDialog.tsx`, its own chunk) is a `.split` with a page list
+  (`.prefs-nav`) on the left and one page mounted on the right; `payload.page` picks the page
+  (`?dialog=preferences&page=view` in a deep link, `dlgWith(…, { page })` in the menu). Every
+  page edits one working copy — the `Preferences` object plus the grid's spacing, look and
+  snaps, which keep their own atoms — written on OK/Apply; Reset to defaults resets the
+  whole copy. The Storage page's clears act at once on the atoms, so `StorageSection` reports
+  the keys it cleared and the dialog re-reads those parts (`KEY_PARTS`). `"gridSettings"` is
+  still a `DialogId` (plugins may open it): its registry entry is `GridSettingsDialog`, a
+  wrapper that opens Preferences on Editing. Sections are `.prefs-section` — the group box's
+  legend styling without the frame — and hints are one sentence (`Hint`); the fieldset
+  `Group` is not used here. The Test Map folder rows (`dialogs/TestFolder.tsx`) are shared
+  with Tools ▸ Test Map; the desktop path lives in the preferences, the browser's handle in
+  IndexedDB and so is written at once, not on OK.
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
   The terrain blits go into a cached layer canvas (`TerrainLayer`, `terrainLayerRef`) that `draw`

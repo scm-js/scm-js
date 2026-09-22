@@ -30,6 +30,7 @@ const terrain = () => import("./TerrainDialogs");
 const exchange = () => import("./ExchangeDialogs");
 const misc = () => import("./MiscDialogs");
 const plugin = () => import("./PluginDialogs");
+const prefs = () => import("./PreferencesDialog");
 
 const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   newMap: from(file, (m) => m.NewMapDialog),
@@ -40,7 +41,7 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   mapProperties: from(map, (m) => m.MapPropertiesDialog),
   resizeMap: from(map, (m) => m.ResizeMapDialog),
   mapRevision: from(map, (m) => m.MapRevisionDialog),
-  gridSettings: from(map, (m) => m.GridSettingsDialog),
+  gridSettings: from(prefs, (m) => m.GridSettingsDialog),
   symmetry: from(map, (m) => m.SymmetryDialog),
   playerSettings: from(player, (m) => m.PlayerSettingsDialog),
   forceSettings: from(player, (m) => m.ForceSettingsDialog),
@@ -61,7 +62,7 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   replaceTerrain: from(terrain, (m) => m.ReplaceTerrainDialog),
   autoStarts: from(terrain, (m) => m.AutoStartsDialog),
   testMap: from(() => import("./TestMapDialog"), (m) => m.TestMapDialog),
-  preferences: from(misc, (m) => m.PreferencesDialog),
+  preferences: from(prefs, (m) => m.PreferencesDialog),
   shortcuts: from(misc, (m) => m.ShortcutsDialog),
   validateMap: from(misc, (m) => m.ValidateMapDialog),
   statistics: from(() => import("./StatisticsDialog"), (m) => m.StatisticsDialog),

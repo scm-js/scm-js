@@ -1,0 +1,30 @@
+/** The shortcut table Preferences ▸ Hotkeys and F1 show — a hand-kept list, not what `useHotkeys` reads. */
+import { msg } from "../../i18n";
+
+export const HOTKEYS: [string, string][] = [
+  ["New / Open / Save", "Ctrl+N · Ctrl+O · Ctrl+S"],
+  [msg("Save As"), "Ctrl+Shift+S"],
+  [msg("Map Properties"), "Alt+Enter"],
+  [msg("Undo / Redo"), "Ctrl+Z · Ctrl+Y or Ctrl+Shift+Z"],
+  ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
+  [msg("Find"), "Ctrl+F"],
+  [msg("Toggle grid"), "Ctrl+G"],
+  [msg("Zoom in / out / 100%"), "Ctrl++ · Ctrl+− · Ctrl+0"],
+  [msg("Zoom to fit"), "Ctrl+Shift+0"],
+  ["Layer: Terrain / Doodads / Units", "T · D · U"],
+  ["Layer: Sprites / Locations / Fog", "S · L · F"],
+  ["Layer: Cut/Copy/Paste", "C"],
+  [msg("Brush smaller / larger"), "[ · ]"],
+  [msg("Scroll the view (two tiles / half a screen)"), "Arrows · Shift+Arrows"],
+  [msg("Nudge selected locations (snap step / 1 px)"), "Arrows · Shift+Arrows"],
+  [msg("Pan the view"), "middle-drag"],
+  [msg("Delete selection / stop placing, clear selection"), "Del · Esc"],
+  [msg("Cancel a plugin's map pick or tool"), "Esc · right-click"],
+  [msg("Trigger Editor"), "Ctrl+T"],
+  [msg("Test Map"), "Ctrl+F5"],
+  [msg("Next / previous open map (desktop app)"), "Ctrl+Tab · Ctrl+Shift+Tab"],
+  [msg("Close map (desktop app)"), "Ctrl+W"],
+  [msg("Preferences"), "Ctrl+,"],
+  [msg("Keyboard shortcuts"), "F1"],
+  [msg("Full screen"), "F11"],
+];

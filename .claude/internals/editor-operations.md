@@ -16,7 +16,7 @@ tileset is loaded, else the flat fill's lattice; objects outside the new bounds 
 locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is pure and
 revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
 `payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
-behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ General ▸ Open maps) is read by
+behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ General ▸ Maps) is read by
 `openTarget` in `useMapFileActions` only — see `viewport-ui.md` for the several-maps design. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
 (`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
@@ -34,7 +34,7 @@ sweeps the rest with `removeStoredKeys`, and `clearStoredDataAtom` is that over 
 too). Keep `STORED_RESETS` complete: a key missing from it can only be removed, leaving
 the value live until a reload — `tests/storage.test.ts` greps the source for every
 `atomWithStorage("scmjs.…")` and fails when one is not in the table. The dialog's list
-(`StorageSection` in `MiscDialogs.tsx`) is one row per key — a plugin's own keys grouped
+(`StorageSection` in `PreferencesDialog.tsx`, the Storage page) is one row per key — a plugin's own keys grouped
 per plugin — each opening onto the stored value and each with its own Clear button beside
 the Clear all;
 document-replacing actions (New / Open / Close / drop) go through `useMapFileActions().guard(PendingAction)`,
@@ -70,4 +70,6 @@ Browse Plugins.
 `gridSizeAtom`, `locationSnapAtom`, `placementOptionsAtom` (`scmjs.placement`),
 `doodadPlacementAtom` (`scmjs.doodadPlacement`), `panelsAtom` and the dock widths are `atomWithStorage`
 now — the two placement bags through `mergedStorage`, and every one of them listed in Preferences ▸
-Browser storage, registered in `STORED_RESETS` and so clearable on its own or with the rest.
+Storage, registered in `STORED_RESETS` and so clearable on its own or with the rest. The grid's
+spacing, look and the two snaps are edited on Preferences ▸ Editing (View ▸ Grid Settings… opens
+that page; there is no separate dialog any more).

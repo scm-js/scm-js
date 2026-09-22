@@ -338,7 +338,7 @@ function useMenus(): Menu[] {
         { kind: "item", label: msg("Zoom to Fit"), shortcut: "Ctrl+Shift+0", onSelect: () => { zoomToFit(); } },
         sep,
         flag("grid", msg("Grid"), "Ctrl+G"),
-        dlg(msg("Grid Settings…"), "gridSettings"),
+        dlgWith(msg("Grid Settings…"), "preferences", { page: "editing" }),
         sep,
         flag("units", msg("Units")),
         flag("doodads", msg("Doodads")),

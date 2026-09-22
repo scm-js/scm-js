@@ -46,8 +46,10 @@ export function useDevDeepLinks() {
       store.set(fogViewPlayerAtom, fogPlayer - 1);
       store.set(fogPlayersAtom, 1 << (fogPlayer - 1));
     }
+    // `page=` rides along as the payload, for a dialog with pages (Preferences).
+    const page = p.get("page");
     for (const d of p.getAll("dialog")) {
-      if (DIALOG_IDS.has(d)) store.set(openDialogAtom, d as DialogId);
+      if (DIALOG_IDS.has(d)) store.set(openDialogAtom, d as DialogId, page ? { page } : undefined);
       else console.warn(`[deep link] no dialog "${d}" — one of ${[...DIALOG_IDS].join(", ")}`);
     }
   }, [store]);

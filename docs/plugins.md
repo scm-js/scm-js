@@ -122,7 +122,7 @@ where the row shows the error.
 
 ### Where a plugin keeps its data
 
-A plugin can keep settings in the browser. Preferences ▸ General ▸ Browser storage lists
+A plugin can keep settings in the browser. Preferences ▸ Storage lists
 them as one row under the plugin's id, with a button to clear them, and Clear all data
 sweeps them with the rest.
 
@@ -1417,7 +1417,7 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 | `"commands"` | A plugin registered or removed a command. This is how a plugin that calls another's by id learns it has arrived, since plugins activate in no fixed order; check `commands.has` in the listener. |
 | `"services"` | A plugin provided or withdrew a service. `services.watch(name, fn)` is the usual way to hear this for one name. |
 | `"gameData"` | The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now, and everything drawn or named from the data is worth redoing. |
-| `"language"` | The editor's language changed (Preferences ▸ Display). `i18n.language` says what it is now; relabel what is showing through `i18n.t`. |
+| `"language"` | The editor's language changed (Preferences ▸ General). `i18n.language` says what it is now; relabel what is showing through `i18n.t`. |
 
 ### `api.storage`
 
@@ -1425,8 +1425,8 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 storage under a per-plugin prefix (`scmjs.plugin.<id>.`), falling back to memory when
 storage is unavailable. `set` answers false when the browser refused the write — its quota
 is a few megabytes for the whole editor — so a plugin keeping something the user made
-(Stamp Library's stamps) can say so instead of losing it silently. The user can see and throw it away: Preferences ▸ General ▸
-Browser storage lists your keys as one row under your plugin's id, opening onto the
+(Stamp Library's stamps) can say so instead of losing it silently. The user can see and throw it away: Preferences ▸
+Storage lists your keys as one row under your plugin's id, opening onto the
 values, with a Clear button of its own, and Clear all data sweeps every key the editor
 owns. So treat what you store as a convenience, never as the only copy of something, and
 keep it small and readable.

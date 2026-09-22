@@ -82,19 +82,19 @@ export function TestMapDialog({ entry }: DialogProps) {
             </Field>
             <Field label={t("Maps folder")}><span className="mono" style={{ wordBreak: "break-all" }}>{info?.mapsDir ? `${info.mapsDir}\\scmJS` : "—"}</span></Field>
             <Field label={t("Executable")}><span className="mono" style={{ wordBreak: "break-all" }}>{info?.exe ?? (info ? t("not found — the map is written, the game is not started") : "—")}</span></Field>
-            {info && !info.mapsDir && <p className="hint">{t("Searched: {join}", { join: info.searched.join(" · ") })}</p>}
+            {info && !info.mapsDir && <p className="hint span">{t("Searched: {join}", { join: info.searched.join(" · ") })}</p>}
           </div>
         ) : canPickTestFolder() ? (
           <div className="form wide">
             <Field label={t("Folder")}>
               <TestFolderRow folder={folder} onFolder={setFolder} onProblem={setProblem} />
             </Field>
-            <p className="hint">
+            <p className="hint span">
               {t("Pick the game's")}{" "}<span className="mono">{t("Maps")}</span> {" "}{t("folder (the map lands in it directly; the browser asks once per session before writing there).")}
               {handleStorePersists() ? t(" The choice is remembered in this browser.") : t(" This browser cannot remember the choice between sessions.")}
               {" "}{t("A browser tab cannot start the game — switch to it and open the map under Single Player ▸ Custom Game. The desktop app does both.")}
             </p>
-            <div className="row"><Button size="sm" onClick={() => { void run(true); }} disabled={!scenario || busy}>{t("Download instead")}</Button></div>
+            <div className="row span"><Button size="sm" onClick={() => { void run(true); }} disabled={!scenario || busy}>{t("Download instead")}</Button></div>
           </div>
         ) : (
           <p className="hint">{t("This browser has no folder picker, so Run downloads the map; move it into the game's")}{" "}<span className="mono">{t("Maps")}</span> {" "}{t("folder and open it under Single Player ▸ Custom Game. Chrome and Edge can write into the folder directly, and the desktop app starts the game as well.")}</p>

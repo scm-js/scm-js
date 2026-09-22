@@ -2,6 +2,7 @@ import type { MapFileHandle } from "../services/mapIo";
 import type { MemberInfo, StoredMembers } from "../formats/mpq/scm";
 import { atom, type Getter, type Setter } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { preferencesAtom } from "./preferencesAtoms";
 import { blankFillAtom } from "./gameDataAtoms";
 import { browserStorage } from "./storage";
 import { storeHandle } from "../services/handleStore";
@@ -71,6 +72,7 @@ export interface RecentEntry {
   handleKey?: string;
 }
 
+/** How many `pushRecentAtom` keeps — `Preferences.startup.recents`; the constant is the default. */
 export const MAX_RECENTS = 10;
 
 export const recentFilesAtom = atomWithStorage<RecentEntry[]>("scmjs.recents", [], createJSONStorage(browserStorage), { getOnInit: true });
@@ -80,7 +82,7 @@ export const pushRecentAtom = atom(null, (get, set, req: { name: string; handle:
   const { name, handle } = req;
   const key = handle ? `recent:${name}` : get(recentFilesAtom).find((r) => r.name === name)?.handleKey;
   const entry: RecentEntry = { name, at: Date.now(), ...(key ? { handleKey: key } : {}) };
-  set(recentFilesAtom, [entry, ...get(recentFilesAtom).filter((r) => r.name !== name)].slice(0, MAX_RECENTS));
+  set(recentFilesAtom, [entry, ...get(recentFilesAtom).filter((r) => r.name !== name)].slice(0, Math.max(1, get(preferencesAtom).startup.recents)));
   if (handle) void storeHandle(`recent:${name}`, handle);
 });
 
@@ -527,8 +529,9 @@ export const closeDocumentAtom = atom(null, (get, set) => {
 // re-exported here because every hook imports it from the atoms.
 export type { HistoryEntry };
 
-/** SCMDraft's default depth; a 7x7 stroke across a whole map is still only a few hundred KB. */
-const UNDO_LEVELS = 200;
+// The depth is `Preferences.undoLevels` (SCMDraft's 200 by default; a 7x7 stroke across a
+// whole map is still only a few hundred KB). Read at commit time, so a change applies to
+// the next edit; a stack already deeper is not trimmed until it grows.
 
 export const undoStackAtom = atom<HistoryEntry[]>([]);
 export const redoStackAtom = atom<HistoryEntry[]>([]);
@@ -547,7 +550,7 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
       sprites: entry.sprites?.length, locations: entry.locations?.length,
     });
   }
-  set(undoStackAtom, [...get(undoStackAtom), entry].slice(-UNDO_LEVELS));
+  set(undoStackAtom, [...get(undoStackAtom), entry].slice(-Math.max(1, get(preferencesAtom).undoLevels)));
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);

@@ -18,7 +18,8 @@ export const STORAGE_PREFIX = "scmjs.";
 
 /**
  * `atomWithStorage`'s storage for a settings *object*: stored values are merged over the
- * defaults, so a field added later still has one when an older entry is read back.
+ * defaults, so a field added later still has one when an older entry is read back — one
+ * level down as well, so a field added to a nested group (`newMap.version`) does too.
  */
 export function mergedStorage<T extends object>(defaults: T) {
   const json = createJSONStorage<T>(browserStorage);
@@ -26,9 +27,21 @@ export function mergedStorage<T extends object>(defaults: T) {
     ...json,
     getItem: (key: string, initial: T): T => {
       const stored = json.getItem(key, initial);
-      return stored && typeof stored === "object" ? { ...defaults, ...stored } : initial;
+      return stored && typeof stored === "object" ? mergeDefaults(defaults, stored) : initial;
     },
   };
+}
+
+const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** `stored` over `defaults`, and each nested plain object of `defaults` over its stored counterpart. */
+export function mergeDefaults<T extends object>(defaults: T, stored: Partial<T>): T {
+  const out = { ...defaults, ...stored } as Record<string, unknown>;
+  for (const [k, d] of Object.entries(defaults)) {
+    const s = (stored as Record<string, unknown>)[k];
+    if (isPlain(d) && isPlain(s)) out[k] = { ...d, ...s };
+  }
+  return out as T;
 }
 
 const memory = new Map<string, string>();

@@ -50,6 +50,14 @@ read in the first effect pass is still null.
   `Group` is not used here. The Test Map folder rows (`dialogs/TestFolder.tsx`) are shared
   with Tools ▸ Test Map; the desktop path lives in the preferences, the browser's handle in
   IndexedDB and so is written at once, not on OK.
+- The wheel over the map is a non-passive listener on the scroller in `MapViewport.tsx` (a
+  React `onWheel` is passive and cannot `preventDefault`): Ctrl/Cmd+wheel always zooms a
+  step of `ZOOM_STEPS` and takes the event from the browser's page zoom (which it used to
+  leak to); `Preferences.view.wheel === "zoom"` makes a plain wheel zoom too, Shift+wheel
+  staying the scroller's sideways scroll. Trackpad deltas are summed to one notch (40 px).
+  `zoomAnchorRef` holds the pointer position when `view.zoomToCursor` is on; the zoom
+  `useLayoutEffect` keeps that point in place, or the centre when nothing set it (menu,
+  keyboard, toolbar).
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
   The terrain blits go into a cached layer canvas (`TerrainLayer`, `terrainLayerRef`) that `draw`

@@ -15,10 +15,12 @@ import {
   ChevronDown,
   ChevronRight,
   Database,
+  Download,
   Eye,
   Globe,
   HardDrive,
   Keyboard,
+  Upload,
   PencilRuler,
   Play,
   Puzzle,
@@ -38,7 +40,9 @@ import {
   clearStoredKeysAtom,
   DEFAULT_GRID_LOOK,
   DEFAULT_PREFERENCES,
+  exportStoredPreferences,
   gridLookAtom,
+  importStoredPreferencesAtom,
   ownedStoredKeys,
   preferencesAtom,
   type GridLook,
@@ -49,10 +53,12 @@ import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } 
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
 import { hostTerms, isDesktop } from "../../editor/platform";
-import type { LanguagePreference, PluginUpdateMode } from "../../editor/preferences";
+import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode } from "../../editor/preferences";
+import { MAP_VERSIONS } from "../../formats/chk/scenario";
+import { saveBytes } from "../../services/mapIo";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import { LOCALES, msg, t, translate } from "../../i18n";
-import { Button, Check, Field, IconSelect, Select } from "../ui";
+import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import FlagIcon from "../ui/FlagIcon";
 import type { DialogProps } from "./DialogHost";
@@ -193,6 +199,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
       <div className="stack">
         <GameDataSection />
         <StorageSection onCleared={reseed} />
+        <TransferSection onImported={() => setW(live())} />
       </div>
     ),
     hotkeys: () => <HotkeysPage />,
@@ -298,6 +305,8 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
   const p = w.prefs;
   const newMap = (n: Partial<Preferences["newMap"]>) => patch({ newMap: { ...p.newMap, ...n } });
   const updates = (u: Partial<Preferences["updates"]>) => patch({ updates: { ...p.updates, ...u } });
+  const startup = (s: Partial<Preferences["startup"]>) => patch({ startup: { ...p.startup, ...s } });
+  const save = (s: Partial<Preferences["save"]>) => patch({ save: { ...p.save, ...s } });
   return (
     <div className="stack">
       <Section title={t("Language")}>
@@ -317,6 +326,13 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
       </Section>
       <Section title={t("Startup")}>
         <Check label={t("Show the splash screen while the game data loads")} checked={p.splash} onChange={(e) => patch({ splash: e.target.checked })} />
+        <Check label={t("Reopen the last map")} checked={p.startup.reopenLast} onChange={(e) => startup({ reopenLast: e.target.checked })} />
+        <Hint>{hostTerms().desktop ? t("The most recent file comes back in place of the blank map.") : t("The most recent file comes back in place of the blank map; a browser that has to ask first offers it in a notice.")}</Hint>
+        <div className="form wide">
+          <Field label={t("Recent files")}>
+            <NumberInput value={p.startup.recents} min={PREFERENCE_LIMITS.recents.min} max={PREFERENCE_LIMITS.recents.max} width={90} onChange={(v) => startup({ recents: v })} />
+          </Field>
+        </div>
         {isDesktop() && (
           <>
             <Check label={t("Check for updates when scmJS starts")} checked={p.updates.checkOnStart} onChange={(e) => updates({ checkOnStart: e.target.checked })} />
@@ -343,8 +359,34 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
               <Select style={{ width: 90 }} value={String(p.newMap.height)} onChange={(e) => newMap({ height: Number(e.target.value) })} options={MAP_SIZES.map(String)} />
             </div>
           </Field>
+          <Field label={t("Revision")}>
+            <Select
+              value={p.newMap.version}
+              onChange={(e) => newMap({ version: e.target.value as NewMapVersion })}
+              options={(["broodwar", "remastered"] as const).map((v) => ({ value: v, label: MAP_VERSIONS[v].label }))}
+            />
+          </Field>
         </div>
-        <Hint>{t("What File ▸ New starts with, and the map the editor opens on.")}</Hint>
+        <Hint>{t("What File ▸ New starts with, and the map the editor opens on. Brood War files play on every build; Remastered's 32-bit strings need 1.21 or later.")}</Hint>
+      </Section>
+      <Section title={t("Saving")}>
+        <div className="form wide">
+          <Field label={t("Save dialog")}>
+            <Select
+              value={p.save.start}
+              onChange={(e) => save({ start: e.target.value as Preferences["save"]["start"] })}
+              options={[{ value: "asOpened", label: t("Starts from how the file was opened") }, { value: "everything", label: t("Starts from Everything") }, { value: "smallest", label: t("Starts from Smallest") }]}
+            />
+          </Field>
+          <Field label={t("New maps")}>
+            <Select
+              value={p.save.compression}
+              onChange={(e) => save({ compression: e.target.value as Preferences["save"]["compression"] })}
+              options={[{ value: "asOpened", label: t("StarEdit's layout (PKWARE, encrypted)") }, { value: "none", label: t("Uncompressed") }, { value: "pkware", label: t("PKWARE") }, { value: "zlib", label: t("zlib (1.16.1 or Remastered)") }]}
+            />
+          </Field>
+        </div>
+        <Hint>{t("A map already saved in this session starts from its last options either way. New maps means a map with no file yet, or one opened from a bare .chk.")}</Hint>
       </Section>
     </div>
   );
@@ -354,6 +396,7 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
 
 function EditingPage({ w, setW }: { w: Working; setW: (w: Working) => void }) {
   const look = (l: Partial<GridLook>) => setW({ ...w, look: { ...w.look, ...l } });
+  const placement = (pl: Partial<Preferences["placement"]>) => setW({ ...w, prefs: { ...w.prefs, placement: { ...w.prefs.placement, ...pl } } });
   return (
     <div className="stack">
       <Section title={t("Grid")}>
@@ -383,6 +426,32 @@ function EditingPage({ w, setW }: { w: Working; setW: (w: Working) => void }) {
         <Check className="wrap" label={t("Snap doodads to the two-tile isometric grid")} checked={w.snapDoodads} onChange={(e) => setW({ ...w, snapDoodads: e.target.checked })} />
         <Hint>{t("The Locations palette can pick a different step. Units have their own snap tick in the Units palette; sprites are placed by the pixel.")}</Hint>
       </Section>
+      <Section title={t("Placement")}>
+        <div className="form wide">
+          <Field label={t("Owner")}>
+            <Select
+              value={String(w.prefs.placement.owner)}
+              onChange={(e) => placement({ owner: Number(e.target.value) })}
+              options={Array.from({ length: 12 }, (_, i) => ({ value: String(i), label: t("Player {n}", { n: i + 1 }) }))}
+            />
+          </Field>
+          <Field label={t("Brush size")}>
+            <NumberInput value={w.prefs.placement.brushSize} min={PREFERENCE_LIMITS.brushSize.min} max={PREFERENCE_LIMITS.brushSize.max} width={90} onChange={(v) => placement({ brushSize: v })} />
+          </Field>
+          <Field label={t("New location")}>
+            <NumberInput value={w.prefs.placement.locationTiles} min={PREFERENCE_LIMITS.locationTiles.min} max={PREFERENCE_LIMITS.locationTiles.max} width={90} unit={t("tiles")} onChange={(v) => placement({ locationTiles: v })} />
+          </Field>
+        </div>
+        <Hint>{t("What the palettes start on: the owner of placed units and sprites, the terrain brush, and the square the Locations palette's New button makes.")}</Hint>
+      </Section>
+      <Section title={t("Undo")}>
+        <div className="form wide">
+          <Field label={t("Levels")}>
+            <NumberInput value={w.prefs.undoLevels} min={PREFERENCE_LIMITS.undoLevels.min} max={PREFERENCE_LIMITS.undoLevels.max} step={10} width={90} onChange={(v) => setW({ ...w, prefs: { ...w.prefs, undoLevels: v } })} />
+          </Field>
+        </div>
+        <Hint>{t("Edits kept per map; a whole-map stroke is a few hundred kB each.")}</Hint>
+      </Section>
     </div>
   );
 }
@@ -404,8 +473,15 @@ function SpeedField({ label, value, onChange }: { label: string; value: number; 
 
 function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
   const p = w.prefs;
+  const view = (v: Partial<Preferences["view"]>) => patch({ view: { ...p.view, ...v } });
   return (
     <div className="stack">
+      <Section title={t("Mouse wheel")}>
+        <Check radio name="wheel" label={t("Scrolls the map; Ctrl+wheel zooms")} checked={p.view.wheel === "scroll"} onChange={() => view({ wheel: "scroll" })} />
+        <Check radio name="wheel" label={t("Zooms; Shift+wheel scrolls sideways")} checked={p.view.wheel === "zoom"} onChange={() => view({ wheel: "zoom" })} />
+        <Check label={t("Zoom toward the pointer")} checked={p.view.zoomToCursor} onChange={(e) => view({ zoomToCursor: e.target.checked })} />
+        <Hint>{t("Keeps the tile under the pointer in place when the wheel zooms; the menu and keyboard zoom on the centre.")}</Hint>
+      </Section>
       <Section title={t("Animation")}>
         <Check label={t("Animate water (palette cycling)")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
         <Check label={t("Animate units (idle animations)")} checked={p.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
@@ -685,6 +761,41 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
           {t("{Here} is not letting the editor store anything, so settings last only until the", { Here: host.Here })}{" "}{host.desktop ? t("app is closed") : t("tab closes")}.
         </Hint>
       )}
+    </Section>
+  );
+}
+
+/** Preferences as a file, to carry to another browser or machine. */
+function TransferSection({ onImported }: { onImported: () => void }) {
+  const importFile = useSetAtom(importStoredPreferencesAtom);
+  const [note, setNote] = useState<string | null>(null);
+  const doExport = async () => {
+    const text = JSON.stringify(exportStoredPreferences(), null, 2);
+    const out = await saveBytes(new TextEncoder().encode(text), "scmjs-preferences.json");
+    setNote(out ? t("Wrote {name}.", { name: out.fileName }) : null);
+  };
+  const doImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      let parsed: unknown;
+      try { parsed = JSON.parse(await file.text()); } catch { setNote(t("{name} is not a preferences file.", { name: file.name })); return; }
+      const r = importFile(parsed);
+      setNote(r.ok ? t("Took {n, plural, one {# setting} other {# settings}} from {name}.", { n: r.keys, name: file.name }) : t("{name} is not a preferences file.", { name: file.name }));
+      if (r.ok) onImported();
+    };
+    input.click();
+  };
+  return (
+    <Section title={t("Preferences file")}>
+      <div className="row">
+        <span className="grow hint">{note ?? t("Every setting above and the plugins' own, as one file; caches and the recent files stay behind.")}</span>
+        <Button size="sm" onClick={() => { void doExport(); }}><Download size={11} /> {" "}{t("Export…")}</Button>
+        <Button size="sm" onClick={doImport}><Upload size={11} /> {" "}{t("Import…")}</Button>
+      </div>
     </Section>
   );
 }

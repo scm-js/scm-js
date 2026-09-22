@@ -79,3 +79,12 @@ in dev: worst long task 6978 ms → 142 ms with the track off. A production buil
 react-dom takes to evaluate — hence "imported first", and hence the microtask that puts it back.
 `VITE_REACT_TRACKS=1` keeps React's track if you want to profile renders. If startup ever feels frozen
 again, measure `longtask` entries before blaming the loading code.
+
+`Preferences.startup.reopenLast` (`useStartupMap`): after the blank map is made, the most
+recent file with a stored handle is opened through `openRecentInto`, which replaces the
+untouched blank the way any first open does. The desktop app and a browser whose
+`queryPermission` still says granted open it straight away; otherwise `requestPermission`
+needs a user gesture, so a toast with a **Reopen** action does it on the click. Nothing
+happens when the recents are empty or the entry has no handle (Firefox, Safari).
+`Preferences.newMap.version` is applied by `newMapInto` after `createScenario` (`setMapVersion`,
+Remastered = VER 206 + STRx); every new map used to be Brood War 205.

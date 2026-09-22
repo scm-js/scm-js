@@ -12,7 +12,8 @@ import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
-import { markDirty, tilesetIndex } from "../formats/chk/scenario";
+import { mapVersionOf, markDirty, setMapVersion, tilesetIndex } from "../formats/chk/scenario";
+import type { NewMapVersion } from "../editor/preferences";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
 import { peekUnitAssets } from "../formats/units/load";
@@ -32,6 +33,8 @@ export interface NewMapOptions {
   description: string;
   /** ISOM id of the terrain to fill with; the tileset's default when omitted. */
   terrainId?: number;
+  /** The file's revision; `Preferences.newMap.version` when omitted. */
+  version?: NewMapVersion;
   /**
    * Start locations to lay down for players 1..N, as Tools ▸ Auto-place would. Part of
    * making the map rather than an edit on it, so it is not in the undo history — a fresh
@@ -145,6 +148,8 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
   const terrain = baseTerrain(loaded?.tileset ?? null, options.terrainId ?? info.defaultIsom);
   const { tiles, isom } = flatTerrain(width, height, terrain, loaded?.tileset ?? null, Math.random, era);
   const scenario = createScenario({ width, height, era, name, description, tiles, isom });
+  const version = options.version ?? store.get(preferencesAtom).newMap.version;
+  if (mapVersionOf(scenario.fileVersion) !== version) setMapVersion(scenario, version);
 
   // Start locations go on before the document is installed: they are part of the map the
   // dialog asked for, so there is nothing to undo them back to.

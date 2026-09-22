@@ -7,12 +7,12 @@
  * `clearStoredDataAtom` at the bottom is Preferences ▸ Clear all data, and
  * `clearStoredKeysAtom` beside it is one row of that list.
  */
-import { atom, type Setter } from "jotai";
+import { atom, type Getter, type Setter } from "jotai";
 import { atomWithStorage, RESET } from "jotai/utils";
 import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
 import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
-import { browserStorage, mergedStorage, removeStoredKeys, storedKeys } from "./storage";
+import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "./storage";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
 import { dockWidthsAtom, panelsAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
@@ -106,6 +106,99 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
 /** The keys an atom owns — everything Preferences can clear *and* put back live. */
 export function ownedStoredKeys(): string[] {
   return Object.keys(STORED_RESETS).sort();
+}
+
+/* ── Export / import ────────────────────────────────────── */
+
+/**
+ * The keys a preferences file leaves out: caches the editor rebuilds, and the recents,
+ * whose file handles live in this browser's IndexedDB and would not travel with them.
+ */
+const NOT_EXPORTED = new Set(["scmjs.plugin-code", "scmjs.plugin-manifests", "scmjs.plugin-registry", "scmjs.plugin-updates", "scmjs.recents"]);
+
+/** The shape of the file Preferences ▸ Storage ▸ Export writes. */
+export interface PreferencesFile {
+  scmjs: "preferences";
+  version: 1;
+  /** Stored key → the JSON text the editor keeps under it. */
+  keys: Record<string, string>;
+}
+
+/** Every setting worth carrying to another browser or machine, as the file's contents. */
+export function exportStoredPreferences(): PreferencesFile {
+  const keys: Record<string, string> = {};
+  for (const key of storedKeys()) {
+    if (NOT_EXPORTED.has(key)) continue;
+    const value = storedValue(key);
+    if (value !== null) keys[key] = value;
+  }
+  return { scmjs: "preferences", version: 1, keys };
+}
+
+/** What `importStoredPreferencesAtom` makes of a file: how many keys it took, or why not. */
+export type PreferencesImport = { ok: true; keys: number } | { ok: false; reason: string };
+
+/**
+ * Take a preferences file into storage. Each key is written as the file has it, then the
+ * atom behind it is `RESET` so `getOnInit` reads the new value back live; a key nothing
+ * owns (a plugin's own) is just written, for the plugin to read when it next looks. Keys
+ * outside the editor's prefix, and the caches never exported, are ignored.
+ */
+export const importStoredPreferencesAtom = atom(null, (get, set, file: unknown): PreferencesImport => {
+  if (!file || typeof file !== "object" || (file as PreferencesFile).scmjs !== "preferences" || typeof (file as PreferencesFile).keys !== "object") return { ok: false, reason: "not a preferences file" };
+  const entries = Object.entries((file as PreferencesFile).keys).filter(([key, value]) => key.startsWith(STORAGE_PREFIX) && !NOT_EXPORTED.has(key) && typeof value === "string");
+  const storage = browserStorage();
+  let taken = 0;
+  for (const [key, value] of entries) {
+    try { JSON.parse(value); } catch { continue; }
+    try { storage.setItem(key, value); taken++; } catch { continue; }
+    // RESET removes the key and puts the default back; write again, then re-read.
+    const owner = STORED_RESETS[key];
+    if (owner) {
+      owner(set);
+      try { storage.setItem(key, value); } catch { /* the first write went through, this one is the same bytes */ }
+      RELOADS[key]?.(get, set);
+    }
+  }
+  return { ok: true, keys: taken };
+});
+
+/**
+ * Re-read an atom's value from storage after an import. `atomWithStorage` with
+ * `getOnInit` reads once; setting the parsed value through the atom keeps the store and
+ * storage in step without a reload. Every key in `STORED_RESETS` is here.
+ */
+const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
+  "scmjs.prefs": (_get, set) => set(preferencesAtom, mergedStorage(DEFAULT_PREFERENCES).getItem("scmjs.prefs", DEFAULT_PREFERENCES)),
+  "scmjs.grid": (_get, set) => set(gridLookAtom, mergedStorage(DEFAULT_GRID_LOOK).getItem("scmjs.grid", DEFAULT_GRID_LOOK)),
+  "scmjs.gridSize": (_get, set) => set(gridSizeAtom, parsed("scmjs.gridSize", 32)),
+  "scmjs.locationSnap": (_get, set) => set(locationSnapAtom, parsed("scmjs.locationSnap", 32)),
+  "scmjs.placement": (get, set) => set(placementOptionsAtom, parsedMerged("scmjs.placement", get(placementOptionsAtom))),
+  "scmjs.doodadPlacement": (get, set) => set(doodadPlacementAtom, parsedMerged("scmjs.doodadPlacement", get(doodadPlacementAtom))),
+  "scmjs.panels": (get, set) => set(panelsAtom, parsedMerged("scmjs.panels", get(panelsAtom))),
+  "scmjs.docks": (get, set) => set(dockWidthsAtom, parsedMerged("scmjs.docks", get(dockWidthsAtom))),
+  "scmjs.console": (_get, set) => set(debugConsoleAtom, parsed("scmjs.console", false)),
+  "scmjs.consoleHeight": (_get, set) => set(consoleHeightAtom, parsed("scmjs.consoleHeight", 176)),
+  "scmjs.recents": () => {},
+  "scmjs.plugins": (_get, set) => set(installedPluginsAtom, parsed("scmjs.plugins", [])),
+  "scmjs.plugin-manifests": () => {},
+  "scmjs.plugin-code": () => {},
+  "scmjs.plugin-registries": (_get, set) => set(userRegistriesAtom, parsed("scmjs.plugin-registries", [])),
+  "scmjs.plugin-registry": () => {},
+  "scmjs.plugin-updates": () => {},
+  "scmjs.gameData": (get, set) => set(gameDataProfileAtom, parsedMerged("scmjs.gameData", get(gameDataProfileAtom))),
+};
+
+function parsed<T>(key: string, fallback: T): T {
+  const raw = storedValue(key);
+  if (raw === null) return fallback;
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
+}
+
+/** The stored object over the value the atom holds now (which has every field), for the merged atoms. */
+function parsedMerged<T extends object>(key: string, current: T): T {
+  const raw = parsed<Partial<T> | null>(key, null);
+  return raw && typeof raw === "object" ? { ...current, ...raw } : current;
 }
 
 /**

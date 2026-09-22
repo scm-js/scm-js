@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { ContextMenu } from "radix-ui";
 import { Crosshair, Loader2 } from "lucide-react";
 import {
@@ -46,9 +46,10 @@ import {
   viewFlagsAtom,
   viewportRectAtom,
   zoomAtom,
+  ZOOM_STEPS,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
-import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom } from "../../atoms/preferencesAtoms";
+import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
@@ -221,6 +222,7 @@ export default function MapViewport() {
   const mapW = useAtomValue(mapWidthAtom);
   const mapH = useAtomValue(mapHeightAtom);
   const zoom = useAtomValue(zoomAtom);
+  const store = useStore();
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const flags = useAtomValue(viewFlagsAtom);
   const waterSpeed = useAtomValue(animateWaterSpeedAtom);
@@ -1432,19 +1434,57 @@ export default function MapViewport() {
   }, [centerOn, clearCenterOn, draw]);
   useEffect(() => () => { glideRef.current?.cancel(); if (panRef.current) cancelAnimationFrame(panRef.current.raf); }, []);
 
-  /* keep the view centred when zooming */
+  /*
+   * Keep a point of the view in place when zooming: the pointer, when the wheel zoomed
+   * with `Preferences.view.zoomToCursor` on (the wheel handler leaves it in `zoomAnchorRef`
+   * just before setting the zoom), else the centre — the menu, the keyboard and the toolbar.
+   */
   const prevZoom = useRef(zoom);
+  const zoomAnchorRef = useRef<{ x: number; y: number } | null>(null);
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el || prevZoom.current === zoom) return;
     const ratio = zoom / prevZoom.current;
-    const cx = el.scrollLeft + el.clientWidth / 2;
-    const cy = el.scrollTop + el.clientHeight / 2;
-    el.scrollLeft = cx * ratio - el.clientWidth / 2;
-    el.scrollTop = cy * ratio - el.clientHeight / 2;
+    const anchor = zoomAnchorRef.current;
+    zoomAnchorRef.current = null;
+    const ax = anchor?.x ?? el.clientWidth / 2;
+    const ay = anchor?.y ?? el.clientHeight / 2;
+    el.scrollLeft = (el.scrollLeft + ax) * ratio - ax;
+    el.scrollTop = (el.scrollTop + ay) * ratio - ay;
     prevZoom.current = zoom;
     scheduleDraw();
   }, [zoom, draw]);
+
+  /*
+   * The wheel: Ctrl (Cmd) + wheel always zooms — and is taken from the browser, whose own
+   * page zoom it would otherwise be; with `Preferences.view.wheel` on "zoom" a plain wheel
+   * zooms too, and Shift+wheel is left to the scroller as sideways scrolling. A step per
+   * notch: a trackpad's stream of small deltas is summed to the same threshold. Not a React
+   * handler, because React's wheel listeners are passive and cannot preventDefault.
+   */
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    let acc = 0;
+    const onWheel = (e: WheelEvent) => {
+      const view = store.get(preferencesAtom).view;
+      const zooms = e.ctrlKey || e.metaKey || (view.wheel === "zoom" && !e.shiftKey);
+      if (!zooms) { acc = 0; return; }
+      e.preventDefault();
+      acc += e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? e.deltaY : e.deltaY * 40;
+      if (Math.abs(acc) < 40) return;
+      const dir = acc < 0 ? 1 : -1;
+      acc = 0;
+      const zoom = store.get(zoomAtom);
+      const next = dir > 0 ? ZOOM_STEPS.find((z) => z > zoom) : [...ZOOM_STEPS].reverse().find((z) => z < zoom);
+      if (next === undefined || next === zoom) return;
+      const r = el.getBoundingClientRect();
+      zoomAnchorRef.current = view.zoomToCursor ? { x: e.clientX - r.left, y: e.clientY - r.top } : null;
+      store.set(zoomAtom, next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [store]);
 
   /* ── pointer ─────────────────────────────────────────── */
   const tileAt = (e: { clientX: number; clientY: number }) => {

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
 import { centerViewOnAtom, locationSnapAtom, selectedLocationsAtom, symmetryAtom, viewportRectAtom } from "../atoms/editorAtoms";
+import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { mirrorBox } from "../editor/symmetry";
 import { commitEditAtom, deleteSelectedLocationsAtom, locationsRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
@@ -132,12 +133,12 @@ export function useLocationTools() {
     return index;
   }, [store, commit, setStatus, setSelected]);
 
-  /** The palette's New button: a 4×4-tile location in the middle of the view. */
+  /** The palette's New button: a square location (`Preferences.placement.locationTiles` a side) in the middle of the view. */
   const createInView = useCallback((): number => {
     const scn = store.get(scenarioAtom);
     if (!scn) return -1;
     const v = store.get(viewportRectAtom), step = snap() || TILE_PX;
-    const size = 4 * TILE_PX;
+    const size = Math.max(1, store.get(preferencesAtom).placement.locationTiles) * TILE_PX;
     const cx = snapTo((v.x + v.w / 2) * TILE_PX - size / 2, step), cy = snapTo((v.y + v.h / 2) * TILE_PX - size / 2, step);
     const box = clampBounds({ left: cx, top: cy, right: cx + size, bottom: cy + size }, scn);
     // Clamping may have squashed the box against an edge; pull it back inside instead.

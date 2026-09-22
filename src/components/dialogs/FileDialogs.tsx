@@ -15,7 +15,7 @@ import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { hostTerms } from "../../editor/platform";
 import { canPickSaveLocation, droppedHandle, MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, type PickedMapFile } from "../../services/mapIo";
 import {
-  buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, formatBytes, planSave, SAVE_PRESETS, type MapFormat, type SaveOptions,
+  buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, formatBytes, initialSaveOptions, planSave, SAVE_PRESETS, type MapFormat, type SaveOptions,
 } from "../../editor/save";
 import { issueCounts, validateScenario } from "../../editor/validate";
 import type { ArchiveCompression, MemberInfo } from "../../formats/mpq/scm";
@@ -322,7 +322,8 @@ export function SaveMapDialog({ entry }: DialogProps) {
   const openDialog = useSetAtom(openDialogAtom);
 
   const [file, setFile] = useState(() => (baseName(path ?? name) || "scenario") + (copy ? " copy" : ""));
-  const [opts, setOpts] = useState<SaveOptions>(() => (scenario ? stored ?? defaultSaveOptions(scenario, origin, path) : DEFAULT_SAVE_OPTIONS));
+  const savePrefs = useAtomValue(preferencesAtom).save;
+  const [opts, setOpts] = useState<SaveOptions>(() => (scenario ? initialSaveOptions(scenario, origin, path, stored, savePrefs) : DEFAULT_SAVE_OPTIONS));
   const [keep, setKeep] = useState<KeepMode>(() => keepModeOf(opts));
   const [archiveOpen, setArchiveOpen] = useState(() => {
     if (!scenario) return false;

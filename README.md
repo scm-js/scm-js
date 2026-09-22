@@ -2049,14 +2049,20 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
 
 - **General** — the editor's language (English or Korean; the default follows the
   browser's, a change applies at once, and a map's own text is untouched by it), the splash
-  screen, whether each map opens in its own tab, whether to ask before replacing a modified
-  map (the same tick decides whether closing the tab or quitting the desktop app asks about
-  unsaved changes), and the tileset and size a new map starts with. The desktop app adds
-  whether to check for updates at startup.
-- **Editing** — the grid's spacing, colour and style, and what snaps to it. View ▸ Grid
-  Settings opens this page.
-- **View** — whether water and units animate and how fast, and whether string previews
-  follow Remastered's colour rule or 1.16.1's.
+  screen, whether to reopen the last map at startup (the desktop app does it straight
+  away; a browser that has to ask before reading the file again offers it in a notice),
+  how many recent files to keep, whether each map opens in its own tab, whether to ask
+  before replacing a modified map (the same tick decides whether closing the tab or
+  quitting the desktop app asks about unsaved changes), the tileset, size and revision a
+  new map starts with, and what the Save dialog starts from: how the file was opened, or
+  one of its presets, with the compression a map with no file yet gets. The desktop app
+  adds whether to check for updates at startup.
+- **Editing** — the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
+  Settings opens this page); what the palettes start on — the owner of placed units, the
+  brush size, the size of a new location; and how many undo levels each map keeps.
+- **View** — whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a
+  wheel zoom keeps the tile under the pointer in place; whether water and units animate
+  and how fast; and whether string previews follow Remastered's colour rule or 1.16.1's.
 - **Testing** — Test Map's folder, and in the desktop app whether the game starts after
   the map is written.
 - **Plugins** — what to do when an installed plugin has a newer version (a notice, nothing,
@@ -2065,7 +2071,9 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
 - **Storage** — where the game data comes from, and a list of everything the editor keeps
   in the browser, one row per setting or cache, with a plugin's own data under its name;
   each row can be cleared on its own, or **Clear all data** throws the lot away. The map
-  you have open is never kept there and is not touched by any of it.
+  you have open is never kept there and is not touched by any of it. **Export** writes
+  the settings and the plugins' own as one file, and **Import** takes such a file into
+  another browser or machine; caches and the recent files stay behind.
 - **Hotkeys** — the shortcut table.
 
 Nothing is written until OK or Apply; **Reset to defaults** puts every page back. The

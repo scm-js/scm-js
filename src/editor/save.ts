@@ -104,14 +104,29 @@ export function formatOf(fileName: string | null | undefined): MapFormat | null 
  * revision, as StarEdit names them), and the archive stored the way it was opened — a map
  * that came in PKWARE-compressed and encrypted, Blizzard's own layout, goes out the same
  * way. A new map, or one opened from a bare .chk, gets StarEdit's layout too, since it is
- * what every build of the game reads.
+ * what every build of the game reads — unless `fresh` names another compression for that
+ * case (Preferences ▸ General ▸ Saving), which then goes without the encryption.
  */
-export function defaultSaveOptions(scn: Scenario, origin: MemberInfo | null, fileName: string | null): SaveOptions {
+export function defaultSaveOptions(scn: Scenario, origin: MemberInfo | null, fileName: string | null, fresh: "asOpened" | ArchiveCompression = "asOpened"): SaveOptions {
   const format = formatOf(fileName) ?? (scn.fileVersion < 205 ? "scm" : "scx");
-  const compression: ArchiveCompression = origin
-    ? (origin.compression === "zlib" || origin.compression === "pkware" ? origin.compression : "none")
-    : "pkware";
-  return { ...DEFAULT_SAVE_OPTIONS, format, compression, encrypt: origin ? origin.encrypted : true };
+  if (origin) {
+    const compression: ArchiveCompression = origin.compression === "zlib" || origin.compression === "pkware" ? origin.compression : "none";
+    return { ...DEFAULT_SAVE_OPTIONS, format, compression, encrypt: origin.encrypted };
+  }
+  return fresh === "asOpened"
+    ? { ...DEFAULT_SAVE_OPTIONS, format, compression: "pkware", encrypt: true }
+    : { ...DEFAULT_SAVE_OPTIONS, format, compression: fresh, encrypt: fresh === "pkware" };
+}
+
+/**
+ * What the Save dialog opens on for this map: the options it was saved with in this
+ * session, else `defaultSaveOptions` with the preferences' fresh-map compression, run
+ * through the preset the preferences name (`Preferences.save`).
+ */
+export function initialSaveOptions(scn: Scenario, origin: MemberInfo | null, fileName: string | null, stored: SaveOptions | null, prefs: { start: "asOpened" | "everything" | "smallest"; compression: "asOpened" | ArchiveCompression }): SaveOptions {
+  if (stored) return stored;
+  const base = defaultSaveOptions(scn, origin, fileName, prefs.compression);
+  return prefs.start === "asOpened" ? base : SAVE_PRESETS[prefs.start](base);
 }
 
 /** Two ready-made settings the dialog offers as buttons. */

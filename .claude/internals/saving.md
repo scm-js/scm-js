@@ -91,3 +91,10 @@ Not done, on purpose or yet: the Save dialog does not mention steps or show the 
 no "leave the source out" tick for a release copy; nothing offers to open the stored source of a
 changed file. The write-plain-first-then-rewrite idea (so a handle save never waits) was dropped for
 the notice's button — two writes of one file is two chances to be interrupted.
+
+`Preferences.save` is where the Save dialog starts (`initialSaveOptions` in `editor/save.ts`):
+`saveOptionsAtom` (this session's confirmed options) wins; else `defaultSaveOptions` with
+`save.compression` as the fresh-map compression — `"asOpened"` is StarEdit's PKWARE +
+encryption, anything else goes unencrypted except PKWARE — and then `save.start` applies a
+`SAVE_PRESETS` entry over it. An opened archive's own compression is followed whatever the
+preference says.

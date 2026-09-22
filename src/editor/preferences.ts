@@ -4,6 +4,8 @@
  * name them without the atoms.
  */
 import type { TilesetId } from "../data/tilesets";
+import type { MapVersion } from "../formats/chk/scenario";
+import type { ArchiveCompression } from "../formats/mpq/scm";
 import type { LanguagePreference } from "../i18n";
 
 export type { LanguagePreference };
@@ -22,8 +24,38 @@ export interface Preferences {
    * is replaced by the first map opened rather than kept beside it.
    */
   multipleMaps: boolean;
-  /** What File ▸ New and the startup map start with. */
-  newMap: { tileset: TilesetId; width: number; height: number };
+  /**
+   * What File ▸ New and the startup map start with. `version` is the file's revision:
+   * Brood War (VER 205, what every build reads) or Remastered (206, 32-bit strings).
+   */
+  newMap: { tileset: TilesetId; width: number; height: number; version: NewMapVersion };
+  /**
+   * Startup: `reopenLast` opens the most recent file again in place of the blank map
+   * (the desktop app straight away; a browser needs a click first, so it asks in a
+   * notice), and `recents` is how many File ▸ Open Recent keeps.
+   */
+  startup: { reopenLast: boolean; recents: number };
+  /**
+   * What the Save dialog starts from: the options the file was opened with
+   * (`"asOpened"`, the default), or one of its presets. `compression` is for a map with
+   * no origin — new, or opened from a bare .chk — where there is nothing to follow;
+   * `"asOpened"` there means StarEdit's PKWARE.
+   */
+  save: { start: "asOpened" | "everything" | "smallest"; compression: "asOpened" | ArchiveCompression };
+  /** How many edits Undo keeps per map (SCMDraft keeps 200). */
+  undoLevels: number;
+  /**
+   * The mouse wheel over the map: scrolling, with Ctrl+wheel zooming (the default), or
+   * zooming, with Shift+wheel scrolling sideways. `zoomToCursor` keeps the tile under the
+   * pointer in place when the wheel zooms; the menu and keyboard keep the centre.
+   */
+  view: { wheel: "scroll" | "zoom"; zoomToCursor: boolean };
+  /**
+   * What the palettes start on: the owner of placed units and sprites (0 = player 1),
+   * the brush size (1–7), and the size of a location the Locations palette's New makes,
+   * in tiles.
+   */
+  placement: { owner: number; brushSize: number; locationTiles: number };
   /** Initial View ▸ Animate Water / Animate Units. */
   animateWater: boolean;
   animateUnits: boolean;
@@ -69,12 +101,28 @@ export interface Preferences {
 /** See `Preferences.plugins.updates`. */
 export type PluginUpdateMode = "notify" | "manual" | "auto";
 
+/** The revisions a new map can start on; the two older ones are for opening old files, not making new ones. */
+export type NewMapVersion = Extract<MapVersion, "broodwar" | "remastered">;
+
+/** The bounds Preferences keeps the numbers in. */
+export const PREFERENCE_LIMITS = {
+  undoLevels: { min: 20, max: 1000 },
+  recents: { min: 5, max: 30 },
+  brushSize: { min: 1, max: 7 },
+  locationTiles: { min: 1, max: 16 },
+} as const;
+
 export const DEFAULT_PREFERENCES: Preferences = {
   language: "auto",
   splash: true,
   confirmClose: true,
   multipleMaps: true,
-  newMap: { tileset: "badlands", width: 128, height: 128 },
+  newMap: { tileset: "badlands", width: 128, height: 128, version: "broodwar" },
+  startup: { reopenLast: false, recents: 10 },
+  save: { start: "asOpened", compression: "asOpened" },
+  undoLevels: 200,
+  view: { wheel: "scroll", zoomToCursor: true },
+  placement: { owner: 0, brushSize: 1, locationTiles: 4 },
   animateWater: true,
   animateUnits: true,
   animateWaterSpeed: 1,

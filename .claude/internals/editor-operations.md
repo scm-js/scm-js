@@ -72,4 +72,14 @@ Browse Plugins.
 now — the two placement bags through `mergedStorage`, and every one of them listed in Preferences ▸
 Storage, registered in `STORED_RESETS` and so clearable on its own or with the rest. The grid's
 spacing, look and the two snaps are edited on Preferences ▸ Editing (View ▸ Grid Settings… opens
-that page; there is no separate dialog any more).
+that page; there is no separate dialog any more). `Preferences.undoLevels` is read by
+`commitEditAtom` at commit time (a stack already deeper is trimmed at its next commit) and
+`startup.recents` by `pushRecentAtom`; `placement.{owner,brushSize}` seed `unitOwnerAtom` /
+`brushSizeAtom` in `useApplyPreferences`, `placement.locationTiles` is read by
+`useLocationTools.createInView`. Preferences ▸ Storage ▸ Export / Import
+(`exportStoredPreferences` / `importStoredPreferencesAtom` in `preferencesAtoms.ts`) carry
+every `scmjs.*` key but the caches and the recents (`NOT_EXPORTED`); an import writes each key,
+`RESET`s the owning atom (that removes the key), writes it again and sets the atom from
+storage through `RELOADS` — keep `RELOADS` in step with `STORED_RESETS` (a merged atom
+merges over the value the store holds). `mergedStorage` merges one level down as well
+(`mergeDefaults`), so a field added to a nested group (`newMap.version`) has its default.

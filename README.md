@@ -133,8 +133,8 @@ sections that follow.
 
 Ctrl+N opens New Scenario. Pick a tileset — each is shown as its own ground — a size, and
 how many players. The terrain list under the size is what the whole map is filled with,
-and the preview shows the result at its real scale. *Place automatically* lays down one
-start location per player in a ring; leave it on.
+and the preview shows the result at its real scale. *Place automatically* (off by default) lays down one
+start location per player in a ring; tick it for this map.
 
 ![The New Scenario dialog](docs/images/new-scenario.webp)
 
@@ -1634,24 +1634,33 @@ write it back, so there every save is a download, and the notice at the bottom r
 so. Save As (Ctrl+Shift+S) and Save Copy As open the Save dialog; a copy is written
 without the open map changing its name or file.
 
-![The Save dialog, with everything it will write listed on the right](docs/images/save.webp)
+![The Save dialog](docs/images/save.webp)
 
-The Save dialog is where the file's shape is decided:
+The Save dialog asks for a file name, a format and what to keep. Everything else is
+folded away underneath and can be left alone:
 
 - **Format**: `.scx` (Brood War), `.scm` (original StarCraft), or a bare `.chk`, the
   scenario alone with no archive around it.
-- **Compression**: PKWARE is what StarEdit writes and what Blizzard's own maps are
+- **What to keep**: *Everything* writes the whole file, so any editor can open it with
+  nothing lost. *Smallest that plays* leaves out the parts only an editor reads (the
+  isometric record, the editor's copies of the player table and so on) and compresses
+  the archive as StarEdit does; the map plays the same, but an editor opening the file
+  later has less to work with. *Custom* shows each of those parts with its own tick. The
+  map in the editor is not changed either way.
+- **Archive** (folded): the compression and StarEdit's encryption tick, and the other
+  files in the archive. PKWARE is what StarEdit writes and what Blizzard's own maps are
   stored as, so every StarCraft build reads it; zlib is smaller and needs 1.16.1 or
   Remastered; none is the largest and readable by anything. A map keeps the compression
-  it was opened with. StarEdit's encryption is a tick beside it.
-- **Other files in the archive**: the sounds and the files plugins keep there, each with
-  a tick, so a copy for release can leave them out. A member the editor cannot name — a
-  protected map's archive often has no file list — is kept exactly as stored, and the
-  dialog says how many there are.
-- **Sections**: the parts of the file only an editor reads (the isometric record, the
-  editor's copies of the player table and so on) can be left out to make a smaller file
-  — the dialog says what each costs an editor later, and *Smallest that plays* ticks
-  them all. The map in the editor is not changed.
+  it was opened with, and the fold starts open when a map is not stored the usual way.
+  The sounds and the files plugins keep in the archive each have a tick, so a copy for
+  release can leave them out. A member the editor cannot name — a protected map's
+  archive often has no file list — is kept exactly as stored, and the fold says how
+  many there are.
+- **Sections** (folded): every section the file will hold, with its size and whether it
+  changed, was left out or was merged.
+
+If Check Map finds problems, the dialog says how many beside a button that opens it; the
+map saves either way.
 
 The options confirmed here are what Ctrl+S reuses for that map from then on.
 

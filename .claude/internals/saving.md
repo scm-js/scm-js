@@ -11,7 +11,17 @@ zlib gets 64 KB sectors, the rest StarEdit's 4 KB). The strip groups are `TERRAI
 `editorOnly` flag, and `tests/save.test.ts` keeps the two in step; nothing the game requires can be
 stripped. Merging uses `combine` with the registry's mode, at the first occurrence. `defaultSaveOptions`
 is the file's own extension and *the way it was opened* (`mapOriginAtom`), else StarEdit's layout;
-`SAVE_PRESETS.everything` / `.smallest` are the dialog's two buttons. Nothing here mutates the scenario.
+`SAVE_PRESETS.everything` / `.smallest` are two of the dialog's three *What to keep* radios (the third,
+Custom, shows the five strip ticks; the radio is read back from the ticks — none on, all on, else
+Custom — so a stored option set reopens on the right one). Nothing here mutates the scenario.
+
+The dialog (reworked 2026-09-21, the user found the two-column version confusing): file name, format
+and *What to keep* in front; **Archive** and **Sections** are `<details>` folds (`.save-more`) whose
+summaries carry the current state (compression · encrypted · n of m other files; kept sections ·
+chk size). The Archive fold starts open only when the options differ from `defaultSaveOptions` for
+this map (compression, encryption, or an omitted extra) — nothing is persisted. The revision hint
+under Format shows only when the extension disagrees with `fileVersion`. Check Map shows only with
+errors or warnings.
 
 `mapIo.ts` keeps the File System Access handle (`MapFileHandle`, typed locally — the DOM lib lacks the
 permission methods) from `pickMapFile`, `droppedHandle` (must be *called* inside the drop event) and

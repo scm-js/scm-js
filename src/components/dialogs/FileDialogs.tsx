@@ -50,7 +50,7 @@ export function NewMapDialog({ entry }: DialogProps) {
   const [name, setLocalName] = useState(DEFAULT_NEW_MAP.name);
   const [desc, setLocalDesc] = useState(DEFAULT_NEW_MAP.description);
   const [players, setPlayers] = useState(4);
-  const [autoStarts, setAutoStarts] = useState(true);
+  const [autoStarts, setAutoStarts] = useState(false);
 
   const thumbs = useTilesetThumbs();
   // The chosen tileset's graphics, so the map preview can be drawn at any terrain and size.
@@ -261,10 +261,10 @@ const FORMAT_OPTIONS: { value: MapFormat; label: string }[] = [
   { value: "chk", label: msg("Raw chunk data (.chk)") },
 ];
 
-const COMPRESSION_OPTIONS: { value: ArchiveCompression; label: string; hint: string }[] = [
-  { value: "pkware", label: msg("PKWARE — what StarEdit writes"), hint: msg("Every StarCraft build reads it. Blizzard's own maps are stored this way.") },
-  { value: "zlib", label: msg("zlib — smallest"), hint: msg("StarCraft 1.16.1 and Remastered read it; older builds do not.") },
-  { value: "none", label: msg("None"), hint: msg("The largest file; anything that opens an MPQ reads it.") },
+const COMPRESSION_OPTIONS: { value: ArchiveCompression; label: string; short: string; hint: string }[] = [
+  { value: "pkware", label: msg("PKWARE — what StarEdit writes"), short: "PKWARE", hint: msg("Every StarCraft build reads it. Blizzard's own maps are stored this way.") },
+  { value: "zlib", label: msg("zlib — smallest"), short: "zlib", hint: msg("StarCraft 1.16.1 and Remastered read it; older builds do not.") },
+  { value: "none", label: msg("None"), short: msg("uncompressed"), hint: msg("The largest file; anything that opens an MPQ reads it.") },
 ];
 
 /** "PKWARE-compressed, encrypted, 4 KB sectors, 39.0 KB of 119.7 KB" */
@@ -286,6 +286,27 @@ const baseName = (name: string) => name.replace(/\.(scm|scx|chk)$/i, "").replace
  * bytes to `saveDocument`, which asks the browser where (or downloads) and reports how it
  * went. `payload.done` hears the answer, for a caller awaiting it (Close Scenario's Save).
  */
+type KeepMode = "everything" | "smallest" | "custom";
+
+/** The five ticks that leave something out of the file; the dialog's one choice sits over them. */
+const STRIP_KEYS = ["stripTerrainEditing", "stripBookkeeping", "stripUnknown", "mergeRepeats", "dropTrailing"] as const;
+
+function keepModeOf(o: SaveOptions): KeepMode {
+  const on = STRIP_KEYS.filter((k) => o[k]).length;
+  return on === 0 ? "everything" : on === STRIP_KEYS.length ? "smallest" : "custom";
+}
+
+const KEEP_CHOICES: { id: KeepMode; label: string; hint: string }[] = [
+  { id: "everything", label: msg("Everything"), hint: msg("The file opens in any editor with nothing lost.") },
+  { id: "smallest", label: msg("Smallest that plays"), hint: msg("Leaves out what only an editor reads and compresses as StarEdit does. It plays the same; an editor opening it later has less to work with.") },
+  { id: "custom", label: msg("Custom"), hint: msg("Choose what to leave out.") },
+];
+
+/**
+ * Save As and Save a Copy. The front is a file name, a format and one choice of what to
+ * keep; the archive's layout and the section list are folded away under it, and the
+ * archive fold starts open only when this map is not stored the usual way.
+ */
 export function SaveMapDialog({ entry }: DialogProps) {
   const copy = entry.payload?.copy === true;
   const done = entry.payload?.done as ((ok: boolean) => void) | undefined;
@@ -302,6 +323,13 @@ export function SaveMapDialog({ entry }: DialogProps) {
 
   const [file, setFile] = useState(() => (baseName(path ?? name) || "scenario") + (copy ? " copy" : ""));
   const [opts, setOpts] = useState<SaveOptions>(() => (scenario ? stored ?? defaultSaveOptions(scenario, origin, path) : DEFAULT_SAVE_OPTIONS));
+  const [keep, setKeep] = useState<KeepMode>(() => keepModeOf(opts));
+  const [archiveOpen, setArchiveOpen] = useState(() => {
+    if (!scenario) return false;
+    const usual = defaultSaveOptions(scenario, origin, path);
+    return opts.compression !== usual.compression || opts.encrypt !== usual.encrypt || opts.omitExtras.length > 0;
+  });
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [built, setBuilt] = useState<{ options: SaveOptions; bytes: Uint8Array } | null>(null);
@@ -323,14 +351,28 @@ export function SaveMapDialog({ entry }: DialogProps) {
   }, [scenario, extras, opts, plan, storedMembers]);
 
   const set = <K extends keyof SaveOptions>(key: K, value: SaveOptions[K]) => setOpts((o) => ({ ...o, [key]: value }));
-  const keepExtra = (n: string, keep: boolean) => set("omitExtras", keep ? opts.omitExtras.filter((x) => x !== n) : [...opts.omitExtras, n]);
+  const keepExtra = (n: string, on: boolean) => set("omitExtras", on ? opts.omitExtras.filter((x) => x !== n) : [...opts.omitExtras, n]);
+  const pickKeep = (mode: KeepMode) => {
+    setKeep(mode);
+    if (mode === "everything") setOpts(SAVE_PRESETS.everything);
+    else if (mode === "smallest") setOpts(SAVE_PRESETS.smallest);
+  };
   const ready = built && built.options === opts ? built.bytes : null;
   const archive = opts.format !== "chk";
   const compression = COMPRESSION_OPTIONS.find((c) => c.value === opts.compression) ?? COMPRESSION_OPTIONS[0];
   const counts = plan?.counts;
   const kept = plan ? plan.sections.filter((x) => x.fate !== "dropped").length : 0;
-  const dropped = plan ? plan.sections.length - kept : 0;
   const keptExtras = plan ? plan.extras.filter((e) => e.kept).length : 0;
+  // The extension only says which game the file is for; say so when it disagrees with the map's revision.
+  const revisionMismatch = scenario !== null && archive && (opts.format === "scx") !== (scenario.fileVersion >= 205);
+
+  const archiveLine = !archive
+    ? t("none, a bare .chk")
+    : [
+      translate(compression.short),
+      opts.encrypt ? t("encrypted") : null,
+      plan && plan.extras.length > 0 ? t("{kept} of {total} other files", { kept: keptExtras, total: plan.extras.length }) : null,
+    ].filter(Boolean).join(" · ");
 
   const save = async () => {
     if (!scenario) return;
@@ -357,7 +399,7 @@ export function SaveMapDialog({ entry }: DialogProps) {
       dialogKey={entry.key}
       title={copy ? t("Save a Copy") : t("Save Scenario As")}
       icon={<Save size={14} />}
-      size="lg"
+      size="md"
       description={copy ? t("Writes a copy; the open map keeps its own file and name.") : undefined}
       footer={
         <>
@@ -367,47 +409,63 @@ export function SaveMapDialog({ entry }: DialogProps) {
           <Button onClick={() => close(entry.key)}>{t("Cancel")}</Button>
         </>
       }
-      footerLeft={plan && (
-        <span className="mono">
-          {ready ? formatBytes(ready.length) : "…"}
-          {archive ? ` · scenario.chk ${formatBytes(plan.chkSize)}` : ""}
-        </span>
-      )}
+      footerLeft={plan && <span className="mono">{ready ? formatBytes(ready.length) : "…"}</span>}
     >
       {!scenario && <p className="error-text">{t("Open a map first — there is nothing to save.")}</p>}
       {scenario && plan && counts && (
-        <div className="split" style={{ ["--split" as string]: "minmax(300px, 1fr)" }}>
-          <div className="stack">
-            <Group title={t("File")}>
-              <div className="form wide">
-                <Field label={t("File name")}>
-                  <div className="row">
-                    <TextInput value={file} onChange={(e) => setFile(e.target.value)} />
-                    <span className="mono dim">.{opts.format}</span>
-                  </div>
-                </Field>
-                <Field label={t("Format")} hint={opts.format === "chk" ? t("The scenario alone, no archive around it.") : t("The extension does not change the map's revision; Scenario ▸ Map Revision does.")}>
-                  <Select value={opts.format} onChange={(e) => set("format", e.target.value as MapFormat)} options={FORMAT_OPTIONS} />
-                </Field>
+        <div className="stack">
+          <div className="form wide">
+            <Field label={t("File name")}>
+              <div className="row">
+                <TextInput value={file} onChange={(e) => setFile(e.target.value)} />
+                <span className="mono dim">.{opts.format}</span>
               </div>
-              {!canPickSaveLocation() && (
-                <p className="hint" style={{ marginTop: 6 }}>{t("{Here} cannot ask where to put the file: it goes to the downloads folder.", { Here: hostTerms().Here })}</p>
-              )}
-            </Group>
+            </Field>
+            <Field
+              label={t("Format")}
+              hint={opts.format === "chk" ? t("The scenario alone, no archive around it.") : revisionMismatch ? t("The extension does not change the map's revision; Scenario ▸ Map Revision does.") : undefined}
+            >
+              <Select value={opts.format} onChange={(e) => set("format", e.target.value as MapFormat)} options={FORMAT_OPTIONS} />
+            </Field>
+          </div>
+          {!canPickSaveLocation() && (
+            <p className="hint">{t("{Here} cannot ask where to put the file: it goes to the downloads folder.", { Here: hostTerms().Here })}</p>
+          )}
 
-            <Group title={t("Archive")}>
+          <Group title={t("What to keep")}>
+            <div className="col save-keep">
+              {KEEP_CHOICES.map((c) => (
+                <label key={c.id} className="check">
+                  <input type="radio" name="save-keep" checked={keep === c.id} onChange={() => pickKeep(c.id)} />
+                  <span><div>{translate(c.label)}</div><div className="hint">{translate(c.hint)}</div></span>
+                </label>
+              ))}
+            </div>
+            {keep === "custom" && (
+              <div className="col save-options">
+                <Check label={t("Leave out terrain editing data — ISOM, TILE, DD2 ({terrainEditing})", { terrainEditing: counts.terrainEditing })} checked={opts.stripTerrainEditing} disabled={counts.terrainEditing === 0} onChange={(e) => set("stripTerrainEditing", e.target.checked)} />
+                <Check label={t("Leave out editor bookkeeping — IVER, IVE2, IOWN, UPUS, SWNM, WAV ({bookkeeping})", { bookkeeping: counts.bookkeeping })} checked={opts.stripBookkeeping} disabled={counts.bookkeeping === 0} onChange={(e) => set("stripBookkeeping", e.target.checked)} />
+                <Check label={t("Leave out sections the format reference does not know ({unknown})", { unknown: counts.unknown })} checked={opts.stripUnknown} disabled={counts.unknown === 0} onChange={(e) => set("stripUnknown", e.target.checked)} />
+                <Check label={t("Merge repeated sections into one ({repeated})", { repeated: counts.repeated })} checked={opts.mergeRepeats} disabled={counts.repeated === 0} onChange={(e) => set("mergeRepeats", e.target.checked)} />
+                <Check label={t("Drop bytes after the last section ({formatBytes})", { formatBytes: formatBytes(counts.trailing) })} checked={opts.dropTrailing} disabled={counts.trailing === 0} onChange={(e) => set("dropTrailing", e.target.checked)} />
+              </div>
+            )}
+            {keep !== "everything" && <p className="hint" style={{ marginTop: 6 }}>{t("The open map is not changed, only the file.")}</p>}
+          </Group>
+
+          <details className="save-more" open={archiveOpen} onToggle={(e) => setArchiveOpen(e.currentTarget.open)}>
+            <summary><span>{t("Archive")}</span><span className="v">{archiveLine}</span></summary>
+            <div className="save-more-body">
               <div className="form wide">
                 <Field label={t("Compression")} hint={archive ? translate(compression.hint) : t("Not used for a bare .chk.")}>
                   <Select value={opts.compression} disabled={!archive} onChange={(e) => set("compression", e.target.value as ArchiveCompression)} options={COMPRESSION_OPTIONS.map((c) => ({ value: c.value, label: c.label }))} />
                 </Field>
               </div>
-              <div className="col" style={{ gap: 2, marginTop: 6 }}>
-                <Check label={t("Encrypt the files inside, as StarEdit does")} checked={opts.encrypt} disabled={!archive} onChange={(e) => set("encrypt", e.target.checked)} />
-              </div>
-              {origin && <p className="hint" style={{ marginTop: 6 }}>{t("Opened as {describeOrigin}.", { describeOrigin: describeOrigin(origin) })}</p>}
+              <Check label={t("Encrypt the files inside, as StarEdit does")} checked={opts.encrypt} disabled={!archive} onChange={(e) => set("encrypt", e.target.checked)} />
+              {origin && <p className="hint">{t("Opened as {describeOrigin}.", { describeOrigin: describeOrigin(origin) })}</p>}
               {plan.extras.length > 0 && (
                 <>
-                  <div className="pane-label" style={{ marginTop: 8 }}>{t("Other files in the archive")}</div>
+                  <div className="pane-label">{t("Other files in the archive")}</div>
                   <div className="save-extras">
                     {plan.extras.map((e) => (
                       <Check
@@ -422,86 +480,59 @@ export function SaveMapDialog({ entry }: DialogProps) {
                 </>
               )}
               {plan.stored && (
-                <p className="hint" style={{ marginTop: 6 }}>
-                  {t("{count} more member", { count: plan.stored.count })}{plan.stored.count === 1 ? "" : "s"} ({formatBytes(plan.stored.size)}) {plan.stored.count === 1 ? "has" : t("have")} {" "}{t("no name the editor knows")}{plan.stored.members.unreadable.length > 0 ? t(", or could not be decoded") : ""}; {archive ? t("kept exactly as stored") : t("not written to a bare .chk")}.
+                <p className="hint">
+                  {archive
+                    ? t("{count, plural, one {# more file ({size}) has} other {# more files ({size}) have}} no name the editor knows; kept exactly as stored.", { count: plan.stored.count, size: formatBytes(plan.stored.size) })
+                    : t("{count, plural, one {# more file ({size}) has} other {# more files ({size}) have}} no name the editor knows; not written to a bare .chk.", { count: plan.stored.count, size: formatBytes(plan.stored.size) })}
+                  {plan.stored.members.unreadable.length > 0 ? " " + t("Some could not be decoded.") : ""}
                 </p>
               )}
-            </Group>
-
-            <Group title={t("Sections")}>
-              <div className="save-presets">
-                <span className="hint">{t("Preset")}</span>
-                <Button size="sm" onClick={() => setOpts(SAVE_PRESETS.everything)}>{t("Everything")}</Button>
-                <Button size="sm" onClick={() => setOpts(SAVE_PRESETS.smallest)}>{t("Smallest that plays")}</Button>
-              </div>
-              <div className="col save-options" style={{ gap: 0, marginTop: 6 }}>
-                <Check label={t("Leave out terrain editing data — ISOM, TILE, DD2 ({terrainEditing})", { terrainEditing: counts.terrainEditing })} checked={opts.stripTerrainEditing} disabled={counts.terrainEditing === 0} onChange={(e) => set("stripTerrainEditing", e.target.checked)} />
-                <Check label={t("Leave out editor bookkeeping — IVER, IVE2, IOWN, UPUS, SWNM, WAV ({bookkeeping})", { bookkeeping: counts.bookkeeping })} checked={opts.stripBookkeeping} disabled={counts.bookkeeping === 0} onChange={(e) => set("stripBookkeeping", e.target.checked)} />
-                <Check label={t("Leave out sections the format reference does not know ({unknown})", { unknown: counts.unknown })} checked={opts.stripUnknown} disabled={counts.unknown === 0} onChange={(e) => set("stripUnknown", e.target.checked)} />
-                <Check label={t("Merge repeated sections into one ({repeated})", { repeated: counts.repeated })} checked={opts.mergeRepeats} disabled={counts.repeated === 0} onChange={(e) => set("mergeRepeats", e.target.checked)} />
-                <Check label={t("Drop bytes after the last section ({formatBytes})", { formatBytes: formatBytes(counts.trailing) })} checked={opts.dropTrailing} disabled={counts.trailing === 0} onChange={(e) => set("dropTrailing", e.target.checked)} />
-              </div>
-              <p className="hint" style={{ marginTop: 6 }}>{t("The game reads none of these; leaving them out changes what an editor can do with the file, not how it plays. The open map is not changed.")}</p>
-            </Group>
-          </div>
-
-          <div className="stack">
-            <Group title={t("What will be written")} flush>
-              <div className="save-sections">
-                <table className="table">
-                  <thead>
-                    <tr><th>{t("Section")}</th><th>{t("What")}</th><th style={{ textAlign: "right" }}>{t("Size")}</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {plan.sections.map((x) => (
-                      <tr key={x.index} className={x.fate} title={x.reason}>
-                        <td className="name">{x.name}</td>
-                        <td>{x.what ? translate(x.what) : <span className="faint">{t("unknown")}</span>}{x.editorOnly && <span className="faint"> {t("· editor only")}</span>}</td>
-                        <td className="num">{formatBytes(x.size)}</td>
-                        <td className="fate">
-                          {x.fate === "dropped" && <span className="badge warn">{t("left out")}</span>}
-                          {x.fate === "merged" && <span className="badge teal">{t("merged")}</span>}
-                          {x.fate === "kept" && x.dirty && <span className="badge gold">{t("changed")}</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Group>
-            <div className="save-summary">
-              <span className="k">scenario.chk</span>
-              <span className="v">{formatBytes(plan.chkSize)}{plan.chkSize !== plan.chkSizeBefore ? t(" (was {formatBytes})", { formatBytes: formatBytes(plan.chkSizeBefore) }) : ""}</span>
-              <span className="k">{t("Sections")}</span>
-              <span className="v">{kept} of {plan.sections.length}{dropped > 0 ? t(", {dropped} left out", { dropped }) : ""}</span>
-              {archive && (
-                <>
-                  <span className="k">{t("Archive")}</span>
-                  <span className="v">{ready ? `${formatBytes(ready.length)} · ${compression.value === "none" ? "uncompressed" : compression.value}${opts.encrypt ? ", encrypted" : ""}` : "…"}</span>
-                  {(plan.extras.length > 0 || plan.stored) && (
-                    <>
-                      <span className="k">{t("Other files")}</span>
-                      <span className="v">{keptExtras} of {plan.extras.length}{plan.stored ? t(", {count} kept as stored", { count: plan.stored.count }) : ""}</span>
-                    </>
-                  )}
-                </>
-              )}
-              {issues && (
-                <>
-                  <span className="k">{t("Check Map")}</span>
-                  <span className="v row" style={{ gap: 8, alignItems: "center" }}>
-                    <span className={`badge ${issues.error > 0 ? "danger" : issues.warn > 0 ? "warn" : "ok"}`}>
-                      {issues.error > 0 ? t("{error, plural, one {# error} other {# errors}}", { error: issues.error }) : issues.warn > 0 ? t("{warn, plural, one {# warning} other {# warnings}}", { warn: issues.warn }) : t("no problems")}
-                    </span>
-                    <Button size="sm" onClick={() => openDialog("validateMap")}>{t("Open Check Map…")}</Button>
-                  </span>
-                </>
-              )}
             </div>
-            {plan.warnings.map((w) => (
-              <div key={w} className="save-warning"><TriangleAlert size={13} /><span>{w}</span></div>
-            ))}
-          </div>
+          </details>
+
+          <details className="save-more" open={sectionsOpen} onToggle={(e) => setSectionsOpen(e.currentTarget.open)}>
+            <summary>
+              <span>{t("Sections")}</span>
+              <span className="v">
+                {t("{kept} of {total}", { kept, total: plan.sections.length })} · scenario.chk {formatBytes(plan.chkSize)}
+                {plan.chkSize !== plan.chkSizeBefore ? t(" (was {formatBytes})", { formatBytes: formatBytes(plan.chkSizeBefore) }) : ""}
+              </span>
+            </summary>
+            <div className="save-sections">
+              <table className="table">
+                <thead>
+                  <tr><th>{t("Section")}</th><th>{t("What")}</th><th style={{ textAlign: "right" }}>{t("Size")}</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {plan.sections.map((x) => (
+                    <tr key={x.index} className={x.fate} title={x.reason}>
+                      <td className="name">{x.name}</td>
+                      <td>{x.what ? translate(x.what) : <span className="faint">{t("unknown")}</span>}{x.editorOnly && <span className="faint"> {t("· editor only")}</span>}</td>
+                      <td className="num">{formatBytes(x.size)}</td>
+                      <td className="fate">
+                        {x.fate === "dropped" && <span className="badge warn">{t("left out")}</span>}
+                        {x.fate === "merged" && <span className="badge teal">{t("merged")}</span>}
+                        {x.fate === "kept" && x.dirty && <span className="badge gold">{t("changed")}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          {plan.warnings.map((w) => (
+            <div key={w} className="save-warning"><TriangleAlert size={13} /><span>{w}</span></div>
+          ))}
+          {issues && (issues.error > 0 || issues.warn > 0) && (
+            <div className="save-check">
+              <span className={`badge ${issues.error > 0 ? "danger" : "warn"}`}>
+                {issues.error > 0 ? t("{error, plural, one {# error} other {# errors}}", { error: issues.error }) : t("{warn, plural, one {# warning} other {# warnings}}", { warn: issues.warn })}
+              </span>
+              <span className="hint">{t("Check Map found problems. The map saves either way.")}</span>
+              <Button size="sm" onClick={() => openDialog("validateMap")}>{t("Open Check Map…")}</Button>
+            </div>
+          )}
         </div>
       )}
       {error && <p className="error-text">{error}</p>}

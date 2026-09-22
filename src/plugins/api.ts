@@ -2273,6 +2273,42 @@ export interface DialogSlotSpec {
 }
 
 /**
+ * A page of the plugin's own in Edit ▸ Preferences, listed under Plugins by the plugin's
+ * name — where a user looks for a setting, instead of a menu item per plugin. One page per
+ * plugin; registering again replaces it. `mount` runs the first time the page is shown
+ * while the dialog is open and the page then stays mounted until the dialog closes, so
+ * what the user changed is still there when OK or Apply calls `apply`; the cleanup runs
+ * on close. A page with no `apply` writes its settings as they change (`api.storage`),
+ * which is the simpler shape when nothing needs undoing on Cancel.
+ *
+ * @example
+ * api.ui.preferencesPage({
+ *   mount(body) {
+ *     const w = api.ui.widgets;
+ *     const dock = w.select([{ value: "float", label: "Floating" }, { value: "right", label: "Docked" }], { value: settings.dock });
+ *     body.append(w.form([{ label: "Panel", field: dock }]), w.hint("Where the panel opens."));
+ *     pending = () => save({ dock: dock.value });
+ *   },
+ *   apply: () => pending?.(),
+ * });
+ */
+export interface PreferencesPageSpec {
+  /** Fill `body` with the page's controls; return a cleanup if you need one. */
+  mount(body: HTMLElement, page: PreferencesPageHost): void | (() => void);
+  /** Called on OK and Apply while the dialog is open and the page has been shown. */
+  apply?(): void;
+  /** Called by Reset to defaults while the page is the one showing. */
+  reset?(): void;
+}
+
+/** What a preferences page's `mount` is handed. */
+export interface PreferencesPageHost {
+  readonly plugin: PluginInfo;
+  /** Close the Preferences dialog. */
+  close(): void;
+}
+
+/**
  * What `view.flash` highlights: a tile rect, or units / locations by index. The
  * highlight fades over `ms` (600 by default) and never blocks or takes the pointer; it is
  * the shared way to say "this just changed" or "look here", so every plugin's flash looks
@@ -2473,6 +2509,12 @@ export interface UiApi {
    * });
    */
   dialogSlot(dialog: DialogSlotId, spec: DialogSlotSpec): Disposable;
+  /**
+   * A page of the plugin's own in Edit ▸ Preferences, under Plugins — see
+   * `PreferencesPageSpec`. `ui.open("preferences", { page: "plugin:<id>" })` opens it.
+   * Returns the registration; it leaves with `dispose()` or the plugin.
+   */
+  preferencesPage(spec: PreferencesPageSpec): Disposable;
   /**
    * Take over the pointer on the map until `stop()`, Esc, a right-click, a map change
    * or another tool. One tool runs at a time — starting one stops the previous — and a

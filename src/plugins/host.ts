@@ -26,7 +26,7 @@ import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -150,7 +150,7 @@ export type Store = ReturnType<typeof createStore>;
 /** Everything one plugin registered, so deactivation can take it all back. */
 export class Contributions {
   readonly disposables: (() => void)[] = [];
-  readonly counts = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 };
+  readonly counts = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 };
   /**
    * Set by `dispose` and never cleared: the bag is the plugin's activation, and the only
    * thing that can reach it afterwards is a callback the plugin left behind — a timer, a
@@ -2163,6 +2163,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         store.set(pluginDialogSlotsAtom, [...store.get(pluginDialogSlotsAtom), { key, plugin: info, dialog, spec }]);
         return bag.add(() => store.set(pluginDialogSlotsAtom, store.get(pluginDialogSlotsAtom).filter((e) => e.key !== key)));
       },
+      preferencesPage: (spec) => {
+        const key = nextContributionKey();
+        // One page per plugin: a second registration takes the first one's place.
+        store.set(pluginPreferencesPagesAtom, [...store.get(pluginPreferencesPagesAtom).filter((e) => e.plugin.id !== info.id), { key, plugin: info, spec }]);
+        return bag.add(() => store.set(pluginPreferencesPagesAtom, store.get(pluginPreferencesPagesAtom).filter((e) => e.key !== key)), "preferences");
+      },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),
       pickFiles: (options = {}) => new Promise<File[]>((resolve) => {
@@ -2328,7 +2334,7 @@ function activeMap(store: Store): Map<string, Active> {
 
 function setRuntime(store: Store, spec: string, patch: Partial<PluginRuntime>) {
   const all = store.get(pluginRuntimesAtom);
-  const prev = all[spec] ?? { spec, status: "disabled" as const, manifest: null, icon: null, error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } };
+  const prev = all[spec] ?? { spec, status: "disabled" as const, manifest: null, icon: null, error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 } };
   store.set(pluginRuntimesAtom, { ...all, [spec]: { ...prev, ...patch } });
 }
 
@@ -2568,7 +2574,7 @@ export function deactivatePlugin(store: Store, spec: string) {
   map.delete(spec);
   runDeactivate(entry.deactivate);
   entry.bag.dispose();
-  setRuntime(store, spec, { status: "disabled", error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } });
+  setRuntime(store, spec, { status: "disabled", error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 } });
   logInfo("plugins", `${store.get(pluginRuntimesAtom)[spec]?.manifest?.name ?? specLabel(spec)} stopped`, { spec });
 }
 

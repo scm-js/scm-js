@@ -34,7 +34,7 @@ import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
-  pluginDialogSlotsAtom, pluginStatusItemsAtom, viewFlashesAtom,
+  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, viewFlashesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -262,7 +262,7 @@ function blankStore(width = 8, height = 6) {
   return { store, scn };
 }
 
-const zero = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 };
+const zero = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 };
 
 describe("plugin api", () => {
   it("registers menu, context-menu and hotkey contributions and takes them back on dispose", () => {
@@ -275,7 +275,7 @@ describe("plugin api", () => {
     expect(store.get(pluginMenuItemsAtom)).toMatchObject([{ pluginId: "t", path: "File/Import", label: "Do It…" }]);
     expect(store.get(pluginContextItemsAtom)).toMatchObject([{ pluginId: "t", surface: "viewport" }]);
     expect(store.get(pluginHotkeysAtom)).toMatchObject([{ combo: "Ctrl+Shift+I" }]);
-    expect(bag.counts).toEqual({ menu: 1, contextMenu: 1, hotkeys: 1, events: 0 });
+    expect(bag.counts).toEqual({ menu: 1, contextMenu: 1, hotkeys: 1, events: 0, preferences: 0 });
     item.dispose();
     expect(store.get(pluginContextItemsAtom)).toEqual([]);
     bag.dispose();
@@ -1252,7 +1252,7 @@ describe("plugin lifecycle", () => {
 
   it("says so when a plugin nobody asked for does not load", () => {
     const rt = (spec: string, error: string, name?: string) => ({
-      [spec]: { spec, status: "error" as const, manifest: name ? ({ name } as never) : null, icon: null, error, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } },
+      [spec]: { spec, status: "error" as const, manifest: name ? ({ name } as never) : null, icon: null, error, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 } },
     });
     const offline = "Failed to fetch.";
     const wanted = [
@@ -2391,6 +2391,28 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     expect(store.get(pluginDialogSlotsAtom).map((e) => e.dialog)).toEqual(["trigedit.text"]);
     bag.dispose();
     expect(store.get(pluginDialogSlotsAtom)).toEqual([]);
+  });
+
+  it("registers one Preferences page per plugin, the newest replacing the last, and sweeps it with the plugin", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const first = api.ui.preferencesPage({ mount: () => {} });
+    const other = createPluginApi(store, { id: "u", name: "U", source: "s" }, new Contributions());
+    other.ui.preferencesPage({ mount: () => {} });
+    expect(store.get(pluginPreferencesPagesAtom).map((e) => e.plugin.id)).toEqual(["t", "u"]);
+    // Registering again is a replacement, not a second page.
+    const second = api.ui.preferencesPage({ mount: () => {}, apply: () => {} });
+    expect(store.get(pluginPreferencesPagesAtom).map((e) => [e.plugin.id, typeof e.spec.apply])).toEqual([["u", "undefined"], ["t", "function"]]);
+    expect(bag.counts.preferences).toBe(2);
+    // The first registration's dispose is stale: its entry is already gone.
+    first.dispose();
+    expect(store.get(pluginPreferencesPagesAtom).map((e) => e.plugin.id)).toEqual(["u", "t"]);
+    second.dispose();
+    expect(store.get(pluginPreferencesPagesAtom).map((e) => e.plugin.id)).toEqual(["u"]);
+    api.ui.preferencesPage({ mount: () => {} });
+    bag.dispose();
+    expect(store.get(pluginPreferencesPagesAtom).map((e) => e.plugin.id)).toEqual(["u"]);
   });
 
   it("turns a flash target into boxes in map pixels, clamped, and forgets expired ones", () => {

@@ -11,7 +11,7 @@ import {
 } from "../src/plugins/updates";
 
 const rt = (spec: string, name: string, version: string): Record<string, PluginRuntime> => ({
-  [spec]: { spec, status: "active", manifest: { name, version } as never, icon: null, error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0 } } as never,
+  [spec]: { spec, status: "active", manifest: { name, version } as never, icon: null, error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 } } as never,
 });
 
 const registry = (...plugins: object[]): Registry =>

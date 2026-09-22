@@ -9,7 +9,7 @@
  * atoms; the working copy re-reads whatever a clear touched so OK afterwards does not write
  * the old values straight back.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronDown,
@@ -26,7 +26,9 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { openDialogAtom } from "../../atoms/uiAtoms";
+import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
+import { pluginPreferencesPagesAtom, type PluginPreferencesPageEntry } from "../../atoms/pluginAtoms";
+import { logError } from "../../editor/log";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom } from "../../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import {
@@ -61,6 +63,9 @@ import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./Test
 
 export type PreferencesPage = "general" | "editing" | "view" | "testing" | "plugins" | "storage" | "hotkeys";
 
+/** A page id as the payload carries it: a built-in page, or `plugin:<id>` for a plugin's page. */
+type PageId = PreferencesPage | `plugin:${string}`;
+
 const PAGES: { id: PreferencesPage; label: string; icon: ReactNode }[] = [
   { id: "general", label: msg("General"), icon: <Settings2 size={13} /> },
   { id: "editing", label: msg("Editing"), icon: <PencilRuler size={13} /> },
@@ -71,9 +76,10 @@ const PAGES: { id: PreferencesPage; label: string; icon: ReactNode }[] = [
   { id: "hotkeys", label: msg("Hotkeys"), icon: <Keyboard size={13} /> },
 ];
 
-function pageOf(payload: Record<string, unknown> | undefined): PreferencesPage {
+function pageOf(payload: Record<string, unknown> | undefined): PageId {
   const page = payload?.page;
-  return PAGES.some((p) => p.id === page) ? (page as PreferencesPage) : "general";
+  if (typeof page === "string" && (PAGES.some((p) => p.id === page) || page.startsWith("plugin:"))) return page as PageId;
+  return "general";
 }
 
 /** A heading and its rows — the group box's legend without the box. */
@@ -130,6 +136,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
   const [locationSnap, setLocationSnap] = useAtom(locationSnapAtom);
   const [doodadPlacement, setDoodadPlacement] = useAtom(doodadPlacementAtom);
   const open = useSetAtom(openDialogAtom);
+  const close = useSetAtom(closeDialogAtom);
+  const pluginPages = useAtomValue(pluginPreferencesPagesAtom);
   const live = (): Working => ({
     prefs: store.get(preferencesAtom),
     gridSize: store.get(gridSizeAtom),
@@ -138,7 +146,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
     snapDoodads: store.get(doodadPlacementAtom).snapToGrid,
   });
   const [w, setW] = useState<Working>(() => ({ prefs, gridSize, look, snapLocations: locationSnap !== 0, snapDoodads: doodadPlacement.snapToGrid }));
-  const [page, setPage] = useState<PreferencesPage>(() => pageOf(entry.payload));
+  const [page, setPage] = useState<PageId>(() => pageOf(entry.payload));
+  // A plugin's page, once shown, stays mounted (hidden) until the dialog closes, so what
+  // the user changed on it is still there for `apply` after they moved to another page.
+  const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  const shownPlugin = page.startsWith("plugin:") ? pluginPages.find((e) => `plugin:${e.plugin.id}` === page) : undefined;
+  useEffect(() => {
+    if (shownPlugin && !visited.has(shownPlugin.plugin.id)) setVisited(new Set(visited).add(shownPlugin.plugin.id));
+  }, [shownPlugin, visited]);
   const patch = (p: Partial<Preferences>) => setW({ ...w, prefs: { ...w.prefs, ...p } });
   const apply = () => {
     setPrefs(w.prefs);
@@ -146,6 +161,16 @@ export function PreferencesDialog({ entry }: DialogProps) {
     setLook(w.look);
     setLocationSnap(w.snapLocations ? w.gridSize : 0);
     if (doodadPlacement.snapToGrid !== w.snapDoodads) setDoodadPlacement({ ...doodadPlacement, snapToGrid: w.snapDoodads });
+    for (const e of pluginPages) {
+      if (!visited.has(e.plugin.id)) continue;
+      try { e.spec.apply?.(); } catch (err) { logError(e.plugin.name, "The Preferences page's apply failed", err); }
+    }
+  };
+  const reset = () => {
+    setW(DEFAULT_WORKING);
+    if (shownPlugin) {
+      try { shownPlugin.spec.reset?.(); } catch (err) { logError(shownPlugin.plugin.name, "The Preferences page's reset failed", err); }
+    }
   };
   // After a clear the atoms behind these keys are back on their defaults; follow them.
   const reseed = (keys: string[]) => {
@@ -183,7 +208,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
       showApply
       onOk={apply}
       footerLeft={
-        <Button size="sm" onClick={() => setW(DEFAULT_WORKING)} title={t("Every page back to how the editor ships; nothing is written until OK or Apply.")}>
+        <Button size="sm" onClick={reset} title={t("Every page back to how the editor ships; nothing is written until OK or Apply.")}>
           <RotateCcw size={11} /> {" "}{t("Reset to defaults")}
         </Button>
       }
@@ -191,23 +216,74 @@ export function PreferencesDialog({ entry }: DialogProps) {
       <div className="split prefs" style={{ ["--split" as string]: "168px" }}>
         <nav className="prefs-nav" aria-label={t("Preferences pages")}>
           {PAGES.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`prefs-nav-btn ${page === p.id ? "is-active" : ""}`}
-              aria-current={page === p.id ? "page" : undefined}
-              onClick={() => setPage(p.id)}
-            >
-              {p.icon}
-              <span>{translate(p.label)}</span>
-            </button>
+            <div key={p.id} className="col" style={{ gap: 2 }}>
+              <button
+                type="button"
+                className={`prefs-nav-btn ${page === p.id ? "is-active" : ""}`}
+                aria-current={page === p.id ? "page" : undefined}
+                onClick={() => setPage(p.id)}
+              >
+                {p.icon}
+                <span>{translate(p.label)}</span>
+              </button>
+              {p.id === "plugins" && pluginPages.map((e) => {
+                const id: PageId = `plugin:${e.plugin.id}`;
+                return (
+                  <button
+                    key={e.key}
+                    type="button"
+                    className={`prefs-nav-btn nested ${page === id ? "is-active" : ""}`}
+                    aria-current={page === id ? "page" : undefined}
+                    title={e.plugin.name}
+                    onClick={() => setPage(id)}
+                  >
+                    <span>{e.plugin.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </nav>
-        <div className="prefs-page" key={page}>
-          {content[page]()}
+        {/* One container for every page, so a visited plugin page stays mounted while a built-in one shows. */}
+        <div className="prefs-page">
+          {!page.startsWith("plugin:") && <div className="prefs-builtin" key={page}>{content[page as PreferencesPage]()}</div>}
+          {page.startsWith("plugin:") && !shownPlugin && <p className="hint">{t("This plugin has no Preferences page, or is not running.")}</p>}
+          {pluginPages.filter((e) => visited.has(e.plugin.id) || e === shownPlugin).map((e) => (
+            <PluginPreferencesPage key={e.key} entry={e} shown={e === shownPlugin} onClose={() => close(entry.key)} />
+          ))}
         </div>
       </div>
     </DialogFrame>
+  );
+}
+
+/**
+ * One plugin's page: an empty `div` the plugin fills through `spec.mount`. The host element
+ * is held in state, not a ref — the dialog's portal mounts a commit after this component,
+ * so a ref read in the first effect pass is still null. Hidden, not unmounted, while
+ * another page shows (see `visited` above).
+ */
+function PluginPreferencesPage({ entry, shown, onClose }: { entry: PluginPreferencesPageEntry; shown: boolean; onClose: () => void }) {
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!host) return;
+    let cleanup: void | (() => void);
+    try {
+      cleanup = entry.spec.mount(host, { plugin: entry.plugin, close: onClose });
+    } catch (err) {
+      logError(entry.plugin.name, "The Preferences page's mount failed", err);
+      host.textContent = err instanceof Error ? err.message : String(err);
+    }
+    return () => { try { cleanup?.(); } catch (err) { logError(entry.plugin.name, "The Preferences page's cleanup failed", err); } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host, entry]);
+  return (
+    <div className="stack" hidden={!shown}>
+      <section className="prefs-section">
+        <h3>{entry.plugin.name}</h3>
+        <div ref={setHost} className="col plugin-prefs-page" style={{ gap: 6 }} />
+      </section>
+    </div>
   );
 }
 

@@ -456,6 +456,7 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
   if (c.contextMenu) parts.push(t("{n, plural, one {# context-menu item} other {# context-menu items}}", { n: c.contextMenu }));
   if (c.hotkeys) parts.push(`${c.hotkeys} hotkey${c.hotkeys === 1 ? "" : "s"}`);
   if (c.events) parts.push(`${c.events} listener${c.events === 1 ? "" : "s"}`);
+  if (c.preferences) parts.push(t("a Preferences page"));
   return parts.length > 0 ? parts.join(", ") : t("no contributions");
 }
 

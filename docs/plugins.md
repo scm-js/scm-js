@@ -124,7 +124,8 @@ where the row shows the error.
 
 A plugin can keep settings in the browser. Preferences ▸ Storage lists
 them as one row under the plugin's id, with a button to clear them, and Clear all data
-sweeps them with the rest.
+sweeps them with the rest. The controls for those settings belong on a page of the
+plugin's own in Preferences (`ui.preferencesPage`, under Plugins), not behind a menu item.
 
 A plugin can also keep files inside the map archive, next to the scenario itself. The
 TrigScript plugin stores its script's files there, so the script travels with the map.
@@ -1166,6 +1167,7 @@ two ways to draw on the map, and the pickers.
 | `panel(spec)` | A panel that floats over the map and blocks nothing, or one docked at the right beside the built-in panels. See below. |
 | `statusItem(spec)` | A cell of your own in the status bar: text, the plugin's icon, a spinner while `busy`, a click. See below. |
 | `dialogSlot(dialogId, spec)` | Add a button or a row to a built-in dialog. See below. |
+| `preferencesPage(spec)` | A page of the plugin's own in Edit ▸ Preferences, under Plugins. See below. |
 | `mapTool(spec)` | Take over the pointer on the map. See below. |
 | `overlay(spec)` | A picture drawn over the map that the user can switch on and off. See below. |
 | `pickFiles({ accept, multiple })` | The file picker, resolved with `File[]` (empty on cancel). |
@@ -1284,6 +1286,17 @@ stay visible without a panel — "AI · working 12 s", "3 problems", "Synced". `
 the icon for a spinner, `warn` paints the cell as a warning, `onClick` makes it a button.
 Keep the handle and `set(patch)` it as things move; `remove()` takes it away, and so does
 disabling the plugin.
+
+**Preferences pages.** `preferencesPage({ mount, apply?, reset? })` gives the plugin a page
+in Edit ▸ Preferences, listed under Plugins by the plugin's name, which is where a user
+looks for a setting — better than a menu item of the plugin's own. `mount(body, page)` fills
+an empty `<div>` the first time the page is shown while the dialog is open; the page then
+stays mounted until the dialog closes, so what the user changed is still there when OK or
+Apply calls `apply`, and the cleanup `mount` returned runs on close. Reset to defaults
+calls `reset` while the page is the one showing. A page without `apply` writes its settings
+as they change (`api.storage`), the simpler shape when nothing needs undoing on Cancel.
+One page per plugin — registering again replaces it — and
+`ui.open("preferences", { page: "plugin:<id>" })` opens it from anywhere.
 
 **Dialog slots.** `dialogSlot(dialogId, { mount })` adds to a built-in dialog — or to
 another plugin's dialog that offers a slot, by the id it names. Each time

@@ -1405,7 +1405,8 @@
   display: flex;
   flex-direction: column;
 }
-.prefs-page > .stack { gap: 18px; }
+.prefs-builtin { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.prefs-page .stack { gap: 18px; }
 .prefs-section > h3 {
   margin: 0 0 8px;
   padding-bottom: 4px;

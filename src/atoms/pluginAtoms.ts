@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -142,7 +142,7 @@ export interface PluginRuntime {
   /** Where the code that is running came from, for a plugin the user asked to keep a copy of. */
   loadedFrom?: "network" | "browser";
   /** What the plugin added, for the Manage Plugins dialog. */
-  contributions: { menu: number; contextMenu: number; hotkeys: number; events: number };
+  contributions: { menu: number; contextMenu: number; hotkeys: number; events: number; preferences: number };
 }
 
 export const pluginRuntimesAtom = atom<Record<string, PluginRuntime>>({});
@@ -426,6 +426,17 @@ export interface PluginDialogSlotEntry {
 }
 
 export const pluginDialogSlotsAtom = atom<PluginDialogSlotEntry[]>([]);
+
+/* ── Preferences pages ──────────────────────────────────── */
+
+/** One `api.ui.preferencesPage`: a page under Plugins in Edit ▸ Preferences, one per plugin. */
+export interface PluginPreferencesPageEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: PreferencesPageSpec;
+}
+
+export const pluginPreferencesPagesAtom = atom<PluginPreferencesPageEntry[]>([]);
 
 /* ── View flashes ───────────────────────────────────────── */
 

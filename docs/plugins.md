@@ -578,6 +578,7 @@ inserted or removed before them, so take a fresh `list()` after every edit.
 | `trailing()` | The bytes after the last chunk the reader could act on (what follows a header with a negative length, say). Save writes them back as they are; a `replaceFile` without them drops them. |
 | `required()` | The section names a file of the open map's revision must carry to load, as Check Map tests them (`STRx` in place of `STR ` on a Remastered file). |
 | `defaults(name)` | The bytes File ▸ New would write for that section on a map of this size, tileset and revision: StarEdit's defaults for a settings table, the fixed VCOD, an empty list, null terrain. Null for a name the editor cannot produce. |
+| `chkOf(file)` | The CHK inside a map file (an `.scx` / `.scm`, or a bare CHK as it is), read the way File ▸ Open reads it: what `replaceFile` takes when all you have is the whole file, such as a stored revision. It only reads. |
 | `rebuild(names?)` | Re-encode sections from the editor's model, the way Save writes a dirty one, and install the result like any other raw edit. Repeated occurrences collapse into one, a truncated or oversized section comes back at the size the model encodes to, and a string table whose offsets point nowhere is rewritten with every string the editor could read. Names the editor does not model, and modelled ones whose model is absent (no ISOM, no settings table), are left alone and missing from the result's `rebuilt`. Omit `names` for every modelled section the map has a model for. |
 
 ### `api.document.buildSteps`

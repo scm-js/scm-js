@@ -36,6 +36,7 @@ import { activationOrder, installFor, requiredInstalls, requirementsOf, type Man
 import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
+import { loadMap } from "../formats/mpq/scm";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { megatileForTile } from "../formats/tileset/decode";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -785,6 +786,7 @@ export function sectionsApi(store: Store, alive: () => boolean = () => true): Se
     insert: (index, name, bytes) => edit((file) => insertSection(file, index, name, bytes)),
     remove: (index) => edit((file) => removeSection(file, index)),
     move: (from, to) => edit((file) => moveSection(file, from, to)),
+    chkOf: async (file) => (await loadMap(file)).chk.slice(),
     replaceFile: (bytes) => {
       writable();
       const next = parseRaw(bytes);

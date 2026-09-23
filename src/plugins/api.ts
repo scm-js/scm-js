@@ -680,6 +680,12 @@ export interface SectionsApi {
   /** Replace the whole CHK, the way File ▸ Open reads one. */
   replaceFile(bytes: Uint8Array): RawEditResult;
   /**
+   * The CHK inside a map file — an `.scx` / `.scm` archive's `staredit\scenario.chk`, or
+   * the bytes themselves for a bare CHK — the way File ▸ Open reads it, for `replaceFile`.
+   * Reads only; rejects with the reason for a file it cannot read.
+   */
+  chkOf(file: Uint8Array): Promise<Uint8Array>;
+  /**
    * Bytes after the last chunk the reader could parse — what follows a chunk header with
    * a negative length, say. Save writes them back as they are; a `replaceFile` without
    * them drops them. Null when the file ends cleanly.

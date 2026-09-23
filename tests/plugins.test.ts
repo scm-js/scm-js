@@ -1,3 +1,4 @@
+import { saveMap } from "../src/formats/mpq/scm";
 import { describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -1446,6 +1447,13 @@ describe("plugin sections", () => {
     // A file the parser has to guess at reports it.
     expect(api.document.sections.replaceFile(new Uint8Array([0x54, 0x59, 0x50, 0x45, 4, 0, 0, 0, 0x52, 0x41])).warnings).toEqual(expect.arrayContaining([expect.stringContaining("TYPE declares 4 bytes")]));
     expect(() => createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.write(0, new Uint8Array())).toThrow(/No map/);
+  });
+
+  it("reads the CHK out of a whole map file, for replaceFile", async () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    const chk = serializeScenario(createScenario({ width: 2, height: 2, era: 3, name: "tiny" }));
+    expect(await api.document.sections.chkOf(await saveMap(chk))).toEqual(chk);
+    expect(await api.document.sections.chkOf(chk)).toEqual(chk);
   });
 });
 

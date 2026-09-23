@@ -2247,6 +2247,26 @@ export interface StatusItemHandle {
   isShown(): boolean;
 }
 
+/** A button on the map itself (`ui.mapButton`), in the row at its bottom-right corner. */
+export interface MapButtonSpec {
+  /** A word or two; the button is as wide as it. */
+  label: string;
+  /** The tooltip. */
+  title?: string;
+  /** A count or a short mark beside the label (unread messages); nothing when absent, null, 0 or "". */
+  badge?: number | string | null;
+  /** Drawn pressed: what the button opens is open. */
+  active?: boolean;
+  onClick: () => void;
+}
+
+export interface MapButtonHandle {
+  /** Change any of the fields; the button redraws. */
+  set(patch: Partial<MapButtonSpec>): void;
+  remove(): void;
+  isShown(): boolean;
+}
+
 /**
  * The dialogs a plugin may add to (`ui.dialogSlot`), and the fields each one exposes to
  * the slot. A field is the dialog's *working copy* — what the person sees in the form,
@@ -2513,6 +2533,13 @@ export interface UiApi {
    * leaves with `remove()` or the plugin.
    */
   statusItem(spec: StatusItemSpec): StatusItemHandle;
+  /**
+   * A button on the map, in the row at its bottom-right corner beside the tileset, size
+   * and zoom — for something that belongs to the map being worked on, such as a shared
+   * map's chat. Keep it to what matters while the map is in view; everything else goes
+   * in a menu or the status bar. It leaves with `remove()` or the plugin.
+   */
+  mapButton(spec: MapButtonSpec): MapButtonHandle;
   /**
    * Add to a built-in dialog. `mount` runs in a row at the left of the dialog's footer each
    * time that dialog opens, with the dialog's working-copy fields to read and fill

@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapButtonSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -401,6 +401,15 @@ export interface PluginStatusItemEntry {
 }
 
 export const pluginStatusItemsAtom = atom<PluginStatusItemEntry[]>([]);
+
+export interface PluginMapButtonEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: MapButtonSpec;
+}
+
+/** `ui.mapButton`: the buttons in the map's bottom-right row, in the order added. */
+export const pluginMapButtonsAtom = atom<PluginMapButtonEntry[]>([]);
 
 /* ── Build steps ────────────────────────────────────────── */
 

@@ -34,7 +34,7 @@ import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
-  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, viewFlashesAtom,
+  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, pluginMapButtonsAtom, viewFlashesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -2424,6 +2424,28 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     bag.dispose();
     expect(other.isShown()).toBe(false);
     expect(store.get(pluginStatusItemsAtom)).toEqual([]);
+  });
+
+  it("adds a map button, changes it, and takes it back on remove or with the plugin", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    let clicks = 0;
+    const chat = api.ui.mapButton({ label: "Chat", onClick: () => { clicks++; } });
+    expect(store.get(pluginMapButtonsAtom).map((e) => [e.plugin.id, e.spec.label, e.spec.badge])).toEqual([["t", "Chat", undefined]]);
+    chat.set({ badge: 3, active: true });
+    expect(store.get(pluginMapButtonsAtom)[0].spec).toMatchObject({ label: "Chat", badge: 3, active: true });
+    store.get(pluginMapButtonsAtom)[0].spec.onClick();
+    expect(clicks).toBe(1);
+    expect(() => api.ui.mapButton({ label: "No click" } as never)).toThrow(/label and onClick/);
+    const other = api.ui.mapButton({ label: "Other", onClick: () => {} });
+    chat.remove();
+    chat.set({ label: "gone" });
+    expect(store.get(pluginMapButtonsAtom).map((e) => e.spec.label)).toEqual(["Other"]);
+    expect(chat.isShown()).toBe(false);
+    bag.dispose();
+    expect(other.isShown()).toBe(false);
+    expect(store.get(pluginMapButtonsAtom)).toEqual([]);
   });
 
   it("registers a dialog slot per dialog id and takes it back on dispose", () => {

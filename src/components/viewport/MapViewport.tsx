@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { logError } from "../../editor/log";
 import { ContextMenu } from "radix-ui";
 import { Crosshair, Loader2 } from "lucide-react";
 import {
@@ -55,7 +56,7 @@ import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginMapButtonsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
 import { pluginContextRows } from "../../plugins/contextMenu";
@@ -2214,6 +2215,7 @@ export default function MapViewport() {
       </div>
       <PluginPanels />
       <div className="map-hud">
+        <PluginMapButtons />
         <span className="hud-chip"><b>{translate(tileset.name)}</b></span>
         <span className="hud-chip">{mapW}×{mapH}</span>
         <span className="hud-chip">{Math.round(zoom * 100)}%</span>
@@ -2233,5 +2235,30 @@ export default function MapViewport() {
         {showFog && <span className="hud-chip">{t("fog of war")}{" "}<b>{t("P{v}", { v: fogViewPlayer + 1 })}</b>{fogPainting && <> · {fogMode === "fog" ? t("painting") : t("clearing")} {" "}{t("· Shift inverts")}</>}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * `ui.mapButton`: the plugins' buttons at the head of the corner row. Its own component so
+ * a badge changing does not render the viewport.
+ */
+function PluginMapButtons() {
+  const buttons = useAtomValue(pluginMapButtonsAtom);
+  return (
+    <>
+      {buttons.map(({ key, plugin, spec }) => (
+        <button
+          key={key}
+          type="button"
+          className={`hud-chip hud-btn${spec.active ? " active" : ""}`}
+          title={spec.title ?? `${spec.label} (${plugin.name})`}
+          aria-pressed={spec.active ?? undefined}
+          onClick={() => { try { spec.onClick(); } catch (err) { logError("plugins", `${plugin.name}: its map button failed`, err); } }}
+        >
+          {spec.label}
+          {spec.badge !== undefined && spec.badge !== null && spec.badge !== 0 && spec.badge !== "" && <span className="hud-badge">{spec.badge}</span>}
+        </button>
+      ))}
+    </>
   );
 }

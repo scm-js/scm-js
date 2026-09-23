@@ -79,6 +79,28 @@
   color: var(--gold);
   font-weight: 600;
 }
+/* A plugin's button in the row (ui.mapButton): the row ignores the pointer, the button does not. */
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+}
+.hud-btn:hover { border-color: var(--teal-dim); color: var(--teal); }
+.hud-btn.active { border-color: var(--teal-dim); color: var(--teal); background: rgba(10, 12, 16, 0.9); }
+.hud-badge {
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--gold);
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
 .map-empty {
   position: absolute;
   inset: 0;

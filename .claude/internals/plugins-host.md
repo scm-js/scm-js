@@ -313,3 +313,11 @@ problem in words.
 `ExportOptions.built`. Everything about what it does to the file is in `saving.md`; the host half is
 only the registration. The eudplib plugin is meant to own the one real step, with its dependents
 (TrigScript 3, later Magenta) contributing sources to it, so a map using both builds once.
+
+### Map buttons (`ui.mapButton`, 2026-09-23)
+
+`pluginMapButtonsAtom`, `addMapButton` in host.ts (a copy of `addStatusItem`'s shape), drawn by
+`PluginMapButtons` at the head of `.map-hud` in MapViewport — its own component so a badge
+change does not render the viewport. `.map-hud` has `pointer-events: none`; `.hud-btn` turns
+it back on for the button only. Added for the scmjs.dev plugin's shared-map chat, because a
+plugin had no way to put anything clickable on the map itself.

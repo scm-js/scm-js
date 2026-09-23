@@ -26,7 +26,7 @@ import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -110,7 +110,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1337,6 +1337,29 @@ export function addStatusItem(store: Store, bag: Contributions, info: PluginInfo
   return handle;
 }
 
+/** `api.ui.mapButton`: one button in the map's corner row, kept on `pluginMapButtonsAtom` until removed or the plugin goes. */
+export function addMapButton(store: Store, bag: Contributions, info: PluginInfo, spec: MapButtonSpec): MapButtonHandle {
+  if (!spec || typeof spec.label !== "string" || typeof spec.onClick !== "function") throw new Error("ui.mapButton needs a label and onClick.");
+  const key = nextContributionKey();
+  let shown = true;
+  const handle: MapButtonHandle = {
+    set: (patch) => {
+      if (!shown) return;
+      store.set(pluginMapButtonsAtom, store.get(pluginMapButtonsAtom).map((e) => (e.key === key ? { ...e, spec: { ...e.spec, ...patch } } : e)));
+    },
+    remove: () => {
+      if (!shown) return;
+      shown = false;
+      store.set(pluginMapButtonsAtom, store.get(pluginMapButtonsAtom).filter((e) => e.key !== key));
+    },
+    isShown: () => shown,
+  };
+  store.set(pluginMapButtonsAtom, [...store.get(pluginMapButtonsAtom), { key, plugin: info, spec: { ...spec } }]);
+  const sweep = bag.add(() => handle.remove());
+  const unsub = store.sub(pluginMapButtonsAtom, () => { if (!shown) { unsub(); sweep.dispose(); } });
+  return handle;
+}
+
 /** `api.document.buildSteps.add`: kept on `pluginBuildStepsAtom`, in activation order, until disposed or the plugin goes. */
 export function addBuildStep(store: Store, bag: Contributions, info: PluginInfo, spec: BuildStepSpec): Disposable {
   if (!spec || typeof spec.id !== "string" || !spec.id || typeof spec.applies !== "function" || typeof spec.run !== "function") throw new Error("buildSteps.add needs an id, applies() and run().");
@@ -2184,6 +2207,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return handle;
       },
       statusItem: (spec) => addStatusItem(store, bag, info, spec),
+      mapButton: (spec) => addMapButton(store, bag, info, spec),
       dialogSlot: (dialog, spec) => {
         const key = nextContributionKey();
         store.set(pluginDialogSlotsAtom, [...store.get(pluginDialogSlotsAtom), { key, plugin: info, dialog, spec }]);

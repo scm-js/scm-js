@@ -1851,10 +1851,22 @@ Open the link in a browser and the editor starts with the Join dialog up. In the
 app, or in an editor that is already open, paste the link into **Account ▸ Join a Shared
 Map…**. The dialog says which map the link leads to, who shared it and how many people are
 in it; type the name the others will see you by and press **Join**. The map opens in a new
-tab beside whatever you had open. Closing that tab leaves the shared map.
+tab beside whatever you had open (or in place of the empty map the editor starts with).
+Closing that tab leaves the shared map.
 
 You can be in one shared map at a time. Joining another leaves the first, which stays
 open as an ordinary map.
+
+### Talking to each other
+
+While a shared map is in front, a **Chat** button sits in the bottom-right corner of the
+map, next to the tileset and zoom. It opens a small window over the map with what everyone
+has written and a line to type in; Enter sends. What you type there goes to everyone in the
+map and nowhere else, and typing in it does not trigger the editor's shortcut keys.
+
+When the chat is closed, a new message shows as a notice and as a count on the button. Anyone
+who joins later sees what was said before them. The chat is kept only while the map is
+shared: it is gone when sharing ends, and it is not saved with the map.
 
 ### When two people change the same thing
 

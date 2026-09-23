@@ -1216,6 +1216,7 @@ two ways to draw on the map, and the pickers.
 | `dialog(spec)` | A dialog in the editor's chrome. See below. |
 | `panel(spec)` | A panel that floats over the map and blocks nothing, or one docked at the right beside the built-in panels. See below. |
 | `statusItem(spec)` | A cell of your own in the status bar: text, the plugin's icon, a spinner while `busy`, a click. See below. |
+| `mapButton(spec)` | A button on the map itself, in the row at its bottom-right corner: a label, a badge, pressed while `active`, a click. See below. |
 | `dialogSlot(dialogId, spec)` | Add a button or a row to a built-in dialog. See below. |
 | `preferencesPage(spec)` | A page of the plugin's own in Edit ▸ Preferences, under Plugins. See below. |
 | `mapTool(spec)` | Take over the pointer on the map. See below. |
@@ -1336,6 +1337,14 @@ stay visible without a panel — "AI · working 12 s", "3 problems", "Synced". `
 the icon for a spinner, `warn` paints the cell as a warning, `onClick` makes it a button.
 Keep the handle and `set(patch)` it as things move; `remove()` takes it away, and so does
 disabling the plugin.
+
+**Map buttons.** `mapButton({ label, title?, badge?, active?, onClick })` is a button on the
+map, at the head of the row in its bottom-right corner where the tileset, size and zoom
+are shown. It is for something that belongs to the map in view — the scmjs.dev plugin's
+*Chat* on a shared map is the example — so use it sparingly: the row is small, and
+anything else fits a menu or the status bar better. `badge` is a count or a short mark
+beside the label (unread messages); `active` draws it pressed, for a panel it opens that
+is open. The handle is a status item's: `set(patch)`, `remove()`, `isShown()`.
 
 **Preferences pages.** `preferencesPage({ mount, apply?, reset? })` gives the plugin a page
 in Edit ▸ Preferences, listed under Plugins by the plugin's name, which is where a user

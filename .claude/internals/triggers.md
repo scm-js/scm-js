@@ -35,12 +35,12 @@ The Classic editor's player pick carries an EPD box (`epdOf` / `addressOfEpd` ov
 `docs/triggers.md` is the trigger reference (a docs-site guide, one page per condition and action).
 Its tables — each entry's number, text form and argument byte offsets, the player groups, the
 argument values, the record layout — are blocks between `<!-- generated: KEY -->` markers that
-`scripts/lib/trigger-reference.mjs` writes from this file's tables (`npm run docs:triggers`; the
+`scripts/lib/trigger-reference.mjs` writes from this file's tables (`npm run docs:reference`; the
 script loads the `.ts` in plain Node through `scripts/lib/load-ts.mjs`, two resolve hooks for
 extensionless and JSON imports). `tests/triggerReference.test.ts` fails when a block is stale, when
 a def has no page, when an offset in the generator's `CONDITION_FIELDS` / `ACTION_FIELDS` is not
 where the codec writes the field, and when a ```` ```trigedit ```` example does not parse. So a
-change to `triggerDefs.ts` means `npm run docs:triggers`, and a new condition or action means a
+change to `triggerDefs.ts` means `npm run docs:reference`, and a new condition or action means a
 page. The prose is hand-written and states only what is settled: the melee triggers are from
 Blizzard's maps, Set Deaths' wrap/saturate is TrigScript's tested number contract, and details
 nobody here has verified (Remove Unit and death counts, Move Location with no unit, command-the-most

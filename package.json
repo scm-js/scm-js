@@ -30,7 +30,7 @@
     "check:assets": "node scripts/extract-assets.mjs --check",
     "i18n": "node scripts/i18n.mjs",
     "build:plugin-types": "node scripts/build-plugin-types.mjs",
-    "docs:triggers": "node scripts/trigger-reference.mjs",
+    "docs:reference": "node scripts/reference-docs.mjs",
     "build:docs": "node scripts/build-plugin-types.mjs && node scripts/build-docs.mjs",
     "publish:plugin-types": "node scripts/publish-plugin-api.mjs"
   },

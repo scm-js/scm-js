@@ -112,7 +112,7 @@ function main(argv) {
   const { guides, resolve: resolveLink } = buildGuides();
   const api = buildApi();
 
-  /* The sidebar is the same on every page: the six guides, then the reference. */
+  /* The sidebar is the same on every page: the seven guides, then the reference. */
   const tree = [
     ...guides.map((g) => ({ title: g.title, url: `${base}${g.url}`, pages: g.pages.map((p) => ({ title: p.title, url: `${base}${p.url}` })) })),
     {

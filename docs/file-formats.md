@@ -72,8 +72,9 @@ stands, says so, and leaves both members where they are. A bare `.chk` is never 
 
 The scenario is a flat sequence of chunks. Each chunk is a four-character name, a length,
 and that many bytes of data: `MTXM` holds the terrain, `UNIT` the placed units, `TRIG`
-the triggers. The complete list is under [Sections](#sections). The community
-reference for the layout of every section is
+the triggers. The complete list is under [Sections](#sections), and the
+[CHK format reference](chk-format.md) gives every section's byte layout. The community's
+older reference is
 [wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk).
 
 ### How the game reads a file
@@ -141,7 +142,8 @@ same way, so a localized install names its units in its own language.
 
 ## Sections
 
-Every section the editor knows. *Modelled* sections are decoded into the editor's own
+Every section the editor knows; the [CHK format reference](chk-format.md#sections) has a
+page for each with its byte layout. *Modelled* sections are decoded into the editor's own
 model and re-encoded when you change them; the rest are carried as bytes. *Required*
 sections are ones the game refuses to load a map without, and Tools ▸ Check Map reports
 a missing one as an error.

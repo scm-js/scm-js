@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The six guides are the repository's own — `README.md` and `docs/*.md` — split into
+ * The seven guides are the repository's own — `README.md` and `docs/*.md` — split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -51,6 +51,13 @@ export const SOURCES = [
     file: "docs/file-formats.md",
     title: "Map files",
     blurb: "The MPQ container, the CHK sections, and how much of a file the editor preserves.",
+  },
+  {
+    id: "chk",
+    file: "docs/chk-format.md",
+    title: "CHK format reference",
+    blurb: "Every section of a scenario file: its byte layout, what a repeat does, whether the game needs it, the values its fields take.",
+    pageTitle: "StarCraft CHK format reference",
   },
   {
     id: "game-data",
@@ -117,7 +124,7 @@ export function headingIndex(guides) {
  * The link rewriter handed to `renderMarkdown`.
  *
  * Absolute and `mailto:` links are left alone. A bare `#fragment` is resolved within the
- * guide it was written in. A relative path naming one of the six source documents
+ * guide it was written in. A relative path naming one of the seven source documents
  * becomes a page here; anything else in the repository becomes a link to GitHub — a blob
  * for a path inside the tree, and the repository's own page for one that climbs above it
  * (`../../releases` in `docs/development.md` is written to work that way on github.com).

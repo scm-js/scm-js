@@ -40,7 +40,14 @@
   section dirty. `create.ts` starts a new map UTF-8. `decodeTbl` (`dat/tbl.ts`) guesses the same way,
   so a localized `stat_txt.tbl` names units in its own language.
 - To model a new section: add a codec in `sections/`, decode it in `parseScenario`, add a case to
-  `encodeSection`, and add a `tests/chk.test.ts` round-trip.
+  `encodeSection`, and add a `tests/chk.test.ts` round-trip. A new *registry* entry also needs a page
+  in `docs/chk-format.md` and a layout in `scripts/lib/chk-reference.mjs#LAYOUTS`
+  (`tests/chkReference.test.ts` fails without them): the reference's facts table, index, value and
+  flag tables are generated from the registry, `create.ts`, `scenario.ts` (`APPEND_ORDER`, now
+  exported for it, `MAP_VERSIONS`, `MODELLED_SECTIONS`) and the codecs' flag consts by
+  `npm run docs:reference`; the layouts are written in that module and held to the encoders by
+  the test (sizes for every section, offsets for UNIT/THG2/DD2/MRGN/UPRP and the UNIS/UPGS/TECS
+  columns). The index's "Holds" column is each page's first sentence, so the prose stays in the doc.
 - `create.ts` builds a fresh scenario (File ▸ New) with every section the game requires: the three the
   editor never models — `IVE2`, `VCOD` (StarEdit's fixed verification table, embedded in
   `sections/vcod.ts`; both fixture maps carry it byte for byte) and the empty CUWP slots `UPRP`/`UPUS` —

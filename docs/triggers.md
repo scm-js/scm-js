@@ -2071,4 +2071,4 @@ It takes no arguments.
 | The trigger record, its flags and the numbers of every condition and action | `src/formats/chk/sections/triggers.ts` |
 | Which field holds which argument, the argument values, the AI scripts | `src/data/triggerDefs.ts` |
 | The text form, printed and parsed | `src/formats/triggers/text.ts` |
-| The generated blocks of this page | `scripts/lib/trigger-reference.mjs`, written by `npm run docs:triggers` |
+| The generated blocks of this page | `scripts/lib/trigger-reference.mjs`, written by `npm run docs:reference` |

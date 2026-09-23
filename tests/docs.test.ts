@@ -244,7 +244,7 @@ describe.skipIf(!haveTypes)("the plugin guide", () => {
  * path belongs, and an atom or hook name belongs nowhere in them.
  */
 describe("the map files and game data guides", () => {
-  const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md"];
+  const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md", "docs/chk-format.md"];
   const MARKER = "## In the source";
 
   it("end with the one section that names the source", () => {

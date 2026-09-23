@@ -44,7 +44,7 @@ npm run test:watch
 npx vitest run tests/chk.test.ts      # one file
 npx vitest run -t "flood fill"        # tests matching a name
 npm run check:assets   # what game data is on disk
-npm run docs:triggers  # rewrite the generated tables of the trigger reference
+npm run docs:reference # rewrite the generated tables of the trigger and CHK references
 ```
 
 `npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
@@ -736,7 +736,8 @@ every sentence would benefit from a native reader.
 ## Contributing
 
 - **Keep the documents current.** `README.md`, `docs/triggers.md`, `docs/file-formats.md`,
-  `docs/game-data.md`, `docs/plugins.md` and this file are the documentation site; a behaviour change that is
+  `docs/chk-format.md`, `docs/game-data.md`, `docs/plugins.md` and this file are the
+  documentation site; a behaviour change that is
   not in them is undocumented. `CLAUDE.md` carries the implementation detail and is kept in
   step with the code too.
 - **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not

@@ -2421,6 +2421,7 @@ files stay the source; the site renders them.
 | [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, mods as data sets, and how the pictures get drawn |
 | [docs/file-formats.md](docs/file-formats.md) | What is in a map file, what the editor preserves, revisions, protected maps |
+| [docs/chk-format.md](docs/chk-format.md) | Every section of the scenario file, byte by byte |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
 | [docs/development.md](docs/development.md) | Running from source, the desktop app and the container, releases, contributing |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |

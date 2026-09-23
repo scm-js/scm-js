@@ -460,7 +460,7 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
  * rebuild) would otherwise be left with the lattice past FORC, which is a file no editor
  * writes — and which the plugin then reports as out of order all over again.
  */
-const APPEND_ORDER = [
+export const APPEND_ORDER = [
   "TYPE", "VER ", "IVER", "IVE2", "VCOD", "IOWN", "OWNR", "ERA ", "DIM ", "SIDE",
   "MTXM", "PUNI", "UPGR", "PTEC", "UNIT", "ISOM", "TILE", "DD2 ", "THG2", "MASK",
   "STR ", "STRx", "UPRP", "UPUS", "MRGN", "TRIG", "MBRF", "SPRP", "FORC", "WAV ",

@@ -19,7 +19,9 @@ build has no domain to be absolute against and leaves all of it out. A guide pag
 search result's worth, or the page's `###` headings when it opens on a table — while its
 card on the section page stays `firstLine`, one sentence. A source may set `pageTitle`, which
 makes its pages' `<title>` "`<page> — <pageTitle>`" instead of "… — scmJS documentation": the
-trigger reference uses it, since those pages are found by the name of one action.
+trigger reference and the CHK reference use it, since those pages are found by the name of one
+action or section. Both references keep their tables in `<!-- generated -->` blocks
+(`scripts/lib/generated-blocks.mjs`) rewritten by `npm run docs:reference`.
 
 Two halves, and only the second is generated in any interesting sense. The guides are
 `README.md` and `docs/*.md` split at their `##` headings, one page each, with the `###`

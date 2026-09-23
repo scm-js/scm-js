@@ -8,9 +8,10 @@
  * from the same tables the editor reads and writes maps with (`src/data/triggerDefs.ts`),
  * so the reference cannot say a field is somewhere the editor does not put it.
  *
- * Pure: the tables are passed in, so `scripts/trigger-reference.mjs` (plain Node) and
+ * Pure: the tables are passed in, so `scripts/reference-docs.mjs` (plain Node) and
  * `tests/triggerReference.test.ts` (vitest) run the same code over the same input.
  */
+import { fillBlocks } from "./generated-blocks.mjs";
 
 /** Byte offset and width of each field of a 20-byte condition. Checked against the codec by the test. */
 export const CONDITION_FIELDS = {
@@ -129,26 +130,9 @@ export function referenceBlocks(defs) {
   return blocks;
 }
 
-const BLOCK = /<!-- generated: ([^>]+?) -->\n[\s\S]*?<!-- \/generated -->/g;
-
 /**
  * The document with every generated block rewritten. `missing` lists the blocks the
  * tables have and the document does not — a condition or action with no page — and
  * `unknown` the markers the tables do not recognise.
  */
-export function fillReference(markdown, defs) {
-  const blocks = referenceBlocks(defs);
-  const seen = new Set();
-  const unknown = [];
-  const text = markdown.replace(BLOCK, (whole, key) => {
-    const block = blocks.get(key);
-    if (block === undefined) {
-      unknown.push(key);
-      return whole;
-    }
-    seen.add(key);
-    return `<!-- generated: ${key} -->\n${block}\n<!-- /generated -->`;
-  });
-  const missing = [...blocks.keys()].filter((k) => !seen.has(k));
-  return { text, missing, unknown };
-}
+export const fillReference = (markdown, defs) => fillBlocks(markdown, referenceBlocks(defs));

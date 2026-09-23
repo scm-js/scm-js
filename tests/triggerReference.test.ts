@@ -10,7 +10,7 @@ import * as defs from "../src/data/triggerDefs";
 import { UNIT_NAMES } from "../src/data/units";
 import { emptyAction, emptyCondition, emptyTrigger, encodeTriggers, type ActionRecord, type ConditionRecord } from "../src/formats/chk/sections/triggers";
 import { parseTriggers, type TriggerNames } from "../src/formats/triggers/text";
-// @ts-expect-error — a plain .mjs module shared with scripts/trigger-reference.mjs
+// @ts-expect-error — a plain .mjs module shared with scripts/reference-docs.mjs
 import { ACTION_FIELDS, CONDITION_FIELDS, fillReference } from "../scripts/lib/trigger-reference.mjs";
 
 const FILE = join(import.meta.dirname, "../docs/triggers.md");
@@ -44,7 +44,7 @@ function exampleNames(): TriggerNames {
 }
 
 describe("the trigger reference", () => {
-  it("is up to date with the editor's trigger tables (npm run docs:triggers)", () => {
+  it("is up to date with the editor's trigger tables (npm run docs:reference)", () => {
     const { text, missing, unknown } = fillReference(doc, defs);
     expect(missing).toEqual([]);
     expect(unknown).toEqual([]);

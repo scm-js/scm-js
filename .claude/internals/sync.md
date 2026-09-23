@@ -86,6 +86,18 @@ every 20 s, with 50 s of silence counting as a drop, catches the half-open socke
 would otherwise sit on. Verified headlessly: server-side `terminate()` mid-session, both
 paths, maps equal after.
 
+**Kept-open maps (2026-09-23; ai-server 0.15.0, plugin 1.31.0).** Server-side only as far
+as the editor is concerned: a kept room *is* a stored map (`map_rooms` + `room_ops`, the
+room's in-memory id is the map id), loaded on the first hello, flushed every `flushMs`,
+cooled by the sweep once empty (revision from the latest copy, note "Edited together:
+…"), ended by `keepDays` from the last edit (365 for null). A clean stop writes who was in
+it with their resume tokens and closes with 1012, so editors resume across a deploy; a
+crash (`clean` still false on load) restores nobody — a fresh copy each, so a replay can
+never paper over lost ops. The plugin's Leave on a kept map sends `leave {snapshot}` so
+the revision is current. The one host addition is `document.sections.chkOf(file)` (the CHK
+out of an archive), which the owner's "Put #N into the shared map" needs before
+`replaceFile` — that goes out as an ordinary `reset` op, no sync change.
+
 **Deliberately left out (v1).** Per-trigger merging (a dialog OK is
 whole-table LWW, the presence line says who is in which dialog); serial remapping;
 presence of the other person's selection. A server refusal of an op (`error.about ===

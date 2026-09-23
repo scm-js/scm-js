@@ -1826,9 +1826,28 @@ Sharing goes through scmjs.dev: the person who shares needs a signed-in
 ![The Share dialog while the map is shared: the link, the three people in it, and Stop sharing](docs/images/share-dialog.webp)
 
 **Account ▸ Share this Map…** asks for a name for the map (its own name to start with) and
-copies it to scmjs.dev when you press **Start sharing**. The dialog then shows the link:
-**Copy** puts it on the clipboard for you to send. A cell appears in the status bar —
-*Shared · 3 people* — and clicking it opens the dialog again.
+how long to **keep it open**, and copies it to scmjs.dev when you press **Start sharing**.
+The dialog then shows the link: **Copy** puts it on the clipboard for you to send. A cell
+appears in the status bar — *Shared · 3 people* — and clicking it opens the dialog again.
+
+*Keep it open* decides what happens when people leave:
+
+- **Until everyone leaves** shares the map only while people are in it. Nothing is stored:
+  sharing ends when you stop it, half an hour after the last person leaves, or when the
+  server restarts.
+- **For a day**, **for a week** (the choice to start with) or **for a month** saves the map
+  to [My Maps](#your-scmjsdev-account) and keeps it open at its link, so people can come and
+  go as they like, on different days if they want. Each time everyone has left, the map is
+  saved as a new revision with a note naming who changed it (*Edited together: Kim, Sam*),
+  and the next person to open the link carries on from there. The time counts from the last
+  edit, so a map people are working on stays open, and one nobody has touched for that long
+  ends. The dialog shows the date: *ends 3 Oct unless someone edits it*.
+- **Until I end it** keeps it open with no time limit. It still ends after a year with no
+  edits.
+
+When a map kept open ends, only the sharing ends: the map and its revisions stay in My Maps.
+If the map in front came from My Maps, sharing it adds a revision to that map rather than
+making a second one.
 
 The dialog lists who is in, in the colour their pointer is drawn in, and what each of them
 has open. The link is the key: anyone who has it can join and edit, so send it only to
@@ -1838,10 +1857,27 @@ controls:
 - **Remove** sends one person out of the map. They keep what they had.
 - **New link** makes the old link stop working without sending anyone out, for when the
   link went further than you meant.
-- **Stop sharing** ends it for everyone.
+- **Stop sharing** (**End sharing** on a map kept open) ends it for everyone. On a map kept
+  open, **Leave** takes only you out and leaves it open for the others; you can change how
+  long it stays open here too.
 
-Up to eight people can be in one map. A map shared from the desktop app gets a link to
-the web editor, since that is what anyone can open.
+Up to eight people can be in one map, and an account can share five maps at a time,
+counting both kinds. A map shared from the desktop app gets a link to the web editor,
+since that is what anyone can open.
+
+### Your shared maps
+
+The **Shared maps** part of **Account ▸ Account…** lists every map you are sharing: who is
+in it now, the last edit and who made it, and when it ends. Each has **Join**, **Copy
+link**, **New link**, how long to keep it open, and **End sharing**. When you are already
+sharing five, Share this Map… shows the same list so you can end one first.
+
+In **My Maps** a map kept open says so (*Shared · 2 editing*, or when it ends), and
+**Join** opens it with whoever is there; **Open** still gives you a revision on its own.
+While you are in one of your maps kept open, a revision of it has **Put #N into the shared
+map**, which replaces the map for everyone with that revision: the way back if someone
+spoiled it. Everyone's undo history starts again, as after a resize, and the map as it was
+is not kept unless you saved it first.
 
 ### Joining
 
@@ -1865,8 +1901,9 @@ has written and a line to type in; Enter sends. What you type there goes to ever
 map and nowhere else, and typing in it does not trigger the editor's shortcut keys.
 
 When the chat is closed, a new message shows as a notice and as a count on the button. Anyone
-who joins later sees what was said before them. The chat is kept only while the map is
-shared: it is gone when sharing ends, and it is not saved with the map.
+who joins later sees what was said before them. The chat is kept only while people are in
+the map: it is gone when sharing ends, or when everyone has left a map kept open, and it is
+not saved with the map.
 
 ### When two people change the same thing
 
@@ -1888,10 +1925,13 @@ shared: it is gone when sharing ends, and it is not saved with the map.
 ### Saving, and when it ends
 
 Saving is each person's own: File ▸ Save writes your copy to your disk, and anyone in the
-map can save at any time. The map is kept on scmjs.dev only while it is shared, and
-nothing of it is stored there afterwards. Sharing ends when the person who shared it stops,
-half an hour after the last person leaves, or when the server restarts. Everyone still has
-the map open in their editor when it ends, so nobody loses work — save it.
+map can save at any time. A map shared *until everyone leaves* is kept on scmjs.dev only
+while it is shared, and nothing of it is stored there afterwards; a map kept open is one of
+the sharer's maps in My Maps, and its revisions stay there after sharing ends. Everyone
+still has the map open in their editor when sharing ends, so nobody loses work — save it.
+
+A server restart ends a map shared until everyone leaves, but not a map kept open: the
+editors in it reconnect on their own when the server is back and carry on.
 
 If your connection drops, the status bar says *Reconnecting…* and you can keep working:
 your changes are kept and sent once the connection is back, and you get everyone else's

@@ -11,6 +11,14 @@ version. (`@scm-js/plugin-api` still publishes from main, so a plugin author on 
 package can be one release ahead of the reference; the API is additive, so what they see
 is a member missing from these pages rather than one that behaves differently.)
 
+For search engines: with `--domain` every page gets a canonical link, `og:url` and the card
+picture (`assets/og.jpg`, the same 1200×630 cut of `editor-plain.webp` scmjs.dev uses), and
+the build writes `sitemap.xml` (every emitted page) and `robots.txt`; a local or `--base`
+build has no domain to be absolute against and leaves all of it out. A guide page's
+`<meta name=description>` is `summaryOf` — sentences from the top until there is about a
+search result's worth, or the page's `###` headings when it opens on a table — while its
+card on the section page stays `firstLine`, one sentence.
+
 Two halves, and only the second is generated in any interesting sense. The guides are
 `README.md` and `docs/*.md` split at their `##` headings, one page each, with the `###`
 beneath as the page's contents list (`markdown.mjs`, `marked`) — **nothing writes prose**,

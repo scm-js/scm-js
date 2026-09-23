@@ -73,7 +73,13 @@ say this, which is why it is here. The
 carrying the `CNAME` a branch-served Pages site keeps its domain in. Both Pages sites answer an
 unknown path with the bundle's `404.html`, which the `scmjs-404` step in `vite.config.ts` copies
 from `index.html` — that is how a shared map's `/share/<invite>` link opens the editor (status 404,
-but the page runs).
+but the page runs). The job also writes `<meta name="robots" content="noindex">` into both pages,
+so a search finds the stable editor and never the nightly (a `robots.txt` Disallow would stop a
+crawler reading that tag, and GitHub Pages cannot send an `X-Robots-Tag` header). `index.html`'s
+own description and Open Graph tags are for a link to the editor itself; the
+`cloudflare-link-previews` worker strips them from a `/map/` or `/share/` page before writing the
+map's in, and sends those pages with `X-Robots-Tag: noindex` — deploy the worker change before an
+editor release carries the tags, or a map card shows the editor's title.
 
 **`editor.scmjs.dev` is proxied through Cloudflare (orange cloud, SSL Full, since 2026-09-23)**
 for the link-preview Worker (private repo `scm-js/cloudflare-link-previews`, deployed as

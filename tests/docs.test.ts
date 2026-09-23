@@ -25,7 +25,7 @@ import { buildReference, docCommentFor, isGroupType, parseDeclarations, parseDoc
 // @ts-expect-error - as above.
 import { highlight } from "../scripts/lib/docs/render.mjs";
 // @ts-expect-error - as above.
-import { firstLine, plainTextOf } from "../scripts/build-docs.mjs";
+import { firstLine, plainTextOf, sitemapXml, summaryOf } from "../scripts/build-docs.mjs";
 
 const root = join(import.meta.dirname, "..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
@@ -145,9 +145,23 @@ describe("rendering", () => {
     expect(plainTextOf("<p>a &amp; <code>b</code></p>")).toBe("a & b");
   });
 
-  it("takes a page's first sentence for its card and its description", () => {
+  it("takes a page's first sentence for its card", () => {
     expect(firstLine("Layers along the left rail. And more.\n\nNext para.")).toBe("Layers along the left rail.");
     expect(firstLine("```sh\nnpm run dev\n```\n\nThe dev server.")).toBe("The dev server.");
+  });
+
+  it("describes a page with enough of its opening to say what it is about", () => {
+    const body = "![A picture](docs/images/x.webp)\n\nTwo kinds. Pure sprites are a graphic drawn where it stands with no unit behind it, at editor.scmjs.dev or anywhere else. Then more text that is not needed here.";
+    expect(summaryOf({ title: "Sprites", body })).toBe("Two kinds. Pure sprites are a graphic drawn where it stands with no unit behind it, at editor.scmjs.dev or anywhere else.");
+    const table = "### Map files\n\n| a | b |\n| --- | --- |\n\n### Terrain\n\n| c | d |";
+    expect(summaryOf({ title: "What works", body: table, headings: [{ text: "Map files" }, { text: "Terrain" }] })).toBe("What works: map files, Terrain.");
+    expect(summaryOf({ title: "Nothing", body: "| a |" })).toBe("");
+  });
+
+  it("lists every page in the sitemap", () => {
+    const xml = sitemapXml("https://docs.example", ["/", "/guide/"]);
+    expect(xml).toContain("<loc>https://docs.example/</loc>");
+    expect(xml).toContain("<loc>https://docs.example/guide/</loc>");
   });
 });
 

@@ -107,6 +107,7 @@ function main(argv) {
   const baseAt = argv.indexOf("--base");
   const base = baseAt === -1 ? "" : (argv[baseAt + 1] ?? "").replace(/\/$/, "");
   const version = JSON.parse(read("package.json")).version;
+  const origin = domain ? `https://${domain}` : "";
 
   const { guides, resolve: resolveLink } = buildGuides();
   const api = buildApi();
@@ -142,6 +143,7 @@ function main(argv) {
       repoUrl: REPO_URL,
       siteUrl: SITE_URL,
       base,
+      origin,
     });
     write(out, opts.url, html);
     index.push({
@@ -186,7 +188,7 @@ ${guide.pages.map((p) => `<li><a class="card" href="${base}${p.url}"><b>${escape
     for (const p of guide.pages) {
       emit({
         title: p.title,
-        description: firstLine(p.body),
+        description: summaryOf(p) || `${p.title}, in the ${guide.title} section of the scmJS documentation.`,
         url: `${base}${p.url}`,
         section: guide.title,
         headings: p.headings.map((h) => h.text),
@@ -241,10 +243,20 @@ ${api.shared.map((t) => typeHtml(t, codeOpts)).join("\n")}`,
   cpSync(join(root, IMAGES_DIR), join(out, "images"), { recursive: true });
   writeFileSync(join(out, "search.json"), JSON.stringify(index));
   writeFileSync(join(out, ".nojekyll"), "");
-  if (domain) writeFileSync(join(out, "CNAME"), `${domain}\n`);
+  if (domain) {
+    writeFileSync(join(out, "CNAME"), `${domain}\n`);
+    // For search engines. Every page is listed; nothing here is kept from them.
+    writeFileSync(join(out, "sitemap.xml"), sitemapXml(origin, index.map((e) => `${base}${e.u}`)));
+    writeFileSync(join(out, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${origin}${base}/sitemap.xml\n`);
+  }
 
   const pages = countPages(guides, api);
   console.log(`docs: ${out} — ${pages} pages, ${api.reference.groups.length} API groups, ${api.reference.types.length} types (plugin API ${api.apiVersion}, editor ${version}).`);
+}
+
+export function sitemapXml(origin, paths) {
+  const urls = paths.map((p) => `  <url><loc>${escapeHtml(origin + p)}</loc></url>`).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
 function countPages(guides, api) {
@@ -268,7 +280,41 @@ export function plainTextOf(html) {
     .trim();
 }
 
-/** The first sentence of a page's body, for a card and a `<meta name=description>`. */
+/**
+ * A page's `<meta name=description>`, which is what a search result shows under the title:
+ * sentences from the top of the page until there is enough to say what it is about. A first
+ * sentence alone is often a caption or "Two kinds.", and a page that opens on a table has
+ * none, so that one is described by its own headings instead.
+ */
+export function summaryOf({ title, body, headings = [] }) {
+  const text = body
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^#{1,6} .*$/gm, "")
+    .replace(/^\|.*$/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^[-*] /gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+  const plain = text
+    .replace(/\s+/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]*)\*\*/g, "$1")
+    .replace(/\*([^*]*)\*/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .trim();
+  let out = "";
+  for (const sentence of plain.match(/.+?(?:[.!?:](?=\s|$)|$)/g) ?? []) {
+    out += sentence;
+    if (out.length >= 110) break;
+  }
+  out = out.trim();
+  if (out.length < 40 && headings.length) {
+    const topics = headings.map((h) => h.text).slice(0, 8).join(", ");
+    out = `${title}: ${topics.charAt(0).toLowerCase()}${topics.slice(1)}.`;
+  }
+  return out.length > 190 ? `${out.slice(0, 187).replace(/\s+\S*$/, "")}…` : out;
+}
+
+/** The first sentence of a page's body, for a card. */
 export function firstLine(body) {
   const text = body
     .replace(/```[\s\S]*?```/g, "")

@@ -8,6 +8,24 @@
     <meta name="color-scheme" content="dark" />
     <title>scmJS — StarCraft Scenario Editor</title>
     <!--
+      What a search result or a pasted link shows for the editor itself. A shared map's link
+      (/map/…, /share/…) on editor.scmjs.dev gets its own title, description and picture from
+      the link-previews worker, which takes these out first so a reader sees only the map's.
+    -->
+    <meta
+      name="description"
+      content="A free, open source StarCraft and Brood War map editor that runs in the browser. Opens .scm, .scx and .chk maps and saves maps the game will play."
+    />
+    <meta property="og:site_name" content="scmJS" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="scmJS — a StarCraft: Brood War map editor" />
+    <meta
+      property="og:description"
+      content="A free, open source StarCraft and Brood War map editor that runs in the browser."
+    />
+    <meta property="og:image" content="https://scmjs.dev/images/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!--
       The splash before the splash. This paints as soon as the HTML is parsed — before the
       stylesheet arrives, before the ~1 MB module bundle evaluates, before React mounts — and
       that is what decides how soon the desktop window appears at all: `desktop/main.ts` keeps

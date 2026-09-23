@@ -73,8 +73,19 @@ const BEACON = `<script>
  * The shell. `nav` is the whole site's tree with the current page marked, so every page
  * carries the same sidebar and nothing has to be generated per section.
  */
-export function page({ title, description, url, body, nav, toc = "", version = "", editorUrl, repoUrl, siteUrl, base = "" }) {
+export function page({ title, description, url, body, nav, toc = "", version = "", editorUrl, repoUrl, siteUrl, base = "", origin = "" }) {
   const heading = title === "scmJS documentation" ? title : `${title} — scmJS documentation`;
+  // The absolute addresses search engines and link previews want. Only known when the build
+  // is told its domain, so a local or --base build leaves them out rather than guessing.
+  const absolute = origin
+    ? `<link rel="canonical" href="${origin}${url}">
+<meta property="og:url" content="${origin}${url}">
+<meta property="og:image" content="${origin}${base}/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+`
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -85,7 +96,8 @@ export function page({ title, description, url, body, nav, toc = "", version = "
 <meta property="og:title" content="${escapeHtml(heading)}">
 <meta property="og:description" content="${escapeHtml(description ?? "")}">
 <meta property="og:type" content="website">
-<link rel="icon" href="${base}/favicon.svg" type="image/svg+xml">
+<meta property="og:site_name" content="scmJS">
+${absolute}<link rel="icon" href="${base}/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${base}/docs.css">
 ${BEACON}
 </head>

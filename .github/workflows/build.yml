@@ -382,6 +382,13 @@ jobs:
           # for nothing, and it drops files whose names begin with an underscore.
           printf '%s\n' "$DOMAIN" > CNAME
           touch .nojekyll
+          # Kept out of search results: the nightly is main as of last night, and the
+          # stable editor at editor.scmjs.dev is the one a search should find.
+          for page in index.html 404.html; do
+            if [ -f "$page" ]; then
+              sed -i 's|<head>|<head><meta name="robots" content="noindex" />|' "$page"
+            fi
+          done
           # One orphan commit, force-pushed: the site is ~5 MB and there is nothing to
           # learn from its history, so the repository stays the size of one bundle rather
           # than growing by that much every night.

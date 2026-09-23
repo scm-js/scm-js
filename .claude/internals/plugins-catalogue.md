@@ -185,6 +185,35 @@ came to 519 KB in 3.5 s headless. Verified headlessly 2026-09-23 on Isolation: A
 2 s hold), reload + reopen the saved bytes → same recording continued (8 → 9), a desert recording drawn
 while an ice map is in front.
 
+**API Playground** (`github.com/scm-js/plugin-api-playground`, 2026-09-23, not a default) is a panel with
+Monaco where `api` is a global: Ctrl+Enter runs the snippet, Stop takes back what it registered, Undo Run
+undoes its edits, snippets live in `api.storage`, Export as Plugin writes a stored zip (`zip.ts`, no
+dependency) of a Hello-World-shaped repository with the snippet as `activate`'s body. It asked the host for
+**`api.scope()`** (see `plugins-host.md`). Points that cost something:
+- **Monaco is TrigScript's bundle, imported under `?instance=playground`** so it is a *separate module
+  instance*. Sharing TrigScript's would share one TS language service: TrigScript `setExtraLibs` on every
+  name change and re-sets the compiler options on close, and each program would see the other's files.
+  The theme is TrigScript's, rule for rule, because Monaco writes token colours into global `.mtkN`
+  classes and two instances with different themes repaint each other. `MonacoEnvironment` is global and
+  both set it to the same two worker files. Verified headlessly with both editors open: TrigScript's
+  instance holds only `file:///main.ts`, completions and colours right in both.
+- **Compiling is Monaco's own TS worker** (`getEmitOutput`, `noEmit: false`, `sourceMap`,
+  `moduleDetection: force` so top-level `await` works and the snippet's names are module-local). The
+  plugin API's `index.d.ts` is bundled as text (`--alias:playground-api-types=… --loader:.d.ts=text`,
+  typed by `modules.d.ts`) and placed at `file:///node_modules/@scm-js/plugin-api/` with a `package.json`,
+  plus a globals file `declare const api: import("@scm-js/plugin-api").PluginApi`.
+- **Running** is a `blob:` module whose first line (prelude, same line so no line shift) takes
+  `api`, `console` and the timers from `globalThis[Symbol.for("scmjs.apiPlayground")]` by run id.
+  `api` is `{ ...scope.api, log }`; timers are wrapped so Stop can clear them (the scope cannot see
+  them). Errors map back to the snippet line through the emitted source map (`sourcemap.ts`,
+  VLQ → per-line table); the map is also inlined so DevTools shows the TypeScript. A loop that never
+  yields hangs the page — no worker can hold `api`.
+- The run, its output and the scope **outlive the panel**: closing it keeps a snippet's own panel or
+  menu item working, and reopening still offers Stop.
+- `tests/examples.test.ts` type-checks every example twice with the real `typescript` — as a snippet
+  (global `api`) and as the exported `plugin.ts` with the starter's tsconfig — so an API change that
+  breaks one goes red.
+
 **Stamp Library** (`github.com/scm-js/plugin-stamp-library`, a default that starts on since 2026-09-07) is the
 clipboard-plus-storage-plus-panel plugin for the extended-terrain parts bin, and the worked example for the
 three additions it asked of the host — `clipboard.capture` (a clip built as `copy` would but not put on the

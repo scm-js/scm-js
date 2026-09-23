@@ -285,6 +285,47 @@ describe("plugin api", () => {
     expect(normalizeCombo("Meta+alt+F9")).toBe("Alt+Meta+F9");
   });
 
+  // The API Playground's question: run a snippet, then take back everything it registered
+  // without turning the playground itself off.
+  it("takes back a scope's contributions and refuses its writes, leaving the plugin's own", () => {
+    const { store } = blankStore();
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    api.menu.add("Tools", { label: "Own", run: () => {} });
+    const scope = api.scope();
+    const inner = scope.api.scope();
+    let heard = 0;
+    scope.api.events.on("selection", () => heard++);
+    scope.api.menu.add("Tools", { label: "Snippet", run: () => {} });
+    inner.api.hotkeys.add("ctrl+k", () => {});
+    expect(store.get(pluginMenuItemsAtom).map((i) => i.label)).toEqual(["Own", "Snippet"]);
+    expect(scope.api.plugin.id).toBe("t");
+    api.selection.markArea({ x0: 0, y0: 0, x1: 1, y1: 1 });
+    expect(heard).toBe(1);
+
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    scope.dispose();
+    expect(scope.disposed).toBe(true);
+    expect(inner.disposed).toBe(true);
+    expect(store.get(pluginMenuItemsAtom).map((i) => i.label)).toEqual(["Own"]);
+    expect(store.get(pluginHotkeysAtom)).toEqual([]);
+    api.selection.markArea({ x0: 0, y0: 0, x1: 2, y1: 2 });
+    expect(heard).toBe(1);
+    expect(scope.api.document.edit("late", (tx) => { tx.setTile(0, 0, 1); }).notes).toEqual([DEACTIVATED_NOTE]);
+    expect(api.document.edit("own", (tx) => { tx.setTile(0, 0, 1); }).changed).toBe(true);
+    errors.mockRestore();
+
+    // The plugin turned off with a scope still open takes the scope too, and a scope made after that is born closed.
+    const open = api.scope();
+    open.api.menu.add("Tools", { label: "Left open", run: () => {} });
+    bag.dispose();
+    expect(open.disposed).toBe(true);
+    expect(store.get(pluginMenuItemsAtom)).toEqual([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(api.scope().disposed).toBe(true);
+    warn.mockRestore();
+  });
+
   it("reads the document and the selection, and fires events", () => {
     const { store } = blankStore();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());

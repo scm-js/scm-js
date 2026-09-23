@@ -278,8 +278,8 @@ describe.skipIf(!haveTypes)("the API reference", () => {
       expect(isGroupType(group.name)).toBe(true);
       expect(group.members.length).toBeGreaterThan(0);
     }
-    // What is left on the root is data and `log`, not a group with no page.
-    expect(reference.plain.map((m: { name: string }) => m.name).sort()).toEqual(["apiVersion", "log", "plugin"]);
+    // What is left on the root is data, `log` and `scope`, not a group with no page.
+    expect(reference.plain.map((m: { name: string }) => m.name).sort()).toEqual(["apiVersion", "log", "plugin", "scope"]);
   });
 
   it("documents every group, so no page reads as a bare interface name", () => {

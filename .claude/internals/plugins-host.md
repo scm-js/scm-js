@@ -321,3 +321,14 @@ only the registration. The eudplib plugin is meant to own the one real step, wit
 change does not render the viewport. `.map-hud` has `pointer-events: none`; `.hud-btn` turns
 it back on for the button only. Added for the scmjs.dev plugin's shared-map chat, because a
 plugin had no way to put anything clickable on the map itself.
+
+### Scopes (`api.scope()`, 2026-09-23)
+
+`createPluginApi` again over a child `Contributions(true)` whose `dispose` is itself one entry in the
+parent bag: the scope's `dispose()` sweeps the child and removes that entry, the parent's sweep (plugin
+off) reaches the child, and a scope made from a disposed bag is born disposed (the parent's `add` takes
+it straight back). `gone()` and `Contributions.add`'s warning read `scoped` so the log says "its scope
+was disposed" rather than "the plugin was deactivated". The child has the same `PluginInfo`, so storage,
+command namespacing and log names are the plugin's; `preferencesPage` is still one per plugin, so a
+scope registering one replaces the plugin's own. Added for the API Playground, which runs each snippet in
+one. `tests/plugins.test.ts` "takes back a scope's contributions…".

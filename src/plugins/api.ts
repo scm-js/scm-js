@@ -264,6 +264,26 @@ export interface PluginApi {
   readonly storage: StorageApi;
   /** `console.log` with the plugin's name in front. */
   log(...args: unknown[]): void;
+  /**
+   * A child of this API with a lifetime of its own. Everything registered through
+   * `scope.api` — menu items, hotkeys, event listeners, panels, dialogs, overlays, map
+   * tools, commands, services, trigger claims — goes when `scope.dispose()` is called, and
+   * with the plugin if it is turned off first. After the dispose, the child's document
+   * writes are refused as a turned-off plugin's are, so a timer or a fetch that outlives
+   * the scope cannot change the map. Scopes nest.
+   *
+   * It is for a plugin that runs other code for a while and then takes it all back: the
+   * API Playground runs each snippet in one. The child speaks as the same plugin — same
+   * id, storage and log name.
+   */
+  scope(): PluginScope;
+}
+
+/** A child API that can be taken back as a whole (`PluginApi.scope`). */
+export interface PluginScope extends Disposable {
+  readonly api: PluginApi;
+  /** True once `dispose` has run, or once the plugin that made the scope was turned off. */
+  readonly disposed: boolean;
 }
 
 /* ── Document ───────────────────────────────────────────── */

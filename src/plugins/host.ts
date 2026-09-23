@@ -151,6 +151,9 @@ export type Store = ReturnType<typeof createStore>;
 
 /** Everything one plugin registered, so deactivation can take it all back. */
 export class Contributions {
+  /** A child bag made by `api.scope()`, so the messages say its scope ended rather than the plugin. */
+  readonly scoped: boolean;
+  constructor(scoped = false) { this.scoped = scoped; }
   readonly disposables: (() => void)[] = [];
   readonly counts = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 };
   /**
@@ -163,7 +166,7 @@ export class Contributions {
   add(dispose: () => void, kind?: keyof Contributions["counts"]) {
     if (this.disposed) {
       // Registered from work that outlived the plugin: take it straight back.
-      logWarn("plugins", "A contribution was added after the plugin was deactivated and has been taken back");
+      logWarn("plugins", `A contribution was added after ${this.scoped ? "its scope was disposed" : "the plugin was deactivated"} and has been taken back`);
       try { dispose(); } catch (err) { logError("plugins", "Disposing a contribution failed", err); }
       return { dispose: () => {} };
     }
@@ -1689,7 +1692,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
    */
   const gone = (what: string): boolean => {
     if (!bag.disposed) return false;
-    logError(info.name, `${what} was called after the plugin was deactivated; nothing was done`);
+    logError(info.name, `${what} was called after ${bag.scoped ? "its scope was disposed" : "the plugin was deactivated"}; nothing was done`);
     return true;
   };
 
@@ -2364,6 +2367,15 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     log: (...args) => {
       console.log(`[${info.name}]`, ...args);
       logInfo(info.name, args.map(printable).join(" "));
+    },
+
+    // A child bag inside this one: disposing the scope sweeps the child and leaves the
+    // parent's entry, and the parent's own sweep (the plugin turned off) reaches the child.
+    scope: () => {
+      const child = new Contributions(true);
+      const childApi = createPluginApi(store, info, child);
+      const entry = bag.add(() => child.dispose());
+      return { api: childApi, get disposed() { return child.disposed; }, dispose: () => entry.dispose() };
     },
   };
   instrument(api as unknown as Record<string, unknown>, info);

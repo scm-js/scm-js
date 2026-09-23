@@ -70,7 +70,10 @@ policy now carries a `v*` **tag** rule beside `main` (Settings ▸ Environments,
 say this, which is why it is here. The
 `nightly-site` job unpacks the nightly's own web zip — never a second build — onto
 `nightly.editor.scmjs.dev` as one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch,
-carrying the `CNAME` a branch-served Pages site keeps its domain in. The nightly prerelease's notes
+carrying the `CNAME` a branch-served Pages site keeps its domain in. Both Pages sites answer an
+unknown path with the bundle's `404.html`, which the `scmjs-404` step in `vite.config.ts` copies
+from `index.html` — that is how a shared map's `/share/<invite>` link opens the editor (status 404,
+but the page runs). nginx and the dev server fall back to `index.html` on their own. The nightly prerelease's notes
 carry a paragraph linking that site — the release page is the only thing most people open, and the
 site is the same run's zip, so it is the cheapest way to try a nightly. That paragraph is written
 only when `NIGHTLY_DOMAIN` *and* `NIGHTLY_PAT` are both set (`SITE:` in the `release` job's env is

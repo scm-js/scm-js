@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { copyFileSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -32,6 +33,17 @@ export default defineConfig(() => ({
       // than imported, since this config is its own TypeScript project. Change both.
       transformIndexHtml: (html: string) =>
         html.replace(/%APP_VERSION_SHORT%/g, shortVersion(version)),
+    },
+    // The page again as `404.html`, which is what GitHub Pages answers a path it has no
+    // file for. Links into the editor are paths — a shared map's invite is
+    // `share/<invite>` — so the editor has to open at any of them. nginx (docker/) and the
+    // dev server fall back to index.html themselves; the file is harmless there.
+    {
+      name: 'scmjs-404',
+      apply: 'build' as const,
+      writeBundle({ dir }: { dir?: string }) {
+        if (dir) copyFileSync(join(dir, 'index.html'), join(dir, '404.html'))
+      },
     },
     // The license texts of everything compiled in, at the root of the bundle so the web
     // zip, the installers and the container image all carry them (scripts/lib/notices.mjs).

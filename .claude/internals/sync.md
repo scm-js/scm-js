@@ -6,7 +6,10 @@
 the map maker's. The transport is the scmjs.dev plugin's (`plugin-scmjs-dev/share/`), the
 server is ai-server's `src/rooms/` (a sequencer + relay that never opens the map). Built
 2026-09-22 after the user picked "fastify websocket on the existing server", "invite link,
-anyone (typed name)" and "rooms end; people keep their copy".
+anyone (typed name)" and "rooms end; people keep their copy". The invite link is
+`<editor>/share/<invite>` (plugin 1.27.0; `?scmjs-room=` before that, dropped with no
+fallback since nobody had used it); the host's only part is the `404.html` copy that lets
+GitHub Pages open the editor at that path (see `desktop-releases.md`).
 
 **Model: server-ordered ops, deterministic resolution, client rebase.** Not a CRDT, not OT
 on indices. Every editor applies the same ops in the server's order through `applyOp`,

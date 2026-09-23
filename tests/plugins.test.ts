@@ -43,6 +43,7 @@ import {
   resolveIcon, resolvePlugin, tagVersion, unpin, validateManifest, type LoaderDeps,
 } from "../src/plugins/loader";
 import { transpileTs } from "../src/plugins/transpile";
+import { pluginLinkAction } from "../src/plugins/link";
 import {
   activatePlugin, checkForUpdate, Contributions, createPluginApi, deactivatePlugin, describePlugin, effectiveInstalls, forgetDescription, installPlugin, isPluginActive,
   reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled, DEACTIVATED_NOTE,
@@ -264,6 +265,23 @@ function blankStore(width = 8, height = 6) {
 }
 
 const zero = { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 };
+
+// The docs site's "Try it" links carry `?plugin=` so a reader without the playground is offered it.
+describe("a ?plugin= link", () => {
+  it("offers a missing or turned-off scm-js plugin and nothing else", () => {
+    const installs = [
+      { spec: "github:scm-js/plugin-api-playground@0123456789abcdef0123456789abcdef01234567", enabled: false },
+      { spec: "github:scm-js/plugin-timelapse", enabled: true },
+    ];
+    expect(pluginLinkAction(null, installs)).toEqual({ kind: "none" });
+    expect(pluginLinkAction("github:scm-js/plugin-api-playground", installs)).toEqual({ kind: "enable", spec: installs[0].spec });
+    expect(pluginLinkAction("github:scm-js/plugin-timelapse", installs)).toEqual({ kind: "none" });
+    expect(pluginLinkAction("github:scm-js/plugin-magenta", installs)).toEqual({ kind: "install", spec: "github:scm-js/plugin-magenta" });
+    for (const spec of ["github:someone/plugin", "github:scm-js/plugin-magenta@main", "github:scm-js/x/../y", "https://example.com/plugin.json", "builtin:paint"]) {
+      expect(pluginLinkAction(spec, installs).kind).toBe("refused");
+    }
+  });
+});
 
 describe("plugin api", () => {
   it("registers menu, context-menu and hotkey contributions and takes them back on dispose", () => {

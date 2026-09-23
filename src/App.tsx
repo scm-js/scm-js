@@ -13,6 +13,7 @@ import { usePreload } from "./hooks/usePreload";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
+import { usePluginLink } from "./hooks/usePluginLink";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
@@ -68,6 +69,7 @@ export default function App() {
   usePreload();
   useStartupMap();
   usePlugins();
+  usePluginLink();
   useWindowTitle();
   useCloseGuard();
   useDesktopFiles();

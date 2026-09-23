@@ -210,6 +210,14 @@ dependency) of a Hello-World-shaped repository with the snippet as `activate`'s 
   yields hangs the page — no worker can hold `api`.
 - The run, its output and the scope **outlive the panel**: closing it keeps a snippet's own panel or
   menu item working, and reopening still offers Stop.
+- **Links** (`link.ts`): `?playground=1<raw deflate, base64url>` puts a snippet in the editor as a new
+  unsaved one, with a warning line in the output, and **never runs it**; changes not saved are only
+  replaced after a confirm. It waits for the map to be on screen (`api.view.visible()` non-empty, or
+  the first `"view"` event) so nothing opens over the splash, and strips the parameter so a reload
+  does not ask again. Copy Link writes the same format; the docs site's Try it links are written by
+  Node's zlib in `scripts/lib/docs/tryit.mjs` and checked against `decodeSnippet` in the plugin's tests.
+- A pasted `plugin.ts` runs as a plugin: a function default export is called with the run's `api`
+  after the module loads, and its return value (function or `Disposable`) is run first on Stop.
 - `tests/examples.test.ts` type-checks every example twice with the real `typescript` — as a snippet
   (global `api`) and as the exported `plugin.ts` with the starter's tsconfig — so an API change that
   breaks one goes red.

@@ -98,7 +98,15 @@ export function splitPages(source) {
  * `shift` moves the heading levels, because a page's own `<h1>` is the `##` it was split
  * at, so its `###` have to render as `<h2>` rather than starting a second level 3.
  */
-export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, headingIds = true } = {}) {
+const escapeText = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** A code block with a "Try it" link over its corner (`tryit.mjs`), or the block as it was. */
+export function withTryIt(pre, url) {
+  if (!url) return pre;
+  return `<div class="code-try">${pre}<a class="try-it" href="${escapeText(url)}" target="_blank" rel="noopener" title="Open this example in the editor's API Playground. Nothing runs until you press Run.">Try it</a></div>`;
+}
+
+export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, headingIds = true, tryIt = () => null } = {}) {
   const seen = new Map();
   const marked = new Marked({ gfm: true }, {
     walkTokens: (token) => {
@@ -107,6 +115,12 @@ export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, head
   });
   marked.use({
     renderer: {
+      // An example that runs as written gets a "Try it" link (`tryit.mjs`); every other block is marked's own.
+      code({ text, lang }) {
+        const url = tryIt(text);
+        if (!url) return false;
+        return `${withTryIt(`<pre><code class="language-${escapeText((lang ?? "").split(/\s/)[0])}">${escapeText(text)}\n</code></pre>`, url)}\n`;
+      },
       heading({ tokens, depth }) {
         const inner = this.parser.parseInline(tokens);
         const level = Math.min(6, Math.max(1, depth + shift));

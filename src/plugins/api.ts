@@ -526,8 +526,9 @@ export interface DocumentApi {
    *
    * @example
    * // One undo entry called "Fill", however many operations it takes.
+   * const ground = api.terrain.types()[1].id; // the tileset's second flat terrain
    * const result = api.document.edit("Fill", (tx) => {
-   *   tx.stampTerrain({ x0: 0, y0: 0, x1: 8, y1: 8 }, terrainId);
+   *   tx.stampTerrain({ x0: 0, y0: 0, x1: 8, y1: 8 }, ground);
    *   tx.placeUnit(api.consts.unit.startLocation, 0, 4 * api.consts.tile, 4 * api.consts.tile);
    * });
    * api.ui.status(`${result.tiles} tiles, ${result.units} units`);
@@ -1340,7 +1341,8 @@ export interface ViewApi {
    * clean up.
    *
    * @example
-   * const r = api.document.edit("Fill", (tx) => tx.fillFlat(rect, terrain));
+   * const rect = { x0: 4, y0: 4, x1: 12, y1: 12 };
+   * const r = api.document.edit("Fill", (tx) => tx.fillFlat(rect, api.terrain.types()[1].id));
    * if (r.changed) api.view.flash({ rect });
    */
   flash(target: FlashTarget): void;

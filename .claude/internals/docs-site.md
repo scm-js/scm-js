@@ -110,3 +110,20 @@ framework and nothing fetched at runtime. `tests/docs.test.ts` pins the split (a
 a fenced shell block is not a page; no line of a guide is dropped between them), the link
 rules, and the reference's shape; the API cases `describe.skipIf` when the bundle is not on
 disk, as a fresh clone's are.
+
+### Try it links (`scripts/lib/docs/tryit.mjs`, 2026-09-23)
+
+Every ```ts/```js block in the guides and every `@example` in the reference that mentions `api` is
+type-checked **once, in one program** (`runnableSnippets`: each block a `/snippetN.ts`, a globals file
+`declare const api: PluginApi`, the bundled `index.d.ts` placed as `node_modules/@scm-js/plugin-api`,
+DOM lib, `moduleDetection: force` — the API Playground's own compile settings), and only the blocks
+with no diagnostic get a link: 14 of 30 candidates at the time, the rest being deliberate fragments
+(`socket`, `settings`). The whole pass is well under a second. An error outside the snippets throws,
+because it would otherwise fail every link silently. Making an example runnable is how you give it a
+link — three were rewritten that way (`document.edit`, `view.flash`, the pickArea flatten in
+`plugins.md`). The link is `EDITOR_URL/?plugin=github:scm-js/plugin-api-playground&playground=1<raw
+deflate, base64url>`, the plugin's own link format (its `link.ts`; a test on each side checks the
+other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both renderers' blocks
+(marked's `code` renderer returns `false` for every other block, so they stay marked's own). The
+`?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
+

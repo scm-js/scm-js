@@ -366,3 +366,16 @@ be on **another origin than the page** before it counts as a repository served f
 eudplib 0.4.0 (2026-09-18) is the first default that registers a build step (`saving.md`): it owns the
 one eudplib step and other plugins contribute to it. With no contributor it never applies, so the pin
 by itself changes nothing a user sees.
+
+### `?plugin=` links (`plugins/link.ts`, `hooks/usePluginLink.ts`, 2026-09-23)
+
+The docs site's Try it links carry `?plugin=github:scm-js/plugin-api-playground`. After the first
+activation pass (`pluginsStartedAtom`) and once the editor is on screen (a dialog over the splash
+reads as nothing), the hook strips the parameter and acts on `pluginLinkAction`: not installed →
+`confirmPlugin` with just the spec (the dialog fetches the preview itself), installed but off → a
+toast with **Turn It On** (`enableWithRequirements`), otherwise nothing. Only
+`github:scm-js/<repo>` with no ref or folder is accepted — anything else is a `logWarn` and nothing on
+screen — so a link cannot put an arbitrary address in front of the user, even behind the
+confirmation. The rest of the address (`playground=`) is left for the plugin, which reads and strips it
+in `activate`; after an install from the link the new plugin activates with it still there.
+

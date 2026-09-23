@@ -7,7 +7,7 @@
  * it builds. The stylesheet is `assets/docs.css` beside this file, in the editor's own
  * palette.
  */
-import { renderMarkdown } from "./markdown.mjs";
+import { renderMarkdown, withTryIt } from "./markdown.mjs";
 
 export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -50,7 +50,8 @@ export function highlight(code, { names = new Set(), urlFor = () => null } = {})
 
 /** `<pre>` for a signature or an example. */
 export function codeBlock(code, opts) {
-  return `<pre class="code"><code>${highlight(code, opts)}</code></pre>`;
+  const pre = `<pre class="code"><code>${highlight(code, opts)}</code></pre>`;
+  return withTryIt(pre, opts?.tryIt?.(code) ?? null);
 }
 
 /**

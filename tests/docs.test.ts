@@ -16,6 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { inflateRawSync } from "node:zlib";
 // @ts-expect-error - plain .mjs build scripts, imported for their pure parts.
 import { headingsIn, renderMarkdown, slug, splitPages } from "../scripts/lib/docs/markdown.mjs";
 // @ts-expect-error - as above.
@@ -24,6 +25,8 @@ import { buildGuide, linkResolver, resolvePath, SOURCES } from "../scripts/lib/d
 import { buildReference, docCommentFor, isGroupType, parseDeclarations, parseDoc, assignTypes } from "../scripts/lib/docs/api.mjs";
 // @ts-expect-error - as above.
 import { highlight } from "../scripts/lib/docs/render.mjs";
+// @ts-expect-error - as above.
+import { codeBlocksOf, playgroundUrl, runnableSnippets } from "../scripts/lib/docs/tryit.mjs";
 // @ts-expect-error - as above.
 import { firstLine, plainTextOf, sitemapXml, summaryOf } from "../scripts/build-docs.mjs";
 
@@ -294,5 +297,37 @@ describe.skipIf(!haveTypes)("the API reference", () => {
     expect(placed).toBe(reference.types.length);
     const names = new Set([...[...perGroup.values()].flat(), ...shared].map((t: { name: string }) => t.name));
     expect(names.size).toBe(reference.types.length);
+  });
+});
+
+describe("Try it links", () => {
+  it("carry the snippet in the playground's link format and offer the plugin", () => {
+    const code = 'console.log("한", api.document.info());';
+    const url = new URL(playgroundUrl("https://editor.scmjs.dev", code));
+    expect(url.searchParams.get("plugin")).toBe("github:scm-js/plugin-api-playground");
+    const param = url.searchParams.get("playground")!;
+    expect(param[0]).toBe("1");
+    expect(inflateRawSync(Buffer.from(param.slice(1), "base64url")).toString("utf8")).toBe(code);
+    expect(param).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it("pick the ```ts and ```js blocks out of a guide", () => {
+    expect(codeBlocksOf("text\n```ts\napi.log(1);\n```\n```json\n{}\n```\n```js\nlet a;\n```\n")).toEqual(["api.log(1);", "let a;"]);
+  });
+
+  it("go on the blocks the renderer is told run, and nowhere else", () => {
+    const html = renderMarkdown("```ts\napi.log(1);\n```\n\n```ts\napi.log(2);\n```", { tryIt: (code: string) => (code === "api.log(1);" ? "https://e/?a=1&b=2" : null) });
+    expect(html.match(/class="try-it"/g)).toHaveLength(1);
+    expect(html).toContain('href="https://e/?a=1&amp;b=2"');
+    expect(html).toContain("api.log(2);");
+  });
+
+  it.skipIf(!haveTypes)("only on examples that type-check as they are written", () => {
+    const dts = readFileSync(DTS, "utf8");
+    const good = 'const info = api.document.info();\nconsole.log(info?.name);';
+    const plugin = 'import type { PluginApi } from "@scm-js/plugin-api";\nexport default function activate(api: PluginApi) {\n  api.menu.add("Tools", { label: "Hi", run: () => api.log("hi") });\n}';
+    const fragment = "api.document.edit(\"Fill\", (tx) => tx.fillFlat(rect, terrain));";
+    const unrelated = "const x = 1;";
+    expect([...runnableSnippets([good, plugin, fragment, unrelated, good], dts)]).toEqual([good, plugin]);
   });
 });

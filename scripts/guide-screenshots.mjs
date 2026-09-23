@@ -12,6 +12,7 @@
  *   npx playwright install chromium          # once
  *   node scripts/guide-screenshots.mjs [--base http://localhost:5173] [--browser <chrome>]
  *                                      [--only editor,units,fog] [--scenes scmjs-ai] [--out docs/images]
+ *                                      [--plugin http://localhost:3121/]   # a local scmjs.dev plugin build
  *
  * Needs the game data extracted (the pictures are of real graphics) and, in
  * `fixtures/maps/`, Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero from
@@ -40,6 +41,10 @@ const ONLY = opt("--only", "")?.split(",").filter(Boolean) ?? [];
 /** Scenes to run at all (`--only` filters pictures; a scene still runs for its side effects). */
 const SCENES_ONLY = opt("--scenes", "")?.split(",").filter(Boolean) ?? [];
 const BROWSER = opt("--browser", process.env.SCMJS_BROWSER ?? "");
+/** The scmjs.dev plugin as the editor pins it (`src/plugins/defaults.ts`), so the pictures are of the version that ships. */
+const PINNED_SCMJS = /"(github:scm-js\/plugin-scmjs-dev@v[^"]+)"/.exec(readFileSync(join(root, "src/plugins/defaults.ts"), "utf8"))?.[1] ?? "github:scm-js/plugin-scmjs-dev";
+/** `--plugin <address>`: a local build of it instead, while working on the plugin (the pinned one is turned off). */
+const SCMJS_PLUGIN = opt("--plugin", PINNED_SCMJS);
 const FIXTURES = join(root, "fixtures/maps");
 
 const { chromium } = await load("playwright");
@@ -303,6 +308,8 @@ const SCENES = [
     await p.drop("(8)Big Game Hunters.scm");
     await p.minimap(0.22, 0.2);
     await p.menu("Account", /^Share this Map/); await p.wait(800);
+    // Kept open for a week, which the dialog offers first.
+    await p.dialog("share-keep");
     await p.page.locator(".dlg button", { hasText: /^Start sharing$/ }).click();
     await p.page.locator(".dlg .sd-link input").waitFor({ timeout: 30_000 }); await p.wait(500);
     const link = await p.page.locator(".dlg .sd-link input").inputValue();
@@ -344,6 +351,23 @@ const SCENES = [
     // The link as the hosted editor makes it, not the dev server and the stand-in's address.
     await p.page.locator(".dlg .sd-link input").evaluate((el, invite) => { el.value = `https://editor.scmjs.dev/share/${invite}`; }, room.invite);
     await p.dialog("share-dialog"); await p.esc();
+
+    // The account's list of shared maps: this one, plus two from earlier for the list to hold.
+    const ago = (days, hours = 0) => new Date(Date.now() - days * 86_400_000 - hours * 3_600_000).toISOString();
+    p.mock.rooms.seed("Lost Temple Remake", ago(9), { keepDays: 30, lastEditAt: ago(2, 3), lastEditBy: "Kim" });
+    p.mock.rooms.seed("Quick 1v1 test", ago(0, 1));
+    await p.menu("Account", /^Account…/); await p.wait(1500);
+    const list = p.page.locator(".dlg .sd-shared").locator("xpath=..");
+    await list.scrollIntoViewIfNeeded(); await p.wait(300);
+    const box = await list.boundingBox();
+    if (!box) throw new Error("no Shared maps list in the Account dialog");
+    await p.take("share-account", { x: box.x - 12, y: box.y - 12, width: box.width + 24, height: box.height + 24 }, { lossless: true });
+    await p.esc();
+
+    // My Maps: the shared map, marked, with the owner's way back to an earlier revision.
+    await p.menu("Account", /^My Maps/); await p.wait(1500);
+    await p.page.locator(".dlg .sd-map", { hasText: "Big Game Hunters" }).first().click(); await p.wait(1000);
+    await p.dialog("share-mymaps"); await p.esc();
     await kim.close();
   }, { seed: true }),
 
@@ -509,7 +533,8 @@ test("the second wave is six Hydralisks", (sim) => {
  */
 function seedScmjs(mockUrl) {
   const plugins = `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([
-    { spec: "github:scm-js/plugin-scmjs-dev", enabled: true },
+    ...(SCMJS_PLUGIN === PINNED_SCMJS ? [] : [{ spec: PINNED_SCMJS, enabled: false }]),
+    { spec: SCMJS_PLUGIN, enabled: true },
   ]))});`;
   if (!mockUrl) return plugins;
   return `${plugins}

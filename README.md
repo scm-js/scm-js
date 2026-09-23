@@ -1775,6 +1775,11 @@ the clipboard. The link always opens the version you just saved, so a link you h
 posted somewhere does not change under the people who follow it; tick *Let the link
 follow my later saves* for one that opens whatever you save to that map next.
 
+Pasted into Discord, Slack, a forum or most other places that show previews, a link to
+the web editor shows a card with the map's name, who shared it, its tileset, size and
+players, and its picture. A link that has been removed shows a card saying it no longer
+works.
+
 In **My Maps**, the *Links* part of a map lists its links, how many times each was
 opened, and **Remove** for each; a removed link stops working at once and the map stays.
 *Link to #3* makes a link to the revision you are looking at, *Link to the newest* one
@@ -1823,12 +1828,16 @@ Sharing goes through scmjs.dev: the person who shares needs a signed-in
 
 ### Sharing a map
 
-![The Share dialog while the map is shared: the link, the three people in it, and Stop sharing](docs/images/share-dialog.webp)
+![The Share dialog while the map is shared: the link, how long it is kept open, the three people in it, and Leave and End sharing](docs/images/share-dialog.webp)
 
 **Account ▸ Share this Map…** asks for a name for the map (its own name to start with) and
 how long to **keep it open**, and copies it to scmjs.dev when you press **Start sharing**.
 The dialog then shows the link: **Copy** puts it on the clipboard for you to send. A cell
 appears in the status bar — *Shared · 3 people* — and clicking it opens the dialog again.
+Pasted into Discord, Slack or a forum, the link shows a card with the map's name, who
+shared it and, for a map kept open, its picture.
+
+![Share this Map before sharing starts: the name, Keep it open set to For a week, and what that means](docs/images/share-keep.webp)
 
 *Keep it open* decides what happens when people leave:
 
@@ -1867,10 +1876,14 @@ since that is what anyone can open.
 
 ### Your shared maps
 
+![The Shared maps part of the Account dialog: two maps kept open and one shared until everyone leaves, with who is in each, the last edit and when it ends](docs/images/share-account.webp)
+
 The **Shared maps** part of **Account ▸ Account…** lists every map you are sharing: who is
 in it now, the last edit and who made it, and when it ends. Each has **Join**, **Copy
 link**, **New link**, how long to keep it open, and **End sharing**. When you are already
 sharing five, Share this Map… shows the same list so you can end one first.
+
+![My Maps with a map kept open: marked Shared · 3 editing, with Put #1 into the shared map and End sharing](docs/images/share-mymaps.webp)
 
 In **My Maps** a map kept open says so (*Shared · 2 editing*, or when it ends), and
 **Join** opens it with whoever is there; **Open** still gives you a revision on its own.

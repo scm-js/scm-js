@@ -17,6 +17,9 @@
  * map through it really edit the same map. For the pictures it can also seat a guest
  * nobody is driving (`rooms.guest`) and pin where a person's pointer is drawn
  * (`rooms.pin`), since a pointer in a headless page goes wherever the last click left it.
+ * A map shared *kept open* is stored with the account's maps like the real server does,
+ * and the account's list of shared maps (`/v1/rooms/mine`) can hold rooms seeded for the
+ * picture (`rooms.seed`).
  *
  * Nothing here is a test of the plugin or the server, and none of it ships: the pictures
  * show the editor's chrome around content that came from a file rather than a model.
@@ -57,10 +60,10 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
   const offers = () => ({
     providers: [{ id: "discord", name: "Discord" }], trial: true, trialUsd: 0.2, signupUsd: 0.8, weeklyUsd: 0,
     packs: [{ id: "five", priceUsd: 5, creditUsd: 4.55 }, { id: "ten", priceUsd: 10, creditUsd: 9.4 }],
-    accountUrl: "https://scmjs.dev/account", maps: true, rooms: true,
+    accountUrl: "https://scmjs.dev/account", maps: true, rooms: true, keptRooms: true,
   });
-  const publicMap = (m) => ({ id: m.id, name: m.name, description: m.description, createdAt: m.createdAt, updatedAt: m.updatedAt, revisions: m.history.length, head: m.history[m.history.length - 1] });
-  const detail = (m) => ({ ...publicMap(m), history: [...m.history].reverse() });
+  const publicMap = (m) => ({ id: m.id, name: m.name, description: m.description, createdAt: m.createdAt, updatedAt: m.updatedAt, revisions: m.history.length, head: m.history[m.history.length - 1], links: 0 });
+  const detail = (m) => ({ ...publicMap(m), history: [...m.history].reverse(), linkList: [] });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
@@ -86,7 +89,7 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
         });
       }
       const look = /^\/v1\/rooms\/([A-Za-z0-9_-]+)$/.exec(path);
-      if (look && req.method === "GET") {
+      if (look && look[1] !== "mine" && req.method === "GET") {
         const room = rooms.byInvite(look[1]);
         return room ? json(200, { room: rooms.info(room) }) : json(404, { error: { code: "not_found", message: "This link does not lead to a shared map any more." } });
       }
@@ -127,8 +130,28 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
         if (req.method === "DELETE") { m.history = m.history.filter((r) => r !== rev); return json(200, { map: detail(m), storage: storage() }); }
       }
       if (path === "/v1/rooms" && req.method === "POST") {
-        const { name, map } = JSON.parse(body.toString());
-        return json(200, { room: { ...rooms.info(rooms.create(name, map)), invite: rooms.last.invite } });
+        const { name, map, keepDays, mapId, fileName, note, meta } = JSON.parse(body.toString());
+        const room = rooms.create(name, map);
+        if (keepDays !== undefined) {
+          // Kept open: the file becomes a revision of the linked map, or a new map, as the server does it.
+          const at = new Date().toISOString();
+          const form = { fields: { note: note ?? "Shared", fileName: fileName ?? `${name}.scx`, meta: JSON.stringify(meta ?? {}) }, file: { data: Buffer.from(map, "base64"), filename: fileName } };
+          let m = mapId ? state.maps.find((x) => x.id === mapId) : null;
+          if (m) { m.history.push(revision(m, m.history.length + 1, form, at)); m.updatedAt = at; }
+          else { m = { id: `m${state.nextMap++}`, name, description: "", createdAt: at, updatedAt: at, history: [] }; m.history.push(revision(m, 1, form, at)); state.maps.push(m); }
+          room.id = m.id;
+          room.kept = { keepDays, lastEditAt: at, lastEditBy: null };
+        }
+        return json(200, { room: { ...rooms.info(room), invite: room.invite, ...(room.kept ? { mapId: room.id } : {}) }, storage: storage() });
+      }
+      if (path === "/v1/rooms/mine" && req.method === "GET") return json(200, { rooms: rooms.mine(), limit: 5 });
+      const own = /^\/v1\/rooms\/mine\/([^/]+)(\/relink)?$/.exec(path);
+      if (own) {
+        const room = rooms.byId(decodeURIComponent(own[1]));
+        if (!room) return json(404, { error: { code: "not_found", message: "You are not sharing a map by that id." } });
+        if (own[2]) { room.invite = randomBytes(18).toString("base64url"); return json(200, { room: rooms.view(room) }); }
+        if (req.method === "PATCH") { room.kept.keepDays = JSON.parse(body.toString()).keepDays; return json(200, { room: rooms.view(room) }); }
+        if (req.method === "DELETE") { rooms.end(room); return json(200, { rooms: rooms.mine(), limit: 5 }); }
       }
       mm = /^\/v1\/recipes\/([a-z-]+)$/.exec(path);
       if (mm && req.method === "POST") {
@@ -176,7 +199,28 @@ function roomServer(log) {
       return room;
     },
     byInvite: (invite) => list.find((r) => r.invite === invite) ?? null,
-    info: (room) => ({ id: room.id, name: room.name, owner: ACCOUNT_NAME, people: room.people.length, maxPeople: 8, createdAt: room.createdAt }),
+    byId: (id) => list.find((r) => r.id === id) ?? null,
+    info: (room) => ({
+      id: room.id, name: room.name, owner: ACCOUNT_NAME, people: room.people.length, maxPeople: 8, createdAt: room.createdAt,
+      ...(room.kept ? { keepDays: room.kept.keepDays, endsAt: endsAt(room.kept), lastEditAt: room.kept.lastEditAt } : {}),
+    }),
+    /** A row of the account's list of shared maps. */
+    view: (room) => ({
+      id: room.id, kind: room.kept ? "kept" : "live", name: room.name, invite: room.invite, people: room.people.map((p) => p.person.name), createdAt: room.createdAt,
+      ...(room.kept ? { keepDays: room.kept.keepDays, endsAt: endsAt(room.kept), lastEditAt: room.kept.lastEditAt, lastEditBy: room.kept.lastEditBy } : {}),
+    }),
+    mine: () => list.map((r) => api.view(r)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    /** A shared map for the list that nobody is in: `kept` { keepDays, lastEditAt, lastEditBy } or none for a live one. */
+    seed(name, createdAt, kept = null) {
+      const room = api.create(name, "");
+      room.createdAt = createdAt;
+      if (kept) room.kept = { ...kept };
+      return room;
+    },
+    end(room) {
+      for (const p of room.people.slice()) { p.conn?.send({ type: "ended", reason: "owner" }); p.conn?.close(); leave(room, p, "left"); }
+      list.splice(list.indexOf(room), 1);
+    },
     connect(conn) {
       let room = null, me = null;
       conn.onMessage = (text) => {
@@ -202,6 +246,7 @@ function roomServer(log) {
           case "op": {
             const seq = ++room.seq;
             room.ops.push({ seq, from: me.person.id, op: msg.op });
+            if (room.kept) { room.kept.lastEditAt = new Date().toISOString(); room.kept.lastEditBy = me.person.name; }
             conn.send({ type: "ack", seq });
             broadcast(room, { type: "op", seq, from: me.person.id, op: msg.op }, me);
             return;
@@ -215,7 +260,7 @@ function roomServer(log) {
             return;
           }
           case "end":
-            if (me.person.owner) for (const p of room.people.slice()) { p.conn?.send({ type: "ended", reason: "owner" }); p.conn?.close(); leave(room, p, "left"); }
+            if (me.person.owner) api.end(room);
             return;
           case "ping": conn.send({ type: "pong" }); return;
         }
@@ -241,6 +286,9 @@ function roomServer(log) {
     presenceOf: (room, name) => room.presence.get(room.people.find((x) => x.person.name === name)?.person.id),
     closeAll() { for (const r of list) for (const p of r.people) p.conn?.close(); },
   };
+  function endsAt(kept) {
+    return new Date(Date.parse(kept.lastEditAt) + (kept.keepDays ?? 365) * 86_400_000).toISOString();
+  }
   function presence(room, from, data) {
     const merged = { px: null, py: null, view: null, layer: "", dialog: null, ...data, ...room.pinned.get(from) };
     room.presence.set(from, merged);

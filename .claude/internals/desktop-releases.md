@@ -73,7 +73,19 @@ say this, which is why it is here. The
 carrying the `CNAME` a branch-served Pages site keeps its domain in. Both Pages sites answer an
 unknown path with the bundle's `404.html`, which the `scmjs-404` step in `vite.config.ts` copies
 from `index.html` — that is how a shared map's `/share/<invite>` link opens the editor (status 404,
-but the page runs). nginx and the dev server fall back to `index.html` on their own. The nightly prerelease's notes
+but the page runs).
+
+**`editor.scmjs.dev` is proxied through Cloudflare (orange cloud, SSL Full, since 2026-09-23)**
+for the link-preview Worker (private repo `scm-js/cloudflare-link-previews`, deployed as
+`scmjs-link-previews`). The Worker runs only on `/map/*` and `/share/*` (zone routes, fail open):
+it fetches the Pages page, asks `api.scmjs.dev/v1/previews/…` what the link is, writes Open Graph
+tags into the head and makes the status 200. It rewrites only a page containing
+`id="boot-splash"`, so **keep that id in `index.html`**, or the cards silently stop. GitHub's own
+"File not found" (a deploy without `404.html`, like tag v0.4.0) passes through untouched.
+**`nightly.editor.scmjs.dev` must stay grey**: the free Universal certificate is `scmjs.dev` +
+`*.scmjs.dev`, one level only, and proxying the two-level name failed the TLS handshake outright
+(tried 2026-09-23). Its routes exist but do nothing. After a proxy change, check the Pages
+settings still show the custom domain's certificate as fine (Pages renews by seeing its own IPs). nginx and the dev server fall back to `index.html` on their own. The nightly prerelease's notes
 carry a paragraph linking that site — the release page is the only thing most people open, and the
 site is the same run's zip, so it is the cheapest way to try a nightly. That paragraph is written
 only when `NIGHTLY_DOMAIN` *and* `NIGHTLY_PAT` are both set (`SITE:` in the `release` job's env is

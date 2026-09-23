@@ -13,6 +13,7 @@
  *   node scripts/guide-screenshots.mjs [--base http://localhost:5173] [--browser <chrome>]
  *                                      [--only editor,units,fog] [--scenes scmjs-ai] [--out docs/images]
  *                                      [--plugin http://localhost:3121/]   # a local scmjs.dev plugin build
+ *                                      [--playground http://localhost:3110/]  # a local API Playground build
  *
  * Needs the game data extracted (the pictures are of real graphics) and, in
  * `fixtures/maps/`, Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero from
@@ -46,6 +47,8 @@ const PINNED_SCMJS = /"(github:scm-js\/plugin-scmjs-dev@v[^"]+)"/.exec(readFileS
 /** `--plugin <address>`: a local build of it instead, while working on the plugin (the pinned one is turned off). */
 const SCMJS_PLUGIN = opt("--plugin", PINNED_SCMJS);
 const FIXTURES = join(root, "fixtures/maps");
+/** The API Playground plugin: not a default, so it is installed for its scene; `--playground` points at a local build. */
+const PLAYGROUND_PLUGIN = opt("--playground", "github:scm-js/plugin-api-playground");
 
 const { chromium } = await load("playwright");
 const sharp = (await load("sharp")).default;
@@ -444,6 +447,45 @@ const SCENES = [
     await p.page.mouse.move(panel.x + 250 + (1146 - (panel.x + panel.width - 100)), panel.y + 12, { steps: 8 }); await p.page.mouse.up(); await p.wait(800);
     await p.take("trigscript-beside");
   }),
+
+  // The plugin guide's pictures of the API Playground: an example run beside the map it
+  // changed, and the reference on hover. Installed for the scene, since it is not a default.
+  scene("api-playground", "", async (p) => {
+    await p.drop("(4)Crescent Moon.scx");
+    await p.minimap(0.3, 0.72); await p.wait(800);
+    await p.menu("Tools", /^API Playground/);
+    await p.page.locator(".apg .monaco-editor .view-lines").waitFor({ timeout: 120_000 }); await p.wait(1500);
+    // Narrower and taller than it opens, at the right of the map, so the ring shows beside it.
+    const panel = await p.page.locator(".plugin-panel").boundingBox();
+    await p.page.mouse.move(panel.x + panel.width - 6, panel.y + panel.height - 6); await p.page.mouse.down();
+    await p.page.mouse.move(panel.x + panel.width - 210, panel.y + panel.height + 180, { steps: 8 }); await p.page.mouse.up(); await p.wait(300);
+    const narrow = await p.page.locator(".plugin-panel").boundingBox();
+    await p.page.mouse.move(narrow.x + 150, narrow.y + 12); await p.page.mouse.down();
+    await p.page.mouse.move(narrow.x + 150 + (1144 - (narrow.x + narrow.width)), 100, { steps: 8 }); await p.page.mouse.up(); await p.wait(400);
+    await p.page.locator(".apg-bar select").selectOption("example:place-units"); await p.wait(800);
+    await p.page.locator(".apg-bar button", { hasText: /^Run$/ }).click(); await p.wait(1500);
+    // The view scrolled right, so the ring the snippet placed at its middle sits left of the panel.
+    await p.page.mouse.move(...at(100, 400)); await p.page.mouse.wheel(270, 0); await p.wait(1200);
+    // The pointer off the map, so no tile cursor is drawn.
+    await p.page.mouse.move(1270, 800); await p.wait(300);
+    await p.take("api-playground");
+
+    // The reference on hover: `edit` in a line that calls it.
+    await p.playground((monaco, ed) => {
+      ed.getModel().setValue('api.document.edit("Fill", (tx) => {\n  tx.fillFlat({ x0: 0, y0: 0, x1: 8, y1: 8 }, api.terrain.types()[1].id);\n});\n');
+      ed.setPosition({ lineNumber: 1, column: 16 }); ed.focus();
+    });
+    await p.wait(2500);
+    await p.playground((monaco, ed) => { ed.trigger("keyboard", "editor.action.showHover", {}); });
+    await p.page.locator(".monaco-hover:not(.hidden) .hover-contents").first().waitFor({ timeout: 15_000 }); await p.wait(800);
+    // The panel's width, from the top of the editor to the foot of the hover.
+    const hover = await p.page.locator(".monaco-hover:not(.hidden)").first().boundingBox();
+    const box = await p.page.locator(".plugin-panel").boundingBox();
+    const editor = await p.page.locator(".apg .monaco-editor").boundingBox();
+    const top = editor.y - 8, bottom = Math.max(hover.y + hover.height, editor.y + 80) + 14;
+    const right = Math.min(1400, Math.max(box.x + box.width, hover.x + hover.width + 12));
+    await p.take("api-playground-hover", { x: box.x, y: top, width: right - box.x, height: Math.min(900, bottom) - top }, { lossless: true });
+  }, { init: () => `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([{ spec: PLAYGROUND_PLUGIN, enabled: true }]))});` }),
 ];
 
 /**
@@ -558,7 +600,7 @@ async function annotate(from, to) {
 
 /* ── the driver ────────────────────────────────────────────────────────────────── */
 
-function scene(name, query, run, { seed = false } = {}) { return { name, query, run, seed }; }
+function scene(name, query, run, { seed = false, init = null } = {}) { return { name, query, run, seed, init }; }
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
@@ -569,6 +611,7 @@ async function main() {
       if (SCENES_ONLY.length && !SCENES_ONLY.includes(s.name)) continue;
       const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
       if (s.seed) await ctx.addInitScript(seedScmjs(mock.url));
+      if (s.init) await ctx.addInitScript(s.init());
       const page = await ctx.newPage();
       page.on("pageerror", (e) => console.error(`[${s.name}] page error:`, e.message));
       const p = driver(page, mock, async () => {
@@ -664,6 +707,15 @@ function driver(page, mock, other) {
       await page.evaluate(async ({ src, args }) => {
         const monaco = await import("https://cdn.jsdelivr.net/gh/scm-js/plugin-trigscript@monaco-0.56.0-2/dist/monaco.js");
         const ed = monaco.editor.getEditors()[0];
+        Object.assign(globalThis, args);
+        new Function("monaco", "ed", `(${src})(monaco, ed)`)(monaco, ed);
+      }, { src: fn.toString(), args });
+    },
+    /** `monaco`, against the API Playground's own copy of Monaco (it imports the same bundle under `?instance=playground`). */
+    async playground(fn, args = {}) {
+      await page.evaluate(async ({ src, args }) => {
+        const monaco = await import("https://cdn.jsdelivr.net/gh/scm-js/plugin-trigscript@monaco-0.56.0-2/dist/monaco.js?instance=playground");
+        const ed = monaco.editor.getEditors().find((e) => e.getModel()?.uri.toString() === "file:///snippet.ts");
         Object.assign(globalThis, args);
         new Function("monaco", "ed", `(${src})(monaco, ed)`)(monaco, ed);
       }, { src: fn.toString(), args });

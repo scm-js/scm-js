@@ -647,6 +647,11 @@ It needs the game data extracted and Big Game Hunters, Binary Burghs, Crescent M
 Ground Zero from the game's own Maps folder in `fixtures/maps/`. Never commit a picture
 that shows anything but the editor.
 
+The API Playground pictures (`--scenes api-playground`) install that plugin for their
+scene, since it is not a default: from its repository, or from a local build with
+`--playground http://localhost:3000/` while you work on it. The scene opens Crescent Moon,
+runs the *Place units in a ring* example and takes the hover over `api.document.edit`.
+
 The scmjs.dev pictures — the Account dialog, My Maps, the AI dialogs and the assistant —
 are taken against a stand-in for the service, `scripts/lib/guide-scmjs-mock.mjs`, which
 the script starts on port 8765 and points the plugin at through its stored settings: one

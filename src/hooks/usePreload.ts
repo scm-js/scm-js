@@ -5,7 +5,8 @@ import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { logInfo } from "../editor/log";
-import { openDialogAtom } from "../atoms/uiAtoms";
+import { dialogStackAtom, openDialogAtom } from "../atoms/uiAtoms";
+import { pluginsStartedAtom } from "../atoms/pluginAtoms";
 import { desktopBridge } from "../gamedata/desktop";
 import { currentAssetSource, onAssetSource } from "../gamedata/source";
 import { runPreload, warmRemainingTilesets, type PreloadTask } from "../services/preload";
@@ -71,7 +72,38 @@ export function usePreload() {
       // needs them; the desktop serves them from its own folder, where that is only disk I/O.
       const source = currentAssetSource();
       if (!desktopBridge()) warmRemainingTilesets(tileset);
-      if (source?.kind === "none") store.set(openDialogAtom, "gameData", { auto: true });
+      if (source?.kind === "none") offerGameDataWhenClear(store, () => currentAssetSource()?.kind === "none");
     });
   }, [setLog, setSource, setStep, store]);
+}
+
+/** How long the offer waits for the plugins to start before it stops waiting for them. */
+export const PLUGIN_WAIT_MS = 5000;
+
+/**
+ * Open the Game Data dialog once the plugins have started and no other dialog is open.
+ * A dialog up by then is there for a reason the user came with — a shared map's Join,
+ * a copy link's Open a Copy, both opened by the scmjs.dev plugin as it starts — and
+ * stacking Game Data on it (or under it) hid one behind the other, in an order that
+ * depended on which finished first; after it closes, the offer follows over whatever it
+ * opened. Waiting for the plugins is capped at `PLUGIN_WAIT_MS`, so one stuck on the
+ * network cannot hold the offer back. `stillNeeded` is asked at the moment of opening,
+ * so data installed meanwhile (Help ▸ Game Data…) cancels it.
+ */
+export function offerGameDataWhenClear(store: Store, stillNeeded: () => boolean, waitMs = PLUGIN_WAIT_MS): void {
+  let waited = false;
+  let done = false;
+  const unsubs: (() => void)[] = [];
+  const timer = setTimeout(() => { waited = true; offer(); }, waitMs);
+  function offer() {
+    if (done) return;
+    if (!store.get(pluginsStartedAtom) && !waited) return;
+    if (store.get(dialogStackAtom).length > 0) return;
+    done = true;
+    clearTimeout(timer);
+    for (const u of unsubs) u();
+    if (stillNeeded()) store.set(openDialogAtom, "gameData", { auto: true });
+  }
+  unsubs.push(store.sub(dialogStackAtom, offer), store.sub(pluginsStartedAtom, offer));
+  offer();
 }

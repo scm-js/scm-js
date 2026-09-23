@@ -147,6 +147,13 @@ export interface PluginRuntime {
 
 export const pluginRuntimesAtom = atom<Record<string, PluginRuntime>>({});
 
+/**
+ * True once the first activation pass has settled — every plugin enabled at startup has
+ * run its `activate` or failed. What a plugin opens as it starts (a link's Join dialog)
+ * is on the dialog stack by then, which is what the startup Game Data offer waits for.
+ */
+export const pluginsStartedAtom = atom(false);
+
 /* ── Contribution registries ────────────────────────────── */
 
 let contributionSeq = 0;

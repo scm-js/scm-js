@@ -15,7 +15,7 @@ was **removed** along with `installFromUrl`, the `remote` source kind and the CI
 fetched from an address the user did not name, and the chain running out and asking is easier to explain
 than four ways of not being asked. The preload's first task is the resolution (progress on the splash for a
 desktop extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData`
-dialog with `{ auto: true }` when it ends at none. After an install the dialog calls `retryFailedParts`
+dialog with `{ auto: true }` when it ends at none — through `offerGameDataWhenClear`, which waits for `pluginsStartedAtom` (first activation pass settled, capped at `PLUGIN_WAIT_MS`) and then for `dialogStackAtom` to be empty (a link's Join / Open a Copy dialog raced it and was hidden under it on a slow probe; tests/gamedata-offer.test.ts). A plugin dialog that never closes means no offer; Help ▸ Game Data… still works. After an install the dialog calls `retryFailedParts`
 (drops the `LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
 `useUnitAssets` depend on — that is how a map already open picks the graphics up. It also calls
 `useMapFileActions.ts#relayBlankTerrain`: the startup map was laid by `flatTerrain` with no CV5 to pick

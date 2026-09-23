@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAtomValue, useStore } from "jotai";
-import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginUpdateCheckAtom } from "../atoms/pluginAtoms";
+import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginsStartedAtom, pluginUpdateCheckAtom } from "../atoms/pluginAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
 import { activatePlugin, activePluginSpecs, deactivatePlugin, effectiveInstalls, orderedInstalls } from "../plugins/host";
@@ -55,6 +55,7 @@ export function usePlugins() {
 
     let live = true;
     void Promise.allSettled(pass).then(() => {
+      store.set(pluginsStartedAtom, true);
       if (!live) return;
       const openPlugins = () => store.set(openDialogAtom, "plugins", { tab: "installed" });
       const failures = pluginFailures(wanted, store.get(pluginRuntimesAtom), store.get(pluginManifestCacheAtom)).filter((f) => !reported.current.has(f.spec));

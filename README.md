@@ -1780,6 +1780,17 @@ the web editor shows a card with the map's name, who shared it, its tileset, siz
 players, and its picture. A link that has been removed shows a card saying it no longer
 works.
 
+**Embed…** beside a link in My Maps gives you that card as a picture to put somewhere
+yourself, with the link around it: a forum post or signature (BBCode), a GitHub README or
+a Discourse forum (Markdown), or a website (HTML). Pick the large picture (1200 × 630) or
+the small one (600 × 315) for a signature, and copy the code. The picture's own address
+opens nothing: only the link you wrap it in does. When the link is removed, the picture
+says the map is no longer shared.
+
+The picture of the map on the card is drawn by your editor when it saves the map to
+scmjs.dev, so a map saved without the game's graphics installed gets its size in its
+place.
+
 In **My Maps**, the *Links* part of a map lists its links, how many times each was
 opened, and **Remove** for each; a removed link stops working at once and the map stays.
 *Link to #3* makes a link to the revision you are looking at, *Link to the newest* one
@@ -1884,6 +1895,12 @@ link**, **New link**, how long to keep it open, and **End sharing**. When you ar
 sharing five, Share this Map… shows the same list so you can end one first.
 
 ![My Maps with a map kept open: marked Shared · 3 editing, with Put #1 into the shared map and End sharing](docs/images/share-mymaps.webp)
+
+A map kept open also has **Embed…** in that list and in the Share dialog. Its picture
+can open a copy of the map (the choice it starts with: a link to the newest revision is
+made for it) or the shared map itself. The second lets anyone who sees the picture join
+and edit, and the dialog says so; **New link** is the way back if it went further than
+you meant.
 
 In **My Maps** a map kept open says so (*Shared · 2 editing*, or when it ends), and
 **Join** opens it with whoever is there; **Open** still gives you a revision on its own.

@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The five guides are the repository's own — `README.md` and `docs/*.md` — split into
+ * The six guides are the repository's own — `README.md` and `docs/*.md` — split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -30,6 +30,15 @@ export const SOURCES = [
     file: "README.md",
     title: "User guide",
     blurb: "What each layer does, how the editor is used, and the table of what is and is not implemented.",
+  },
+  {
+    id: "triggers",
+    file: "docs/triggers.md",
+    title: "Trigger reference",
+    blurb: "Every trigger condition and action: what it does, its arguments, its text form and where it is stored in the map.",
+    // A page here is found by the name of one condition or action, so its title says what
+    // the name is: "Set Deaths — StarCraft trigger reference".
+    pageTitle: "StarCraft trigger reference",
   },
   {
     id: "plugins",
@@ -108,7 +117,7 @@ export function headingIndex(guides) {
  * The link rewriter handed to `renderMarkdown`.
  *
  * Absolute and `mailto:` links are left alone. A bare `#fragment` is resolved within the
- * guide it was written in. A relative path naming one of the five source documents
+ * guide it was written in. A relative path naming one of the six source documents
  * becomes a page here; anything else in the repository becomes a link to GitHub — a blob
  * for a path inside the tree, and the repository's own page for one that climbs above it
  * (`../../releases` in `docs/development.md` is written to work that way on github.com).

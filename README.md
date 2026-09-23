@@ -447,7 +447,8 @@ players, *do* these actions. In a melee game the map's triggers are ignored and 
 applies its own rules, so a melee map needs none (Blizzard's own carry the three standard
 ones — defeat, victory, starting resources — for anyone who opens them as Use Map
 Settings); a "Use Map Settings" map is nothing but triggers. Three editors over the same
-list, and a fourth for mission briefings.
+list, and a fourth for mission briefings. The [trigger reference](docs/triggers.md) has a
+page for every condition and action.
 
 ### The Trigger Editor
 
@@ -2417,6 +2418,7 @@ files stay the source; the site renders them.
 
 | Document | Covers |
 | --- | --- |
+| [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, mods as data sets, and how the pictures get drawn |
 | [docs/file-formats.md](docs/file-formats.md) | What is in a map file, what the editor preserves, revisions, protected maps |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |

@@ -17,7 +17,9 @@ the build writes `sitemap.xml` (every emitted page) and `robots.txt`; a local or
 build has no domain to be absolute against and leaves all of it out. A guide page's
 `<meta name=description>` is `summaryOf` — sentences from the top until there is about a
 search result's worth, or the page's `###` headings when it opens on a table — while its
-card on the section page stays `firstLine`, one sentence.
+card on the section page stays `firstLine`, one sentence. A source may set `pageTitle`, which
+makes its pages' `<title>` "`<page> — <pageTitle>`" instead of "… — scmJS documentation": the
+trigger reference uses it, since those pages are found by the name of one action.
 
 Two halves, and only the second is generated in any interesting sense. The guides are
 `README.md` and `docs/*.md` split at their `##` headings, one page each, with the `###`

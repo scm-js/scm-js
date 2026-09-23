@@ -8,8 +8,8 @@ A browser-based StarCraft 1 / Brood War map editor (React 19 + Vite + TypeScript
 StarEdit / SCMDraft 2. It opens real `.scm`/`.scx` maps (MPQ archives via `mopaq`), renders terrain from
 the game's own tileset graphics, and writes playable archives back. `README.md` is the map-maker's
 guide (what each layer does, and the table of what is and is not implemented) — read it first; the
-technical companions are `docs/file-formats.md`, `docs/game-data.md`, `docs/plugins.md` and
-`docs/development.md`. Keep all five current when behaviour changes — they are also the
+technical companions are `docs/triggers.md` (the trigger reference), `docs/file-formats.md`,
+`docs/game-data.md`, `docs/plugins.md` and `docs/development.md`. Keep all six current when behaviour changes — they are also the
 documentation *site* (`npm run build:docs` → docs.scmjs.dev), which renders them rather
 than holding anything of its own.
 
@@ -59,6 +59,7 @@ npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weap
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"    # or explicit .mpq paths
 npm run check:assets   # what is on disk, no archives touched (predev/prebuild run this with --warn)
 npm run i18n           # the language catalogues against the source (-- --write brings them up to date)
+npm run docs:triggers  # the generated tables of docs/triggers.md, from src/data/triggerDefs.ts
 npm run build:image    # web bundle + docker/Dockerfile -> the `scmjs` image (nginx, no game data)
 node scripts/extract-tilesets.mjs         # just the tilesets
 node scripts/extract-units.mjs            # just the unit data

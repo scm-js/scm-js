@@ -112,7 +112,7 @@ function main(argv) {
   const { guides, resolve: resolveLink } = buildGuides();
   const api = buildApi();
 
-  /* The sidebar is the same on every page: the five guides, then the reference. */
+  /* The sidebar is the same on every page: the six guides, then the reference. */
   const tree = [
     ...guides.map((g) => ({ title: g.title, url: `${base}${g.url}`, pages: g.pages.map((p) => ({ title: p.title, url: `${base}${p.url}` })) })),
     {
@@ -189,6 +189,7 @@ ${guide.pages.map((p) => `<li><a class="card" href="${base}${p.url}"><b>${escape
       emit({
         title: p.title,
         description: summaryOf(p) || `${p.title}, in the ${guide.title} section of the scmJS documentation.`,
+        heading: guide.pageTitle ? `${p.title} — ${guide.pageTitle}` : undefined,
         url: `${base}${p.url}`,
         section: guide.title,
         headings: p.headings.map((h) => h.text),
@@ -289,6 +290,7 @@ export function plainTextOf(html) {
 export function summaryOf({ title, body, headings = [] }) {
   const text = body
     .replace(/```[\s\S]*?```/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/^#{1,6} .*$/gm, "")
     .replace(/^\|.*$/gm, "")
     .replace(/^>\s?/gm, "")

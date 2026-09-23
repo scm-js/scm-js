@@ -167,6 +167,24 @@ checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.
 the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
 plus bases at every start location, mirroring the selection and the symmetry check.
 
+**Timelapse** (`github.com/scm-js/plugin-timelapse`, 2026-09-23, not a default) records one frame per
+`"commit"` and plays the recording back / exports GIF (gifenc) or WebM (MediaRecorder). Design points that
+cost something to settle: frames are **taken by diffing the whole MTXM against the recorder's copy**, not
+from the event's `area` (sub-millisecond at 256², and immune to any commit path that under-reports); the
+area is only the highlight box. Objects are packed Int32Arrays stored whole, only on frames where they
+changed. A key frame every 64 frames bounds seeking. Recordings go to **IndexedDB** (`scmjs-timelapse`:
+`recordings` summaries + `frames` keyed `[id, index]`, one transaction per frame so they never disagree)
+because `api.storage` is a few MB of JSON. A reopened file **continues** its recording when the file name
+matches and `seek(frames, last)` equals the map as opened — replaying the frames rather than keeping a
+"tail" copy that a debounced write could leave stale. Playback draws the terrain incrementally (a clip cut
+to the dirty rect through `renderClip`) and the objects as one tile-less clip over it (parts.doodads on so
+overlays draw; the doodad tiles it re-blits are harmless). GIF: one palette quantised from the first and
+last frames, unchanged pixels set to a reserved transparent index with dispose 1 — 298 frames at 512²
+came to 519 KB in 3.5 s headless. Verified headlessly 2026-09-23 on Isolation: API edits + a mouse stroke
+→ 17 frames, status cell, panel, play, GIF export (decoded back with `ImageDecoder`: 9 frames, 80 ms,
+2 s hold), reload + reopen the saved bytes → same recording continued (8 → 9), a desert recording drawn
+while an ice map is in front.
+
 **Stamp Library** (`github.com/scm-js/plugin-stamp-library`, a default that starts on since 2026-09-07) is the
 clipboard-plus-storage-plus-panel plugin for the extended-terrain parts bin, and the worked example for the
 three additions it asked of the host — `clipboard.capture` (a clip built as `copy` would but not put on the

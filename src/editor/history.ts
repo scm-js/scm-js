@@ -8,7 +8,7 @@
  * list only has to be consistent with the state the ones before it leave behind.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { applyChanges, type TileChange } from "./terrain";
+import { applyChanges, type Rect, type TileChange } from "./terrain";
 import { applyIsomChanges } from "./isom";
 import { applyUnitChanges, type UnitChange } from "./units";
 import { applyFogChanges } from "./fog";
@@ -96,3 +96,98 @@ export const touchesDoodads = (entry: HistoryEdit) =>
 export const hasEdits = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0
   || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined || touchesDoodads(entry) || (entry.locations?.length ?? 0) > 0;
+
+/* ── What a commit changed, for the listeners ────────────── */
+
+/**
+ * Why the map changed: an edit recorded in the history, an undo or redo of one, a dialog
+ * writing its tables (settings, triggers, strings — outside the history), a change to the
+ * whole document (resize, tileset change, raw section edit), or other people's edits on a
+ * shared map.
+ */
+export type CommitReason = "edit" | "undo" | "redo" | "tables" | "whole" | "remote";
+
+/** Which parts of the map one commit touched. */
+export interface CommitParts {
+  terrain: boolean;
+  isom: boolean;
+  units: boolean;
+  doodads: boolean;
+  sprites: boolean;
+  locations: boolean;
+  fog: boolean;
+  settings: boolean;
+  triggers: boolean;
+}
+
+export interface CommitNotice {
+  reason: CommitReason;
+  /** The history label (the Edit menu's words), or "" for a change with none. */
+  label: string;
+  /**
+   * The tiles the change fell on, far edges exclusive: every changed tile, and the tile
+   * under each object's position before and after (an object's picture reaches past its
+   * position — widen the rect by the largest picture you draw). Null when the change
+   * has no place on the map (a dialog's tables) or the whole map may have changed.
+   */
+  area: Rect | null;
+  parts: CommitParts;
+}
+
+export const NO_PARTS: CommitParts = {
+  terrain: false, isom: false, units: false, doodads: false, sprites: false, locations: false, fog: false, settings: false, triggers: false,
+};
+export const ALL_PARTS: CommitParts = {
+  terrain: true, isom: true, units: true, doodads: true, sprites: true, locations: true, fog: true, settings: true, triggers: true,
+};
+
+/** Which parts an entry's lists touch. */
+export function entryParts(entry: HistoryEdit): CommitParts {
+  return {
+    ...NO_PARTS,
+    terrain: entry.changes.length > 0 || (entry.doodadTiles?.length ?? 0) > 0,
+    isom: (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || entry.rebuiltIsom === true,
+    units: (entry.units?.length ?? 0) > 0,
+    doodads: (entry.doodads?.length ?? 0) > 0,
+    sprites: (entry.sprites?.length ?? 0) > 0,
+    locations: (entry.locations?.length ?? 0) > 0,
+    fog: (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined,
+  };
+}
+
+/**
+ * The tile rectangle an entry's lists fall on (see `CommitNotice.area`), clamped to the
+ * map; null when nothing in it has a place. A created or rebuilt ISOM lattice counts as
+ * the whole map, since it is not listed cell by cell.
+ */
+export function entryArea(entry: HistoryEdit, width: number, height: number): Rect | null {
+  if (entry.createdIsom !== undefined || entry.rebuiltIsom || entry.createdMask !== undefined) return { x0: 0, y0: 0, x1: width, y1: height };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const tile = (x: number, y: number) => {
+    if (x < x0) x0 = x;
+    if (y < y0) y0 = y;
+    if (x + 1 > x1) x1 = x + 1;
+    if (y + 1 > y1) y1 = y + 1;
+  };
+  const cells = (list: readonly TileChange[] | undefined) => {
+    if (list) for (const c of list) tile(c.at % width, Math.floor(c.at / width));
+  };
+  const at = (r: { x: number; y: number } | null) => { if (r) tile(Math.floor(r.x / 32), Math.floor(r.y / 32)); };
+  cells(entry.changes);
+  cells(entry.doodadTiles);
+  cells(entry.fog);
+  for (const list of [entry.units, entry.doodads, entry.sprites]) if (list) for (const c of list) { at(c.before); at(c.after); }
+  if (entry.locations) {
+    for (const c of entry.locations) {
+      for (const l of [c.before, c.after]) {
+        // An unused slot is all zeroes; it has no place.
+        if (l.left === 0 && l.top === 0 && l.right === 0 && l.bottom === 0) continue;
+        at({ x: Math.min(l.left, l.right), y: Math.min(l.top, l.bottom) });
+        at({ x: Math.max(l.left, l.right) - 1, y: Math.max(l.top, l.bottom) - 1 });
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  const r = { x0: Math.max(0, x0), y0: Math.max(0, y0), x1: Math.min(width, x1), y1: Math.min(height, y1) };
+  return r.x1 > r.x0 && r.y1 > r.y0 ? r : null;
+}

@@ -57,7 +57,7 @@ import {
 import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
-import { pluginIdOf, type EditTransaction, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
+import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
 
 /* ── Specs and manifests ────────────────────────────────── */
 
@@ -303,6 +303,46 @@ describe("plugin api", () => {
     expect(store.get(terrainModeAtom)).toBe("tile");
     expect(api.terrain.active().tile).toBe(0x55);
     expect(() => api.events.on("nope" as never, () => {})).toThrow(/Unknown plugin event/);
+  });
+
+  // The timelapse plugin's question, and any incremental redraw's: what changed and where,
+  // once per commit, for every way the editor commits.
+  it("says what each commit changed and where", () => {
+    const { store } = blankStore(16, 12);
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    const seen: CommitEvent[] = [];
+    api.events.on("commit", (e) => { seen.push(e); });
+
+    api.document.edit("Paint", (tx) => { tx.setTile(2, 3, 0x21); tx.setTile(5, 1, 0x21); });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ reason: "edit", label: "Paint", area: { x0: 2, y0: 1, x1: 6, y1: 4 } });
+    expect(seen[0].parts).toMatchObject({ terrain: true, units: false, settings: false });
+
+    api.document.edit("Place", (tx) => { tx.placeUnit(api.consts.unit.mineralFields[0], 0, 9 * 32 + 16, 7 * 32 + 16); });
+    expect(seen[1]).toMatchObject({ reason: "edit", label: "Place", area: { x0: 9, y0: 7, x1: 10, y1: 8 } });
+    expect(seen[1].parts).toMatchObject({ terrain: false, units: true });
+
+    api.document.undo();
+    expect(seen[2]).toMatchObject({ reason: "undo", label: "Place", area: { x0: 9, y0: 7, x1: 10, y1: 8 } });
+    api.document.redo();
+    expect(seen[3]).toMatchObject({ reason: "redo", label: "Place" });
+
+    // One commit for an update, though it writes both kinds of table.
+    api.document.update("Rename", (tx) => { tx.properties({ name: "Renamed" }); });
+    expect(seen).toHaveLength(5);
+    expect(seen[4]).toMatchObject({ reason: "tables", label: "Rename", area: null, parts: { settings: true, triggers: true, terrain: false } });
+
+    api.document.resize({ width: 20, height: 12 });
+    expect(seen[5]).toMatchObject({ reason: "whole", area: null, parts: { terrain: true, units: true } });
+    // An edit with nothing in it is not recorded, so it is not announced either.
+    api.document.edit("Nothing", () => {});
+    expect(seen).toHaveLength(6);
+    expect(seen.every((e) => e.id === api.document.id())).toBe(true);
+  });
+
+  it("refuses to load a tileset it does not know", async () => {
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(await api.tileset.load("nowhere" as never)).toBe(false);
   });
 
   // The point of the group is that a plugin stops writing the hex itself, so what it is

@@ -16,6 +16,7 @@ import type { LoadedTileset } from "../formats/tileset/load";
 import type { TerrainType, TileInfo } from "../formats/tileset/palette";
 import type { TilesetId } from "../data/tilesets";
 import type { Rect } from "../editor/terrain";
+import type { CommitParts, CommitReason } from "../editor/history";
 import type { Diamond, IsomReport } from "../editor/isom";
 import type { Bounds, LocationPatch } from "../editor/locations";
 import type { FogMode } from "../editor/fog";
@@ -1455,8 +1456,9 @@ export interface GraphicsApi {
    * overlays with the viewport's own graphics, then location boxes — a thumbnail for a
    * list of clips, or the ghost under the pointer while a plugin stamps one. It is drawn
    * with the graphics of the clip's *own* tileset (`clip.era`), which are in memory for
-   * the open map once loaded and otherwise not, so a clip from another tileset answers
-   * null; so does a missing tileset or a page with no canvas. Synchronous and uncached:
+   * the open map once loaded; a clip from another tileset answers null until
+   * `tileset.load(id)` has fetched that one. So does a missing tileset or a page with no
+   * canvas. Synchronous and uncached:
    * keep the result while the clip and the tileset stay the same.
    */
   renderClip(clip: Clip, options?: RenderClipOptions): PluginImage | null;
@@ -1792,8 +1794,14 @@ export interface TilesetApi {
   id(): TilesetId | null;
   name(): string;
   isLoaded(): boolean;
-  /** Fetch and decode the graphics; resolves false when they were never extracted. */
-  load(): Promise<boolean>;
+  /**
+   * Fetch and decode the graphics — the open map's tileset's, or `tileset`'s — and keep
+   * them in memory; resolves false when they were never extracted. Loading another
+   * tileset changes nothing about the map: it is for `graphics.renderClip` drawing a clip
+   * that came from a map on that tileset (a stamp, a recording), which answers null until
+   * its tileset's graphics are loaded.
+   */
+  load(tileset?: TilesetId): Promise<boolean>;
   raw(): LoadedTileset | null;
 }
 
@@ -3044,6 +3052,8 @@ export interface HotkeyApi {
 export type PluginEvent =
   /** A map was opened, closed or replaced. */
   | "document"
+  /** A change was committed to the map in front; the listener gets a `CommitEvent` saying what and where. */
+  | "commit"
   /** The editor's language changed (Preferences ▸ Display): re-label what is showing through `api.i18n.t`. */
   | "language"
   /** Any committed edit (every `document.edit`, stroke, undo and redo bumps it, terrain or not), and a fog edit. */
@@ -3079,6 +3089,44 @@ export type PluginEvent =
   | "dialogs"
   /** The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now. */
   | "gameData";
+
+/**
+ * What the `"commit"` event hands its listeners: one change to the map in front, after it
+ * is in the scenario. Every stroke, `document.edit`, undo and redo is one commit; so is a
+ * dialog's OK or a `document.update` (reason `"tables"`), a resize, tileset change or raw
+ * section edit (`"whole"`), and a batch of other people's edits on a shared map
+ * (`"remote"`). A dialog that writes both settings and triggers may send two. Opening,
+ * closing and switching maps are not commits — the `"document"` event says those.
+ *
+ * @example
+ * api.events.on("commit", (e) => {
+ *   if (e.parts.terrain && e.area) redrawTiles(e.area);
+ *   else if (e.reason === "whole" || e.reason === "remote") redrawAll();
+ * });
+ */
+export interface CommitEvent {
+  /** `document.id()` of the map it happened to (always the one in front). */
+  id: number | null;
+  reason: CommitReason;
+  /**
+   * The history label — the words Edit ▸ Undo shows, in the editor's language; for an undo
+   * or redo, the label of the entry taken back or put back. The update's label for a
+   * `document.update`, the operation's name for `"whole"`, and "" for a built-in dialog's
+   * OK and for other people's edits.
+   */
+  label: string;
+  /**
+   * The tiles the change fell on, far edges exclusive: every changed tile, and the tile
+   * under each moved, placed or removed object's position (its picture reaches further —
+   * widen the rect by the largest picture you draw). Null when the change has no place on
+   * the map (`"tables"`) or may have touched all of it (`"whole"`, `"remote"`).
+   */
+  area: Rect | null;
+  /** Which parts changed. All of them for `"whole"` and `"remote"`, which do not say. */
+  parts: CommitParts;
+}
+
+export type { CommitParts, CommitReason };
 
 /* ── Sync ───────────────────────────────────────────────── */
 
@@ -3218,8 +3266,10 @@ export interface EventsApi {
  *   if (e.reason === "open") check(e.fileName);
  * });
  * api.events.on("terrain", () => redraw());
+ * api.events.on("commit", (e) => console.log(e.reason, e.label, e.area));
  */
   on(event: "document", listener: (event: DocumentEvent) => void): Disposable;
+  on(event: "commit", listener: (event: CommitEvent) => void): Disposable;
   on(event: PluginEvent, listener: () => void): Disposable;
 }
 

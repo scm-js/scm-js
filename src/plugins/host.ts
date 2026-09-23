@@ -17,7 +17,7 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -98,7 +98,7 @@ import { createWidgets, el } from "./widgets";
 import {
   applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
-import { hasEdits } from "../editor/history";
+import { hasEdits, NO_PARTS } from "../editor/history";
 import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, makeUnit, MINERAL_FIELD_IDS, nextSerial, removeUnits, snapPlacement, TILE_PX, unitAt, unitBox, unitGeometry, updateUnits, VESPENE_GEYSER, type UnitChange } from "../editor/units";
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
@@ -111,7 +111,7 @@ import {
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
   type FlashTarget, type StatusItemHandle, type StatusItemSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
-  type ClipboardApi, type ClipSource,
+  type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi,
@@ -1002,10 +1002,11 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
   // Both commits: triggers for the trigger lists and the script block's manifest, settings
   // for everything that reads names and colours (a string is shown in half the chrome).
   const commit = () => {
-    store.set(commitTriggersAtom);
-    store.set(commitSettingsAtom);
+    store.set(commitTriggersAtom, false);
+    store.set(commitSettingsAtom, false);
     store.set(mapNameAtom, scenarioName(scn) ?? "");
     store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+    store.set(commitNoticeAtom, { reason: "tables", label, area: null, parts: { ...NO_PARTS, settings: true, triggers: true } });
   };
 
   // There are no change lists here to take an operation back with, so a builder that throws
@@ -1506,6 +1507,7 @@ function clipboardApi(store: Store): ClipboardApi {
 
 const EVENT_ATOMS = {
   document: [scenarioAtom],
+  commit: [commitNoticeAtom],
   language: [localeAtom],
   terrain: [terrainRevisionAtom],
   units: [unitsRevisionAtom],
@@ -1543,6 +1545,16 @@ export function documentEvent(store: Store): DocumentEvent {
   const change = store.get(documentChangeAtom);
   const reason = change.scenario === scenario ? change.reason : scenario ? "open" : "close";
   return { reason, fileName: scenario ? store.get(mapFilePathAtom) : null, id: scenario ? store.get(activeDocumentIdAtom) : null };
+}
+
+/** The `"commit"` event's payload: the last notice, with the map it happened to. */
+export function commitEvent(store: Store): CommitEvent | null {
+  const notice = store.get(commitNoticeAtom);
+  if (!notice) return null;
+  return {
+    id: store.get(activeDocumentIdAtom), reason: notice.reason, label: notice.label,
+    area: notice.area ? { ...notice.area } : null, parts: { ...notice.parts },
+  };
 }
 
 /** `api.settings`: the dialogs' tables without a transaction. */
@@ -2030,8 +2042,10 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       id: () => (scenario() ? TILESETS[tilesetIndex(scenario()!)].id : null),
       name: () => { const scn = scenario(); return scn ? TILESETS[tilesetIndex(scn)].name : TILESET_BY_ID[store.get(mapTilesetAtom)].name; },
       isLoaded: () => loaded() !== null,
-      load: async () => {
-        try { await ensureTileset(store.get(tilesetFileNameAtom)); return true; } catch { return false; }
+      load: async (id) => {
+        const era = id === undefined ? -1 : TILESETS.findIndex((t) => t.id === id);
+        if (id !== undefined && era < 0) return false;
+        try { await ensureTileset(era < 0 ? store.get(tilesetFileNameAtom) : TILESET_FILENAMES[era]); return true; } catch { return false; }
       },
       raw: loaded,
     },
@@ -2287,11 +2301,16 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     },
 
     events: {
-      on: (event: PluginEvent, listener: (payload: DocumentEvent) => void) => {
+      on: (event: PluginEvent, listener: ((payload: DocumentEvent) => void) | ((payload: CommitEvent) => void)) => {
         const atoms = EVENT_ATOMS[event];
         if (!atoms) throw new Error(`Unknown plugin event "${event}"`);
-        // Only "document" carries a payload; the other listeners are declared with none and ignore it.
-        const safe = () => { try { listener(documentEvent(store)); } catch (err) { logError(info.name, "An event listener failed", err); } };
+        // "document" and "commit" carry a payload; the other listeners are declared with none and ignore it.
+        const payload = event === "commit" ? () => commitEvent(store) : () => documentEvent(store);
+        const safe = () => {
+          const value = payload();
+          if (value === null) return;
+          try { (listener as (payload: unknown) => void)(value); } catch (err) { logError(info.name, "An event listener failed", err); }
+        };
         const unsubs = atoms.map((a) => store.sub(a, safe));
         return bag.add(() => { for (const u of unsubs) u(); }, "events");
       },

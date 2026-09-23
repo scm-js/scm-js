@@ -15,7 +15,7 @@
  */
 import type { createStore } from "jotai";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, documentsAtom, doodadsRevisionAtom, isomRevisionAtom, loadDocumentAtom, locationsRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, documentsAtom, doodadsRevisionAtom, isomRevisionAtom, loadDocumentAtom, locationsRevisionAtom, noticeWholeAtom,
   redoStackAtom, scenarioAtom, settingsRevisionAtom, syncTapAtom, terrainRevisionAtom, triggersRevisionAtom, undoStackAtom, unitsRevisionAtom, type SyncTap,
 } from "../atoms/documentAtoms";
 import {
@@ -192,6 +192,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       }
       if (doc.extras !== extrasBefore) store.set(archiveExtrasAtom, doc.extras);
       store.set(mapModifiedAtom, true);
+      store.set(noticeWholeAtom, { reason: "remote", label: "" });
       base = captureFields(doc.scn);
       extrasBase = doc.extras;
     } catch (err) {

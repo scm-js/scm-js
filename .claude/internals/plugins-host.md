@@ -243,6 +243,26 @@ paste-ghost pass reproduced over the clip's own era's `peekTileset`, null when t
 in memory — the open map's are — so a plugin never gets another tileset's tiles drawn as this one's).
 `StorageApi.set` now returns a boolean (false on a quota refusal) — additive for a caller that ignored
 `void`. `tests/plugins.test.ts` "tx.paste stamps a clip…" pins all four.
+The Timelapse pass (2026-09-23) added the `"commit"` event and `tileset.load(id)`. `"commit"` is
+`commitNoticeAtom` (`documentAtoms.ts`), a fresh `CommitNotice` object per commit so `store.sub` always
+fires, written last in every committing path: `commitEditAtom` (reason `"edit"`, which covers strokes,
+tools, pastes and `runTransaction` since they all end there), `undoAtom` / `redoAtom` in both branches
+(on a shared map the notice describes `other ?? entry`, what the session actually applied, but keeps
+`entry.label`), `commitTriggersAtom` / `commitSettingsAtom` (`"tables"`; both take `notice = true`, and
+`runUpdate` passes `false` to each and writes one combined notice carrying the update's label, since one
+`document.update` is one change), `resizeDocumentAtom` / `changeTilesetAtom` / `replaceScenarioAtom`
+through `noticeWholeAtom` (`"whole"`), and `services/sync.ts`'s `drain` after applying other people's ops
+(`"remote"`, area null: `SyncCells` knows the grids but not where objects went). `editor/history.ts` holds
+the types and `entryArea` / `entryParts`: the area is the bounding box of every listed tile change
+(terrain, doodad tiles, fog) and of the tile under each object record's position before and after,
+because the history lists are already that — no rescan of the map. ISOM changes are not counted
+separately (they always come with tile changes); a created or rebuilt lattice or a created MASK counts as
+the whole map. `host.ts#commitEvent` adds the document id. `rollbackEntryAtom` sends nothing: nothing
+that was announced changed. Opening, closing and switching are deliberately not commits.
+`tileset.load(id?)` resolves `TILESETS` index → `TILESET_FILENAMES` and calls `ensureTileset`, which
+leaves the map alone and just fills the cache `peekTileset` reads — which is all `renderClip` needed to
+draw a clip from another era. `tests/plugins.test.ts` "says what each commit changed and where" pins
+the reasons, labels, areas and the one-commit-per-update rule.
 The 2026-09-07 assistant-transcript pass added `steps` and `fold` (the "Work, step by step"
 block in `ui.css`): the scmjs.dev plugin had two hand-rolled step lists (Make Scenario's
 build stages and the assistant's tool calls) and was about to grow a `<details>` with a live

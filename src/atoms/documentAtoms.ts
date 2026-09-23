@@ -30,7 +30,7 @@ import { applyDoodadChanges, convertDoodads, removeDoodads, strandedDoodads } fr
 import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
-import { applyEntry, hasEdits, touchesDoodads, type HistoryEntry } from "../editor/history";
+import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -137,17 +137,36 @@ export const settingsRevisionAtom = atom(0);
  */
 export const triggersRevisionAtom = atom(0);
 
-export const commitTriggersAtom = atom(null, (get, set) => {
+/**
+ * The last change committed to the map in front — what the plugin API's `"commit"` event
+ * hands its listeners. A fresh object every time, so a subscriber hears each one.
+ */
+export const commitNoticeAtom = atom<CommitNotice | null>(null);
+
+/** Announce an entry that was just recorded, undone or redone. */
+function noticeEntry(get: Getter, set: Setter, reason: CommitNotice["reason"], entry: HistoryEntry | HistoryEdit, label: string) {
+  const scn = get(scenarioAtom);
+  set(commitNoticeAtom, { reason, label, area: scn ? entryArea(entry, scn.width, scn.height) : null, parts: entryParts(entry) });
+}
+
+/** Announce a change to the whole document: resize, tileset, a re-parse, other people's edits. */
+export const noticeWholeAtom = atom(null, (_get, set, req: { reason: "whole" | "remote"; label: string }) => {
+  set(commitNoticeAtom, { reason: req.reason, label: req.label, area: null, parts: { ...ALL_PARTS } });
+});
+
+/** `notice: false` for a caller that announces the change itself (a plugin's `document.update` commits both tables as one). */
+export const commitTriggersAtom = atom(null, (get, set, notice: boolean = true) => {
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
   get(syncTapAtom)?.tables(get, set);
+  if (notice) set(commitNoticeAtom, { reason: "tables", label: "", area: null, parts: { ...NO_PARTS, triggers: true } });
 });
 
 /**
  * Record that a settings dialog changed the scenario. Player colours reach every drawn
  * unit and sprite, so the object layers repaint too.
  */
-export const commitSettingsAtom = atom(null, (get, set) => {
+export const commitSettingsAtom = atom(null, (get, set, notice: boolean = true) => {
   set(mapModifiedAtom, true);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
@@ -155,6 +174,7 @@ export const commitSettingsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
   get(syncTapAtom)?.tables(get, set);
+  if (notice) set(commitNoticeAtom, { reason: "tables", label: "", area: null, parts: { ...NO_PARTS, settings: true } });
 });
 
 export interface ResizeRequest {
@@ -186,6 +206,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   set(mapHeightAtom, scn.height);
   afterWholeDocumentChange(get, set);
   get(syncTapAtom)?.whole(get, set, t("Resize map"));
+  set(noticeWholeAtom, { reason: "whole", label: t("Resize map") });
   return result;
 });
 
@@ -219,6 +240,7 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
   set(mapTilesetAtom, req.tileset);
   afterWholeDocumentChange(get, set);
   get(syncTapAtom)?.whole(get, set, t("Change tileset"));
+  set(noticeWholeAtom, { reason: "whole", label: t("Change tileset") });
   return result;
 });
 
@@ -491,6 +513,7 @@ export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => 
   });
   set(mapModifiedAtom, true);
   tap?.whole(get, set, t("Edit sections"));
+  set(noticeWholeAtom, { reason: "whole", label: t("Edit sections") });
 });
 
 /**
@@ -592,6 +615,7 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   // A rebuilt lattice is the one edit the ISOM status is re-measured after.
   if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+  noticeEntry(get, set, "edit", entry, entry.label);
 });
 
 /**
@@ -680,6 +704,7 @@ export const undoAtom = atom(
       set(undoStackAtom, stack.slice(0, -1));
       if (other) set(redoStackAtom, [...get(redoStackAtom), other]);
       afterStep(get, set, other ?? entry);
+      noticeEntry(get, set, "undo", other ?? entry, entry.label);
       return entry.label;
     }
     applyEntry(scn, entry, "undo");
@@ -689,6 +714,7 @@ export const undoAtom = atom(
     set(redoStackAtom, [...get(redoStackAtom), entry]);
     set(mapModifiedAtom, true);
     set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+    noticeEntry(get, set, "undo", entry, entry.label);
     return entry.label;
   },
 );
@@ -721,6 +747,7 @@ export const redoAtom = atom(
       set(redoStackAtom, stack.slice(0, -1));
       if (other) set(undoStackAtom, [...get(undoStackAtom), other]);
       afterStep(get, set, other ?? entry);
+      noticeEntry(get, set, "redo", other ?? entry, entry.label);
       return entry.label;
     }
     applyEntry(scn, entry, "do");
@@ -730,6 +757,7 @@ export const redoAtom = atom(
     set(undoStackAtom, [...get(undoStackAtom), entry]);
     set(mapModifiedAtom, true);
     set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+    noticeEntry(get, set, "redo", entry, entry.label);
     return entry.label;
   },
 );

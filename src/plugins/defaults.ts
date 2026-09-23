@@ -54,7 +54,7 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-eudplib@v0.4.1", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.0.1", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.3.1", enabled: true },
-  { spec: "github:scm-js/plugin-scmjs-dev@v1.29.0", enabled: true },
+  { spec: "github:scm-js/plugin-scmjs-dev@v1.30.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.0.0", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },

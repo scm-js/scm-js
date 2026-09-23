@@ -441,8 +441,8 @@ export interface ResizeDocumentOptions {
 /**
  * Where a map opened or created goes. `"new"` opens it beside the open one, which stays
  * open behind it; `"current"` opens it in place of the open one, through the unsaved-changes
- * gate. Omitted, the editor follows its preference (several maps at once, on by default),
- * except that the untouched blank map it started on is always replaced.
+ * gate. Omitted, the editor follows its preference (several maps at once, on by default).
+ * Either way the untouched blank map the editor started on is replaced, not kept.
  */
 export type OpenInto = "new" | "current";
 

@@ -93,11 +93,14 @@ export function isUntouchedBlank(store: Store): boolean {
  * Where the next map opened or created goes: beside the open one (`"tab"`) when
  * Preferences allow several maps at once, in its place (`"replace"`) otherwise — or as a
  * plugin's explicit `into` says. Nothing open, or only the untouched blank startup map,
- * is always `"replace"`. Decided here, before any file is read, so the answer is about
- * the state the user acted on.
+ * is always `"replace"` — even for `into: "new"`, which asks to keep the open map, and
+ * the blank is nobody's: a map joined from a shared link used to open beside a blank tab
+ * the person never made (which, once the graphics arrived, drew as one megatile repeated,
+ * since only the map in front is laid again). `"current"` replaces whatever is open.
+ * Decided here, before any file is read, so the answer is about the state the user acted on.
  */
 export function openTarget(store: Store, into?: OpenInto): "tab" | "replace" {
-  if (into === "new") return store.get(scenarioAtom) ? "tab" : "replace";
+  if (into === "new") return store.get(scenarioAtom) && !isUntouchedBlank(store) ? "tab" : "replace";
   if (into === "current") return "replace";
   if (!store.get(preferencesAtom).multipleMaps || !store.get(scenarioAtom) || isUntouchedBlank(store)) return "replace";
   return "tab";

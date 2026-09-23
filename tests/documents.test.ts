@@ -153,13 +153,15 @@ describe("where a map opens", () => {
     await newMapInto(store);
     expect(isUntouchedBlank(store)).toBe(true);
     expect(openTarget(store)).toBe("replace");
-    expect(openTarget(store, "new")).toBe("tab"); // a plugin's explicit choice wins
+    expect(openTarget(store, "new")).toBe("replace"); // even a plugin's "new" takes the blank's place: it is nobody's map
+    expect(openTarget(store, "current")).toBe("replace");
     const blank = store.get(activeDocumentIdAtom);
     expect(await openFileInto(store, file("a"))).toBe(true);
     expect(store.get(documentTabsAtom)).toHaveLength(1);
     expect(store.get(activeDocumentIdAtom)).not.toBe(blank);
     // Opened from a file: the next map goes beside it, and the gate has nothing to ask.
     expect(openTarget(store)).toBe("tab");
+    expect(openTarget(store, "new")).toBe("tab");
     store.set(mapModifiedAtom, true);
     store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: true });
     expect(needsCloseConfirm(store, { action: "open", file: file("b") })).toBe(false);

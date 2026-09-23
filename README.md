@@ -63,7 +63,9 @@ use it asks where to get them:
   archives; use the download above instead.
 
 The extraction runs in the browser and the result is kept for next time; the desktop
-app looks for an installation on its own first. **Help ▸ Game Data…** brings the dialog
+app looks for an installation on its own first. If the editor was opened from a link — a
+shared map to join, or a copy of a map — that comes first, and the question about the
+graphics follows once you have answered it. **Help ▸ Game Data…** brings the dialog
 back later, to remove the copy or to install a mod's files beside the game's own as a
 second *data set* (see [docs/game-data.md](docs/game-data.md#data-sets)).
 
@@ -1697,7 +1699,8 @@ triggers, strings — and Ctrl+F finds a unit, location, sprite, string or trigg
 ## Your scmjs.dev account
 
 [scmjs.dev](https://scmjs.dev) is the project's own service. An account there does three
-things for the editor: it keeps maps for you, with a history of revisions, it lets you
+things for the editor: it keeps maps for you, with a history of revisions and links
+that give anyone a copy, it lets you
 share the map you have open so others can edit it with you at the same time
 ([Editing a map together](#editing-a-map-together)), and it pays
 for the AI features in the [next section](#the-ai). None of it is required. The editor
@@ -1758,6 +1761,29 @@ Revisions are numbered in order and a number is never reused. Saving a file whos
 are already on the account costs no storage — only the new note is kept — so saving a
 note on its own is free. Storage is 250 MB per account on scmjs.dev, shown as a bar in
 both dialogs. Maps live on a signed-in account only; the free AI trial cannot store them.
+
+### Giving someone a copy
+
+A link can hand a map to anyone: whoever opens it gets a copy of the map in their own
+editor, without signing in. The copy is theirs — it opens as a new file, File ▸ Save
+asks where to keep it, and nothing they change reaches your map. To edit a map together
+instead, see [Editing a map together](#editing-a-map-together).
+
+**Account ▸ Copy Link to This Map…** saves the open map to your account — as the next
+revision of the map it came from, or as a new map — and gives you the link, already on
+the clipboard. The link always opens the version you just saved, so a link you have
+posted somewhere does not change under the people who follow it; tick *Let the link
+follow my later saves* for one that opens whatever you save to that map next.
+
+In **My Maps**, the *Links* part of a map lists its links, how many times each was
+opened, and **Remove** for each; a removed link stops working at once and the map stays.
+*Link to #3* makes a link to the revision you are looking at, *Link to the newest* one
+that follows your saves. Deleting a revision removes the links to it, and deleting a map
+removes all of its links. A map can have ten links.
+
+Opening a link starts the editor with an *Open a Copy* dialog showing the map's name,
+picture, size and who shared it; **Open a copy** opens it. **Account ▸ Open a Map
+Link…** takes a link pasted in, which is the way in the desktop editor.
 
 ### Balance and costs
 
@@ -1863,9 +1889,8 @@ carry on with everyone's latest.
 
 ![The Tools ▸ AI menu](docs/images/ai-menu.webp)
 
-**Tools ▸ AI** holds the AI features. They come with the editor, in the scmjs.dev plugin
-— which is installed but starts off, so the menu appears once you tick it on in Plugins ▸
-Manage Plugins… — and run on scmjs.dev (see [the previous
+**Tools ▸ AI** holds the AI features. They come with the editor, in the scmjs.dev plugin,
+and run on scmjs.dev (see [the previous
 section](#your-scmjsdev-account) for the account and what a request costs); there is
 nothing else to set up, no key to paste and no server to name. The first request starts
 the free trial.
@@ -2096,7 +2121,7 @@ and the addresses it will fetch from.
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | View ▸ Timelapse…, the status-bar cell while it records | Records the map as you build it, one frame per change, and plays the recording back with a box around each change. Export it as a GIF or a WebM video. Recordings stay in the browser, and opening the same file again carries on the same recording. |
-| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, links that give anyone a copy of one, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](docs/images/walkability.webp)
 

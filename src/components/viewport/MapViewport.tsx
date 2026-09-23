@@ -42,6 +42,7 @@ import {
   unitPlacingAtom,
   lockedLayersAtom,
   cursorPixelAtom,
+  mapPointerHeldAtom,
   viewportRepaintAtom,
   viewFlagsAtom,
   viewportRectAtom,
@@ -234,6 +235,19 @@ export default function MapViewport() {
   const repaintRequest = useAtomValue(viewportRepaintAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const setCursorPixel = useSetAtom(cursorPixelAtom);
+  const setPointerHeld = useSetAtom(mapPointerHeldAtom);
+  // A release the surface never sees (over a context menu, outside the window, a lost
+  // focus) must still end the hold, or a shared map would wait for the next click. The
+  // bubble phase, so the surface's own handler has committed the stroke first.
+  useEffect(() => {
+    const release = () => setPointerHeld(false);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("blur", release);
+    };
+  }, [setPointerHeld]);
   const brush = useAtomValue(brushSizeAtom);
   const terrainMode = useAtomValue(terrainModeAtom);
   const symmetry = useAtomValue(symmetryAtom);
@@ -2151,10 +2165,11 @@ export default function MapViewport() {
               ref={surfaceRef}
               className={`map-surface ${painting || fogPainting ? "painting" : ""} ${unitPlacing || doodadPlacing || spritePlacing || clipPasting ? "placing" : ""}`}
               style={{ width: worldW, height: worldH, cursor: tooling ? mapTool?.spec.cursor ?? "crosshair" : undefined }}
-              onPointerDown={onDown}
+              onPointerDown={(e) => { setPointerHeld(true); onDown(e); }}
               onPointerMove={onMove}
-              onPointerUp={onUp}
-              onPointerCancel={onUp}
+              onPointerUp={(e) => { onUp(e); setPointerHeld(false); }}
+              onPointerCancel={(e) => { onUp(e); setPointerHeld(false); }}
+              onLostPointerCapture={() => setPointerHeld(false)}
               onPointerLeave={onLeave}
               onContextMenu={onContextMenu}
               onDoubleClick={onDoubleClick}

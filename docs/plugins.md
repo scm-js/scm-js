@@ -1004,6 +1004,53 @@ that needs a newer one. There is no sandbox between plugins here any more than
 elsewhere: a service is an ordinary object, and what a consumer does with it is up to
 the consumer.
 
+### `api.sync`
+
+Editing the map in front together with other editors. The editor turns every change to
+the shared map into an *op* — a plain object JSON can carry — and applies the ops other
+editors made, in the order a server gives; the plugin carries them. The scmjs.dev plugin's
+shared maps are built on it, and its server is the reference for what the other end does.
+
+```js
+const session = api.sync.start({
+  send: (op) => socket.send(JSON.stringify({ type: "op", op })),
+  onEnd: (reason) => leaveRoom(reason),
+});
+socket.onmessage = (m) => {
+  const msg = JSON.parse(m.data);
+  if (msg.type === "ack") session.confirm();   // the server took the oldest op we sent
+  if (msg.type === "op") session.receive(msg.op); // someone else's, in the server's order
+};
+```
+
+What goes out: every commit, undo and redo (as the records it touches, so it lands right
+on a map that has moved on), what a settings or trigger dialog's OK writes (its whole
+table, the string table slot by slot), files put into or taken out of the archive, and a
+resize, tileset change or raw section edit as the whole scenario. What the server must do
+is small: put every op from everyone in one order, confirm each to its sender, and relay it
+to everyone else in that order. It never opens the map.
+
+The editor does the rest. Your own ops apply at once; until the server confirms one it is
+*pending*, and when someone else's arrives first the editor takes the pending ones back,
+applies theirs and applies yours again on top — so every editor that has seen the same
+ops has the same map. A unit, doodad or sprite change finds its record by content, since
+someone else's insertion may have moved it down the list, and is dropped when the record
+is gone (the other person deleted it); a tile, a lattice cell or a fog cell takes the later
+value; a new location moves to a free slot if someone else took its slot. Undo on a
+shared map takes back the user's own changes the same way, and forgets a cell once
+someone else has painted it.
+
+Other people's ops wait (`holding()`) while a mouse button is held on the map — a stroke
+is live but not yet recorded — while a dialog that edits the map is open, and while
+another map is in front, and arrive together when that ends. `snapshot()` answers the
+shared map as a file (not built) at this moment, for the server to hand people joining
+with the number of the last op applied; it is null while anything is pending or waiting,
+because the copy would match no point in the server's order. One session runs at a
+time; it ends when the map is closed or replaced by another (`onEnd("closed")`) or on
+`stop()`, and a plugin's session stops when the plugin is turned off. `receive` refuses
+(`false`) a value that is not an op. If the server refuses one of your ops, the other
+editors will never apply it: end the session, since this copy no longer matches theirs.
+
 ### `api.terrain`
 
 Read-only helpers over the current tileset, plus the Terrain palette's own pick and the
@@ -1161,6 +1208,7 @@ two ways to draw on the map, and the pickers.
 | | |
 | --- | --- |
 | `status(text)` / `statusText()` | The status bar. |
+| `openDialogs()` | The dialogs open now, bottom to top, by id — the built-in ones by name (`"playerSettings"`, `"triggerEditor"`…), a plugin's as `"pluginDialog"`. The `"dialogs"` event says when it changes. |
 | `toast({ kind?, title, detail?, ttl? })` | A notice over the map that leaves by itself, the way Save reports. `kind` is `"ok"`, `"info"`, `"warn"` or `"error"`; `ttl` 0 keeps it until dismissed. |
 | `saveFile(data, fileName)` | Write bytes or a `Blob` to disk the way the editor's own exports do: through the browser's save dialog where it has one, else as a download. Resolves `{ route, fileName }`, or null when dismissed. |
 | `dialog(spec)` | A dialog in the editor's chrome. See below. |
@@ -1429,6 +1477,7 @@ whatever a plugin computed from the earlier state is recomputed from the later o
 | `"file"` | The document's name or handle after a Save, its save options, the archive extras, or the recent list. |
 | `"commands"` | A plugin registered or removed a command. This is how a plugin that calls another's by id learns it has arrived, since plugins activate in no fixed order; check `commands.has` in the listener. |
 | `"services"` | A plugin provided or withdrew a service. `services.watch(name, fn)` is the usual way to hear this for one name. |
+| `"dialogs"` | A dialog opened or closed. `ui.openDialogs()` says which are open, bottom to top. |
 | `"gameData"` | The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now, and everything drawn or named from the data is worth redoing. |
 | `"language"` | The editor's language changed (Preferences ▸ General). `i18n.language` says what it is now; relabel what is showing through `i18n.t`. |
 
@@ -1476,5 +1525,5 @@ above. Read the one nearest to what you are writing.
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | A library kept in `api.storage` (one record per item, an index, and the quota answer from `set`); `clipboard.capture` for a clip that leaves the user's clipboard alone, `tx.paste` to lay it down as one undo step, `graphics.renderClip` for thumbnails and the ghost a `ui.mapTool` draws under the pointer; a floating panel that can move into the dock and back; JSON export and import, and one item as a line of text through the system clipboard. |
 | [Magenta](https://github.com/scm-js/plugin-magenta) | `requires` the eudplib plugin and builds through its service; a sentence-based trigger editor in a floating panel: `ui.panel` with `resizable`, `ui.pickObject` and `view.flash` behind chips, `document.update` with `tx.triggers` and `tx.strings.intern` for one-record writes, `document.extras` for a member of its own, `triggers.claim` on the runs it generates for counter copies and comparisons, `triggers.epd` / `addressOf` and `consts.triggers.maskedRecord` for its EUD catalogue. |
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | The Text Trigger Editor as a plugin: `triggers.text` print and parse, `tx.triggers.fromText` with `replace`, `triggers.claims` to fence the runs other plugins generate, and a dialog that offers a slot of its own (`DialogSpec.slot`, `"trigedit.text"`) so the scmjs.dev buttons still have a place in it. |
-| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, `view.reveal` to follow the assistant's tool calls around the map with the `"view"` event as the sign the user took the view back, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | `api.services`: the sign-in held out as the `scmjs-dev.account` service for other plugins; a top-level menu of the plugin's own (`"Account"`) beside a submenu (`"Tools/AI"`); a status-bar cell; map storage through `document.export` / `document.open`. The "built-in feel" surfaces: a panel with `dock: "right"`, `ui.statusItem` for the assistant's phase, `ui.dialogSlot` buttons in Map Properties and the trigger editors, `view.flash` and an overlay for what a tool call touches. Calling another plugin's commands after the `"commands"` event, `document.create`, the settings family of `document.update`, `view.reveal` to follow the assistant's tool calls around the map with the `"view"` event as the sign the user took the view back, and a whole group of contributions put in and taken out again by one tick — every `add` and `register` keeps its `Disposable`. Shared maps: `api.sync` against a WebSocket room, `sync.snapshot` for the copy people joining get, an overlay with `onHover` for the pointers, and `ui.openDialogs` with the `"dialogs"` event for "in Player Settings". |
 | [eudplib](https://github.com/scm-js/plugin-eudplib) | A library plugin: no editor of its own, one service (`eudplib.build`, provided with a version through `api.services`) that runs eudplib in a Web Worker with Pyodide; a runtime downloaded once into the Cache API after a modal dialog with the widgets' progress bar; a worker bootstrapped from a `blob:` URL that imports the real module from the plugin's own tag on jsDelivr. The first plugin others name in `requires`. |

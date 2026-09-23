@@ -355,6 +355,19 @@ settings-and-triggers equivalent, committing through the settings and triggers c
 `document.sections` rewrites the file and installs the re-parsed scenario, which is why
 it drops the history.
 
+`api.sync` hooks the same places. While a map is shared, every commit, undo and redo, the
+settings and trigger commits, a whole-document change and a write to the archive's extra
+files report to the session, which turns the change into an op, applies it again through
+the op's own resolution (so this editor computes exactly what every other one will), and
+hands it to the plugin. Other people's ops queue with the server's confirmations in
+arrival order and are applied when no stroke, map-editing dialog or other tab is in the
+way: the pending local ops are taken back, the queue is applied, the pending ops go on
+again, and the selections, the mirror atoms and the revisions are brought up to date. The
+resolution itself — records found by content, cells by value, locations by slot with
+their names as text, dialog tables whole — is pure and has its own tests, including one
+that interleaves three editors' random edits across a hundred seeds and checks they end
+identical.
+
 ### The loading pipeline
 
 1. The spec is parsed into a base URL. `builtin:<name>` is a plugin compiled in from

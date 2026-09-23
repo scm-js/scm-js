@@ -125,6 +125,7 @@ import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapIn
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
 import { writeTestFile } from "../services/testMap";
+import { currentSync, startSync } from "../services/sync";
 import { saveBlob } from "../services/mapIo";
 import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
 import { floodRegion, flatGroupOf, replaceTerrain } from "../editor/terrain";
@@ -1528,6 +1529,7 @@ const EVENT_ATOMS = {
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
   commands: [pluginCommandsAtom],
   services: [pluginServicesAtom],
+  dialogs: [dialogStackAtom],
   gameData: [gameDataSourceAtom, gameDataRevisionAtom],
 } as const;
 
@@ -2110,7 +2112,17 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       doodadInfo: (id) => { const def = loaded()?.doodads.byId.get(id); return def ? doodadInfoOf(def) : null; },
     },
 
+    sync: {
+      start: (options) => {
+        if (gone("sync.start")) return null;
+        const session = startSync(store, options);
+        if (session) bag.add(() => session.stop());
+        return session;
+      },
+      current: () => currentSync(store),
+    },
     ui: {
+      openDialogs: () => store.get(dialogStackAtom).map((d) => d.id),
       status: (text) => store.set(statusMessageAtom, text),
       statusText: () => store.get(statusMessageAtom),
       toast: (t) => { store.set(pushToastAtom, { kind: t.kind ?? "info", title: t.title, detail: t.detail, ttl: t.ttl }); },

@@ -27,6 +27,7 @@ reach, and the traps in them are not visible from the code.
 | `src/editor/{sprites,locations,fog,doodads}.ts` and their hooks, `viewport/fog.ts` | `objects.md` |
 | `src/formats/{dat,units}/**`, `src/editor/{units,placement}.ts`, `useUnitTools`, `data/units.ts` | `units.md` |
 | `src/editor/{clipboard,history}.ts`, `useClipboardTools` | `clipboard.md` |
+| `src/editor/sync.ts`, `services/sync.ts`, `syncTapAtom`, `api.sync` — shared maps | `sync.md` |
 | `src/editor/{settings,cuwp,tileset}.ts`, `sections/{players,settings,cuwp}.ts`, the Scenario menu's dialogs | `settings.md` |
 | `src/editor/{strings,sounds,switches,textColors}.ts`, `formats/wav.ts`, `audioConvert.ts`, `ui/ColorCodes.tsx` | `strings-sounds.md` |
 | `sections/triggers.ts`, `data/triggerDefs.ts`, `formats/triggers/text.ts`, `src/editor/triggers.ts`, trigger claims | `triggers.md` |
@@ -91,6 +92,11 @@ re-encodes only those and emits everything else byte for byte. **Any mutation of
 call `markDirty(scn, "NAME", …)` for every section it affects, or the change is silently dropped on
 save.** Modelling a new section means: a codec in `sections/`, decode it in `parseScenario`, a case
 in `encodeSection`, and a `tests/chk.test.ts` round-trip. See `chk-format.md`.
+
+**Shared maps.** Every write to a map goes through the commit/undo/redo atoms, the settings
+and trigger commits, `resizeDocumentAtom` / `changeTilesetAtom` / `replaceScenarioAtom` or the
+extras atom — that is where `syncTapAtom` listens. A new way of changing the scenario that
+bypasses all of them is invisible to the other people on a shared map. See `sync.md`.
 
 **Repaints.** Everything the editor draws is mutated in place, so a change is invisible until its
 revision atom is bumped — `terrainRevisionAtom`, `doodadsRevisionAtom`, `unitsRevisionAtom`,

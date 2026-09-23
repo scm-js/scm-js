@@ -42,6 +42,29 @@ import { t } from "../i18n";
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
 
+/**
+ * What a shared map's sync session (services/sync.ts) hooks into: every commit, undo,
+ * redo, dialog write and whole-document change of the map in front reports here, so the
+ * change can be sent and later rebased. Null — the usual case — when no map is shared.
+ * An atom rather than a module variable so each store (each test) has its own.
+ */
+export interface SyncTap {
+  /** Whether undo and redo of the map in front go through the session (it is the shared one). */
+  owns(get: Getter): boolean;
+  /** An edit was applied and is about to be recorded as `entry`; the tap may rewrite its lists. */
+  edit(get: Getter, set: Setter, entry: HistoryEntry): void;
+  /** Undo (`"undo"`) or redo (`"do"`) `entry`; answers the entry for the other stack, or null when nothing applied. */
+  step(get: Getter, set: Setter, entry: HistoryEntry, direction: "do" | "undo"): HistoryEntry | null;
+  /** A settings or trigger dialog wrote to the scenario. */
+  tables(get: Getter, set: Setter): void;
+  /** The whole document is about to change (resize, tileset, a re-parse). */
+  beforeWhole(get: Getter): void;
+  /** …and it has. */
+  whole(get: Getter, set: Setter, label: string): void;
+}
+
+export const syncTapAtom = atom<SyncTap | null>(null);
+
 /** Non-scenario archive members, carried across on save so custom assets survive. */
 export const archiveExtrasAtom = atom<Map<string, Uint8Array>>(new Map());
 /**
@@ -117,6 +140,7 @@ export const triggersRevisionAtom = atom(0);
 export const commitTriggersAtom = atom(null, (get, set) => {
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
+  get(syncTapAtom)?.tables(get, set);
 });
 
 /**
@@ -130,6 +154,7 @@ export const commitSettingsAtom = atom(null, (get, set) => {
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   const scn = get(scenarioAtom);
   if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+  get(syncTapAtom)?.tables(get, set);
 });
 
 export interface ResizeRequest {
@@ -150,6 +175,7 @@ export interface ResizeRequest {
 export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): ResizeResult | null => {
   const scn = get(scenarioAtom);
   if (!scn) return null;
+  get(syncTapAtom)?.beforeWhole(get);
   const loaded = peekTileset(get(tilesetFileNameAtom));
   const tileset = loaded?.tileset ?? null;
   const result = resizeScenario(scn, {
@@ -159,6 +185,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);
   afterWholeDocumentChange(get, set);
+  get(syncTapAtom)?.whole(get, set, t("Resize map"));
   return result;
 });
 
@@ -179,6 +206,7 @@ export interface ChangeTilesetRequest {
 export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest): ChangeTilesetResult | null => {
   const scn = get(scenarioAtom);
   if (!scn) return null;
+  get(syncTapAtom)?.beforeWhole(get);
   const era = Math.max(0, TILESETS.findIndex((t) => t.id === req.tileset));
   const previous = peekTileset(get(tilesetFileNameAtom));
   const next = peekTileset(TILESET_FILENAMES[era]);
@@ -190,6 +218,7 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
   });
   set(mapTilesetAtom, req.tileset);
   afterWholeDocumentChange(get, set);
+  get(syncTapAtom)?.whole(get, set, t("Change tileset"));
   return result;
 });
 
@@ -455,10 +484,13 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * of the document may have changed. The mirror atoms are refilled from the new object.
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
+  const tap = get(syncTapAtom);
+  tap?.beforeWhole(get);
   set(loadDocumentAtom, {
     scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
   });
   set(mapModifiedAtom, true);
+  tap?.whole(get, set, t("Edit sections"));
 });
 
 /**
@@ -542,6 +574,7 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  */
 export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (!hasEdits(entry)) return;
+  get(syncTapAtom)?.edit(get, set, entry);
   // Verbose only: a painting session commits a stroke every time the mouse comes up, and
   // at the always-on tier that would push everything worth reading out of the ring.
   if (isVerbose()) {
@@ -624,6 +657,14 @@ function afterUnitEdit(get: Getter, set: Setter, entry: HistoryEntry) {
   }
 }
 
+/** The repaint and bookkeeping after an undo or redo on a shared map. */
+function afterStep(get: Getter, set: Setter, entry: HistoryEntry) {
+  if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
+  afterUnitEdit(get, set, entry);
+  set(mapModifiedAtom, true);
+  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+}
+
 export const undoAtom = atom(
   (get) => get(undoStackAtom).at(-1)?.label ?? null,
   (get, set) => {
@@ -631,6 +672,16 @@ export const undoAtom = atom(
     const stack = get(undoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
+    const tap = get(syncTapAtom);
+    if (tap?.owns(get)) {
+      // A shared map: the entry's records are found again by content, and what could
+      // be undone goes to the redo stack (nothing, when other people's edits took it all).
+      const other = tap.step(get, set, entry, "undo");
+      set(undoStackAtom, stack.slice(0, -1));
+      if (other) set(redoStackAtom, [...get(redoStackAtom), other]);
+      afterStep(get, set, other ?? entry);
+      return entry.label;
+    }
     applyEntry(scn, entry, "undo");
     if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     afterUnitEdit(get, set, entry);
@@ -664,6 +715,14 @@ export const redoAtom = atom(
     const stack = get(redoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
+    const tap = get(syncTapAtom);
+    if (tap?.owns(get)) {
+      const other = tap.step(get, set, entry, "do");
+      set(redoStackAtom, stack.slice(0, -1));
+      if (other) set(undoStackAtom, [...get(undoStackAtom), other]);
+      afterStep(get, set, other ?? entry);
+      return entry.label;
+    }
     applyEntry(scn, entry, "do");
     if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
     afterUnitEdit(get, set, entry);

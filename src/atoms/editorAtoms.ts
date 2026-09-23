@@ -143,6 +143,12 @@ export const mapVersionAtom = atom<MapVersion>("broodwar");
 export const zoomAtom = atom<number>(1);
 export const cursorTileAtom = atom<{ x: number; y: number }>({ x: 0, y: 0 });
 export const viewportRectAtom = atom<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
+/**
+ * A mouse button is held on the map: a stroke, a drag or a marquee is under way and its
+ * changes are live but not yet recorded. A shared map holds other people's edits back
+ * until it is released, so a stroke is never cut in two.
+ */
+export const mapPointerHeldAtom = atom(false);
 
 /**
  * One-shot request to centre the main viewport on a tile — set by the minimap, `view.center`

@@ -1,4 +1,7 @@
 {
+  "Resize map": "맵 크기 조절",
+  "Change tileset": "타일셋 변경",
+  "Edit sections": "섹션 편집",
   ", removed {n, plural, one {# stranded unit} other {# stranded units}}": ", 고립된 유닛 {n, plural, other {#기}} 제거",
   "Delete {n, plural, one {# doodad} other {# doodads}}": "장식물 {n, plural, other {#개}} 삭제",
   "Convert {n, plural, one {# doodad} other {# doodads}} to terrain": "장식물 {n, plural, other {#개}}를 지형으로 변환",

@@ -54,6 +54,7 @@ import type { CuwpSlotPatch, CuwpSlotView } from "../editor/cuwp";
 import type { SaveOptions } from "../editor/save";
 import type { BuiltBy } from "../editor/mapBuild";
 import type { ChangeTilesetResult } from "../editor/tileset";
+import type { SyncOp } from "../editor/sync";
 import type { TerrainPick } from "../editor/terrain";
 import type { SymmetryMode } from "../editor/symmetry";
 import type { PlacementOptions } from "../editor/placement";
@@ -248,6 +249,13 @@ export interface PluginApi {
   /** The plugin's words in the editor's language: its own catalogues, and a `t` over them. */
   readonly i18n: I18nApi;
   readonly events: EventsApi;
+  /**
+   * Editing the map in front together with other editors: every change to it is handed out
+   * as an op for the plugin to carry to them, and theirs come back in, in the order a
+   * server puts them. The scmjs.dev plugin's shared maps are built on it; the transport,
+   * the server and who may join are the plugin's.
+   */
+  readonly sync: SyncApi;
   /**
    * A small key-value store of the plugin's own, kept in the browser's local storage under
    * the plugin's id and listed with everything else in Preferences ▸ Browser storage.
@@ -2468,6 +2476,11 @@ export interface PickFilesOptions {
 }
 
 export interface UiApi {
+  /**
+   * The dialogs open now, bottom to top, by id: the built-in ones by their `DialogId`, a
+   * plugin's as `"pluginDialog"`. What a shared map shows others ("in Player Settings").
+   */
+  openDialogs(): string[];
   /** Set the status bar line. */
   status(text: string): void;
   /** The status bar line as it stands. */
@@ -3062,8 +3075,87 @@ export type PluginEvent =
   | "commands"
   /** A plugin provided or withdrew a service — `services.watch` is the usual way to hear this for one name. */
   | "services"
+  /** A dialog opened or closed — `ui.openDialogs()` says which are open. */
+  | "dialogs"
   /** The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now. */
   | "gameData";
+
+/* ── Sync ───────────────────────────────────────────────── */
+
+export type { SyncOp };
+
+/** Why other people's changes are waiting: a stroke under way on the map, a dialog that edits the map open, another map in front. */
+export type SyncHold = "stroke" | "dialog" | "behind";
+
+export interface SyncReport {
+  /** Other people's ops applied. */
+  ops: number;
+  /** Parts of them that could not be applied — the unit they moved was deleted, the map was resized… */
+  dropped: number;
+  /** Parts of this editor's unconfirmed changes that no longer applied on top of theirs. */
+  lost: number;
+}
+
+export interface SyncStartOptions {
+  /**
+   * Every change made to the shared map, as a plain object JSON can carry, in the order
+   * made: commits, undo and redo, the dialogs' writes, archive files, and a resize or a
+   * tileset change (the whole scenario). Each must reach the server, and every other
+   * editor, in this order.
+   */
+  send(op: SyncOp): void;
+  /** The session ended: the shared map was closed or replaced by another, or `stop` was called. */
+  onEnd?(reason: "closed" | "stopped"): void;
+  /** Other people's changes were applied to the map. */
+  onApplied?(report: SyncReport): void;
+}
+
+/**
+ * One shared map. The server confirms each op this editor sent (`confirm`, in order) and
+ * relays everyone else's (`receive`, in the order it gave them); the session applies
+ * them to the map when nothing is in the way (`holding`) and rebases this editor's
+ * unconfirmed changes on top, so every editor that has seen the same ops has the same map.
+ *
+ * @example
+ * const session = api.sync.start({ send: (op) => socket.send(JSON.stringify({ type: "op", op })) });
+ * socket.onmessage = (m) => {
+ *   const msg = JSON.parse(m.data);
+ *   if (msg.type === "ack") session?.confirm();
+ *   if (msg.type === "op") session?.receive(msg.op);
+ * };
+ */
+export interface SyncSession {
+  /** The shared map's `document.id()`. */
+  readonly documentId: number;
+  /** Another editor's op, in the server's order. False, and nothing done, for a value that is not an op. */
+  receive(op: unknown): boolean;
+  /** The server confirmed the oldest op this editor sent. */
+  confirm(): void;
+  /** Ops sent and not yet confirmed. */
+  pending(): number;
+  /** Ops and confirmations received and not yet applied. */
+  waiting(): number;
+  /**
+   * The shared map as a file (`.scx` / `.scm`, not built), copied at this moment — for a
+   * server to hand people joining, labelled with the last op this editor applied. Null
+   * while anything is pending or waiting (the copy would not match any point in the
+   * server's order) or while another map is in front. The copy is taken before the first
+   * `await`, so a change made while the file is written is not in it.
+   */
+  snapshot(): Promise<Uint8Array | null>;
+  holding(): SyncHold | null;
+  stop(): void;
+}
+
+export interface SyncApi {
+  /**
+   * Share the map in front. Null when no map is open or another session is running (one
+   * at a time). A session a plugin started stops when the plugin is turned off.
+   */
+  start(options: SyncStartOptions): SyncSession | null;
+  /** The running session, whichever plugin started it. */
+  current(): SyncSession | null;
+}
 
 /** Why the document changed. */
 export type DocumentChangeReason =

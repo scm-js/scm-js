@@ -297,6 +297,54 @@ const SCENES = [
     await p.dialog("make-scenario"); await p.esc();
   }, { seed: true }),
 
+  /* ── scmjs.dev: a shared map, two editors on one map through the stand-in ─────── */
+
+  scene("scmjs-share", "", async (p) => {
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.minimap(0.22, 0.2);
+    await p.menu("Account", /^Share this Map/); await p.wait(800);
+    await p.page.locator(".dlg button", { hasText: /^Start sharing$/ }).click();
+    await p.page.locator(".dlg .sd-link input").waitFor({ timeout: 30_000 }); await p.wait(500);
+    const link = await p.page.locator(".dlg .sd-link input").inputValue();
+    await p.esc();
+
+    // Kim opens the link in an editor of her own, signed out, and joins.
+    const kim = await p.other();
+    await kim.goto(new URL(link).search.slice(1));
+    await kim.page.locator(".dlg input[placeholder='How the others see you']").fill("Kim");
+    await kim.page.locator(".dlg", { hasText: /editing now/ }).waitFor({ timeout: 15_000 }); await kim.wait(300);
+    await kim.dialog("share-join");
+    await kim.page.locator(".dlg button", { hasText: /^Join$/ }).click();
+    await kim.page.locator(".dlg").waitFor({ state: "detached", timeout: 30_000 }); await kim.wait(2500);
+    // Her changes, from the same view as Jeany's: a few marines by the ramp. Then she looks up and to the left.
+    await kim.minimap(0.22, 0.2);
+    await kim.page.click(rail(2)); await kim.wait(600);
+    await kim.unit("Terran Marine");
+    const marines = [[250, 270], [285, 290], [320, 270], [285, 250]];
+    for (const [x, y] of marines) await kim.click(...at(x, y));
+    await kim.esc();
+    await kim.minimap(0.17, 0.15);
+    await p.wait(1500);
+
+    // Where the others are drawn is worked out from Jeany's view, which her editor has told the room.
+    const room = p.mock.rooms.last;
+    const view = p.mock.rooms.presenceOf(room, "Jeany")?.view;
+    if (!view) throw new Error("the owner's view never reached the room");
+    const px = (x, y) => ({ px: view.x0 * 32 + x, py: view.y0 * 32 + y });
+    p.mock.rooms.pin(room, "Kim", px(340, 300));
+    p.mock.rooms.guest(room, "Sam", {
+      ...px(690, 560), layer: "units", dialog: "playerSettings",
+      view: { x0: view.x0 + 18, y0: view.y0 + 14, x1: view.x1 + 18, y1: view.y1 + 14 },
+    });
+    await p.wait(1500);
+    await p.take("share-editing");
+    await p.menu("Account", /^Share this Map/); await p.wait(800);
+    // The link as the hosted editor makes it, not the dev server and the stand-in's address.
+    await p.page.locator(".dlg .sd-link input").evaluate((el, invite) => { el.value = `https://editor.scmjs.dev/share/${invite}`; }, room.invite);
+    await p.dialog("share-dialog"); await p.esc();
+    await kim.close();
+  }, { seed: true }),
+
   /* ── TrigScript: the script editor, on a map with three named locations ──────── */
 
   scene("trigscript", "layer=locations", async (p) => {
@@ -448,18 +496,21 @@ test("the second wave is six Hydralisks", (sim) => {
 /**
  * The scmjs.dev plugin turned on and signed in against the stand-in server.
  *
- * Two keys. `scmjs.plugins` is the installed list: the plugin is a default, but one that
- * ships *off* (`src/plugins/defaults.ts`), so without a stored row saying otherwise there
- * is no Account menu and no Tools ▸ AI to photograph. The spec is left unpinned on
- * purpose — `effectiveInstalls` matches a stored row to a default by `pluginKey` and then
- * runs the *default's* spec, so this says "on" without also freezing which version these
- * pictures are of. The other key is the editor's per-plugin storage prefix and the
- * plugin's own `settings` key, holding the server and a session.
+ * Two keys. `scmjs.plugins` is the installed list: the plugin is a default and ships on
+ * (`src/plugins/defaults.ts`), but a stored row keeps the pictures from depending on that.
+ * The spec is left unpinned on purpose — `effectiveInstalls` matches a stored row to a
+ * default by `pluginKey` and then runs the *default's* spec, so this says "on" without
+ * also freezing which version these pictures are of. The other key is the editor's
+ * per-plugin storage prefix and the plugin's own `settings` key, holding the server and a
+ * session. With no `mockUrl` only the first is written: a second editor, signed out, that
+ * learns the server from the link it opens (`?scmjs-server=`).
  */
 function seedScmjs(mockUrl) {
-  return `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([
+  const plugins = `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([
     { spec: "github:scm-js/plugin-scmjs-dev", enabled: true },
-  ]))});
+  ]))});`;
+  if (!mockUrl) return plugins;
+  return `${plugins}
   localStorage.setItem("scmjs.plugin.scmjs-dev.settings", ${JSON.stringify(JSON.stringify({
     serverUrl: mockUrl, session: "guide-session", deviceId: "guide-device", statusItem: true,
     ai: true, quality: "standard", showThinking: true, maxRounds: 24, attachView: false, dockAssistant: false,
@@ -493,7 +544,14 @@ async function main() {
       if (s.seed) await ctx.addInitScript(seedScmjs(mock.url));
       const page = await ctx.newPage();
       page.on("pageerror", (e) => console.error(`[${s.name}] page error:`, e.message));
-      const p = driver(page, mock);
+      const p = driver(page, mock, async () => {
+        // A second editor in the same scene: its own browser profile, nobody signed in.
+        const other = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
+        if (s.seed) await other.addInitScript(seedScmjs(null));
+        const q = driver(await other.newPage(), mock, null);
+        q.close = () => other.close();
+        return q;
+      });
       await p.goto(s.query);
       await s.run(p);
       await ctx.close();
@@ -504,10 +562,12 @@ async function main() {
   }
 }
 
-function driver(page, mock) {
+function driver(page, mock, other) {
   const wait = (ms) => page.waitForTimeout(ms);
   const p = {
     page, wait, mock,
+    /** Another editor beside this one (the shared-map scene's second person). */
+    other,
     async goto(query) { await page.goto(`${BASE}?nosplash${query ? "&" + query : ""}`); await wait(2500); },
     async take(name, clip, { lossless = !!clip && clip.width < 858 } = {}) {
       if (ONLY.length && !ONLY.includes(name)) return;

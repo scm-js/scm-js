@@ -647,7 +647,7 @@ export function AboutDialog({ entry }: DialogProps) {
           <div className="about-links">
             <button
               className="about-link"
-              onClick={() => projectPage("/#readme")}
+              onClick={() => window.open("https://docs.scmjs.dev", "_blank", "noopener,noreferrer")}
             >
               {t("Docs")}
             </button>

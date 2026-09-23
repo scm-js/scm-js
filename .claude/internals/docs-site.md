@@ -54,8 +54,8 @@ The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-m
 `assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
 `generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a
 stand-in for the ai-server on port 8765 that the script points the plugin at by seeding
-`localStorage["scmjs.plugins"]` (the plugin is a default that ships *off*, so without a
-stored row turning it on there is no Account menu to photograph) and
+`localStorage["scmjs.plugins"]` (the plugin was a default that shipped *off*; the row
+stays so the pictures do not hang on that) and
 `localStorage["scmjs.plugin.scmjs-dev.settings"]` (`serverUrl` + a session) before the
 page loads: the account and ledger are constants, the map storage is real (multipart
 parsed by hand, dedup by hash, dates rewritten by the scene afterwards so the list reads
@@ -67,6 +67,19 @@ Hunters. Chosen over running the real server because a live run needs an OAuth p
 a model key and gives a different picture every time; the mock is not a test of anything
 and must stay honest to what the dialogs would show. `--scenes scmjs-ai` runs one scene;
 `--only` still filters pictures within it.
+
+The shared-map pictures (2026-09-22: `share-join`, `share-editing`, `share-dialog`, scene
+`scmjs-share`) add rooms to the same mock: `POST /v1/rooms`, `GET /v1/rooms/:invite`
+(answered signed out) and a hand-written RFC 6455 server on `/v1/rooms/socket` (masked
+frames in, continuations joined, no dependency) that numbers, acks and relays ops like
+ai-server's `rooms/service.ts`. The scene drives a second browser context (`p.other()`,
+seeded with the plugin row only, the server arriving through the link's `?scmjs-server=`),
+which joins as Kim and places four marines — those reach the owner's page as real sync ops.
+`rooms.guest` seats "Sam" with no socket (dialog `playerSettings`, so the label reads "in
+Player Settings"), and `rooms.pin` overrides a person's `px`/`py` in every presence relayed,
+because a headless page's pointer is wherever the last click left it; positions are worked
+out from the owner's `view` as the room last heard it. The Share dialog's link input is
+rewritten to `https://editor.scmjs.dev/?scmjs-room=…` before the picture.
 
 `ATTRIBUTION.md` is the provenance record (audited 2026-09-04) and `scripts/lib/notices.mjs`
 its mechanical half: the `scmjs-notices` plugin in `vite.config.ts` emits

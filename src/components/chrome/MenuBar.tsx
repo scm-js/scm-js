@@ -39,6 +39,7 @@ import { msg, t, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
+const DOCS_URL = "https://docs.scmjs.dev";
 
 /* ── Menu model ─────────────────────────────────────────── */
 
@@ -67,7 +68,8 @@ export interface Menu {
 /**
  * Merge what plugins registered into the menu model: each item goes to the end of the
  * top-level menu or submenu its path names (`"File/Import"`), after one separator — or,
- * when `after` names an item or submenu in that menu, directly under it. A path whose
+ * when `after` names an item or submenu in that menu, directly under it, whether that is
+ * a built-in or another plugin's item registered earlier or later. A path whose
  * last segment names no submenu gets one made for it (`"Tools/AI"` — a submenu of the
  * plugin's own, at the end of Tools); a top-level menu that does not exist is made for
  * the plugin, before Help (`"Account"`), holding only what plugins put there. Pure, so it
@@ -88,6 +90,23 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
   const separated = new Set<Item[]>();
   const copied = new Set<Item>();
   const placed = new Set<Item>();
+  /** Put `item` directly under the item or submenu labelled `after` (and under any plugin item already there); false when there is none. */
+  const putAfter = (target: Item[], item: Item, after: string): boolean => {
+    const anchor = target.findIndex((it) => (it.kind === "item" || it.kind === "sub") && it.label === after);
+    if (anchor < 0) return false;
+    let at = anchor + 1;
+    while (at < target.length && placed.has(target[at])) at++;
+    target.splice(at, 0, item);
+    placed.add(item);
+    return true;
+  };
+  /** Put `item` at the end, after the one separator the menu's plugin items share (or its own). */
+  const atEnd = (target: Item[], item: Item, separator?: boolean) => {
+    if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
+    else if (separator && target.length > 0 && target[target.length - 1].kind !== "sep") target.push(sep);
+    target.push(item);
+  };
+  let waiting: { target: Item[]; item: Item; after: string; separator?: boolean }[] = [];
   for (const p of plugin) {
     const [top, ...rest] = p.path.split("/");
     let target: Item[] | null = null;
@@ -133,19 +152,20 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
       disabled: p.enabled ? !safely(p.enabled, true) : false,
       onSelect: () => { safely(p.run, undefined); },
     };
-    // `after`: under the named built-in (or an earlier plugin item that landed there), no separator.
-    const anchor = p.after ? target.findIndex((it) => (it.kind === "item" || it.kind === "sub") && it.label === p.after) : -1;
-    if (anchor >= 0) {
-      let at = anchor + 1;
-      while (at < target.length && placed.has(target[at])) at++;
-      target.splice(at, 0, item);
-      placed.add(item);
-      continue;
-    }
-    if (!separated.has(target) && target.length > 0) { target.push(sep); separated.add(target); }
-    else if (p.separator && target.length > 0 && target[target.length - 1].kind !== "sep") target.push(sep);
-    target.push(item);
+    // `after`: under the named item, no separator. The anchor may be another plugin's item
+    // that has not been placed yet — plugins start in whatever order they start — so one
+    // not found now waits for the rest and is tried again below.
+    if (p.after && !putAfter(target, item, p.after)) { waiting.push({ target, item, after: p.after, separator: p.separator }); continue; }
+    if (!p.after) atEnd(target, item, p.separator);
   }
+  // Retry the waiting ones until a pass places none (one anchored to another waiting item
+  // lands on a later pass); what is left names nothing in its menu and goes to the end.
+  for (let progress = true; progress && waiting.length > 0;) {
+    const before = waiting.length;
+    waiting = waiting.filter((w) => !putAfter(w.target, w.item, w.after));
+    progress = waiting.length < before;
+  }
+  for (const w of waiting) atEnd(w.target, w.item, w.separator);
   return out;
 }
 
@@ -461,7 +481,7 @@ function useMenus(): Menu[] {
         dlg(msg("Game Data…"), "gameData"),
         // Desktop only: the web build has nothing to update.
         ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),
-        link(msg("Documentation"), `${REPO_URL}#readme`),
+        link(msg("Documentation"), DOCS_URL),
         sep,
         // The whole of a bug report: the build, the game data source, the plugins and the
         // log. Report an Issue fills the form with it; this is for a log too long for a link.

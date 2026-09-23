@@ -15,6 +15,7 @@ import {
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
 import { compareVersions } from "../../plugins/updates";
+import { specLabel } from "../../plugins/failures";
 
 import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
@@ -880,6 +881,10 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   const [looking, setLooking] = useState(false);
   const defaults = defaultPluginSpecs();
   const list = effectiveInstalls(installed, defaultPlugins());
+  // Shown by name, as Browse lists them: the installed order is the order they start in,
+  // which says nothing to the reader. Until a manifest is in, the repository stands in.
+  const sortName = (spec: string) => (runtimes[spec]?.manifest?.name ?? specLabel(spec)).toLocaleLowerCase();
+  const byName = [...list].sort((a, b) => sortName(a.spec).localeCompare(sortName(b.spec)));
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -1075,7 +1080,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
         )}
       </div>
       <div className="listbox plugin-list" role="list" ref={listRef}>
-        {list.map((p) => {
+        {byName.map((p) => {
           const rt = runtimes[p.spec];
           // The spec this editor ships for the plugin, when it is one of the defaults. It
           // differs from the row's own once the user has moved that default forward, which

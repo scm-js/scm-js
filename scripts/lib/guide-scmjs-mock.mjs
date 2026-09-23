@@ -12,9 +12,16 @@
  * recipe streams as server-sent events the way the server does, so the dialogs go
  * through their waiting states.
  *
+ * Shared maps get a room server as well (`/v1/rooms` and its WebSocket): it numbers,
+ * confirms and relays changes the way the real one does, so two browser pages sharing a
+ * map through it really edit the same map. For the pictures it can also seat a guest
+ * nobody is driving (`rooms.guest`) and pin where a person's pointer is drawn
+ * (`rooms.pin`), since a pointer in a headless page goes wherever the last click left it.
+ *
  * Nothing here is a test of the plugin or the server, and none of it ships: the pictures
  * show the editor's chrome around content that came from a file rather than a model.
  */
+import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 
 const ACCOUNT_NAME = "Jeany";
@@ -50,7 +57,7 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
   const offers = () => ({
     providers: [{ id: "discord", name: "Discord" }], trial: true, trialUsd: 0.2, signupUsd: 0.8, weeklyUsd: 0,
     packs: [{ id: "five", priceUsd: 5, creditUsd: 4.55 }, { id: "ten", priceUsd: 10, creditUsd: 9.4 }],
-    accountUrl: "https://scmjs.dev/account", maps: true,
+    accountUrl: "https://scmjs.dev/account", maps: true, rooms: true,
   });
   const publicMap = (m) => ({ id: m.id, name: m.name, description: m.description, createdAt: m.createdAt, updatedAt: m.updatedAt, revisions: m.history.length, head: m.history[m.history.length - 1] });
   const detail = (m) => ({ ...publicMap(m), history: [...m.history].reverse() });
@@ -77,6 +84,11 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
           access: { anonymous: false, byok: false }, accounts: offers(),
           caller: signedIn ? { kind: "user", name: ACCOUNT_NAME, remaining: { balanceUsd: round(state.balance) }, account: account() } : { kind: "anonymous", remaining: {} },
         });
+      }
+      const look = /^\/v1\/rooms\/([A-Za-z0-9_-]+)$/.exec(path);
+      if (look && req.method === "GET") {
+        const room = rooms.byInvite(look[1]);
+        return room ? json(200, { room: rooms.info(room) }) : json(404, { error: { code: "not_found", message: "This link does not lead to a shared map any more." } });
       }
       if (!signedIn) return json(401, { error: { code: "unauthorized", message: "no session." } });
       if (path === "/v1/account") return json(200, { account: account(), ledger: ledger() });
@@ -114,6 +126,10 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
         if (req.method === "PATCH") { const p = JSON.parse(body.toString() || "{}"); if (p.note !== undefined) rev.note = p.note; return json(200, { map: detail(m), storage: storage() }); }
         if (req.method === "DELETE") { m.history = m.history.filter((r) => r !== rev); return json(200, { map: detail(m), storage: storage() }); }
       }
+      if (path === "/v1/rooms" && req.method === "POST") {
+        const { name, map } = JSON.parse(body.toString());
+        return json(200, { room: { ...rooms.info(rooms.create(name, map)), invite: rooms.last.invite } });
+      }
       mm = /^\/v1\/recipes\/([a-z-]+)$/.exec(path);
       if (mm && req.method === "POST") {
         const request = JSON.parse(body.toString());
@@ -130,9 +146,168 @@ export function startMock({ port = 8765, log = () => {} } = {}) {
     }
   });
 
-  return new Promise((resolve) => {
-    server.listen(port, "127.0.0.1", () => resolve({ url: `http://localhost:${port}`, state, close: () => new Promise((r) => server.close(r)) }));
+  const rooms = roomServer(log);
+  server.on("upgrade", (req, socket) => {
+    if (new URL(req.url, "http://x").pathname !== "/v1/rooms/socket") { socket.destroy(); return; }
+    rooms.connect(upgrade(req, socket));
   });
+
+  return new Promise((resolve) => {
+    server.listen(port, "127.0.0.1", () => resolve({ url: `http://localhost:${port}`, state, rooms, close: () => { rooms.closeAll(); return new Promise((r) => server.close(r)); } }));
+  });
+}
+
+/* ── Shared maps: the rooms ────────────────────────────────────────────────────── */
+
+/**
+ * Rooms as `protocol.ts` describes them: one map, the people in it, every change numbered
+ * in the order it arrived. The owner is whoever says hello with a session; anyone else
+ * gives a name. No limits, no idle ending — the pictures take a minute.
+ */
+function roomServer(log) {
+  const list = [];
+  let people = 0;
+  const api = {
+    last: null,
+    create(name, map) {
+      const room = { id: `r${list.length + 1}`, name, invite: randomBytes(18).toString("base64url"), createdAt: new Date().toISOString(), map, seq: 0, ops: [], people: [], presence: new Map(), pinned: new Map(), colors: 0 };
+      list.push(room);
+      api.last = room;
+      return room;
+    },
+    byInvite: (invite) => list.find((r) => r.invite === invite) ?? null,
+    info: (room) => ({ id: room.id, name: room.name, owner: ACCOUNT_NAME, people: room.people.length, maxPeople: 8, createdAt: room.createdAt }),
+    connect(conn) {
+      let room = null, me = null;
+      conn.onMessage = (text) => {
+        let msg;
+        try { msg = JSON.parse(text); } catch { return; }
+        if (!room) {
+          if (msg.type !== "hello") return;
+          room = api.byInvite(msg.invite);
+          if (!room) { conn.send({ type: "error", code: "not_found", message: "This link does not lead to a shared map any more." }); conn.close(); return; }
+          const owner = !!msg.session && !room.people.some((p) => p.person.owner);
+          me = { person: { id: `p${++people}`, name: owner ? ACCOUNT_NAME : String(msg.name || "Guest"), color: room.colors++ % 8, owner }, conn };
+          conn.send({
+            type: "welcome", protocol: 1, you: me.person, room: { ...api.info(room), ...(owner ? { invite: room.invite } : {}) },
+            people: [...room.people.map((p) => p.person), me.person], snapshot: { seq: room.snapshotSeq ?? 0, map: room.map },
+            ops: room.ops.filter((o) => o.seq > (room.snapshotSeq ?? 0)), presence: [...room.presence].map(([from, data]) => ({ from, data })),
+          });
+          broadcast(room, { type: "joined", person: me.person });
+          room.people.push(me);
+          log(`room ${room.id}: ${me.person.name} in`);
+          return;
+        }
+        switch (msg.type) {
+          case "op": {
+            const seq = ++room.seq;
+            room.ops.push({ seq, from: me.person.id, op: msg.op });
+            conn.send({ type: "ack", seq });
+            broadcast(room, { type: "op", seq, from: me.person.id, op: msg.op }, me);
+            return;
+          }
+          case "presence": presence(room, me.person.id, msg.data); return;
+          case "snapshot": room.map = msg.map; room.snapshotSeq = msg.seq; return;
+          case "relink": room.invite = randomBytes(18).toString("base64url"); conn.send({ type: "link", invite: room.invite }); return;
+          case "kick": {
+            const them = room.people.find((p) => p.person.id === msg.person);
+            if (me.person.owner && them) { them.conn?.send({ type: "ended", reason: "removed" }); them.conn?.close(); leave(room, them, "removed"); }
+            return;
+          }
+          case "end":
+            if (me.person.owner) for (const p of room.people.slice()) { p.conn?.send({ type: "ended", reason: "owner" }); p.conn?.close(); leave(room, p, "left"); }
+            return;
+          case "ping": conn.send({ type: "pong" }); return;
+        }
+      };
+      conn.onClose = () => { if (room && me) leave(room, me, "left"); };
+    },
+    /** Seat someone nobody drives, with where they are and what they have open. */
+    guest(room, name, data) {
+      const g = { person: { id: `p${++people}`, name, color: room.colors++ % 8, owner: false }, conn: null };
+      broadcast(room, { type: "joined", person: g.person });
+      room.people.push(g);
+      presence(room, g.person.id, data);
+      return g.person;
+    },
+    /** Draw `name`'s pointer (and anything else in `data`) here, whatever their editor says. */
+    pin(room, name, data) {
+      const p = room.people.find((x) => x.person.name === name);
+      if (!p) throw new Error(`nobody called ${name} in the room`);
+      room.pinned.set(p.person.id, data);
+      presence(room, p.person.id, room.presence.get(p.person.id) ?? {});
+    },
+    /** The presence a person last sent: the owner's view is where the pictures put the others. */
+    presenceOf: (room, name) => room.presence.get(room.people.find((x) => x.person.name === name)?.person.id),
+    closeAll() { for (const r of list) for (const p of r.people) p.conn?.close(); },
+  };
+  function presence(room, from, data) {
+    const merged = { px: null, py: null, view: null, layer: "", dialog: null, ...data, ...room.pinned.get(from) };
+    room.presence.set(from, merged);
+    broadcast(room, { type: "presence", from, data: merged }, room.people.find((p) => p.person.id === from));
+  }
+  function broadcast(room, msg, except) {
+    for (const p of room.people) if (p !== except) p.conn?.send(msg);
+  }
+  function leave(room, who, reason) {
+    const at = room.people.indexOf(who);
+    if (at === -1) return;
+    room.people.splice(at, 1);
+    room.presence.delete(who.person.id);
+    broadcast(room, { type: "left", person: who.person.id, reason });
+  }
+  return api;
+}
+
+/**
+ * The server half of a WebSocket (RFC 6455), as much as a browser talking to it needs:
+ * the handshake, masked text frames in (continuations joined), plain text frames out.
+ */
+function upgrade(req, socket) {
+  const accept = createHash("sha1").update(`${req.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+  socket.setNoDelay(true);
+  const conn = {
+    onMessage: () => {},
+    onClose: () => {},
+    send(msg) {
+      if (socket.destroyed) return;
+      const data = Buffer.from(JSON.stringify(msg));
+      const head = data.length < 126 ? Buffer.from([0x81, data.length])
+        : data.length < 65536 ? Buffer.from([0x81, 126, data.length >> 8, data.length & 255])
+          : Buffer.concat([Buffer.from([0x81, 127]), (() => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(data.length)); return b; })()]);
+      socket.write(Buffer.concat([head, data]));
+    },
+    close() { if (!socket.destroyed) { socket.write(Buffer.from([0x88, 0])); socket.end(); } },
+  };
+  let buf = Buffer.alloc(0);
+  let parts = [];
+  socket.on("data", (chunk) => {
+    buf = Buffer.concat([buf, chunk]);
+    for (;;) {
+      if (buf.length < 2) return;
+      const fin = buf[0] & 0x80, opcode = buf[0] & 0x0f;
+      let len = buf[1] & 0x7f, at = 2;
+      if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); at = 4; }
+      else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); at = 10; }
+      const masked = buf[1] & 0x80;
+      const mask = masked ? buf.subarray(at, at + 4) : null;
+      if (masked) at += 4;
+      if (buf.length < at + len) return;
+      const payload = Buffer.from(buf.subarray(at, at + len));
+      if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
+      buf = buf.subarray(at + len);
+      if (opcode === 8) { conn.close(); return; }
+      if (opcode === 9) { socket.write(Buffer.concat([Buffer.from([0x8a, payload.length]), payload])); continue; }
+      if (opcode === 1 || opcode === 0) {
+        parts.push(payload);
+        if (fin) { const text = Buffer.concat(parts).toString("utf8"); parts = []; conn.onMessage(text); }
+      }
+    }
+  });
+  socket.on("close", () => conn.onClose());
+  socket.on("error", () => {});
+  return conn;
 }
 
 function round(v) { return Math.round(v * 100) / 100; }

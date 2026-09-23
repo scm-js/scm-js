@@ -654,6 +654,13 @@ answers written in advance for the fixture maps. Those pictures show the editor'
 around example content, not a model's output; when a dialog changes, change the scene,
 and when a canned answer no longer fits the map it is written for, change the mock.
 
+The shared-map pictures use the same stand-in, which also runs the rooms and their
+WebSocket the way the service does: the scene shares Big Game Hunters from one editor and
+joins it from a second, signed-out one, so the marines that editor places reach the first
+as real changes. A third person nobody drives is seated by the stand-in, and the others'
+pointers are pinned to set places, since a headless browser has no mouse to follow. The
+link in the Share dialog is rewritten to the hosted editor's address before the picture.
+
 ## Translations
 
 The editor's own words — menus, dialogs, hints, Check Map's findings — can be shown in

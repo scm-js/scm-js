@@ -9,6 +9,10 @@ does not understand in a file is copied through untouched - an unknown section, 
 malformed one, an archive member it cannot name - so a map only loses what you
 deliberately change.
 
+Several people can edit one map at the same time: share the map you have open and anyone
+you send the link to works on it with you, each in their own editor, seeing the others'
+changes and pointers as they happen. See [Editing a map together](#editing-a-map-together).
+
 ![The editor with Big Game Hunters open on the Terrain layer](docs/images/editor-plain.webp)
 
 > **Beta.** This editor needs to be extensively tested. Keep backups of maps you care
@@ -25,8 +29,9 @@ Three ways to run the editor:
 
 - **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest
   numbered release. There is nothing to install; your maps stay on your own disk, and nothing is
-  sent anywhere unless you use a network feature - a copy kept on your scmjs.dev account, or a
-  question for the AI, both described further down. The hosted editor, the nightly and the
+  sent anywhere unless you use a network feature - a copy kept on your scmjs.dev account, a
+  map you share for others to edit with you, or a question for the AI, all described further
+  down. The hosted editor, the nightly and the
   documentation site count visits with Cloudflare Web Analytics (no cookies, and nothing about
   your maps); the desktop app and a copy you host yourself do not. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
   every night from the latest changes, for trying what is in development; being a separate site
@@ -1693,15 +1698,16 @@ triggers, strings — and Ctrl+F finds a unit, location, sprite, string or trigg
 
 [scmjs.dev](https://scmjs.dev) is the project's own service. An account there does three
 things for the editor: it keeps maps for you, with a history of revisions, it lets you
-share the map you have open so others can edit it with you at the same time, and it pays
+share the map you have open so others can edit it with you at the same time
+([Editing a map together](#editing-a-map-together)), and it pays
 for the AI features in the [next section](#the-ai). None of it is required. The editor
 works completely without an account, and it sends nothing to scmjs.dev until you use one
 of these features — there is no request at startup unless you are already signed in, and
 then only to show your balance.
 
-All of it lives in the scmjs.dev plugin, which the editor ships **turned off**: the
-Account menu and everything below appears after you turn it on in Plugins ▸ Manage
-Plugins… (it is there in the list, badged *default*).
+All of it lives in the scmjs.dev plugin, which is installed and on from the start. If
+you would rather not see the Account menu at all, turn the plugin off in Plugins ▸
+Manage Plugins….
 
 ### Signing in
 
@@ -1753,43 +1759,6 @@ are already on the account costs no storage — only the new note is kept — so
 note on its own is free. Storage is 250 MB per account on scmjs.dev, shown as a bar in
 both dialogs. Maps live on a signed-in account only; the free AI trial cannot store them.
 
-### Editing a map together
-
-**Account ▸ Share this Map…** puts the map you have open on scmjs.dev and gives you a
-link. Anyone who opens the link — in their browser, or pasted into **Account ▸ Join a
-Shared Map…** — types a name, and the map opens in their editor beside whatever they
-have open. From then on everyone edits the same map at the same time: terrain, doodads,
-units, sprites, locations, fog, the settings dialogs, triggers, strings and sounds. Each
-person sees the others' changes as they are made, their pointers on the map with their
-names, and the edge of what each of them has on screen. Sharing takes a signed-in account;
-joining takes only the link.
-
-Some things to know:
-
-- **Your stroke is never cut in two.** While you hold the mouse button on the map, other
-  people's changes wait and arrive when you let go. The same happens while a dialog that
-  edits the map is open (Player Settings, the Trigger Editor, Unit Properties and the
-  like). The status-bar cell tells the others which dialog you are in.
-- **The later change wins.** Two people painting the same tile: the one the server got
-  second stays. Two people moving the same unit: the first move stands and the second is
-  dropped, since the unit it was meant for is no longer where it was. A dialog's OK writes
-  its whole table, so if two people change the triggers at the same time, the second OK
-  wins — the status line says who is in which dialog, which is the time to talk.
-- **Undo is yours.** Ctrl+Z takes back your own changes, not other people's, and leaves a
-  tile alone once someone else has painted over it.
-- **Resize, a tileset change and a raw section edit** replace the whole map for everyone,
-  and everyone's undo history starts again, as it does when you do them alone.
-- **Saving** is each person's own: File ▸ Save writes your copy to your disk. The map on
-  scmjs.dev is only there while it is shared. It ends when the person who shared it stops
-  sharing, half an hour after the last person leaves, or when the server restarts — and
-  everyone still has the map in their editor to save.
-- **The link is the key.** Anyone who has it can join and edit. The Share dialog lists who
-  is in; the person who shared the map can remove someone, and **New link** makes the old
-  one stop working without sending anyone out. Up to eight people can be in one map.
-- If the connection drops, or the server cannot take one of your changes, your editor
-  leaves the shared map and says so. The map stays open; save it, or join again from the
-  link to carry on with everyone's latest.
-
 ### Balance and costs
 
 The account and the map storage cost nothing. The AI does: each request is charged what
@@ -1810,6 +1779,85 @@ request, and so what it costs (see [Options](#options-and-turning-it-off)). Roug
 name or a translation costs a few cents and a map plan, a trigger script or a review a
 few tens of cents. When the balance runs out the dialog says so and points to the Account
 dialog.
+
+## Editing a map together
+
+![Big Game Hunters shared by three people: Kim's pointer beside the marines she just placed, Sam in Player Settings, and the edges of what each of them can see](docs/images/share-editing.webp)
+
+Several people can work on one map at the same time, each in their own editor. One of
+them shares the map they have open and sends the others a link; whoever opens it gets the
+map in their editor, and from then on every change anyone makes shows up for everyone:
+terrain, doodads, units, sprites, locations, fog, the settings dialogs, triggers, strings
+and sounds. Each person also sees the others' pointers on the map with their names, a
+dashed box in their colour around what each of them has on screen, and which dialog they
+are in.
+
+Sharing goes through scmjs.dev: the person who shares needs a signed-in
+[account](#your-scmjsdev-account), and the people joining need only the link.
+
+### Sharing a map
+
+![The Share dialog while the map is shared: the link, the three people in it, and Stop sharing](docs/images/share-dialog.webp)
+
+**Account ▸ Share this Map…** asks for a name for the map (its own name to start with) and
+copies it to scmjs.dev when you press **Start sharing**. The dialog then shows the link:
+**Copy** puts it on the clipboard for you to send. A cell appears in the status bar —
+*Shared · 3 people* — and clicking it opens the dialog again.
+
+The dialog lists who is in, in the colour their pointer is drawn in, and what each of them
+has open. The link is the key: anyone who has it can join and edit, so send it only to
+people you want in the map. Only you, as the person who shared it, see the link and the
+controls:
+
+- **Remove** sends one person out of the map. They keep what they had.
+- **New link** makes the old link stop working without sending anyone out, for when the
+  link went further than you meant.
+- **Stop sharing** ends it for everyone.
+
+Up to eight people can be in one map. A map shared from the desktop app gets a link to
+the web editor, since that is what anyone can open.
+
+### Joining
+
+![Joining from a link: the map's name, who shared it, and the name the others will see](docs/images/share-join.webp)
+
+Open the link in a browser and the editor starts with the Join dialog up. In the desktop
+app, or in an editor that is already open, paste the link into **Account ▸ Join a Shared
+Map…**. The dialog says which map the link leads to, who shared it and how many people are
+in it; type the name the others will see you by and press **Join**. The map opens in a new
+tab beside whatever you had open. Closing that tab leaves the shared map.
+
+You can be in one shared map at a time. Joining another leaves the first, which stays
+open as an ordinary map.
+
+### When two people change the same thing
+
+- **Your stroke is never cut in two.** While you hold the mouse button on the map, other
+  people's changes wait and arrive when you let go. The same happens while a dialog that
+  edits the map is open (Player Settings, the Trigger Editor, Unit Properties and the
+  like); the others see that you are in it, next to your pointer and in the Share dialog.
+- **The later change wins.** If two people paint the same tile, the change the server got
+  second stays. If two people move the same unit, the first move stands and the second is
+  dropped, because the unit is no longer where the second person's editor had it; the
+  status bar says when some of your change no longer applied. A dialog's OK writes its
+  whole table, so if two people change the triggers at the same time, the second OK wins.
+  When you see someone in the Trigger Editor, talk before you open it too.
+- **Undo is yours.** Ctrl+Z takes back your own changes, not other people's, and leaves a
+  tile alone once someone else has painted over it.
+- **Resize, a tileset change and a raw section edit** replace the whole map for everyone,
+  and everyone's undo history starts again, as it does when you do them alone.
+
+### Saving, and when it ends
+
+Saving is each person's own: File ▸ Save writes your copy to your disk, and anyone in the
+map can save at any time. The map is kept on scmjs.dev only while it is shared, and
+nothing of it is stored there afterwards. Sharing ends when the person who shared it stops,
+half an hour after the last person leaves, or when the server restarts. Everyone still has
+the map open in their editor when it ends, so nobody loses work — save it.
+
+If your connection drops, or the server cannot take one of your changes, your editor
+leaves the shared map and says so. The map stays open; save it, or open the link again to
+carry on with everyone's latest.
 
 ## The AI
 
@@ -2019,13 +2067,12 @@ inside the editor's dialogs. Your account and the maps stored on it stay.
 ## Plugins
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
-Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library and the
-scmscx.com search are installed and on from the start. Two more are installed but start
-*off*: scmjs.dev — the account and the AI, because an account and a trial are yours to ask
-for — and TrigEdit, the Text Trigger Editor, which is for text carried in from SCMDraft
-rather than for every map. Tick either on in Plugins ▸ Manage Plugins… and what it adds
-appears: scmjs.dev's Account menu, its File entries and Tools ▸ AI; TrigEdit's Triggers ▸
-Text Trigger Editor…. Melee Wizard and Section Explorer are a click away.
+Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library, scmjs.dev
+(the account) and the scmscx.com search are installed and on from the start. One more is
+installed but starts *off*: TrigEdit, the Text Trigger Editor, which is for text carried
+in from SCMDraft rather than for every map. Tick it on in Plugins ▸ Manage Plugins… and
+Triggers ▸ Text Trigger Editor… appears. Melee Wizard and Section Explorer are a click
+away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -2048,7 +2095,7 @@ and the addresses it will fetch from.
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game, built into the saved map by the eudplib plugin (StarCraft: Remastered). See [TrigScript](#trigscript). |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
-| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account and the AI that comes with it — see [Your scmjs.dev account](#your-scmjsdev-account) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
+| [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](docs/images/walkability.webp)
 
@@ -2239,7 +2286,7 @@ you expected, and a copied log.
 | Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: install it from Plugins ▸ Browse Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
 | Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
 | Test Map | Yes (Ctrl+F5). Neither StarCraft build opens a map from the outside, so Test Map writes the map into a `scmJS` folder under the game's Maps folder, where Single Player ▸ Custom Game lists it, and the desktop app starts the game as well. In Chrome and Edge the map goes into a folder you pick once (the game's Maps folder); other browsers download it. |
-| Make a whole scenario from a sentence, generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes (Tools ▸ AI, in the scmjs.dev plugin — shipped with the editor, turned on in Plugins ▸ Manage Plugins…; it runs on scmjs.dev and the first request starts a free trial — see [The AI](#the-ai)). Every change it makes is one undo step; what the settings dialogs write is a transaction outside undo, as by hand. |
+| Make a whole scenario from a sentence, generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes (Tools ▸ AI, in the scmjs.dev plugin — shipped with the editor and on from the start; it runs on scmjs.dev and the first request starts a free trial — see [The AI](#the-ai)). Every change it makes is one undo step; what the settings dialogs write is a transaction outside undo, as by hand. |
 | Keep maps on an account with numbered revisions and notes, and open them from any machine | Yes (Account ▸ Save to scmjs.dev… and My Maps…, signed in — see [Your scmjs.dev account](#your-scmjsdev-account)) |
 | Edit one map with other people at the same time | Yes (Account ▸ Share this Map…, signed in; the others join from the link — see [Editing a map together](#editing-a-map-together)) |
 

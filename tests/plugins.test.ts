@@ -1152,37 +1152,36 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships ten defaults in order, TrigEdit and scmjs.dev starting off, each pinned to a version", () => {
-    // Which ten, in which order, and which of them start on — the versions deliberately
-    // not, since every plugin release would otherwise have to come back and edit this.
+  it("ships ten defaults in order, TrigEdit starting off, each pinned to a version", () => {
+    // Which ten, in alphabetical order of their names (what Manage Plugins shows), and
+    // which of them start on — the versions deliberately not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-eudplib",
-      "github:scm-js/plugin-scm-scx",
-      "github:scm-js/plugin-repair",
-      "github:scm-js/plugin-walkability",
-      "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-paint",
+      "github:scm-js/plugin-repair",
+      "github:scm-js/plugin-scmjs-dev",
+      "github:scm-js/plugin-scm-scx",
+      "github:scm-js/plugin-stamp-library",
+      "github:scm-js/plugin-image-to-terrain",
       "github:scm-js/plugin-trigedit",
       "github:scm-js/plugin-trigscript",
-      "github:scm-js/plugin-stamp-library",
-      "github:scm-js/plugin-scmjs-dev",
+      "github:scm-js/plugin-walkability",
     ]);
-    // Two start off. scmjs.dev is an account and a paid trial, which is the user's to ask
-    // for rather than the editor's to assume; TrigEdit is the text-trigger syntax, which
-    // the Trigger Editor and TrigScript already cover for anyone not carrying text in
-    // from SCMDraft. Both are still listed and badged *default*, and ticking one on is
-    // remembered like any other change.
+    // One starts off: TrigEdit is the text-trigger syntax, which the Trigger Editor and
+    // TrigScript already cover for anyone not carrying text in from SCMDraft. It is still
+    // listed and badged *default*, and ticking it on is remembered like any other change.
+    // scmjs.dev starts on: it sends nothing until it is used or somebody is signed in.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => [pluginIdentity(d.spec), d.enabled])).toEqual([
       ["github:scm-js/plugin-eudplib", true],
-      ["github:scm-js/plugin-scm-scx", true],
-      ["github:scm-js/plugin-repair", true],
-      ["github:scm-js/plugin-walkability", true],
-      ["github:scm-js/plugin-image-to-terrain", true],
       ["github:scm-js/plugin-paint", true],
+      ["github:scm-js/plugin-repair", true],
+      ["github:scm-js/plugin-scmjs-dev", true],
+      ["github:scm-js/plugin-scm-scx", true],
+      ["github:scm-js/plugin-stamp-library", true],
+      ["github:scm-js/plugin-image-to-terrain", true],
       ["github:scm-js/plugin-trigedit", false],
       ["github:scm-js/plugin-trigscript", true],
-      ["github:scm-js/plugin-stamp-library", true],
-      ["github:scm-js/plugin-scmjs-dev", false],
+      ["github:scm-js/plugin-walkability", true],
     ]);
     // The point of the pin: a released editor loads the code it was tested against, and
     // the desktop build can compile that exact version in. A default on a moving branch
@@ -1210,13 +1209,11 @@ describe("plugin lifecycle", () => {
     expect(fresh).toContain("github:scm-js/plugin-paint");
     // scmscx.com starts on: it needs no address, and it only reaches the network when its dialog is opened.
     expect(fresh).toContain("github:scm-js/plugin-scm-scx");
-    // A fresh editor runs every default but TrigEdit and scmjs.dev, both listed and
-    // waiting to be ticked on — scmjs.dev rather than signing anybody in, TrigEdit
+    // A fresh editor runs every default but TrigEdit, listed and waiting to be ticked on
     // rather than putting a second trigger editor in the menu of a map maker who never
     // asked for the text syntax.
     expect(effectiveInstalls([]).filter((p) => !p.enabled).map((p) => pluginKey(p.spec))).toEqual([
       "github:scm-js/plugin-trigedit",
-      "github:scm-js/plugin-scmjs-dev",
     ]);
     // Melee Wizard and Section Explorer are not defaults: they are found and installed
     // through Browse Plugins. (Run this without a vendored `plugins/` directory too — a
@@ -2089,6 +2086,16 @@ describe("plugin surfaces", () => {
     expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Open…", "sub", "Find Map…", "Second", "sep", "Save", "sep", "Nowhere"]);
     expect((merged[0].items[2] as { icon?: unknown }).icon).toBe(icon);
     expect(menus[0].items).toHaveLength(4);
+  });
+
+  it("places an item under another plugin's item whichever registered first", () => {
+    const menus: Menu[] = [{ label: "Triggers", items: [{ kind: "item", label: "Triggers…" }] }];
+    const merged = withPluginItems(menus, [
+      { key: 1, pluginId: "b", path: "Triggers", label: "Script Editor…", after: "Text Trigger Editor…", run: () => {} },
+      { key: 2, pluginId: "c", path: "Triggers", label: "Third", after: "Script Editor…", run: () => {} },
+      { key: 3, pluginId: "a", path: "Triggers", label: "Text Trigger Editor…", run: () => {} },
+    ]);
+    expect(merged[0].items.map((i) => (i.kind === "item" ? i.label : i.kind))).toEqual(["Triggers…", "sep", "Text Trigger Editor…", "Script Editor…", "Third"]);
   });
 
   it("resolves `icon: \"plugin\"` to the plugin's own icon when it registers", () => {

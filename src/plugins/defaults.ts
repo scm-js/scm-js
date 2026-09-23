@@ -44,24 +44,23 @@ export interface DefaultPlugin {
  * startup, which still works and is the path these specs describe.
  *
  * One that starts off is still listed (badged *default*, no Remove button); ticking it
- * on is remembered like any other change. TrigEdit is listed before TrigScript because
- * TrigScript's menu item anchors `after: "Text Trigger Editor…"`; with TrigEdit off there
- * is no such item and TrigScript's goes to the end of the Triggers menu, which is what
- * `menu.add` does for any anchor it cannot find.
+ * on is remembered like any other change.
+ *
+ * Kept in alphabetical order of the plugins' names, the order Manage Plugins shows them
+ * in. Nothing depends on it: a plugin starts after the ones it `requires`, and a menu
+ * item's `after:` finds another plugin's item whichever of the two started first.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
-  // The library TrigScript's Remastered target (and Magenta) build through; it requires it.
-  // First, so the plugin other plugins lean on heads the Installed list.
   { spec: "github:scm-js/plugin-eudplib@v0.4.1", enabled: true },
-  { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
-  { spec: "github:scm-js/plugin-repair@v1.3.1", enabled: true },
-  { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },
-  { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.0.1", enabled: true },
+  { spec: "github:scm-js/plugin-repair@v1.3.1", enabled: true },
+  { spec: "github:scm-js/plugin-scmjs-dev@v1.27.0", enabled: true },
+  { spec: "github:scm-js/plugin-scm-scx@v1.1.2", enabled: true },
+  { spec: "github:scm-js/plugin-stamp-library@v1.0.0", enabled: true },
+  { spec: "github:scm-js/plugin-image-to-terrain@v1.0.2", enabled: true },
   { spec: "github:scm-js/plugin-trigedit@v1.0.0", enabled: false },
   { spec: "github:scm-js/plugin-trigscript@v3.10.4", enabled: true },
-  { spec: "github:scm-js/plugin-stamp-library@v1.0.0", enabled: true },
-  { spec: "github:scm-js/plugin-scmjs-dev@v1.27.0", enabled: false },
+  { spec: "github:scm-js/plugin-walkability@v1.1.2", enabled: true },
 ];
 
 /**

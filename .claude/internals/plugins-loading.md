@@ -20,13 +20,17 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-eudplib (a default since 2026-09-17, on — TrigScript requires it; first since 2026-09-18 so the library heads the
-Installed list, which also makes it activate first), scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit (the Text Trigger Editor, moved out 2026-09-07;
-**off** since 2026-09-07 — with it off, TrigScript's `after: "Text Trigger Editor…"` finds no anchor and its item lands at
-the end of the Triggers menu after a separator, which is `menu.add`'s answer for any missing anchor; it stays listed before
-TrigScript so the anchor works for anyone who ticks it on),
-TrigScript (a default since 2026-09-07, on), Stamp Library and
-scmjs.dev (off), each pinned to a tag; that file is the only place the versions are written down, so read them there
+eudplib (a default since 2026-09-17, on — TrigScript requires it), Paint, Repair, scmjs.dev (on since 2026-09-22; off before, while the AI was a paid trial), scmscx.com,
+Stamp Library, Terrain from Image, TrigEdit (the Text Trigger Editor, moved out 2026-09-07; **off**), TrigScript
+(a default since 2026-09-07, on) and Walkability. Since 2026-09-22 the array is alphabetical by display name and
+the Installed tab sorts by manifest name (the repository name until a manifest is in), matching Browse; before
+that the array order was the order they were added plus two rules — eudplib first "to head the list", TrigEdit
+before TrigScript so TrigScript's `after: "Text Trigger Editor…"` found its anchor. Neither is needed now:
+`orderedInstalls` starts requirements first, and `withPluginItems` retries an unresolved `after:` once every
+other item is placed, so an anchor to another plugin's item works whichever registered first (with TrigEdit off
+there is no anchor and TrigScript's item goes to the end of the Triggers menu). The array order is still the start
+order, so it decides the order of plugin items appended at the end of the same menu, panels and status items.
+Each is pinned to a tag; that file is the only place the versions are written down, so read them there
 rather than here; Melee Wizard
 and Section Explorer are published in the registry but are not defaults — plus any built-in, each a
 `DefaultPlugin { spec, enabled }`), which `effectiveInstalls` merges over

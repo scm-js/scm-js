@@ -30,7 +30,7 @@ on one and the editor shows where the code comes from and asks before it adds an
 Plugins ▸ **Manage Plugins…** lists what is installed, turns each plugin on or off, and
 takes the address of any plugin that is not on the list.
 
-Nine plugins are *defaults* (two of them, TrigEdit and scmjs.dev, start off). They are on
+Ten plugins are *defaults* (one of them, TrigEdit, starts off). They are on
 the list from the start and compiled into the editor, so a fresh install has them without
 touching the network. They are ordinary
 plugins from their own repositories and can be turned off, but not removed.
@@ -1402,9 +1402,9 @@ Walkability is the worked example.
   by label (`"File/Import"`). Labels are the English ones whatever language the editor
   is showing — a label is an item's identity, and the menu translates it as it draws it,
   so a plugin's own label shows as written and a built-in's shows in the user's language.
-  Plugin items appear after a separator at the end of that menu, unless `after` names a
-  built-in item or submenu (`after: "Open Recent"`), in which case the item sits directly
-  under it. A last segment that names no submenu gets
+  Plugin items appear after a separator at the end of that menu, unless `after` names an
+  item or submenu there (`after: "Open Recent"`), in which case the item sits directly
+  under it. The item named can be another plugin's, whichever of the two starts first. A last segment that names no submenu gets
   one of the plugin's own at the end of the menu (`"Tools/AI"`), so a plugin with many
   items can keep them together, and a first segment that names no top-level menu gets
   one made for the plugin, placed before Help (`"Account"`); `separator: true` on an

@@ -310,7 +310,9 @@ const SCENES = [
 
     // Kim opens the link in an editor of her own, signed out, and joins.
     const kim = await p.other();
-    await kim.goto(new URL(link).search.slice(1));
+    // The invite is in the path (`share/<invite>`), the stand-in's address in the query.
+    const opened = new URL(link);
+    await kim.goto(opened.search.slice(1), opened.pathname.slice(new URL(BASE).pathname.length));
     await kim.page.locator(".dlg input[placeholder='How the others see you']").fill("Kim");
     await kim.page.locator(".dlg", { hasText: /editing now/ }).waitFor({ timeout: 15_000 }); await kim.wait(300);
     await kim.dialog("share-join");
@@ -568,7 +570,8 @@ function driver(page, mock, other) {
     page, wait, mock,
     /** Another editor beside this one (the shared-map scene's second person). */
     other,
-    async goto(query) { await page.goto(`${BASE}?nosplash${query ? "&" + query : ""}`); await wait(2500); },
+    /** The editor at `BASE` + `path` (a link's `share/<invite>`), with `query` after `nosplash`. */
+    async goto(query, path = "") { await page.goto(`${BASE}${path}?nosplash${query ? "&" + query : ""}`); await wait(2500); },
     async take(name, clip, { lossless = !!clip && clip.width < 858 } = {}) {
       if (ONLY.length && !ONLY.includes(name)) return;
       await wait(400);

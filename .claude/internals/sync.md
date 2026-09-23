@@ -72,8 +72,21 @@ fails, add that per-step check back first — it found the one real bug in minut
 - Selections follow records (identity, then serial+unitId / content), since
   `afterUnitEdit`-style clearing on every remote op would make selecting impossible.
 
-**Deliberately left out (v1).** Reconnect/resume after a dropped socket (the plugin ends
-the session and says so; rejoining gets a fresh copy); per-trigger merging (a dialog OK is
+**Resume after a drop (2026-09-23; ai-server 0.14.0, plugin 1.30.0).** No host change:
+a resume replay is, to `SyncCore`, just late delivery. The server keeps a dropped person
+*away* (1006 only; 1000/1001/1005 is leaving) for `resumeGraceSec`; `hello.resume {token,
+seq}` answers `resumed` with the log after `seq`. The plugin keeps every op the session sent
+that is not acked (`unacked`, sent or not); in the replay an op `from` itself is
+`unacked.shift()` + `confirm()`, anyone else's `receive()`, and what is left is re-sent in
+order — resolution does not care that an op is sequenced later than it was made. When the
+log no longer reaches back to `seq` the server sends a plain `welcome`; the plugin then
+stops the old session (guarded by a generation counter so the old session's `onEnd` /
+`send` are ignored) and opens the copy in a new tab, never over the old one. A client ping
+every 20 s, with 50 s of silence counting as a drop, catches the half-open socket a browser
+would otherwise sit on. Verified headlessly: server-side `terminate()` mid-session, both
+paths, maps equal after.
+
+**Deliberately left out (v1).** Per-trigger merging (a dialog OK is
 whole-table LWW, the presence line says who is in which dialog); serial remapping;
 presence of the other person's selection. A server refusal of an op (`error.about ===
 "op"`) ends the plugin's session, since the copy no longer matches.

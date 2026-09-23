@@ -1893,9 +1893,18 @@ nothing of it is stored there afterwards. Sharing ends when the person who share
 half an hour after the last person leaves, or when the server restarts. Everyone still has
 the map open in their editor when it ends, so nobody loses work — save it.
 
-If your connection drops, or the server cannot take one of your changes, your editor
-leaves the shared map and says so. The map stays open; save it, or open the link again to
-carry on with everyone's latest.
+If your connection drops, the status bar says *Reconnecting…* and you can keep working:
+your changes are kept and sent once the connection is back, and you get everyone else's
+changes from while you were gone. The others see you as having lost the connection
+meanwhile. If you are away so long that the server has moved on, the shared map opens
+again in a new tab with everyone's latest, and your copy stays open in its own tab, with
+a note saying how many of your changes the others never got. After two minutes of trying,
+the editor gives up and leaves the shared map; the map stays open, and the link still
+works.
+
+If the server cannot take one of your changes, your editor leaves the shared map and says
+so. The map stays open; save it, or open the link again to carry on with everyone's
+latest.
 
 ## The AI
 

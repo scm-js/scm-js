@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The seven guides are the repository's own — `README.md` and `docs/*.md` — split into
+ * The eight guides are the repository's own — `README.md` and `docs/*.md` — split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -26,10 +26,25 @@ export const IMAGES_DIR = "docs/images";
  */
 export const SOURCES = [
   {
+    id: "installing",
+    file: "docs/installing.md",
+    title: "Installing",
+    blurb: "Getting to the hosted editor, downloading and installing the desktop app for Windows, macOS and Linux, the container, and getting the game's graphics.",
+  },
+  {
     id: "guide",
     file: "README.md",
     title: "User guide",
-    blurb: "What each layer does, how the editor is used, and the table of what is and is not implemented.",
+    // The README is also the repository's front page, and these two sections are for
+    // that reader: on the site the sidebar is the index and the footer carries the licence.
+    omit: ["documentation", "license"],
+    blurb: "How to use the editor: Your first map, then each layer and dialog - terrain, units, triggers, TrigScript, settings, saving, editing one map with multiple people, map sharing, and how to install plugins.",
+  },
+  {
+    id: "plugins",
+    file: "docs/plugins.md",
+    title: "Plugins",
+    blurb: "Installing plugins and what they may do, writing one, and a tour of the API.",
   },
   {
     id: "triggers",
@@ -41,16 +56,10 @@ export const SOURCES = [
     pageTitle: "StarCraft trigger reference",
   },
   {
-    id: "plugins",
-    file: "docs/plugins.md",
-    title: "Plugins",
-    blurb: "Installing plugins and what they may do, writing one, and a tour of the API.",
-  },
-  {
     id: "map-files",
     file: "docs/file-formats.md",
-    title: "Map files",
-    blurb: "The MPQ container, the CHK sections, and how much of a file the editor preserves.",
+    title: "Opening and saving maps",
+    blurb: "What the editor does with a map file: what it preserves, what Save can strip, revisions, protected and built maps.",
   },
   {
     id: "chk",
@@ -90,7 +99,8 @@ export function resolvePath(fromFile, href) {
 /** One source document, split into the pages the site serves. */
 export function buildGuide(source, text) {
   const { title, intro, sections } = splitPages(text);
-  const pages = sections.map((s) => ({
+  const omit = new Set(source.omit ?? []);
+  const pages = sections.filter((s) => !omit.has(s.slug)).map((s) => ({
     slug: s.slug,
     title: s.title,
     url: `/${source.id}/${s.slug}/`,
@@ -99,7 +109,7 @@ export function buildGuide(source, text) {
   }));
   // The nav's name for a section is `SOURCES`' own, not the document's `#` heading:
   // `README.md` calls itself "scmJS", which is the repository rather than the section.
-  return { ...source, title: source.title, docTitle: title, intro, url: `/${source.id}/`, pages };
+  return { ...source, title: source.title, docTitle: title, intro, url: `/${source.id}/`, pages, omitted: [...omit] };
 }
 
 /**
@@ -115,6 +125,8 @@ export function headingIndex(guides) {
       per.set(page.slug, page.url);
       for (const h of headingsIn(page.body)) if (!per.has(h.slug)) per.set(h.slug, `${page.url}#${h.slug}`);
     }
+    // A link to a section the site leaves out goes to what stands in for it: the index.
+    for (const slug of guide.omitted ?? []) if (!per.has(slug)) per.set(slug, "/");
     index.set(guide.file, { guide, per });
   }
   return index;
@@ -124,7 +136,7 @@ export function headingIndex(guides) {
  * The link rewriter handed to `renderMarkdown`.
  *
  * Absolute and `mailto:` links are left alone. A bare `#fragment` is resolved within the
- * guide it was written in. A relative path naming one of the seven source documents
+ * guide it was written in. A relative path naming one of the eight source documents
  * becomes a page here; anything else in the repository becomes a link to GitHub — a blob
  * for a path inside the tree, and the repository's own page for one that climbs above it
  * (`../../releases` in `docs/development.md` is written to work that way on github.com).

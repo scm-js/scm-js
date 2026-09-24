@@ -28,6 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import { assignTypes, buildReference, slugOf } from "./lib/docs/api.mjs";
 import { headingsIn, renderMarkdown } from "./lib/docs/markdown.mjs";
 import { codeBlock, escapeHtml, memberHtml, navHtml, page, tocHtml, typeHtml } from "./lib/docs/render.mjs";
+import { codeBlocksOf, playgroundUrl, runnableSnippets } from "./lib/docs/tryit.mjs";
 import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -52,6 +53,13 @@ export const EXAMPLE_PLUGINS = [
   { repo: "plugin-image-to-terrain", name: "Terrain from Image", groups: ["terrain", "ui"], of: "an image turned into terrain, one transaction" },
   { repo: "plugin-scm-scx", name: "scmscx.com", groups: ["document", "ui"], of: "opening a map fetched from elsewhere" },
   { repo: "plugin-trigscript", name: "TrigScript", groups: ["triggers", "commands"], of: "generating a run of triggers and claiming it" },
+  { repo: "plugin-trigedit", name: "TrigEdit", groups: ["triggers", "ui"], of: "the text trigger format, and a dialog that offers a slot to other plugins" },
+  { repo: "plugin-magenta", name: "Magenta", groups: ["triggers", "consts", "services"], of: "a trigger editor that needs another plugin's service" },
+  { repo: "plugin-eudplib", name: "eudplib", groups: ["services"], of: "a library plugin: one versioned service for others to build with" },
+  { repo: "plugin-stamp-library", name: "Stamp Library", groups: ["clipboard", "graphics", "storage"], of: "clips kept in storage, drawn as thumbnails and pasted as one edit" },
+  { repo: "plugin-timelapse", name: "Timelapse", groups: ["events", "graphics", "tileset"], of: "following every commit, one frame per change" },
+  { repo: "plugin-aftermath", name: "Aftermath", groups: ["ui", "view"], of: "a replay drawn over its map with an overlay" },
+  { repo: "plugin-scmjs-dev", name: "scmjs.dev", groups: ["services", "sync", "menu", "ui"], of: "an account, shared maps, docked panels and dialog slots" },
 ];
 
 function read(file) {
@@ -81,7 +89,38 @@ function buildApi() {
   const reference = buildReference(dts);
   const { perGroup, shared } = assignTypes(reference);
   const version = /version (\d+)/.exec(dts.slice(0, 400))?.[1] ?? String(reference.root.members.length);
-  return { reference, perGroup, shared, apiVersion: version };
+  return { reference, perGroup, shared, apiVersion: version, dts };
+}
+
+/**
+ * The "Try it" link for a code block, or null: every example in the guides and the
+ * reference is type-checked once as an API Playground snippet (`tryit.mjs`), and only the
+ * ones that pass get a link.
+ */
+function tryItLinks(guides, api) {
+  const codes = [];
+  for (const g of guides) {
+    if (g.intro) codes.push(...codeBlocksOf(g.intro));
+    for (const p of g.pages) codes.push(...codeBlocksOf(p.body));
+  }
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) return node.forEach(walk);
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "examples" && Array.isArray(value))
+        codes.push(...value.filter((x) => typeof x === "string"));
+      else walk(value);
+    }
+  };
+  walk(api.reference);
+  const runnable = runnableSnippets(codes, api.dts);
+  console.log(`Try it links: ${runnable.size} examples run as written.`);
+  return (code) => {
+    const key = code.replace(/\n$/, "");
+    return runnable.has(key) ? playgroundUrl(EDITOR_URL, key) : null;
+  };
 }
 
 /**
@@ -111,8 +150,9 @@ function main(argv) {
 
   const { guides, resolve: resolveLink } = buildGuides();
   const api = buildApi();
+  const tryIt = tryItLinks(guides, api);
 
-  /* The sidebar is the same on every page: the seven guides, then the reference. */
+  /* The sidebar is the same on every page: the eight guides, then the reference. */
   const tree = [
     ...guides.map((g) => ({ title: g.title, url: `${base}${g.url}`, pages: g.pages.map((p) => ({ title: p.title, url: `${base}${p.url}` })) })),
     {
@@ -131,6 +171,7 @@ function main(argv) {
     urlFor: (name) => urls.get(name) ?? null,
     idFor: anchor,
     rewriteLink: (href) => resolveLink("docs/plugins.md", href),
+    tryIt,
   };
 
   const index = [];
@@ -171,7 +212,7 @@ function main(argv) {
 
   /* ── the guides ── */
   for (const guide of guides) {
-    const intro = guide.intro ? renderMarkdown(guide.intro, { shift: 0, rewriteLink: (h) => resolveLink(guide.file, h) }) : "";
+    const intro = guide.intro ? renderMarkdown(guide.intro, { shift: 0, rewriteLink: (h) => resolveLink(guide.file, h), tryIt }) : "";
     emit({
       title: guide.title,
       description: guide.blurb,
@@ -194,7 +235,7 @@ ${guide.pages.map((p) => `<li><a class="card" href="${base}${p.url}"><b>${escape
         section: guide.title,
         headings: p.headings.map((h) => h.text),
         toc: tocHtml(p.headings),
-        body: `<h1>${escapeHtml(p.title)}</h1>\n${renderMarkdown(p.body, { shift: -1, rewriteLink: (h) => resolveLink(guide.file, h) })}`,
+        body: `<h1>${escapeHtml(p.title)}</h1>\n${renderMarkdown(p.body, { shift: -1, rewriteLink: (h) => resolveLink(guide.file, h), tryIt })}`,
       });
     }
   }
@@ -323,6 +364,7 @@ export function firstLine(body) {
     .replace(/^#{1,6} .*$/gm, "")
     .replace(/^[-*] .*$/gm, "")
     .replace(/^\|.*$/gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .trim();
   const para = text.split(/\n\s*\n/)[0] ?? "";
   const plain = para
@@ -338,8 +380,9 @@ export function firstLine(body) {
 
 function homeHtml(guides, api, base) {
   return `<h1>scmJS documentation</h1>
-<p class="lede">A StarCraft: Brood War map editor that runs in a browser tab — it opens real <code>.scm</code> and <code>.scx</code> files, draws terrain from the game's own tileset graphics, and writes playable archives back.</p>
-<p>These pages are the repository's own guides, and a reference generated from the plugin API's declarations. The editor itself is at <a href="${EDITOR_URL}">editor.scmjs.dev</a>.</p>
+<p class="lede">scmJS is a fully featured StarCraft: Brood War map editor that runs in a browser tab. Open, edit, and save your Starcraft 1 maps (<code>.scm</code>, <code>.scx</code>, and <code>.chk</code> files).</p>
+<p class="home-shot"><img src="${base}/images/editor-plain.webp" width="1400" height="900" alt="The editor with Big Game Hunters open on the Terrain layer"></p>
+<p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}" target="_blank" rel="noopener noreferrer">${EDITOR_URL}</a>.</p>
 <ul class="cards">
 ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.blurb)}</span></a></li>`).join("\n")}
 <li><a class="card" href="${base}/api/"><b>API reference</b><span>Every call a plugin can make, group by group — plugin API version ${api.apiVersion}.</span></a></li>
@@ -347,10 +390,10 @@ ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(
 <h2 id="start">Where to start</h2>
 <ul>
 <li>New to the editor: <a href="${base}/guide/getting-started/">Getting started</a>, then <a href="${base}/guide/your-first-map/">Your first map</a>.</li>
-<li>Wondering whether it does the thing you need: <a href="${base}/guide/what-works-and-what-does-not/">What works, and what does not</a>.</li>
+<li>Wondering whether it does the thing you need: <a href="${base}/guide/what-it-does-not-do/">What it does not do</a>.</li>
 <li>Installing a plugin, or wondering what one may do: <a href="${base}/plugins/using-plugins/">Using plugins</a>.</li>
-<li>Writing a plugin: <a href="${base}/plugins/writing-a-plugin/">Writing a plugin</a>, then the <a href="${base}/api/">API reference</a>; <a href="https://github.com/scm-js/plugin-hello-world">Hello World</a> is the repository to copy.</li>
-<li>Working on the editor itself: <a href="${base}/development/">Development</a> and <a href="${base}/map-files/">Map files</a>.</li>
+<li>Writing a plugin: try the API first in the <a href="${base}/plugins/writing-a-plugin/#trying-the-api-first">API Playground</a>, which runs code against the open map in the editor. Then <a href="${base}/plugins/writing-a-plugin/">Writing a plugin</a> and the <a href="${base}/api/">API reference</a>; <a href="https://github.com/scm-js/plugin-hello-world">Hello World</a> is the repository to copy.</li>
+<li>Working on the editor itself: <a href="${base}/development/">Development</a> and <a href="${base}/map-files/">Opening and saving maps</a>.</li>
 </ul>`;
 }
 
@@ -370,6 +413,7 @@ export default function activate(api: PluginApi) {
   api.menu.add("Tools", { label: "Say hello", run: () => api.ui.toast({ title: "Hello" }) });
 }`, opts)}
 <p>Nothing here is written by hand. A member with no description has no doc comment in <code>api.ts</code>; the fix belongs there, not on this page.</p>
+<p>An example marked <b>Try it</b> runs as it is written: the link opens it in the editor's <a href="${base}/plugins/writing-a-plugin/#trying-the-api-first">API Playground</a>, and nothing runs until you press Run.</p>
 <h2 id="groups">Groups</h2>
 <table><tbody>
 ${rows}

@@ -24,13 +24,18 @@ action or section. Both references keep their tables in `<!-- generated -->` blo
 (`scripts/lib/generated-blocks.mjs`) rewritten by `npm run docs:reference`.
 
 Two halves, and only the second is generated in any interesting sense. The guides are
-`README.md` and `docs/*.md` split at their `##` headings, one page each, with the `###`
+`README.md` and `docs/*.md` split at their `##` headings (nav order is `SOURCES` in
+`site.mjs`; `docs/installing.md` is first, above the user guide, and holds what README's
+*Getting started* used to — README keeps a short summary pointing at it), one page each, with the `###`
 beneath as the page's contents list (`markdown.mjs`, `marked`) — **nothing writes prose**,
 because a generator that did would be a fifth document to keep current against the four
 the top of this file names. `site.mjs` is the URL model and, with it, the link rewriter
 that is the whole reason those documents keep working here: they are written to be read as
 GitHub blobs, so `docs/plugins.md` becomes a page, a bare `#fragment` finds whichever page
 that heading landed on, and `LICENSE` or `../../releases` goes back to the repository.
+A `SOURCES` entry's `omit` (slugs) drops `##` sections that are only for the GitHub
+reader — README's *Documentation* (the sidebar is the index) and *License* (the footer
+links LICENSE and ATTRIBUTION.md) — and a `#fragment` to an omitted section resolves to `/`.
 
 The reference is read out of `plugin-api/index.d.ts` — the *bundle* rather than the source
 tree, because that one file with no imports is exactly what a plugin repository compiles
@@ -42,6 +47,14 @@ group that can reach it — transitively, so `IsomReport` and `Diamond` both lan
 only place the reference is written: a group with no doc comment reads as a bare interface
 name on the site (`tests/docs.test.ts` fails when one does), and an `@example` there shows
 up as a code block *and* in a plugin author's editor tooltip.
+
+`docs/file-formats.md` (titled "Opening and saving maps") and `docs/chk-format.md` split
+one subject: a fact about the format — a byte layout, what the game does with a repeat,
+which revision needs which table, how the game reads `STR` text — goes only in the CHK
+reference, which is editor-neutral apart from each page's "In scmJS" row; a fact about
+what scmJS does with a file goes only in `file-formats.md`, which links to the reference
+instead of restating it. The section list was once kept by hand in both and drifted, so
+the generated index in `chk-format.md` is the only one.
 
 `docs/file-formats.md` and `docs/game-data.md` are written for *readers* — map makers
 deciding what to strip from a file, people repairing a protected map, mod makers,
@@ -93,12 +106,15 @@ because a headless page's pointer is wherever the last click left it; positions 
 out from the owner's `view` as the room last heard it. The Share dialog's link input is
 rewritten to `https://editor.scmjs.dev/?scmjs-room=…` before the picture.
 
-`ATTRIBUTION.md` is the provenance record (audited 2026-09-04) and `scripts/lib/notices.mjs`
+`ATTRIBUTION.md` is the provenance record (audited 2026-09-23) and `scripts/lib/notices.mjs`
 its mechanical half: the `scmjs-notices` plugin in `vite.config.ts` emits
 `dist/THIRD-PARTY-NOTICES.txt` from `package.json`'s runtime `dependencies` plus the
 vendored `plugins/*/LICENSE`, failing the build on a dependency with no license file, so
 the web zip, the installers and the image carry every bundled license (TypeScript's
-Apache-2.0 text above all). Adding a runtime dependency needs no edit there; adding an
+Apache-2.0 text above all). The plugin runtimes (eudplib's Pyodide, wheel and worker) are
+copied in *after* vite, so `bundle-plugin-runtimes.mjs` appends each runtime's `licenses/`
+files to that file itself (`withRuntimeNotices`, idempotent, throws on a runtime with none)
+— Pyodide's MPL-2.0 is the one that matters. Adding a runtime dependency needs no edit there; adding an
 *adapted* algorithm or table needs an entry in `ATTRIBUTION.md` and a provenance comment
 (`tests/notices.test.ts`).
 
@@ -127,3 +143,8 @@ other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both
 (marked's `code` renderer returns `false` for every other block, so they stay marked's own). The
 `?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
 
+
+`docs/chk.ksy` is linked from the CHK reference as a relative link, which the resolver sends
+to its GitHub blob page (the site does not copy it). The reference's SVG pictures live in
+`docs/images/` like the guide's webp shots but are generated, not screenshots — see
+`chk-format.md`.

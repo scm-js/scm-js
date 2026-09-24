@@ -8,7 +8,7 @@ the game you are entitled to use, extracts what it needs once, and keeps the res
 
 This document is for anyone who wants to know where the graphics come from, what is kept
 where, how a mod's files can be used in place of the game's, and how the pictures are
-drawn. The [user guide](../README.md#the-graphics) covers the first-run dialog itself;
+drawn. The [installing guide](installing.md#the-graphics) covers the first-run dialog itself;
 building the editor from source, which needs the same files on disk, is in
 [Extracting for a source build](#extracting-for-a-source-build).
 
@@ -17,7 +17,8 @@ Attribution is not permission. Before publishing a fork or hosting a build, read
 
 ## What the editor needs
 
-Two archives from a classic (1.16) installation, `StarDat.mpq` and `BrooDat.mpq`. Brood
+The editor needs two archives from a classic (1.16) installation, `StarDat.mpq` and
+`BrooDat.mpq`. Brood
 War's is required: its unit table is the layout the editor reads, and the Ice, Desert and
 Twilight tilesets exist only there. A `patch_rt.mpq` beside them is applied over both,
 as the game applies it. Remastered installations carry none of these files; the download

@@ -94,6 +94,15 @@ describe("links", () => {
     expect(at).toBe("/guide/keyboard-and-preferences/");
   });
 
+  it("leaves the README's GitHub-only sections off the site, and points links to them at the index", () => {
+    const guide = guides.find((g: { id: string }) => g.id === "guide");
+    const slugs = guide.pages.map((p: { slug: string }) => p.slug);
+    expect(slugs).not.toContain("documentation");
+    expect(slugs).not.toContain("license");
+    expect(read("README.md")).toContain("## Documentation");
+    expect(resolve("README.md", "#documentation")).toBe("/");
+  });
+
   it("sends everything else in the repository back to GitHub, and leaves absolute links alone", () => {
     expect(resolve("README.md", "LICENSE")).toBe("https://github.com/scm-js/scm-js/blob/main/LICENSE");
     expect(resolve("docs/development.md", "../../releases")).toBe("https://github.com/scm-js/scm-js/releases");
@@ -151,6 +160,7 @@ describe("rendering", () => {
   it("takes a page's first sentence for its card", () => {
     expect(firstLine("Layers along the left rail. And more.\n\nNext para.")).toBe("Layers along the left rail.");
     expect(firstLine("```sh\nnpm run dev\n```\n\nThe dev server.")).toBe("The dev server.");
+    expect(firstLine("![The editor window](docs/images/editor.webp)\n\nThe parts, numbered.")).toBe("The parts, numbered.");
   });
 
   it("describes a page with enough of its opening to say what it is about", () => {
@@ -260,9 +270,9 @@ describe("the map files and game data guides", () => {
   });
 
   it("keep the editor's internals out of the prose", () => {
-    for (const file of GUIDES) {
+    for (const file of [...GUIDES, "docs/installing.md"]) {
       const text = read(file);
-      const prose = text.slice(0, text.indexOf(MARKER));
+      const prose = text.includes(MARKER) ? text.slice(0, text.indexOf(MARKER)) : text;
       const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);
       expect(paths, file).toEqual([]);
       const names = [...text.matchAll(/\b(\w+Atom|use[A-Z]\w+|Jotai)\b/g)].map((m) => m[0]);

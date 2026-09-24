@@ -254,8 +254,32 @@ main p > img:only-child {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* The home page's picture of the editor, under the lede: kept small. */
+main p.home-shot > img {
+  width: 560px;
+  height: auto;
+  margin: -8px 0 22px;
+}
+
 /* ── code colouring ─────────────────────────────────────── */
 
+/* An example that runs as written: "Try it" opens it in the editor's API Playground. */
+.code-try { position: relative; }
+.code-try > pre { padding-top: 30px; }
+.try-it {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--gold);
+}
+.try-it::after { content: " ↗"; color: var(--text-faint); }
+.try-it:hover { border-color: var(--gold); color: var(--gold-hi); }
 pre .k { color: var(--violet); }
 pre .s { color: #8fd694; }
 pre .n { color: #d79b6a; }

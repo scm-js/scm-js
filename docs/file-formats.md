@@ -1,10 +1,11 @@
-# Map files
+# Opening and saving maps
 
-What is inside a StarCraft map file, and what scmJS does with it. This is for anyone who
-wants to know what happens to their file: map makers deciding what to keep in a release
-copy, people fixing a broken or protected map, and developers reading the format for the
-first time. The [user guide](../README.md#saving) covers the Save dialog itself; this
-document explains the file it writes.
+This section contains documentation on what scmJS does with a StarCraft map file when it opens and saves one. This is for anyone
+who wants to know what happens to their file: map makers deciding what to keep in a
+release copy, and people fixing a broken or protected map. The
+[user guide](../README.md#saving) covers the Save dialog itself; this document explains
+the file it writes. The format itself, section by section, is in the
+[CHK format reference](chk-format.md).
 
 The short version: the editor opens `.scm`, `.scx` and bare `.chk` files, rewrites only
 the parts of the scenario you changed, and copies everything else through byte for byte,
@@ -70,43 +71,27 @@ stands, says so, and leaves both members where they are. A bare `.chk` is never 
 
 ## The scenario
 
-The scenario is a flat sequence of chunks. Each chunk is a four-character name, a length,
-and that many bytes of data: `MTXM` holds the terrain, `UNIT` the placed units, `TRIG`
-the triggers. The complete list is under [Sections](#sections), and the
-[CHK format reference](chk-format.md) gives every section's byte layout. The community's
-older reference is
-[wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk).
-
-### How the game reads a file
-
-The game reads the chunks one after another into fixed-size buffers, so a section that
-appears twice in a file is not simply replaced by its second copy. What happens depends
-on the section:
-
-| Behaviour | Sections | What a repeat does |
-| --- | --- | --- |
-| Overlay | `MTXM`, `TILE`, `ISOM`, `MASK`, `MRGN` | The second copy overwrites only as many bytes as it carries. A second `MTXM` half the size of the map rewrites the top half and leaves the bottom as the first copy had it. |
-| Append | `UNIT`, `THG2`, `DD2 `, `TRIG`, `MBRF` | The copies concatenate into one list. Two `TRIG` sections are one longer trigger list. |
-| Last | everything else | The later copy replaces the earlier one. |
-
-A section can also be shorter or longer than the game expects, carry a name that is not a
-real section, or declare a length that runs past the end of the file. The game copes with
-all of it in its own particular ways, and *protected* maps rely on exactly that: a map
-protector writes a file that the game reads correctly and that a naive editor reads
+The scenario is a flat sequence of sections, each a four-character name, a length and
+that many bytes of data: `MTXM` holds the terrain, `UNIT` the placed units, `TRIG` the
+triggers. The [CHK format reference](chk-format.md) has a page for every section with its
+byte layout, and explains what the game does when a file
+[repeats a section](chk-format.md#repeated-sections) or
+[gives one an odd length](chk-format.md#odd-lengths). Map protectors rely on those cases:
+a protected map is written so that the game reads it correctly and a naive editor reads it
 wrongly, so opening and saving it in that editor produces a different map.
 
 ### What the editor does with it
 
-The editor keeps every chunk in the order it found it, repeats included, and reproduces
+The editor keeps every section in the order it found it, repeats included, and reproduces
 the game's reading when it decodes them. Opening a protected map shows what the game
 would show.
 
 On save, only the sections you changed are written from the editor's own model. Edit a
-trigger and `TRIG` is re-encoded; every other chunk, known or not, is written back from
+trigger and `TRIG` is re-encoded; every other section, known or not, is written back from
 the bytes it came in with, in its original order and with its original repeats. A section
 that has to be added, because the map had none and an edit created one, goes in among the
 others at the place StarEdit would put it rather than at the end. Bytes after the last
-chunk are kept as well, unless the Save dialog is told to drop them.
+section are kept as well, unless the Save dialog is told to drop them.
 
 Two consequences are worth knowing:
 
@@ -117,24 +102,17 @@ Two consequences are worth knowing:
   sections into one* tick does it using the same rules the game uses, and the Repair plugin
   explains each finding before it changes anything.
 
-The scenario's own strings live in one table, `STR ` (or `STRx` on a Remastered map),
-and every name in the file points into it by number: the scenario name and description,
-force names, location names, custom unit names, switch names, sound file paths, and the
-text and sound of every trigger action. Index 0 means no string. Because raw sections
-keep pointing at the numbers they were written with, the editor never renumbers the
-table on save; a string that stops being used is blanked, not removed. `STR ` addresses
-its strings with 16-bit offsets, so the whole table has to fit in 64 KB; `STRx` uses
-32-bit offsets and has no such limit.
+Every piece of text in the map lives in one string table, [`STR `](chk-format.md#str)
+(or [`STRx`](chk-format.md#strx) on a Remastered map), and the other sections point into
+it by number. Because raw sections keep pointing at the numbers they were written with,
+the editor never renumbers the table on save; a string that stops being used is blanked,
+not removed.
 
-Neither table says how its bytes spell characters. StarEdit wrote the code page of the
-Windows it ran on — EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
-Chinese, Windows-1251 for Russian, Windows-1252 for the rest — and 1.16.1 reads a file in
-the code page of the machine it runs on. Remastered writes UTF-8 (always in `STRx`) and
-reads `STR ` as UTF-8 when the bytes are valid UTF-8, falling back to the local code
-page when they are not. The editor follows the same reading: a table that is valid
-UTF-8 is UTF-8; otherwise every legacy encoding that decodes the bytes without error is
-scored by how much of the non-ASCII text falls in its own script, and the best guess is
-shown in Scenario ▸ Map Revision for the user to correct. Korean and Chinese bytes are
+Neither table says how its bytes spell characters; the `STR ` page says what StarEdit
+wrote and how each version of the game reads it. The editor follows the game's reading:
+a table that is valid UTF-8 is UTF-8; otherwise every legacy encoding that decodes the
+bytes without error is scored by how much of the non-ASCII text falls in its own script,
+and the best guess is shown in Scenario ▸ Map Revision for the user to correct. Korean and Chinese bytes are
 often valid in each other's encoding, so a tie goes to Korean. The table is written back
 in the encoding chosen, `?` standing in for a character it cannot hold, which Check Map
 and the Save dialog report first. `stat_txt.tbl` and the other game tables are read the
@@ -142,84 +120,12 @@ same way, so a localized install names its units in its own language.
 
 ## Sections
 
-Every section the editor knows; the [CHK format reference](chk-format.md#sections) has a
-page for each with its byte layout. *Modelled* sections are decoded into the editor's own
-model and re-encoded when you change them; the rest are carried as bytes. *Required*
-sections are ones the game refuses to load a map without, and Tools ▸ Check Map reports
-a missing one as an error.
-
-**Identity**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `TYPE` | `RAWS` (original StarCraft) or `RAWB` (Brood War) | yes | |
-| `VER ` | the file revision, see [Revisions](#revisions) | yes | yes |
-| `IVER`, `IVE2` | StarEdit's version stamps, read by nothing | | |
-| `VCOD` | a 1040-byte verification table, the same in every unprotected map; the game refuses a map without it | | yes |
-
-**Players**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `OWNR` | each slot's type: human, computer, rescuable, neutral, unused | yes | yes |
-| `IOWN` | StarEdit's own copy of the player types; the editor writes both and Check Map warns when a file's two disagree | yes | |
-| `SIDE` | each slot's race | yes | yes |
-| `COLR` | each slot's colour, from the classic palette | yes | |
-| `CRGB` | Remastered's per-slot RGB colours and colour modes | yes | |
-| `FORC` | the four forces: names, membership, allied victory and the other flags | yes | yes |
-
-**The map**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `DIM ` | width and height in tiles | yes | yes |
-| `ERA ` | the tileset | yes | yes |
-| `MTXM` | the terrain as the game draws it, one tile id per cell, doodads included | yes | yes |
-| `TILE` | the terrain under the doodads, StarEdit's copy; editor-only | yes | |
-| `ISOM` | the isometric record: the lattice of terrain diamonds the isometric brush paints; editor-only | yes | |
-| `DD2 ` | the placed doodads as objects, so an editor can select and remove one; editor-only | yes | |
-| `MASK` | fog of war: which players start with each tile unexplored | yes | |
-
-**Objects**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `UNIT` | every placed unit, 36 bytes each | yes | yes |
-| `THG2` | sprites, both pure sprites and the unit-shaped ones | yes | yes |
-| `MRGN` | locations: 64 slots on an original map, 255 on Brood War; slot 64 is Anywhere | yes | yes |
-
-**Text and sound**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `STR `, `STRx` | the string table, 16-bit or 32-bit offsets | yes | yes |
-| `SPRP` | which strings are the scenario name and description | yes | yes |
-| `SWNM` | switch names; editor-only | yes | |
-| `WAV ` | the list of sound files, for the Sound Editor; editor-only | yes | |
-
-**Triggers**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `TRIG` | the triggers, 2400 bytes each | yes | yes |
-| `MBRF` | the mission briefing, in the same record | yes | yes |
-| `UPRP` | the 64 Create Unit with Properties slots | yes | yes |
-| `UPUS` | which of those slots StarEdit considers in use; editor-only | yes | |
-
-**Settings**
-
-| Section | Holds | Modelled | Required |
-| --- | --- | --- | --- |
-| `PUNI` | which unit types each player may build | yes | yes |
-| `UNIS`, `UNIx` | unit settings: hit points, shields, armour, build time, cost, weapon damage, names | yes | by revision |
-| `UPGS`, `UPGx` | upgrade costs and times | yes | by revision |
-| `UPGR`, `PUPx` | upgrade levels each player starts at and may reach | yes | by revision |
-| `TECS`, `TECx` | technology costs and times | yes | by revision |
-| `PTEC`, `PTEx` | which technologies each player starts with and may research | yes | by revision |
-
-The settings pairs are the original and Brood War layouts of the same table; the next
-section says which a file needs. Anything not in these tables is a section the editor
-does not know, carried through untouched.
+The [CHK format reference](chk-format.md#sections) lists every section the editor knows,
+with a page for each. The editor decodes all of them into its own model, and re-encodes
+them when you change them, except `VCOD`, `IVER` and `IVE2`, which it only ever carries as
+bytes. Any section not in that list is one the editor does not know, and it is carried
+through untouched. Tools ▸ Check Map reports a section the game requires and the file
+lacks as an error.
 
 ### What the game reads and what it skips
 
@@ -254,7 +160,8 @@ rebuilt.
 
 ## Revisions
 
-The revision is the `VER ` value, and it decides which sections the game reads:
+The revision is the `VER ` value. It decides which sections the game reads, and so which
+versions of the game can play the map:
 
 | Revision | `VER ` | `TYPE` | Extension | Plays in |
 | --- | --- | --- | --- | --- |
@@ -263,22 +170,9 @@ The revision is the `VER ` value, and it decides which sections the game reads:
 | Brood War 1.04 | 205 | `RAWB` | `.scx` | Brood War and Remastered |
 | Remastered 1.21+ | 206 | `RAWB` | `.scx` | Remastered only, with `STRx` |
 
-Brood War widened the settings tables, because it added units, upgrades and technologies,
-and gave the wider versions new names:
-
-| Original | Brood War | Table |
-| --- | --- | --- |
-| `UNIS` (100 weapons) | `UNIx` (130) | unit settings |
-| `UPGS` (46 upgrades) | `UPGx` (61) | upgrade settings |
-| `UPGR` | `PUPx` | upgrade restrictions |
-| `TECS` (24 techs) | `TECx` (44) | technology settings |
-| `PTEC` | `PTEx` | technology restrictions |
-
-A 1.00 map needs the original five; a Brood War map needs the `x` five; a hybrid map
-needs both, which is the whole point of a hybrid: the original game reads one set and
-Brood War the other. Blizzard's own Brood War maps carry only the `x` layouts.
-
-The editor keeps one model at the Brood War width and writes whichever layouts the
+Brood War widened the five settings tables and gave the wider versions new names, so a
+1.00 map carries the original five, a Brood War map the `x` five, and a hybrid both; the
+[CHK format reference](chk-format.md#revisions) lists the pairs. The editor keeps one model at the Brood War width and writes whichever layouts the
 file's revision calls for, plus any the file already carried, so a hybrid map stays a
 hybrid. Changing the revision in Scenario ▸ Map Revision rewrites `VER ` and `TYPE`,
 switches the string table between `STR ` and `STRx` for Remastered (and the text to
@@ -290,10 +184,9 @@ what will be written.
 ## New maps
 
 File ▸ New writes a Brood War map with the section set StarEdit writes for one: the
-tables above with the `x` layouts of the settings pairs only, and without `IVER`,
-`SWNM` and `CRGB`, which StarEdit adds when there is something to put in them. The
-terrain is one
-flat terrain type at the size and tileset chosen in the dialog, laid as StarEdit lays it,
+`x` layouts of the settings tables only, and without `IVER`,
+`SWNM` and `CRGB`, which StarEdit adds when there is something to put in them. The terrain is
+one flat terrain type at the size and tileset chosen in the dialog, laid as StarEdit lays it,
 in left/right tile pairs that share a variation, with a matching isometric record. The
 location table has 255 slots with Anywhere in place, the fog table starts every player
 unexplored, and the start locations the dialog places are part of the new map rather

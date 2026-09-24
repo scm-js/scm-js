@@ -1,7 +1,7 @@
 # Development
 
-How to run scmJS from source, how it is built and released, and what to know before
-changing it. This is for anyone running the editor locally, building the desktop app or
+This page covers how to run scmJS from source, how it is built and released, and what to
+know before changing it. This is for anyone running the editor locally, building the desktop app or
 the container, or contributing. The [user guide](../README.md) says what the editor does;
 [file-formats.md](file-formats.md) and [game-data.md](game-data.md) explain the map file
 and the game data; [plugins.md](plugins.md) is for plugin authors. Per-subsystem notes for
@@ -75,6 +75,8 @@ main thread. Set `VITE_REACT_TRACKS=1` to have it back when profiling renders.
 
 ## Repository layout
 
+The repository is laid out like this:
+
 ```
 src/
   atoms/        Jotai state: the document and its undo history, UI state, the dialog stack, preferences
@@ -115,7 +117,7 @@ plugin-api/     Generated: the bundled plugin typings (gitignored)
 
 ## How the editor is put together
 
-The conventions that everything else follows. Each is explained in more depth in
+These are the conventions that everything else follows. Each is explained in more depth in
 [CLAUDE.md](../CLAUDE.md), and the source comments say why.
 
 **State is Jotai, and there is one store.** No context providers, no Redux. Persisted
@@ -623,7 +625,7 @@ node scripts/build-docs.mjs --out /some/dir
 ```
 
 The guides are written to be read on GitHub as well; the site's link rewriter turns a
-relative link to one of the five documents into a page and anything else in the
+relative link to one of the eight documents into a page and anything else in the
 repository into a link back to GitHub, and `tests/docs.test.ts` checks every link and
 picture.
 
@@ -740,7 +742,7 @@ every sentence would benefit from a native reader.
 
 ## Contributing
 
-- **Keep the documents current.** `README.md`, `docs/triggers.md`, `docs/file-formats.md`,
+- **Keep the documents current.** `README.md`, `docs/installing.md`, `docs/triggers.md`, `docs/file-formats.md`,
   `docs/chk-format.md`, `docs/game-data.md`, `docs/plugins.md` and this file are the
   documentation site; a behaviour change that is
   not in them is undocumented. `CLAUDE.md` carries the implementation detail and is kept in
@@ -765,6 +767,8 @@ every sentence would benefit from a native reader.
   tag in `src/plugins/defaults.ts`.
 
 ## Where things are documented
+
+Each topic has one place it is written down:
 
 | Topic | Where |
 | --- | --- |

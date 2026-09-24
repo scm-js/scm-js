@@ -1,7 +1,6 @@
 # scmJS
 
-A map editor for StarCraft and Brood War available in the browser and as a desktop app, modelled on
-StarEdit, SCMDraft 2 and StarForge.
+scmJS is a map editor for StarCraft, Brood War, and StarCraft: Remastered, modelled on StarEdit, SCMDraft 2, and StarForge. It is available in the browser and as a desktop app.
 
 It opens the game's `.scm` and `.scx` maps (and a bare `.chk` scenario), draws them
 with the game's terrain and unit graphics, and saves maps the game plays. Whatever it
@@ -21,56 +20,23 @@ changes and pointers as they happen. See [Editing a map together](#editing-a-map
 This guide is for map makers. It starts with getting the editor running, walks through
 a first map, and then goes through each layer and dialog in turn. The technical side —
 file formats, game data, writing plugins, building from source — has documents of its
-own, listed at the [end](#documentation).
+own; see [Documentation](#documentation).
 
 ## Getting started
 
-Three ways to run the editor:
+There are three ways to run scmJS, each covered in [docs/installing.md](docs/installing.md):
 
-- **In the browser.** [editor.scmjs.dev](https://editor.scmjs.dev) is the newest
-  numbered release. There is nothing to install; your maps stay on your own disk, and nothing is
-  sent anywhere unless you use a network feature - a copy kept on your scmjs.dev account, a
-  map you share for others to edit with you, or a question for the AI, all described further
-  down. The hosted editor, the nightly and the
-  documentation site count visits with Cloudflare Web Analytics (no cookies, and nothing about
-  your maps); the desktop app and a copy you host yourself do not. [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt
-  every night from the latest changes, for trying what is in development; being a separate site
-  it keeps its own settings and asks for the graphics again.
-- **As a desktop app.** The [releases](../../releases) page has installers for Windows,
-  macOS and Linux, and a Windows zip to unpack and run without installing. The app finds
-  a StarCraft installation on its own, registers `.scm` / `.scx` / `.chk` so a
-  double-click opens a map, can start the game for Test Map, and offers new versions in a
-  notice when they come out.
-- **In a container**, for a server on your own network or locally - `docker run --rm -p 8080:80
+- **In the browser** at [editor.scmjs.dev](https://editor.scmjs.dev). Nothing to install,
+  and your maps stay on your own disk.
+- **As a desktop app** for Windows, macOS and Linux, from the [releases](../../releases)
+  page. It finds a StarCraft installation on its own and opens a map on a double-click.
+- **In a container**, for a server on your own network: `docker run --rm -p 8080:80
   ghcr.io/scm-js/scm-js:latest`, then open `http://localhost:8080`.
 
-Building from source is covered in [docs/development.md](docs/development.md).
-
-### The graphics
-
-The editor draws terrain and units with graphics out of StarCraft's own archives.
-Blizzard's data is not redistributable and none of it ships with the editor, so on first
-use it asks where to get them:
-
-![The Game Data dialog on first use, before any graphics are installed](docs/images/game-data.webp)
-
-- **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
-  free download, and that package carries the two archives the graphics come from. No
-  account, nothing to find on your own disk, about 80 MB — take this route if you have
-  never had the 1.16 game installed.
-- **Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
-  them, from a classic (1.16) installation. Remastered installations do not carry these
-  archives; use the download above instead.
-
-The extraction runs in the browser and the result is kept for next time; the desktop
-app looks for an installation on its own first. If the editor was opened from a link — a
-shared map to join, or a copy of a map — that comes first, and the question about the
-graphics follows once you have answered it. **Help ▸ Game Data…** brings the dialog
-back later, to remove the copy or to install a mod's files beside the game's own as a
-second *data set* (see [docs/game-data.md](docs/game-data.md#data-sets)).
-
-Without any graphics the editor still runs: terrain is drawn in flat colours and units as
-coloured markers, and everything else works.
+On first use the editor asks where to get StarCraft's graphics, which do not ship with
+it: a free download from Blizzard, or the `StarDat.mpq` and `BrooDat.mpq` of a classic
+installation. See [The graphics](docs/installing.md#the-graphics). Without them the editor
+still runs, with terrain in flat colours and units as coloured markers.
 
 ### Opening a map
 
@@ -83,6 +49,8 @@ opens the map you pick (see [Plugins](#plugins)). File ▸ Open from scmjs.dev�
 account, every revision you saved there (see [Your scmjs.dev account](#your-scmjsdev-account)).
 
 ## The editor window
+
+The window has nine parts, numbered in the picture below.
 
 ![The editor window with its parts numbered](docs/images/editor.webp)
 
@@ -133,8 +101,8 @@ its own OK / Apply / Cancel transaction and is not in the undo history, as in St
 
 ## Your first map
 
-A small melee map, start to finish. Everything here is covered in more depth in the
-sections that follow.
+This section walks through a small melee map from start to finish. Everything here is
+covered in more depth in the sections that follow.
 
 ### 1. Make the map
 
@@ -223,7 +191,7 @@ That is a playable melee map. Triggers, briefings, custom unit settings and ever
 
 ## Terrain
 
-Four brushes, each a tab in the palette:
+Terrain is painted with four brushes, each a tab in the palette:
 
 | Brush | Paints |
 | --- | --- |
@@ -286,8 +254,8 @@ made illegal (a building now half on a cliff) as part of the same undo step.
 
 ## Doodads
 
-Trees, rocks, ruins, ramps, bridges: pieces of terrain that come with their own tiles and,
-sometimes, a sprite drawn over them. The palette is built from the current tileset's
+Doodads are the trees, rocks, ruins, ramps and bridges of a map: pieces of terrain that
+come with their own tiles and, sometimes, a sprite drawn over them. The palette is built from the current tileset's
 own groups, with StarEdit's categories and placement rules.
 
 ![The Doodads layer on a Desert map, placing a sand dune](docs/images/doodads.webp)
@@ -315,8 +283,8 @@ pieces you mean to work over by hand.
 
 ## Units
 
-Everything the game has a unit for: the three races' units and buildings, heroes,
-critters, resources, start locations, beacons, powerups. The palette groups them by
+The Units layer places everything the game has a unit for: the three races' units and
+buildings, heroes, critters, resources, start locations, beacons and powerups. The palette groups them by
 race, and the search box takes a name or an id.
 
 ![The Units layer: marines placed, and a tank refused because it overlaps them](docs/images/units.webp)
@@ -353,7 +321,7 @@ them so you can drag them where you want.
 
 ## Sprites
 
-Two kinds. Pure sprites are a graphic drawn where it stands with no unit behind it: tree
+There are two kinds of sprite. Pure sprites are a graphic drawn where it stands with no unit behind it: tree
 canopies, markers, glows. Unit sprites are records the game turns into a unit when the
 map loads, which is how StarEdit does Installation doors and traps.
 
@@ -370,8 +338,8 @@ the doodad's tiles behind.
 
 ## Locations
 
-The rectangles triggers refer to: "bring a unit to *Beacon*", "create a unit at *Spawn*".
-A melee map needs none.
+Locations are the rectangles that triggers refer to, as in "bring a unit to *Beacon*" or
+"create a unit at *Spawn*". A melee map needs none.
 
 ![The Locations layer with two locations](docs/images/locations.webp)
 
@@ -398,7 +366,8 @@ back.
 
 ## Fog of war
 
-Which tiles a player starts the game unable to see. Every player has their own, and a
+The fog of war decides which tiles a player starts the game unable to see. Every player
+has their own, and a
 map that carries no fog data at all starts fully fogged — which is what a new map does,
 and what the editor draws until the first stroke.
 
@@ -415,7 +384,7 @@ itself uses for that tileset.
 
 ## Cut, copy and paste
 
-Drag on the map with the Cut / Copy / Paste layer active (`C`) to mark a rectangle, then
+To copy part of a map, drag on it with the Cut / Copy / Paste layer active (`C`) to mark a rectangle, then
 Ctrl+C or Ctrl+X. On the object layers the same keys act on the selection instead, and
 the clip is the selection's bounding box carrying just those objects, so a base can be
 copied from either side.
@@ -1606,6 +1575,9 @@ chasing the size limit. A *Play WAV* action then names the file.
 
 ## Checking, testing and saving
 
+Before a map is played, it can be checked for common mistakes, tried in the game, and
+saved in the form you want to release.
+
 ### Check Map
 
 ![Check Map on a new map: eight players and no start locations yet](docs/images/check-map.webp)
@@ -1741,12 +1713,14 @@ of it.
 
 **Account ▸ My Maps…** — also File ▸ Open from scmjs.dev… — lists the maps on your
 account, newest change first, each with a picture, its tileset, size and player count,
-and how many revisions it has. Pick one and its revisions appear on the right: the
-number, the note you wrote, the file name, the size and when it was saved. **Open** puts
-that revision in the editor, asking first if the map you have open has unsaved changes;
-**Download** saves the file to disk as it was uploaded; the note can be edited later and
-the map renamed. A revision can be deleted, except the last one — delete the map to
-remove it.
+and how many revisions it has. The box above the list searches the names, tilesets, file
+names and notes. The map you last opened or saved from here is picked when the list
+arrives, and its revisions appear on the right: the number, the note you wrote, the file
+name, the size and when it was saved. Up and Down move through the list, and Enter opens
+the map. **Open** puts the picked revision in the editor, asking first if the map you have
+open has unsaved changes; **Download** saves the file to disk as it was uploaded; the
+note can be added or edited later and the map renamed. A revision can be deleted, except
+the last one — delete the map to remove it.
 
 ![Save to scmjs.dev: a second revision of Big Game Hunters with a note](docs/images/save-to-scmjs.webp)
 
@@ -1981,205 +1955,204 @@ latest.
 
 ![The Tools ▸ AI menu](docs/images/ai-menu.webp)
 
-**Tools ▸ AI** holds the AI features. They come with the editor, in the scmjs.dev plugin,
-and run on scmjs.dev (see [the previous
-section](#your-scmjsdev-account) for the account and what a request costs); there is
-nothing else to set up, no key to paste and no server to name. The first request starts
-the free trial.
+**Tools ▸ AI** holds the AI features. They come with the editor as part of the scmjs.dev
+plugin and run on scmjs.dev, so there is no key to paste and no server to set up. The
+first request starts the free trial. [The previous section](#your-scmjsdev-account) covers
+the account and what requests cost.
 
-Each feature sends what it needs and no more: the words you typed, the map's facts (size,
-tileset, players, what is where), a picture of the map for a review, the strings for a
-rewrite, the triggers for an explanation. The map file itself is never sent for the AI —
-only Save to scmjs.dev uploads a file, and only when you press it. Every AI dialog shows
-what it is doing while it waits, and what the request cost once it is done.
+A few things are the same for every feature:
 
-Every change the AI makes to the map is one undo step, labelled "AI: …", with one
-exception the dialogs point out: what the settings dialogs write (the name and
-description, strings, triggers, players, unit settings) is a transaction outside the undo
-history, as it is when you change it by hand.
-
-### Make Scenario
-
-![Make Scenario: the design document for a four-player madness map](docs/images/make-scenario.webp)
-
-**Make Scenario…** builds a whole scenario from a sentence — "a madness map", "an RPG
-about a marine lost on a Zerg world", "a two-lane tower defense". Say the size, the
-tileset and the number of players, and press **Design**. The model writes a *design
-document* first, and nothing is built until you have read it: the genre and premise, the
-players and forces, every trigger system the map will run on with its parameters, a brief
-for the layout with the locations it must place, the objectives and the briefing. Change
-what you like — rename it, drop a system, edit a parameter, rewrite the brief — or open
-**Change the design first**, write what should be different and press **Design again**.
-A location in a system's parameters may carry `{p}` for the player number ("Spawn {p}",
-"Armory {p}"): one such system serves every player, built once per player with the
-number filled in, as long as the numbered locations exist.
-
-**Build** folds the design away and goes step by step, each step a row that passes or
-fails on its own: the map, the terrain and the named locations, the players and forces,
-each system, the objectives and briefing, the name, and Check Map at the end. When the
-design fits a *layout preset* — corner camps around an arena, lanes from spawns to a goal,
-a walled arena, a bound's winding course, a town with a chain of regions — the editor lays
-the terrain out itself from the design's few numbers, in a second, and
-the row says so. Otherwise the terrain is the long step, with the clock and the model's
-reasoning shown under the rows, and it is written as *shapes* — plateaus, lanes, rivers, arenas, in map tiles — that the
-editor draws with its own brush, so a lane from a spawn to a goal is continuous and a
-plateau that asks for a ramp gets one: the editor cuts the corner into the diagonal
-edge the game's ramps sit on, paints the ground the tileset has ramps for either side,
-and fits the ramp where its own placement check says it fits. Ramps go down toward the
-south-west or the south-east, as the game's do. Bridges the same way, over a diagonal
-channel the editor paints for them, in Jungle and Space Platform, which are the tilesets
-whose bridges fit the brush's shores; Ice has no ramp the brush's cliffs can take.
-Systems the editor's own toolkit knows — hyper triggers, spawns on a timer, kills paid in
-minerals, income, waves, lives, shops, healing, respawns, teleports, kill zones,
-leaderboards, countdowns, last standing, alliances, escalation stages, a bound's obstacles
-and checkpoints and more — are built by the editor
-from their parameters, instantly and the same way every time, and show in green.
-Anything else is written as a TrigScript (gold), which needs the TrigScript plugin
-switched on. Afterwards **Review it…** or **Open the assistant** to keep working
-on it.
-
-### Generate Map and Redo Area
-
-![Generate Map: the plan as a coloured grid, with the designer's notes](docs/images/generate-map.webp)
-
-**Generate Map…** lays out a map from a description: how many players, the feel of the
-terrain, where the bases go, the symmetry (or leave it to the model). What comes back is
-a *plan*, shown before anything is painted — a coarse grid of terrain types, the bases
-with their mineral lines and geysers, ramps, decoration, a name and a description, and
-the designer's notes on what the layout is for. **Apply** paints it: onto a new map of
-the size and tileset you chose, or onto the open map when it is the same size. The
-terrain goes down with the isometric brush, lowest ground first, so cliffs and shores
-form on their own; the bases are laid out as the Melee Wizard lays them; doodads are
-scattered where the plan says.
-
-![The plan applied: a two-player jungle map with a lake in the middle](docs/images/generated-map.webp)
-
-The result is a start, not a finished map. **Refine** sends the plan back with what you
-want changed — "more room around the naturals", "swap the lake for a plateau" — along
-with a picture of the result and everything the editor refused or Check Map found, and
-the revised plan replaces the applied one (the previous render is undone first when
-nothing else was edited in between). Ramps come as doodads chosen by size, since the
-tilesets give them no direction of their own, so check them against the cliffs before
-you play.
-
-**Redo Area…** does the same for one rectangle of an existing map: mark an area (or
-right-click on it and choose *Redo this area with AI…*), say what should be there, and
-the model sees the area as it is now with a margin around it, plus a picture, so the new
-ground joins the old at the edges.
-
-### Triggers
-
-**Write Triggers…** turns a description into triggers, written in
-[TrigScript](#trigscript), whose plugin has to be switched on. The model is given the
-map's own declarations, so it can name every unit, location and switch as the map calls
-them; the script is checked and run here, and if it fails the complaints go back to the
-model for up to two rounds of repairs. **Build** installs it exactly as TrigScript's own
-Build does, and the source stays with the map. It can extend the map's current script or
-replace every trigger with the script.
-
-**Explain Triggers…** walks through what the triggers do in play — all of them, a range,
-or the mission briefing — or answers a question about them, and the text streams in as
-it is written. Both are a button away inside the Trigger Editor, the Text Trigger Editor
-and Mission Briefing as well: *Explain*, *Write…* and *Ask*.
-
-### Names, briefings, reviews and strings
-
-![Name and Describe: three names to pick from](docs/images/name-describe.webp)
-
-**Name and Describe…** offers three name-and-description pairs from what is on the map,
-with a line of guidance if you want it ("short and grim", "in German"); pick one and
-**Use this** writes it into Map Properties. Map Properties itself has a *Suggest a name*
-button that fills its fields the same way and leaves OK to you.
-
-**Write Briefing…** writes objectives and narration for the map and puts them into one
-mission briefing trigger per player — the objectives as a Mission Objectives action, each
-line as a Text Message. Edit the text before it is written.
-
-![Review Map on Big Game Hunters](docs/images/review-map.webp)
-
-**Review Map…** sends a picture of the whole map with its statistics and what Check Map
-says, and comes back with a critique and a list of findings, each marked info, warning or
-problem; the ones that point somewhere have a **Go to** button. The chips offer a melee
-balance review, a readability review for a scenario, or "what to change first".
-
-![Rewrite Strings: every string in use, translated, with a tick per row](docs/images/rewrite-strings.webp)
-
-**Rewrite Strings…** takes an instruction — translate, fix spelling and grammar, shorten,
-put it in the map's voice — over the strings in use, or only the trigger text, the
-briefing or the names, and shows a before-and-after table with a tick on every row that
-would change. **Apply ticked** writes them back in place, never renumbering, so triggers
-keep pointing at the same strings. The String Editor has a *Rewrite with AI…* button
-that opens the same dialog.
+- **What is sent.** Only what the feature needs: what you typed and the map's facts (size,
+  tileset, players, what is where). Some features also send a picture of the map, the
+  strings or the triggers. The map file itself is never sent.
+- **Undo.** Every change the AI makes is one undo step, labelled "AI: …". The exception is
+  anything written through a settings dialog (the name and description, strings, triggers,
+  players, unit settings). Those changes are left out of the undo history, just like when
+  you make them by hand, and the dialogs point this out.
+- **Cost.** Every AI dialog shows its progress while you wait, and the cost when it
+  finishes.
 
 ### The assistant
 
 ![The assistant placing a squad for Player 1 on Big Game Hunters](docs/images/assistant.webp)
 
-**Assistant** (Ctrl+Shift+A, or the *AI* cell in the status bar) is a conversation about
-the open map, in a panel floating over it. Ask what you want to know or say what to
-change; the model reads the map through tools and changes it through others, and you
-watch it happen. The transcript reads as what you asked, then what it answered, with the
-work between them folded into one block per turn. While the turn runs the block is open
-on its last few steps — each tool call a line in plain words, **▸** for a read and **✎**
-for a change, with what came back after it — and the model's words between calls sit
-there small, so the answer stands apart from the narration. When the turn ends the block
-folds to one line: how many steps, how many edits, whether any failed, the seconds and
-the cost, and an **Undo** for that turn's edits. Open it to see every step; a screenshot
-the model took is a thumbnail there that grows when clicked, and the model's reasoning is
-a fold of its own inside. The strip at the top says what it is doing — waiting, thinking,
-writing, the step it is on — with the seconds and the cost. The map outlines what a call
-is about to touch and flashes what it changed, and the view follows: it glides to each
-call's spot, zooming out when the spot is larger than the view and never in. Scroll or
-zoom yourself and the view is yours for the rest of the turn; *Follow the assistant's
-work around the map* in Tools ▸ AI ▸ Options… turns the following off for good. The
-panel can be closed while it works;
-the status bar shows the same state, and Escape stops it. The transcript follows the work
-only while you are at the bottom of it: scroll up to read and it stays, with a button
-back to the latest.
+**Assistant** (Ctrl+Shift+A, or the *AI* cell in the status bar) opens a conversation
+about the open map. Ask a question or say what to change. The assistant reads the map and
+edits it with the editor's own tools while you watch.
 
-It can read everything: the map's facts and statistics, the units with every property,
-doodads, sprites, locations, strings, switches, sounds, the triggers as text, the trigger
-script, the settings of any unit type, upgrade or technology, the fog, the terrain, Check
-Map, what you have selected, and a screenshot of any area. It can change nearly
-everything the editor can: paint terrain, place, move and edit units, doodads and
-sprites, add and edit locations, set fog, name the map, write and rearrange triggers,
-edit strings, build the trigger script, set up players and forces, change unit, upgrade
-and technology settings, and resize the map. It knows the same genre guides and builds
-the same toolkit systems as Make Scenario, so "add kill to cash" is one call rather than
-a page of triggers; it lays out the same layout presets ("make this a two-lane defense")
-and paints terrain as shapes — a plateau with a ramp that fits, a lane that stays
-walkable, a river with a bridge — fits a ramp or a bridge on ground already there, tells
-you whether units can walk from one place to another, and checks the game's silent rules
-(a player who owns nothing is defeated at once) and fixes them when asked. Each edit is
-its own undo step, and the folded line of a turn that changed the map carries the Undo
-for all of that turn's edits in one press.
+It can **read** everything: the map's facts and statistics, units with all their
+properties, doodads, sprites, locations, strings, switches, sounds, the triggers and
+trigger script, unit, upgrade and technology settings, fog, terrain, Check Map results,
+your selection, and a screenshot of any area.
 
-The chips above the input suggest a question for the layer you are on and what you have
-selected. Right-click on the map and choose *Ask AI about this spot / the selection /
-this area…* to start a message about it. The *Picture* tick sends a screenshot of the
-visible area with the message. With every message the model gets the map's current state
-— players, counts, locations, the selection, where the view is, the top of the undo
-stack — and, once per map, a reference to the tileset's terrains, the doodads, the unit
-table and the trigger vocabulary; scmjs.dev caches that, so the second message costs
-little more than the words you typed. The assistant stops after a number of rounds of
-tool calls (24 unless you change it) and offers to continue.
+It can **change** nearly everything the editor can: terrain, units, doodads, sprites,
+locations, fog, the map's name, triggers, strings, the trigger script, players and forces,
+unit, upgrade and technology settings, and the map's size. It also knows the systems and
+layout presets that [Make Scenario](#make-scenario) uses, so "add kill to cash" or "make
+this a two-lane defense" takes one step. It draws terrain as shapes, such as a plateau with
+a ramp that fits, a lane that stays walkable or a river with a bridge. It can tell you
+whether units can walk from one place to another. It also checks the rules the game
+enforces without telling you (a player who owns nothing is defeated at once), and fixes
+them if you ask.
 
-Player Settings has a *Set up with AI…* button that asks the assistant to set the players
-and forces up from a sentence.
+**Watching a turn.** Each turn shows your message, the answer, and the work in between,
+folded into one block. While the turn runs, the block shows its latest steps: **▸** marks
+a read and **✎** a change. The strip at the top of the panel shows what the assistant is
+doing, how long it has taken and what it has cost so far. When the turn ends, the block
+folds to one line showing the step and edit counts, any failures, the time, the cost and
+an **Undo** button that reverses all of that turn's edits at once. Open the block to see
+every step, the screenshots the assistant took (click one to enlarge it) and its
+reasoning.
+
+On the map, the area a step is about to change is outlined, and the result flashes after
+the change. The view moves to each step and zooms out if the area is too big to show, but
+it never zooms in. If you scroll or zoom yourself, the view stays where you put it for the
+rest of the turn. To turn the following off completely, untick *Follow the assistant's
+work around the map* in Tools ▸ AI ▸ Options…. You can close the panel while the assistant
+works, since the status bar shows the same progress. Escape stops the turn.
+
+**Starting a message.** The chips above the input suggest questions based on the layer
+you are on and what you have selected. You can also right-click the map and choose *Ask AI
+about this spot / the selection / this area…*. Tick *Picture* to send a screenshot of the
+visible area with your message. Player Settings has a *Set up with AI…* button that sets
+up players and forces from one sentence.
+
+**Cost and limits.** Every message includes the map's current state: players, counts,
+locations, the selection, the view and the latest undo step. The first message about a map
+also includes a reference for the tileset, doodads, units and trigger vocabulary.
+scmjs.dev caches that reference, so later messages cost little more than the words you
+type. After 24 rounds of tool calls the assistant stops and offers to continue. You can
+change that number in Options.
+
+### Make Scenario
+
+![Make Scenario: the design document for a four-player madness map](docs/images/make-scenario.webp)
+
+**Make Scenario…** builds a whole scenario from a sentence, such as "a madness map", "an
+RPG about a marine lost on a Zerg world" or "a two-lane tower defense". Set the size,
+tileset and number of players, then press **Design**.
+
+**The design.** The model starts with a design document and builds nothing until you have
+read it. The document covers the genre and premise, the players and forces, each trigger
+system and its settings, a plan for the layout and the locations it needs, the objectives
+and the briefing. You can edit any of it directly, or open **Change the design first**,
+describe what should be different and press **Design again**.
+
+A location name in a system's settings can include `{p}` for the player number, as in
+"Spawn {p}". That system is then built once for each player, as long as the numbered
+locations exist.
+
+**Building.** **Build** works through the design one step at a time. Each step is a row
+that passes or fails separately: the map, terrain and locations, players and forces, each
+system, the objectives and briefing, the name, and a Check Map at the end.
+
+- **Terrain.** If the design matches a *layout preset* (corner camps around an arena, lanes
+  from spawns to a goal, a walled arena, a bound's winding course, or a town with a chain
+  of regions), the editor lays out the terrain itself in about a second. Otherwise the
+  model describes the terrain as shapes such as plateaus, lanes, rivers and arenas, and
+  the editor draws them with its own brush. That keeps lanes connected and puts ramps and
+  bridges only where they fit. This is the slow step, and a clock and the model's
+  reasoning show under the rows while it runs.
+- **Ramps and bridges.** Ramps always slope down toward the south-west or south-east,
+  like the game's own ramps. Ice gets no ramps, and bridges are only drawn in Jungle and
+  Space Platform, because those are the only tilesets whose pieces fit what the brush
+  draws.
+- **Systems.** The editor builds the systems it knows directly from their settings, the
+  same way every time, and shows them in green. These include hyper triggers, timed
+  spawns, kills paid in minerals, income, waves, lives, shops, healing, respawns,
+  teleports, kill zones, leaderboards, countdowns, last standing, alliances, escalation
+  stages, and a bound's obstacles and checkpoints. Anything else is written in TrigScript
+  and shown in gold, which requires the TrigScript plugin.
+
+When it finishes, choose **Review it…** or **Open the assistant** to keep going.
+
+### Generate Map and Redo Area
+
+![Generate Map: the plan as a coloured grid, with the designer's notes](docs/images/generate-map.webp)
+
+**Generate Map…** lays out a map from a description: the number of players, the kind of
+terrain, where the bases go and the symmetry (or let the model choose). The result is a
+*plan*, shown before anything is painted. It includes a rough grid of terrain types, the
+bases with their mineral lines and geysers, ramps, decoration, a name and description,
+and the designer's notes on how the layout is meant to play.
+
+**Apply** paints the plan onto a new map with your chosen size and tileset, or onto the
+open map if it is the same size. Terrain is painted with the isometric brush from the
+lowest ground up, so cliffs and shores form on their own. Bases are laid out the same way
+the Melee Wizard does it, and doodads are scattered where the plan puts them.
+
+![The plan applied: a two-player jungle map with a lake in the middle](docs/images/generated-map.webp)
+
+Treat the result as a starting point. **Refine** sends the plan back along with your
+changes ("more room around the naturals", "swap the lake for a plateau"), a picture of
+the result, and anything the editor refused or Check Map flagged. The revised plan
+replaces the old one, and the earlier result is undone first if nothing else was edited
+in between. Ramps are placed as doodads chosen by size, so check them against the cliffs
+before you play.
+
+**Redo Area…** does the same for one part of an existing map. Mark an area (or right-click
+it and choose *Redo this area with AI…*) and describe what should be there. The model sees
+the area and a margin around it, plus a picture, so the new ground joins the old at the
+edges.
+
+### Triggers
+
+**Write Triggers…** turns a description into triggers written in [TrigScript](#trigscript),
+so the TrigScript plugin must be switched on. The model sees the map's own names for its
+units, locations and switches. The script is checked here, and if it fails, the errors go
+back to the model for up to two rounds of fixes. **Build** installs it the same way
+TrigScript's own Build does, and the source is kept with the map. You can add to the
+map's existing script or replace all of its triggers.
+
+**Explain Triggers…** describes what the triggers do in play. It can cover all of them, a
+range, or the mission briefing, or answer a question about them. The explanation appears
+as it is written. The Trigger Editor, the Text Trigger Editor and Mission Briefing also
+have *Explain*, *Write…* and *Ask* buttons.
+
+### Names, briefings, reviews and strings
+
+![Name and Describe: three names to pick from](docs/images/name-describe.webp)
+
+**Name and Describe…** suggests three names with descriptions based on what is on the
+map. You can add a hint such as "short and grim" or "in German". Pick one and **Use this**
+writes it into Map Properties. Map Properties also has a *Suggest a name* button that fills
+in its fields the same way and waits for you to press OK.
+
+**Write Briefing…** writes objectives and narration and creates one mission briefing
+trigger per player, with the objectives as a Mission Objectives action and each line as a
+Text Message. You can edit the text before it is written.
+
+![Review Map on Big Game Hunters](docs/images/review-map.webp)
+
+**Review Map…** sends a picture of the whole map with its statistics and Check Map results.
+It returns a critique and a list of findings marked info, warning or problem, and findings
+that refer to a spot on the map have a **Go to** button. The chips offer a melee balance
+review, a readability review for scenarios, or "what to change first".
+
+![Rewrite Strings: every string in use, translated, with a tick per row](docs/images/rewrite-strings.webp)
+
+**Rewrite Strings…** applies an instruction to the map's strings, such as translate, fix
+spelling and grammar, shorten, or match the map's voice. It can cover every string in use,
+or only trigger text, the briefing or names. It shows a before-and-after table with a tick
+on every row that would change. **Apply ticked** writes them back in place without
+renumbering, so triggers still point at the right strings. The String Editor's *Rewrite
+with AI…* button opens the same dialog.
 
 ### Options, and turning it off
 
-**Tools ▸ AI ▸ Options…** is short. *Quality* is how hard the model works on a request,
-and so how long it takes and what it costs: *Standard* gives each feature the setting it
-was tuned for, *Quick* the cheapest, *Thorough* the highest. Under *Assistant*: the
-rounds of tool calls per message, the picture tick, whether the panel floats over the map
-or docks at the right under the Properties panel, and whether the model's reasoning
-summary is shown while it works. Which model answers is scmjs.dev's business and is
-never asked.
+**Tools ▸ AI ▸ Options…** has a few settings:
 
-The tick at the top, **Use the AI features** — also in the Account dialog — takes the
-whole AI away when off: the menu, the assistant, the status-bar cell and the buttons
-inside the editor's dialogs. Your account and the maps stored on it stay.
+- **Quality** sets how much effort the model puts into each request, and so how long it
+  takes and what it costs. *Standard* uses the level each feature was tuned for, *Quick*
+  is the cheapest and *Thorough* the most careful. You don't choose the model; scmjs.dev
+  picks it.
+- **Assistant** sets the rounds of tool calls per message and the picture tick. It also
+  sets whether the panel floats over the map or docks on the right under the Properties
+  panel, and whether the model's reasoning summary shows while it works.
+
+**Use the AI features**, at the top of Options and also in the Account dialog, removes the
+whole AI when unticked: the menu, the assistant, the status-bar cell and the AI buttons in
+other dialogs. Your account and the maps stored on it are not affected.
 
 ## Plugins
 
@@ -2197,7 +2170,8 @@ Plugins ▸ Browse Plugins… lists the plugins the project publishes; press Ins
 and it shows where the code comes from before adding it. Plugins ▸ Manage Plugins… lists
 what is installed, turns each on or off, and takes the address of any other plugin —
 a GitHub repository, a link to its `plugin.json`, or `http://localhost:3000/` while you
-write one. There is no sandbox: a plugin has the same access as the editor itself, so only
+write one. A plugin that has settings keeps them on its own page under Edit ▸ Preferences
+▸ Plugins. There is no sandbox: a plugin has the same access as the editor itself, so only
 add plugins you trust. The Add screen says as much and shows the manifest, the repository
 and the addresses it will fetch from.
 
@@ -2207,7 +2181,7 @@ and the addresses it will fetch from.
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
 | [Repair](https://github.com/scm-js/plugin-repair) | on open, Tools ▸ Repair Map… | Reads a map the way the game does and lists what is missing, damaged, repeated or the wrong size, each with the repair and what the game does without it. Rebuilds a stripped isometric record. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
-| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; Plugins ▸ scmscx.com Settings… holds its address and how many minimaps to ask for. |
+| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; its page in Edit ▸ Preferences ▸ Plugins holds its address and how many minimaps to ask for. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game, built into the saved map by the eudplib plugin (StarCraft: Remastered). See [TrigScript](#trigscript). |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
@@ -2222,11 +2196,13 @@ and the addresses it will fetch from.
 Each plugin has its own README with the details. Installing plugins, what they are allowed
 to do, and writing one are covered in [docs/plugins.md](docs/plugins.md). Browse Plugins
 also lists [Hello World](https://github.com/scm-js/plugin-hello-world), an example plugin
-with nothing in it but a Tools menu item, kept as the one to copy when writing your own.
+with nothing in it but a Tools menu item, kept as the one to copy when writing your own,
+and the [API Playground](https://github.com/scm-js/plugin-api-playground), a code editor
+for trying the plugin API on the open map before writing a plugin.
 
 ## Keyboard and preferences
 
-F1 lists every shortcut. The ones worth knowing up front:
+Press F1 for a list of every shortcut. These are the ones worth knowing up front:
 
 | Keys | |
 | --- | --- |
@@ -2284,133 +2260,123 @@ placement options, the panels and the recent files are remembered too.
 
 ## When something goes wrong
 
-Most of what the editor knows about a bad session used to go somewhere nobody looks. **View
-▸ Debug Console** opens a strip along the bottom of the window with the log in it: maps
-opened and saved, plugins started and stopped, where the game data came from, and every
-error the page threw.
+If the editor does something strange (or a bug happens) you can check the debug console to see
+what happened, use the bug report option to copy it, or use the **Report an Issue** to send it.
+
+### The debug console
+
+**View ▸ Debug Console** opens a strip along the bottom of the window with the log in it:
+maps opened and saved, plugins started and stopped, where the game data came from, and
+every error the page threw.
 
 ![The debug console](docs/images/debug-console.webp)
 
-It records whether the strip is open or not, so opening it *after* something odd happened
-still shows what happened — you do not have to make the problem occur again to catch it.
-The last couple of thousand lines are kept; older ones fall off the end, and **Clear** is
-there for starting from a clean slate before reproducing something.
-
-**Help ▸ Copy Bug Report** is the one to reach for when something has gone wrong: it puts
-the log on the clipboard with a short header above it — the version, the browser or desktop
-app, where the game data came from, the map's size and tileset, and the plugins with their
-versions — ready to paste into an issue. A long session is trimmed to its most recent lines
-so the paste fits in an issue; when it is, it says so.
-
-**Help ▸ Report an Issue…** opens a new issue on GitHub with the same report already in
-it, under three questions to answer: what you did, what you expected, and what happened. A
-link carries less than a paste, so the log in it is cut to its last few dozen lines; if the
-lines you need are older, use **Copy Bug Report** and paste over it.
-
-The console's own **Copy** does the same thing without the trim, and **Save…** writes it to
-a file. All three name the map *file* you have open, the plugins you have installed and the
-build you are running — nothing else about you, and never the folder the map is in.
+The log is kept whether the strip is open or not, so opening it *after* something odd
+happened still shows what happened. The
+last couple of thousand lines are kept; **Clear** empties it, for starting clean before
+reproducing something.
 
 **Warnings** and **Errors** narrow the list to what went wrong; the box beside them filters
 on any text. **Verbose** adds a line for every edit and every call a plugin makes into the
 editor. It answers "which plugin did that?", it is noisy by design, and it turns itself off
 when you next load the editor.
 
-If something is wrong and you want it looked at, the useful report is: what you did, what
-you expected, and a copied log.
+### Copying a bug report
 
-## What works, and what does not
+**Help ▸ Copy Bug Report** puts the log on the clipboard with a short header above it —
+the version, the browser or desktop app, where the game data came from, the map's size and
+tileset, and the plugins with their versions — ready to paste into an issue, a forum post
+or a message. A long session is trimmed to its most recent lines so the paste fits in an
+issue; when it is, the report says so.
 
-### Map files
+The console's own **Copy** does the same without the trim, and **Save…** writes the whole
+log to a file, for when it is too long to paste.
 
-| | Status |
-| --- | --- |
-| Open and save `.scm`, `.scx`, `.chk` | Yes. Save writes in place where the browser allows it (Chrome, Edge, the desktop app) and downloads elsewhere; the Save dialog chooses compression (PKWARE as StarEdit, zlib, none), encryption, which archive files ride along and which editor-only sections are left out, and shows what it will write first. |
-| Preserve unmodelled sections, repeated sections and custom archive files | Yes |
-| New map, with the full section set StarEdit writes | Yes |
-| Resize and crop, with a 3×3 anchor | Yes |
-| Switch revision: StarCraft 1.00, Hybrid, Brood War, Remastered | Yes |
-| Change a map's tileset | Yes, in Map Properties: the terrain is laid again with the new tileset's terrain (the doodads go with it, everything else stays), or keep the tile numbers as SCMDraft does. Clears the undo history. |
-| Open Recent | Yes. In Chrome, Edge and the desktop app a recent map reopens from disk (the file handle is kept in the browser; it asks once before reading). Firefox and Safari keep the names and reopen through File ▸ Open. |
-| Open a map from the file manager | Yes, in the desktop app. The installers (Windows setup, `.deb`, AppImage, macOS) register `.scm`, `.scx` and `.chk`, so a double-click, "Open with", a drag onto the app's icon or a path on the command line opens the map — in the running window when one is already up. The Windows zip registers nothing (nothing is installed), but a map dragged onto `scmJS.exe` still opens. Dropping a map anywhere on the window works in every build, and in the browser. |
-| In-app updates | Yes, in the desktop app. It checks GitHub at startup (a preference, on by default) and offers what it finds in a notice; Help ▸ Check for Updates… asks on demand. Nothing downloads or installs without being asked. Windows, the Linux AppImage and the `.deb` apply the update themselves; macOS can see one but not install it until the app is code-signed, so it offers the download page instead. |
-| More than one map open at once | Yes. Each map opened or created goes in its own tab under the toolbar, with its own undo history, selection and view; the Window menu lists them. Copy and paste work between them. A map that is not in front does no work: switching costs one repaint, and the tilesets the open maps use stay decoded. Preferences ▸ General turns it off for StarEdit's one map at a time. |
+### Filing an issue
 
-### Terrain
+**Help ▸ Report an Issue…** opens a new issue on GitHub with the report already filled in,
+under three questions: what you did, what you expected, and what happened. Answer those,
+check the rest, and submit. You need a GitHub account.
 
-| | Status |
-| --- | --- |
-| Isometric brush | Yes. Needs the map's `ISOM` section; the Repair plugin (on by default) rebuilds a stripped one. |
-| Rect, Tile and Blend brushes | Yes |
-| Flood fill, fill map, pick tile | Yes |
-| Elevation and buildability overlays | Yes: ground height per minitile, unbuildable tiles hatched. |
-| Water and lava animation | Yes |
-| Symmetry | Yes. The Isometric, Rect and Tile brushes, the fills, the Fog brush, and placing units, sprites, doodads and locations all land on the images of the spot too (mirror, both axes, 180°, 90° and the diagonals on a square map). Moving and deleting are not mirrored, and neither is Blend. |
-| Replace Terrain | Yes. One terrain type (or one exact tile) becomes another, over the whole map or the marked area, laid as the Rect brush lays it; one undo step. |
-| Terrain from Image | Yes, as a plugin installed by default (File ▸ Import, or right-click the terrain palette / map: *into Area…* lets you drag the target first). File, paste, drop or URL; colour adjustments; key colours per terrain with an eyedropper; despeckle and island removal. |
+The automatic issue contains a truncated log. If the lines that matter are not listed, use **Copy Bug Report** and paste it over the
+shortened one.
 
-### Objects
+Nothing is sent until you submit the issue yourself. Every report names the map *file* you
+have open, the plugins you have installed and the build you are running. Nothing specific
+to you is included.
 
-| | Status |
-| --- | --- |
-| Doodads: catalogue, placement rules, overlays, move, delete, convert to terrain | Yes |
-| Units: placement checks, properties, team colours, idle animation | Yes |
-| Sprites: pure and unit sprites, flags, properties | Yes |
-| Locations: create, resize, snap, rename, elevation flags | Yes |
-| Fog of war, per player | Yes |
-| Cut, copy and paste, including between maps | Yes |
-| Paint: lines, rectangles, ellipses, polygons, stars, freehand, spray, text and an eraser, out of units, sprites, doodads, terrain or fog | Yes, as a plugin (on by default): Tools ▸ Paint…. Outlined or filled, spaced, jittered, per-player; one undo step each. |
-| Find a map and open it | Yes, as a plugin (scmscx.com, on by default): File ▸ Find on scmscx.com… searches the map archive by name, tileset, players and size, shows minimaps, and opens the map you pick. |
-| Auto-place Start Locations | Yes. Tools ▸ Auto-place Start Locations puts one per player on a ring or in the corners, each moved to the nearest ground the placement checks accept, as one undo step. The Melee Wizard plugin (install it from Plugins ▸ Browse Plugins…, then Tools ▸ Melee Wizard…) does the elaborate version: click where Player 1 starts and the others land on its images under the symmetry you chose, with bases. |
-| Lock a layer | Yes, in the Layers panel: a locked layer's tools stop changing the map. |
-| Lay out a base's resources: the mineral line on the three-tile ring, the geyser past its end, for every player at once | Yes, as a plugin (Melee Wizard). Press on the hall spot and drag towards the minerals; presets for main, natural and third; amounts, end-patch amounts, mineral types; spots the map refuses are shown in red and left out. Also bases at every start location in one go, a blocking patch tool, mirroring the selected units, a symmetry check and a resource summary. |
-| See what a unit can walk: islands, unreachable pockets, the areas a map divides into and the chokes between them with widths, cliff seams with no ramp, ground distances between start locations | Yes, as a plugin (Walkability, installed by default: View ▸ Walkability or Ctrl+Shift+W). Read from the game's own minitile flags with buildings and resources as walls, drawn over the map as an overlay that stays on while you place units and follows every edit; hover reads the ground under the pointer; Tools ▸ Walkability… is the settings and the lists. |
+## What it does not do
+This section lists what is currently missing in the editor and the limits worth knowing before you rely on a feature.
 
-### Triggers
+### Not implemented
 
-| | Status |
-| --- | --- |
-| Classic editor: every condition and action, per-item disable | Yes |
-| Text editor in SCMDraft's TrigEdit syntax | Yes, as a plugin (TrigEdit, installed but starting off): tick it on in Manage Plugins for Triggers ▸ Text Trigger Editor…. File ▸ Import / Export Triggers read and write the same text without it. |
-| Scripting: TypeScript that builds into triggers | Yes, as a plugin (TrigScript, on by default): Triggers ▸ TrigScript…. Loops, helpers and tables to write triggers with, `program()` bodies that run in the game, checked against the map's names as you type, a simulator, and an editor beside the map. See [TrigScript](#trigscript). |
-| Import and export `.trg` and text triggers | Yes |
-| Validate triggers | Yes |
-| Mission briefings | Yes: the classic editor, the text editor's Briefing mode, Find and Statistics. The field layout is checked against the briefings on Blizzard's own maps (Ground Zero, Spring Thaw), which put the portrait slot where the community reference does not. Transmission is the one action no Blizzard map uses. |
-| Create Unit with Properties (CUWP) | Yes. Triggers ▸ Unit Properties Slots… edits the 64 slots (vitals, resources, hangar, the special states), the action picks a slot by what it sets, and Check Map flags a slot that sets nothing. |
-| EUD triggers | Yes, as far as an editor without an address database goes: any raw player and unit value is accepted, the player pick has an EPD box that turns a memory address into the player value a Deaths condition or Set Deaths action needs (and shows the address a raw value reaches), Check Map points out the raw values, and the script's raw level has `Memory` / `SetMemory`. |
+- **Changing the shortcuts.** Preferences ▸ Hotkeys lists them but cannot change them (yet).
+- **Backups and recovery.** Save overwrites the file, with no `.bak` beside it, and the
+  editor does not keep a copy of an unsaved map. If the tab or the app closes without a
+  save, the changes are gone. Keep your own copies for now, or use Save to scmjs.dev, which keeps
+  every revision.
+- **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
+  scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
+  Resizing and changing the tileset clear the undo history.
+- **Remastered graphics.** The editor draws the classic graphics from the 1.16 archives,
+  not Remastered's HD art.
 
-### Scenario data
+### Browsers and the desktop app
 
-| | Status |
-| --- | --- |
-| Map properties, players, forces, colours (including Remastered RGB) | Yes |
-| Unit, upgrade and technology settings, with per-player availability | Yes |
-| String editor with a usage list, and unused-string cleanup | Yes |
-| Text encodings | The encoding is guessed on open and chosen in Scenario ▸ Map Revision: UTF-8, Korean (EUC-KR / CP949), Japanese (Shift_JIS), Chinese (GBK, Big5), Cyrillic and Western Windows code pages. Written back in the same encoding on save. |
-| Interface language | English and Korean, in Preferences ▸ General; the default follows the browser. Korean covers the whole editor: menus, panels, every dialog, status messages, Check Map's findings, and the game's own vocabulary (unit, upgrade, technology, tileset and terrain names) as the editor shows it. The Korean was written by the editor's author with a dictionary, not by a native speaker, and reads like it; a review is invited (see [docs/development.md](docs/development.md#translations)). A map's own text, the text trigger format and the plugin API keep English names. |
-| Switch names | Yes |
-| Sound editor | Import converts MP3, FLAC, AAC, Ogg and any WAV to PCM WAV at a chosen rate; play, remove, adopt archive files and re-encode a listed `.wav` all work. The editor reads every WAV encoding the game and the usual tools produce itself (8 to 32-bit PCM, float, A-law, µ-law, IMA and Microsoft ADPCM), so the game's own sounds play and convert; MP3, Ogg and FLAC go through the browser's decoders. |
+- In Firefox and Safari, every save is a download, and a recent map reopens through
+  File ▸ Open instead of straight from disk. Chrome, Edge and the desktop app write in
+  place.
+- Test Map in the browser writes the map where the game lists it but cannot start the
+  game. In Firefox and Safari it downloads the map.
+- The Windows zip does not register `.scm`, `.scx` and `.chk`, since nothing is installed.
+  A map dragged onto `scmJS.exe` still opens.
+- On macOS the app sees a new version but cannot install it until the app is
+  code-signed, so it offers the download page instead.
 
-### Tools
+### Terrain and objects
 
-| | Status |
-| --- | --- |
-| Check Map | Yes |
-| Find (units, locations, sprites, strings, triggers) | Yes |
-| Statistics | Yes |
-| Export the map as a PNG, from full art down to a minimap | Yes |
-| Import and export strings | Yes |
-| Plugins (Plugins ▸ Browse Plugins… / Manage Plugins…) | Yes. Search the project's published plugins and install one, or load a `plugin.ts` from any public repository or URL; it can add menu items, context-menu entries, hotkeys, dialogs, floating panels and map tools of its own, and edit the map through undo. See [docs/plugins.md](docs/plugins.md). |
-| Look at and edit the file itself: every CHK section, its bytes, what each byte means | Yes, as a plugin (Section Explorer: install it from Plugins ▸ Browse Plugins…, then Tools ▸ Section Explorer…). A hex editor with the sections listed, fields coloured and named, values edited as numbers, choices, flags or text; sections added, removed, renamed and reordered. |
-| Repair a protected or damaged map: missing, repeated, mis-sized or hidden sections, a stripped ISOM | Yes, as a plugin (Repair, on by default: it checks every map as it opens, and Tools ▸ Repair Map… runs it by hand) |
-| Test Map | Yes (Ctrl+F5). Neither StarCraft build opens a map from the outside, so Test Map writes the map into a `scmJS` folder under the game's Maps folder, where Single Player ▸ Custom Game lists it, and the desktop app starts the game as well. In Chrome and Edge the map goes into a folder you pick once (the game's Maps folder); other browsers download it. |
-| Make a whole scenario from a sentence, generate a map from a description, write triggers from one, explain triggers, name and describe the map, write a briefing, get a critique, translate the strings, or ask an assistant to make changes | Yes (Tools ▸ AI, in the scmjs.dev plugin — shipped with the editor and on from the start; it runs on scmjs.dev and the first request starts a free trial — see [The AI](#the-ai)). Every change it makes is one undo step; what the settings dialogs write is a transaction outside undo, as by hand. |
-| Keep maps on an account with numbered revisions and notes, and open them from any machine | Yes (Account ▸ Save to scmjs.dev… and My Maps…, signed in — see [Your scmjs.dev account](#your-scmjsdev-account)) |
-| Edit one map with other people at the same time | Yes (Account ▸ Share this Map…, signed in; the others join from the link — see [Editing a map together](#editing-a-map-together)) |
+- The isometric brush needs the map's `ISOM` section. The Repair plugin, on by default,
+  rebuilds one a protected map had stripped.
+- Symmetry mirrors the brushes, the fills and placing things, but not moving, deleting
+  or the Blend brush.
+- Changing the tileset lays the terrain again and drops the doodads; the units, sprites,
+  locations, fog and triggers stay.
+
+### Triggers and text
+
+- In the Trigger dialogs, EUD values are raw numbers: the EPD box turns a memory address
+  into the player value that reaches it, but nothing names what an address holds. For
+  named reads and writes of the game (a unit's hit points, a player's minerals, the unit
+  tables), use a [TrigScript](#trigscript) program, or the
+  [Magenta](https://github.com/scm-js/plugin-magenta) trigger editor (Plugins ▸ Browse
+  Plugins…), whose EUD conditions and actions work like the game's own. Both play on
+  Remastered only.
+- Transmission is the one briefing action no Blizzard map uses, so its layout could not
+  be checked against one.
+- TrigScript's programs play on Remastered only; `trigger()` works on every version. The
+  full list is under [TrigScript's reference](#reference).
+- A character the map's text encoding cannot hold is saved as `?`. Check Map and the
+  Save dialog say so beforehand.
+- The Korean translation was written with a translation, not by a native speaker. A
+  review is welcome (see [docs/development.md](docs/development.md#translations)).
+
+### The scmjs.dev features
+
+- The AI, keeping maps on an account and editing a map together all run on scmjs.dev
+  and need a connection. The AI starts with a free trial; keeping and sharing maps need an
+  account.
+- On a shared map, if two people press OK in the same dialog, the second OK wins. A
+  resize, a tileset change or a raw section edit starts everyone's undo history again.
+
+### Plugins
+
+A plugin runs with the same access as the editor itself; there is no sandbox. Install
+ones from sources you trust. The plugins listed under Browse Plugins… are reviewed
+before they are listed.
 
 ## Documentation
 
-All of it is also a site — [docs.scmjs.dev](https://docs.scmjs.dev) — with these documents
+All of this documentation is also a site — [docs.scmjs.dev](https://docs.scmjs.dev) — with these documents
 as pages, a search box, and a reference for every call in the plugin API generated from
 the editor's own declarations. It is built from the tag the hosted editor runs, so the
 version in its footer is the one at [editor.scmjs.dev](https://editor.scmjs.dev). These
@@ -2418,17 +2384,14 @@ files stay the source; the site renders them.
 
 | Document | Covers |
 | --- | --- |
+| [docs/installing.md](docs/installing.md) | The hosted editor, the desktop app, the container, and getting the game's graphics |
 | [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, mods as data sets, and how the pictures get drawn |
-| [docs/file-formats.md](docs/file-formats.md) | What is in a map file, what the editor preserves, revisions, protected maps |
+| [docs/file-formats.md](docs/file-formats.md) | What the editor does with a map file: what it preserves, what Save can strip, revisions, protected maps |
 | [docs/chk-format.md](docs/chk-format.md) | Every section of the scenario file, byte by byte |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
 | [docs/development.md](docs/development.md) | Running from source, the desktop app and the container, releases, contributing |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |
-
-The screenshots in this guide are made by `scripts/guide-screenshots.mjs` against the
-editor's own fixture maps — and, for the scmjs.dev pictures, a stand-in for the service
-with example answers — so they can be taken again when the chrome changes.
 
 ## License
 

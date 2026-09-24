@@ -1,7 +1,7 @@
 # Trigger reference
 
-Every trigger condition and action in StarCraft and Brood War: what it does, the
-arguments it takes, how it is written in text, and where each argument is stored in the
+This reference covers every trigger condition and action in StarCraft and Brood War: what
+each one does, the arguments it takes, how it is written in text, and where each argument is stored in the
 map file.
 
 The number, the text form and the table on each page come from the same tables the
@@ -56,7 +56,7 @@ In text, a disabled line starts with `;`.
 
 ## Players and groups
 
-The values a trigger stores for a player. The same 27 values number the owners a trigger
+These are the values a trigger stores for a player. The same 27 values number the owners a trigger
 can have (one byte each in the record) and are what the Player arguments of conditions
 and actions store.
 
@@ -105,7 +105,7 @@ has an EPD box that turns a memory address into that value.
 
 ## Argument values
 
-The values the enumerated arguments take, and the number each is stored as. The names in
+These are the values the enumerated arguments take, and the number each is stored as. The names in
 parentheses are the other spellings the editor's text format accepts.
 
 ### Comparisons
@@ -377,6 +377,8 @@ All numbers are little-endian. An unused action slot is all zeros.
 <!-- /generated -->
 
 ## Conditions
+
+A condition is a test a trigger makes on every cycle. These are all of them:
 
 | Condition | True when |
 | --- | --- |
@@ -817,6 +819,8 @@ Switch("Switch 1", set);
 ```
 
 ## Actions
+
+An action is what a trigger does once its conditions hold. These are all of them:
 
 | Action | Does |
 | --- | --- |

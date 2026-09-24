@@ -139,7 +139,7 @@ ${footer(version, repoUrl, url)}
 function footer(version, repoUrl, url) {
   const source = url ? `<a href="${repoUrl}">the repository</a>` : "";
   return `<footer class="page-foot">
-  <p>${version ? `scmJS ${escapeHtml(version)} · ` : ""}Generated from ${source}. StarCraft and Brood War are trademarks of Blizzard Entertainment; this project ships none of their data.</p>
+  <p>${version ? `scmJS ${escapeHtml(version)} · ` : ""}Generated from ${source}. The source is under the <a href="${repoUrl}/blob/main/LICENSE">MIT license</a>, which does not cover what <a href="${repoUrl}/blob/main/ATTRIBUTION.md">ATTRIBUTION.md</a> lists. StarCraft and Brood War are trademarks of Blizzard Entertainment; this project ships none of their data.</p>
 </footer>`;
 }
 

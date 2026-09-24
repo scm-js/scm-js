@@ -30,6 +30,7 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseDefaultSpecs, parseGithubSpec } from "./vendor-plugins.mjs";
+import { withRuntimeNotices } from "./lib/notices.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const DEFAULTS = resolve(root, "src/plugins/defaults.ts");
@@ -135,8 +136,14 @@ export async function bundleRuntimes({ outDir = resolve(root, "dist"), log = con
       await cp(resolve(got.dir, f.path), resolve(into, f.path));
     }
     await cp(resolve(got.dir, "runtime.json"), resolve(into, "runtime.json"));
-    done.push({ spec, plugin: got.manifest.plugin, version: got.manifest.version });
+    done.push({ spec, plugin: got.manifest.plugin, version: got.manifest.version, dir: into });
   }
+  // The build's THIRD-PARTY-NOTICES.txt knows nothing of the runtimes; they carry their own
+  // licences (Pyodide's MPL among them), which go into it here, where they start shipping.
+  const notices = resolve(outDir, "THIRD-PARTY-NOTICES.txt");
+  const text = await readFile(notices, "utf8").catch(() => null);
+  if (text === null) throw new Error(`${outDir} holds no THIRD-PARTY-NOTICES.txt; build it with vite first.`);
+  await writeFile(notices, withRuntimeNotices(text, done));
   for (const name of await readdir(CACHE).catch(() => [])) {
     const dir = resolve(CACHE, name);
     if (!kept.has(dir)) await rm(dir, { recursive: true, force: true });

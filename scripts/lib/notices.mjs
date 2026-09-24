@@ -76,3 +76,35 @@ export function buildNotices(root) {
 
   return parts.join("\n");
 }
+
+/** The line that starts the runtimes' part of the file, so a second run replaces it. */
+export const RUNTIMES_HEADING = "Plugin runtimes (desktop app and container image only)";
+
+/**
+ * The notices of the plugin runtimes a desktop or container build carries: each runtime's
+ * `licenses/` files as the plugin ships them (eudplib's are its own licence, euddraft's,
+ * Pyodide's and an ATTRIBUTION.md). The web build cannot write these — the runtimes are
+ * copied into `dist/` after it, by `scripts/bundle-plugin-runtimes.mjs` — so that script
+ * adds this to the file the build wrote, through `withRuntimeNotices`. `runtimes` is
+ * `{ plugin, version, dir }` with `dir` the runtime as copied. Throws on a runtime with no
+ * licence files: redistributing one without its notices is what this exists to prevent.
+ */
+export function runtimeNotices(runtimes) {
+  if (runtimes.length === 0) return "";
+  const parts = [rule(RUNTIMES_HEADING)];
+  for (const { plugin, version, dir } of runtimes) {
+    const licenses = join(dir, "licenses");
+    const files = existsSync(licenses) ? readdirSync(licenses).filter((f) => !f.startsWith(".")).sort() : [];
+    if (files.length === 0) throw new Error(`notices: the ${plugin} ${version} runtime carries no licenses/ files`);
+    for (const f of files) parts.push(rule(`runtime ${plugin} ${version}: ${f}`), readFileSync(join(licenses, f), "utf8").trim(), "");
+  }
+  return parts.join("\n");
+}
+
+/** `text` (the build's notices) with the runtimes' part replaced by `runtimeNotices(runtimes)`. */
+export function withRuntimeNotices(text, runtimes) {
+  const at = text.indexOf(rule(RUNTIMES_HEADING));
+  const base = (at < 0 ? text : text.slice(0, at)).replace(/\n*$/, "\n");
+  const extra = runtimeNotices(runtimes);
+  return extra ? `${base}\n${extra}` : base;
+}

@@ -1827,11 +1827,11 @@ shared it and, for a map kept open, its picture.
 
 *Keep it open* decides what happens when people leave:
 
-- **Until everyone leaves** shares the map only while people are in it. Nothing is stored:
-  sharing ends when you stop it, half an hour after the last person leaves, or when the
-  server restarts.
-- **For a day**, **for a week** (the choice to start with) or **for a month** saves the map
-  to [My Maps](#your-scmjsdev-account) and keeps it open at its link, so people can come and
+- **Until everyone leaves** (the choice to start with) shares the map only while people are
+  in it. Nothing is stored: sharing ends when you stop it, half an hour after the last
+  person leaves, or when the server restarts.
+- **For a day**, **for a week** or **for a month** saves the map to
+  [My Maps](#your-scmjsdev-account) and keeps it open at its link, so people can come and
   go as they like, on different days if they want. Each time everyone has left, the map is
   saved as a new revision with a note naming who changed it (*Edited together: Kim, Sam*),
   and the next person to open the link carries on from there. The time counts from the last

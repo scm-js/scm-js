@@ -311,7 +311,8 @@ const SCENES = [
     await p.drop("(8)Big Game Hunters.scm");
     await p.minimap(0.22, 0.2);
     await p.menu("Account", /^Share this Map/); await p.wait(800);
-    // Kept open for a week, which the dialog offers first.
+    // Kept open for a week (the dialog starts on Until everyone leaves), so My Maps has it.
+    await p.page.locator(".dlg select").first().selectOption("7"); await p.wait(300);
     await p.dialog("share-keep");
     await p.page.locator(".dlg button", { hasText: /^Start sharing$/ }).click();
     await p.page.locator(".dlg .sd-link input").waitFor({ timeout: 30_000 }); await p.wait(500);

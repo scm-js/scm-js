@@ -79,3 +79,39 @@
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
   game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib
   needs 1.16.1+.
+
+### The reference's extras (2026-09-23): ISOM model, examples, pictures, chk.ksy
+
+`docs/chk-format.md` now explains ISOM in full (lattice, words, values, 14 shapes, worked
+example, diamonds → tiles, per-tileset value tables), the CV5 group record under MTXM, STR
+control codes and layout facts, a UNIT/STR/ISOM hex example each, VCOD's SHA-256, and a
+"How the sections fit together" page. Everything that can be generated is: `npm run
+docs:reference` also writes `docs/images/{isom-lattice,isom-shapes,isom-example,chk-references}.svg`
+(`scripts/lib/chk-diagrams.mjs`, sized for the site's ~760 px column — wider pictures shrink
+their labels to unreadable) and `docs/chk.ksy` (`scripts/lib/chk-kaitai.mjs`, from `LAYOUTS` —
+every row needs a `field` or an explicit `id` — plus the trigger record and enums).
+
+Facts found on the eight fixture maps and pinned by `tests/chkReference.test.ts`:
+- a diamond's value is stored 8× and the copies always agree; bits 0/15 always clear;
+- the flag nibble is fixed by position (`isomWordFlags`), **except** that ground the map was
+  started with and never repainted has flags 0 — one flat value per map. Read a word's owner
+  from its position, not its flags;
+- ISOM shape semantics (`ISOM_SHAPES`, quarters O/I/edge) agree with flat neighbours; which
+  terrain of an edge set is outside/inside (`ISOM_EDGE_SETS`) comes from the brush's
+  `isomTables` (test needs the tilesets); the worked example is what `paintIsom` paints;
+- STR: 1024 slots, unused ones point at one 0 byte right after the offsets; MASK all 0xFF;
+  VCOD identical to `defaultVcod()`.
+Chkdraft's shape names for the inner corners ("jut in N" etc.) are inconsistent with the
+neighbours, so the page describes shapes by which way the corner points.
+
+`chk.ksy` was checked ad hoc (not a dependency): `kaitai-struct-compiler` 0.11 (npm, JS
+build) compiles it to JavaScript and Python, and the generated JS parser read all eight maps
+with no disagreement against `parseScenario` (units, sprites, doodads, locations, triggers,
+strings, ISOM, MTXM). Redo that after changing the generator.
+
+Later the same day: a "Protected maps" page (container tricks, section tricks, a reading
+checklist) and hex examples for THG2, DD2, MRGN, FORC, PUNI and UNIx (`recordDump` in
+`chk-reference.mjs`, from the real encoders; the "is up to date" test covers them). The
+game-behaviour claims on the Protected maps page are the ones the reader, the registry's
+combine modes and the Repair plugin's findings already make; nothing new about the game was
+asserted, so the probe-map pass (melee/UMS reads, bad values, VCOD) is still owed.

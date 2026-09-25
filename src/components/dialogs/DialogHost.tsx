@@ -39,6 +39,7 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   exportImage: from(file, (m) => m.ExportImageDialog),
   confirmClose: from(file, (m) => m.ConfirmCloseDialog),
   recovery: from(() => import("./RecoveryDialog"), (m) => m.RecoveryDialog),
+  previousVersions: from(() => import("./PreviousVersionsDialog"), (m) => m.PreviousVersionsDialog),
   mapProperties: from(map, (m) => m.MapPropertiesDialog),
   resizeMap: from(map, (m) => m.ResizeMapDialog),
   mapRevision: from(map, (m) => m.MapRevisionDialog),

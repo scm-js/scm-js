@@ -1,4 +1,4 @@
-import { baseName, logError, logInfo } from "../editor/log";
+import { baseName, logError, logInfo, logWarn } from "../editor/log";
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
@@ -19,7 +19,8 @@ import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
 import { peekUnitAssets } from "../formats/units/load";
 import { DEFAULT_START_PLACEMENT, placeStartLocations, type StartLayout } from "../editor/startLocations";
 import { terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../data/tilesets";
-import { openMapFile, saveBytes, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
+import { openMapFile, saveBytes, type BeforeOverwrite, type MapFileHandle, type SaveOutcome } from "../services/mapIo";
+import { keepPrevious, type KeptPrevious } from "../services/previousVersions";
 import { defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
 import { hostTerms } from "../editor/platform";
@@ -288,7 +289,10 @@ export interface SaveRequest {
 }
 
 /** What `saveBytes` does, so tests can stand in for the browser. */
-export type SaveWriter = (bytes: Uint8Array, fileName: string, handle: MapFileHandle | null) => Promise<SaveOutcome | null>;
+export type SaveWriter = (bytes: Uint8Array, fileName: string, handle: MapFileHandle | null, before?: BeforeOverwrite) => Promise<SaveOutcome | null>;
+
+/** Which kinds of keeping the old file this session has already explained in a notice. */
+const explained = new Set<KeptPrevious["kind"]>();
 
 /**
  * Write the open map and record the result: the file name and handle to write back to next
@@ -305,7 +309,10 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
     const built = await buildOutgoing(store, { options: req.options, fileName: req.fileName, purpose: "save", plain: req.bytes });
     const bytes = built.bytes;
-    const outcome = await write(bytes, req.fileName, req.handle);
+    // Save ▸ keep the file being replaced: `.bak` on the desktop, the browser's storage otherwise.
+    const kept: { result: KeptPrevious | null } = { result: null };
+    const before: BeforeOverwrite | undefined = store.get(preferencesAtom).save.backup ? async (existing) => { kept.result = await keepPrevious(existing); } : undefined;
+    const outcome = await write(bytes, req.fileName, req.handle, before);
     if (!outcome) { logInfo("document", `Save of the ${what} was dismissed`); return false; }
     const size = formatBytes(bytes.length);
     logInfo("document", `Saved the ${what}`, { file: baseName(outcome.fileName), bytes: bytes.length, route: outcome.route, format: req.options?.format, compression: req.options?.compression });
@@ -327,7 +334,16 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
       });
     } else {
       store.set(statusMessageAtom, `Saved ${outcome.fileName} — ${size}`);
-      store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})` });
+      store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})${keptNote(kept.result)}` });
+    }
+    if (kept.result) {
+      const k = kept.result;
+      if (k.kind === "failed") {
+        logWarn("document", "Could not keep the file the save replaced", { file: baseName(outcome.fileName), message: k.message });
+        store.set(pushToastAtom, { kind: "warn", title: t("The previous file was not kept"), detail: t("The save went through, but the file it replaced could not be kept: {message}", { message: k.message }) });
+      } else {
+        logInfo("document", k.kind === "bak" ? "Kept the replaced file as .bak" : "Kept the replaced file in storage", { file: baseName(outcome.fileName) });
+      }
     }
     for (const u of built.unprepared) {
       store.set(pushToastAtom, { kind: "error", ttl: 0, title: t("{label} is not up to date in this file", { label: u.label }), detail: /[.!?…]$/.test(u.message.trim()) ? u.message.trim() : `${u.message.trim()}.` });
@@ -345,6 +361,15 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     store.set(pushToastAtom, { kind: "error", title: t("Could not save the {what}", { what }), detail: message });
     return false;
   }
+}
+
+/** The Save notice's word on the file it replaced — once a session for each kind, since after that it is expected. */
+function keptNote(k: KeptPrevious | null): string {
+  if (!k || k.kind === "failed" || explained.has(k.kind)) return "";
+  explained.add(k.kind);
+  return k.kind === "bak"
+    ? t(". The file it replaced is kept as {name}.", { name: baseName(k.path) ?? k.path })
+    : t(". The version it replaced is kept in File ▸ Previous Versions….");
 }
 
 /**

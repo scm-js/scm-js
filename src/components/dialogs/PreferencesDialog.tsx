@@ -58,6 +58,7 @@ import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type Pl
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
+import { KEEP_PER_FILE, listPrevious, removePrevious, type PreviousEntry } from "../../services/previousVersions";
 import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
@@ -204,6 +205,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
         <GameDataSection />
         <StorageSection onCleared={reseed} />
         <RecoverySection onShow={() => open("recovery")} />
+        <PreviousSection onShow={() => open("previousVersions")} />
         <TransferSection onImported={() => setW(live())} />
       </div>
     ),
@@ -393,6 +395,16 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
           </Field>
         </div>
         <Hint>{t("A map already saved in this session starts from its last options either way. New maps means a map with no file yet, or one opened from a bare .chk.")}</Hint>
+        <Check
+          label={hostTerms().desktop ? t("Keep the file a save replaces as a .bak beside it") : t("Keep the version a save replaces")}
+          checked={p.save.backup}
+          onChange={(e) => save({ backup: e.target.checked })}
+        />
+        <Hint>
+          {hostTerms().desktop
+            ? t("Saving over map.scx first copies it to map.scx.bak, replacing an older .bak.")
+            : t("{Here} cannot put a file beside another, so the last {n} versions of each file are kept in {here} instead, under File ▸ Previous Versions…. A download replaces nothing, so there is nothing to keep.", { Here: hostTerms().Here, here: hostTerms().here, n: KEEP_PER_FILE })}
+        </Hint>
       </Section>
       <Section title={t("Recovery")}>
         <Check label={t("Keep a recovery copy of maps with unsaved changes")} checked={p.recovery.enabled} onChange={(e) => recovery({ enabled: e.target.checked })} />
@@ -834,6 +846,47 @@ function RecoverySection({ onShow }: { onShow: () => void }) {
       </div>
       {state !== null && state.ours > 0 && <Hint>{t("{n, plural, one {# map open now has a copy} other {# maps open now have copies}}; each goes when its map is saved or closed.", { n: state.ours })}</Hint>}
       {!recoveryPersists() && <Hint>{t("{Here} is not letting the editor store anything, so the copies would not outlive this page.", { Here: hostTerms().Here })}</Hint>}
+    </Section>
+  );
+}
+
+/** The versions saves wrote over, kept in IndexedDB: how many, the dialog, and a Discard for the lot. */
+function PreviousSection({ onShow }: { onShow: () => void }) {
+  const [entries, setEntries] = useState<PreviousEntry[] | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void listPrevious().then((e) => { if (live) setEntries(e); });
+    return () => { live = false; };
+  }, [run]);
+  const size = entries?.reduce((n, e) => n + e.size, 0) ?? 0;
+  const discard = async () => {
+    for (const e of entries ?? []) await removePrevious(e.key);
+    setAsking(false);
+    setRun((n) => n + 1);
+  };
+  return (
+    <Section title={t("Previous versions")}>
+      <div className="row">
+        {asking ? (
+          <>
+            <span className="hint grow">{t("Discard {n, plural, one {the kept version} other {all # kept versions}}? The files on disk are not touched.", { n: entries?.length ?? 0 })}</span>
+            <Button size="sm" onClick={() => setAsking(false)}>{t("Cancel")}</Button>
+            <Button size="sm" variant="danger" onClick={() => { void discard(); }}><Trash2 size={11} /> {" "}{t("Discard")}</Button>
+          </>
+        ) : (
+          <>
+            <span className="grow dim">
+              {entries === null ? t("Looking…")
+                : entries.length === 0 ? t("None kept.")
+                : t("{n, plural, one {# version} other {# versions}} of files saves wrote over, {size}.", { n: entries.length, size: formatBytes(size) })}
+            </span>
+            <Button size="sm" disabled={!entries || entries.length === 0} onClick={onShow}><History size={11} /> {" "}{t("Previous Versions…")}</Button>
+            <Button size="sm" variant="danger" disabled={!entries || entries.length === 0} onClick={() => setAsking(true)}><Trash2 size={11} /> {" "}{t("Discard…")}</Button>
+          </>
+        )}
+      </div>
     </Section>
   );
 }

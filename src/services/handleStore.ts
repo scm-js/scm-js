@@ -6,7 +6,7 @@
  * first use after a reload (`queryPermission` / `requestPermission` on the handle), and
  * Firefox and Safari have no handles to keep, so every caller treats a `null` as "ask
  * again". One object store for them, keyed by a string the caller chooses (the recovery copies
- * have a second store in the same database); a memory `Map` stands in
+ * and the previous versions of saved files have stores of their own in the same database); a memory `Map` stands in
  * when there is no IndexedDB (tests, a browser with site data blocked).
  */
 
@@ -14,9 +14,11 @@ const DB_NAME = "scmjs";
 const STORE = "handles";
 /** The recovery copies of modified maps (`services/recovery.ts`), in the same database. */
 export const RECOVERY_STORE = "recovery";
-// 2 added the recovery store. The upgrade only ever adds a store that is missing.
-const VERSION = 2;
-const STORES = [STORE, RECOVERY_STORE];
+/** The versions of files a save wrote over (`services/previousVersions.ts`). */
+export const PREVIOUS_STORE = "previous";
+// 2 added the recovery store, 3 the previous versions. The upgrade only ever adds a store that is missing.
+const VERSION = 3;
+const STORES = [STORE, RECOVERY_STORE, PREVIOUS_STORE];
 
 /** The part of a handle every caller relies on; the DOM lib lacks the permission methods. */
 export interface StoredHandle {

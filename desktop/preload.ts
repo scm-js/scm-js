@@ -3,7 +3,7 @@
  * `src/gamedata/desktop.ts` (keep the two in step). Runs sandboxed; nothing here touches
  * Node beyond `process.argv` and `process.platform`.
  */
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import type { DesktopBridge, UpdateProgress } from "../src/gamedata/desktop";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? "";
@@ -42,6 +42,13 @@ const bridge: DesktopBridge = {
       // Ask for what the app was started with; the main process answers on the same channel.
       ipcRenderer.send("file:ready");
       return () => { ipcRenderer.off("file:open", handler); };
+    },
+    backup: async (file) => {
+      // The page has a handle, not a path; Electron knows the path behind the File it reads.
+      let path = "";
+      try { path = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
+      if (!path) return { ok: false, message: "The file has no path on disk." };
+      return ipcRenderer.invoke("file:backup", path);
     },
   },
   updates: {

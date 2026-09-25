@@ -39,9 +39,11 @@ export interface Preferences {
    * What the Save dialog starts from: the options the file was opened with
    * (`"asOpened"`, the default), or one of its presets. `compression` is for a map with
    * no origin — new, or opened from a bare .chk — where there is nothing to follow;
-   * `"asOpened"` there means StarEdit's PKWARE.
+   * `"asOpened"` there means StarEdit's PKWARE. `backup` keeps the file a save writes
+   * over: `<name>.bak` beside it in the desktop app, the browser's storage otherwise
+   * (`services/previousVersions.ts`).
    */
-  save: { start: "asOpened" | "everything" | "smallest"; compression: "asOpened" | ArchiveCompression };
+  save: { start: "asOpened" | "everything" | "smallest"; compression: "asOpened" | ArchiveCompression; backup: boolean };
   /**
    * Recovery copies (`hooks/useRecovery.ts`): while a map has unsaved changes, a copy of
    * it is kept in the browser's storage every `minutes` and when the editor goes to the
@@ -128,7 +130,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   multipleMaps: true,
   newMap: { tileset: "badlands", width: 128, height: 128, version: "broodwar" },
   startup: { reopenLast: false, recents: 10 },
-  save: { start: "asOpened", compression: "asOpened" },
+  save: { start: "asOpened", compression: "asOpened", backup: true },
   recovery: { enabled: true, minutes: 2 },
   undoLevels: 200,
   view: { wheel: "scroll", zoomToCursor: true },

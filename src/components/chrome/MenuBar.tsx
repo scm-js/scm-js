@@ -304,6 +304,7 @@ function useMenus(): Menu[] {
           ],
         },
         dlg(msg("Recover Maps…"), "recovery"),
+        dlg(msg("Previous Versions…"), "previousVersions"),
         sep,
         { kind: "item", label: msg("Save"), shortcut: "Ctrl+S", onSelect: () => { void save(); } },
         dlg(msg("Save As…"), "saveAs", "Ctrl+Shift+S"),

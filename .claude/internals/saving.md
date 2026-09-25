@@ -140,3 +140,32 @@ nothing was asked. The browser's `beforeunload` leaves them — that is the acci
 
 Not done: the `.bak`/previous-version slice (2 in the plan); copies of a shared map's guest are
 written like any other; no age limit on leftovers.
+
+### Keeping the file a save replaces (`services/previousVersions.ts`, `desktop/backup.ts`, `PreviousVersionsDialog`, 2026-09-25)
+
+Slice 2 of the plan, widened: `Preferences.save.backup` (default **on**). `saveBytes` / `saveBlob`
+take an optional `BeforeOverwrite` callback, called by `tellBefore` with `handle.getFile()` *after*
+the readwrite permission and *before* `createWritable` — on the handle route and on the picker
+route (Save As onto an existing file); an empty file (one the picker just made) or an unreadable one
+is skipped, and a throwing callback never stops the write. The callback must read the bytes before
+it returns: a `File` from a handle goes stale once the file changes. `SaveWriter` gained the same
+4th argument, and `saveDocument` passes it only with the preference on (test-pinned).
+
+`keepPrevious(file)`: the desktop first — `bridge.files.backup(file)` (optional on the bridge type,
+since an older preload lacks it). The page has no paths, so the preload asks
+`webUtils.getPathForFile(file)` and invokes `file:backup`; main's `backupMap` copies to
+`<path>.bak` (so `x.scx.bak`, extension kept visible), **only** for an existing regular file ending
+`.scm/.scx/.chk` — plugins share the page's privileges and must not get a general copy/overwrite
+primitive. On failure, or in a browser, the bytes go to the `previous` store (IndexedDB **VERSION
+3**): `{ key: "<name>:<at>", fileName, at, modified, size, bytes }`, trimmed by `overLimits` to 3
+per file name, 30 total, 256 MB total (oldest first). Keyed by *name* — a handle has no path and
+`isSameEntry` is async per pair — so two different `map.scx` share the three slots.
+
+The Save toast names the kept copy once per session per kind (`explained`); a failure is a warn
+toast every time. File ▸ Previous Versions… lists the store (Open → `openFileInto(…, "new")` with
+no handle and `name (previous).scx`, so Save asks where; Save As → `saveBytes` with no handle;
+Discard). Preferences ▸ Storage has a Previous versions section beside Recovery copies.
+
+Verified headlessly: Save As → Save over an OPFS handle (picker stubbed to OPFS) keeps the version
+and the dialog reopens it. The Electron `.bak` path is covered by `backupMap`'s unit test and a
+desktop bundle build; not run in a live desktop window.

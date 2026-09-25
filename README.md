@@ -1644,6 +1644,15 @@ map saves either way.
 
 The options confirmed here are what Ctrl+S reuses for that map from then on.
 
+A save that writes over a file keeps what it replaced. The desktop app copies the old
+file to a `.bak` beside it first (`Lagoon.scx` to `Lagoon.scx.bak`, replacing an older
+`.bak`). A browser cannot put a file beside another, so there the
+version replaced is kept in the browser's storage, the last three of each file name, and
+**File ▸ Previous Versions…** lists them: **Open** puts one in its own tab with
+"(previous)" added to its name, and **Save As** writes it out as it was. A download
+replaces nothing, so Firefox and Safari have nothing to keep. Preferences ▸ General ▸
+Saving turns this off.
+
 A plugin that compiles something into the map, as the eudplib plugin does for scripts
 that need Remastered, does it while the file is written. The file you save is the one
 the game plays, and it carries the map as you see it in the editor inside, which is what
@@ -2254,8 +2263,9 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   before replacing a modified map (the same tick decides whether closing the tab or
   quitting the desktop app asks about unsaved changes), the tileset, size and revision a
   new map starts with, and what the Save dialog starts from: how the file was opened, or
-  one of its presets, with the compression a map with no file yet gets; and whether to
-  keep [recovery copies](#recovery-copies) of unsaved maps, and how often. The desktop
+  one of its presets, with the compression a map with no file yet gets, and whether a save
+  keeps the file it replaces (a `.bak`, or a previous version in a browser); and whether
+  to keep [recovery copies](#recovery-copies) of unsaved maps, and how often. The desktop
   app adds whether to check for updates at startup.
 - **Editing** — the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
   Settings opens this page); what the palettes start on — the owner of placed units, the
@@ -2273,7 +2283,7 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   each row can be cleared on its own, or **Clear all data** throws the lot away. Maps are
   not part of that list and are not touched by it; the recovery copies have their own
   line, with a way to the Recover Maps dialog and a Discard for copies left by earlier
-  sessions. **Export** writes
+  sessions, and so do the previous versions of saved files. **Export** writes
   the settings and the plugins' own as one file, and **Import** takes such a file into
   another browser or machine; caches and the recent files stay behind.
 - **Hotkeys** — the shortcut table.
@@ -2334,10 +2344,6 @@ This section lists what is currently missing in the editor and the limits worth 
 ### Not implemented
 
 - **Changing the shortcuts.** Preferences ▸ Hotkeys lists them but cannot change them (yet).
-- **Backups.** Save overwrites the file, with no `.bak` beside it. The
-  [recovery copies](#recovery-copies) cover work that was never saved, not a save that
-  should not have happened; keep your own copies for now, or use Save to scmjs.dev, which
-  keeps every revision.
 - **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
   scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
   Resizing and changing the tileset clear the undo history.

@@ -11,6 +11,9 @@ export type DesktopLocateResult =
   | { status: "missing"; searched: string[] }
   | { status: "failed"; message: string };
 
+/** What `files.backup` did: the `.bak` written, or why not. */
+export type DesktopBackupResult = { ok: true; path: string } | { ok: false; message: string };
+
 /** Where the desktop build found the game: its executable and its Maps folder, if any. */
 export interface DesktopGameInfo {
   /** The game executable, or null when none of the searched folders holds one. */
@@ -95,6 +98,13 @@ export interface DesktopBridge {
   files: {
     /** A file arrived; open it the way File ▸ Open does. Fires for the file the app was started with once the editor listens. */
     onOpen(listener: (file: { name: string; bytes: Uint8Array }) => void): () => void;
+    /**
+     * Copy the map file a save is about to write over to `<its path>.bak`, replacing an
+     * older one. `file` is what the file handle reads (`handle.getFile()`), which is how the
+     * page names a file it has no path for. Answers rather than throws; absent in a build
+     * older than the call.
+     */
+    backup?(file: File): Promise<DesktopBackupResult>;
   };
   /**
    * In-app updates (`desktop/updater.ts`). Everything here answers rather than throws —

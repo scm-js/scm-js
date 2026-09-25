@@ -150,22 +150,30 @@ export interface SaveOutcome {
 }
 
 /**
+ * Called with the file a write is about to replace, before a byte of it changes — Save's
+ * `.bak` and the browser's previous versions. Its failure never stops the write.
+ */
+export type BeforeOverwrite = (existing: File) => Promise<void>;
+
+/**
  * Write bytes to disk: straight into `handle` when there is one and the browser allows
  * it, else through the save dialog where supported, else as a download. Null when the
- * user dismissed the dialog.
+ * user dismissed the dialog. `before` hears the file being replaced, when the route
+ * writes over one that has something in it (never a download).
  */
-export async function saveBytes(bytes: Uint8Array, fileName: string, handle: MapFileHandle | null = null): Promise<SaveOutcome | null> {
-  return saveBlob(new Blob([bytes as unknown as BlobPart], { type: "application/octet-stream" }), fileName, handle);
+export async function saveBytes(bytes: Uint8Array, fileName: string, handle: MapFileHandle | null = null, before?: BeforeOverwrite): Promise<SaveOutcome | null> {
+  return saveBlob(new Blob([bytes as unknown as BlobPart], { type: "application/octet-stream" }), fileName, handle, before);
 }
 
 /** The same, for something already assembled as a blob (an exported PNG). */
-export async function saveBlob(blob: Blob, fileName: string, handle: MapFileHandle | null = null): Promise<SaveOutcome | null> {
-  if (handle && await writeThrough(handle, blob)) return { route: "file", fileName: handle.name, handle };
+export async function saveBlob(blob: Blob, fileName: string, handle: MapFileHandle | null = null, before?: BeforeOverwrite): Promise<SaveOutcome | null> {
+  if (handle && await writeThrough(handle, blob, before)) return { route: "file", fileName: handle.name, handle };
 
   const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker }).showSaveFilePicker;
   if (picker) {
     try {
       const picked = await picker({ suggestedName: fileName, types: pickerTypes(fileName), id: PICKER_ID });
+      await tellBefore(picked, before);
       const writable = await picked.createWritable();
       await writable.write(blob);
       await writable.close();
@@ -186,19 +194,37 @@ export async function saveBlob(blob: Blob, fileName: string, handle: MapFileHand
 }
 
 /** Write into an existing handle, asking for write permission first; false when that is refused or the write fails. */
-async function writeThrough(handle: MapFileHandle, blob: Blob): Promise<boolean> {
+async function writeThrough(handle: MapFileHandle, blob: Blob, before?: BeforeOverwrite): Promise<boolean> {
   try {
     if (handle.queryPermission) {
       let state = await handle.queryPermission({ mode: "readwrite" });
       if (state === "prompt" && handle.requestPermission) state = await handle.requestPermission({ mode: "readwrite" });
       if (state !== "granted") return false;
     }
+    await tellBefore(handle, before);
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Hand `before` what `handle` holds now; an empty or unreadable file (one the picker just made) is nothing to keep. */
+async function tellBefore(handle: MapFileHandle, before?: BeforeOverwrite): Promise<void> {
+  if (!before) return;
+  let existing: File;
+  try {
+    existing = await handle.getFile();
+  } catch {
+    return;
+  }
+  if (existing.size === 0) return;
+  try {
+    await before(existing);
+  } catch {
+    // Keeping the old file is a courtesy; the save goes on.
   }
 }
 

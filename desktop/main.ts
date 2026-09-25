@@ -21,6 +21,7 @@ import { openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData } from "../src/gamedata/extract";
 import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
 import { updaterIpc } from "./updater";
+import { backupMap } from "./backup";
 
 const SCHEME = "app";
 const HOST = "scmjs";
@@ -673,6 +674,7 @@ app.whenReady().then(() => {
   // launch that never checks pays nothing for this.
   updaterIpc(() => BrowserWindow.getAllWindows()[0] ?? null);
 
+  ipcMain.handle("file:backup", (_e, path: string) => backupMap(path));
   ipcMain.handle("game:info", (_e, dir: string | null) => gameInfo(dir));
   ipcMain.handle("game:pickFolder", async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);

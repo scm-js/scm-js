@@ -5,13 +5,18 @@
  * remember the game's Maps folder. The browser still asks for permission again on the
  * first use after a reload (`queryPermission` / `requestPermission` on the handle), and
  * Firefox and Safari have no handles to keep, so every caller treats a `null` as "ask
- * again". One object store, keyed by a string the caller chooses; a memory `Map` stands in
+ * again". One object store for them, keyed by a string the caller chooses (the recovery copies
+ * have a second store in the same database); a memory `Map` stands in
  * when there is no IndexedDB (tests, a browser with site data blocked).
  */
 
 const DB_NAME = "scmjs";
 const STORE = "handles";
-const VERSION = 1;
+/** The recovery copies of modified maps (`services/recovery.ts`), in the same database. */
+export const RECOVERY_STORE = "recovery";
+// 2 added the recovery store. The upgrade only ever adds a store that is missing.
+const VERSION = 2;
+const STORES = [STORE, RECOVERY_STORE];
 
 /** The part of a handle every caller relies on; the DOM lib lacks the permission methods. */
 export interface StoredHandle {
@@ -35,22 +40,33 @@ export function handleStorePersists(): boolean {
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, VERSION);
-    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
-    req.onsuccess = () => resolve(req.result);
+    req.onupgradeneeded = () => {
+      for (const name of STORES) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
+    };
+    req.onsuccess = () => {
+      // Another tab of a newer version upgrading must not wait on this one.
+      req.result.onversionchange = () => req.result.close();
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error ?? new Error("IndexedDB refused to open"));
     req.onblocked = () => reject(new Error("IndexedDB is blocked"));
   });
 }
 
-function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** One request against one of the database's stores; the database is opened for it and closed after. Rejects when IndexedDB does. */
+export function idbRequest<T>(storeName: string, mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return openDb().then((db) => new Promise<T>((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
-    const req = run(tx.objectStore(STORE));
+    const tx = db.transaction(storeName, mode);
+    const req = run(tx.objectStore(storeName));
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error("IndexedDB request failed"));
     tx.oncomplete = () => db.close();
     tx.onabort = () => { db.close(); reject(tx.error ?? new Error("IndexedDB transaction aborted")); };
   }));
+}
+
+function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return idbRequest(STORE, mode, run);
 }
 
 /** Keep a handle under `key`; a failure (quota, a browser that refuses to clone it) is swallowed — the handle simply will not come back next time. */

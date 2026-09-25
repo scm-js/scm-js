@@ -303,6 +303,7 @@ function useMenus(): Menu[] {
             { kind: "item", label: msg("Clear Recent"), disabled: recent.length === 0, onSelect: () => clearRecents(store) },
           ],
         },
+        dlg(msg("Recover Maps…"), "recovery"),
         sep,
         { kind: "item", label: msg("Save"), shortcut: "Ctrl+S", onSelect: () => { void save(); } },
         dlg(msg("Save As…"), "saveAs", "Ctrl+Shift+S"),

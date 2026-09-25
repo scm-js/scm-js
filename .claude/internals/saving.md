@@ -98,3 +98,45 @@ the notice's button — two writes of one file is two chances to be interrupted.
 encryption, anything else goes unencrypted except PKWARE — and then `save.start` applies a
 `SAVE_PRESETS` entry over it. An opened archive's own compression is followed whatever the
 preference says.
+
+### Recovery copies (`editor/recovery.ts`, `services/recovery.ts`, `hooks/useRecovery.ts`, `RecoveryDialog`, 2026-09-25)
+
+Slice 1 of `~/preferences-later-plan.md`. A copy per modified open map, in the `recovery` object
+store of the `scmjs` IndexedDB database — `handleStore.ts` went to **VERSION 2** for it (the
+upgrade only adds missing stores; `onversionchange` closes the connection so an older tab never
+blocks the upgrade; `idbRequest(store, …)` is the shared entry point). A record is
+`{ key: "<session>:<docId>", session, docId, at, name, fileName, width, height, tileset, size,
+chk, extras, stored, origin, builtBy, saveOptions, handle }` — `chk` is `serializeScenario`, so a
+restore is `parseScenario` + `loadDocumentAtom`, not the file-opening path (no build-step unpack,
+no sound hints; the copy is already the source). A `FileSystemFileHandle` is stored with it so Save
+goes back to the file; a `DataCloneError` retries without it.
+
+**Which maps, when.** `planRecovery` is pure: write a map that is modified and changed since its
+copy (or never copied); remove the copy of a map no longer modified, no longer open, or with the
+preference off. `RecoveryCopier` (one per store, made by `useRecovery`) marks the *front* map
+changed on any revision atom, `undoStackAtom`, `archiveExtrasAtom` or `mapModifiedAtom` — a parked
+map cannot change, and a switch bumping every revision costs one extra write, nothing more. Writes
+happen on the `Preferences.recovery.minutes` interval (default 2, limits 1–30) and on
+`visibilitychange` → hidden; removals also run a tick after any `documentsAtom` / `mapModifiedAtom`
+change, so a save or close drops its copy at once and a crash straight after a save offers nothing.
+All copies of a pass are built synchronously before the first IndexedDB await, so each is the map at
+one instant. Over `MAX_COPY_BYTES` (64 MB) is skipped with one `logWarn` per map. Passes are chained
+on one promise, never overlapping.
+
+**Whose copies.** `SESSION` is a UUID per page; `holdSessionLock` takes the Web Lock
+`scmjs.session:<id>` for the page's life, and `liveSessions` (`navigator.locks.query()`) tells a
+window still running from one that ended — `leftoverCopies` offers only the latter. Without Web Locks
+every other session's copies count as left over (a second tab would see the first's). Restoring
+deletes the old record and the copier writes a fresh one under this session.
+
+**Offer.** `usePreload` calls `offerRecoveryWhenClear` after the preload; it opens `recovery` through
+`whenDialogsClear` — `offerGameDataWhenClear`'s wait (plugins started or 5 s, empty dialog stack),
+factored out so Game Data and Recover Maps come one after the other. File ▸ Recover Maps… opens the
+same dialog; Preferences ▸ Storage has a Recovery copies section (count, size, Discard of leftovers
+only — this session's copies go with their maps). *Clear all data* does not touch them, on purpose:
+they are work, not settings. Desktop Quit with `confirmClose` on calls `forgetSessionCopies` after
+`quitGuard` answered true (every map was asked about); with the question off the copies stay, since
+nothing was asked. The browser's `beforeunload` leaves them — that is the accidental-close case.
+
+Not done: the `.bak`/previous-version slice (2 in the plan); copies of a shared map's guest are
+written like any other; no age limit on leftovers.

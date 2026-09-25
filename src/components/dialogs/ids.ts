@@ -39,6 +39,7 @@ export type DialogId =
   | "find"
   | "about"
   | "confirmClose"
+  | "recovery"
   | "plugins"
   | "confirmPlugin"
   | "pluginDialog"

@@ -1657,6 +1657,26 @@ scmjs.dev account as a numbered revision with a note — a backup with a history
 way to reach the same map from another machine. It does not change where Ctrl+S writes.
 See [Keeping maps on scmjs.dev](#keeping-maps-on-scmjsdev).
 
+### Recovery copies
+
+While a map has unsaved changes, the editor keeps a copy of it in the browser's storage
+(the app's own storage in the desktop app): every two minutes, and whenever the editor
+goes to the background — another tab, the window minimised. The copy is removed as soon
+as the map is saved or closed, so a copy only survives when the editor closed with work
+unsaved: a crash, a closed tab, a power cut.
+
+At the next start the **Recover Maps** dialog lists what was left, with the map's name,
+its file, its size and when it was copied. **Restore** opens the map in its own tab with
+its changes unsaved, under its old file name, so Ctrl+S writes back to the same file
+(after the browser asks again for permission). **Later** keeps the copies for the next
+start, and File ▸ Recover Maps… lists them at any time. Maps still open in another tab or
+window are never listed there.
+
+Quitting the desktop app and answering Don't Save removes the copies, since that was the
+answer. A copy only covers changes up to its time, and it lives in this browser: it is not
+a backup of the file, and clearing the site's data removes it. Preferences ▸ General ▸
+Recovery turns the copies off or changes how often they are made.
+
 ### Export an image
 
 ![The Export Image dialog](docs/images/export-image.webp)
@@ -2234,8 +2254,9 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   before replacing a modified map (the same tick decides whether closing the tab or
   quitting the desktop app asks about unsaved changes), the tileset, size and revision a
   new map starts with, and what the Save dialog starts from: how the file was opened, or
-  one of its presets, with the compression a map with no file yet gets. The desktop app
-  adds whether to check for updates at startup.
+  one of its presets, with the compression a map with no file yet gets; and whether to
+  keep [recovery copies](#recovery-copies) of unsaved maps, and how often. The desktop
+  app adds whether to check for updates at startup.
 - **Editing** — the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
   Settings opens this page); what the palettes start on — the owner of placed units, the
   brush size, the size of a new location; and how many undo levels each map keeps.
@@ -2249,8 +2270,10 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   and a plugin's own settings when it has a page here.
 - **Storage** — where the game data comes from, and a list of everything the editor keeps
   in the browser, one row per setting or cache, with a plugin's own data under its name;
-  each row can be cleared on its own, or **Clear all data** throws the lot away. The map
-  you have open is never kept there and is not touched by any of it. **Export** writes
+  each row can be cleared on its own, or **Clear all data** throws the lot away. Maps are
+  not part of that list and are not touched by it; the recovery copies have their own
+  line, with a way to the Recover Maps dialog and a Discard for copies left by earlier
+  sessions. **Export** writes
   the settings and the plugins' own as one file, and **Import** takes such a file into
   another browser or machine; caches and the recent files stay behind.
 - **Hotkeys** — the shortcut table.
@@ -2311,10 +2334,10 @@ This section lists what is currently missing in the editor and the limits worth 
 ### Not implemented
 
 - **Changing the shortcuts.** Preferences ▸ Hotkeys lists them but cannot change them (yet).
-- **Backups and recovery.** Save overwrites the file, with no `.bak` beside it, and the
-  editor does not keep a copy of an unsaved map. If the tab or the app closes without a
-  save, the changes are gone. Keep your own copies for now, or use Save to scmjs.dev, which keeps
-  every revision.
+- **Backups.** Save overwrites the file, with no `.bak` beside it. The
+  [recovery copies](#recovery-copies) cover work that was never saved, not a save that
+  should not have happened; keep your own copies for now, or use Save to scmjs.dev, which
+  keeps every revision.
 - **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
   scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
   Resizing and changing the tileset clear the undo history.

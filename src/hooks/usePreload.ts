@@ -12,6 +12,7 @@ import { currentAssetSource, onAssetSource } from "../gamedata/source";
 import { runPreload, warmRemainingTilesets, type PreloadTask } from "../services/preload";
 import type { getDefaultStore } from "jotai";
 import { t } from "../i18n";
+import { offerRecoveryWhenClear } from "./useRecovery";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -73,6 +74,7 @@ export function usePreload() {
       const source = currentAssetSource();
       if (!desktopBridge()) warmRemainingTilesets(tileset);
       if (source?.kind === "none") offerGameDataWhenClear(store, () => currentAssetSource()?.kind === "none");
+      void offerRecoveryWhenClear(store);
     });
   }, [setLog, setSource, setStep, store]);
 }
@@ -91,6 +93,15 @@ export const PLUGIN_WAIT_MS = 5000;
  * so data installed meanwhile (Help ▸ Game Data…) cancels it.
  */
 export function offerGameDataWhenClear(store: Store, stillNeeded: () => boolean, waitMs = PLUGIN_WAIT_MS): void {
+  whenDialogsClear(store, () => { if (stillNeeded()) store.set(openDialogAtom, "gameData", { auto: true }); }, waitMs);
+}
+
+/**
+ * Run `open` once the plugins have started (or `waitMs` has passed) and no dialog is open —
+ * the rule every dialog the editor raises by itself at start follows, so two of them (Game
+ * Data, Recover Maps) come one after the other rather than stacked.
+ */
+export function whenDialogsClear(store: Store, open: () => void, waitMs = PLUGIN_WAIT_MS): void {
   let waited = false;
   let done = false;
   const unsubs: (() => void)[] = [];
@@ -102,7 +113,7 @@ export function offerGameDataWhenClear(store: Store, stillNeeded: () => boolean,
     done = true;
     clearTimeout(timer);
     for (const u of unsubs) u();
-    if (stillNeeded()) store.set(openDialogAtom, "gameData", { auto: true });
+    open();
   }
   unsubs.push(store.sub(dialogStackAtom, offer), store.sub(pluginsStartedAtom, offer));
   offer();

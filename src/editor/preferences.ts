@@ -42,6 +42,14 @@ export interface Preferences {
    * `"asOpened"` there means StarEdit's PKWARE.
    */
   save: { start: "asOpened" | "everything" | "smallest"; compression: "asOpened" | ArchiveCompression };
+  /**
+   * Recovery copies (`hooks/useRecovery.ts`): while a map has unsaved changes, a copy of
+   * it is kept in the browser's storage every `minutes` and when the editor goes to the
+   * background, and dropped when the map is saved or closed. What a session that ended
+   * without saving left behind is offered back at the next start. Off stops the copies
+   * and drops this session's; copies left by earlier sessions are still offered.
+   */
+  recovery: { enabled: boolean; minutes: number };
   /** How many edits Undo keeps per map (SCMDraft keeps 200). */
   undoLevels: number;
   /**
@@ -110,6 +118,7 @@ export const PREFERENCE_LIMITS = {
   recents: { min: 5, max: 30 },
   brushSize: { min: 1, max: 7 },
   locationTiles: { min: 1, max: 16 },
+  recoveryMinutes: { min: 1, max: 30 },
 } as const;
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -120,6 +129,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   newMap: { tileset: "badlands", width: 128, height: 128, version: "broodwar" },
   startup: { reopenLast: false, recents: 10 },
   save: { start: "asOpened", compression: "asOpened" },
+  recovery: { enabled: true, minutes: 2 },
   undoLevels: 200,
   view: { wheel: "scroll", zoomToCursor: true },
   placement: { owner: 0, brushSize: 1, locationTiles: 4 },

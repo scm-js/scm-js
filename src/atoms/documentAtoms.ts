@@ -395,6 +395,11 @@ function parkRegisters(get: Getter): ParkedDocument | null {
   };
 }
 
+/** The map in front as the record parking would take — what the recovery copies are made from. Null with no map. */
+export function frontDocument(get: Getter): ParkedDocument | null {
+  return parkRegisters(get);
+}
+
 /**
  * Put a record into the registers — the one write behind opening, switching and closing
  * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and

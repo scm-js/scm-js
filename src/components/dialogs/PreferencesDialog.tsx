@@ -19,6 +19,7 @@ import {
   Eye,
   Globe,
   HardDrive,
+  History,
   Keyboard,
   Upload,
   PencilRuler,
@@ -56,6 +57,9 @@ import { hostTerms, isDesktop } from "../../editor/platform";
 import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode } from "../../editor/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
+import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
+import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
+import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import { LOCALES, msg, t, translate } from "../../i18n";
 import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
@@ -199,6 +203,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
       <div className="stack">
         <GameDataSection />
         <StorageSection onCleared={reseed} />
+        <RecoverySection onShow={() => open("recovery")} />
         <TransferSection onImported={() => setW(live())} />
       </div>
     ),
@@ -307,6 +312,7 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
   const updates = (u: Partial<Preferences["updates"]>) => patch({ updates: { ...p.updates, ...u } });
   const startup = (s: Partial<Preferences["startup"]>) => patch({ startup: { ...p.startup, ...s } });
   const save = (s: Partial<Preferences["save"]>) => patch({ save: { ...p.save, ...s } });
+  const recovery = (r: Partial<Preferences["recovery"]>) => patch({ recovery: { ...p.recovery, ...r } });
   return (
     <div className="stack">
       <Section title={t("Language")}>
@@ -387,6 +393,23 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
           </Field>
         </div>
         <Hint>{t("A map already saved in this session starts from its last options either way. New maps means a map with no file yet, or one opened from a bare .chk.")}</Hint>
+      </Section>
+      <Section title={t("Recovery")}>
+        <Check label={t("Keep a recovery copy of maps with unsaved changes")} checked={p.recovery.enabled} onChange={(e) => recovery({ enabled: e.target.checked })} />
+        <div className="form wide">
+          <Field label={t("Copy every")}>
+            <NumberInput
+              value={p.recovery.minutes}
+              min={PREFERENCE_LIMITS.recoveryMinutes.min}
+              max={PREFERENCE_LIMITS.recoveryMinutes.max}
+              width={90}
+              unit={t("min")}
+              disabled={!p.recovery.enabled}
+              onChange={(v) => recovery({ minutes: v })}
+            />
+          </Field>
+        </div>
+        <Hint>{t("A copy is also made when the editor goes to the background, and is removed when the map is saved or closed. If the editor closes before a map is saved, the copy is offered back at the next start. Copies are kept in {here}, not beside your files.", { here: hostTerms().here })}</Hint>
       </Section>
     </div>
   );
@@ -747,7 +770,7 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
         ) : (
           <>
             <span className="hint">
-              {cleared !== null ? cleared : entries.length === 0 ? t("Nothing is stored in {here}.", { here: host.here }) : t("{bytes} stored in {here}. The open map is never kept here, so it is not affected.", { bytes: bytes(total), here: host.here })}
+              {cleared !== null ? cleared : entries.length === 0 ? t("Nothing is stored in {here}.", { here: host.here }) : t("{bytes} stored in {here}. Maps are not part of this list; their recovery copies are below.", { bytes: bytes(total), here: host.here })}
             </span>
             <span className="grow" />
             <Button size="sm" variant="danger" disabled={entries.length === 0} onClick={() => { setCleared(null); setAsking({ what: t("everything"), keys: null }); }}>
@@ -761,6 +784,56 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
           {t("{Here} is not letting the editor store anything, so settings last only until the", { Here: host.Here })}{" "}{host.desktop ? t("app is closed") : t("tab closes")}.
         </Hint>
       )}
+    </Section>
+  );
+}
+
+/**
+ * The recovery copies, which live in IndexedDB rather than beside the settings: how many an
+ * earlier session left, the way to the dialog that restores them, and a Discard for the lot.
+ * The copies of maps open now are counted but never discarded here — they go when their map
+ * is saved or closed.
+ */
+function RecoverySection({ onShow }: { onShow: () => void }) {
+  const [state, setState] = useState<{ left: RecoveryEntry[]; ours: number } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([leftoverEntries(), listCopies()]).then(([left, all]) => {
+      if (live) setState({ left, ours: all.filter((r) => r.session === SESSION).length });
+    });
+    return () => { live = false; };
+  }, [run]);
+  const size = state?.left.reduce((n, e) => n + e.size, 0) ?? 0;
+  const discard = async () => {
+    for (const e of state?.left ?? []) await discardCopy(e.key);
+    setAsking(false);
+    setRun((n) => n + 1);
+  };
+  return (
+    <Section title={t("Recovery copies")}>
+      <div className="row">
+        {asking ? (
+          <>
+            <span className="hint grow">{t("Discard {n, plural, one {the copy} other {all # copies}} left by earlier sessions? The maps in them cannot be got back afterwards.", { n: state?.left.length ?? 0 })}</span>
+            <Button size="sm" onClick={() => setAsking(false)}>{t("Cancel")}</Button>
+            <Button size="sm" variant="danger" onClick={() => { void discard(); }}><Trash2 size={11} /> {" "}{t("Discard")}</Button>
+          </>
+        ) : (
+          <>
+            <span className="grow dim">
+              {state === null ? t("Looking…")
+                : state.left.length === 0 ? t("None left by earlier sessions.")
+                : t("{n, plural, one {# map} other {# maps}} left by earlier sessions, {size}.", { n: state.left.length, size: formatBytes(size) })}
+            </span>
+            <Button size="sm" disabled={!state || state.left.length === 0} onClick={onShow}><History size={11} /> {" "}{t("Recover Maps…")}</Button>
+            <Button size="sm" variant="danger" disabled={!state || state.left.length === 0} onClick={() => setAsking(true)}><Trash2 size={11} /> {" "}{t("Discard…")}</Button>
+          </>
+        )}
+      </div>
+      {state !== null && state.ours > 0 && <Hint>{t("{n, plural, one {# map open now has a copy} other {# maps open now have copies}}; each goes when its map is saved or closed.", { n: state.ours })}</Hint>}
+      {!recoveryPersists() && <Hint>{t("{Here} is not letting the editor store anything, so the copies would not outlive this page.", { Here: hostTerms().Here })}</Hint>}
     </Section>
   );
 }

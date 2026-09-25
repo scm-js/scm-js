@@ -1421,3 +1421,8 @@
 .prefs-section .check + .prefs-hint,
 .prefs-section .form + .prefs-hint,
 .prefs-section .row + .prefs-hint { margin-top: -2px; }
+
+/* Recover Maps */
+.recovery-list { max-height: 280px; overflow: auto; margin: 10px 0; }
+.recovery-list .recovery-item { gap: 8px; padding: 6px 8px; align-items: center; height: auto; }
+.recovery-item .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

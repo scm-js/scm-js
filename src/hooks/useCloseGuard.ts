@@ -4,6 +4,7 @@ import { anyModifiedAtom } from "../atoms/documentAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { desktopBridge } from "../gamedata/desktop";
 import { quitGuard } from "./useMapFileActions";
+import { forgetSessionCopies } from "./useRecovery";
 
 /**
  * Leaving the editor altogether — the tab's × , the window's, Alt+F4, Cmd+Q — with a map that
@@ -21,7 +22,8 @@ import { quitGuard } from "./useMapFileActions";
  * and opens the editor's own Close Scenario dialog for it — so Save writes the file through
  * the ordinary path (Save As when the map has no file yet) and Cancel keeps the window.
  * `respondClose` carries the answer back; a dismissal reaches it as false through
- * `guardedAction`'s dialog-stack watch. Electron fires `beforeunload` on a window close too,
+ * `guardedAction`'s dialog-stack watch. A quit that went through drops this session's
+ * recovery copies (`useRecovery`), since Don't Save was the answer for each of them. Electron fires `beforeunload` on a window close too,
  * but returning a value there cancels it *silently* — which is why the browser half is
  * skipped whenever the bridge is there.
  */
@@ -48,7 +50,11 @@ export function useCloseGuard() {
       // A second press of the close button while the dialog is up is not a second question.
       if (asking.current) return;
       asking.current = true;
-      void quitGuard(store).then((quit) => {
+      void quitGuard(store).then(async (quit) => {
+        // Every modified map was asked about, so what is left unsaved was left on purpose:
+        // its recovery copy would only ask again at the next start. With the question
+        // switched off nothing was asked, and the copies stay.
+        if (quit && store.get(preferencesAtom).confirmClose) await forgetSessionCopies();
         asking.current = false;
         bridge.window.respondClose(quit);
       });

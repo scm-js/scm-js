@@ -15,6 +15,7 @@ import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { usePluginLink } from "./hooks/usePluginLink";
 import { useWindowTitle } from "./hooks/useWindowTitle";
+import { useRecovery } from "./hooks/useRecovery";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
@@ -72,6 +73,7 @@ export default function App() {
   usePluginLink();
   useWindowTitle();
   useCloseGuard();
+  useRecovery();
   useDesktopFiles();
   useUpdateCheck();
 

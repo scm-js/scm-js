@@ -45,7 +45,7 @@ import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { getUnitAssets, imageGrpPath, peekUnitAssets, requestGrp } from "../formats/units/load";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { DEFAULT_PROFILE } from "../gamedata/profiles";
-import { currentAssetSource, type AssetSource } from "../gamedata/source";
+import { currentAssetSource, fetchAsset, GameDataUnavailableError, type AssetSource } from "../gamedata/source";
 import { installDataSetInto, listDataSets, removeDataSet, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
 import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
@@ -1417,7 +1417,23 @@ export function gameDataApi(store: Store): GameDataApi {
     install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name }, files, progress)),
     select: async (id) => publish(await switchDataSet(store, id)),
     remove: (id) => removeDataSet(store, id),
+    read: readGameFile,
   };
+}
+
+async function readGameFile(path: string): Promise<Uint8Array | null> {
+  const clean = path.trim().replaceAll("\\", "/").replace(/^\/+/, "").toLowerCase();
+  if (!clean || clean.split("/").includes("..")) return null;
+  let res: Response;
+  try {
+    res = await fetchAsset(clean);
+  } catch (err) {
+    if (err instanceof GameDataUnavailableError) return null;
+    throw err;
+  }
+  // A dev server answers a missing file with its index page.
+  if (!res.ok || res.headers.get("content-type")?.startsWith("text/html")) return null;
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 /* ── Commands ───────────────────────────────────────────── */

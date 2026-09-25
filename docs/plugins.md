@@ -732,6 +732,12 @@ A mod's files replace the game's in the same formats, so `data`, `tileset`, `gra
 covered. A plugin written only for the game's own data can check `profile().id`
 (`"starcraft"`) and turn itself off for anything else.
 
+`read(path)` hands over one of the extracted files as bytes, for a plugin that reads the
+game's formats itself: `arr/units.dat`, `tileset/jungle.cv5`, `unit/zerg/drone.grp`. Paths
+are the archive's, in lower case with forward slashes, and `tileset/manifest.json` and
+`unit/manifest.json` list what was extracted. It answers null for a file the copy does
+not have.
+
 ### `api.consts`
 
 [Reference](https://docs.scmjs.dev/api/consts/)

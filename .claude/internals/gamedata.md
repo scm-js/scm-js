@@ -39,7 +39,7 @@ own with a note in `tried`. `AssetSource.profile` says which set answered. Switc
 (`resetUnitAssets`, `releaseAllTilesets`, `clearFrameCache`, `clearComposedImages`), resolves again
 and bumps `gameDataRevisionAtom` — `useUnitAssets` now re-reads `peekUnitAssets` on every bump
 rather than keeping what it had. `api.gameData` and the `"gameData"` event are the plugin side
-(`host.ts#gameDataApi`). A data set is a name over files in the game's formats: the table sizes,
+(`host.ts#gameDataApi`); `api.gameData.read(path)` (`host.ts#readGameFile`) hands a plugin one extracted file through `fetchAsset`, null for a missing one — a dev server's `text/html` fallback included. `extract.ts#EXTRA_TABLES` (`arr/orders.dat`) is copied though the editor never reads it: OpenBW, behind Walkability's game pathing, will not start without it, and a stored copy made before 2026-09-25 lacks it (the plugin says to reinstall). A data set is a name over files in the game's formats: the table sizes,
 tileset formats and CHK layouts are the game's, and a mod that extends them is out of scope.
 
 **Names from the data** (`data/gameNames.ts`): `stat_txt.tbl` (entries 0–227 the unit types as

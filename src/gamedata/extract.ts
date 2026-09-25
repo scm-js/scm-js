@@ -96,6 +96,12 @@ export const UNIT_TABLES = [
   "arr\\units.dat", "arr\\weapons.dat", "arr\\upgrades.dat", "arr\\techdata.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "arr\\images.tbl",
   "game\\tunit.pcx", "scripts\\iscript.bin",
 ];
+/**
+ * Tables the editor never reads but copies when the archives have them, for plugins that
+ * run the game's own code over the files (`api.gameData.read`): OpenBW, behind the
+ * Walkability plugin's game pathing, will not start without the orders table.
+ */
+export const EXTRA_TABLES = ["arr\\orders.dat"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 
@@ -202,6 +208,10 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   const files = new Map<string, Uint8Array>();
   const missing: string[] = [];
   for (const [member, data] of tables) files.set(assetPath(member), data);
+  for (const member of EXTRA_TABLES) {
+    const data = read(member);
+    if (data) files.set(assetPath(member), data);
+  }
   const wanted = [...grpPaths, ...loPaths].sort();
   wanted.forEach((rel, i) => {
     if (i % 25 === 0) progress?.(0.1 + (i / wanted.length) * 0.9, `Unit graphics · ${i} of ${wanted.length}`);

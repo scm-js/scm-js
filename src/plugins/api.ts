@@ -1611,6 +1611,13 @@ export interface GameDataApi {
   select(id: string): Promise<GameDataSource>;
   /** Remove a data set's copy (never the game's bundled files). True when there was one. */
   remove(id: string): Promise<boolean>;
+  /**
+   * One file of the data set in use, by its path in the extracted copy: the archive path in
+   * lower case with forward slashes (`arr/units.dat`, `tileset/jungle.cv5`,
+   * `unit/zerg/drone.grp`). `tileset/manifest.json` and `unit/manifest.json` list what was
+   * extracted. Null when the copy has no such file, or there is no game data.
+   */
+  read(path: string): Promise<Uint8Array | null>;
 }
 
 /* ── The numbers a record is written in ─────────────────── */

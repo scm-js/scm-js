@@ -43,7 +43,11 @@ describe("format", () => {
     expect(josa("위치", "은")).toBe("위치는");
     expect(josa("서울", "으로")).toBe("서울로");
     expect(josa("부산", "으로")).toBe("부산으로");
-    expect(josa("Marine", "을")).toBe("Marine을");
+    expect(josa("Marine", "을")).toBe("Marine을(를)");
+    expect(josa("game.rep", "으로")).toBe("game.rep(으)로");
+    expect(josa("Player 3", "이")).toBe("Player 3이"); // 삼
+    expect(josa("Player 2", "이")).toBe("Player 2가"); // 이
+    expect(josa("Location 1", "으로")).toBe("Location 1로"); // 일: ㄹ takes 로
     expect(format("{name|을} 저장", { name: "맵" }, "ko")).toBe("맵을 저장");
     expect(format("{name|가} 저장", { name: "위치" }, "ko")).toBe("위치가 저장");
   });

@@ -149,13 +149,25 @@ const JOSA: Record<string, [string, string]> = {
   "으로": ["으로", "로"], "로": ["으로", "로"],
 };
 
-/** `value` with the particle that follows it — decided by the last syllable, and left unchanged for text that is not Hangul. */
+/** How each digit is read: its final consonant as `josa` counts it (0 none, 8 ㄹ, other a closed syllable). 영 일 이 삼 사 오 육 칠 팔 구. */
+const DIGIT_FINAL = [21, 8, 0, 16, 0, 0, 1, 8, 8, 0];
+
+/** Both forms at once, for a value whose reading is not known: 을(를), 이(가), (으)로. */
+const EITHER: Record<string, string> = { "을": "을(를)", "이": "이(가)", "은": "은(는)", "과": "과(와)", "으로": "(으)로" };
+
+/**
+ * `value` with the particle that follows it — decided by the last syllable, or the last
+ * digit as it is read aloud. After anything else (a Latin file name) both forms are
+ * written, 을(를), the way Korean software does when it cannot know the reading.
+ */
 export function josa(value: string, particle: string): string {
   const pair = JOSA[particle];
   if (!pair) return value + particle;
   const last = value.codePointAt(value.length - 1) ?? 0;
-  if (last < 0xac00 || last > 0xd7a3) return value + particle;
-  const final = (last - 0xac00) % 28; // 0 = open syllable; 8 = ㄹ
+  let final: number;
+  if (last >= 0xac00 && last <= 0xd7a3) final = (last - 0xac00) % 28; // 0 = open syllable; 8 = ㄹ
+  else if (last >= 0x30 && last <= 0x39) final = DIGIT_FINAL[last - 0x30];
+  else return value + EITHER[pair[0]];
   const vowelLike = final === 0 || (particle.endsWith("로") && final === 8);
   return value + (vowelLike ? pair[1] : pair[0]);
 }

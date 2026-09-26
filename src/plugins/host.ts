@@ -7,7 +7,7 @@
  * — the path a brush stroke takes — so a plugin edit undoes, marks sections dirty,
  * lifts stranded doodads and units, and repaints exactly like the built-in tools.
  */
-import { locale as currentLocale, makeTranslator, t } from "../i18n";
+import { addPluginCatalogues, locale as currentLocale, makeTranslator, t } from "../i18n";
 import type { createStore } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
@@ -1970,13 +1970,18 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return list && list.length > 0 ? Object.assign({}, ...list) as Record<string, string> : undefined;
       };
       const translator = makeTranslator(merged);
+      // Menu and context-menu labels are handed over in English and shown through `translate`,
+      // which looks here while the plugin has a catalogue registered.
+      let shown: (() => void) | null = null;
       return {
         get language() { return currentLocale(); },
         register: (added: Record<string, Record<string, string>>) => {
           const entries = Object.entries(added);
           for (const [loc, catalogue] of entries) catalogues.set(loc, [...(catalogues.get(loc) ?? []), catalogue]);
+          shown ??= addPluginCatalogues(merged);
           return bag.add(() => {
             for (const [loc, catalogue] of entries) catalogues.set(loc, (catalogues.get(loc) ?? []).filter((c) => c !== catalogue));
+            if (shown && [...catalogues.values()].every((list) => list.length === 0)) { shown(); shown = null; }
           });
         },
         t: translator.t,

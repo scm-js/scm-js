@@ -106,7 +106,26 @@ export function msg(text: string): string {
  * lookup; a different name so the extractor knows not to expect a literal.
  */
 export function translate(text: string, params?: Params): string {
-  return t(text, params);
+  const own = catalogues[current][text];
+  if (own) return format(own, params, current);
+  for (const source of pluginSources) {
+    const hit = source(current)?.[text];
+    if (hit) return format(hit, params, current);
+  }
+  return format(text, params, current);
+}
+
+/**
+ * Plugins' catalogues, consulted by `translate` after the editor's own: a plugin's menu
+ * labels and context-menu labels stay English (they are identities other plugins place
+ * items by) and are shown through here, so they follow a language change.
+ */
+const pluginSources = new Set<(loc: Locale) => Catalogue | undefined>();
+
+/** Adds a plugin's catalogues to what `translate` looks in; the returned function removes them. */
+export function addPluginCatalogues(source: (loc: Locale) => Catalogue | undefined): () => void {
+  pluginSources.add(source);
+  return () => { pluginSources.delete(source); };
 }
 
 /* ── Formatting ─────────────────────────────────────────── */

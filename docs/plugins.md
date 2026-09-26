@@ -1072,13 +1072,17 @@ References: [menu](https://docs.scmjs.dev/api/menu/),
 [hotkeys](https://docs.scmjs.dev/api/hotkeys/)
 
 - **`menu.add(path, item)`.** `path` is a menu (`"Tools"`) or a submenu (`"File/Import"`),
-  always in English; the editor translates built-in labels itself. Items go at the end
+  always in English, and so is the item's `label`: labels are how items find each other,
+  whatever language the menu shows. The editor translates built-in labels itself, and
+  yours through the catalogues you register with `api.i18n`. Items go at the end
   of the menu unless `after` names an item to follow. A path that names no existing
   submenu creates one for your plugin (`"Tools/AI"`), and one that names no menu creates
   a top-level menu before Help (`"Account"`). `icon: "plugin"` marks an item with your
   plugin's icon.
 - **`contextMenu.add(surface, item)`.** Surfaces are `"viewport"` (the map) and
-  `"terrainPalette"`. The item's functions receive what was under the pointer.
+  `"terrainPalette"`. The item's functions receive what was under the pointer. A fixed
+  `label` is English and translated like a menu label; a function label is called when
+  the menu opens, so translate it there with `api.i18n.t`.
 - **`hotkeys.add("Ctrl+Shift+I", run)`.** Plugin hotkeys are checked before the built-in
   ones, and never while typing or while a dialog is open.
 
@@ -1097,7 +1101,7 @@ api.i18n.register({ ko: {
   "{n, plural, one {# unit} other {# units}}": "유닛 {n, plural, other {#개}}",
 } });
 api.menu.add("Tools", {
-  label: api.i18n.t("Count units…"),
+  label: "Count units…", // English: the menu shows it through the catalogue above
   run: () => api.ui.alert(api.i18n.t("{n, plural, one {# unit} other {# units}}", { n: api.query.unitsOf(0).length })),
 });
 ```
@@ -1107,6 +1111,8 @@ api.menu.add("Tools", {
 - Placeholders are a subset of ICU MessageFormat: `{name}`, `plural` and `select`. For
   Korean, `{name|을}` picks the particle that agrees with the value (을/를, 이/가, 은/는,
   과/와, 으로/로).
+- Menu labels and fixed context-menu labels are the exception: give them in English and
+  the editor translates them with your catalogues when it draws the menu.
 - `language` is the current language (`"en"`, `"ko"`). The `"language"` event fires when
   it changes, so you can relabel what is showing.
 

@@ -3545,3 +3545,26 @@ describe("document.test", async () => {
     expect(testFileNameFor("")).toBe("map.scx");
   });
 });
+
+describe("plugin menu labels", () => {
+  it("stay English and are shown through the plugin's catalogue, while it is registered", async () => {
+    const { setLocale, translate } = await import("../src/i18n");
+    const bag = new Contributions();
+    const api = createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, bag);
+    setLocale("ko");
+    try {
+      expect(translate("Count units…")).toBe("Count units…");
+      const catalogue = api.i18n.register({ ko: { "Count units…": "유닛 세기…" } });
+      expect(translate("Count units…")).toBe("유닛 세기…");
+      expect(translate("Save")).toBe("저장"); // the editor's own comes first
+      setLocale("en");
+      expect(translate("Count units…")).toBe("Count units…");
+      setLocale("ko");
+      catalogue.dispose();
+      expect(translate("Count units…")).toBe("Count units…");
+      expect(bag.disposables).toHaveLength(0);
+    } finally {
+      setLocale("en");
+    }
+  });
+});

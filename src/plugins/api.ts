@@ -3067,6 +3067,11 @@ export type TopMenu = "File" | "Edit" | "View" | "Layer" | "Scenario" | "Trigger
 export type MenuPath = TopMenu | `${TopMenu}/${string}` | (string & {});
 
 export interface MenuItemSpec {
+  /**
+   * In English, like the path's segments: it is the item's identity (another plugin's
+   * `after` names it), and the menu shows it translated through the catalogues the plugin
+   * registered with `i18n.register`, so it follows a language change.
+   */
   label: string;
   /** Display only — bind the key with `hotkeys.add`. */
   shortcut?: string;
@@ -3126,6 +3131,10 @@ export interface ContextMenuContext {
 }
 
 export interface ContextItemSpec {
+  /**
+   * A fixed label is given in English and shown through the plugin's registered catalogues;
+   * a function is called when the menu opens, so it translates with `i18n.t` itself.
+   */
   label: string | ((ctx: ContextMenuContext) => string);
   enabled?: (ctx: ContextMenuContext) => boolean;
   visible?: (ctx: ContextMenuContext) => boolean;

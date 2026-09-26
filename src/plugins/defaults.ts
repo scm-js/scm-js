@@ -55,7 +55,7 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-paint@v1.1.0", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.5.0", enabled: true },
   { spec: "github:scm-js/plugin-scmjs-dev@v1.34.0", enabled: true },
-  { spec: "github:scm-js/plugin-scm-scx@v1.3.0", enabled: true },
+  { spec: "github:scm-js/plugin-scm-scx@v1.4.0", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.2.0", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.1.0", enabled: true },
   { spec: "github:scm-js/plugin-trigedit@v1.1.0", enabled: false },

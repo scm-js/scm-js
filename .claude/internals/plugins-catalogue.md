@@ -103,6 +103,13 @@ that answers JSON), the plugin passes the site first and an optional forwarder f
 second, and the dialog explains the block and links to the site when nothing answers. The editor
 runs no forwarder of its own and must not grow one for this — the user decided that; the fix belongs
 on the site (a `CorsLayer` on its GET routes).
+Since 1.4.0 the plugin also reads its own link off the page: `<editor>/scmscx/<id>` (the site's map
+id) makes `activate` put the address back to the editor's own with `history.replaceState` and open
+the Find dialog with that map selected over the newest uploads — a confirmation, nothing downloads
+before Open. It works because every path serves the editor's page (`404.html` on Pages); the
+link-preview Worker does not route `/scmscx/*` (the user declined cards for it, 2026-09-26), so on
+GitHub Pages the link answers 404 with the page and a pasted link shows no card. The same pattern
+as the scmjs.dev plugin's `/map/<token>`; the path helpers are the plugin's own (`format.ts`).
 
 **Section Explorer** (`github.com/scm-js/plugin-section-explorer`, not a default — installed from Browse Plugins) is the
 annotated hex editor and the worked example for `api.document.sections` and `api.names`. The host side

@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   ClipboardPaste,
   Copy,
@@ -27,6 +27,8 @@ import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/ui
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { Tip } from "../ui";
+import { hotkeysAtom } from "../../atoms/preferencesAtoms";
+import { shortcutOf } from "../../editor/commands";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
 import { translate } from "../../i18n";
 import { useT } from "../../i18n/react";
@@ -56,6 +58,8 @@ export default function ToolBar() {
   const [brush, setBrush] = useAtom(brushSizeAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
+  const hotkeys = useAtomValue(hotkeysAtom);
+  const key = (command: string) => shortcutOf(hotkeys, command);
 
   const dlg = (id: DialogId) => () => open(id);
   const clipTools = useClipboardTools();
@@ -64,16 +68,16 @@ export default function ToolBar() {
 
   return (
     <div className="toolbar" role="toolbar">
-      <TB icon={FilePlus2} label={t("New Map")} shortcut="Ctrl+N" onClick={dlg("newMap")} />
-      <TB icon={FolderOpen} label={t("Open Map")} shortcut="Ctrl+O" onClick={dlg("openMap")} />
-      <TB icon={Save} label={t("Save Map")} shortcut="Ctrl+S" onClick={() => { void save(); }} />
+      <TB icon={FilePlus2} label={t("New Map")} shortcut={key("file.new")} onClick={dlg("newMap")} />
+      <TB icon={FolderOpen} label={t("Open Map")} shortcut={key("file.open")} onClick={dlg("openMap")} />
+      <TB icon={Save} label={t("Save Map")} shortcut={key("file.save")} onClick={() => { void save(); }} />
       <Sep />
-      <TB icon={Undo2} label={undoLabel ? t("Undo {what}", { what: undoLabel }) : t("Undo")} shortcut="Ctrl+Z" disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); }} />
-      <TB icon={Redo2} label={redoLabel ? t("Redo {what}", { what: redoLabel }) : t("Redo")} shortcut="Ctrl+Y" disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); }} />
+      <TB icon={Undo2} label={undoLabel ? t("Undo {what}", { what: undoLabel }) : t("Undo")} shortcut={key("edit.undo")} disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); }} />
+      <TB icon={Redo2} label={redoLabel ? t("Redo {what}", { what: redoLabel }) : t("Redo")} shortcut={key("edit.redo")} disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); }} />
       <Sep />
-      <TB icon={Scissors} label={t("Cut")} shortcut="Ctrl+X" onClick={() => { clipTools.cut(); }} />
-      <TB icon={Copy} label={t("Copy")} shortcut="Ctrl+C" onClick={() => { clipTools.copy(); }} />
-      <TB icon={ClipboardPaste} label={t("Paste")} shortcut="Ctrl+V" onClick={() => { clipTools.paste(); }} />
+      <TB icon={Scissors} label={t("Cut")} shortcut={key("edit.cut")} onClick={() => { clipTools.cut(); }} />
+      <TB icon={Copy} label={t("Copy")} shortcut={key("edit.copy")} onClick={() => { clipTools.copy(); }} />
+      <TB icon={ClipboardPaste} label={t("Paste")} shortcut={key("edit.paste")} onClick={() => { clipTools.paste(); }} />
       <Sep />
       <div className="tb-group">
         <span className="lbl">{t("Layer")}</span>
@@ -94,22 +98,22 @@ export default function ToolBar() {
         </div>
       )}
       <Sep />
-      <TB icon={Grid3x3} label={t("Toggle Grid")} shortcut="Ctrl+G" active={flags.grid} onClick={() => setFlags({ ...flags, grid: !flags.grid })} />
+      <TB icon={Grid3x3} label={t("Toggle Grid")} shortcut={key("view.grid")} active={flags.grid} onClick={() => setFlags({ ...flags, grid: !flags.grid })} />
       <TB icon={SquareDashed} label={t("Toggle Locations")} active={flags.locations} onClick={() => setFlags({ ...flags, locations: !flags.locations })} />
       <TB icon={CloudFog} label={t("Toggle Fog of War")} active={flags.fog} onClick={() => setFlags({ ...flags, fog: !flags.fog })} />
       <Sep />
       <TB icon={FlipHorizontal2} label={t("Symmetry…")} onClick={dlg("symmetry")} />
-      <TB icon={Search} label={t("Find…")} shortcut="Ctrl+F" onClick={dlg("find")} />
+      <TB icon={Search} label={t("Find…")} shortcut={key("edit.find")} onClick={dlg("find")} />
       <Sep />
-      <TB icon={ZoomOut} label={t("Zoom Out")} shortcut="Ctrl+−" onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
+      <TB icon={ZoomOut} label={t("Zoom Out")} shortcut={key("view.zoomOut")} onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
       <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
-      <TB icon={ZoomIn} label={t("Zoom In")} shortcut="Ctrl++" onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
-      <TB icon={Maximize} label={t("Zoom to Fit")} shortcut="Ctrl+Shift+0" onClick={() => { zoomToFit(); }} />
+      <TB icon={ZoomIn} label={t("Zoom In")} shortcut={key("view.zoomIn")} onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
+      <TB icon={Maximize} label={t("Zoom to Fit")} shortcut={key("view.zoomFit")} onClick={() => { zoomToFit(); }} />
       <span className="tb-spacer" />
       <TB icon={Users} label={t("Player Settings…")} onClick={dlg("playerSettings")} text={t("Players")} />
-      <TB icon={Zap} label={t("Trigger Editor…")} shortcut="Ctrl+T" onClick={dlg("triggerEditor")} text={t("Triggers")} accent />
+      <TB icon={Zap} label={t("Trigger Editor…")} shortcut={key("tools.triggers")} onClick={dlg("triggerEditor")} text={t("Triggers")} accent />
       <Sep />
-      <TB icon={Play} label={t("Test Map — write the map where StarCraft lists it")} shortcut="Ctrl+F5" onClick={() => open("testMap", { run: true })} text={t("Test")} />
+      <TB icon={Play} label={t("Test Map — write the map where StarCraft lists it")} shortcut={key("tools.testMap")} onClick={() => open("testMap", { run: true })} text={t("Test")} />
     </div>
   );
 }

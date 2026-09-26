@@ -30,6 +30,8 @@ import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type Pane
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
 import { BUG_REPORT_BUDGET, formatLog, issueUrl, logDropped, logEntries } from "../../editor/log";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
+import { hotkeysAtom } from "../../atoms/preferencesAtoms";
+import { shortcutOf } from "../../editor/commands";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
@@ -174,14 +176,14 @@ function safely<T>(fn: () => T, fallback: T): T {
 }
 
 /** The layers by id, `label` English (show it through `translate`). */
-export const LAYERS: { id: EditorLayer; label: string; key: string }[] = [
-  { id: "terrain", label: msg("Terrain"), key: "T" },
-  { id: "doodads", label: msg("Doodads"), key: "D" },
-  { id: "units", label: msg("Units"), key: "U" },
-  { id: "sprites", label: msg("Sprites"), key: "S" },
-  { id: "locations", label: msg("Locations"), key: "L" },
-  { id: "fog", label: msg("Fog of War"), key: "F" },
-  { id: "clipboard", label: msg("Cut / Copy / Paste"), key: "C" },
+export const LAYERS: { id: EditorLayer; label: string }[] = [
+  { id: "terrain", label: msg("Terrain") },
+  { id: "doodads", label: msg("Doodads") },
+  { id: "units", label: msg("Units") },
+  { id: "sprites", label: msg("Sprites") },
+  { id: "locations", label: msg("Locations") },
+  { id: "fog", label: msg("Fog of War") },
+  { id: "clipboard", label: msg("Cut / Copy / Paste") },
 ];
 
 export const ZOOM_LEVELS = ZOOM_STEPS;
@@ -190,6 +192,8 @@ function useMenus(): Menu[] {
   const t = useT();
   const open = useSetAtom(openDialogAtom);
   const pluginItems = useAtomValue(pluginMenuItemsAtom);
+  const hotkeys = useAtomValue(hotkeysAtom);
+  const key = (command: string) => shortcutOf(hotkeys, command);
   const overlays = useAtomValue(pluginOverlaysAtom);
   const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
   const setStatus = useSetAtom(statusMessageAtom);
@@ -289,8 +293,8 @@ function useMenus(): Menu[] {
     {
       label: msg("File"),
       items: [
-        dlg(msg("New…"), "newMap", "Ctrl+N"),
-        dlg(msg("Open…"), "openMap", "Ctrl+O"),
+        dlg(msg("New…"), "newMap", key("file.new")),
+        dlg(msg("Open…"), "openMap", key("file.open")),
         {
           kind: "sub",
           label: msg("Open Recent"),
@@ -306,8 +310,8 @@ function useMenus(): Menu[] {
         dlg(msg("Recover Maps…"), "recovery"),
         dlg(msg("Previous Versions…"), "previousVersions"),
         sep,
-        { kind: "item", label: msg("Save"), shortcut: "Ctrl+S", onSelect: () => { void save(); } },
-        dlg(msg("Save As…"), "saveAs", "Ctrl+Shift+S"),
+        { kind: "item", label: msg("Save"), shortcut: key("file.save"), onSelect: () => { void save(); } },
+        dlg(msg("Save As…"), "saveAs", key("file.saveAs")),
         dlgWith(msg("Save Copy As…"), "saveAs", { copy: true }),
         sep,
         {
@@ -331,10 +335,10 @@ function useMenus(): Menu[] {
           ],
         },
         sep,
-        dlg(msg("Map Properties…"), "mapProperties", "Alt+Enter"),
+        dlg(msg("Map Properties…"), "mapProperties", key("file.properties")),
         sep,
         // Ctrl+W is the browser's own (it closes the tab); only the desktop build can take it.
-        dlg(msg("Close Map"), "confirmClose", desktop ? "Ctrl+W" : undefined),
+        dlg(msg("Close Map"), "confirmClose", key("file.close")),
         // A browser tab cannot close itself; the desktop build quits through the same unsaved-changes gate as its close button, one open map at a time.
         ...(desktop ? [sep, { kind: "item", label: msg("Exit"), shortcut: desktop.platform === "darwin" ? "Cmd+Q" : "Alt+F4", onSelect: () => { void quitGuard(store, true).then((quit) => { if (quit) desktop.window.respondClose(true); }); } } as Item] : []),
       ],
@@ -342,35 +346,35 @@ function useMenus(): Menu[] {
     {
       label: msg("Edit"),
       items: [
-        { kind: "item", label: undoLabel ? t("Undo {what}", { what: undoLabel }) : msg("Undo"), shortcut: "Ctrl+Z", disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); } },
-        { kind: "item", label: redoLabel ? t("Redo {what}", { what: redoLabel }) : msg("Redo"), shortcut: "Ctrl+Y", disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); } },
+        { kind: "item", label: undoLabel ? t("Undo {what}", { what: undoLabel }) : msg("Undo"), shortcut: key("edit.undo"), disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); } },
+        { kind: "item", label: redoLabel ? t("Redo {what}", { what: redoLabel }) : msg("Redo"), shortcut: key("edit.redo"), disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); } },
         sep,
-        { kind: "item", label: msg("Cut"), shortcut: "Ctrl+X", disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
-        { kind: "item", label: msg("Copy"), shortcut: "Ctrl+C", disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
-        { kind: "item", label: msg("Paste"), shortcut: "Ctrl+V", disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
+        { kind: "item", label: msg("Cut"), shortcut: key("edit.cut"), disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
+        { kind: "item", label: msg("Copy"), shortcut: key("edit.copy"), disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
+        { kind: "item", label: msg("Paste"), shortcut: key("edit.paste"), disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
         { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
         sep,
-        { kind: "item", label: msg("Select All"), shortcut: "Ctrl+A", disabled: !hasMap, onSelect: selectAll },
+        { kind: "item", label: msg("Select All"), shortcut: key("edit.selectAll"), disabled: !hasMap, onSelect: selectAll },
         { kind: "item", label: msg("Deselect"), shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
         sep,
-        dlg(msg("Find…"), "find", "Ctrl+F"),
+        dlg(msg("Find…"), "find", key("edit.find")),
         sep,
-        dlg(msg("Preferences…"), "preferences", "Ctrl+,"),
+        dlg(msg("Preferences…"), "preferences", key("tools.preferences")),
       ],
     },
     {
       label: msg("View"),
       items: [
-        { kind: "item", label: msg("Zoom In"), shortcut: "Ctrl++", onSelect: zoomIn },
-        { kind: "item", label: msg("Zoom Out"), shortcut: "Ctrl+−", onSelect: zoomOut },
+        { kind: "item", label: msg("Zoom In"), shortcut: key("view.zoomIn"), onSelect: zoomIn },
+        { kind: "item", label: msg("Zoom Out"), shortcut: key("view.zoomOut"), onSelect: zoomOut },
         {
           kind: "sub",
           label: msg("Zoom"),
-          items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => setZoom(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? "Ctrl+0" : undefined })) }],
+          items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => setZoom(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? key("view.zoomActual") : undefined })) }],
         },
-        { kind: "item", label: msg("Zoom to Fit"), shortcut: "Ctrl+Shift+0", onSelect: () => { zoomToFit(); } },
+        { kind: "item", label: msg("Zoom to Fit"), shortcut: key("view.zoomFit"), onSelect: () => { zoomToFit(); } },
         sep,
-        flag("grid", msg("Grid"), "Ctrl+G"),
+        flag("grid", msg("Grid"), key("view.grid")),
         dlgWith(msg("Grid Settings…"), "preferences", { page: "editing" }),
         sep,
         flag("units", msg("Units")),
@@ -398,7 +402,7 @@ function useMenus(): Menu[] {
     {
       label: msg("Layer"),
       items: [
-        { kind: "radio-group", value: layer, onChange: (v) => setLayer(v as EditorLayer), items: LAYERS.map((l) => ({ value: l.id, label: l.label, shortcut: l.key })) },
+        { kind: "radio-group", value: layer, onChange: (v) => setLayer(v as EditorLayer), items: LAYERS.map((l) => ({ value: l.id, label: l.label, shortcut: key(`layer.${l.id}`) })) },
       ],
     },
     {
@@ -427,7 +431,7 @@ function useMenus(): Menu[] {
     {
       label: msg("Triggers"),
       items: [
-        dlg(msg("Trigger Editor…"), "triggerEditor", "Ctrl+T"),
+        dlg(msg("Trigger Editor…"), "triggerEditor", key("tools.triggers")),
         dlg(msg("Mission Briefing Editor…"), "missionBriefing"),
         dlg(msg("Unit Properties Slots…"), "cuwpEditor"),
         sep,
@@ -450,7 +454,7 @@ function useMenus(): Menu[] {
         dlg(msg("Check Map…"), "validateMap"),
         dlg(msg("Statistics…"), "statistics"),
         sep,
-        dlgWith(msg("Test Map"), "testMap", { run: true }, "Ctrl+F5"),
+        dlgWith(msg("Test Map"), "testMap", { run: true }, key("tools.testMap")),
         dlg(msg("Test Map Settings…"), "testMap"),
       ],
     },
@@ -465,8 +469,8 @@ function useMenus(): Menu[] {
       label: msg("Window"),
       items: [
         // Ctrl+Tab belongs to the browser's own tabs; only the desktop build can take it.
-        { kind: "item", label: msg("Next Map"), shortcut: desktop ? "Ctrl+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, 1); } },
-        { kind: "item", label: msg("Previous Map"), shortcut: desktop ? "Ctrl+Shift+Tab" : undefined, disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, -1); } },
+        { kind: "item", label: msg("Next Map"), shortcut: key("window.next"), disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, 1); } },
+        { kind: "item", label: msg("Previous Map"), shortcut: key("window.previous"), disabled: tabs.length < 2, onSelect: () => { stepDocumentIn(store, -1); } },
         sep,
         ...(tabs.length > 0
           ? [{
@@ -479,7 +483,7 @@ function useMenus(): Menu[] {
     {
       label: msg("Help"),
       items: [
-        dlg(msg("Keyboard Shortcuts…"), "shortcuts", "F1"),
+        dlg(msg("Keyboard Shortcuts…"), "shortcuts", key("help.shortcuts")),
         dlg(msg("Game Data…"), "gameData"),
         // Desktop only: the web build has nothing to update.
         ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),

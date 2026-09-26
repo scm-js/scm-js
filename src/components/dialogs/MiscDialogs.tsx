@@ -68,12 +68,14 @@ import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
-import { HOTKEYS } from "./hotkeys";
+import { hotkeyRows } from "./hotkeys";
+import { hotkeysAtom } from "../../atoms/preferencesAtoms";
 
 /* ── Shortcuts ──────────────────────────────────────────── */
 
 export function ShortcutsDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
+  const rows = hotkeyRows(useAtomValue(hotkeysAtom));
   return (
     <DialogFrame
       dialogKey={entry.key}
@@ -89,13 +91,13 @@ export function ShortcutsDialog({ entry }: DialogProps) {
       <div className="listbox hotkeys" style={{ maxHeight: 420 }}>
         <table className="table">
           <tbody>
-            {HOTKEYS.map(([cmd, keys]) => (
-              <tr key={cmd}>
-                <td>{translate(cmd)}</td>
+            {rows.map(({ label, keys }) => (
+              <tr key={label}>
+                <td>{translate(label)}</td>
                 <td style={{ textAlign: "right" }}>
-                  {keys.split(" · ").map((k) => (
+                  {keys.map((k) => (
                     <span key={k} className="kbd">
-                      {k}
+                      {translate(k)}
                     </span>
                   ))}
                 </td>

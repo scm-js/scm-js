@@ -1,30 +1,21 @@
-/** The shortcut table Preferences ▸ Hotkeys and F1 show — a hand-kept list, not what `useHotkeys` reads. */
-import { msg } from "../../i18n";
+/** The shortcut table F1 shows: every command with the keys it answers to now, then the keys that are not commands. */
+import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, formatCombo, type ResolvedHotkeys } from "../../editor/commands";
 
-export const HOTKEYS: [string, string][] = [
-  ["New / Open / Save", "Ctrl+N · Ctrl+O · Ctrl+S"],
-  [msg("Save As"), "Ctrl+Shift+S"],
-  [msg("Map Properties"), "Alt+Enter"],
-  [msg("Undo / Redo"), "Ctrl+Z · Ctrl+Y or Ctrl+Shift+Z"],
-  ["Cut / Copy / Paste", "Ctrl+X · Ctrl+C · Ctrl+V"],
-  [msg("Find"), "Ctrl+F"],
-  [msg("Toggle grid"), "Ctrl+G"],
-  [msg("Zoom in / out / 100%"), "Ctrl++ · Ctrl+− · Ctrl+0"],
-  [msg("Zoom to fit"), "Ctrl+Shift+0"],
-  ["Layer: Terrain / Doodads / Units", "T · D · U"],
-  ["Layer: Sprites / Locations / Fog", "S · L · F"],
-  ["Layer: Cut/Copy/Paste", "C"],
-  [msg("Brush smaller / larger"), "[ · ]"],
-  [msg("Scroll the view (two tiles / half a screen)"), "Arrows · Shift+Arrows"],
-  [msg("Nudge selected locations (snap step / 1 px)"), "Arrows · Shift+Arrows"],
-  [msg("Pan the view"), "middle-drag"],
-  [msg("Delete selection / stop placing, clear selection"), "Del · Esc"],
-  [msg("Cancel a plugin's map pick or tool"), "Esc · right-click"],
-  [msg("Trigger Editor"), "Ctrl+T"],
-  [msg("Test Map"), "Ctrl+F5"],
-  [msg("Next / previous open map (desktop app)"), "Ctrl+Tab · Ctrl+Shift+Tab"],
-  [msg("Close map (desktop app)"), "Ctrl+W"],
-  [msg("Preferences"), "Ctrl+,"],
-  [msg("Keyboard shortcuts"), "F1"],
-  [msg("Full screen"), "F11"],
-];
+export interface HotkeyRow {
+  /** A `msg()` key; `translate` where shown. */
+  label: string;
+  keys: string[];
+}
+
+export function hotkeyRows(resolved: ResolvedHotkeys): HotkeyRow[] {
+  const rows: HotkeyRow[] = [];
+  for (const g of COMMAND_GROUPS) {
+    for (const c of COMMANDS) {
+      if (c.group !== g.id) continue;
+      const keys = resolved.byCommand[c.id] ?? [];
+      if (keys.length > 0) rows.push({ label: c.label, keys: keys.map(formatCombo) });
+    }
+  }
+  for (const [label, keys] of FIXED_KEYS) rows.push({ label, keys });
+  return rows;
+}

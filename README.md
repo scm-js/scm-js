@@ -2232,7 +2232,8 @@ for trying the plugin API on the open map before writing a plugin.
 
 ## Keyboard and preferences
 
-Press F1 for a list of every shortcut. These are the ones worth knowing up front:
+Press F1 for a list of every shortcut. These are the ones the editor starts with; any of the
+commands can be given other keys on Preferences ▸ Hotkeys:
 
 | Keys | |
 | --- | --- |
@@ -2273,7 +2274,9 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   brush size, the size of a new location; and how many undo levels each map keeps.
 - **View** — whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a
   wheel zoom keeps the tile under the pointer in place; whether water and units animate
-  and how fast; and whether string previews follow Remastered's colour rule or 1.16.1's.
+  and how fast; which cells the status bar shows (the tile, pixel and tile id under the
+  cursor, the map size, tileset, layer, zoom and revision); and whether string previews
+  follow Remastered's colour rule or 1.16.1's.
 - **Testing** — Test Map's folder, and in the desktop app whether the game starts after
   the map is written.
 - **Plugins** — what to do when an installed plugin has a newer version (a notice, nothing,
@@ -2287,7 +2290,15 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   sessions, and so do the previous versions of saved files. **Export** writes
   the settings and the plugins' own as one file, and **Import** takes such a file into
   another browser or machine; caches and the recent files stay behind.
-- **Hotkeys** — the shortcut table.
+- **Hotkeys** — every command and its keys. **+** on a row waits for the next keys you
+  press and adds them (Esc stops waiting); the × on a key removes it, and a command can have
+  several keys or none. Keys used by two commands, or by a command and a plugin, are marked:
+  a plugin's keys are tried first, and between two commands the one higher in the list wins.
+  Delete, Esc, the arrows, Tab, Enter, Space and F11 keep their own jobs and cannot be given
+  to a command. A plain key such as `T` never fires while you type in a text box, and most
+  Ctrl shortcuts leave a text box's own undo, clipboard and select-all alone. The browser
+  keeps Ctrl+Tab and Ctrl+W for its tabs, so Next Map and Close Map start with no keys
+  there; give them others if you want them.
 
 Nothing is written until OK or Apply; **Reset to defaults** puts every page back. The
 placement options, the panels and the recent files are remembered too.

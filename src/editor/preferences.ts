@@ -7,6 +7,7 @@ import type { TilesetId } from "../data/tilesets";
 import type { MapVersion } from "../formats/chk/scenario";
 import type { ArchiveCompression } from "../formats/mpq/scm";
 import type { LanguagePreference } from "../i18n";
+import type { HotkeyOverrides } from "./commands";
 
 export type { LanguagePreference };
 
@@ -106,6 +107,29 @@ export interface Preferences {
    * ever named in the notice. Every mode leaves the confirmation on a row's button alone.
    */
   plugins: { updates: PluginUpdateMode };
+  /**
+   * Preferences ▸ Hotkeys: the commands whose keys the user changed, by command id
+   * (`editor/commands.ts`), each with its whole list — `[]` leaves it with none. A
+   * command not here has the keys it ships with.
+   */
+  hotkeys: HotkeyOverrides;
+  /**
+   * Which cells the status bar shows (Preferences ▸ View). The message, the symmetry badge
+   * while a mode is on, and the plugins' items always show.
+   */
+  statusBar: StatusBarCells;
+}
+
+/** See `Preferences.statusBar`, in the order the bar draws them. */
+export interface StatusBarCells {
+  tile: boolean;
+  pixel: boolean;
+  tileId: boolean;
+  size: boolean;
+  tileset: boolean;
+  layer: boolean;
+  zoom: boolean;
+  revision: boolean;
 }
 
 /** See `Preferences.plugins.updates`. */
@@ -143,6 +167,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   testMap: { launch: true, dir: "" },
   updates: { checkOnStart: true, nightly: false },
   plugins: { updates: "notify" },
+  hotkeys: {},
+  statusBar: { tile: true, pixel: true, tileId: true, size: true, tileset: true, layer: true, zoom: true, revision: true },
 };
 
 /** The speeds the Preferences sliders offer, slowest first. */

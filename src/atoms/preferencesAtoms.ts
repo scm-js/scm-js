@@ -19,6 +19,8 @@ import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { recentFilesAtom } from "./documentAtoms";
 import { gameDataProfileAtom } from "./gameDataAtoms";
+import { resolveHotkeys } from "../editor/commands";
+import { desktopBridge } from "../gamedata/desktop";
 
 export type { Preferences } from "../editor/preferences";
 export { ANIMATION_SPEEDS, animationSpeedIndex, DEFAULT_PREFERENCES } from "../editor/preferences";
@@ -68,6 +70,17 @@ export const gridLookAtom = atomWithStorage<GridLook>("scmjs.grid", DEFAULT_GRID
  */
 export const animateWaterSpeedAtom = atom((get) => get(preferencesAtom).animateWaterSpeed);
 export const animateUnitsSpeedAtom = atom((get) => get(preferencesAtom).animateUnitsSpeed);
+
+/** The status bar's cells on their own, so the bar does not re-render for every other preference. */
+export const statusBarCellsAtom = atom((get) => get(preferencesAtom).statusBar);
+
+/**
+ * The keys every command answers to, merged over the defaults for this build. Read
+ * through `hotkeyOverridesAtom`, which keeps its value while any other preference
+ * changes, so the menus and `useHotkeys` see a new value only when a binding does.
+ */
+const hotkeyOverridesAtom = atom((get) => get(preferencesAtom).hotkeys);
+export const hotkeysAtom = atom((get) => resolveHotkeys(get(hotkeyOverridesAtom), !!desktopBridge()));
 
 /* ── Clearing ───────────────────────────────────────────── */
 

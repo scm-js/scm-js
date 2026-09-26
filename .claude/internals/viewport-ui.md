@@ -170,7 +170,27 @@ read in the first effect pass is still null.
   (`useMapFileActions.ts`, the gate `document.open` / `document.create` share). Electron fires
   `beforeunload` on a window close too but a value returned there cancels it *silently*, which
   is why the browser half is skipped whenever the bridge is there.
-- Hotkeys are centralised in `src/hooks/useHotkeys.ts`; file actions (open/save/new, drag-drop) in
+- Hotkeys: `src/editor/commands.ts` is the one list of rebindable commands (id, label, group,
+  `defaults` / `webDefaults`, `inText`, `inDialogs`) and the combo grammar (`comboOf`: Ctrl
+  folds Cmd in, letters/digits from `e.key` when it is one else from `e.code` — so AZERTY
+  Ctrl+A is Ctrl+A but Ctrl+Shift+0 is not `)` and a Hangul layout still hits Ctrl+S; `+` is
+  `Plus`). `Preferences.hotkeys` holds only the commands the user changed, each with its whole
+  list (`[]` = unbound); `withBinding` drops an entry equal to the defaults. `hotkeysAtom`
+  (preferencesAtoms.ts) resolves them through a derived `hotkeyOverridesAtom` so an unrelated
+  preference does not re-render the menus. `useHotkeys` order: `inDialogs` commands (F1) →
+  return if a dialog is open → plugin hotkeys (still `comboOfEvent`, their own format; a
+  plugin wins a clash) → the command (text fields: only `inText` and only with Ctrl/Alt/F-key,
+  `firesWhileTyping`) → Delete / Escape / arrows inline, which are layer-dependent and
+  `reservedReason` keeps off-limits for binding. MenuBar / ToolBar / F1 (`dialogs/hotkeys.ts`
+  `hotkeyRows`) read labels through `shortcutOf`; `LAYERS` no longer carries a key. The
+  Hotkeys page captures on a window **capture-phase** listener with stopPropagation, so neither
+  DialogFrame's Escape nor the editor's hotkeys see the key being bound. Tests:
+  `tests/hotkeys.test.ts`.
+- Status bar cells: `Preferences.statusBar` (eight booleans, Preferences ▸ View), read by
+  `StatusBar.tsx` through `statusBarCellsAtom` so the bar does not re-render on unrelated
+  preference changes. The message, the symmetry badge and plugin status items are not
+  optional. Ctrl+A's status line uses the same plural `t()` strings as Edit ▸ Select All.
+- File actions (open/save/new, drag-drop) are in
   `src/hooks/useMapFileActions.ts` and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).
 - CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs → splash`

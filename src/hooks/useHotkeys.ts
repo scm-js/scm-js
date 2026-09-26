@@ -3,12 +3,12 @@ import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
-  type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, selectAllAtom, undoAtom,
+  deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
 } from "../atoms/documentAtoms";
-import { desktopBridge } from "../gamedata/desktop";
+import { hotkeysAtom } from "../atoms/preferencesAtoms";
+import { commandById, comboOf, firesWhileTyping, isModifierKey } from "../editor/commands";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
@@ -16,10 +16,12 @@ import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
 
-const LAYER_KEYS: Record<string, EditorLayer> = { t: "terrain", d: "doodads", u: "units", s: "sprites", l: "locations", f: "fog", c: "clipboard" };
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
-/** Global editor hotkeys (UI only). */
+/**
+ * Global editor hotkeys (UI only). The rebindable ones are `editor/commands.ts`, matched
+ * through `hotkeysAtom`; Delete, Escape and the arrows depend on the layer and stay inline.
+ */
 export function useHotkeys() {
   const store = useStore();
   const open = useSetAtom(openDialogAtom);
@@ -53,76 +55,96 @@ export function useHotkeys() {
   const selectAll = useSetAtom(selectAllAtom);
   const zoomToFit = useSetAtom(zoomToFitAtom);
 
+  const hotkeys = useAtomValue(hotkeysAtom);
+
   useEffect(() => {
+    const zoomIn = () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z);
+    const zoomOut = () => setZoom((z) => [...ZOOM_LEVELS].reverse().find((v) => v < z) ?? z);
+    const redoOne = () => { const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); };
+    // What each command in `editor/commands.ts` does; the keys come from the resolved table.
+    const run: Record<string, () => void> = {
+      "file.new": () => open("newMap"),
+      "file.open": () => open("openMap"),
+      "file.save": () => { void save(); },
+      "file.saveAs": () => open("saveAs"),
+      "file.close": () => open("confirmClose"),
+      "file.properties": () => open("mapProperties"),
+      "edit.undo": () => { const l = undo(); setStatus(l ? t("Undid: {l}", { l }) : t("Nothing to undo")); },
+      "edit.redo": redoOne,
+      "edit.cut": () => { clipTools.cut(); },
+      "edit.copy": () => { clipTools.copy(); },
+      "edit.paste": () => { clipTools.paste(); },
+      "edit.selectAll": () => {
+        if (!store.get(scenarioAtom)) return;
+        if (activeLayer === "clipboard") { clipTools.selectAll(); return; }
+        const n = selectAll(activeLayer);
+        if (!["doodads", "sprites", "locations", "units"].includes(activeLayer)) setLayer("units");
+        // The same words as Edit ▸ Select All.
+        setStatus(activeLayer === "doodads" ? t("Selected {n, plural, one {# doodad} other {# doodads}}", { n })
+          : activeLayer === "sprites" ? t("Selected {n, plural, one {# sprite} other {# sprites}}", { n })
+            : activeLayer === "locations" ? t("Selected {n, plural, one {# location} other {# locations}}", { n })
+              : t("Selected {n, plural, one {# unit} other {# units}}", { n }));
+      },
+      "edit.find": () => open("find"),
+      "view.grid": () => setFlags((f) => ({ ...f, grid: !f.grid })),
+      "view.zoomIn": zoomIn,
+      "view.zoomOut": zoomOut,
+      "view.zoomActual": () => setZoom(1),
+      "view.zoomFit": () => { zoomToFit(); },
+      "layer.terrain": () => setLayer("terrain"),
+      "layer.doodads": () => setLayer("doodads"),
+      "layer.units": () => setLayer("units"),
+      "layer.sprites": () => setLayer("sprites"),
+      "layer.locations": () => setLayer("locations"),
+      "layer.fog": () => setLayer("fog"),
+      "layer.clipboard": () => setLayer("clipboard"),
+      // SCMDraft grows and shrinks the brush with the bracket keys.
+      "brush.smaller": () => setBrush((b) => Math.max(1, b - 1)),
+      "brush.larger": () => setBrush((b) => Math.min(7, b + 1)),
+      "tools.triggers": () => open("triggerEditor"),
+      "tools.testMap": () => open("testMap", { run: true }),
+      "tools.preferences": () => open("preferences"),
+      "window.next": () => stepDocumentIn(store, 1),
+      "window.previous": () => stepDocumentIn(store, -1),
+      "help.shortcuts": () => open("shortcuts"),
+    };
+
     const onKey = (e: KeyboardEvent) => {
       // Mid-composition keystrokes (Hangul, kana, pinyin): the IME owns them, and the
       // key it reports is not the character being typed.
       if (e.isComposing || e.keyCode === 229) return;
+      if (isModifierKey(e.key)) return;
       const target = e.target as HTMLElement | null;
       // A tick box or radio button keeps focus after a click but has no text to edit, so the hotkeys still apply there.
       const textInput = target?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((target as HTMLInputElement).type);
       const typing = !!target && (textInput || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
       const mod = e.ctrlKey || e.metaKey;
+      const combo = comboOf(e);
+      const id = hotkeys.byCombo.get(combo);
+      const command = id ? commandById(id) : undefined;
 
-      if (e.key === "F1") { e.preventDefault(); open("shortcuts"); return; }
+      if (command?.inDialogs) { e.preventDefault(); run[command.id]?.(); return; }
       if (dialogs.length > 0) return;
 
       // Plugin hotkeys come first, never while typing (a plugin cannot know which fields are safe).
       if (!typing && pluginHotkeys.length > 0) {
-        const combo = comboOfEvent(e);
-        const hit = pluginHotkeys.find((h) => h.combo === combo);
+        const pluginCombo = comboOfEvent(e);
+        const hit = pluginHotkeys.find((h) => h.combo === pluginCombo);
         if (hit) {
           e.preventDefault();
-          try { hit.run(); } catch (err) { console.error(`[plugins] hotkey ${combo} failed`, err); }
+          try { hit.run(); } catch (err) { console.error(`[plugins] hotkey ${pluginCombo} failed`, err); }
           return;
         }
       }
 
-      // Ctrl+Tab walks the open maps — a browser keeps it for its own tabs, so only the desktop build sees it here.
-      if (mod && e.key === "Tab" && desktopBridge()) { e.preventDefault(); stepDocumentIn(store, e.shiftKey ? -1 : 1); return; }
-
-      if (mod && !e.shiftKey) {
-        const k = e.key.toLowerCase();
-        const map: Record<string, () => void> = {
-          n: () => open("newMap"),
-          o: () => open("openMap"),
-          s: () => { void save(); },
-          z: () => { const l = undo(); setStatus(l ? t("Undid: {l}", { l }) : t("Nothing to undo")); },
-          y: () => { const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); },
-          x: () => { clipTools.cut(); },
-          c: () => { clipTools.copy(); },
-          v: () => { clipTools.paste(); },
-          g: () => setFlags((f) => ({ ...f, grid: !f.grid })),
-          t: () => open("triggerEditor"),
-          f: () => open("find"),
-          ",": () => open("preferences"),
-          f5: () => open("testMap", { run: true }),
-          "=": () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z),
-          "+": () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z),
-          "-": () => setZoom((z) => [...ZOOM_LEVELS].reverse().find((v) => v < z) ?? z),
-          "0": () => setZoom(1),
-          a: () => {
-            if (activeLayer === "clipboard") { clipTools.selectAll(); return; }
-            const n = selectAll(activeLayer);
-            if (!["doodads", "sprites", "locations", "units"].includes(activeLayer)) setLayer("units");
-            setStatus(`Selected ${n} ${activeLayer === "doodads" ? "doodad" : activeLayer === "sprites" ? "sprite" : activeLayer === "locations" ? "location" : "unit"}${n === 1 ? "" : "s"}`);
-          },
-          // Ctrl+W is the browser's own shortcut (close the tab); only the desktop build sees it here.
-          ...(desktopBridge() ? { w: () => open("confirmClose") } : {}),
-        };
-        // Inside a text field the browser keeps its own clipboard, selection and undo.
-        if (map[k] && !(typing && ["=", "+", "-", "0", "g", "t", "f", "z", "y", "x", "c", "v", "a"].includes(k))) { e.preventDefault(); map[k](); }
+      if (command) {
+        // Inside a text field the browser keeps its own clipboard, selection, undo — and the text.
+        if (typing && !firesWhileTyping(command, combo)) return;
+        e.preventDefault();
+        run[command.id]?.();
         return;
       }
-      if (mod && e.shiftKey) {
-        const k = e.key.toLowerCase();
-        if (k === "s") { e.preventDefault(); open("saveAs"); }
-        if (k === "z" && !typing) { e.preventDefault(); const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); }
-        if (k === ")" || k === "0") { e.preventDefault(); zoomToFit(); }
-        return;
-      }
-      if (e.altKey && e.key === "Enter") { e.preventDefault(); open("mapProperties"); return; }
-      if (typing || e.altKey) return;
+      if (typing || mod || e.altKey) return;
 
       if (e.key === "Delete" || e.key === "Backspace") {
         if (activeLayer === "clipboard") {
@@ -191,14 +213,8 @@ export function useHotkeys() {
         store.set(centerViewOnAtom, { x: v.x + v.w / 2 + dx, y: v.y + v.h / 2 + dy });
         return;
       }
-
-      const layer = LAYER_KEYS[e.key.toLowerCase()];
-      if (layer) setLayer(layer);
-      // SCMDraft grows and shrinks the brush with the bracket keys.
-      if (e.key === "[") setBrush((b) => Math.max(1, b - 1));
-      if (e.key === "]") setBrush((b) => Math.min(7, b + 1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit]);
+  }, [store, open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit, hotkeys]);
 }

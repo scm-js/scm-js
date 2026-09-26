@@ -617,6 +617,53 @@
 .hotkeys .kbd {
   margin-right: 3px;
 }
+.prefs .hotkeys {
+  overflow-x: hidden;
+}
+.prefs .hotkeys td .kbd {
+  margin-block: 1px;
+}
+.prefs .hotkeys td.hotkey-keys {
+  white-space: normal;
+}
+.prefs .hotkeys td:first-child {
+  white-space: normal;
+}
+.hotkeys .hotkeys-group td {
+  padding-top: 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.hotkey-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.hotkey-remove {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.hotkey-remove:hover {
+  color: var(--danger);
+}
+.hotkeys .kbd.is-conflict {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.hotkeys .kbd.is-capturing {
+  border-style: dashed;
+  color: var(--text);
+}
+.prefs-hint.warn {
+  color: var(--warn);
+}
 
 /* validation */
 .issue {
@@ -1426,3 +1473,10 @@
 .recovery-list { max-height: 280px; overflow: auto; margin: 10px 0; }
 .recovery-list .recovery-item { gap: 8px; padding: 6px 8px; align-items: center; height: auto; }
 .recovery-item .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* preferences: a short list of ticks in two columns */
+.prefs-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 16px;
+}

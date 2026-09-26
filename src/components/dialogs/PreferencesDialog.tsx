@@ -9,7 +9,7 @@
  * atoms; the working copy re-reads whatever a clear touched so OK afterwards does not write
  * the old values straight back.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronDown,
@@ -21,6 +21,8 @@ import {
   HardDrive,
   History,
   Keyboard,
+  Plus,
+  X,
   Upload,
   PencilRuler,
   Play,
@@ -30,7 +32,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { pluginPreferencesPagesAtom, type PluginPreferencesPageEntry } from "../../atoms/pluginAtoms";
+import { pluginHotkeysAtom, pluginPreferencesPagesAtom, pluginRuntimesAtom, type PluginPreferencesPageEntry } from "../../atoms/pluginAtoms";
+import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, withBinding } from "../../editor/commands";
 import { logError } from "../../editor/log";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom } from "../../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
@@ -54,7 +57,7 @@ import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } 
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
 import { hostTerms, isDesktop } from "../../editor/platform";
-import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode } from "../../editor/preferences";
+import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
@@ -67,7 +70,6 @@ import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import FlagIcon from "../ui/FlagIcon";
 import type { DialogProps } from "./DialogHost";
-import { HOTKEYS } from "./hotkeys";
 import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./TestFolder";
 
 /* ── Pages ──────────────────────────────────────────────── */
@@ -209,7 +211,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
         <TransferSection onImported={() => setW(live())} />
       </div>
     ),
-    hotkeys: () => <HotkeysPage />,
+    hotkeys: () => <HotkeysPage w={w} patch={patch} />,
   };
 
   return (
@@ -506,6 +508,17 @@ function SpeedField({ label, value, onChange }: { label: string; value: number; 
   );
 }
 
+const STATUS_CELLS: [keyof StatusBarCells, string][] = [
+  ["tile", msg("Tile under the cursor")],
+  ["pixel", msg("Pixel under the cursor")],
+  ["tileId", msg("Tile id under the cursor")],
+  ["size", msg("Map size")],
+  ["tileset", msg("Tileset")],
+  ["layer", msg("Active layer")],
+  ["zoom", msg("Zoom")],
+  ["revision", msg("Map revision")],
+];
+
 function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
   const p = w.prefs;
   const view = (v: Partial<Preferences["view"]>) => patch({ view: { ...p.view, ...v } });
@@ -525,6 +538,14 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
           <SpeedField label={t("Unit speed")} value={p.animateUnitsSpeed} onChange={(v) => patch({ animateUnitsSpeed: v })} />
         </div>
         <Hint>{t("The ticks are what the View menu starts with; 1× is the speed the game itself runs at.")}</Hint>
+      </Section>
+      <Section title={t("Status bar")}>
+        <div className="prefs-checks">
+          {STATUS_CELLS.map(([k, label]) => (
+            <Check key={k} label={translate(label)} checked={p.statusBar[k]} onChange={(e) => patch({ statusBar: { ...p.statusBar, [k]: e.target.checked } })} />
+          ))}
+        </div>
+        <Hint>{t("The message, the symmetry mode while one is on, and what plugins add always show.")}</Hint>
       </Section>
       <Section title={t("Text colours")}>
         <Check radio name="classicText" label={t("Preview strings as Remastered draws them: a colour carries onto the next line")} checked={!p.classicText} onChange={() => patch({ classicText: false })} />
@@ -928,29 +949,114 @@ function TransferSection({ onImported }: { onImported: () => void }) {
 
 /* ── Hotkeys ────────────────────────────────────────────── */
 
-function HotkeysPage() {
+function HotkeysPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
+  const desktop = isDesktop();
+  const overrides = w.prefs.hotkeys;
+  const resolved = useMemo(() => resolveHotkeys(overrides, desktop), [overrides, desktop]);
+  const pluginHotkeys = useAtomValue(pluginHotkeysAtom);
+  const runtimes = useAtomValue(pluginRuntimesAtom);
+  const pluginName = (id: string) => runtimes[id]?.manifest?.name ?? id;
+  const pluginCombos = pluginHotkeys.map((h) => ({ combo: h.combo, plugin: pluginName(h.pluginId) }));
+  const [capturing, setCapturing] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const setKeys = (id: string, keys: string[] | null) => patch({ hotkeys: withBinding(overrides, id, keys, desktop) });
+
+  // While a row waits for keys, every key press is the new combo: taken on the capture
+  // phase so neither the dialog's Escape nor the editor's own hotkeys see it.
+  useEffect(() => {
+    if (!capturing) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.isComposing || isModifierKey(e.key)) return;
+      const combo = comboOf(e);
+      if (combo === "Escape") { setCapturing(null); setNote(null); return; }
+      const reserved = reservedReason(combo);
+      if (reserved) { setNote(t("{keys} cannot be used: {why}.", { keys: formatCombo(combo), why: translate(reserved) })); return; }
+      const now = resolved.byCommand[capturing] ?? [];
+      if (!now.includes(combo)) setKeys(capturing, [...now, combo]);
+      setCapturing(null);
+      setNote(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
+
   return (
-    <div className="listbox hotkeys" style={{ height: "100%" }}>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t("Command")}</th>
-            <th style={{ width: 240 }}>{t("Shortcut")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {HOTKEYS.map(([cmd, keys]) => (
-            <tr key={cmd}>
-              <td>{translate(cmd)}</td>
-              <td>
-                {keys.split(" · ").map((k) => (
-                  <span key={k} className="kbd">{k}</span>
-                ))}
-              </td>
+    <div className="stack" style={{ height: "100%" }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <Hint>{t("Add a key to a command with +, then press the keys. A plugin's keys are tried before the editor's.")}</Hint>
+        <Button size="sm" disabled={Object.keys(overrides).length === 0} onClick={() => { setCapturing(null); patch({ hotkeys: {} }); }}>
+          <RotateCcw size={11} /> {" "}{t("Reset all hotkeys")}
+        </Button>
+      </div>
+      {note && <p className="hint prefs-hint warn" role="status">{note}</p>}
+      <div className="listbox hotkeys" style={{ flex: 1, minHeight: 0 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th style={{ width: "36%" }}>{t("Command")}</th>
+              <th>{t("Shortcut")}</th>
+              <th style={{ width: 1 }} />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {COMMAND_GROUPS.map((g) => (
+              <Fragment key={g.id}>
+                <tr className="hotkeys-group"><td colSpan={3}>{translate(g.label)}</td></tr>
+                {COMMANDS.filter((c) => c.group === g.id).map((c) => {
+                  const keys = resolved.byCommand[c.id] ?? [];
+                  const conflicts = conflictsOf(c.id, resolved, pluginCombos);
+                  return (
+                    <tr key={c.id}>
+                      <td>{translate(c.label)}</td>
+                      <td className="hotkey-keys">
+                        {keys.map((k) => {
+                          const clash = conflicts.find((x) => x.combo === k);
+                          const also = clash ? [...clash.commands.map((id) => translate(commandById(id)?.label ?? id)), ...clash.plugins.map((n) => t("{plugin} (plugin, tried first)", { plugin: n }))].join(", ") : "";
+                          return (
+                            <span key={k} className={`kbd hotkey-chip${clash ? " is-conflict" : ""}`} title={clash ? t("Also: {also}", { also }) : undefined}>
+                              {formatCombo(k)}
+                              <button type="button" className="hotkey-remove" aria-label={t("Remove {keys}", { keys: formatCombo(k) })} onClick={() => setKeys(c.id, keys.filter((x) => x !== k))}>
+                                <X size={9} />
+                              </button>
+                            </span>
+                          );
+                        })}
+                        {capturing === c.id && <span className="kbd is-capturing">{t("Press keys… (Esc to stop)")}</span>}
+                        {keys.length === 0 && capturing !== c.id && <span className="faint">{t("none")}</span>}
+                      </td>
+                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <Button size="sm" aria-label={t("Add a key to {command}", { command: translate(c.label) })} title={t("Add a key")} onClick={() => { setNote(null); setCapturing(capturing === c.id ? null : c.id); }}>
+                          <Plus size={11} />
+                        </Button>
+                        {" "}
+                        <Button size="sm" disabled={!(c.id in overrides)} aria-label={t("Put back the keys {command} ships with", { command: translate(c.label) })} title={t("Back to the default")} onClick={() => setKeys(c.id, null)}>
+                          <RotateCcw size={11} />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
+            {pluginHotkeys.length > 0 && <tr className="hotkeys-group"><td colSpan={3}>{t("Plugins")}</td></tr>}
+            {pluginHotkeys.map((h) => (
+              <tr key={h.key}>
+                <td>{pluginName(h.pluginId)}</td>
+                <td colSpan={2}><span className="kbd">{h.combo}</span></td>
+              </tr>
+            ))}
+            <tr className="hotkeys-group"><td colSpan={3}>{t("Fixed")}</td></tr>
+            {FIXED_KEYS.map(([label, keys]) => (
+              <tr key={label}>
+                <td>{translate(label)}</td>
+                <td colSpan={2}>{keys.map((k) => <span key={k} className="kbd">{translate(k)}</span>)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

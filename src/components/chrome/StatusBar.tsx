@@ -3,6 +3,7 @@ import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTil
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
+import { statusBarCellsAtom } from "../../atoms/preferencesAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { hexTile } from "../../formats/tileset/palette";
@@ -28,38 +29,53 @@ export default function StatusBar() {
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
   const pluginItems = useAtomValue(pluginStatusItemsAtom);
+  const show = useAtomValue(statusBarCellsAtom);
   useAtomValue(terrainRevisionAtom);
   const tileId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
   return (
     <footer className="statusbar">
-      <span className="status-cell" title={t("Cursor tile")}>
-        <span className="k">{t("Tile")}</span>
-        <span className="v">{cursor.x}, {cursor.y}</span>
-      </span>
-      <span className="status-cell" title={t("Cursor position in map pixels")}>
-        <span className="k">{t("Px")}</span>
-        <span className="v">{pixel.x}, {pixel.y}</span>
-      </span>
-      <span className="status-cell" title={t("MTXM tile id under the cursor (group · slot)")}>
-        <span className="k">{t("Id")}</span>
-        <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId)}:${tileSubIndex(tileId)}`}</span>
-      </span>
-      <span className="status-cell" title={t("Map dimensions")}>
-        <span className="k">{t("Map")}</span>
-        <span className="v">{w} × {h}</span>
-      </span>
-      <span className="status-cell" title={t("Tileset")}>
-        <span className="swatch" style={{ background: tileset.color }} />
-        <span>{translate(tileset.name)}</span>
-      </span>
-      <span className="status-cell" title={t("Active layer")}>
-        <span className="k">{t("Layer")}</span>
-        <span>{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span>
-      </span>
-      <span className="status-cell" title={t("Zoom")}>
-        <span className="v">{Math.round(zoom * 100)}%</span>
-      </span>
+      {show.tile && (
+        <span className="status-cell" title={t("Cursor tile")}>
+          <span className="k">{t("Tile")}</span>
+          <span className="v">{cursor.x}, {cursor.y}</span>
+        </span>
+      )}
+      {show.pixel && (
+        <span className="status-cell" title={t("Cursor position in map pixels")}>
+          <span className="k">{t("Px")}</span>
+          <span className="v">{pixel.x}, {pixel.y}</span>
+        </span>
+      )}
+      {show.tileId && (
+        <span className="status-cell" title={t("MTXM tile id under the cursor (group · slot)")}>
+          <span className="k">{t("Id")}</span>
+          <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId)}:${tileSubIndex(tileId)}`}</span>
+        </span>
+      )}
+      {show.size && (
+        <span className="status-cell" title={t("Map dimensions")}>
+          <span className="k">{t("Map")}</span>
+          <span className="v">{w} × {h}</span>
+        </span>
+      )}
+      {show.tileset && (
+        <span className="status-cell" title={t("Tileset")}>
+          <span className="swatch" style={{ background: tileset.color }} />
+          <span>{translate(tileset.name)}</span>
+        </span>
+      )}
+      {show.layer && (
+        <span className="status-cell" title={t("Active layer")}>
+          <span className="k">{t("Layer")}</span>
+          <span>{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span>
+        </span>
+      )}
+      {show.zoom && (
+        <span className="status-cell" title={t("Zoom")}>
+          <span className="v">{Math.round(zoom * 100)}%</span>
+        </span>
+      )}
       {symmetry !== "none" && (
         <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? t("Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)") : t("This symmetry mode needs a square map — brushes paint normally")}>
           <span className="k">{t("Sym")}</span>
@@ -81,9 +97,11 @@ export default function StatusBar() {
           <span>{item.spec.text}</span>
         </span>
       ))}
-      <span className="status-cell" title={t("Map revision")}>
-        <span className="badge gold">{translate(VERSION_LABEL[version])}</span>
-      </span>
+      {show.revision && (
+        <span className="status-cell" title={t("Map revision")}>
+          <span className="badge gold">{translate(VERSION_LABEL[version])}</span>
+        </span>
+      )}
     </footer>
   );
 }

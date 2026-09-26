@@ -206,5 +206,16 @@ rather than from `process.platform`: `support.check` is `isUpdaterActive()`, bec
 `checkForUpdates()` resolves **null** instead of throwing — reading that as "up to date" is the lie
 `check()` maps to `unsupported`. `support.install` is false only on macOS (Squirrel.Mac verifies the
 code signature; unsigned cannot apply an update), where the dialog offers the release page instead of
-a progress bar. `message()` trims electron-updater's errors, which otherwise carry the whole HTTP
+a progress bar. **The nightly feed is read directly** (fixed 2026-09-26): with `allowPrerelease`,
+electron-updater's GitHub provider walks the releases feed and follows only tags that parse as
+versions (and only alpha/beta channels past a prerelease current version), so the rolling
+`nightly` tag was never chosen for a build that is itself a nightly — the check found nothing.
+`check()` now calls `setFeedURL` each time: nightly → `{ provider: "generic", url:
+".../releases/download/nightly" }` (the `latest*.yml` there names version-less assets that resolve
+beside it), stable → the GitHub provider (releases/latest). And an update is
+`result.isUpdateAvailable` (semver-greater), not "a different version" — the old test offered
+0.5.0 to a nightly with the line switched off, a downgrade. Verified against the live feeds with
+`NsisUpdater` + `forceDevUpdateConfig` under Electron for an older nightly, 0.5.0 and the current
+nightly, nightly on and off. A build from before the fix cannot find the fixed nightly by itself:
+install it once from the release page. `message()` trims electron-updater's errors, which otherwise carry the whole HTTP
 response — headers and `Set-Cookie` — into the dialog.

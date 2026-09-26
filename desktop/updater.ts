@@ -30,6 +30,8 @@ import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "../src/g
 
 /** The releases page, for every case that cannot install and for "what changed". */
 const RELEASES_URL = "https://github.com/scm-js/scm-js/releases";
+/** Where the nightly's `latest*.yml` and installers are: the rolling `nightly` tag's download folder. */
+const NIGHTLY_FEED = "https://github.com/scm-js/scm-js/releases/download/nightly";
 
 type Updater = import("electron-updater").AppUpdater;
 
@@ -123,6 +125,13 @@ async function check(allowPrerelease: boolean): Promise<UpdateAvailability> {
   const up = get();
   if (!up) return { status: "error", current, support: can, message: loadError ?? "The updater could not be loaded." };
   up.allowPrerelease = allowPrerelease;
+  // The nightly is one release under the fixed tag `nightly`, which is not a version, so
+  // electron-updater's GitHub provider never picks it for a build that is itself a nightly
+  // (it only follows tags that parse as versions, and only alpha/beta channels). Its feed
+  // is read straight from the tag's download folder instead; the assets carry no version
+  // in their names, so the files `latest*.yml` names resolve there too. Stable stays on the
+  // GitHub provider, which asks for the latest full release.
+  up.setFeedURL(allowPrerelease ? { provider: "generic", url: NIGHTLY_FEED } : { provider: "github", owner: "scm-js", repo: "scm-js" });
   try {
     const result = await up.checkForUpdates();
     // A null result means the updater declined to check at all — `support()` should have
@@ -131,8 +140,10 @@ async function check(allowPrerelease: boolean): Promise<UpdateAvailability> {
     if (!result) {
       return { status: "unsupported", current, support: { ...can, check: false, install: false, reason: can.reason ?? "The updater declined to check." } };
     }
+    // Only something newer is an update: a nightly build with the nightly line switched off
+    // finds the last release, which is older, and a downgrade is not offered.
     const version = result.updateInfo?.version;
-    if (!version || version === current) return { status: "current", current, support: can };
+    if (!version || !result.isUpdateAvailable) return { status: "current", current, support: can };
     return {
       status: "available",
       current,

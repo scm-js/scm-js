@@ -10,6 +10,8 @@
  * when there is no IndexedDB (tests, a browser with site data blocked).
  */
 
+import { revivedHandle, storableHandle } from "./diskFiles";
+
 const DB_NAME = "scmjs";
 const STORE = "handles";
 /** The recovery copies of modified maps (`services/recovery.ts`), in the same database. */
@@ -72,7 +74,9 @@ function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => ID
 }
 
 /** Keep a handle under `key`; a failure (quota, a browser that refuses to clone it) is swallowed — the handle simply will not come back next time. */
-export async function storeHandle(key: string, handle: unknown): Promise<boolean> {
+/** Keep a handle under `key`. A desktop map handle is kept as its path (`services/diskFiles.ts`). */
+export async function storeHandle(key: string, value: unknown): Promise<boolean> {
+  const handle = storableHandle(value);
   if (!hasIdb()) { memory.set(key, handle); return false; }
   try {
     await request("readwrite", (s) => s.put(handle, key));
@@ -84,10 +88,10 @@ export async function storeHandle(key: string, handle: unknown): Promise<boolean
 }
 
 export async function loadHandle<T = unknown>(key: string): Promise<T | null> {
-  if (memory.has(key)) return memory.get(key) as T;
+  if (memory.has(key)) return revivedHandle(memory.get(key)) as T | null;
   if (!hasIdb()) return null;
   try {
-    return ((await request("readonly", (s) => s.get(key))) as T | undefined) ?? null;
+    return (revivedHandle((await request("readonly", (s) => s.get(key))) ?? null) as T | null) ?? null;
   } catch {
     return null;
   }

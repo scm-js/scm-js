@@ -141,8 +141,9 @@ read in the first effect pass is still null.
   title into the window title, so the desktop build's title bar and taskbar entry follow it too.
 - `src/hooks/useDesktopFiles.ts` is the desktop's "Open with": `desktop/main.ts` holds the single
   instance lock, takes a map path from `argv` / `second-instance` / macOS `open-file`, and sends the
-  bytes on `file:open` once the renderer's `files.onOpen` listener says `file:ready`; the hook opens
-  them through `guardedAction` like a drop. What sends it one is `fileAssociations` in
+  bytes and the path on `file:open` once the renderer's `files.onOpen` listener says `file:ready`; the
+  hook opens them with a `diskHandle(path)` (see `saving.md`, desktop maps go by path) through
+  `guardedAction` like a drop. What sends it one is `fileAssociations` in
   `electron-builder.yml` (`.scm` / `.scx` / `.chk`, one mime type each — electron-builder writes a
   `<mime-type>` block per association into the Linux packages' mime XML and shared-mime-info reads
   only the first of a repeated type): the NSIS installer registers `"$appExe \"%1\""` per extension

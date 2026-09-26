@@ -9,6 +9,7 @@
  * Only ever the bytes that were on disk: nothing here reads the open map.
  */
 import { desktopBridge } from "../gamedata/desktop";
+import { isDiskHandle } from "./diskFiles";
 import { handleStorePersists, idbRequest, PREVIOUS_STORE } from "./handleStore";
 
 /** One kept version. */
@@ -29,7 +30,8 @@ export type PreviousEntry = Omit<PreviousVersion, "bytes">;
 /** What keeping the old file came to, for the Save notice. */
 export type KeptPrevious =
   | { kind: "bak"; path: string }
-  | { kind: "stored"; fileName: string }
+  /** `bakFailed`: the desktop app tried a `.bak` first, and why it could not. */
+  | { kind: "stored"; fileName: string; bakFailed?: string }
   | { kind: "failed"; message: string };
 
 /** The versions kept of one file name; older ones go. */
@@ -115,19 +117,22 @@ export async function storePrevious(existing: File, now = Date.now()): Promise<v
 }
 
 /**
- * Keep the file a save is about to replace: `<path>.bak` in the desktop app, the browser's
- * storage otherwise (or when the desktop cannot say where the file is). Never throws; what
- * happened is the answer, for the Save notice.
+ * Keep the file a save is about to replace: `<path>.bak` in the desktop app when the handle
+ * knows its path (`services/diskFiles.ts`), the browser's storage otherwise — and when the
+ * `.bak` could not be written, with the reason, so the Save notice and the log can say why.
+ * Never throws; what happened is the answer.
  */
-export async function keepPrevious(existing: File): Promise<KeptPrevious> {
+export async function keepPrevious(existing: File, handle?: unknown): Promise<KeptPrevious> {
   const bridge = desktopBridge();
-  if (bridge?.files.backup) {
-    const r = await bridge.files.backup(existing).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
+  let reason: string | undefined;
+  if (bridge && isDiskHandle(handle)) {
+    const r = await bridge.files.backup(handle.path).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
     if (r.ok) return { kind: "bak", path: r.path };
+    reason = r.message;
   }
   try {
     await storePrevious(existing);
-    return { kind: "stored", fileName: existing.name };
+    return { kind: "stored", fileName: existing.name, ...(reason ? { bakFailed: reason } : {}) };
   } catch (err) {
     return { kind: "failed", message: err instanceof Error ? err.message : String(err) };
   }

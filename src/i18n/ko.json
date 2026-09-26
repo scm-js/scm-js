@@ -2577,6 +2577,8 @@
   "Copy saved": "사본 저장 완료",
   "The previous file was not kept": "이전 파일을 보관하지 못했습니다",
   "The save went through, but the file it replaced could not be kept: {message}": "저장은 되었지만 덮어쓴 파일을 보관하지 못했습니다: {message}",
+  "No .bak was written": ".bak 파일을 만들지 못했습니다",
+  "{message} The file the save replaced is in File ▸ Previous Versions… instead.": "{message} 저장으로 바뀐 파일은 대신 파일 ▸ 이전 버전…에 있습니다.",
   "{label} is not up to date in this file": "이 파일에는 {label}의 최신 내용이 반영되지 않았습니다",
   "Saved without the built part": "빌드 결과 없이 저장됨",
   "{problem} The file holds the map as the editor shows it; what the build adds is not in it until a save goes through.": "{problem} 파일에는 에디터에 보이는 그대로의 맵이 들어 있습니다. 빌드가 더하는 내용은 저장이 제대로 끝날 때까지 들어가지 않습니다.",

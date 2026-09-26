@@ -37,19 +37,26 @@ const bridge: DesktopBridge = {
   },
   files: {
     onOpen: (listener) => {
-      const handler = (_e: IpcRendererEvent, file: { name: string; bytes: Uint8Array }) => listener({ name: file.name, bytes: new Uint8Array(file.bytes) });
+      const handler = (_e: IpcRendererEvent, file: { name: string; path: string; bytes: Uint8Array }) => listener({ name: file.name, path: file.path, bytes: new Uint8Array(file.bytes) });
       ipcRenderer.on("file:open", handler);
       // Ask for what the app was started with; the main process answers on the same channel.
       ipcRenderer.send("file:ready");
       return () => { ipcRenderer.off("file:open", handler); };
     },
-    backup: async (file) => {
-      // The page has a handle, not a path; Electron knows the path behind the File it reads.
+    pathOf: async (file) => {
+      // A dropped (or input-picked) File knows its path; one read through a handle does not.
       let path = "";
       try { path = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
-      if (!path) return { ok: false, message: "The file has no path on disk." };
-      return ipcRenderer.invoke("file:backup", path);
+      return path ? ipcRenderer.invoke("file:register", path) : null;
     },
+    openDialog: async () => {
+      const r = await ipcRenderer.invoke("file:openDialog") as { path: string; name: string; bytes: Uint8Array } | null;
+      return r && { ...r, bytes: new Uint8Array(r.bytes) };
+    },
+    saveDialog: (suggestedName) => ipcRenderer.invoke("file:saveDialog", suggestedName),
+    read: async (path) => new Uint8Array(await ipcRenderer.invoke("file:read", path)),
+    write: (path, bytes) => ipcRenderer.invoke("file:write", path, bytes),
+    backup: (path) => ipcRenderer.invoke("file:backup", path),
   },
   updates: {
     support: () => ipcRenderer.invoke("update:support"),

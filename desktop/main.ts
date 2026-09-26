@@ -21,7 +21,7 @@ import { openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData } from "../src/gamedata/extract";
 import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
 import { updaterIpc } from "./updater";
-import { backupMap } from "./backup";
+import { MapFiles } from "./mapFiles";
 
 const SCHEME = "app";
 const HOST = "scmjs";
@@ -243,9 +243,23 @@ function mapArg(argv: string[]): string | null {
 /** The file to hand the renderer once it listens: the launch argument, or a macOS open-file. */
 let pendingOpen: string | null = mapArg(process.argv);
 
+let mapFileList: MapFiles | null = null;
+/** The map paths the user gave the app (`desktop/mapFiles.ts`); made once the user data folder is known. */
+function mapFiles(): MapFiles {
+  mapFileList ??= new MapFiles(join(app.getPath("userData"), "map-files.json"));
+  return mapFileList;
+}
+
+const MAP_FILTERS = [{ name: "StarCraft scenario", extensions: ["scx", "scm", "chk"] }];
+/** Where the open and save dialogs start: the folder of the last map the app was given. */
+let lastMapDir: string | null = null;
+
 function sendOpen(win: BrowserWindow, path: string) {
   try {
-    win.webContents.send("file:open", { name: basename(path), bytes: readFileSync(path) });
+    const full = mapFiles().allow(path);
+    if (!full) return;
+    lastMapDir = dirname(full);
+    win.webContents.send("file:open", { name: basename(full), path: full, bytes: readFileSync(full) });
   } catch (err) {
     console.warn("open file:", err instanceof Error ? err.message : String(err));
   }
@@ -674,7 +688,46 @@ app.whenReady().then(() => {
   // launch that never checks pays nothing for this.
   updaterIpc(() => BrowserWindow.getAllWindows()[0] ?? null);
 
-  ipcMain.handle("file:backup", (_e, path: string) => backupMap(path));
+  // Map files by path (`desktop/mapFiles.ts`): only ones the user gave the app through
+  // these dialogs, a drop or a double-click.
+  ipcMain.handle("file:openDialog", async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const picked = await dialog.showOpenDialog(win ?? undefined as never, {
+      title: "Open Map",
+      defaultPath: lastMapDir ?? undefined,
+      filters: MAP_FILTERS,
+      properties: ["openFile"],
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return null;
+    const full = mapFiles().allow(picked.filePaths[0]);
+    if (!full) return null;
+    lastMapDir = dirname(full);
+    return { path: full, name: basename(full), bytes: readFileSync(full) };
+  });
+  ipcMain.handle("file:saveDialog", async (e, suggestedName: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const name = typeof suggestedName === "string" && suggestedName ? basename(suggestedName) : "Untitled.scx";
+    const picked = await dialog.showSaveDialog(win ?? undefined as never, {
+      title: "Save Map",
+      defaultPath: lastMapDir ? join(lastMapDir, name) : name,
+      filters: MAP_FILTERS,
+    });
+    if (picked.canceled || !picked.filePath) return null;
+    const full = mapFiles().allow(picked.filePath);
+    if (!full) return null;
+    lastMapDir = dirname(full);
+    return { path: full, name: basename(full) };
+  });
+  // A dropped file's path, which the preload reads off the `File` itself.
+  ipcMain.handle("file:register", (_e, path: string) => {
+    if (typeof path !== "string" || !existsSync(path)) return null;
+    const full = mapFiles().allow(path);
+    if (full) lastMapDir = dirname(full);
+    return full;
+  });
+  ipcMain.handle("file:read", (_e, path: string) => mapFiles().read(path));
+  ipcMain.handle("file:write", (_e, path: string, bytes: Uint8Array) => mapFiles().write(path, new Uint8Array(bytes)));
+  ipcMain.handle("file:backup", (_e, path: string) => mapFiles().backup(path));
   ipcMain.handle("game:info", (_e, dir: string | null) => gameInfo(dir));
   ipcMain.handle("game:pickFolder", async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);

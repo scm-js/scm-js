@@ -311,7 +311,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     const bytes = built.bytes;
     // Save ▸ keep the file being replaced: `.bak` on the desktop, the browser's storage otherwise.
     const kept: { result: KeptPrevious | null } = { result: null };
-    const before: BeforeOverwrite | undefined = store.get(preferencesAtom).save.backup ? async (existing) => { kept.result = await keepPrevious(existing); } : undefined;
+    const before: BeforeOverwrite | undefined = store.get(preferencesAtom).save.backup ? async (existing, handle) => { kept.result = await keepPrevious(existing, handle); } : undefined;
     const outcome = await write(bytes, req.fileName, req.handle, before);
     if (!outcome) { logInfo("document", `Save of the ${what} was dismissed`); return false; }
     const size = formatBytes(bytes.length);
@@ -342,7 +342,9 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
         logWarn("document", "Could not keep the file the save replaced", { file: baseName(outcome.fileName), message: k.message });
         store.set(pushToastAtom, { kind: "warn", title: t("The previous file was not kept"), detail: t("The save went through, but the file it replaced could not be kept: {message}", { message: k.message }) });
       } else {
-        logInfo("document", k.kind === "bak" ? "Kept the replaced file as .bak" : "Kept the replaced file in storage", { file: baseName(outcome.fileName) });
+        logInfo("document", k.kind === "bak" ? "Kept the replaced file as .bak" : "Kept the replaced file in storage", { file: baseName(outcome.fileName), ...(k.kind === "stored" && k.bakFailed ? { bakFailed: k.bakFailed } : {}) });
+        // The desktop app meant to write a .bak and could not: say so every time, not just once.
+        if (k.kind === "stored" && k.bakFailed) store.set(pushToastAtom, { kind: "warn", title: t("No .bak was written"), detail: t("{message} The file the save replaced is in File ▸ Previous Versions… instead.", { message: /[.!?…]$/.test(k.bakFailed.trim()) ? k.bakFailed.trim() : `${k.bakFailed.trim()}.` }) });
       }
     }
     for (const u of built.unprepared) {

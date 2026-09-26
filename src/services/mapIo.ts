@@ -7,6 +7,8 @@ import type { LoadedDocument } from "../atoms/documentAtoms";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, type MapFormat, type SaveOptions } from "../editor/save";
 
 export type { MapFormat } from "../editor/save";
+import { desktopBridge } from "../gamedata/desktop";
+import { diskHandle } from "./diskFiles";
 import { t, msg } from "../i18n";
 
 export const MAP_FILE_ACCEPT = ".scm,.scx,.chk";
@@ -85,6 +87,12 @@ const PICKER_ID = "scmjs-maps";
 
 /** Show a file picker, falling back to a hidden input where the API is unavailable. */
 export async function pickMapFile(): Promise<PickedMapFile | null> {
+  // The desktop build opens through its own dialog, which gives the path Save needs for its `.bak`.
+  const bridge = desktopBridge();
+  if (bridge) {
+    const picked = await bridge.files.openDialog();
+    return picked && { file: new File([picked.bytes as unknown as BlobPart], picked.name), handle: diskHandle(picked.path) };
+  }
   const picker = (window as unknown as { showOpenFilePicker?: ShowOpenFilePicker }).showOpenFilePicker;
   if (picker) {
     try {
@@ -112,6 +120,10 @@ export async function pickMapFile(): Promise<PickedMapFile | null> {
  * promise can be awaited later.
  */
 export function droppedHandle(transfer: DataTransfer): Promise<MapFileHandle | null> {
+  // The desktop build keeps the dropped file's path instead (`services/diskFiles.ts`).
+  const bridge = desktopBridge();
+  const dropped = transfer.files?.[0];
+  if (bridge) return dropped ? bridge.files.pathOf(dropped).then((path) => (path ? diskHandle(path) : null), () => null) : Promise.resolve(null);
   const item = transfer.items?.[0] as (DataTransferItem & { getAsFileSystemHandle?(): Promise<{ kind: string } | null> }) | undefined;
   if (!item?.getAsFileSystemHandle) return Promise.resolve(null);
   try {
@@ -153,7 +165,12 @@ export interface SaveOutcome {
  * Called with the file a write is about to replace, before a byte of it changes — Save's
  * `.bak` and the browser's previous versions. Its failure never stops the write.
  */
-export type BeforeOverwrite = (existing: File) => Promise<void>;
+export type BeforeOverwrite = (existing: File, handle: MapFileHandle) => Promise<void>;
+
+/** Whether a name is a map file's — what the desktop build saves through its own dialog. */
+export function isMapFileName(name: string): boolean {
+  return /\.(scm|scx|chk)$/i.test(name);
+}
 
 /**
  * Write bytes to disk: straight into `handle` when there is one and the browser allows
@@ -168,6 +185,19 @@ export async function saveBytes(bytes: Uint8Array, fileName: string, handle: Map
 /** The same, for something already assembled as a blob (an exported PNG). */
 export async function saveBlob(blob: Blob, fileName: string, handle: MapFileHandle | null = null, before?: BeforeOverwrite): Promise<SaveOutcome | null> {
   if (handle && await writeThrough(handle, blob, before)) return { route: "file", fileName: handle.name, handle };
+
+  // The desktop build saves a map through its own dialog, for the path (`services/diskFiles.ts`).
+  const bridge = desktopBridge();
+  if (bridge && isMapFileName(fileName)) {
+    const chosen = await bridge.files.saveDialog(fileName);
+    const picked = chosen && diskHandle(chosen.path);
+    if (!picked) return null;
+    await tellBefore(picked, before);
+    const writable = await picked.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return { route: "picker", fileName: picked.name, handle: picked };
+  }
 
   const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker }).showSaveFilePicker;
   if (picker) {
@@ -222,7 +252,7 @@ async function tellBefore(handle: MapFileHandle, before?: BeforeOverwrite): Prom
   }
   if (existing.size === 0) return;
   try {
-    await before(existing);
+    await before(existing, handle);
   } catch {
     // Keeping the old file is a courtesy; the save goes on.
   }

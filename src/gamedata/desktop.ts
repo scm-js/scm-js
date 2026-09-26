@@ -94,17 +94,27 @@ export interface DesktopBridge {
     /** The directories `locate` looks in, for the dialog to list. */
     searchDirs(): Promise<string[]>;
   };
-  /** Map files the operating system hands the app: a double-click, "Open with", a path on the command line. */
+  /**
+   * Map files by path (`desktop/mapFiles.ts`). The page cannot learn a path from a file
+   * handle, so in the desktop build a map is read and written through its path instead —
+   * one the user gave the app through these dialogs, a drop or the operating system. Only
+   * map files the user gave the app are readable or writable.
+   */
   files: {
-    /** A file arrived; open it the way File ▸ Open does. Fires for the file the app was started with once the editor listens. */
-    onOpen(listener: (file: { name: string; bytes: Uint8Array }) => void): () => void;
-    /**
-     * Copy the map file a save is about to write over to `<its path>.bak`, replacing an
-     * older one. `file` is what the file handle reads (`handle.getFile()`), which is how the
-     * page names a file it has no path for. Answers rather than throws; absent in a build
-     * older than the call.
-     */
-    backup?(file: File): Promise<DesktopBackupResult>;
+    /** A double-click, "Open with" or a path on the command line; fires for the file the app was started with once the editor listens. */
+    onOpen(listener: (file: { name: string; path: string; bytes: Uint8Array }) => void): () => void;
+    /** The path behind a dropped `File`, recorded as one the user gave the app; null when it has none or is not a map file. */
+    pathOf(file: File): Promise<string | null>;
+    /** The native open dialog, for File ▸ Open. Null when dismissed. */
+    openDialog(): Promise<{ path: string; name: string; bytes: Uint8Array } | null>;
+    /** The native save dialog, for Save As. Null when dismissed. */
+    saveDialog(suggestedName: string): Promise<{ path: string; name: string } | null>;
+    /** Read a map file the user gave the app. Rejects when it cannot. */
+    read(path: string): Promise<Uint8Array>;
+    /** Write a map file the user gave the app. */
+    write(path: string, bytes: Uint8Array): Promise<{ ok: true } | { ok: false; message: string }>;
+    /** Save's `.bak`: copy the file to `<path>.bak` before a save writes over it. Answers rather than throws. */
+    backup(path: string): Promise<DesktopBackupResult>;
   };
   /**
    * In-app updates (`desktop/updater.ts`). Everything here answers rather than throws —

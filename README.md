@@ -1646,7 +1646,10 @@ The options confirmed here are what Ctrl+S reuses for that map from then on.
 
 A save that writes over a file keeps what it replaced. The desktop app copies the old
 file to a `.bak` beside it first (`Lagoon.scx` to `Lagoon.scx.bak`, replacing an older
-`.bak`). A browser cannot put a file beside another, so there the
+`.bak`), however the map was opened: File ▸ Open, Open Recent, a drop onto the window or a
+double-click. If the `.bak` cannot be written (a read-only folder, say), the save still
+goes through, a notice says why, and the old file goes to Previous Versions instead. A
+browser cannot put a file beside another, so there the
 version replaced is kept in the browser's storage, the last three of each file name, and
 **File ▸ Previous Versions…** lists them: **Open** puts one in its own tab with
 "(previous)" added to its name, and **Save As** writes it out as it was. A download

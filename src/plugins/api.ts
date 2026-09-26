@@ -1238,7 +1238,12 @@ export interface TriggerClaimRange {
  * in it — by a hash of the records, say — or null when the records are not there.
  */
 export interface TriggerClaimSpec {
-  /** What generated the run, in words, as a sentence would use it: `"the trigger script"`. */
+  /**
+   * What generated the run, in words, as a sentence would use it: `"the trigger script"`.
+   * `label`, `badge` and `openLabel` are given in English and shown through the plugin's
+   * registered catalogues, so they follow a language change; `api.triggers.claims` hands
+   * back the English.
+   */
   label: string;
   /** The word on the badge the trigger list shows on each row; the plugin's id by default. */
   badge?: string;

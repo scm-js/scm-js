@@ -1111,7 +1111,7 @@ api.menu.add("Tools", {
 - Placeholders are a subset of ICU MessageFormat: `{name}`, `plural` and `select`. For
   Korean, `{name|을}` picks the particle that agrees with the value (을/를, 이/가, 은/는,
   과/와, 으로/로).
-- Menu labels and fixed context-menu labels are the exception: give them in English and
+- Menu labels, fixed context-menu labels and overlay names are the exception: give them in English and
   the editor translates them with your catalogues when it draws the menu.
 - `language` is the current language (`"en"`, `"ko"`). The `"language"` event fires when
   it changes, so you can relabel what is showing.

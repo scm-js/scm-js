@@ -2521,7 +2521,7 @@ export type OverlayAbove =
  * it goes away with the plugin.
  */
 export interface OverlaySpec {
-  /** Shown in View ▸ Overlays and the Layers panel. Unique per plugin. */
+  /** Shown in View ▸ Overlays and the Layers panel. Unique per plugin. In English, like a menu label: shown through the plugin's registered catalogues. */
   name: string;
   /** Start visible; true by default. What the user last set for this name wins for the session. */
   visible?: boolean;

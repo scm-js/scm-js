@@ -59,12 +59,12 @@ export default function LayersPanel() {
       })}
       {overlays.length > 0 && <div className="layer-group">{t("Overlays")}</div>}
       {overlays.map((o) => (
-        <div key={o.key} className="layer-row is-overlay" title={`${o.spec.name} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
+        <div key={o.key} className="layer-row is-overlay" title={`${translate(o.spec.name)} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
           <button className={`eye ${o.visible ? "" : "off"}`} title={o.visible ? t("Hide overlay") : t("Show overlay")} onClick={(e) => { e.stopPropagation(); setOverlayVisible(o.key, !o.visible); }}>
             {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
           <span className="ico"><PluginIconView icon={o.plugin.icon} size={13} /></span>
-          <span>{o.spec.name}</span>
+          <span>{translate(o.spec.name)}</span>
         </div>
       ))}
     </div>

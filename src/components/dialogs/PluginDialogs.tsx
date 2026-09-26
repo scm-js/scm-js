@@ -21,7 +21,7 @@ import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
-import { msg, t, translate } from "../../i18n";
+import { msg, pluginText, t, translate } from "../../i18n";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
@@ -134,7 +134,7 @@ export function PluginDialog({ entry }: DialogProps) {
       footerLeft={
         working !== null
           ? <span className="status-line" role="status" aria-live="polite"><span className="spinner sm" aria-hidden="true" />{working}</span>
-          : plugin ? <span className="hint">{plugin.name}</span> : undefined
+          : plugin ? <span className="hint">{pluginText(plugin.id, plugin.name)}</span> : undefined
       }
     >
       <div
@@ -1093,7 +1093,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
           const address = updateAddress(p.spec);
           const copy = snapshots[p.spec];
           const builtinPlugin = p.spec.startsWith("builtin:");
-          const name = rt?.manifest?.name ?? (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
+          const name = rt?.manifest ? (rt.manifest.id ? pluginText(rt.manifest.id, rt.manifest.name) : rt.manifest.name) : (builtinPlugin ? p.spec.slice("builtin:".length) : p.spec);
           // Until the manifest is in, the spec *is* the name — printing it twice reads as a bug.
           const named = rt?.manifest != null || builtinPlugin;
           const status = statusLabel(rt, p.enabled);

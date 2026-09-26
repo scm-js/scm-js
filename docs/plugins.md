@@ -1113,7 +1113,9 @@ api.menu.add("Tools", {
   과/와, 으로/로).
 - Menu labels, fixed context-menu labels, overlay names and a trigger claim's `label`,
   `badge` and `openLabel` are the exception: give them in English and
-  the editor translates them with your catalogues when it draws the menu.
+  the editor translates them with your catalogues when it draws them. Your manifest's
+  `name` is shown the same way once the plugin is running, so a descriptive name
+  ("Stamp Library") can have an entry; a product name needs none.
 - `language` is the current language (`"en"`, `"ko"`). The `"language"` event fires when
   it changes, so you can relabel what is showing.
 

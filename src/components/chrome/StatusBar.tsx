@@ -10,7 +10,7 @@ import { hexTile } from "../../formats/tileset/palette";
 import { tileGroup, tileSubIndex } from "../../formats/chk/sections/terrain";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { LAYERS } from "./MenuBar";
-import { msg, translate } from "../../i18n";
+import { msg, pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 const VERSION_LABEL = { original: msg("StarCraft 1.00"), hybrid: msg("Hybrid 1.04"), broodwar: msg("Brood War"), remastered: msg("Remastered") } as const;
@@ -87,7 +87,7 @@ export default function StatusBar() {
         <span
           key={item.key}
           className={`status-cell plugin-status${item.spec.warn ? " warn" : ""}${item.spec.onClick ? " clickable" : ""}`}
-          title={item.spec.title ?? item.plugin.name}
+          title={item.spec.title ?? pluginText(item.plugin.id, item.plugin.name)}
           role={item.spec.onClick ? "button" : undefined}
           tabIndex={item.spec.onClick ? 0 : undefined}
           onClick={item.spec.onClick}

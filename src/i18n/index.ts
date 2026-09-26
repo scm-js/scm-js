@@ -106,26 +106,33 @@ export function msg(text: string): string {
  * lookup; a different name so the extractor knows not to expect a literal.
  */
 export function translate(text: string, params?: Params): string {
-  const own = catalogues[current][text];
-  if (own) return format(own, params, current);
-  for (const source of pluginSources) {
-    const hit = source(current)?.[text];
-    if (hit) return format(hit, params, current);
-  }
-  return format(text, params, current);
+  return t(text, params);
 }
 
 /**
- * Plugins' catalogues, consulted by `translate` after the editor's own: a plugin's menu
- * labels and context-menu labels stay English (they are identities other plugins place
- * items by) and are shown through here, so they follow a language change.
+ * The catalogues each plugin registered through `api.i18n`, by plugin id. A plugin's menu
+ * labels, overlay names and trigger-claim labels stay English (identities, like the
+ * built-in labels) and are shown through `pluginText`, so they follow a language change.
+ * Only the owning plugin's catalogue is consulted — a bare word in one plugin's catalogue
+ * must never re-word a name the editor shows from the map or the game data.
  */
-const pluginSources = new Set<(loc: Locale) => Catalogue | undefined>();
+const pluginSources = new Map<string, Set<(loc: Locale) => Catalogue | undefined>>();
 
-/** Adds a plugin's catalogues to what `translate` looks in; the returned function removes them. */
-export function addPluginCatalogues(source: (loc: Locale) => Catalogue | undefined): () => void {
-  pluginSources.add(source);
-  return () => { pluginSources.delete(source); };
+/** Adds a plugin's catalogues to what `pluginText` looks in for that plugin; the returned function removes them. */
+export function addPluginCatalogues(pluginId: string, source: (loc: Locale) => Catalogue | undefined): () => void {
+  const set = pluginSources.get(pluginId) ?? new Set();
+  set.add(source);
+  pluginSources.set(pluginId, set);
+  return () => { set.delete(source); if (set.size === 0 && pluginSources.get(pluginId) === set) pluginSources.delete(pluginId); };
+}
+
+/** A label a plugin handed over in English, in the current language: its own catalogues first, then the editor's. */
+export function pluginText(pluginId: string, text: string, params?: Params): string {
+  for (const source of pluginSources.get(pluginId) ?? []) {
+    const hit = source(current)?.[text];
+    if (hit) return format(hit, params, current);
+  }
+  return translate(text, params);
 }
 
 /* ── Formatting ─────────────────────────────────────────── */

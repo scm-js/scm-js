@@ -4,7 +4,7 @@ import { activeLayerAtom, lockedLayersAtom, viewFlagsAtom, type EditorLayer, typ
 import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { RAIL_ICON } from "./PalettePanel";
-import { translate } from "../../i18n";
+import { pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 import { LAYERS } from "../chrome/MenuBar";
 
@@ -59,12 +59,12 @@ export default function LayersPanel() {
       })}
       {overlays.length > 0 && <div className="layer-group">{t("Overlays")}</div>}
       {overlays.map((o) => (
-        <div key={o.key} className="layer-row is-overlay" title={`${translate(o.spec.name)} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
+        <div key={o.key} className="layer-row is-overlay" title={`${pluginText(o.plugin.id, o.spec.name)} — ${o.plugin.name}`} onClick={() => setOverlayVisible(o.key, !o.visible)}>
           <button className={`eye ${o.visible ? "" : "off"}`} title={o.visible ? t("Hide overlay") : t("Show overlay")} onClick={(e) => { e.stopPropagation(); setOverlayVisible(o.key, !o.visible); }}>
             {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
           <span className="ico"><PluginIconView icon={o.plugin.icon} size={13} /></span>
-          <span>{translate(o.spec.name)}</span>
+          <span>{pluginText(o.plugin.id, o.spec.name)}</span>
         </div>
       ))}
     </div>

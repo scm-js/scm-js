@@ -1970,7 +1970,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return list && list.length > 0 ? Object.assign({}, ...list) as Record<string, string> : undefined;
       };
       const translator = makeTranslator(merged);
-      // Menu and context-menu labels are handed over in English and shown through `translate`,
+      // Menu labels and the like are handed over in English and shown through `pluginText`,
       // which looks here while the plugin has a catalogue registered.
       let shown: (() => void) | null = null;
       return {
@@ -1978,7 +1978,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         register: (added: Record<string, Record<string, string>>) => {
           const entries = Object.entries(added);
           for (const [loc, catalogue] of entries) catalogues.set(loc, [...(catalogues.get(loc) ?? []), catalogue]);
-          shown ??= addPluginCatalogues(merged);
+          shown ??= addPluginCatalogues(info.id, merged);
           return bag.add(() => {
             for (const [loc, catalogue] of entries) catalogues.set(loc, (catalogues.get(loc) ?? []).filter((c) => c !== catalogue));
             if (shown && [...catalogues.values()].every((list) => list.length === 0)) { shown(); shown = null; }

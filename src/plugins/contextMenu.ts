@@ -4,7 +4,7 @@
  * hides or disables its item rather than breaking the menu.
  */
 import type { PluginContextItem } from "../atoms/pluginAtoms";
-import { translate } from "../i18n";
+import { pluginText } from "../i18n";
 import type { ContextMenuContext, ContextSurface } from "./api";
 
 export interface ContextRow {
@@ -23,7 +23,7 @@ export function pluginContextRows(items: readonly PluginContextItem[], surface: 
       rows.push({
         key: it.key,
         // A fixed label is English, shown through the plugin's catalogue; a function's is the plugin's own `t()`.
-        label: typeof it.label === "function" ? it.label(ctx) : translate(it.label),
+        label: typeof it.label === "function" ? it.label(ctx) : pluginText(it.pluginId, it.label),
         disabled: it.enabled ? !it.enabled(ctx) : false,
         onSelect: () => { try { it.run(ctx); } catch (err) { console.error(`[plugins] context-menu item failed`, err); } },
       });

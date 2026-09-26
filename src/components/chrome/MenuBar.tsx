@@ -37,7 +37,7 @@ import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { msg, t, translate } from "../../i18n";
+import { msg, pluginText, t, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
@@ -53,10 +53,10 @@ const DOCS_URL = "https://docs.scmjs.dev";
  * file) is translated where it is built and passes through `translate` unchanged.
  */
 type Item =
-  | { kind: "item"; label: string; shortcut?: string; disabled?: boolean; icon?: PluginIcon; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
-  | { kind: "check"; label: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
+  | { kind: "item"; label: string; pluginId?: string; shortcut?: string; disabled?: boolean; icon?: PluginIcon; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
+  | { kind: "check"; label: string; pluginId?: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
   | { kind: "radio-group"; value: string; onChange: (v: string) => void; items: { value: string; label: string; shortcut?: string }[] }
-  | { kind: "sub"; label: string; items: Item[] }
+  | { kind: "sub"; label: string; pluginId?: string; items: Item[] }
   | { kind: "sep" }
   | { kind: "label"; label: string };
 
@@ -64,6 +64,8 @@ const sep: Item = { kind: "sep" };
 
 export interface Menu {
   label: string;
+  /** Set on a top-level menu a plugin's path created: its label is shown through that plugin's catalogues. */
+  pluginId?: string;
   items: Item[];
 }
 
@@ -115,7 +117,7 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
     let menu = out.find((m) => m.label === top) ?? null;
     if (!menu && top.trim()) {
       // A top-level menu of the plugin's own, before Help so the built-in order stays readable.
-      menu = { label: top, items: [] };
+      menu = { label: top, pluginId: p.pluginId, items: [] };
       separated.add(menu.items);
       const help = out.findIndex((m) => m.label === "Help");
       out.splice(help >= 0 ? help : out.length, 0, menu);
@@ -127,7 +129,7 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
         if (!sub) {
           // A submenu of the plugin's own: created at the end of the menu, after a separator, on first use.
           if (label !== rest[rest.length - 1]) { target = null; break; }
-          sub = { kind: "sub", label, items: [] };
+          sub = { kind: "sub", label, pluginId: p.pluginId, items: [] };
           copied.add(sub);
           // Its items are all the plugin's: no separator before the first, only the ones it asks for.
           separated.add(sub.items);
@@ -149,6 +151,7 @@ export function withPluginItems(menus: Menu[], plugin: readonly PluginMenuItem[]
     const item: Item = {
       kind: "item",
       label: p.label,
+      pluginId: p.pluginId,
       shortcut: p.shortcut,
       icon: p.icon,
       disabled: p.enabled ? !safely(p.enabled, true) : false,
@@ -390,7 +393,7 @@ function useMenus(): Menu[] {
         flag("elevation", msg("Elevation Overlay")),
         flag("buildability", msg("Buildability Overlay")),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
-        ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
+        ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
         { kind: "sub", label: msg("Panels"), items: [panel("palette", msg("Palette")), panel("minimap", msg("Minimap")), panel("layers", msg("Layers")), panel("properties", msg("Properties")), sep, panel("toolbar", msg("Toolbar")), panel("statusbar", msg("Status Bar"))] },
         // Not in Panels: it is not one of the map's panels, and it is off unless something is wrong.
@@ -503,6 +506,11 @@ function useMenus(): Menu[] {
 
 /* ── Rendering ──────────────────────────────────────────── */
 
+/** A built-in label through the editor's catalogue; a plugin's through its own. */
+function labelOf(it: { label: string; pluginId?: string }): string {
+  return it.pluginId ? pluginText(it.pluginId, it.label) : translate(it.label);
+}
+
 function Items({ items }: { items: Item[] }): ReactNode {
   const open = useSetAtom(openDialogAtom);
   return items.map((it, i) => {
@@ -510,12 +518,12 @@ function Items({ items }: { items: Item[] }): ReactNode {
       case "sep":
         return <Menubar.Separator key={i} className="menu-separator" />;
       case "label":
-        return <Menubar.Label key={i} className="menu-label">{translate(it.label)}</Menubar.Label>;
+        return <Menubar.Label key={i} className="menu-label">{labelOf(it)}</Menubar.Label>;
       case "item":
         return (
           <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog, it.payload) : it.onSelect?.())}>
             {it.icon && <span className="indicator menu-icon"><PluginIconView icon={it.icon} size={14} /></span>}
-            {translate(it.label)}
+            {labelOf(it)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.Item>
         );
@@ -523,7 +531,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return (
           <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} onCheckedChange={it.onChange}>
             <Menubar.ItemIndicator className="indicator"><Check size={12} /></Menubar.ItemIndicator>
-            {translate(it.label)}
+            {labelOf(it)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
           </Menubar.CheckboxItem>
         );
@@ -543,7 +551,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return (
           <Menubar.Sub key={i}>
             <Menubar.SubTrigger className="menu-item">
-              {translate(it.label)}
+              {labelOf(it)}
               <ChevronRight className="chev" size={13} />
             </Menubar.SubTrigger>
             <Menubar.Portal>
@@ -571,7 +579,7 @@ export default function MenuBar() {
       {menus.map((m) => (
         <Fragment key={m.label}>
           <Menubar.Menu>
-            <Menubar.Trigger className="menu-trigger">{translate(m.label)}</Menubar.Trigger>
+            <Menubar.Trigger className="menu-trigger">{labelOf(m)}</Menubar.Trigger>
             <Menubar.Portal>
               <Menubar.Content className="menu-content" align="start" sideOffset={1}>
                 <Items items={m.items} />

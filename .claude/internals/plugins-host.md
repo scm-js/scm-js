@@ -126,7 +126,9 @@ dialog opts in by passing `slot={{ dialog, fields, payload }}` to `DialogFrame`,
 `components/ui/DialogSlots.tsx` at the left of the footer — one `<span>` per registration,
 `mount`ed with a `DialogSlotHost` whose `fields` read the dialog's working copy live through a
 ref; `SlottedDialogId` in `api.ts` is the list of dialogs that pass it and the fields each lends,
-keep it in step when adding one; `DialogSlotId` widens it to any string because a plugin dialog can
+keep it in step when adding one (the Trigger Editor and Mission Briefing lend `selected` — the row, through a
+`SelectionHandle` ref `TriggerListEditor` fills — and a read-only `modified`, since a slot's `close()` is Cancel and
+would drop unapplied edits; added 2026-09-26 for Trigger Map); `DialogSlotId` widens it to any string because a plugin dialog can
 offer a slot of its own — `DialogSpec.slot = { id, payload, fields }`, passed through by
 `PluginDialog` to the same `DialogFrame` prop — which is how the TrigEdit plugin's Text Trigger
 Editor keeps the scmjs.dev buttons that the built-in dialog used to host, under `"trigedit.text"`) and `api.view.flash` (`host.ts#flashOnMap` resolves the target

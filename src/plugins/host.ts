@@ -35,7 +35,7 @@ import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
 import { activationOrder, installFor, requiredInstalls, requirementsOf, type ManifestLookup } from "./requires";
 import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
-import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex } from "../formats/chk/scenario";
+import { markDirty, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, strSectionName, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { loadMap } from "../formats/mpq/scm";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { megatileForTile } from "../formats/tileset/decode";
@@ -61,6 +61,7 @@ import {
 import { getString, setString } from "../formats/chk/sections/strings";
 import { boundsOf, locationName } from "../editor/locations";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../editor/switches";
+import { resolvePlayers, triggerReferences } from "../editor/triggerRefs";
 import { applyCuwp, cuwpSlotView, cuwpSlotViews, patchCuwp, readCuwp } from "../editor/cuwp";
 import { emptyCuwpSlot } from "../formats/chk/sections/cuwp";
 import {
@@ -1084,7 +1085,18 @@ export function triggersApi(store: Store): Omit<TriggersApi, "claim"> {
     addressOf: addressOfEpd,
     fingerprint: fingerprintTrigger,
     usage: (list) => triggerUsage(list ?? (scenario() ? readTriggers(scenario()!) : [])),
+    references: (list, options = {}) => {
+      const scn = scenario();
+      const briefing = options.briefing ?? false;
+      return triggerReferences(list ?? (scn ? (briefing ? scn.briefing : scn.triggers) : []), forceSlots(scn), briefing);
+    },
+    resolvePlayers: (group, owners = []) => resolvePlayers(group, owners, forceSlots(scenario())),
   };
+}
+
+/** Each force's slots, for resolving *Force N* in a trigger. */
+function forceSlots(scn: Scenario | null): number[][] {
+  return scn ? forceViews(scn).map((f) => f.players) : [];
 }
 
 /* ── Query ──────────────────────────────────────────────── */
@@ -1250,7 +1262,11 @@ export function viewApi(store: Store): ViewApi {
           const b = boundsOf(l);
           store.set(selectedLocationsAtom, [target.index]);
           centerOn((b.left + b.right) / 64, (b.top + b.bottom) / 64);
+          return;
         }
+        case "trigger":
+          store.set(openDialogAtom, target.briefing ? "missionBriefing" : "triggerEditor", { index: target.index });
+          return;
       }
     },
     cursorTile: () => store.get(cursorTileAtom),

@@ -43,6 +43,7 @@ describes each in more detail, and each repository has its own README.
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Browse | Tools ▸ Melee Wizard… | Symmetric start locations, mineral lines and geysers. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Browse | Tools ▸ Section Explorer… | The map file's sections in a hex editor, with what each byte means. |
 | [Magenta](https://github.com/scm-js/plugin-magenta) | Browse | Triggers ▸ Magenta… | A trigger editor where each trigger reads as a sentence, with Remastered EUD conditions and actions. |
+| [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | Browse | Triggers ▸ Trigger Map… | The triggers as a graph: what each one waits for and what it changes, and what does not fit together. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | Browse | View ▸ Timelapse… | Records the map as you build it and exports the recording as a GIF or video. |
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | Browse | File ▸ Open Replay… | Plays a replay back over its map: heat maps, build orders, APM. |
 | [Hello World](https://github.com/scm-js/plugin-hello-world) | Browse | Tools ▸ Hello World… | An example plugin to copy when writing your own. |
@@ -650,6 +651,22 @@ Reading triggers and everything needed to show one. Writing is `document.update`
 - `newTrigger`, `newCondition` and `newAction` make blank records.
 - `usage()` lists every death counter and switch the triggers use, for a plugin that needs
   counters of its own. `epd` and `addressOf` do EUD address arithmetic.
+- `references()` says what each trigger reads, writes and names: switches, death
+  counters, memory addresses, locations, the countdown timer, ore and gas, scores, units,
+  strings, sounds, AI scripts and Victory / Defeat / Draw. A condition reads; an action
+  writes, or *uses* something without changing it (the location units are created at, the
+  text a message shows). Player groups come resolved to slots, with `approximate` set for
+  groups the game settles only while it runs, such as *Foes*. `resolvePlayers(group)` does
+  that resolution on its own.
+
+```js
+// Switches a condition tests that no action ever sets.
+const refs = api.triggers.references().flatMap((t) => t.refs).filter((r) => r.kind === "switch");
+const set = new Set(refs.filter((r) => r.access === "write").map((r) => r.id));
+const neverSet = [...new Set(refs.filter((r) => r.access === "read" && !set.has(r.id)).map((r) => r.id))];
+```
+
+  The Trigger Map plugin draws its whole graph from this one call.
 
 **To generate triggers, write text.** `tx.triggers.fromText` parses the text format,
 interns its strings and resolves names against the open map. That is easier than filling
@@ -704,7 +721,8 @@ Where the map view is looking, and showing the user something.
 
 - `zoom` / `setZoom`, `visible()`, `center(x, y)`, `cursorTile()`, the View menu's options
   (`flags` / `setFlags`) and grid size.
-- `goTo(target)` scrolls to a tile, unit, sprite or location and selects it. An issue from
+- `goTo(target)` scrolls to a tile, unit, sprite or location and selects it, or opens the
+  Trigger Editor on a trigger (`{ kind: "trigger", index }`). An issue from
   `query.validate()` carries a target it accepts.
 - `reveal(rect)` glides the view to show an area, and resolves `false` if the user moved
   the view first. A plugin following its own work should stop following then.
@@ -962,6 +980,23 @@ pasted or dropped files and text. To pick something on the map from a dialog, cl
 pick, and reopen it with the result, as Terrain from Image does. A dialog can offer a slot
 of its own (`spec.slot`) for other plugins to add to.
 
+**Dialog slots** hand your `mount` the dialog's fields. Map Properties lends `name` and
+`description`. The Trigger Editor and Mission Briefing lend `selected`, which is the index
+of the selected trigger as text; setting it selects a different row. They also lend
+`modified`, which is `"1"` while the dialog holds changes that have not been applied. Closing
+the dialog from a slot discards those changes, so ask first when it is set.
+
+```js
+api.ui.dialogSlot("triggerEditor", {
+  mount(body, dlg) {
+    body.append(api.ui.widgets.button("Explain", { onClick: () => {
+      const index = Number(dlg.fields.selected.get());
+      explain(api.triggers.list()[index]);
+    } }));
+  },
+});
+```
+
 **Panels** block nothing: the user keeps editing while one is open. A floating panel can
 be dragged and, with `resizable: true`, resized. `dock: "right"` puts it in the dock
 under the built-in panels, which suits anything kept open while working.
@@ -1161,6 +1196,7 @@ closest to what you are writing.
 | [Magenta](https://github.com/scm-js/plugin-magenta) | `requires` and a service from another plugin, `document.update` for single records, EUD constants. |
 | [eudplib](https://github.com/scm-js/plugin-eudplib) | A library plugin: one versioned service, a Web Worker, a large runtime downloaded once. |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | `api.storage` for user data, `clipboard.capture`, `tx.paste`, rendered thumbnails. |
+| [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | `triggers.references`, a large resizable panel drawn in SVG, a button in the Trigger Editor's slot, `view.goTo` a trigger. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | The `"commit"` event, `graphics.renderClip`, IndexedDB for large data, a preferences page. |
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | Reading a file format of its own and drawing it over the map with an overlay. |
 | [API Playground](https://github.com/scm-js/plugin-api-playground) | `api.scope()` to remove what other code registered, the plugin API's own typings in a code editor. |

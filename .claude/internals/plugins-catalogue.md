@@ -167,6 +167,22 @@ checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.
 the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
 plus bases at every start location, mirroring the selection and the symmetry check.
 
+**Trigger Map** (`github.com/scm-js/plugin-trigger-map`, 2026-09-26, not a default) is the worked example for
+`triggers.references` (host side in `triggers.md`). `graph.ts` folds the references into trigger nodes and thing nodes
+(`<kind>:<id>`, `timer`, `memory:<address>`; Ore-and-gas splits into both) with one link per (trigger, thing, access);
+a `use` flows thing → trigger like a read, so "inputs" = reads + uses and "outputs" = writes. The focus view is five
+columns (writers-of-inputs · inputs · focus · outputs · readers-of-outputs, mirrored for a thing), each node placed
+once in the nearest column, outer columns ordered by barycentre, capped at 10 with a "more" node. Death counters are
+one node per *unit* (players on the edge label), not per cell: per-cell nodes made eight copies of every Current
+Player counter. Findings check "read, never written" for switches and the timer only — deaths, units, ore and score
+change in play. Writers in an inert trigger or a disabled action do not count. The SVG is sized in JS
+(`MIN_SCALE` 0.8, ResizeObserver) — a CSS max-width fit shrank the 5-column graph to ~8px text in an 800px box. Focus
+survives edits by fingerprint remapping; a focus asked for before the panel mounts is held as `pending` (the panel
+mounts after `ui.panel` returns — the right-click entry lost its focus to that). The Trigger Editor button reads the
+new `selected` / `modified` slot fields and confirms before `close()`, which discards. `trigger-map.focus` is a
+dotted command id so other plugins can call it. Verified headlessly 2026-09-26 on a generated UMS map (menu, list,
+graph, findings, Trigger Editor button, location right-click, Korean).
+
 **Timelapse** (`github.com/scm-js/plugin-timelapse`, 2026-09-23, not a default) records one frame per
 `"commit"` and plays the recording back / exports GIF (gifenc) or WebM (MediaRecorder). Design points that
 cost something to settle: frames are **taken by diffing the whole MTXM against the recorder's copy**, not

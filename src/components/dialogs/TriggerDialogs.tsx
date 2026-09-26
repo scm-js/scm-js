@@ -8,7 +8,7 @@
  * Both are dialog transactions (OK / Apply / Cancel over a working copy) like the
  * settings dialogs, committed through `commitTriggersAtom`.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowUp, Code2, Copy, MessageSquare, Plus, Trash2, Zap } from "lucide-react";
 import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
@@ -84,7 +84,7 @@ function ChoiceSelect({ value, onChange, options, width }: { value: number; onCh
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
 }
 
-import { addressOfEpd, epdOf } from "../../editor/triggers";
+import { addressOfEpd, epdOf, sameTriggers } from "../../editor/triggers";
 export { addressOfEpd, epdOf };
 
 /**
@@ -312,7 +312,26 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
 
 /* ── Trigger list editor ────────────────────────────────── */
 
-function TriggerListEditor({ list, setList, briefing, names, scenario, claims, initial }: {
+/** The list's selected row, as a dialog lends it to plugin slots. */
+interface SelectionHandle {
+  get(): number | null;
+  set(index: number | null): void;
+}
+
+/** The `modified` slot field: "1" while the working copy differs from the map, "" otherwise. Setting it does nothing. */
+function modifiedField(isModified: () => boolean) {
+  return { get: () => (isModified() ? "1" : ""), set: () => {} };
+}
+
+/** The `selected` slot field: the row's index as text, "" for none. */
+function selectedField(selection: RefObject<SelectionHandle | null>) {
+  return {
+    get: () => { const i = selection.current?.get(); return i === null || i === undefined ? "" : String(i); },
+    set: (value: string) => selection.current?.set(value.trim() === "" || !Number.isInteger(Number(value)) ? null : Number(value)),
+  };
+}
+
+function TriggerListEditor({ list, setList, briefing, names, scenario, claims, initial, selection }: {
   list: TriggerRecord[];
   setList: (next: TriggerRecord[]) => void;
   briefing: boolean;
@@ -322,6 +341,8 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
   claims?: readonly PluginTriggerClaim[];
   /** The row to open on — Check Map's and Find's go-to. */
   initial?: number;
+  /** Filled with the selection, for the dialog to lend its plugin slot as the `selected` field. */
+  selection?: RefObject<SelectionHandle | null>;
 }) {
   const groups = useMemo(() => visibleGroups(list), [list]);
   const ranges: ClaimedRange[] = useMemo(() => (claims?.length ? locateClaims(claims, list) : []), [list, claims]);
@@ -329,6 +350,15 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
   const [filter, setFilter] = useState<Set<number> | null>(null); // null = every group
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number | null>(initial !== undefined && initial >= 0 && initial < list.length ? initial : list.length ? 0 : null);
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  const lengthRef = useRef(list.length);
+  lengthRef.current = list.length;
+  useEffect(() => {
+    if (!selection) return;
+    selection.current = { get: () => selRef.current, set: (i) => setSel(i !== null && i >= 0 && i < lengthRef.current ? i : null) };
+    return () => { selection.current = null; };
+  }, [selection]);
 
   const shown = useMemo(() => {
     const out: number[] = [];
@@ -517,6 +547,7 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const names = useNames(scenario);
   const [local, setLocal] = useScenarioForm(scenario, readTriggers);
+  const selection = useRef<SelectionHandle | null>(null);
   if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Trigger Editor")} icon={<Zap size={14} />} />;
 
   const apply = () => { applyTriggers(scenario, local); commit(); };
@@ -529,10 +560,10 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
-      slot={{ dialog: "triggerEditor" }}
+      slot={{ dialog: "triggerEditor", fields: { selected: selectedField(selection), modified: modifiedField(() => !sameTriggers(local, readTriggers(scenario))) } }}
       footerLeft={<span>{t("{length} trigger", { length: local.length })}{local.length === 1 ? "" : "s"}</span>}
     >
-      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} claims={claims} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
+      <TriggerListEditor list={local} setList={setLocal} briefing={false} names={names} scenario={scenario} claims={claims} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} selection={selection} />
     </DialogFrame>
   );
 }
@@ -545,6 +576,7 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitTriggersAtom);
   const names = useNames(scenario);
   const [local, setLocal] = useScenarioForm(scenario, readBriefing);
+  const selection = useRef<SelectionHandle | null>(null);
   if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Mission Briefing")} icon={<MessageSquare size={14} />} />;
 
   const apply = () => { applyBriefing(scenario, local); commit(); };
@@ -557,10 +589,10 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
-      slot={{ dialog: "missionBriefing" }}
+      slot={{ dialog: "missionBriefing", fields: { selected: selectedField(selection), modified: modifiedField(() => !sameTriggers(local, readBriefing(scenario))) } }}
       footerLeft={<span>{t("{length} briefing", { length: local.length })}{local.length === 1 ? "" : "s"} {" "}{t("· one per player, played before the map starts")}</span>}
     >
-      <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} />
+      <TriggerListEditor list={local} setList={setLocal} briefing names={names} scenario={scenario} initial={typeof entry.payload?.index === "number" ? entry.payload.index : undefined} selection={selection} />
     </DialogFrame>
   );
 }

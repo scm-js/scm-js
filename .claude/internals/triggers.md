@@ -110,3 +110,26 @@ language and its internals. What stays here is generic:
   `transpileClient.ts` turn a `.ts` plugin into JavaScript for the loader (idle-terminated after
   `WORKER_IDLE_MS`, main-thread fallback when the worker cannot start). A plugin cannot transpile the
   plugins loaded before it, so this cannot move out.
+
+### Trigger references (`src/editor/triggerRefs.ts`, `api.triggers.references` / `resolvePlayers`)
+
+Added 2026-09-26 for the Trigger Map plugin (`github.com/scm-js/plugin-trigger-map`). `triggerUsage` answers
+"which counters are taken"; `triggerReferences(list, forces, briefing)` answers "who talks to whom": per trigger,
+its resolved owners, `inert` (Disabled flag or no owner), and one `TriggerRef { kind, access, part, slot, type, id,
+players, group?, approximate?, address?, mask?, disabled? }` per thing a condition reads or an action writes/uses.
+Decisions worth keeping:
+
+- Player groups resolve more precisely than `playerSlotsOf` (which is deliberately conservative, all 12, because a
+  counter allocator must not collide): *All Players* = slots 0–7, *Force N* = FORC's members, *Current Player* = the
+  owners. *Foes / Allies / Non Allied Victory* = 0–7 and *Neutral* = 0–11, flagged `approximate` — the game settles
+  them at run time. Blizzard's melee Victory trigger is exactly this case (`tests/triggerRefs.test.ts`, Ice Floes).
+- Deaths: unit < 228 unmasked = a `deaths` cell; 228–232 unmasked = a class sum, reported as a `units` *read* (a
+  write to a class is meaningless and dropped); a masked record (mask word 0x4353) or unit > 232 or player ≥ 27 = a
+  `memory` ref with `addressOfEpd(slot or raw player, unit)` and the mask bits.
+- Locations come off the defs table (every `location` arg); conditions read, actions use, Move Location's `target`
+  field alone writes. Strings / WAVs / AI scripts / CUWP slots likewise from the arg kinds; MBRF only yields those two.
+- Units: Bring/Command read with players, Command the Most/Least read with `players: []` (every player compared);
+  Create/Kill/Remove/Move/Give write; Order/Modify…/Set Invincibility/Doodad State/Move Location use. Kill / Most
+  Kills / Opponents / Elapsed Time are not references (game state nobody's trigger writes).
+- `view.goTo({ kind: "trigger", index, briefing? })` opens the Trigger Editor (or Mission Briefing) on the row —
+  the dialogs already took `payload.index` (Find's trigger results used it); this just puts it on the plugin API.

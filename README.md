@@ -2190,8 +2190,8 @@ Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library, scmjs
 (the account) and the scmscx.com search are installed and on from the start. One more is
 installed but starts *off*: TrigEdit, the Text Trigger Editor, which is for text carried
 in from SCMDraft rather than for every map. Tick it on in Plugins ▸ Manage Plugins… and
-Triggers ▸ Text Trigger Editor… appears. Melee Wizard, Section Explorer and Timelapse are
-a click away.
+Triggers ▸ Text Trigger Editor… appears. Melee Wizard, Section Explorer, Timelapse and
+Trigger Map are a click away.
 
 ![Browse Plugins](docs/images/browse-plugins.webp)
 
@@ -2216,6 +2216,7 @@ and the addresses it will fetch from.
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | View ▸ Timelapse…, the status-bar cell while it records | Records the map as you build it, one frame per change, and plays the recording back with a box around each change. Export it as a GIF or a WebM video. Recordings stay in the browser, and opening the same file again carries on the same recording. |
+| [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | Triggers ▸ Trigger Map…, Show in Trigger Map in the Trigger Editor, right-click a location | The triggers as a graph. Pick a trigger to see what it waits for and which triggers set that, and what it changes and which triggers read it; pick a switch, a death counter, a location or Victory to see who writes it and who reads it. A Findings list names switches nothing sets, counters nothing reads, locations that are not there and triggers that never run. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, links that give anyone a copy of one, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](docs/images/walkability.webp)

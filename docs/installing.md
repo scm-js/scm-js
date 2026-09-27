@@ -3,7 +3,7 @@
 scmJS runs in a web browser, as a desktop app for Windows, macOS and Linux, or from a
 container on your own server. Whichever you choose, the editor asks once for StarCraft's
 graphics, which are not shipped with it. This page covers each way of running it and
-that first question. The [user guide](../README.md) starts once the editor is open.
+that first question. The [user guide](guide.md) starts once the editor is open.
 
 ## In the browser
 

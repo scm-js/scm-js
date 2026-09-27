@@ -30,18 +30,32 @@ StarCraft, because nobody searches for "scmJS" yet — a page is found by what i
 (`scripts/lib/generated-blocks.mjs`) rewritten by `npm run docs:reference`.
 
 Two halves, and only the second is generated in any interesting sense. The guides are
-`README.md` and `docs/*.md` split at their `##` headings (nav order is `SOURCES` in
-`site.mjs`; `docs/installing.md` is first, above the user guide, and holds what README's
-*Getting started* used to — README keeps a short summary pointing at it), one page each, with the `###`
-beneath as the page's contents list (`markdown.mjs`, `marked`) — **nothing writes prose**,
-because a generator that did would be a fifth document to keep current against the four
-the top of this file names. `site.mjs` is the URL model and, with it, the link rewriter
-that is the whole reason those documents keep working here: they are written to be read as
-GitHub blobs, so `docs/plugins.md` becomes a page, a bare `#fragment` finds whichever page
-that heading landed on, and `LICENSE` or `../../releases` goes back to the repository.
-A `SOURCES` entry's `omit` (slugs) drops `##` sections that are only for the GitHub
-reader — README's *Documentation* (the sidebar is the index) and *License* (the footer
-links LICENSE and ATTRIBUTION.md) — and a `#fragment` to an omitted section resolves to `/`.
+`docs/*.md` split at their `##` headings, one page each, with the `###` beneath as the
+page's contents list (`markdown.mjs`, `marked`). Nav order is `SOURCES` in `site.mjs`:
+`docs/installing.md` first, then `docs/guide.md` (the user guide), then
+`docs/trigscript.md` — once the guide's `## TrigScript`, a thousand lines that buried
+everything after it; the guide keeps a short overview linking into its pages, and
+`tests/trigscript-guide.test.ts` compiles its examples. **Nothing writes prose**, because a
+generator that did would be one more document to keep current. `site.mjs` is the URL
+model and, with it, the link rewriter that is the whole reason those documents keep
+working here: they are written to be read as GitHub blobs, so `docs/plugins.md` becomes a
+page, a bare `#fragment` finds whichever page that heading landed on, and `LICENSE` or
+`../../releases` goes back to the repository. A `SOURCES` entry's `omit` (slugs) can drop
+`##` sections meant only for the GitHub reader, and a `#fragment` to one resolves to `/`;
+no source uses it since the README stopped being one.
+
+`README.md` is not a source. It was the user guide until 2026-09-26 and is now the
+repository's front page — what scmJS is, *What it does*, getting started, the documents
+table, the licence — about a hundred lines, because a GitHub visitor deciding in thirty
+seconds and a map maker reading the manual are different readers and 1,500 lines served
+neither. Outside links to the guide's old README anchors land at the top of the README;
+nothing in these repositories used them. A link to `README.md` from a guide resolves to
+the site's home page, which stands in for it.
+
+The home page's *What it does* list is the README's `## What it does` section, read out
+of the README and rendered (`homeHtml`, picture lines dropped since the home page opens on
+one), not a hand-written copy, so the two front pages cannot drift. It is found by the
+slug `what-it-does`, and `tests/docs.test.ts` fails if the README loses that section.
 
 The reference is read out of `plugin-api/index.d.ts` — the *bundle* rather than the source
 tree, because that one file with no imports is exactly what a plugin repository compiles
@@ -74,7 +88,7 @@ contributor's guide (running, building, releasing, the plugin host, the conventi
 may name files, but the *reasons* and the measurements behind a decision stay here and in
 the source comments; it points at this file for them.
 
-The guide's pictures are `docs/images/*.webp`, referenced from `README.md` by that path
+The guide's pictures are `docs/images/*.webp`, referenced from `docs/guide.md` as `images/…` (and from `README.md` as `docs/images/…`)
 so they render on GitHub; `site.mjs#linkResolver` sends `docs/images/…` to `/images/…`
 (the directory is copied whole) rather than to a blob page, and `tests/docs.test.ts`
 fails on a picture the guide names that is not on disk. `scripts/guide-screenshots.mjs`

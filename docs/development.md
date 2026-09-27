@@ -2,7 +2,7 @@
 
 This page covers how to run scmJS from source, how it is built and released, and what to
 know before changing it. This is for anyone running the editor locally, building the desktop app or
-the container, or contributing. The [user guide](../README.md) says what the editor does;
+the container, or contributing. The [user guide](guide.md) says what the editor does;
 [file-formats.md](file-formats.md) and [game-data.md](game-data.md) explain the map file
 and the game data; [plugins.md](plugins.md) is for plugin authors. Per-subsystem notes for
 someone working deep in one area are in [CLAUDE.md](../CLAUDE.md), which is written for
@@ -613,7 +613,7 @@ deploy that lacks its own is skipped with a notice.
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is `npm run build:docs`, deployed by the `docs`
 job on a tag so the site, the hosted editor and the installers are one version. It has
-two halves. The guides are `README.md` and `docs/*.md`, split at their `##` headings into
+two halves. The guides are `docs/*.md`, split at their `##` headings into
 pages with the `###` beneath as each page's contents; nothing on the site is prose a
 generator wrote, and these files stay where it is maintained. The reference is generated
 from the bundled plugin typings, so a doc comment in `src/plugins/api.ts` is a paragraph
@@ -742,9 +742,9 @@ every sentence would benefit from a native reader.
 
 ## Contributing
 
-- **Keep the documents current.** `README.md`, `docs/installing.md`, `docs/triggers.md`, `docs/file-formats.md`,
+- **Keep the documents current.** `docs/guide.md`, `docs/installing.md`, `docs/trigscript.md`, `docs/triggers.md`, `docs/file-formats.md`,
   `docs/chk-format.md`, `docs/game-data.md`, `docs/plugins.md` and this file are the
-  documentation site; a behaviour change that is
+  documentation site, and `README.md` is the repository's front page; a behaviour change that is
   not in them is undocumented. `CLAUDE.md` carries the implementation detail and is kept in
   step with the code too.
 - **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not
@@ -772,11 +772,11 @@ Each topic has one place it is written down:
 
 | Topic | Where |
 | --- | --- |
-| What the editor does, for map makers | [README.md](../README.md) |
+| What the editor does, for map makers | [guide.md](guide.md); the [README](../README.md) is the short version |
 | What is in a map file and what the editor does with it | [file-formats.md](file-formats.md) |
 | Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
 | Using, installing and writing plugins, the plugin API | [plugins.md](plugins.md), and the generated reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
-| TrigScript, the trigger scripting language | the user guide's [TrigScript](../README.md#trigscript) section for map makers; the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README for the compiler and the commands it offers other plugins |
+| TrigScript, the trigger scripting language | [trigscript.md](trigscript.md) for map makers; the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README for the compiler and the commands it offers other plugins |
 | Each plugin's internals | its own repository's README |
 | Running, building, releasing, contributing | this file |
 | Per-subsystem implementation notes | [CLAUDE.md](../CLAUDE.md) |

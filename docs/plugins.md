@@ -25,7 +25,7 @@ and what you are trusting when you do.
 ### What is available
 
 Nine plugins are installed and on from the start, and one more is installed but off. The
-rest are in Plugins ▸ **Browse Plugins…**. The [user guide](../README.md#plugins)
+rest are in Plugins ▸ **Browse Plugins…**. The [user guide](guide.md#plugins)
 describes each in more detail, and each repository has its own README.
 
 | Plugin | Starts | Where it appears | What it does |

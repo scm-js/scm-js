@@ -3,7 +3,7 @@
  *
  * Two halves, and only one of them is generated in any interesting sense:
  *
- *   guides   `README.md` and `docs/*.md`, split at their `##` headings into pages and
+ *   guides   `docs/*.md`, split at their `##` headings into pages and
  *            rendered. These stay the source and are still read on GitHub; this puts the
  *            same words at a URL, with navigation and working cross-links. Nothing here
  *            writes prose — a generator that did would be a fifth document to keep
@@ -27,7 +27,7 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { assignTypes, buildReference, slugOf } from "./lib/docs/api.mjs";
-import { headingsIn, renderMarkdown } from "./lib/docs/markdown.mjs";
+import { headingsIn, renderMarkdown, splitPages } from "./lib/docs/markdown.mjs";
 import { codeBlock, escapeHtml, memberHtml, navHtml, page, tocHtml, typeHtml } from "./lib/docs/render.mjs";
 import { codeBlocksOf, playgroundUrl, runnableSnippets } from "./lib/docs/tryit.mjs";
 import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
@@ -156,7 +156,7 @@ function main(argv) {
   const api = buildApi();
   const tryIt = tryItLinks(guides, api);
 
-  /* The sidebar is the same on every page: the eight guides, then the reference. */
+  /* The sidebar is the same on every page: the nine guides, then the reference. */
   const tree = [
     ...guides.map((g) => ({ title: g.title, url: `${base}${g.url}`, pages: g.pages.map((p) => ({ title: p.title, url: `${base}${p.url}` })) })),
     {
@@ -212,7 +212,8 @@ function main(argv) {
     description: "Guides and the plugin API reference for scmJS, a StarCraft: Brood War map editor that runs in a browser tab.",
     url: `${base}/`,
     section: "Home",
-    body: homeHtml(guides, api, base),
+    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "what-it-does")?.body ?? "",
+      (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt })),
   });
 
   /* ── the guides ── */
@@ -383,11 +384,20 @@ export function firstLine(body) {
   return sentence.length > 190 ? `${sentence.slice(0, 187)}…` : sentence;
 }
 
-function homeHtml(guides, api, base) {
+/**
+ * The home page. Its feature list is the README's *What it does* section — the
+ * repository's front page and the site's are the same pitch — rendered here rather than
+ * copied, so the two cannot drift. Its picture is left out: the home page opens on one.
+ */
+function homeHtml(guides, api, base, features, render) {
+  const featuresHtml = features
+    ? `<h2 id="what-it-does">What it does</h2>\n${render(features.replace(/^!\[.*$/gm, "").trim())}\n`
+    : "";
   return `<h1>scmJS documentation</h1>
-<p class="lede">scmJS is a fully featured StarCraft: Brood War map editor that runs in a browser tab. Open, edit, and save your Starcraft 1 maps (<code>.scm</code>, <code>.scx</code>, and <code>.chk</code> files).</p>
+<p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files.</p>
 <p class="home-shot"><img src="${base}/images/editor-plain.webp" width="1400" height="900" alt="The editor with Big Game Hunters open on the Terrain layer"></p>
 <p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}" target="_blank" rel="noopener noreferrer">${EDITOR_URL}</a>.</p>
+${featuresHtml}<h2 id="documents">The documents</h2>
 <ul class="cards">
 ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.blurb)}</span></a></li>`).join("\n")}
 <li><a class="card" href="${base}/api/"><b>API reference</b><span>Every call a plugin can make, group by group — plugin API version ${api.apiVersion}.</span></a></li>

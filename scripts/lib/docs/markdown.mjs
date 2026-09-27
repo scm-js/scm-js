@@ -2,14 +2,14 @@
  * The Markdown half of `scripts/build-docs.mjs`: splitting the repository's own guides
  * into pages, and rendering them.
  *
- * Nothing here writes documentation. `README.md` is the map-maker's guide and
- * `docs/*.md` the technical companions, and they stay the source — this turns them into
+ * Nothing here writes documentation. `docs/guide.md` is the map-maker's guide and
+ * the other `docs/*.md` its companions, and they stay the source — this turns them into
  * a site so the same words can be read at a URL instead of on a GitHub blob page. A
  * generator that *wrote* prose would be a fifth thing to keep current; a generator that
  * renders what is already maintained is not.
  *
- * A guide is split at its `##` headings, one page each, because `README.md` alone is 800
- * lines and "Working in the editor" is half of it. The `###` beneath a `##` become the
+ * A guide is split at its `##` headings, one page each, because the user guide alone is
+ * well over a thousand lines. The `###` beneath a `##` become the
  * page's own contents list, which is what a heading three levels down is for.
  */
 import { Marked } from "marked";

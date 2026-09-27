@@ -2,7 +2,7 @@
 
 ### The buffer (`src/editor/log.ts`, `src/editor/diagnostics.ts`, `src/atoms/logAtoms.ts`, `src/components/chrome/DebugConsole.tsx`, `src/hooks/useErrorCapture.ts`)
 
-`README.md#when-something-goes-wrong` is the user's half; `docs/development.md#how-the-editor-is-put-together`
+`docs/guide.md#when-something-goes-wrong` is the user's half; `docs/development.md#how-the-editor-is-put-together`
 has the paragraph for contributors. This is why it is shaped the way it is.
 
 **The problem it solves.** Everything the editor knew about a misbehaving session went to
@@ -61,7 +61,7 @@ or partial extraction explains a whole class of "the map draws wrong"), the map'
 the plugins with versions and errors. What it deliberately leaves out: full file paths
 (`log.ts#baseName` trims them — a desktop path carries the user's own name), the user agent
 beyond its engine and OS (`shortAgent`), and anything from a plugin's stored settings. The
-README says what a copy contains before anyone copies it; keep that promise if you add a
+user guide says what a copy contains before anyone copies it; keep that promise if you add a
 fact here.
 
 **Help ▸ Copy Bug Report carries the log too, capped.** It used to copy the header alone,

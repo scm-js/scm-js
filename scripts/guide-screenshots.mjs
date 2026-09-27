@@ -1,5 +1,5 @@
 /**
- * The pictures in the user guide (`README.md` → `docs/images/*.webp`), taken again.
+ * The pictures in the user guide (`docs/guide.md` → `docs/images/*.webp`), taken again.
  *
  * Drives the dev server in a headless Chromium: opens the fixture maps, paints and
  * places what each picture shows, and writes the WebP files the guide names. Dialogs

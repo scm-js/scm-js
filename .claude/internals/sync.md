@@ -2,7 +2,7 @@
 
 ### Where it lives (`src/editor/sync.ts`, `src/services/sync.ts`, `syncTapAtom` in `documentAtoms.ts`, `mapPointerHeldAtom`)
 
-`docs/plugins.md#apisync` is the plugin author's half and `README.md#editing-a-map-together`
+`docs/plugins.md#apisync` is the plugin author's half and `docs/guide.md#editing-a-map-together`
 the map maker's. The transport is the scmjs.dev plugin's (`plugin-scmjs-dev/share/`), the
 server is ai-server's `src/rooms/` (a sequencer + relay that never opens the map). Built
 2026-09-22 after the user picked "fastify websocket on the existing server", "invite link,

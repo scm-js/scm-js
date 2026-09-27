@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The eight guides are the repository's own — `README.md` and `docs/*.md` — split into
+ * The nine guides are the repository's own `docs/*.md`, split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -33,13 +33,17 @@ export const SOURCES = [
   },
   {
     id: "guide",
-    file: "README.md",
+    file: "docs/guide.md",
     title: "User guide",
-    // The README is also the repository's front page, and these two sections are for
-    // that reader: on the site the sidebar is the index and the footer carries the licence.
-    omit: ["documentation", "license"],
     pageTitle: "StarCraft map editor guide",
-    blurb: "How to use the editor: Your first map, then each layer and dialog - terrain, units, triggers, TrigScript, settings, saving, editing one map with multiple people, map sharing, and how to install plugins.",
+    blurb: "How to use the editor: Your first map, then each layer and dialog - terrain, units, triggers, settings, saving, editing one map with multiple people, map sharing, and how to install plugins.",
+  },
+  {
+    id: "trigscript",
+    file: "docs/trigscript.md",
+    title: "TrigScript",
+    blurb: "Triggers written as TypeScript: the script window, tests, triggers made by code, programs that run in the game on StarCraft: Remastered, examples and the reference.",
+    pageTitle: "TrigScript, StarCraft triggers as code",
   },
   {
     id: "plugins",
@@ -110,7 +114,7 @@ export function buildGuide(source, text) {
     headings: headingsIn(s.body).filter((h) => h.depth === 3),
   }));
   // The nav's name for a section is `SOURCES`' own, not the document's `#` heading:
-  // `README.md` calls itself "scmJS", which is the repository rather than the section.
+  // `docs/guide.md` calls itself "User guide" too, but a document's own title need not be the nav's.
   return { ...source, title: source.title, docTitle: title, intro, url: `/${source.id}/`, pages, omitted: [...omit] };
 }
 
@@ -138,9 +142,9 @@ export function headingIndex(guides) {
  * The link rewriter handed to `renderMarkdown`.
  *
  * Absolute and `mailto:` links are left alone. A bare `#fragment` is resolved within the
- * guide it was written in. A relative path naming one of the eight source documents
+ * guide it was written in. A relative path naming one of the nine source documents
  * becomes a page here; anything else in the repository becomes a link to GitHub — a blob
- * for a path inside the tree, and the repository's own page for one that climbs above it
+ * for a path inside the tree (the README is the exception: the home page stands in for it), and the repository's own page for one that climbs above it
  * (`../../releases` in `docs/development.md` is written to work that way on github.com).
  */
 export function linkResolver(guides, { repoUrl = REPO_URL } = {}) {
@@ -155,6 +159,8 @@ export function linkResolver(guides, { repoUrl = REPO_URL } = {}) {
     }
     const { path, above } = resolvePath(fromFile, target);
     if (above > 0) return `${repoUrl}/${path}`;
+    // The README is the repository's front page; on the site the home page is.
+    if (path === "README.md") return "/";
     if (path.startsWith(`${IMAGES_DIR}/`)) return `/images/${path.slice(IMAGES_DIR.length + 1)}`;
     const doc = index.get(path);
     if (doc) {

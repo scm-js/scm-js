@@ -85,22 +85,29 @@ describe("links", () => {
 
   it("turns a cross-document link into a page here", () => {
     expect(resolve("README.md", "docs/plugins.md")).toBe("/plugins/");
-    expect(resolve("docs/plugins.md", "../README.md")).toBe("/guide/");
+    expect(resolve("docs/plugins.md", "guide.md")).toBe("/guide/");
     expect(resolve("docs/development.md", "game-data.md#getting-the-files")).toBe("/game-data/getting-the-files/");
   });
 
   it("sends a `#fragment` to whichever page that heading ended up on", () => {
-    const at = resolve("README.md", "#keyboard-and-preferences");
+    const at = resolve("docs/guide.md", "#keyboard-and-preferences");
     expect(at).toBe("/guide/keyboard-and-preferences/");
   });
 
-  it("leaves the README's GitHub-only sections off the site, and points links to them at the index", () => {
-    const guide = guides.find((g: { id: string }) => g.id === "guide");
-    const slugs = guide.pages.map((p: { slug: string }) => p.slug);
-    expect(slugs).not.toContain("documentation");
-    expect(slugs).not.toContain("license");
-    expect(read("README.md")).toContain("## Documentation");
-    expect(resolve("README.md", "#documentation")).toBe("/");
+  it("keeps the README off the site, and sends a guide's link to it to the home page", () => {
+    expect(SOURCES.map((s: { file: string }) => s.file)).not.toContain("README.md");
+    expect(resolve("docs/guide.md", "../README.md#documentation")).toBe("/");
+    // The README's links into the guide, as the home page renders them.
+    expect(resolve("README.md", "docs/guide.md#saving")).toBe("/guide/checking-testing-and-saving/#saving");
+  });
+
+  it("keeps the README section the home page renders as its feature list", () => {
+    expect(read("README.md")).toContain("\n## What it does\n");
+  });
+
+  it("leaves no README link into the guide pointing at a heading it does not have", () => {
+    const headings = new Set(headingsIn(read("docs/guide.md")).map((h: { slug: string }) => h.slug));
+    for (const m of read("README.md").matchAll(/\]\(docs\/guide\.md#([^)]+)\)/g)) expect(headings.has(m[1]), m[1]).toBe(true);
   });
 
   it("sends everything else in the repository back to GitHub, and leaves absolute links alone", () => {
@@ -270,7 +277,7 @@ describe("the map files and game data guides", () => {
   });
 
   it("keep the editor's internals out of the prose", () => {
-    for (const file of [...GUIDES, "docs/installing.md"]) {
+    for (const file of [...GUIDES, "docs/installing.md", "docs/guide.md", "docs/trigscript.md", "README.md"]) {
       const text = read(file);
       const prose = text.includes(MARKER) ? text.slice(0, text.indexOf(MARKER)) : text;
       const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);

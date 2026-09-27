@@ -1,11 +1,11 @@
 /**
- * The guide's TrigScript examples (`README.md` § TrigScript) compile.
+ * The TrigScript guide's examples (`docs/trigscript.md`) compile.
  *
  * They are the code a map maker copies, and nothing else runs them: the plugin's own
  * tests cover the language, the docs tests cover the prose, and an example that quietly
  * stopped compiling after a language change would only be found by the reader who
- * pasted it. So every fenced `ts` block in the section is compiled here with the
- * plugin's real compiler, against a map that has the locations the section says it
+ * pasted it. So every fenced `ts` block in it is compiled here with the
+ * plugin's real compiler, against a map that has the locations the guide says it
  * assumes. An example that carries a `test()` has its tests run too, and they pass.
  *
  * The compiler is the vendored default's (`plugins/trigscript/`, written by
@@ -23,16 +23,12 @@ const root = join(import.meta.dirname, "..");
 const plugin = join(root, "plugins", "trigscript");
 const have = existsSync(join(plugin, "compiler", "compiler.ts")) && existsSync(join(plugin, "bundle", "lib.mjs"));
 
-/** The section's fenced `ts` blocks, each with the line it starts on. */
+/** The guide's fenced `ts` blocks, each with the line it starts on. */
 function examples(): { line: number; code: string }[] {
-  const text = readFileSync(join(root, "README.md"), "utf8");
-  const start = text.indexOf("\n## TrigScript\n");
-  const end = text.indexOf("\n## ", start + 1);
-  expect(start).toBeGreaterThan(0);
-  const section = text.slice(start, end);
-  const before = text.slice(0, start).split("\n").length;
+  const text = readFileSync(join(root, "docs", "trigscript.md"), "utf8");
+  const before = 1;
   const out: { line: number; code: string }[] = [];
-  const lines = section.split("\n");
+  const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim() !== "```ts") continue;
     const from = i + 1;
@@ -43,7 +39,7 @@ function examples(): { line: number; code: string }[] {
 }
 
 describe.skipIf(!have)("the guide's TrigScript examples", () => {
-  it("every fenced example compiles against the map the section assumes", { timeout: 60_000 }, async () => {
+  it("every fenced example compiles against the map the guide assumes", { timeout: 60_000 }, async () => {
     const { compileScript } = await import(join(plugin, "compiler", "compiler.ts"));
     const { scriptNames } = await import(join(plugin, "compiler", "names.ts"));
     const { defaultLib } = await import(join(plugin, "bundle", "lib.mjs"));
@@ -56,11 +52,11 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
       // An example that carries a test() is also run: each location a box of its own, side by side.
       const tests = /\btest\(/.test(code) ? { world: { locations: Object.fromEntries(names.locations.entries.map((e: { value: number }) => [e.value, { left: e.value * 1000, top: 0, right: e.value * 1000 + 200, bottom: 200 }])) } } : undefined;
       const result = compileScript(ts, { "main.ts": code }, names, { lib, ...(tests ? { tests } : {}) });
-      for (const d of result.diagnostics) failures.push(`README.md:${line} (${d.file}:${d.line}) ${d.message}`);
-      if (tests && !result.tests?.results.length) failures.push(`README.md:${line}: the example's tests did not run`);
-      for (const t of result.tests?.results ?? []) if (t.status === "failed") failures.push(`README.md:${line}: the test "${t.id}" fails: ${t.message}`);
+      for (const d of result.diagnostics) failures.push(`docs/trigscript.md:${line} (${d.file}:${d.line}) ${d.message}`);
+      if (tests && !result.tests?.results.length) failures.push(`docs/trigscript.md:${line}: the example's tests did not run`);
+      for (const t of result.tests?.results ?? []) if (t.status === "failed") failures.push(`docs/trigscript.md:${line}: the test "${t.id}" fails: ${t.message}`);
       // A trigger() is a trigger of the map; a program() is IR, built into the saved file by the eudplib plugin.
-      if (result.diagnostics.length === 0 && result.triggers.length === 0 && (result.ir?.length ?? 0) === 0) failures.push(`README.md:${line}: the example makes neither a trigger nor a program`);
+      if (result.diagnostics.length === 0 && result.triggers.length === 0 && (result.ir?.length ?? 0) === 0) failures.push(`docs/trigscript.md:${line}: the example makes neither a trigger nor a program`);
     }
     expect(failures).toEqual([]);
   });

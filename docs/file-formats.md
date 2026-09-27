@@ -3,7 +3,7 @@
 This section contains documentation on what scmJS does with a StarCraft map file when it opens and saves one. This is for anyone
 who wants to know what happens to their file: map makers deciding what to keep in a
 release copy, and people fixing a broken or protected map. The
-[user guide](../README.md#saving) covers the Save dialog itself; this document explains
+[user guide](guide.md#saving) covers the Save dialog itself; this document explains
 the file it writes. The format itself, section by section, is in the
 [CHK format reference](chk-format.md).
 

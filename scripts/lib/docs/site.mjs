@@ -38,6 +38,7 @@ export const SOURCES = [
     // The README is also the repository's front page, and these two sections are for
     // that reader: on the site the sidebar is the index and the footer carries the licence.
     omit: ["documentation", "license"],
+    pageTitle: "StarCraft map editor guide",
     blurb: "How to use the editor: Your first map, then each layer and dialog - terrain, units, triggers, TrigScript, settings, saving, editing one map with multiple people, map sharing, and how to install plugins.",
   },
   {
@@ -60,6 +61,7 @@ export const SOURCES = [
     file: "docs/file-formats.md",
     title: "Opening and saving maps",
     blurb: "What the editor does with a map file: what it preserves, what Save can strip, revisions, protected and built maps.",
+    pageTitle: "StarCraft map files",
   },
   {
     id: "chk",

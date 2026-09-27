@@ -75,7 +75,7 @@ const BEACON = `<script>
  * carries the same sidebar and nothing has to be generated per section.
  */
 export function page({ title, heading: fixed, description, url, body, nav, toc = "", version = "", editorUrl, repoUrl, siteUrl, base = "", origin = "" }) {
-  const heading = fixed ?? (title === "scmJS documentation" ? title : `${title} — scmJS documentation`);
+  const heading = fixed ?? `${title} — scmJS StarCraft map editor`;
   // The absolute addresses search engines and link previews want. Only known when the build
   // is told its domain, so a local or --base build leaves them out rather than guessing.
   const absolute = origin

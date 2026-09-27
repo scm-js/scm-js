@@ -2,12 +2,17 @@
 
 ### The documentation site (`scripts/build-docs.mjs`, `scripts/lib/docs/`)
 
-`docs.scmjs.dev` is `npm run build:docs`, deployed by build.yml's `docs` job onto
+`docs.scmjs.dev` is `npm run build:docs`, deployed by `docs.yml` onto
 `scm-js/docs`'s `gh-pages` branch — one force-pushed orphan commit with a `CNAME`, the
 `nightly-site` shape, behind the `DOCS_PAT` secret and the `DOCS_DOMAIN` variable and
-skipped with a notice without them. It is a **stable-channel** job: the hosted editor, the
-installers, the notes and the docs are one tag, and every page's footer carries the
-version. (`@scm-js/plugin-api` still publishes from main, so a plugin author on the newest
+skipped with a notice without them. build.yml's `docs` job calls it on every **stable**
+tag: the hosted editor, the installers, the notes and the docs are one tag, and every
+page's footer carries the version. It can also be run by hand (Actions ▸ Docs site, `ref`
+defaulting to main) to put a docs fix live between releases; the footer then reads
+"`0.6.0 + main@abc1234`" (`--version`, worked out from `git describe` against the newest
+`v*` tag), and the next release's run puts the tag's own pages back. A hand run from main
+publishes whatever main says, including prose for unreleased features and main's API
+declarations. (`@scm-js/plugin-api` still publishes from main, so a plugin author on the newest
 package can be one release ahead of the reference; the API is additive, so what they see
 is a member missing from these pages rather than one that behaves differently.)
 
@@ -18,9 +23,10 @@ build has no domain to be absolute against and leaves all of it out. A guide pag
 `<meta name=description>` is `summaryOf` — sentences from the top until there is about a
 search result's worth, or the page's `###` headings when it opens on a table — while its
 card on the section page stays `firstLine`, one sentence. A source may set `pageTitle`, which
-makes its pages' `<title>` "`<page> — <pageTitle>`" instead of "… — scmJS documentation": the
-trigger reference and the CHK reference use it, since those pages are found by the name of one
-action or section. Both references keep their tables in `<!-- generated -->` blocks
+makes its pages' `<title>` "`<page> — <pageTitle>`" instead of "… — scmJS StarCraft map editor":
+the trigger reference and the CHK reference use it, since those pages are found by the name of
+one action or section, and so do the user guide and the map-files guide. Every title names
+StarCraft, because nobody searches for "scmJS" yet — a page is found by what it is about. Both references keep their tables in `<!-- generated -->` blocks
 (`scripts/lib/generated-blocks.mjs`) rewritten by `npm run docs:reference`.
 
 Two halves, and only the second is generated in any interesting sense. The guides are

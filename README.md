@@ -2358,7 +2358,6 @@ This section lists what is currently missing in the editor and the limits worth 
 
 ### Not implemented
 
-- **Changing the shortcuts.** Preferences ▸ Hotkeys lists them but cannot change them (yet).
 - **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
   scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
   Resizing and changing the tileset clear the undo history.

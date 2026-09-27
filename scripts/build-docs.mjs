@@ -22,6 +22,7 @@
  *   node scripts/build-docs.mjs --out DIR
  *   node scripts/build-docs.mjs --domain docs.scmjs.dev    # write a CNAME too
  *   node scripts/build-docs.mjs --base /docs       # served somewhere other than the root
+ *   node scripts/build-docs.mjs --version "0.6.0 + main@abc1234"    # what the footer says
  */
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -145,7 +146,10 @@ function main(argv) {
   const domain = domainAt === -1 ? "" : argv[domainAt + 1] ?? "";
   const baseAt = argv.indexOf("--base");
   const base = baseAt === -1 ? "" : (argv[baseAt + 1] ?? "").replace(/\/$/, "");
-  const version = JSON.parse(read("package.json")).version;
+  // --version names what the footer says was built: a release's number, or for a docs-only
+  // deploy from main the release it follows and the commit (docs.yml).
+  const versionAt = argv.indexOf("--version");
+  const version = versionAt === -1 ? JSON.parse(read("package.json")).version : argv[versionAt + 1] ?? "";
   const origin = domain ? `https://${domain}` : "";
 
   const { guides, resolve: resolveLink } = buildGuides();
@@ -204,6 +208,7 @@ function main(argv) {
   /* ── home ── */
   emit({
     title: "scmJS documentation",
+    heading: "scmJS documentation — StarCraft: Brood War map editor",
     description: "Guides and the plugin API reference for scmJS, a StarCraft: Brood War map editor that runs in a browser tab.",
     url: `${base}/`,
     section: "Home",

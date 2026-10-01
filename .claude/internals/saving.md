@@ -46,9 +46,14 @@ in the hook: `"save"` with a path writes with the remembered options; otherwise 
 `taken`) or leaves the stack — so Close Scenario's Save waits for the whole thing. Save Copy As is the
 same dialog with `{ copy: true }`. `tests/save-flow.test.ts` covers the store half with a fake writer.
 `SaveMapDialog` builds the real file 150 ms after each option change, for the size line and so
-the click has the bytes ready; the last `BUILDS_KEPT` (4) builds are kept by `JSON.stringify(opts)`
-for as long as the scenario, extras and stored members are the same objects, so going back to a
-choice already tried does not build again. What made this matter (2026-10-01): mopaq's
+the click has the bytes ready; the last four builds are kept in `createBuildCache` (`editor/save.ts`)
+under `saveOptionsKey(opts)` — a key that ignores the order of the fields and of `omitExtras` — for
+as long as the scenario, extras and stored members are the same objects, so going back to a
+choice already tried does not build again. `of(inputs)` hands back a handle tied to those inputs,
+so a build that lands after the map changed cannot be served for the new one. `tests/save.test.ts`
+covers the key (a new `SaveOptions` field must be given a variant there), the eviction and that
+each option set is served the file a fresh build writes; checked headlessly 2026-10-01 (presets
+switched back and forth: 170 ms the first time, ~0 after; the file saved was the one shown). What made this matter (2026-10-01): mopaq's
 `writeAsync` / `readFileAsync` started a Worker per zlib sector — 35 s to write and 6 s to read a
 7.4 MB scenario at 4 KB sectors, which is what `requiredSectorSize` picks when stored members are
 kept and what other editors' zlib maps use. Fixed in mopaq itself (small sectors on the calling

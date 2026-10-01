@@ -6,8 +6,8 @@ import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
 import { loadMap, readExtras, readMembers, saveMap, SCENARIO_PATH } from "../src/formats/mpq/scm";
 import {
-  BOOKKEEPING_SECTIONS, buildChk, buildMapFile, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, editorOnlySections, extraKind, formatBytes, formatOf,
-  MANIFEST_MEMBER, planSave, SAVE_PRESETS, SCRIPT_MEMBER, TERRAIN_EDITING_SECTIONS, type SaveOptions,
+  BOOKKEEPING_SECTIONS, buildChk, buildMapFile, createBuildCache, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, editorOnlySections, extraKind, formatBytes, formatOf,
+  MANIFEST_MEMBER, planSave, SAVE_PRESETS, saveOptionsKey, SCRIPT_MEMBER, TERRAIN_EDITING_SECTIONS, type SaveOptions,
 } from "../src/editor/save";
 
 const MAPS_DIR = join(import.meta.dirname, "..", "fixtures", "maps");
@@ -200,4 +200,89 @@ if (fixtures.length > 0) describe("save options on the fixture maps", () => {
       expect(smaller.scenarioInfo!.storedSize).toBeLessThan(out.scenarioInfo!.storedSize);
     });
   }
+});
+
+describe("the Save dialog's built files", () => {
+  const bytes = (n: number) => new Uint8Array([n]);
+
+  it("gives every option its own key, and the same key whatever the order things were written in", () => {
+    const base = opts({ omitExtras: ["a.wav", "b.wav"] });
+    const variants: SaveOptions[] = [
+      base,
+      { ...base, format: "scm" }, { ...base, format: "chk" },
+      { ...base, compression: "zlib" }, { ...base, compression: "pkware" },
+      { ...base, encrypt: !base.encrypt },
+      { ...base, omitExtras: [] }, { ...base, omitExtras: ["a.wav"] }, { ...base, omitExtras: ["a.wav", "b.wav", "c.wav"] },
+      { ...base, stripTerrainEditing: !base.stripTerrainEditing }, { ...base, stripBookkeeping: !base.stripBookkeeping },
+      { ...base, stripUnknown: !base.stripUnknown }, { ...base, mergeRepeats: !base.mergeRepeats }, { ...base, dropTrailing: !base.dropTrailing },
+    ];
+    expect(new Set(variants.map(saveOptionsKey)).size).toBe(variants.length);
+    // Every field of the options is covered above; a new one must be given a variant here.
+    expect(Object.keys(DEFAULT_SAVE_OPTIONS).sort()).toEqual(
+      ["compression", "dropTrailing", "encrypt", "format", "mergeRepeats", "omitExtras", "stripBookkeeping", "stripTerrainEditing", "stripUnknown"].sort(),
+    );
+
+    const reordered = Object.fromEntries(Object.entries(base).reverse()) as unknown as SaveOptions;
+    expect(saveOptionsKey(reordered)).toBe(saveOptionsKey(base));
+    expect(saveOptionsKey({ ...base, omitExtras: ["b.wav", "a.wav"] })).toBe(saveOptionsKey(base));
+    expect(base.omitExtras).toEqual(["a.wav", "b.wav"]); // the key does not sort the caller's list
+  });
+
+  it("answers for options equal in value, and not for any others", () => {
+    const kept = createBuildCache().of(["scn"]);
+    expect(kept.get(opts())).toBeUndefined();
+    kept.put(opts(), bytes(1));
+    kept.put(opts({ compression: "zlib" }), bytes(2));
+    expect(kept.get({ ...opts() })).toEqual(bytes(1));
+    expect(kept.get(opts({ compression: "zlib" }))).toEqual(bytes(2));
+    expect(kept.get(opts({ compression: "pkware" }))).toBeUndefined();
+    expect(kept.get(opts({ encrypt: !opts().encrypt }))).toBeUndefined();
+  });
+
+  it("keeps only the newest few, and counts a rebuild as new", () => {
+    const kept = createBuildCache(2).of([]);
+    kept.put(opts({ format: "scx" }), bytes(1));
+    kept.put(opts({ format: "scm" }), bytes(2));
+    kept.put(opts({ format: "scx" }), bytes(3)); // built again: now the newest
+    kept.put(opts({ format: "chk" }), bytes(4));
+    expect(kept.get(opts({ format: "scm" }))).toBeUndefined();
+    expect(kept.get(opts({ format: "scx" }))).toEqual(bytes(3));
+    expect(kept.get(opts({ format: "chk" }))).toEqual(bytes(4));
+  });
+
+  it("forgets everything when the map, its extras or its stored members are other objects", () => {
+    const cache = createBuildCache();
+    const scn = fresh(), extras = new Map<string, Uint8Array>();
+    cache.of([scn, extras, null]).put(opts(), bytes(1));
+    expect(cache.of([scn, extras, null]).get(opts())).toEqual(bytes(1)); // the same inputs, asked again
+    expect(cache.of([scn, new Map(), null]).get(opts())).toBeUndefined();
+    expect(cache.of([scn, extras, null]).get(opts())).toBeUndefined(); // and it does not come back
+    cache.of([scn, extras, null]).put(opts(), bytes(2));
+    expect(cache.of([fresh(), extras, null]).get(opts())).toBeUndefined();
+    expect(cache.of([fresh(), extras]).get(opts())).toBeUndefined();
+  });
+
+  it("does not serve a build that finished after its inputs changed", () => {
+    const cache = createBuildCache();
+    const before = cache.of(["first map"]);
+    const after = cache.of(["second map"]);
+    before.put(opts(), bytes(1)); // the first map's build lands late
+    expect(after.get(opts())).toBeUndefined();
+    expect(cache.of(["second map"]).get(opts())).toBeUndefined();
+  });
+
+  it("hands back, for each option set tried, the file a fresh build of it writes", async () => {
+    const scn = fresh();
+    const extras = new Map([["staredit\\wav\\hello.wav", new Uint8Array(4000).fill(7)]]);
+    const kept = createBuildCache().of([scn, extras, null]);
+    const tried = [opts(), opts({ compression: "zlib" }), opts({ compression: "pkware", encrypt: true }), opts({ format: "chk" })];
+    for (const o of tried) kept.put(o, await buildMapFile(scn, extras, o));
+    const sizes = new Set<number>();
+    for (const o of tried) {
+      const served = kept.get({ ...o })!;
+      expect(served).toEqual(await buildMapFile(scn, extras, o));
+      sizes.add(served.length);
+    }
+    expect(sizes.size).toBe(tried.length); // four different files, none served for another
+  });
 });

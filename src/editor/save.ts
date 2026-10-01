@@ -332,6 +332,54 @@ export async function buildMapFile(scn: Scenario, extras: Map<string, Uint8Array
   });
 }
 
+/* ── Built files, kept while options are tried ───────────── */
+
+/** One string per distinct file the options would write: the order of the keys and of the omitted names does not matter. */
+export function saveOptionsKey(options: SaveOptions): string {
+  const sorted = Object.keys(options).sort().map((k) => {
+    const value = options[k as keyof SaveOptions];
+    return [k, Array.isArray(value) ? [...value].sort() : value];
+  });
+  return JSON.stringify(sorted);
+}
+
+export interface BuiltFiles {
+  get(options: SaveOptions): Uint8Array | undefined;
+  put(options: SaveOptions, bytes: Uint8Array): void;
+}
+
+/**
+ * The files the Save dialog has built, by the options they were built with. A build is the
+ * whole save, compression included, so going back to a choice already tried should not run
+ * it again. `of(inputs)` answers for one set of inputs — the scenario, the extras, the
+ * stored members, compared by identity — and forgets everything when any of them is another
+ * object; the handle it returns stays with the inputs it was asked for, so a build that
+ * finishes after they changed cannot be served for the new ones. The oldest build goes
+ * once there are more than `limit`.
+ */
+export function createBuildCache(limit = 4): { of(inputs: readonly unknown[]): BuiltFiles } {
+  let held: readonly unknown[] = [];
+  let builds = new Map<string, Uint8Array>();
+  return {
+    of(inputs) {
+      if (inputs.length !== held.length || inputs.some((x, i) => x !== held[i])) {
+        held = [...inputs];
+        builds = new Map();
+      }
+      const mine = builds;
+      return {
+        get: (options) => mine.get(saveOptionsKey(options)),
+        put: (options, bytes) => {
+          const key = saveOptionsKey(options);
+          mine.delete(key);
+          mine.set(key, bytes);
+          while (mine.size > Math.max(1, limit)) mine.delete(mine.keys().next().value!);
+        },
+      };
+    },
+  };
+}
+
 /** The names the registry marks editor-only, for the tests that keep the two lists above in step with it. */
 export function editorOnlySections(): string[] {
   return [...SECTION_SPECS.values()].filter((s) => s.editorOnly).map((s) => s.name);

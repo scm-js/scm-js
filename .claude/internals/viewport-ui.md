@@ -66,6 +66,24 @@ read in the first effect pass is still null.
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+  **The terrain revision means the ground** (2026-10-01). `commitEditAtom`, undo, redo and
+  `rollbackEntryAtom` used to bump `terrainRevisionAtom` for every entry, so moving a unit or
+  nudging a location threw the terrain layer away and recoloured the minimap. They now go
+  through `bumpGround` (`documentAtoms.ts`): an entry that `touchesGround` (`history.ts` — tiles,
+  ISOM, doodad tiles, fog, a created ISOM/MASK) bumps the terrain revision, and one that does not
+  bumps `objectEditRevisionAtom` instead, which nothing draws from. Units, doodads/sprites and
+  locations repaint through their own revisions, as they already did. The second counter is
+  there for the plugin API: `"terrain"` is documented as every committed edit, so
+  `EVENT_ATOMS.terrain` listens to both, and exactly one moves per commit — the event fires as
+  often as before. A component that shows something an object edit changes must subscribe to
+  that object's revision, not the terrain one. `tests/revisions.test.ts`; checked headlessly
+  (place / move / undo / redo a unit, create / undo a location: viewport and minimap follow).
+- `MinimapPanel.tsx` paints in two effects. The first draws the picture — terrain, locations,
+  unit dots, start locations, fog — into a canvas of its own (`pictureRef`), with the terrain's
+  `ImageData` kept in `terrainRef` under a key of what it was computed from, so a unit drag
+  redraws the dots over the same pixels. The second copies the picture and strokes the view
+  rectangle, and is all a scroll runs: before, `viewportRectAtom` in the one effect's deps
+  recomputed 65,536 pixels, every dot and the fog on every scroll frame.
   Every repaint request — a pointer move, a scroll, the `[size, draw]` effect that fires
   whenever `draw`'s identity changes — goes through `scheduleDraw()`, which books one
   `requestAnimationFrame` and coalesces the rest, so a burst of events costs one paint and it

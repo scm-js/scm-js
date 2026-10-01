@@ -17,7 +17,7 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom, objectEditRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -1569,7 +1569,8 @@ const EVENT_ATOMS = {
   document: [scenarioAtom],
   commit: [commitNoticeAtom],
   language: [localeAtom],
-  terrain: [terrainRevisionAtom],
+  // Every committed edit, as documented: one of the two moves per commit, never both.
+  terrain: [terrainRevisionAtom, objectEditRevisionAtom],
   units: [unitsRevisionAtom],
   doodads: [doodadsRevisionAtom],
   locations: [locationsRevisionAtom],

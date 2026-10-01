@@ -93,6 +93,16 @@ export function applyEntry(scn: Scenario, entry: HistoryEdit, direction: "do" | 
 export const touchesDoodads = (entry: HistoryEdit) =>
   (entry.doodadTiles?.length ?? 0) > 0 || (entry.doodads?.length ?? 0) > 0 || (entry.sprites?.length ?? 0) > 0;
 
+/**
+ * Whether the entry changed what the terrain revision stands for: the tiles, the lattice
+ * under them, the doodad tiles stamped into the picture, or the fog mask. An entry of
+ * units, sprites, locations or doodad records alone does not, and repaints through its
+ * own revision.
+ */
+export const touchesGround = (entry: HistoryEdit) =>
+  entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || entry.rebuiltIsom === true
+  || (entry.doodadTiles?.length ?? 0) > 0 || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined;
+
 export const hasEdits = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0
   || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined || touchesDoodads(entry) || (entry.locations?.length ?? 0) > 0;

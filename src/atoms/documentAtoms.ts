@@ -30,7 +30,7 @@ import { applyDoodadChanges, convertDoodads, removeDoodads, strandedDoodads } fr
 import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
-import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
+import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -111,6 +111,21 @@ export const pushRecentAtom = atom(null, (get, set, req: { name: string; handle:
 
 /** Bumped whenever terrain changes, so the viewport knows to repaint. */
 export const terrainRevisionAtom = atom(0);
+
+/**
+ * Bumped by an edit, undo or redo that left the ground alone — units, sprites, locations,
+ * doodad records. Nothing draws from it: such an edit repaints through its own revision,
+ * and keeping it off the terrain revision is what spares the cached terrain layer and the
+ * minimap's picture. It exists for the plugin API's `"terrain"` event, which is documented
+ * as every committed edit and listens to both.
+ */
+export const objectEditRevisionAtom = atom(0);
+
+/** The repaint an entry's ground changes need — or, when it has none, the tick the `"terrain"` event still hears. */
+function bumpGround(get: Getter, set: Setter, entry: HistoryEdit) {
+  const revision = touchesGround(entry) ? terrainRevisionAtom : objectEditRevisionAtom;
+  set(revision, get(revision) + 1);
+}
 
 /** Bumped whenever `scenario.units` changes (place, move, delete, undo), for the same reason. */
 export const unitsRevisionAtom = atom(0);
@@ -614,7 +629,7 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   set(undoStackAtom, [...get(undoStackAtom), entry].slice(-Math.max(1, get(preferencesAtom).undoLevels)));
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);
-  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+  bumpGround(get, set, entry);
   if (entry.units) set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
@@ -691,7 +706,7 @@ function afterStep(get: Getter, set: Setter, entry: HistoryEntry) {
   if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   afterUnitEdit(get, set, entry);
   set(mapModifiedAtom, true);
-  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+  bumpGround(get, set, entry);
 }
 
 export const undoAtom = atom(
@@ -718,7 +733,7 @@ export const undoAtom = atom(
     set(undoStackAtom, stack.slice(0, -1));
     set(redoStackAtom, [...get(redoStackAtom), entry]);
     set(mapModifiedAtom, true);
-    set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+    bumpGround(get, set, entry);
     noticeEntry(get, set, "undo", entry, entry.label);
     return entry.label;
   },
@@ -736,7 +751,7 @@ export const rollbackEntryAtom = atom(null, (get, set, entry: HistoryEntry) => {
   applyEntry(scn, entry, "undo");
   if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   afterUnitEdit(get, set, entry);
-  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+  bumpGround(get, set, entry);
 });
 
 export const redoAtom = atom(
@@ -761,7 +776,7 @@ export const redoAtom = atom(
     set(redoStackAtom, stack.slice(0, -1));
     set(undoStackAtom, [...get(undoStackAtom), entry]);
     set(mapModifiedAtom, true);
-    set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+    bumpGround(get, set, entry);
     noticeEntry(get, set, "redo", entry, entry.label);
     return entry.label;
   },

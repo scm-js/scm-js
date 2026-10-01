@@ -14,10 +14,61 @@ import { hashNoise } from "../viewport/noise";
 import { locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { megatileForTile } from "../../formats/tileset/decode";
+import type { LoadedTileset } from "../../formats/tileset/load";
 import { t } from "../../i18n";
+
+/** The minimap's backing size in pixels, each side. */
+const SIZE = 256;
+
+/** The ground at minimap scale: the tiles' mean colours, a plain plate while the graphics load, the tileset's colour without them. */
+function fillTerrain(img: ImageData, w: number, h: number, scale: number, tiles: ArrayLike<number> | undefined, assets: LoadedTileset | null, loading: boolean, fallback: string) {
+  if (tiles && assets) {
+    // One mean colour per megatile is exactly what a minimap wants.
+    const { atlas, tileset: ts } = assets;
+    for (let py = 0; py < img.height; py++) {
+      const ty = Math.min(h - 1, Math.floor(py / scale));
+      for (let px = 0; px < img.width; px++) {
+        const tx = Math.min(w - 1, Math.floor(px / scale));
+        const megatile = megatileForTile(ts, tiles[ty * w + tx]);
+        const rgb = megatile < 0 ? 0 : atlas.averages[megatile];
+        const i = (py * img.width + px) * 4;
+        img.data[i] = rgb >> 16;
+        img.data[i + 1] = (rgb >> 8) & 255;
+        img.data[i + 2] = rgb & 255;
+        img.data[i + 3] = 255;
+      }
+    }
+  } else if (tiles && loading) {
+    // Graphics for the map just opened are still coming; a plain plate reads as
+    // "loading" instead of pretending to be terrain.
+    img.data.fill(255);
+    for (let i = 0; i < img.data.length; i += 4) {
+      img.data[i] = 0x12; img.data[i + 1] = 0x16; img.data[i + 2] = 0x1d;
+    }
+  } else {
+    const base = parseInt(fallback.slice(1), 16);
+    const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
+    for (let py = 0; py < img.height; py++) {
+      for (let px = 0; px < img.width; px++) {
+        const tx = Math.floor(px / scale), ty = Math.floor(py / scale);
+        const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
+        const k = 1 + n;
+        const i = (py * img.width + px) * 4;
+        img.data[i] = br * k;
+        img.data[i + 1] = bg * k;
+        img.data[i + 2] = bb * k;
+        img.data[i + 3] = 255;
+      }
+    }
+  }
+}
 
 export default function MinimapPanel() {
   const ref = useRef<HTMLCanvasElement>(null);
+  /** Everything but the view rectangle, kept between paints: a scroll moves only the rectangle. */
+  const pictureRef = useRef<HTMLCanvasElement | null>(null);
+  /** The terrain's pixels and what they were computed from, so a unit or location edit does not recolour the ground. */
+  const terrainRef = useRef<{ key: unknown[]; img: ImageData } | null>(null);
   /** One pixel per tile; the fog image is scaled from it so the minimap stays one drawImage. */
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
@@ -38,12 +89,15 @@ export default function MinimapPanel() {
   const selectedLocations = useAtomValue(selectedLocationsAtom);
   const startLocations = scenario ? mapStarts : [];
 
+  // The picture: terrain, locations, units, start locations and fog, into a canvas of its own.
+  const pictureDeps = [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer];
   useEffect(() => {
-    const c = ref.current;
-    if (!c) return;
-    const size = 256;
-    c.width = size;
-    c.height = size;
+    const size = SIZE;
+    const c = pictureRef.current ?? (pictureRef.current = document.createElement("canvas"));
+    if (c.width !== size || c.height !== size) {
+      c.width = size;
+      c.height = size;
+    }
     const ctx = c.getContext("2d")!;
     ctx.fillStyle = "#0a0c10";
     ctx.fillRect(0, 0, size, size);
@@ -51,49 +105,16 @@ export default function MinimapPanel() {
     const ox = (size - w * scale) / 2;
     const oy = (size - h * scale) / 2;
 
-    // terrain
-    const img = ctx.createImageData(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)));
+    // terrain — recomputed only when the ground itself may have changed
     const tiles = scenario?.tiles;
-    if (tiles && tilesetAssets) {
-      // One mean colour per megatile is exactly what a minimap wants.
-      const { atlas, tileset: ts } = tilesetAssets;
-      for (let py = 0; py < img.height; py++) {
-        const ty = Math.min(h - 1, Math.floor(py / scale));
-        for (let px = 0; px < img.width; px++) {
-          const tx = Math.min(w - 1, Math.floor(px / scale));
-          const megatile = megatileForTile(ts, tiles[ty * w + tx]);
-          const rgb = megatile < 0 ? 0 : atlas.averages[megatile];
-          const i = (py * img.width + px) * 4;
-          img.data[i] = rgb >> 16;
-          img.data[i + 1] = (rgb >> 8) & 255;
-          img.data[i + 2] = rgb & 255;
-          img.data[i + 3] = 255;
-        }
-      }
-    } else if (tiles && tilesetLoading) {
-      // Graphics for the map just opened are still coming; a plain plate reads as
-      // "loading" instead of pretending to be terrain.
-      img.data.fill(255);
-      for (let i = 0; i < img.data.length; i += 4) {
-        img.data[i] = 0x12; img.data[i + 1] = 0x16; img.data[i + 2] = 0x1d;
-      }
-    } else {
-      const base = parseInt(tileset.color.slice(1), 16);
-      const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
-      for (let py = 0; py < img.height; py++) {
-        for (let px = 0; px < img.width; px++) {
-          const tx = Math.floor(px / scale), ty = Math.floor(py / scale);
-          const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
-          const k = 1 + n;
-          const i = (py * img.width + px) * 4;
-          img.data[i] = br * k;
-          img.data[i + 1] = bg * k;
-          img.data[i + 2] = bb * k;
-          img.data[i + 3] = 255;
-        }
-      }
+    const terrainKey = [w, h, tileset, scenario, tiles, tilesetAssets, tilesetLoading, terrainRevision];
+    let terrain = terrainRef.current;
+    if (!terrain || terrain.key.some((x, i) => x !== terrainKey[i])) {
+      const img = ctx.createImageData(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)));
+      fillTerrain(img, w, h, scale, tiles, tilesetAssets, tilesetLoading, tileset.color);
+      terrain = terrainRef.current = { key: terrainKey, img };
     }
-    ctx.putImageData(img, ox, oy);
+    ctx.putImageData(terrain.img, ox, oy);
 
     if (flags.locations) {
       ctx.lineWidth = 1;
@@ -133,11 +154,27 @@ export default function MinimapPanel() {
       ctx.globalCompositeOperation = "source-over";
       ctx.imageSmoothingEnabled = true;
     }
-    // viewport rectangle
+  }, pictureDeps);
+
+  // What is on screen: the picture, and the view rectangle over it. This is all a scroll costs.
+  useEffect(() => {
+    const c = ref.current;
+    const picture = pictureRef.current;
+    if (!c || !picture) return;
+    const size = SIZE;
+    if (c.width !== size || c.height !== size) {
+      c.width = size;
+      c.height = size;
+    }
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(picture, 0, 0);
+    const scale = size / Math.max(w, h);
+    const ox = (size - w * scale) / 2;
+    const oy = (size - h * scale) / 2;
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
-  }, [w, h, tileset, rect, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer]);
+  }, [...pictureDeps, rect]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.
@@ -146,7 +183,7 @@ export default function MinimapPanel() {
     if (!c) return null;
     const box = c.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) return null;
-    const size = 256;
+    const size = SIZE;
     const scale = size / Math.max(w, h);
     const ox = (size - w * scale) / 2;
     const oy = (size - h * scale) / 2;

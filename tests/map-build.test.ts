@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
@@ -107,8 +107,10 @@ describe("build steps", () => {
     api.document.buildSteps.add(step({ run: ({ signal }) => new Promise(() => signal.addEventListener("abort", () => { aborted = true; })) }));
     const w = writer();
     const saving = save(store, w);
-    await new Promise((r) => setTimeout(r, 0));
-    const notice = store.get(toastsAtom).find((t) => t.title === "Building the map…")!;
+    // The notice goes up once the plain file is built, which takes a turn or several of the event loop.
+    const building = () => store.get(toastsAtom).find((t) => t.title === "Building the map…");
+    await vi.waitFor(() => expect(building()).toBeDefined());
+    const notice = building()!;
     expect(notice.action?.label).toBe("Save without it");
     notice.action!.run();
     expect(await saving).toBe(true);

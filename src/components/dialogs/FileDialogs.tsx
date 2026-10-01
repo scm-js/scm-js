@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
 import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
@@ -302,6 +302,9 @@ const KEEP_CHOICES: { id: KeepMode; label: string; hint: string }[] = [
   { id: "custom", label: msg("Custom"), hint: msg("Choose what to leave out.") },
 ];
 
+/** How many built files the Save dialog keeps while its options are being tried. */
+const BUILDS_KEPT = 4;
+
 /**
  * Save As and Save a Copy. The front is a file name, a format and one choice of what to
  * keep; the archive's layout and the section list are folded away under it, and the
@@ -339,12 +342,25 @@ export function SaveMapDialog({ entry }: DialogProps) {
   const issues = useMemo(() => (scenario ? issueCounts(validateScenario(scenario, { extras })) : null), [scenario, extras]);
 
   // The real bytes, for the size: built a moment after the last change, off the click path.
+  // A build is the whole save — compression included — so the last few are kept by their
+  // options: going back to a choice already tried (a preset, a tick put back) costs nothing.
+  const builds = useRef<{ source: unknown[]; byOptions: Map<string, Uint8Array> }>({ source: [], byOptions: new Map() });
   useEffect(() => {
     if (!scenario || !plan) return;
+    const source = [scenario, extras, storedMembers];
+    if (source.some((x, i) => x !== builds.current.source[i])) builds.current = { source, byOptions: new Map() };
+    const { byOptions } = builds.current;
+    const key = JSON.stringify(opts);
+    const known = byOptions.get(key);
+    if (known) { setBuilt({ options: opts, bytes: known }); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       buildMapFile(scenario, extras, opts, plan, storedMembers).then(
-        (bytes) => { if (!cancelled) setBuilt({ options: opts, bytes }); },
+        (bytes) => {
+          byOptions.set(key, bytes);
+          if (byOptions.size > BUILDS_KEPT) byOptions.delete(byOptions.keys().next().value!);
+          if (!cancelled) setBuilt({ options: opts, bytes });
+        },
         () => { if (!cancelled) setBuilt(null); },
       );
     }, 150);

@@ -72,11 +72,36 @@ read in the first effect pass is still null.
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
   The terrain blits go into a cached layer canvas (`TerrainLayer`, `terrainLayerRef`) that `draw`
-  copies with one `drawImage`: it is redrawn whole when the scroll, size, zoom, tiles, revisions,
-  tileset or document change, and only its cycling tiles when the water step moves, so a unit
+  copies with one `drawImage`: it is redrawn whole when the size, zoom, tiles, revisions,
+  tileset or document change, shifted when the view scrolls (below), and only its cycling tiles
+  are redrawn when the water step moves, so a unit
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+  **A scroll shifts the layer** (2026-10-04). The layer used to be redrawn whole on every
+  scroll frame — one `drawImage` per visible megatile, 10,793 of them at 25% in a 1400×900
+  window. It is now anchored at the scroll position *rounded to a device pixel* (`ox`, `oy`),
+  with each tile at `round(tx · tilePx · dpr) − ox`, so a tile's pixels no longer depend on the
+  scroll and a scroll over the same ground is a self-`drawImage` of the layer (composite
+  `copy`) plus the tiles under the uncovered strips (`blitTiles`, a tile to spare each way).
+  Counted in headless Chrome: 200–900 blits for a wheel notch at 25%, 50–260 at 100%. The
+  shift is skipped where an unsmoothed blit enlarges by a non-whole factor (`exact`: 150%
+  zoom, or ≥100% on a display scaled to 125% / 150%) — half the samples there fall exactly
+  between two source pixels and which side they land depends on where on the canvas the tile
+  is, so a moved tile and a fresh one differ by pixel columns; those scales redraw whole as
+  before, and they are the ones with few tiles on screen. `layer.animated` is only ever
+  raised by a shift and is put right by the next water step, which visits every visible tile.
+  Checked by hashing the canvas after each of 13 scrolls against a forced whole redraw at
+  eight zooms and four display scales, with noise tileset files generated for the purpose:
+  identical everywhere except 75% on a 125% display, where smoothed channels differ by 1/255.
+  (A scroll set to a fractional position paints twice in Chrome, before and after it snaps;
+  the unmodified viewport does the same.)
+  The same pass made three per-paint costs go away: the rulers are redrawn only when their
+  own axis's scroll, scale, length or hovered tile changed (`rulerKeysRef`; they used to be
+  reallocated and redrawn on every paint, an animation frame included); the font tokens are
+  read with `getComputedStyle` once per paint at most (`uiFont()` / `monoFont()`); and the
+  units and sprites are culled to the view *before* the painter's-order sort rather than
+  after, so a paint no longer builds and sorts a record per unit on the map.
   **The terrain revision means the ground** (2026-10-01). `commitEditAtom`, undo, redo and
   `rollbackEntryAtom` used to bump `terrainRevisionAtom` for every entry, so moving a unit or
   nudging a location threw the terrain layer away and recoloured the minimap. They now go

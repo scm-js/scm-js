@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { mapFiles } from "./support/maps";
 import { createScenario } from "../src/formats/chk/create";
 import { parseScenario, serializeScenario, type Scenario } from "../src/formats/chk/scenario";
 import { loadMap } from "../src/formats/mpq/scm";
@@ -233,12 +233,9 @@ describe("MRGN round trip", () => {
   });
 });
 
-const MAPS = join(__dirname, "..", "fixtures", "maps");
-const mapFiles = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.(scx|scm)$/i.test(f)) : [];
-
-describe.skipIf(mapFiles.length === 0)("real maps", () => {
-  it.each(mapFiles)("%s keeps Anywhere in slot 63 and round-trips its locations", async (file) => {
-    const scn = parseScenario((await loadMap(readFileSync(join(MAPS, file)))).chk);
+describe("map files", () => {
+  it.each(mapFiles())("$name keeps Anywhere in slot 63 and round-trips its locations", async ({ path }) => {
+    const scn = parseScenario((await loadMap(readFileSync(path))).chk);
     expect(scn.locations.length).toBeGreaterThanOrEqual(ORIGINAL_LOCATION_SLOTS);
     expect(isAnywhereIntact(scn)).toBe(true);
     expect(locationName(scn, ANYWHERE_INDEX)).toBe("Anywhere");

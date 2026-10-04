@@ -24,6 +24,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:maps": "node scripts/test-maps.mjs",
     "extract": "node scripts/extract-assets.mjs",
     "extract:tilesets": "node scripts/extract-tilesets.mjs",
     "extract:units": "node scripts/extract-units.mjs",

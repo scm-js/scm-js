@@ -41,6 +41,7 @@ npm run preview        # serve dist/ locally
 npm run lint           # oxlint; does not type-check
 npm test               # vitest, a few seconds, no browser
 npm run test:watch
+npm run test:maps      # write tests/maps again from the code that makes them
 npx vitest run tests/chk.test.ts      # one file
 npx vitest run -t "flood fill"        # tests matching a name
 npm run check:assets   # what game data is on disk
@@ -106,7 +107,7 @@ src/
   styles/       Plain CSS, imported in order: tokens → base → ui → chrome → panels → viewport → dialogs → splash
 desktop/        The Electron shell: main process, preload bridge, updater
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
-tests/          vitest suites
+tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
 docs/           These documents, the release notes, the guide's pictures
 docker/         The container image
 plugins/        Generated: the default plugins' source at their pinned versions (gitignored)
@@ -171,12 +172,23 @@ is rolled back through the same change lists. See [The plugin host](#the-plugin-
 Tests are `tests/*.test.ts` (and any `src/**/*.test.ts`), run by vitest in Node with no
 browser. The whole suite takes a few seconds.
 
-Some suites need real Blizzard files: maps in `fixtures/maps/*.scx` and extracted data in
-`public/`. Those use `describe.skipIf(...)` and skip silently when the files are absent,
-so a green run on a fresh clone has not exercised them. CI has no game data and always
-skips them; run them locally before touching a codec, a decoder or the isometric brush.
-`fixtures/` and the generated `public/` trees are gitignored, and nothing in them may be
-committed.
+The suites open two sets of map files. `tests/maps/` is committed: five small `.scx` and
+`.scm` maps built by `tests/support/testMaps.ts` from the editor's own code, with nothing
+of Blizzard's in them. Between them they cover the four file revisions, the three archive
+compressions, an archive without a file list, triggers, a briefing, locations, a sound,
+unit properties and unit settings. Every clone and CI runs the suites over these.
+`tests/maps.test.ts` rebuilds each one and compares it with the committed file, so after
+changing the code that makes them run `npm run test:maps` and commit the result. What
+they do not have is terrain, which cannot be laid without a tileset.
+
+`fixtures/maps/` holds Blizzard's own maps, on a machine that has them. A suite that
+holds for any map runs over both folders; the ones about terrain, doodads and what
+StarEdit itself writes need the real maps, the extracted data in `public/`, or both.
+Those use `describe.skipIf(...)` and skip silently when the files are absent, so a green
+run on a fresh clone has not exercised them. CI has no game data and always skips them;
+run them locally before touching a tileset decoder, the doodad code or the isometric
+brush. `fixtures/` and the generated `public/` trees are gitignored, and nothing in them
+may be committed.
 
 Two suites are worth knowing about:
 

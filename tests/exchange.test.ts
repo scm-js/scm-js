@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { mapFiles } from "./support/maps";
 import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { parseScenario } from "../src/formats/chk/scenario";
@@ -106,18 +106,15 @@ describe("string files", () => {
   });
 });
 
-const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
-const fixtures = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.(scx|scm)$/i.test(f)) : [];
-
-describe.skipIf(fixtures.length === 0)("fixture maps", () => {
-  for (const file of fixtures) {
+describe("map files", () => {
+  for (const { name: file, path } of mapFiles()) {
     it(`exports and re-imports the triggers and strings of ${file}`, async () => {
-      const { chk } = await loadMap(new Uint8Array(readFileSync(join(MAPS, file))));
+      const { chk } = await loadMap(new Uint8Array(readFileSync(path)));
       const scn = parseScenario(chk);
       const text = triggersToText(scn, scn.triggers);
       const back = triggersFromText(scn, text);
       expect(back.length).toBe(scn.triggers.length);
-      expect(decodeTrg(encodeTrg(scn.triggers))).toEqual(scn.triggers);
+      if (scn.triggers.length > 0) expect(decodeTrg(encodeTrg(scn.triggers))).toEqual(scn.triggers);
       const strings = parseStringTable(formatStringTable(scn.strings));
       expect(strings.errors).toEqual([]);
       for (const { index, text: t } of strings.entries) expect(getString(scn.strings, index)).toBe(t);

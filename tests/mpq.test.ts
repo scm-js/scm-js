@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseScenario, serializeScenario, scenarioName } from "../src/formats/chk/scenario";
 import { loadMap, looksLikeMpq, readMembers, saveMap, SCENARIO_PATH } from "../src/formats/mpq/scm";
@@ -7,17 +6,8 @@ import { createScenario } from "../src/formats/chk/create";
 import { applySounds, referencedMembers, wavMemberName } from "../src/editor/sounds";
 import { internString } from "../src/editor/settings";
 import { openMapFile, writeMapBytes } from "../src/services/mapIo";
+import { mapFiles } from "./support/maps";
 import { MANIFEST_MEMBER, SCRIPT_MEMBER, scriptMembersFromManifest } from "../src/editor/save";
-
-const MAPS_DIR = join(import.meta.dirname, "..", "fixtures", "maps");
-
-function fixtureMaps(): string[] {
-  try {
-    return readdirSync(MAPS_DIR).filter((f) => /\.(scm|scx|chk)$/i.test(f));
-  } catch {
-    return [];
-  }
-}
 
 describe("mpq container", () => {
   it("recognises a bare chk as not an archive", () => {
@@ -145,11 +135,11 @@ describe("members without a file list", () => {
   });
 });
 
-const maps = fixtureMaps();
-describe.skipIf(maps.length === 0)("real maps (fixtures/maps)", () => {
-  for (const file of maps) {
+// The committed maps always, Blizzard's where they are installed.
+describe("map files (tests/maps, fixtures/maps)", () => {
+  for (const { name: file, path } of mapFiles()) {
     it(`opens and re-saves ${file} without losing sections`, async () => {
-      const bytes = new Uint8Array(readFileSync(join(MAPS_DIR, file)));
+      const bytes = new Uint8Array(readFileSync(path));
       const loaded = await loadMap(bytes);
       const scn = parseScenario(loaded.chk);
 
@@ -167,14 +157,15 @@ describe.skipIf(maps.length === 0)("real maps (fixtures/maps)", () => {
     });
 
     it(`keeps every member of ${file} when its file list is gone`, async () => {
-      const loaded = await loadMap(new Uint8Array(readFileSync(join(MAPS_DIR, file))));
+      const loaded = await loadMap(new Uint8Array(readFileSync(path)));
       const scn = parseScenario(loaded.chk);
       const all = await readMembers(loaded.archive!, loaded.files, referencedMembers(scn));
       // Strip the list, as a protector would, then open and save through the editor's path.
       const stripped = await loadMap(await saveMap(loaded.chk, { extras: all.extras, listfile: false, compress: "pkware", encrypt: true }));
       expect(stripped.files).toBeNull();
       const members = await readMembers(stripped.archive!, null, referencedMembers(scn));
-      expect(members.stored!.members.length).toBe(all.extras.size);
+      // A member the scenario names (a sound in its WAV table) is found by that name; the rest come across as stored.
+      expect(members.extras.size + (members.stored?.members.length ?? 0)).toBe(all.extras.size);
       const saved = await loadMap(await saveMap(serializeScenario(scn), { extras: members.extras, stored: members.stored }));
       for (const [name, data] of all.extras) expect(await saved.archive!.readFileAsync(name)).toEqual(data);
       expect(saved.chk).toEqual(loaded.chk);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
 import { parseChk } from "../src/formats/chk/reader";
@@ -13,6 +13,7 @@ import { validateScenario } from "../src/editor/validate";
 import { scenarioAtom } from "../src/atoms/documentAtoms";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import { loadMap } from "../src/formats/mpq/scm";
+import { testMap } from "./support/maps";
 
 const FIXTURES = join(__dirname, "..", "fixtures", "maps");
 const fixture = (name: string) => join(FIXTURES, name);
@@ -119,11 +120,12 @@ describe("CUWP in the scenario", () => {
   });
 });
 
-const FIXTURE_FILES = ["(2)Binary Burghs.scx", "(8)Big Game Hunters.scm"].filter((f) => existsSync(fixture(f)));
+// The committed map has a slot in use; Blizzard's two, where installed, have the tables StarEdit writes.
+const MAP_FILES = [testMap("ums.scx"), ...["(2)Binary Burghs.scx", "(8)Big Game Hunters.scm"].map(fixture).filter((f) => existsSync(f))];
 
-describe.skipIf(FIXTURE_FILES.length === 0)("CUWP on the fixture maps", () => {
-  it.each(FIXTURE_FILES)("%s re-encodes UPRP / UPUS byte for byte", async (name) => {
-    const bytes = new Uint8Array(readFileSync(fixture(name)));
+describe("CUWP on map files", () => {
+  it.each(MAP_FILES.map((path) => ({ path, name: basename(path) })))("$name re-encodes UPRP / UPUS byte for byte", async ({ path }) => {
+    const bytes = new Uint8Array(readFileSync(path));
     const scenario = parseScenario((await loadMap(bytes)).chk);
     for (const section of ["UPRP", "UPUS"]) {
       const original = scenario.chk.sections.find((s) => s.name === section);

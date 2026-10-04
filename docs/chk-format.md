@@ -1184,8 +1184,9 @@ plays fully fogged.
 <!-- /generated -->
 
 Only Players 1 to 8 have a bit. A byte of 0x05, bits 0 and 2, means Players 1 and 3 start
-with that tile unexplored and the other six start with it explored. Every Blizzard map
-checked has 0xFF in every byte.
+with that tile unexplored and the other six start with it explored. Every Blizzard melee
+map checked has 0xFF in every byte; some of the campaign and scenario maps, where the
+maker set the fog, do not.
 
 ## STR
 

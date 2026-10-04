@@ -125,8 +125,25 @@ describe.skipIf(!haveTilesets)("isom tables from real tilesets", () => {
   });
 });
 
+/**
+ * The one Blizzard map whose ISOM is out of step with its own tiles: 125 of its 8192 rects
+ * resolve to another terrain than the one drawn, and a rebuild recovers every one. It is
+ * left out of what holds for a lattice StarEdit kept in step, and pinned on its own below.
+ */
+const OUT_OF_STEP = "(4)Zoo Keeper.scm";
+const inStep = maps.filter((f) => f !== OUT_OF_STEP);
+
 describe.skipIf(!haveTilesets || maps.length === 0)("isom against StarEdit-made maps", () => {
-  for (const file of maps) {
+  it.skipIf(!maps.includes(OUT_OF_STEP))(`${OUT_OF_STEP}: the ISOM is out of step with the tiles, and a rebuild recovers all of it`, async () => {
+    const scn = await readMap(OUT_OF_STEP);
+    const ts = readTileset(tilesetIndex(scn));
+    const report = isomReport(scn, ts)!;
+    expect(report).toMatchObject({ rects: 8192, mismatched: 125, inherent: 0, stale: false });
+    scn.isom = rebuildIsomFromTiles(scn, ts).isom;
+    expect(isomReport(scn, ts)).toMatchObject({ mismatched: 0, inherent: 0, stale: false });
+  });
+
+  for (const file of inStep) {
     it(`${file}: regenerating the tiles from ISOM reproduces the map`, async () => {
       const scn = await readMap(file);
       if (!hasIsom(scn)) return;
@@ -157,6 +174,9 @@ describe.skipIf(!haveTilesets || maps.length === 0)("isom against StarEdit-made 
       const { rects, mismatched } = checkIsom(scn, readTileset(tilesetIndex(scn)));
       expect(mismatched / rects).toBeLessThan(0.005);
     });
+  }
+
+  for (const file of maps) {
 
     it(`${file}: rebuilding ISOM from the tiles recovers the original`, async () => {
       const scn = await readMap(file);
@@ -270,7 +290,7 @@ describe.skipIf(!haveTilesets || maps.length === 0)("isom against StarEdit-made 
       // As it came from StarEdit: nothing to recover, and no lattice trouble either.
       const pristine = isomReport(scn, ts)!;
       expect(pristine.stale, file).toBe(false);
-      expect(pristine.mismatched, file).toBe(pristine.inherent);
+      if (file !== OUT_OF_STEP) expect(pristine.mismatched, file).toBe(pristine.inherent);
 
       // Rect-brush blocks of every flat terrain over it, leaving the lattice behind.
       const rnd = seeded(7);

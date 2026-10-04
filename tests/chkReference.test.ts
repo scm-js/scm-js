@@ -150,6 +150,11 @@ function diamondValue(isom: Uint16Array, w: number, h: number, x: number, y: num
 /** The rects and sides holding each quarter of a diamond: top-left, top-right, bottom-right, bottom-left. */
 const QUARTER_WORDS: [number, number, number, number][] = [[-1, -1, 2, 3], [0, -1, 0, 3], [0, 0, 0, 1], [-1, 0, 1, 2]];
 
+/** Its ISOM is out of step with its tiles in one patch (see `isom.test.ts`), so its edge shapes are not evidence of anything. */
+const OUT_OF_STEP_ISOM = "(4)Zoo Keeper.scm";
+/** The campaign and scenario maps whose makers set the fog of war; every other map has the MASK a new map starts with. */
+const FOG_SET = ["(1)Enslavers01.scm", "(1)Enslavers03a.scm", "(2)Wakka Wakka.scm", "(5)Race of Death.scm", "(8)StarCraft Fortress.scm"];
+
 describe.skipIf(maps.length === 0)("the CHK reference against Blizzard's maps", () => {
   async function read(file: string) {
     const { chk } = await loadMap(new Uint8Array(readFileSync(join(MAP_DIR, file))));
@@ -198,6 +203,7 @@ describe.skipIf(maps.length === 0)("the CHK reference against Blizzard's maps", 
     let checked = 0;
     const wrong: string[] = [];
     for (const file of maps) {
+      if (file === OUT_OF_STEP_ISOM) continue;
       const { scn } = await read(file);
       const era = scenario.tilesetIndex(scn);
       const { terrainTypes } = isomData.ISOM_TABLES[era];
@@ -227,7 +233,7 @@ describe.skipIf(maps.length === 0)("the CHK reference against Blizzard's maps", 
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it("finds StarEdit's string table, an all-unexplored MASK and StarEdit's VCOD", async () => {
+  it("finds StarEdit's string table, a MASK all unexplored unless the fog was set, and StarEdit's VCOD", async () => {
     for (const file of maps) {
       const { chk } = await read(file);
       const str = chk.sections.find((s) => s.name === "STR ")!.data;
@@ -240,7 +246,7 @@ describe.skipIf(maps.length === 0)("the CHK reference against Blizzard's maps", 
       expect(Math.min(...offsets), file).toBe(header);
       for (const off of offsets) if (str[off] === 0) expect(off, file).toBe(header);
       const mask = chk.sections.find((s) => s.name === "MASK")!.data;
-      expect(mask.every((b) => b === 0xff), file).toBe(true);
+      expect(mask.every((b) => b === 0xff), file).toBe(!FOG_SET.includes(file));
       expect(chk.sections.find((s) => s.name === "VCOD")!.data, file).toEqual(vcod.defaultVcod());
     }
   });

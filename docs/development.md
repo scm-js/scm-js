@@ -661,6 +661,13 @@ It needs the game data extracted and Big Game Hunters, Binary Burghs, Crescent M
 Ground Zero from the game's own Maps folder in `fixtures/maps/`. Never commit a picture
 that shows anything but the editor.
 
+The plugin guide's pictures are the scene `plugin-guide`
+(`node scripts/guide-screenshots.mjs --scenes plugin-guide`). It needs the game data but
+no fixture map: it makes its own map through the plugin API, and each picture is one of
+the examples in `docs/plugins.md`, run in the API Playground. An example the scene cannot
+find in the guide stops it, so changing an example that has a picture means re-running
+the scene.
+
 The API Playground pictures (`--scenes api-playground`) install that plugin for their
 scene, since it is not a default: from its repository, or from a local build with
 `--playground http://localhost:3000/` while you work on it. The scene opens Crescent Moon,

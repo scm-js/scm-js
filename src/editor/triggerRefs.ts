@@ -11,6 +11,7 @@
 import {
   ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, PLAYER_GROUP_COUNT, TriggerFlag,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
+  type ReadonlyTrigger,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, type ArgDef } from "../data/triggerDefs";
 import { UNIT_TYPE_COUNT } from "../data/units";
@@ -139,7 +140,7 @@ export function triggerOwners(trigger: TriggerRecord, forces: readonly (readonly
 }
 
 /** Every trigger's references, in list order. MBRF when `briefing`, where only strings and sounds mean anything. */
-export function triggerReferences(list: readonly TriggerRecord[], forces: readonly (readonly number[])[], briefing = false): TriggerRefs[] {
+export function triggerReferences(list: readonly ReadonlyTrigger[], forces: readonly (readonly number[])[], briefing = false): TriggerRefs[] {
   return list.map((trigger, index) => {
     const groups = trigger.players.flatMap((on, i) => (on ? [i] : []));
     const owners = resolvePlayers(PlayerGroup.CurrentPlayer, groups, forces).players;

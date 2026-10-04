@@ -1,0 +1,3 @@
+# Generated test maps (npm run test:maps): MPQ archives, never text.
+tests/maps/*.scx binary
+tests/maps/*.scm binary

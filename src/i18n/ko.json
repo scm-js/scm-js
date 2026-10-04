@@ -1737,6 +1737,8 @@
   "Insert a text colour or layout code": "텍스트 색상 또는 배치 코드 삽입",
   "Insert a text colour code": "텍스트 색상 코드 삽입",
   "Inserted at the caret. Codes may also be typed as <XX>.": "커서 위치에 삽입됩니다. 코드는 <XX>로 직접 입력할 수도 있습니다.",
+  "Discard the changes made in this dialog?": "이 대화 상자에서 바꾼 내용을 버릴까요?",
+  "Keep editing": "계속 편집",
   "Apply": "적용",
   "Increment": "증가",
   "Decrement": "감소",

@@ -316,6 +316,30 @@ problem in words.
 only the registration. The eudplib plugin is meant to own the one real step, with its dependents
 (TrigScript 3, later Magenta) contributing sources to it, so a map using both builds once.
 
+### The read-only scenario (2026-10-04)
+
+`document.scenario()`, `EditTransaction.scenario` and `UpdateTransaction.scenario` are typed
+`ReadonlyScenario` = `DeepReadonly<Scenario>` (`api.ts`); the host hands out the same live object
+as before, so this is types only and costs nothing at run time. `ReadonlyTyped` is a *mapped*
+type with a `readonly` modifier, not `Omit<…> & { readonly [i: number] }`: `Omit` keeps the typed
+array's own writable index signature and the intersection then allows `scn.tiles[0] = 3`.
+`ReadonlyTrigger` lives in `sections/triggers.ts` (spelled out, the same shape `DeepReadonly`
+gives) because the editor's own read paths take it. So that what a plugin reads can be handed
+back, every API parameter that is only read is `readonly` — index lists, `addUnits` /
+`addSprites` records, the trigger read helpers, `encodeTrg`, and the list a claim's `locate` /
+`describe` / `open` are called with — and the editor functions behind them were widened rather
+than cast to (`editor/units.ts`, `sprites.ts`, `doodads.ts`, `locations.ts`, `triggers.ts`,
+`triggerRefs.ts`, `formats/triggers/text.ts`, `encodeTriggers`, `cloneTrigger`, `locateClaims`),
+so tsc proves none of them writes to its input. The trigger *writes* (`tx.triggers.set` / `add` /
+`replace`) still take mutable records: they keep what they are given.
+`src/plugins/api.typecheck.ts` is the test — `@ts-expect-error` per kind of write, checked by
+`npm run build`, imported by nothing. What it does not stop: TypeScript lets a read-only property
+be assigned to a mutable one, so `const u: UnitRecord = scn.units[0]; u.x = 5` compiles. Not
+additive for a plugin's *type-check* (never its behaviour): a plugin helper typed
+`TriggerRecord[]` or `Scenario` that is handed something read from the map needs `readonly` /
+`ReadonlyScenario`. Against the vendored copies that day: scmjs-dev (`ai/reference.ts`,
+`ai/tools/layout.ts`) and TrigScript (`service.ts`, the claim callbacks), seven lines.
+
 ### Map buttons (`ui.mapButton`, 2026-09-23)
 
 `pluginMapButtonsAtom`, `addMapButton` in host.ts (a copy of `addStatusItem`'s shape), drawn by

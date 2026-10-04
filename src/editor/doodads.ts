@@ -299,7 +299,7 @@ export function convertDoodads(scn: Scenario, catalogue: DoodadCatalogue, indice
 }
 
 /** Replace fields on the doodads at `indices` (and mirror owner / disabled onto their overlay sprites). */
-export function updateDoodads(scn: Scenario, catalogue: DoodadCatalogue, indices: number[], patch: Partial<Pick<DoodadRecord, "owner" | "disabled">>): DoodadEdit {
+export function updateDoodads(scn: Scenario, catalogue: DoodadCatalogue, indices: readonly number[], patch: Partial<Pick<DoodadRecord, "owner" | "disabled">>): DoodadEdit {
   const doodads: DoodadChange[] = [];
   const sprites: SpriteChange[] = [];
   for (const i of new Set(indices)) {

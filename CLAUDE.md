@@ -54,6 +54,7 @@ npm run build          # tsc -b (type-check) + vite build
 npm run lint           # oxlint
 npm test               # vitest run (node environment, ~2s)
 npm run test:watch
+npm run test:maps      # tests/maps/*.scx|scm again from tests/support/testMaps.ts (no game data needed)
 npx vitest run tests/chk.test.ts          # one file
 npx vitest run -t "flood fill"            # tests matching a name
 npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons/upgrades/techdata.dat), game, scripts, unit (BrooDat required)
@@ -112,9 +113,14 @@ crashing when the data is absent, so a green test run and a working `npm run dev
 the extraction still works — run it. Never redistribute what it produces, and never add an address
 the editor fetches game data from without the user naming it.
 
-**Tests.** They live in `tests/*.test.ts` (and `src/**/*.test.ts` is picked up). Suites needing
+**Tests.** They live in `tests/*.test.ts` (and `src/**/*.test.ts` is picked up). `tests/maps/` is
+five committed maps built by `tests/support/testMaps.ts` from the editor's code alone (no terrain,
+nothing of Blizzard's), so CI opens real archives; `tests/maps.test.ts` fails when the files and
+that code disagree — `npm run test:maps`, then commit. A suite that holds for any map loops over
+`mapFiles()` (`tests/support/maps.ts`: the committed maps plus `fixtures/maps/` where present).
+**Only generated maps go in `tests/maps/` — never a Blizzard or community map.** Suites needing
 `fixtures/maps/*.scx` or `public/tileset/*.cv5` use `describe.skipIf(...)` and skip silently when the
-files are absent — **a green run does not mean the real-map suites ran.** vitest still *runs* a
+files are absent — **a green run does not mean the terrain, doodad and StarEdit-layout suites ran.** vitest still *runs* a
 skipped describe's body to collect it, so a suite that reads those files in the body (not inside
 `it` / `beforeAll`) must be guarded with `if (have) describe(...)` instead, or CI — which has no
 game data — crashes on the read.

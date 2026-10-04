@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eraser, Lock, Music, Pencil, Play, Plus, RefreshCw, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
@@ -29,6 +29,26 @@ function NoMap({ entry, title, icon }: { entry: DialogProps["entry"]; title: str
 /* ── String Editor ──────────────────────────────────────── */
 
 /**
+ * One row of the string table. Memoised on what it shows, so typing in one string renders
+ * that row and not the whole table — each row parses its text for colour codes.
+ */
+const StringRow = memo(function StringRow({ index, text, used, selected, onSelect }: {
+  index: number;
+  text: string | null;
+  used: string;
+  selected: boolean;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <tr className={selected ? "selected" : ""} onClick={() => onSelect(index)}>
+      <td className="num">{index}</td>
+      <td className={text === null ? "faint" : ""} style={{ maxWidth: 360 }}>{text === null ? t("(blank)") : <InlineString text={text} placeholder="(empty)" />}</td>
+      <td className={used ? "dim" : "faint"} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }} title={used}>{used || t("unused")}</td>
+    </tr>
+  );
+});
+
+/**
  * Scenario ▸ String Editor: every entry of STR / STRx with where it is referenced. Edits
  * change the text at its index (triggers and locations keep pointing where they did);
  * "Delete unused" blanks slots nothing refers to, and only unused slots at the very end
@@ -40,7 +60,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const setName = useSetAtom(mapNameAtom);
   const setDescription = useSetAtom(mapDescriptionAtom);
-  const [list, setList] = useScenarioForm(scenario, readStrings);
+  const [list, setList, guard] = useScenarioForm(scenario, readStrings);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number>(typeof entry.payload?.index === "number" ? (entry.payload.index as number) : 1);
   // Preview the string the way 1.16.1 drew it (colour reset at every line break) rather
@@ -94,6 +114,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       slot={{ dialog: "stringEditor" }}
       footerLeft={<span className={count > capacity ? "error-text" : ""}>{t("{count} strings · {unused} unused", { count, unused })}{empty > 0 ? t(" · {empty} empty", { empty }) : ""} {" "}{t("· capacity {toLocaleString} (", { toLocaleString: capacity.toLocaleString() })}{scenario.strings.extended ? "STRx" : "STR"})</span>}
     >
@@ -108,13 +129,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
           <table className="table">
             <thead><tr><th style={{ width: 50 }}>#</th><th>{t("Text")}</th><th style={{ width: 220 }}>{t("Used by")}</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.index} className={sel === r.index ? "selected" : ""} onClick={() => setSel(r.index)}>
-                  <td className="num">{r.index}</td>
-                  <td className={r.text === null ? "faint" : ""} style={{ maxWidth: 360 }}>{r.text === null ? t("(blank)") : <InlineString text={r.text} placeholder="(empty)" />}</td>
-                  <td className={r.used ? "dim" : "faint"} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }} title={r.used}>{r.used || t("unused")}</td>
-                </tr>
-              ))}
+              {rows.map((r) => <StringRow key={r.index} index={r.index} text={r.text} used={r.used} selected={sel === r.index} onSelect={setSel} />)}
               {rows.length === 0 && <tr><td colSpan={3} className="hint">{q ? t("No strings match.") : t("The table is empty.")}</td></tr>}
             </tbody>
           </table>
@@ -195,7 +210,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
   const extrasAtom = useAtomValue(archiveExtrasAtom);
   const setExtras = useSetAtom(archiveExtrasAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const [form, setForm] = useScenarioForm<SoundForm>(scenario, (scn) => ({ wavs: readWavs(scn), extras: new Map(extrasAtom) }));
+  const [form, setForm, guard] = useScenarioForm<SoundForm>(scenario, (scn) => ({ wavs: readWavs(scn), extras: new Map(extrasAtom) }));
   const [sel, setSel] = useState(-1);
   const [playing, setPlaying] = useState<string | null>(null);
   const [durations, setDurations] = useState<Map<string, number | null>>(new Map());
@@ -397,6 +412,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       footerLeft={<span>{t("{filled} / {WAV_SLOTS} sounds · {kb} in archive", { filled, WAV_SLOTS, kb: kb(soundBytes(form.extras)) })}{scenario.wavs ? "" : t(" · no WAV section yet")}</span>}
     >
       <input ref={fileRef} type="file" accept={IMPORT_ACCEPT} multiple hidden onChange={(e) => { void importFiles(e.target.files); e.target.value = ""; }} />
@@ -456,7 +472,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const [names, setNames] = useScenarioForm(scenario, readSwitchNames);
+  const [names, setNames, guard] = useScenarioForm(scenario, readSwitchNames);
   const [sel, setSel] = useState(0);
   const usage = useMemo(() => (scenario ? switchUsage(scenario) : []), [scenario]);
 
@@ -468,7 +484,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
   const apply = () => { if (applySwitchNames(scenario, names)) commit(); setNames(readSwitchNames(scenario)); };
 
   return (
-    <DialogFrame dialogKey={entry.key} title={t("Switches")} icon={<ToggleLeft size={14} />} size="md" tall showApply onOk={apply} footerLeft={<span>{t("256 switches · {named} named · {referenced} referenced by triggers", { named, referenced })}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Switches")} icon={<ToggleLeft size={14} />} size="md" tall showApply onOk={apply} guard={guard} footerLeft={<span>{t("256 switches · {named} named · {referenced} referenced by triggers", { named, referenced })}</span>}>
       <div className="split rows" style={{ ["--split" as string]: "1fr" }}>
         <ListBox
           items={names}

@@ -96,6 +96,8 @@ import { hashNoise } from "./noise";
 import { t, translate } from "../../i18n";
 
 const TILE = 32;
+/** How far outside the view a unit is still drawn, in map pixels: the largest GRP box is a few hundred. */
+const UNIT_MARGIN = 512;
 
 /**
  * A drag that reaches the edge of the window scrolls the view under it: `EDGE_BAND` px
@@ -153,8 +155,9 @@ interface TerrainLayer {
   scenario: unknown;
   tiles: ArrayLike<number>;
   assets: unknown;
-  sx: number;
-  sy: number;
+  /** The scroll position the layer is drawn at, in whole device pixels. */
+  ox: number;
+  oy: number;
   w: number;
   h: number;
   dpr: number;
@@ -219,6 +222,8 @@ export default function MapViewport() {
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
   const unitsInViewRef = useRef(false);
   const lastViewportRect = useRef({ x: -1, y: -1, w: -1, h: -1 });
+  /** What each ruler was last drawn for, so a paint that moves neither leaves them alone. */
+  const rulerKeysRef = useRef({ top: "", left: "" });
   const [size, setSize] = useState({ w: 0, h: 0 });
 
   const mapW = useAtomValue(mapWidthAtom);
@@ -367,6 +372,12 @@ export default function MapViewport() {
     const x1 = Math.min(mapW, Math.ceil((sx + size.w) / tilePx));
     const y1 = Math.min(mapH, Math.ceil((sy + size.h) / tilePx));
 
+    // The chrome's fonts, read from the tokens once per paint at most: a style read per
+    // label adds up over a few hundred locations.
+    let uiFontName: string | undefined, monoFontName: string | undefined;
+    const uiFont = () => (uiFontName ??= getComputedStyle(document.body).getPropertyValue("--font-ui"));
+    const monoFont = () => (monoFontName ??= getComputedStyle(document.body).getPropertyValue("--font-mono"));
+
     /** Map pixels to canvas pixels, for plugin overlays and a plugin's map tool. */
     const view: MapView = {
       zoom,
@@ -394,13 +405,31 @@ export default function MapViewport() {
       // The terrain is blitted into a layer of its own and the layer is copied here, so a
       // paint that changes nothing under the ground — a unit animation frame, a hover ghost,
       // a selection — costs one drawImage instead of a thousand. The layer is redrawn whole
-      // when the view or the tiles change, and only its cycling tiles when the water steps.
+      // when the size, zoom or tiles change, shifted when the view scrolls, and only its
+      // cycling tiles are redrawn when the water steps.
       const step = atlas.animation?.step ?? 0;
       let layer = terrainLayerRef.current;
-      const same = layer !== null && layer.scenario === scenario && layer.tiles === tiles && layer.assets === tilesetAssets &&
-        layer.sx === sx && layer.sy === sy && layer.w === size.w && layer.h === size.h && layer.dpr === dpr && layer.tilePx === tilePx &&
+      const sameGround = layer !== null && layer.scenario === scenario && layer.tiles === tiles && layer.assets === tilesetAssets &&
+        layer.w === size.w && layer.h === size.h && layer.dpr === dpr && layer.tilePx === tilePx &&
         layer.terrainRevision === terrainRevision && layer.doodadsRevision === doodadsRevision;
-      if (!same) {
+      // The layer sits at the scroll position rounded to a device pixel, and every tile at
+      // its own place on the map rounded likewise. A tile's pixels then depend on the tile
+      // alone, not on the scroll, so a scroll moves the picture by a whole number of
+      // pixels and nothing else about it changes.
+      const ox = Math.round(sx * dpr), oy = Math.round(sy * dpr);
+      const same = sameGround && layer!.ox === ox && layer!.oy === oy;
+      // A scroll over the same ground therefore shifts the layer and blits only the strips
+      // the scroll uncovered, instead of every visible megatile.
+      const dx = sameGround ? ox - layer!.ox : 0, dy = sameGround ? oy - layer!.oy : 0;
+      // Not at a scale that enlarges a tile by anything but a whole factor (150%, or 100%
+      // on a display scaled to 125%): the blit is unsmoothed there and half its samples
+      // land exactly between two source pixels, where the side they fall depends on where
+      // on the canvas the tile is — a tile that was moved and one drawn afresh would differ
+      // by a pixel column here and there, and the next whole redraw would show it. (A
+      // smoothed blit can still round a channel one step the other way; nothing shows.)
+      const exact = tilePx < TILE || Number.isInteger((tilePx * dpr) / TILE);
+      const shifts = sameGround && !same && exact && Math.abs(dx) < layer!.canvas.width && Math.abs(dy) < layer!.canvas.height;
+      if (!same && !shifts) {
         const canvas = layer?.canvas ?? document.createElement("canvas");
         // Whole device pixels: a fractional backing size would be truncated and the copy
         // below would then stretch the layer by a hair, doubling a row here and there.
@@ -409,11 +438,12 @@ export default function MapViewport() {
           canvas.width = devW;
           canvas.height = devH;
         }
-        layer = { canvas, scenario, tiles, assets: tilesetAssets, sx, sy, w: size.w, h: size.h, dpr, tilePx, terrainRevision, doodadsRevision, step, animated: false };
+        layer = { canvas, scenario, tiles, assets: tilesetAssets, ox, oy, w: size.w, h: size.h, dpr, tilePx, terrainRevision, doodadsRevision, step, animated: false };
         terrainLayerRef.current = layer;
       }
       if (!same || layer!.step !== step) {
         const lc = layer!.canvas.getContext("2d")!;
+        const devW = layer!.canvas.width, devH = layer!.canvas.height;
         // The layer is drawn in device pixels, every tile snapped to whole ones: a tile
         // drawn at a fractional position (a fractional scroll offset, a display scaled to
         // 125%) is blended over its edges, and a hairline of the dark ground behind the
@@ -421,43 +451,78 @@ export default function MapViewport() {
         // apart. Snapped, neighbours share an edge exactly; a tile is a device pixel
         // wider or narrower here and there, which nothing can see.
         lc.setTransform(1, 0, 0, 1, 0, 0);
-        const snapX = (tx: number) => Math.round((tx * tilePx - sx) * dpr);
-        const snapY = (ty: number) => Math.round((ty * tilePx - sy) * dpr);
-        // A step change redraws only the tiles that cycle; everything else is still right.
-        const onlyAnimated = same;
-        if (!onlyAnimated) lc.clearRect(0, 0, layer!.canvas.width, layer!.canvas.height);
+        const devTile = tilePx * dpr;
+        const snapX = (tx: number) => Math.round(tx * devTile) - ox;
+        const snapY = (ty: number) => Math.round(ty * devTile) - oy;
         // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
         // precomputed mean colour instead.
         const flat = tilePx < 4;
-        lc.imageSmoothingEnabled = tilePx < TILE;
-        let animated = false;
-        for (let ty = y0; ty < y1; ty++) {
-          const row = ty * mapW;
-          const py = snapY(ty), ph = snapY(ty + 1) - py;
-          for (let tx = x0; tx < x1; tx++) {
-            const megatile = megatileForTile(ts, tiles[row + tx]);
-            const px = snapX(tx), pw = snapX(tx + 1) - px;
-            if (megatile < 0) {
-              if (onlyAnimated) continue;
-              lc.fillStyle = "#000";
-              lc.fillRect(px, py, pw, ph);
-              continue;
+        /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */
+        const blitTiles = (tx0: number, ty0: number, tx1: number, ty1: number, onlyAnimated: boolean): boolean => {
+          let animated = false;
+          lc.imageSmoothingEnabled = tilePx < TILE;
+          for (let ty = ty0; ty < ty1; ty++) {
+            const row = ty * mapW;
+            const py = snapY(ty), ph = snapY(ty + 1) - py;
+            for (let tx = tx0; tx < tx1; tx++) {
+              const megatile = megatileForTile(ts, tiles[row + tx]);
+              const px = snapX(tx), pw = snapX(tx + 1) - px;
+              if (megatile < 0) {
+                if (onlyAnimated) continue;
+                lc.fillStyle = "#000";
+                lc.fillRect(px, py, pw, ph);
+                continue;
+              }
+              if (flat) {
+                if (onlyAnimated) continue;
+                const rgb = atlas.averages[megatile];
+                lc.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
+                lc.fillRect(px, py, pw, ph);
+                continue;
+              }
+              const src = atlasSource(atlas, megatile);
+              if (src.animated) animated = true;
+              else if (onlyAnimated) continue;
+              lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, pw, ph);
             }
-            if (flat) {
-              if (onlyAnimated) continue;
-              const rgb = atlas.averages[megatile];
-              lc.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
-              lc.fillRect(px, py, pw, ph);
-              continue;
-            }
-            const src = atlasSource(atlas, megatile);
-            if (src.animated) animated = true;
-            else if (onlyAnimated) continue;
-            lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, pw, ph);
           }
+          return animated;
+        };
+        if (same) {
+          // A step change redraws only the tiles that cycle; everything else is still right.
+          layer!.animated = blitTiles(x0, y0, x1, y1, true);
+        } else if (shifts) {
+          // "copy" replaces what is there, so the part the shifted picture no longer
+          // covers comes out clear rather than keeping what was drawn before.
+          lc.globalCompositeOperation = "copy";
+          lc.imageSmoothingEnabled = false;
+          lc.drawImage(layer!.canvas, -dx, -dy);
+          lc.globalCompositeOperation = "source-over";
+          layer!.ox = ox;
+          layer!.oy = oy;
+          // The tiles under an uncovered strip, a tile to spare each way: one that straddles
+          // the strip's edge is drawn again whole, over the same pixels it already had.
+          const tileSpan = (from: number, to: number, origin: number, lo: number, hi: number): [number, number] =>
+            [Math.max(lo, Math.floor((from + origin) / devTile) - 1), Math.min(hi, Math.ceil((to + origin) / devTile) + 1)];
+          let animated = layer!.animated;
+          if (dx !== 0) {
+            const [tx0, tx1] = dx > 0 ? tileSpan(devW - dx, devW, ox, x0, x1) : tileSpan(0, -dx, ox, x0, x1);
+            if (blitTiles(tx0, y0, tx1, y1, false)) animated = true;
+          }
+          if (dy !== 0) {
+            const [ty0, ty1] = dy > 0 ? tileSpan(devH - dy, devH, oy, y0, y1) : tileSpan(0, -dy, oy, y0, y1);
+            if (blitTiles(x0, ty0, x1, ty1, false)) animated = true;
+          }
+          // Only ever raised here — the tiles that left are not counted out — and put
+          // right by the next step, which looks at every visible tile.
+          layer!.animated = animated;
+          // The kept part still shows the step it was drawn at.
+          if (layer!.step !== step) layer!.animated = blitTiles(x0, y0, x1, y1, true);
+        } else {
+          lc.clearRect(0, 0, devW, devH);
+          layer!.animated = blitTiles(x0, y0, x1, y1, false);
         }
         layer!.step = step;
-        if (!onlyAnimated) layer!.animated = animated;
       }
       animatedInView = layer!.animated;
       // Device pixel for device pixel: no resampling of the layer on its way to the screen.
@@ -671,23 +736,28 @@ export default function MapViewport() {
     };
     let unitsInView = false;
     if ((flags.units || flags.sprites) && scenario && tilePx >= 3) {
-      const margin = 512 * zoom; // the largest GRP box is a few hundred pixels
+      const margin = UNIT_MARGIN * zoom;
       const animated = animator?.enabled ? animator : null;
       if (animated && flags.units) animated.sync(scenario.units, tilesetIndex(scenario));
       if (animated && flags.sprites) animated.syncSprites(scenario.sprites, tilesetIndex(scenario));
       // Units and THG2 sprites share the game's painter's order: everything on the
       // ground by y (so a tree canopy over a unit works out by position), flyers last.
+      // Only what is near the view is sorted: the order among those is the same, and a
+      // paint no longer builds and sorts a record for every unit on the map.
       type Drawable = { kind: "unit" | "sprite"; i: number; y: number; flyer: number };
       const order: Drawable[] = [];
-      if (flags.units) scenario.units.forEach((u, i) => order.push({ kind: "unit", i, y: u.y, flyer: unitGeometry(unitTables, u.unitId).flyer ? 1 : 0 }));
-      if (flags.sprites) scenario.sprites.forEach((r, i) => order.push({ kind: "sprite", i, y: r.y, flyer: 0 }));
+      const near = (x: number, y: number) => {
+        const px = x * zoom - sx, py = y * zoom - sy;
+        return px >= -margin && py >= -margin && px <= size.w + margin && py <= size.h + margin;
+      };
+      if (flags.units) scenario.units.forEach((u, i) => { if (near(u.x, u.y)) order.push({ kind: "unit", i, y: u.y, flyer: unitGeometry(unitTables, u.unitId).flyer ? 1 : 0 }); });
+      if (flags.sprites) scenario.sprites.forEach((r, i) => { if (near(r.x, r.y)) order.push({ kind: "sprite", i, y: r.y, flyer: 0 }); });
       order.sort((a, b) => a.flyer - b.flyer || a.y - b.y || (a.kind === b.kind ? a.i - b.i : a.kind === "unit" ? -1 : 1));
       ctx.imageSmoothingEnabled = zoom < 1;
       for (const d of order) {
         if (d.kind === "sprite") {
           const r = scenario.sprites[d.i];
           const px = r.x * zoom - sx, py = r.y * zoom - sy;
-          if (px < -margin || py < -margin || px > size.w + margin || py > size.h + margin) continue;
           unitsInView = true;
           const alpha = r.flags & SpriteFlag.Disabled ? 0.5 : 1;
           const sprite = animated?.spriteForRecord(r);
@@ -699,7 +769,6 @@ export default function MapViewport() {
         const u = scenario.units[d.i];
         const ux = u.x * zoom - sx;
         const uy = u.y * zoom - sy;
-        if (ux < -margin || uy < -margin || ux > size.w + margin || uy > size.h + margin) continue;
         unitsInView = true;
         // A cloaked unit is drawn faint, the way the game shows your own cloaked units.
         const cloaked = (u.validStates & UnitUsed.State) !== 0 && (u.stateFlags & UnitState.Cloaked) !== 0;
@@ -813,9 +882,8 @@ export default function MapViewport() {
       const selectedSet = new Set(locationsEditing ? selectedLocations : []);
       const hvl = hoverPointRef.current;
       const hoverLoc = locationsEditing && hvl && !locationGestureRef.current && !locationTools.handleAtPoint(hvl, zoom) ? locationTools.pickAt(hvl) : -1;
-      const uiFont = getComputedStyle(document.body).getPropertyValue("--font-ui");
       const fontPx = Math.max(10, Math.min(13, tilePx * 0.4));
-      ctx.font = `${fontPx}px ${uiFont}`;
+      ctx.font = `${fontPx}px ${uiFont()}`;
       ctx.lineWidth = 1;
       for (const l of locations) {
         const lx = l.left * zoom - sx, ly = l.top * zoom - sy, lw = (l.right - l.left) * zoom, lh = (l.bottom - l.top) * zoom;
@@ -871,7 +939,7 @@ export default function MapViewport() {
           ctx.strokeRect(Math.round(gx) + 0.5, Math.round(gy) + 0.5, Math.round(gw), Math.round(gh));
           ctx.setLineDash([]);
           const label = `${fmtTiles(ghost.right - ghost.left)} × ${fmtTiles(ghost.bottom - ghost.top)}`;
-          ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+          ctx.font = `10px ${monoFont()}`;
           const tw = ctx.measureText(label).width;
           ctx.fillStyle = "rgba(10,12,16,0.8)";
           ctx.fillRect(gx + gw + 4, gy + gh + 4, tw + 8, 15);
@@ -895,7 +963,7 @@ export default function MapViewport() {
         ctx.stroke();
         if (tilePx >= 12) {
           ctx.fillStyle = "#fff";
-          ctx.font = `bold ${Math.max(10, tilePx * 0.5)}px ${getComputedStyle(document.body).getPropertyValue("--font-ui")}`;
+          ctx.font = `bold ${Math.max(10, tilePx * 0.5)}px ${uiFont()}`;
           ctx.textAlign = "center";
           ctx.fillText(String(s.player + 1), cx, cy + tilePx * 0.18);
           ctx.textAlign = "left";
@@ -954,7 +1022,7 @@ export default function MapViewport() {
         ctx.lineWidth = 2;
         ctx.strokeRect(Math.round(bx) + 0.5, Math.round(by) + 0.5, Math.max(2, Math.round(bw)), Math.max(2, Math.round(bh)));
         ctx.lineWidth = 1;
-        ctx.font = `11px ${getComputedStyle(document.body).getPropertyValue("--font-ui")}`;
+        ctx.font = `11px ${uiFont()}`;
         const tw = ctx.measureText(label).width;
         ctx.fillStyle = "rgba(10,12,16,0.85)";
         ctx.fillRect(bx, by - 18, tw + 10, 16);
@@ -976,7 +1044,7 @@ export default function MapViewport() {
       ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
       ctx.setLineDash([]);
       const label = mapPick?.kind === "tile" ? `${pg.to.x}, ${pg.to.y}` : `${r.x1 - r.x0} × ${r.y1 - r.y0} at ${r.x0}, ${r.y0}`;
-      ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+      ctx.font = `10px ${monoFont()}`;
       const tw = ctx.measureText(label).width;
       ctx.fillStyle = "rgba(10,12,16,0.8)";
       ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
@@ -998,7 +1066,7 @@ export default function MapViewport() {
         ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
         ctx.setLineDash([]);
         const label = `${marked.x1 - marked.x0} × ${marked.y1 - marked.y0}`;
-        ctx.font = `10px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+        ctx.font = `10px ${monoFont()}`;
         const tw = ctx.measureText(label).width;
         ctx.fillStyle = "rgba(10,12,16,0.8)";
         ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
@@ -1227,15 +1295,25 @@ export default function MapViewport() {
     const drawRuler = (c: HTMLCanvasElement | null, horizontal: boolean) => {
       if (!c) return;
       const len = horizontal ? size.w : size.h;
-      c.width = (horizontal ? len : 20) * dpr;
-      c.height = (horizontal ? 20 : len) * dpr;
+      // A ruler shows the scroll, the scale and the tile under the pointer along its own
+      // axis; most paints (an animation frame, a ghost following the pointer inside one
+      // tile, a scroll along the other axis) change none of them.
+      const key = `${len}|${dpr}|${horizontal ? sx : sy}|${tilePx}|${horizontal ? mapW : mapH}|${hv ? (horizontal ? hv.x : hv.y) : ""}`;
+      const drawn = rulerKeysRef.current;
+      if (drawn[horizontal ? "top" : "left"] === key) return;
+      drawn[horizontal ? "top" : "left"] = key;
+      // Setting a canvas's size reallocates it, even to the size it has.
+      const cw = Math.floor((horizontal ? len : 20) * dpr), ch = Math.floor((horizontal ? 20 : len) * dpr);
+      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
       const rc = c.getContext("2d")!;
       rc.setTransform(dpr, 0, 0, dpr, 0, 0);
       rc.fillStyle = "#191d25";
       rc.fillRect(0, 0, horizontal ? len : 20, horizontal ? 20 : len);
-      rc.font = `9.5px ${getComputedStyle(document.body).getPropertyValue("--font-mono")}`;
+      rc.font = `9.5px ${monoFont()}`;
+      rc.textAlign = "left";
       rc.fillStyle = "#99a2b3";
       rc.strokeStyle = "#3b4453";
+      rc.lineWidth = 1;
       rc.beginPath();
       const scroll = horizontal ? sx : sy;
       const tiles = horizontal ? mapW : mapH;
@@ -1360,6 +1438,9 @@ export default function MapViewport() {
     scheduleDraw();
   }, [size, draw]);
 
+  /** The scale as the frame loops and effects below read it, without being re-created by a zoom. */
+  const tilePxRef = useRef(tilePx);
+  tilePxRef.current = tilePx;
   /* ── water / lava animation ──────────────────────────── */
   useEffect(() => {
     const anim = flags.animateWater ? tilesetAssets?.atlas.animation : undefined;
@@ -1382,7 +1463,15 @@ export default function MapViewport() {
         const frame = Math.floor((now * unitSpeed) / GAME_FRAME_MS);
         const steps = Math.min(4, frame - lastFrame);
         lastFrame = frame;
-        for (let i = 0; i < steps; i++) if (units.tick()) repaint = true;
+        // Every sprite advances, but only one standing near the view asks for a paint —
+        // the same margin the draw pass culls by.
+        const el = scrollerRef.current;
+        const zoom = tilePxRef.current / TILE;
+        const view = el ? {
+          left: el.scrollLeft / zoom - UNIT_MARGIN, top: el.scrollTop / zoom - UNIT_MARGIN,
+          right: (el.scrollLeft + el.clientWidth) / zoom + UNIT_MARGIN, bottom: (el.scrollTop + el.clientHeight) / zoom + UNIT_MARGIN,
+        } : undefined;
+        for (let i = 0; i < steps; i++) if (units.tick(view)) repaint = true;
         if (!unitsInViewRef.current) repaint = repaint && animatedInViewRef.current;
       }
       // A repaint booked for this frame is served here rather than painted twice over.
@@ -1393,8 +1482,6 @@ export default function MapViewport() {
   }, [flags.animateWater, flags.animateUnits, flags.units, flags.sprites, tilesetAssets, scenario, animator, waterSpeed, unitSpeed]);
 
   /* recentring, from the minimap, `view.center` and `view.reveal` */
-  const tilePxRef = useRef(tilePx);
-  tilePxRef.current = tilePx;
   /** The glide in progress, if any; a newer request or a scroll from elsewhere cancels it. */
   const glideRef = useRef<{ cancel(): void } | null>(null);
   useEffect(() => {

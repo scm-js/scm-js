@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { mapFiles } from "./support/maps";
 import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { parseScenario } from "../src/formats/chk/scenario";
@@ -62,13 +62,10 @@ describe("map statistics", () => {
   });
 });
 
-const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
-const fixtures = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.(scx|scm)$/i.test(f)) : [];
-
-describe.skipIf(fixtures.length === 0)("fixture maps", () => {
-  for (const file of fixtures) {
+describe("map files", () => {
+  for (const { name: file, path } of mapFiles()) {
     it(`sums to the record counts of ${file}`, async () => {
-      const { chk } = await loadMap(new Uint8Array(readFileSync(join(MAPS, file))));
+      const { chk } = await loadMap(new Uint8Array(readFileSync(path)));
       const scn = parseScenario(chk);
       const s = mapStatistics(scn, null, null, null);
       expect(s.players.reduce((n, p) => n + p.units, 0) + s.unownedUnits).toBe(scn.units.length);

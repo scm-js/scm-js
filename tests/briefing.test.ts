@@ -10,6 +10,7 @@ import { formatTriggers, parseTriggers } from "../src/formats/triggers/text";
 import { triggerNames } from "../src/editor/triggers";
 import { findInScenario } from "../src/editor/find";
 import { mapStatistics } from "../src/editor/statistics";
+import { testMap } from "./support/maps";
 import { getString } from "../src/formats/chk/sections/strings";
 
 /**
@@ -21,10 +22,12 @@ import { getString } from "../src/formats/chk/sections/strings";
  */
 const MAPS = join(__dirname, "..", "fixtures", "maps");
 const BRIEFED = ["(6)Ground Zero.scm", "(4)Spring Thaw.scx"].filter((f) => existsSync(join(MAPS, f)));
+// The committed map's briefing is written by the editor, not StarEdit, and has to hold to the same.
+const briefed = [{ name: "ums.scx", path: testMap("ums.scx") }, ...BRIEFED.map((name) => ({ name, path: join(MAPS, name) }))];
 
-describe.skipIf(BRIEFED.length === 0)("mission briefings on Blizzard's maps", () => {
-  it.each(BRIEFED)("%s decodes to known briefing actions with valid arguments", async (name) => {
-    const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(join(MAPS, name))))).chk);
+describe("mission briefings in map files", () => {
+  it.each(briefed)("$name decodes to known briefing actions with valid arguments", async ({ path }) => {
+    const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
     expect(scn.briefing.length).toBeGreaterThan(0);
     const known = new Set(BRIEFING_ACTION_DEFS.map((d) => d.type));
     let texts = 0;
@@ -49,8 +52,8 @@ describe.skipIf(BRIEFED.length === 0)("mission briefings on Blizzard's maps", ()
     expect(texts).toBeGreaterThan(0);
   });
 
-  it.each(BRIEFED)("%s prints and parses back to the same records, and re-encodes byte for byte", async (name) => {
-    const bytes = new Uint8Array(readFileSync(join(MAPS, name)));
+  it.each(briefed)("$name prints and parses back to the same records, and re-encodes byte for byte", async ({ path }) => {
+    const bytes = new Uint8Array(readFileSync(path));
     const scn = parseScenario((await loadMap(bytes)).chk);
     const names = triggerNames(scn);
     const text = formatTriggers(scn.briefing, names, true);
@@ -66,8 +69,8 @@ describe.skipIf(BRIEFED.length === 0)("mission briefings on Blizzard's maps", ()
     expect(parseChk(serializeScenario(scn)).sections.find((s) => s.name === "MBRF")!.data).toEqual(original);
   });
 
-  it.each(BRIEFED)("%s: Find and Statistics see the briefing", async (name) => {
-    const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(join(MAPS, name))))).chk);
+  it.each(briefed)("$name: Find and Statistics see the briefing", async ({ path }) => {
+    const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
     const first = scn.briefing[0].actions.map((a) => getString(scn.strings, a.text)).find((s) => s && s.length > 3)!;
     const word = first.split(/\s+/).find((w) => w.length > 3)!;
     expect(findInScenario(scn, { kind: "briefing", query: word }).length).toBeGreaterThan(0);

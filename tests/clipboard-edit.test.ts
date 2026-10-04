@@ -5,6 +5,7 @@ import { createScenario } from "../src/formats/chk/create";
 import { parseScenario, tilesetIndex, type Scenario } from "../src/formats/chk/scenario";
 import { ANYWHERE_INDEX, isLocationUsed, SpriteFlag, type LocationRecord } from "../src/formats/chk/sections/objects";
 import { loadMap } from "../src/formats/mpq/scm";
+import { testMap } from "./support/maps";
 import { NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../src/formats/tileset/doodads";
 import {
   clampRect, clipSummary, copyObjects, copyRegion, DEFAULT_CLIP_PARTS, ALL_CLIP_PARTS, pasteClip, regionObjects, removeObjects, selectionRect, tileRect,
@@ -331,10 +332,12 @@ describe("cut", () => {
 
 const mapsDir = join(__dirname, "..", "fixtures", "maps");
 const realMap = join(mapsDir, "(4)Crescent Moon.scx");
+// The committed map for its units and sprites; Blizzard's, where installed, for terrain that is not all one tile.
+const clipMaps = [{ name: "ums.scx", path: testMap("ums.scx") }, ...(existsSync(realMap) ? [{ name: "(4)Crescent Moon.scx", path: realMap }] : [])];
 
-describe.skipIf(!existsSync(realMap))("fixture maps", () => {
-  it("round-trips a region through a blank map and self-pastes without changing a tile", async () => {
-    const src = parseScenario((await loadMap(new Uint8Array(readFileSync(realMap)))).chk);
+describe("map files", () => {
+  it.each(clipMaps)("$name: round-trips a region through a blank map and self-pastes without changing a tile", async ({ path }) => {
+    const src = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
     // A 32×24 window around the first unit, so the clip is sure to carry some.
     const u0 = src.units[0];
     const region = clampRect({ x0: (u0.x >> 5) - 16, y0: (u0.y >> 5) - 12, x1: (u0.x >> 5) + 16, y1: (u0.y >> 5) + 12 }, src);

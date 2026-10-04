@@ -9,7 +9,7 @@
  * removals in it — the run has to be found again in whatever list an editor holds.
  * Everything here is pure; the entries live in `pluginTriggerClaimsAtom`.
  */
-import type { TriggerRecord } from "../formats/chk/sections/triggers";
+import type { ReadonlyTrigger } from "../formats/chk/sections/triggers";
 import type { PluginTriggerClaim } from "../atoms/pluginAtoms";
 import { pluginText, t } from "../i18n";
 
@@ -21,7 +21,7 @@ export interface ClaimedRange {
 }
 
 /** Every claim that finds its run in `list`, first run first; a `locate` that throws is skipped. */
-export function locateClaims(claims: readonly PluginTriggerClaim[], list: TriggerRecord[]): ClaimedRange[] {
+export function locateClaims(claims: readonly PluginTriggerClaim[], list: readonly ReadonlyTrigger[]): ClaimedRange[] {
   const out: ClaimedRange[] = [];
   for (const claim of claims) {
     let where: { start: number; count: number } | null = null;
@@ -49,7 +49,7 @@ export function claimBadge(range: ClaimedRange): string {
 }
 
 /** What the editor says in place of a locked trigger's form. */
-export function claimDescription(range: ClaimedRange, index: number, list: TriggerRecord[]): string {
+export function claimDescription(range: ClaimedRange, index: number, list: readonly ReadonlyTrigger[]): string {
   try {
     const text = range.claim.spec.describe?.(index, list);
     if (text) return text;

@@ -51,10 +51,32 @@ The text format (`formats/triggers/text.ts`) resolves names through a `TriggerNa
 print as bare numbers and parse back, unknown types print as `Condition N(...)` / `Action N(...)`.
 The one thing text cannot carry is the `UnitTypeUsed` hint bit (0x10) — Blizzard's own maps disagree
 about it — so `tests/trigger.test.ts` masks the hint bits in its fixture round trip. `intern` appends
-to the string table while parsing (never removed, so harmless). Trigger dialogs are settings-style
+to the string table while parsing (never removed, so harmless — a parse interns each string once).
+The Classic editor and Mission Briefing intern at every keystroke of a text, WAV or comment field, so
+they edit through `draftTriggerNames` (`editor/triggers.ts`): a string the map lacks gets a *negative*
+draft index held in the dialog (`StringDrafts`), and `resolveDraftStrings` interns the ones the list
+still refers to on OK / Apply, handing the resolved list back as the working copy. Before 2026-10-04
+they went through `triggerNames` and every prefix typed was appended to the map's STR for good,
+Cancel or not. A working copy can therefore hold negative `text` / `wav` values; nothing else may
+read one as a string index without those names. `tests/triggerDrafts.test.ts`. Trigger dialogs are settings-style
 transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (marks `TRIG` only on a
 real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
 `newCondition` / `newAction` seed StarEdit-like defaults.
+**The list on a big map** (2026-10-04). `TriggerListEditor` used to call `summarizeTrigger` for every
+row on every render, and every keystroke in a comment or argument renders it — 3,000 triggers
+formatted per key. `useSummaries` keeps each summary in a `WeakMap` by record (an edit replaces the
+one trigger it touches; `list.map` leaves the rest the same objects), dropped whenever `names`
+changes, and the row is a `memo` component (`TriggerRow`) given the summary and plain strings, so
+an untouched row is not rendered again; the filter box reads the same cache (`search`). The String
+Editor's rows are `StringRow`, memoised likewise — each parses its text for colour codes. Measured
+in headless Chrome on a dev build, 3,000 triggers and 6,000 strings: a key in the comment field
+84 → 33 ms, a key in a string 167 → 33 ms, the floor of that measurement being about a frame.
+Every row is still in the DOM (opening is ~0.5 s at that size); windowing is the next step if
+that matters, and the trigger rows' variable height is what makes it more than a few lines.
+**Caching the serialised map was looked at and left** (same day): `serializeScenario` with TRIG,
+STR, UNIT, MTXM, TILE and ISOM all dirty on a 256×256 map with 3,000 triggers takes 2.6 ms, and
+the callers are the save plan and the recovery pass — nothing to win, and a stale cache there is
+a lost edit.
 
 ### Trigger claims, and the TrigScript plugin
 

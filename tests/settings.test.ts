@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { mapFiles } from "./support/maps";
 import { describe, expect, it } from "vitest";
 import { Writer } from "../src/formats/chk/binary";
 import { createScenario } from "../src/formats/chk/create";
@@ -244,13 +244,10 @@ describe("players and forces", () => {
   });
 });
 
-const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
-const mapFiles = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.(scx|scm)$/i.test(f)) : [];
-
-describe.skipIf(mapFiles.length === 0)("real maps", () => {
+describe("map files", () => {
   it("re-encode their settings sections byte for byte", async () => {
-    for (const file of mapFiles) {
-      const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(join(MAPS, file))))).chk);
+    for (const { name: file, path } of mapFiles()) {
+      const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
       for (const name of ["UNIS", "UNIx", "PUNI", "COLR", "CRGB", "FORC", "OWNR", "SIDE"]) {
         const original = scn.chk.sections.filter((s) => s.name === name).at(-1);
         if (!original) continue;

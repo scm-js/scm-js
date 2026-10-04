@@ -45,7 +45,28 @@ scripts for reachable images (`walkAnimation`, `IMAGE_SPAWN_OPS`). `UnitAnimator
 per record (matched by object, then by serial across replacements), each a bottom-to-top `images` stack
 running Init → StarEditInit (turreted vehicles) or Built (buildings); `tick()` is one game frame and the
 viewport's rAF loop drives it alongside water cycling (`GAME_FRAME_MS`), repainting only when `tick()`
-reports a change and units are on screen. Damage overlays (image 450/472 + the damage `.lo` slot index — the
+reports a change and units are on screen. **What it costs per frame** (2026-10-04): `sync` runs
+before every paint and `tick` 24 times a second, both over every unit on the map, so both are built
+to do nothing when nothing happens. `sync` builds its set of live records only once a record turns up
+without a sprite (or the counts differ) — the steady state is one map lookup per unit — and
+`updateDamage` returns before any path lookup for a healthy unit with no flames. `tickSprite` counts
+the waits down and collects the images whose turn it is into a reused list (a script touches only its
+own image and what it spawns, so running them after the countdown is the same as interleaved), and a
+sprite with none due skips `settle` altogether. That is only right because `settle` is now
+order-independent: it settles the **main image first**, then the rest — a shadow that follows the
+main graphic sits *under* it in the stack and used to read last frame's value, which the next
+tick's settle put right one frame late; with settle skipped on idle frames it would have stayed
+wrong for the whole wait. `tick(view)` still advances every sprite (units placed together pulse
+together, and would drift apart if the ones out of sight stood still) but reports a change only for
+a sprite standing inside `view`; the viewport passes the visible box plus `UNIT_MARGIN`, the margin
+the draw pass culls by, so a light blinking across the map no longer repaints the screen.
+`tests/animateSynthetic.test.ts` runs the class on a made-up script with no game files; the change
+was also run tick for tick against the previous implementation for 3,000 frames with a seeded
+`Math.random` (identical but for the follower lag). Measured in Node on 1,700 units of that script:
+`sync` 125 → 30 µs a paint; `tick` 83 → 61 µs when most images are waiting and 274 → 290 µs when
+every unit's script runs every few frames — so the interpreter was never the cost, a quarter of a
+millisecond either way. What a tick costs is the *repaint* it asks for, which is what `view` cuts.
+Damage overlays (image 450/472 + the damage `.lo` slot index — the
 22 slots are laid out Terran 0–7, Zerg 8–15, Protoss 16–21 — count from `hitPointsPercent`) are re-evaluated in `sync`; `creategasoverlays` spawns smoke
 from the special `.lo`. `sprites.ts#getImageFrame` is the per-(image, frame, flip, colour, tileset)
 canvas cache; shadows draw as 50% black, `DrawFunction.Remap` images through the tileset's

@@ -245,7 +245,7 @@ export function addLocation(scn: Scenario, bounds: Bounds, name?: string, elevat
 }
 
 /** Editable slots among `indices`: in use, and not Anywhere. */
-function editable(scn: Scenario, indices: number[]): number[] {
+function editable(scn: Scenario, indices: readonly number[]): number[] {
   return [...new Set(indices)].filter((i) => i !== ANYWHERE_INDEX && scn.locations[i] && isLocationUsed(scn.locations[i]));
 }
 
@@ -301,7 +301,7 @@ export function editLocation(scn: Scenario, index: number, patch: LocationPatch)
 }
 
 /** Blank the slots at `indices`; the name strings stay in the table (StarEdit leaves them too). */
-export function removeLocations(scn: Scenario, indices: number[]): LocationChange[] {
+export function removeLocations(scn: Scenario, indices: readonly number[]): LocationChange[] {
   return editable(scn, indices).sort((a, b) => a - b).map((i) => ({ index: i, before: scn.locations[i], after: blankLocation() }));
 }
 

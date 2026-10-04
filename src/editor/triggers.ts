@@ -8,12 +8,13 @@
  * caller bumps `triggersRevisionAtom` (`commitTriggersAtom`) so lists re-read.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { getString } from "../formats/chk/sections/strings";
+import { findString, getString } from "../formats/chk/sections/strings";
 import { ANYWHERE_INDEX } from "../formats/chk/sections/objects";
 import {
   ActionFlag, ActionType, Comparison, ConditionFlag, ConditionType, SetModifier, SwitchAction, SwitchState, UnitClass, UnitState,
   cloneTrigger, emptyAction, emptyCondition, emptyTrigger, PlayerGroup, PLAYER_GROUP_COUNT, SWITCH_COUNT, TriggerFlag,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
+  type ReadonlyTrigger,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
 import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName } from "../data/units";
@@ -32,7 +33,8 @@ export function switchName(scn: Scenario, index: number): string {
 /**
  * A `TriggerNames` over the scenario. `intern` appends to the string table (marking it
  * dirty), so parsing text into a scenario changes it even before the triggers are applied;
- * strings are never removed, so that is harmless.
+ * strings are never removed, so that is harmless for a parse, which interns each string
+ * once. An editor that interns as the user types wants `draftTriggerNames` instead.
  */
 export function triggerNames(scn: Scenario): TriggerNames {
   const lower = (s: string) => s.trim().toLowerCase();
@@ -82,6 +84,61 @@ export function triggerNames(scn: Scenario): TriggerNames {
       return m && Number(m[1]) >= 1 && Number(m[1]) <= SWITCH_COUNT ? Number(m[1]) - 1 : undefined;
     },
   };
+}
+
+/**
+ * The strings a dialog's working copy has typed but the map does not hold yet. A draft's
+ * index is negative — nothing a TRIG record decodes to — so a working copy can carry it in
+ * the same field as a real one until `resolveDraftStrings` swaps it.
+ */
+export interface StringDrafts {
+  byText: Map<string, number>;
+  byIndex: Map<number, string>;
+}
+
+export function newStringDrafts(): StringDrafts {
+  return { byText: new Map(), byIndex: new Map() };
+}
+
+/**
+ * `names` for an editor that works on a copy: `intern` answers with a string the map
+ * already has, else with a draft, and never touches the string table. Typing a text
+ * argument interns at every keystroke; through `triggerNames` each prefix was appended to
+ * the map for good, whatever the dialog's Cancel then did.
+ */
+export function draftTriggerNames(scn: Scenario, names: TriggerNames, drafts: StringDrafts): TriggerNames {
+  return {
+    ...names,
+    string: (index) => (index < 0 ? drafts.byIndex.get(index) ?? null : names.string(index)),
+    intern: (text) => {
+      if (text === "") return 0;
+      const existing = findString(scn.strings, text);
+      if (existing > 0) return existing;
+      let index = drafts.byText.get(text);
+      if (index === undefined) {
+        index = -(drafts.byIndex.size + 1);
+        drafts.byText.set(text, index);
+        drafts.byIndex.set(index, text);
+      }
+      return index;
+    },
+  };
+}
+
+/**
+ * The list with every draft string interned in the map — the step before `applyTriggers` /
+ * `applyBriefing`. Only the drafts the list still refers to reach the string table. Returns
+ * `list` itself when it holds none, and leaves the triggers without one as they are.
+ */
+export function resolveDraftStrings(scn: Scenario, list: TriggerRecord[], drafts: StringDrafts): TriggerRecord[] {
+  const real = (index: number) => (index < 0 ? internString(scn, drafts.byIndex.get(index) ?? "") : index);
+  let changed = false;
+  const next = list.map((t) => {
+    if (!t.actions.some((a) => a.text < 0 || a.wav < 0)) return t;
+    changed = true;
+    return { ...t, actions: t.actions.map((a) => (a.text < 0 || a.wav < 0 ? { ...a, text: real(a.text), wav: real(a.wav) } : a)) };
+  });
+  return changed ? next : list;
 }
 
 /* ── Working copies ──────────────────────────────────────── */
@@ -165,12 +222,12 @@ export function newAction(type: number, briefing = false): ActionRecord {
 }
 
 /** Whether the trigger keeps running: a Preserve Trigger action or the equivalent flag. */
-export function isPreserved(t: TriggerRecord): boolean {
+export function isPreserved(t: ReadonlyTrigger): boolean {
   return (t.flags & 0x04) !== 0 || t.actions.some((a) => a.type === ActionType.PreserveTrigger);
 }
 
 /** Add or remove the Preserve Trigger action (StarEdit's checkbox); the flag is left alone. */
-export function setPreserved(t: TriggerRecord, on: boolean): TriggerRecord {
+export function setPreserved(t: ReadonlyTrigger, on: boolean): TriggerRecord {
   const next = cloneTrigger(t);
   const has = next.actions.some((a) => a.type === ActionType.PreserveTrigger);
   if (on && !has) next.actions.push(newAction(ActionType.PreserveTrigger));
@@ -196,7 +253,7 @@ export function insertTrigger(list: TriggerRecord[], at: number, t: TriggerRecor
   return next;
 }
 
-export function removeTriggers(list: TriggerRecord[], indices: number[]): TriggerRecord[] {
+export function removeTriggers(list: TriggerRecord[], indices: readonly number[]): TriggerRecord[] {
   const drop = new Set(indices);
   return list.filter((_, i) => !drop.has(i));
 }
@@ -227,7 +284,7 @@ export function actionStrings(a: ActionRecord, briefing = false): { index: numbe
   return out;
 }
 
-export function triggersFor(list: TriggerRecord[], groups: number[]): number[] {
+export function triggersFor(list: readonly ReadonlyTrigger[], groups: readonly number[]): number[] {
   const out: number[] = [];
   list.forEach((t, i) => { if (groups.some((g) => t.players[g])) out.push(i); });
   return out;
@@ -284,7 +341,7 @@ export function playerSlotsOf(player: number, owners: readonly number[]): number
  * allocates counters of its own must keep clear of. A cell is `[player, unit]`; deaths
  * of a unit class (`Any unit`, `Men`, …) are a sum the game computes and count for nothing.
  */
-export function triggerUsage(list: readonly TriggerRecord[]): { cells: [player: number, unit: number][]; switches: number[] } {
+export function triggerUsage(list: readonly ReadonlyTrigger[]): { cells: [player: number, unit: number][]; switches: number[] } {
   const cells = new Set<number>();
   const switches = new Set<number>();
   for (const t of list) {

@@ -9,6 +9,8 @@ import {
   BOOKKEEPING_SECTIONS, buildChk, buildMapFile, createBuildCache, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, editorOnlySections, extraKind, formatBytes, formatOf,
   MANIFEST_MEMBER, planSave, SAVE_PRESETS, saveOptionsKey, SCRIPT_MEMBER, TERRAIN_EDITING_SECTIONS, type SaveOptions,
 } from "../src/editor/save";
+import { referencedMembers } from "../src/editor/sounds";
+import { testMapFiles } from "./support/maps";
 
 const MAPS_DIR = join(import.meta.dirname, "..", "fixtures", "maps");
 const fixtures = (() => { try { return readdirSync(MAPS_DIR).filter((f) => /\.scx$/i.test(f)); } catch { return []; } })();
@@ -200,6 +202,32 @@ if (fixtures.length > 0) describe("save options on the fixture maps", () => {
       expect(smaller.scenarioInfo!.storedSize).toBeLessThan(out.scenarioInfo!.storedSize);
     });
   }
+});
+
+describe("save options on the committed maps", () => {
+  it.each(testMapFiles())("$name: writes the same scenario back as it was opened, and a smaller one that still loads", async ({ name, path }) => {
+    const loaded = await loadMap(new Uint8Array(readFileSync(path)));
+    const scn = parseScenario(loaded.chk);
+    const members = await readMembers(loaded.archive!, loaded.files, referencedMembers(scn));
+    const kept = defaultSaveOptions(scn, loaded.scenarioInfo, name);
+    expect(kept).toMatchObject({ compression: loaded.scenarioInfo!.compression, encrypt: loaded.scenarioInfo!.encrypted, format: formatOf(name) });
+    const out = await loadMap(await buildMapFile(scn, members.extras, kept, undefined, members.stored));
+    expect(out.chk).toEqual(loaded.chk);
+    expect(out.scenarioInfo).toMatchObject({ compression: loaded.scenarioInfo!.compression, encrypted: loaded.scenarioInfo!.encrypted });
+    for (const [member, data] of members.extras) expect(await out.archive!.readFileAsync(member)).toEqual(data);
+
+    const small = SAVE_PRESETS.smallest(kept);
+    const plan = planSave(scn, members.extras, small, members.stored);
+    // A Remastered file's strings are in STRx, which stands in for the STR the list names.
+    const has = (n: string) => plan.file.sections.some((s) => s.name === n);
+    for (const req of requiredSections(scn.fileVersion)) expect(has(req) || (req === "STR " && has("STRx")), req).toBe(true);
+    const back = parseScenario((await loadMap(await buildMapFile(scn, members.extras, small, plan, members.stored))).chk);
+    expect(back.units).toEqual(scn.units);
+    expect(back.triggers).toEqual(scn.triggers);
+    expect(back.briefing).toEqual(scn.briefing);
+    expect(back.isom).toBeNull();
+    expect(plan.chkSize).toBeLessThan(plan.chkSizeBefore);
+  });
 });
 
 describe("the Save dialog's built files", () => {

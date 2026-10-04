@@ -93,6 +93,14 @@ function damageLevel(hp: number): number {
   return hp > 66 ? 0 : hp > 33 ? 1 : 2;
 }
 
+/** A box of the map in pixels: what `tick` counts a change inside of. */
+export interface AnimatorView {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export class UnitAnimator {
   private readonly assets: UnitAssets;
   private readonly byRecord = new Map<UnitRecord, SpriteState>();
@@ -101,6 +109,8 @@ export class UnitAnimator {
   private readonly bySprite = new Map<SpriteRecord, SpriteState>();
   private readonly bySpriteKey = new Map<string, SpriteState>();
   private tilesetIndex = 0;
+  /** The images of the sprite being ticked whose wait ran out this frame; reused between sprites. */
+  private readonly due: ImageState[] = [];
 
   constructor(assets: UnitAssets) {
     this.assets = assets;
@@ -128,10 +138,14 @@ export class UnitAnimator {
    */
   sync(units: readonly UnitRecord[], tilesetIndex: number) {
     this.setTileset(tilesetIndex);
-    const live = new Set(units);
+    // This runs before every paint, and nearly always nothing has moved: every record
+    // already has its sprite and there are as many sprites as records. The set of live
+    // records is only built once a record turns up that has none.
+    let live: Set<UnitRecord> | null = null;
     for (const u of units) {
       let s = this.byRecord.get(u);
       if (!s) {
+        live ??= new Set(units);
         const same = this.bySerial.get(u.serial);
         if (same && same.record && same.unitId === u.unitId && !live.has(same.record)) {
           this.byRecord.delete(same.record);
@@ -145,6 +159,8 @@ export class UnitAnimator {
       }
       this.updateDamage(s);
     }
+    if (!live && this.byRecord.size === units.length) return;
+    live ??= new Set(units);
     for (const [record, s] of this.byRecord) {
       if (live.has(record)) continue;
       this.byRecord.delete(record);
@@ -160,10 +176,12 @@ export class UnitAnimator {
    */
   syncSprites(sprites: readonly SpriteRecord[], tilesetIndex: number) {
     this.setTileset(tilesetIndex);
-    const live = new Set(sprites);
+    // As in `sync`: the live set is for the paint after an edit, not for every paint.
+    let live: Set<SpriteRecord> | null = null;
     for (const r of sprites) {
       let s = this.bySprite.get(r);
       if (!s) {
+        live ??= new Set(sprites);
         const key = spriteKey(r);
         const same = this.bySpriteKey.get(key);
         if (same && !live.has(same.spriteRecord!)) {
@@ -179,6 +197,10 @@ export class UnitAnimator {
         this.bySprite.set(r, s);
       }
     }
+    // A record with no sprite (a type the tables do not have) keeps the sizes apart, and
+    // the sweep then runs as it always did.
+    if (!live && this.bySprite.size === sprites.length) return;
+    live ??= new Set(sprites);
     for (const [record, s] of this.bySprite) {
       if (live.has(record)) continue;
       this.bySprite.delete(record);
@@ -214,17 +236,26 @@ export class UnitAnimator {
     return s;
   }
 
-  /** Advance every sprite one game frame. Returns whether anything visible changed. */
-  tick(): boolean {
+  /**
+   * Advance every sprite one game frame. Returns whether anything changed — with a `view`,
+   * whether anything standing inside it did, so a light blinking at the far end of the map
+   * does not repaint the screen. Every sprite is advanced either way: units placed together
+   * pulse together, and would drift apart if the ones out of sight stood still.
+   */
+  tick(view?: AnimatorView): boolean {
     if (!this.enabled) return false;
+    const inView = (at: { x: number; y: number } | null | undefined) =>
+      !view || !at || (at.x >= view.left && at.x <= view.right && at.y >= view.top && at.y <= view.bottom);
     let changed = false;
     for (const s of this.byRecord.values()) {
-      if (this.tickSprite(s)) changed = true;
-      if (s.turret && this.tickSprite(s.turret)) changed = true;
+      let moved = this.tickSprite(s);
+      if (s.turret && this.tickSprite(s.turret)) moved = true;
+      if (moved && inView(s.record)) changed = true;
     }
     for (const s of this.bySprite.values()) {
-      if (this.tickSprite(s)) changed = true;
-      if (s.turret && this.tickSprite(s.turret)) changed = true;
+      let moved = this.tickSprite(s);
+      if (s.turret && this.tickSprite(s.turret)) moved = true;
+      if (moved && inView(s.spriteRecord)) changed = true;
     }
     return changed;
   }
@@ -294,13 +325,24 @@ export class UnitAnimator {
   }
 
   private tickSprite(s: SpriteState): boolean {
-    // Scripts spawn images while running, so iterate a snapshot of the stack.
-    for (const img of s.images.slice()) {
+    // Most frames most images are waiting. Count the waits down first and collect the
+    // images whose turn it is; a script only ever touches its own image and the ones it
+    // spawns (which start on the next frame), so running them afterwards is the same as
+    // running each at its place in the stack — and the list doubles as the snapshot the
+    // stack needs, since scripts spawn into it while running.
+    const due = this.due;
+    due.length = 0;
+    for (const img of s.images) {
       if (img.pc < 0 || img.ended) continue;
       if (img.wait > 0 && --img.wait > 0) continue;
-      this.execute(s, img);
+      due.push(img);
     }
-    this.settle(s);
+    if (due.length > 0) {
+      for (let i = 0; i < due.length; i++) this.execute(s, due[i]);
+      due.length = 0;
+      // Nothing ran, nothing to settle: every path that changes a sprite settles it itself.
+      this.settle(s);
+    }
     const changed = s.changed;
     s.changed = false;
     return changed;
@@ -308,29 +350,37 @@ export class UnitAnimator {
 
   /** Drop ended overlays and recompute every image's frame and pinned position. */
   private settle(s: SpriteState) {
-    const before = s.images.length;
-    s.images = s.images.filter((img) => !img.ended || img === s.main);
-    if (s.images.length !== before) s.changed = true;
     const main = s.main;
-    for (const img of s.images) {
-      let frame: number, flip: boolean;
-      if (img.followMain && img !== main) {
-        frame = main.frame;
-        flip = main.flip;
-      } else if (this.assets.images.graphicTurns[img.imageId]) {
-        const f = facingFrame(s.direction);
-        frame = img.frameBase + f.frame;
-        flip = f.flip !== img.flipState;
-      } else {
-        frame = img.frameBase;
-        flip = img.flipState;
-      }
-      if (frame !== img.frame || flip !== img.flip) { img.frame = frame; img.flip = flip; s.changed = true; }
-      if (img.lo) {
-        const lo = requestLo(img.lo.path);
-        const at = lo ? loOffset(lo, main.frame, img.lo.slot) : null;
-        if (at && (at.x !== img.x || at.y !== img.y)) { img.x = at.x; img.y = at.y; s.changed = true; }
-      }
+    if (s.images.some((img) => img.ended && img !== main)) {
+      s.images = s.images.filter((img) => !img.ended || img === main);
+      s.changed = true;
+    }
+    // The main image first: the images under it in the stack (a shadow that follows it,
+    // a flame pinned to its frame) read its frame, and read last frame's when they were
+    // settled before it — which the next tick's settle used to put right a frame late.
+    const facing = facingFrame(s.direction);
+    this.settleImage(s, main, facing);
+    for (const img of s.images) if (img !== main) this.settleImage(s, img, facing);
+  }
+
+  private settleImage(s: SpriteState, img: ImageState, facing: { frame: number; flip: boolean }) {
+    const main = s.main;
+    let frame: number, flip: boolean;
+    if (img.followMain && img !== main) {
+      frame = main.frame;
+      flip = main.flip;
+    } else if (this.assets.images.graphicTurns[img.imageId]) {
+      frame = img.frameBase + facing.frame;
+      flip = facing.flip !== img.flipState;
+    } else {
+      frame = img.frameBase;
+      flip = img.flipState;
+    }
+    if (frame !== img.frame || flip !== img.flip) { img.frame = frame; img.flip = flip; s.changed = true; }
+    if (img.lo) {
+      const lo = requestLo(img.lo.path);
+      const at = lo ? loOffset(lo, main.frame, img.lo.slot) : null;
+      if (at && (at.x !== img.x || at.y !== img.y)) { img.x = at.x; img.y = at.y; s.changed = true; }
     }
   }
 
@@ -341,6 +391,8 @@ export class UnitAnimator {
     if (!u) return;
     const hp = u.validStates & UnitUsed.HitPoints ? u.hitPointsPercent : 100;
     const level = damageLevel(hp);
+    // Called for every unit before every paint; a healthy unit with no flames has nothing to look up.
+    if (level === 0 && s.damageLevel === 0) return;
     const path = imageLoPath(this.assets, s.main.imageId, "damage");
     let slots: number[] = [];
     const base = level === 2 ? DAMAGE_LARGE : DAMAGE_SMALL;

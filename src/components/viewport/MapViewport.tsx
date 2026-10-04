@@ -96,6 +96,8 @@ import { hashNoise } from "./noise";
 import { t, translate } from "../../i18n";
 
 const TILE = 32;
+/** How far outside the view a unit is still drawn, in map pixels: the largest GRP box is a few hundred. */
+const UNIT_MARGIN = 512;
 
 /**
  * A drag that reaches the edge of the window scrolls the view under it: `EDGE_BAND` px
@@ -734,7 +736,7 @@ export default function MapViewport() {
     };
     let unitsInView = false;
     if ((flags.units || flags.sprites) && scenario && tilePx >= 3) {
-      const margin = 512 * zoom; // the largest GRP box is a few hundred pixels
+      const margin = UNIT_MARGIN * zoom;
       const animated = animator?.enabled ? animator : null;
       if (animated && flags.units) animated.sync(scenario.units, tilesetIndex(scenario));
       if (animated && flags.sprites) animated.syncSprites(scenario.sprites, tilesetIndex(scenario));
@@ -1436,6 +1438,9 @@ export default function MapViewport() {
     scheduleDraw();
   }, [size, draw]);
 
+  /** The scale as the frame loops and effects below read it, without being re-created by a zoom. */
+  const tilePxRef = useRef(tilePx);
+  tilePxRef.current = tilePx;
   /* ── water / lava animation ──────────────────────────── */
   useEffect(() => {
     const anim = flags.animateWater ? tilesetAssets?.atlas.animation : undefined;
@@ -1458,7 +1463,15 @@ export default function MapViewport() {
         const frame = Math.floor((now * unitSpeed) / GAME_FRAME_MS);
         const steps = Math.min(4, frame - lastFrame);
         lastFrame = frame;
-        for (let i = 0; i < steps; i++) if (units.tick()) repaint = true;
+        // Every sprite advances, but only one standing near the view asks for a paint —
+        // the same margin the draw pass culls by.
+        const el = scrollerRef.current;
+        const zoom = tilePxRef.current / TILE;
+        const view = el ? {
+          left: el.scrollLeft / zoom - UNIT_MARGIN, top: el.scrollTop / zoom - UNIT_MARGIN,
+          right: (el.scrollLeft + el.clientWidth) / zoom + UNIT_MARGIN, bottom: (el.scrollTop + el.clientHeight) / zoom + UNIT_MARGIN,
+        } : undefined;
+        for (let i = 0; i < steps; i++) if (units.tick(view)) repaint = true;
         if (!unitsInViewRef.current) repaint = repaint && animatedInViewRef.current;
       }
       // A repaint booked for this frame is served here rather than painted twice over.
@@ -1469,8 +1482,6 @@ export default function MapViewport() {
   }, [flags.animateWater, flags.animateUnits, flags.units, flags.sprites, tilesetAssets, scenario, animator, waterSpeed, unitSpeed]);
 
   /* recentring, from the minimap, `view.center` and `view.reveal` */
-  const tilePxRef = useRef(tilePx);
-  tilePxRef.current = tilePx;
   /** The glide in progress, if any; a newer request or a scroll from elsewhere cancels it. */
   const glideRef = useRef<{ cancel(): void } | null>(null);
   useEffect(() => {

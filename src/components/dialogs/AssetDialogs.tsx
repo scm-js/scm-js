@@ -40,7 +40,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const setName = useSetAtom(mapNameAtom);
   const setDescription = useSetAtom(mapDescriptionAtom);
-  const [list, setList] = useScenarioForm(scenario, readStrings);
+  const [list, setList, guard] = useScenarioForm(scenario, readStrings);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number>(typeof entry.payload?.index === "number" ? (entry.payload.index as number) : 1);
   // Preview the string the way 1.16.1 drew it (colour reset at every line break) rather
@@ -94,6 +94,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       slot={{ dialog: "stringEditor" }}
       footerLeft={<span className={count > capacity ? "error-text" : ""}>{t("{count} strings · {unused} unused", { count, unused })}{empty > 0 ? t(" · {empty} empty", { empty }) : ""} {" "}{t("· capacity {toLocaleString} (", { toLocaleString: capacity.toLocaleString() })}{scenario.strings.extended ? "STRx" : "STR"})</span>}
     >
@@ -195,7 +196,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
   const extrasAtom = useAtomValue(archiveExtrasAtom);
   const setExtras = useSetAtom(archiveExtrasAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const [form, setForm] = useScenarioForm<SoundForm>(scenario, (scn) => ({ wavs: readWavs(scn), extras: new Map(extrasAtom) }));
+  const [form, setForm, guard] = useScenarioForm<SoundForm>(scenario, (scn) => ({ wavs: readWavs(scn), extras: new Map(extrasAtom) }));
   const [sel, setSel] = useState(-1);
   const [playing, setPlaying] = useState<string | null>(null);
   const [durations, setDurations] = useState<Map<string, number | null>>(new Map());
@@ -397,6 +398,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       footerLeft={<span>{t("{filled} / {WAV_SLOTS} sounds · {kb} in archive", { filled, WAV_SLOTS, kb: kb(soundBytes(form.extras)) })}{scenario.wavs ? "" : t(" · no WAV section yet")}</span>}
     >
       <input ref={fileRef} type="file" accept={IMPORT_ACCEPT} multiple hidden onChange={(e) => { void importFiles(e.target.files); e.target.value = ""; }} />
@@ -456,7 +458,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const [names, setNames] = useScenarioForm(scenario, readSwitchNames);
+  const [names, setNames, guard] = useScenarioForm(scenario, readSwitchNames);
   const [sel, setSel] = useState(0);
   const usage = useMemo(() => (scenario ? switchUsage(scenario) : []), [scenario]);
 
@@ -468,7 +470,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
   const apply = () => { if (applySwitchNames(scenario, names)) commit(); setNames(readSwitchNames(scenario)); };
 
   return (
-    <DialogFrame dialogKey={entry.key} title={t("Switches")} icon={<ToggleLeft size={14} />} size="md" tall showApply onOk={apply} footerLeft={<span>{t("256 switches · {named} named · {referenced} referenced by triggers", { named, referenced })}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Switches")} icon={<ToggleLeft size={14} />} size="md" tall showApply onOk={apply} guard={guard} footerLeft={<span>{t("256 switches · {named} named · {referenced} referenced by triggers", { named, referenced })}</span>}>
       <div className="split rows" style={{ ["--split" as string]: "1fr" }}>
         <ListBox
           items={names}

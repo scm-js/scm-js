@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
 import { useSetAtom } from "jotai";
@@ -6,6 +6,7 @@ import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { Button } from "./index";
 import DialogSlots, { type DialogSlotProps } from "./DialogSlots";
 import { useT } from "../../i18n/react";
+import type { FormGuard } from "../../hooks/useScenarioForm";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
 
@@ -29,6 +30,13 @@ export interface DialogFrameProps {
   showApply?: boolean;
   /** Called before Escape closes the dialog; `preventDefault()` keeps it open (an embedded editor wants Escape for itself). */
   onEscapeKeyDown?: (e: KeyboardEvent) => void;
+  /**
+   * A working copy worth asking about: while it is dirty, Escape, a press on the dim and
+   * the close button ask before the copy is thrown away, since nothing a dialog holds is
+   * in the undo history. Cancel says what it does and is not asked about. Cleaned after
+   * OK / Apply.
+   */
+  guard?: FormGuard;
   /**
    * Let plugins add to this dialog (`api.ui.dialogSlot`): which id they register for, and
    * the working-copy fields lent to them. Rendered at the left of the footer, before `footerLeft`.
@@ -54,14 +62,22 @@ export default function DialogFrame({
   okDisabled,
   showApply,
   onEscapeKeyDown,
+  guard,
   slot,
 }: DialogFrameProps) {
   const t = useT();
   const close = useSetAtom(closeDialogAtom);
   const dismiss = () => close(dialogKey);
+  /** The footer is asking whether to discard; a second Escape goes back to editing. */
+  const [asking, setAsking] = useState(false);
+  const leave = () => {
+    if (guard?.dirty) setAsking(!asking);
+    else dismiss();
+  };
+  const ok = () => { onOk?.(); guard?.clean(); };
 
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && dismiss()}>
+    <Dialog.Root open onOpenChange={(o) => !o && leave()}>
       <Dialog.Portal>
         <Dialog.Overlay className="dlg-overlay" />
         <Dialog.Content
@@ -100,7 +116,13 @@ export default function DialogFrame({
             {description && <p className="dlg-desc">{description}</p>}
             {children}
           </div>
-          {footer !== null && (
+          {asking ? (
+            <div className="dlg-footer">
+              <div className="left discard" role="alert">{t("Discard the changes made in this dialog?")}</div>
+              <Button variant="danger" onClick={dismiss}>{t("Discard")}</Button>
+              <Button autoFocus onClick={() => setAsking(false)}>{t("Keep editing")}</Button>
+            </div>
+          ) : footer !== null && (
             <div className="dlg-footer">
               <div className="left">
                 {slot && <DialogSlots dialogKey={dialogKey} dialog={slot.dialog} fields={slot.fields} payload={slot.payload} />}
@@ -108,11 +130,11 @@ export default function DialogFrame({
               </div>
               {footer ?? (
                 <>
-                  <Button variant="primary" disabled={okDisabled} onClick={() => { onOk?.(); dismiss(); }}>
+                  <Button variant="primary" disabled={okDisabled} onClick={() => { ok(); dismiss(); }}>
                     {okLabel ?? t("OK")}
                   </Button>
                   <Button onClick={dismiss}>{cancelLabel ?? t("Cancel")}</Button>
-                  {showApply && <Button disabled={okDisabled} onClick={onOk}>{t("Apply")}</Button>}
+                  {showApply && <Button disabled={okDisabled} onClick={ok}>{t("Apply")}</Button>}
                 </>
               )}
             </div>

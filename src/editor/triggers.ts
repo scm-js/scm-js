@@ -8,7 +8,7 @@
  * caller bumps `triggersRevisionAtom` (`commitTriggersAtom`) so lists re-read.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { getString } from "../formats/chk/sections/strings";
+import { findString, getString } from "../formats/chk/sections/strings";
 import { ANYWHERE_INDEX } from "../formats/chk/sections/objects";
 import {
   ActionFlag, ActionType, Comparison, ConditionFlag, ConditionType, SetModifier, SwitchAction, SwitchState, UnitClass, UnitState,
@@ -32,7 +32,8 @@ export function switchName(scn: Scenario, index: number): string {
 /**
  * A `TriggerNames` over the scenario. `intern` appends to the string table (marking it
  * dirty), so parsing text into a scenario changes it even before the triggers are applied;
- * strings are never removed, so that is harmless.
+ * strings are never removed, so that is harmless for a parse, which interns each string
+ * once. An editor that interns as the user types wants `draftTriggerNames` instead.
  */
 export function triggerNames(scn: Scenario): TriggerNames {
   const lower = (s: string) => s.trim().toLowerCase();
@@ -82,6 +83,61 @@ export function triggerNames(scn: Scenario): TriggerNames {
       return m && Number(m[1]) >= 1 && Number(m[1]) <= SWITCH_COUNT ? Number(m[1]) - 1 : undefined;
     },
   };
+}
+
+/**
+ * The strings a dialog's working copy has typed but the map does not hold yet. A draft's
+ * index is negative — nothing a TRIG record decodes to — so a working copy can carry it in
+ * the same field as a real one until `resolveDraftStrings` swaps it.
+ */
+export interface StringDrafts {
+  byText: Map<string, number>;
+  byIndex: Map<number, string>;
+}
+
+export function newStringDrafts(): StringDrafts {
+  return { byText: new Map(), byIndex: new Map() };
+}
+
+/**
+ * `names` for an editor that works on a copy: `intern` answers with a string the map
+ * already has, else with a draft, and never touches the string table. Typing a text
+ * argument interns at every keystroke; through `triggerNames` each prefix was appended to
+ * the map for good, whatever the dialog's Cancel then did.
+ */
+export function draftTriggerNames(scn: Scenario, names: TriggerNames, drafts: StringDrafts): TriggerNames {
+  return {
+    ...names,
+    string: (index) => (index < 0 ? drafts.byIndex.get(index) ?? null : names.string(index)),
+    intern: (text) => {
+      if (text === "") return 0;
+      const existing = findString(scn.strings, text);
+      if (existing > 0) return existing;
+      let index = drafts.byText.get(text);
+      if (index === undefined) {
+        index = -(drafts.byIndex.size + 1);
+        drafts.byText.set(text, index);
+        drafts.byIndex.set(index, text);
+      }
+      return index;
+    },
+  };
+}
+
+/**
+ * The list with every draft string interned in the map — the step before `applyTriggers` /
+ * `applyBriefing`. Only the drafts the list still refers to reach the string table. Returns
+ * `list` itself when it holds none, and leaves the triggers without one as they are.
+ */
+export function resolveDraftStrings(scn: Scenario, list: TriggerRecord[], drafts: StringDrafts): TriggerRecord[] {
+  const real = (index: number) => (index < 0 ? internString(scn, drafts.byIndex.get(index) ?? "") : index);
+  let changed = false;
+  const next = list.map((t) => {
+    if (!t.actions.some((a) => a.text < 0 || a.wav < 0)) return t;
+    changed = true;
+    return { ...t, actions: t.actions.map((a) => (a.text < 0 || a.wav < 0 ? { ...a, text: real(a.text), wav: real(a.wav) } : a)) };
+  });
+  return changed ? next : list;
 }
 
 /* ── Working copies ──────────────────────────────────────── */

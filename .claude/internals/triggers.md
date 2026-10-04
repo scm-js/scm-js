@@ -51,7 +51,14 @@ The text format (`formats/triggers/text.ts`) resolves names through a `TriggerNa
 print as bare numbers and parse back, unknown types print as `Condition N(...)` / `Action N(...)`.
 The one thing text cannot carry is the `UnitTypeUsed` hint bit (0x10) — Blizzard's own maps disagree
 about it — so `tests/trigger.test.ts` masks the hint bits in its fixture round trip. `intern` appends
-to the string table while parsing (never removed, so harmless). Trigger dialogs are settings-style
+to the string table while parsing (never removed, so harmless — a parse interns each string once).
+The Classic editor and Mission Briefing intern at every keystroke of a text, WAV or comment field, so
+they edit through `draftTriggerNames` (`editor/triggers.ts`): a string the map lacks gets a *negative*
+draft index held in the dialog (`StringDrafts`), and `resolveDraftStrings` interns the ones the list
+still refers to on OK / Apply, handing the resolved list back as the working copy. Before 2026-10-04
+they went through `triggerNames` and every prefix typed was appended to the map's STR for good,
+Cancel or not. A working copy can therefore hold negative `text` / `wav` values; nothing else may
+read one as a string index without those names. `tests/triggerDrafts.test.ts`. Trigger dialogs are settings-style
 transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (marks `TRIG` only on a
 real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
 `newCondition` / `newAction` seed StarEdit-like defaults.

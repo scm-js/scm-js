@@ -30,8 +30,8 @@ import { cuwpSlotLabel, CUWP_SLOTS } from "../../editor/cuwp";
 import { usedLocations } from "../../editor/locations";
 import { unitCustomName } from "../../editor/settings";
 import {
-  applyBriefing, applyTriggers, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers,
-  removeTriggers, setPreserved, triggerNames,
+  applyBriefing, applyTriggers, draftTriggerNames, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newStringDrafts, newTrigger,
+  readBriefing, readTriggers, removeTriggers, resolveDraftStrings, setPreserved, triggerNames, type StringDrafts,
 } from "../../editor/triggers";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
@@ -43,13 +43,20 @@ import { pluginText, t } from "../../i18n";
 
 /* ── Shared ─────────────────────────────────────────────── */
 
-function useNames(scenario: Scenario | null): TriggerNames | null {
+/**
+ * The names a working copy is edited through: the scenario's, with the strings typed here
+ * held as drafts until Apply (`resolveDraftStrings`) rather than added to the map at every
+ * keystroke. The drafts outlive the names, which are rebuilt whenever the map moves.
+ */
+function useNames(scenario: Scenario | null): { names: TriggerNames | null; drafts: StringDrafts } {
   // Locations, unit names and switch names can all change under an open dialog.
   const settingsRev = useAtomValue(settingsRevisionAtom);
   const locationsRev = useAtomValue(locationsRevisionAtom);
   const triggersRev = useAtomValue(triggersRevisionAtom);
+  const [drafts] = useState(newStringDrafts);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => (scenario ? triggerNames(scenario) : null), [scenario, settingsRev, locationsRev, triggersRev]);
+  const names = useMemo(() => (scenario ? draftTriggerNames(scenario, triggerNames(scenario), drafts) : null), [scenario, settingsRev, locationsRev, triggersRev]);
+  return { names, drafts };
 }
 
 function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: ReactNode }) {
@@ -545,12 +552,18 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
   useAtomValue(triggersRevisionAtom);
   const claims = useAtomValue(pluginTriggerClaimsAtom);
   const commit = useSetAtom(commitTriggersAtom);
-  const names = useNames(scenario);
-  const [local, setLocal] = useScenarioForm(scenario, readTriggers);
+  const { names, drafts } = useNames(scenario);
+  const [local, setLocal, guard] = useScenarioForm(scenario, readTriggers);
   const selection = useRef<SelectionHandle | null>(null);
   if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Trigger Editor")} icon={<Zap size={14} />} />;
 
-  const apply = () => { applyTriggers(scenario, local); commit(); };
+  const apply = () => {
+    // The working copy keeps the real indices too, so a second Apply compares equal.
+    const list = resolveDraftStrings(scenario, local, drafts);
+    if (list !== local) setLocal(list);
+    applyTriggers(scenario, list);
+    commit();
+  };
 
   return (
     <DialogFrame
@@ -560,6 +573,7 @@ export function TriggerEditorDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
+      guard={guard}
       slot={{ dialog: "triggerEditor", fields: { selected: selectedField(selection), modified: modifiedField(() => !sameTriggers(local, readTriggers(scenario))) } }}
       footerLeft={<span>{t("{length} trigger", { length: local.length })}{local.length === 1 ? "" : "s"}</span>}
     >
@@ -574,12 +588,17 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(triggersRevisionAtom);
   const commit = useSetAtom(commitTriggersAtom);
-  const names = useNames(scenario);
-  const [local, setLocal] = useScenarioForm(scenario, readBriefing);
+  const { names, drafts } = useNames(scenario);
+  const [local, setLocal, guard] = useScenarioForm(scenario, readBriefing);
   const selection = useRef<SelectionHandle | null>(null);
   if (!scenario || !local || !names) return <NoMap entry={entry} title={t("Mission Briefing")} icon={<MessageSquare size={14} />} />;
 
-  const apply = () => { applyBriefing(scenario, local); commit(); };
+  const apply = () => {
+    const list = resolveDraftStrings(scenario, local, drafts);
+    if (list !== local) setLocal(list);
+    applyBriefing(scenario, list);
+    commit();
+  };
 
   return (
     <DialogFrame
@@ -589,6 +608,7 @@ export function MissionBriefingDialog({ entry }: DialogProps) {
       size="full"
       onOk={apply}
       showApply
+      guard={guard}
       slot={{ dialog: "missionBriefing", fields: { selected: selectedField(selection), modified: modifiedField(() => !sameTriggers(local, readBriefing(scenario))) } }}
       footerLeft={<span>{t("{length} briefing", { length: local.length })}{local.length === 1 ? "" : "s"} {" "}{t("· one per player, played before the map starts")}</span>}
     >

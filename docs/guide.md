@@ -1396,6 +1396,9 @@ This section lists what is currently missing in the editor and the limits worth 
 
 - **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
   scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
+  The larger editors (triggers, the briefing, strings, sounds, switches, and the unit,
+  upgrade and technology settings) ask before Escape, the close button or a click outside
+  the dialog throws away changes you have not applied.
   Resizing and changing the tileset clear the undo history.
 - **Remastered graphics.** The editor draws the classic graphics from the 1.16 archives,
   not Remastered's HD art.

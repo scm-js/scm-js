@@ -137,7 +137,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
   const [sel, setSel] = useState(0);
-  const [state, setState] = useScenarioForm(scenario, (scn) => ({ ...readUnitSettings(scn), names: new Map<number, string>() }));
+  const [state, setState, guard] = useScenarioForm(scenario, (scn) => ({ ...readUnitSettings(scn), names: new Map<number, string>() }));
   const [, bump] = useState(0); // the copies are typed arrays edited in place
 
   if (!scenario || !state) {
@@ -149,7 +149,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
   const dat = assets?.units ?? null;
   const weapons = assets?.weapons ?? null;
   const useDefault = settings.useDefault[sel] !== 0;
-  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); };
+  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
 
   const defaults = {
     hp: dat ? Math.floor(dat.hitPoints[sel] / 256) : 0,
@@ -229,6 +229,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every type back to its dat defaults, every player back to the global availability")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
@@ -332,7 +333,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
   const [sel, setSel] = useState(0);
-  const [state, setState] = useScenarioForm(scenario, readUpgradeSettings);
+  const [state, setState, guard] = useScenarioForm(scenario, readUpgradeSettings);
   const [, bump] = useState(0); // the copies are typed arrays edited in place
 
   if (!scenario || !state) {
@@ -342,7 +343,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
   const { settings, restrictions } = state;
   const dat = assets?.upgrades ?? null;
   const useDefault = settings.useDefault[sel] !== 0;
-  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); };
+  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
   const beyondOriginal = !isExpansion(scenario) && sel >= UPGRADES_ORIGINAL;
 
   const setDefault = (on: boolean) => edit(() => {
@@ -396,6 +397,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every upgrade back to its dat costs, every player back to the default levels")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
@@ -483,7 +485,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
   const [sel, setSel] = useState(0);
-  const [state, setState] = useScenarioForm(scenario, readTechSettings);
+  const [state, setState, guard] = useScenarioForm(scenario, readTechSettings);
   const [, bump] = useState(0);
 
   if (!scenario || !state) {
@@ -493,7 +495,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
   const { settings, restrictions } = state;
   const dat = assets?.techs ?? null;
   const useDefault = settings.useDefault[sel] !== 0;
-  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); };
+  const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
   const beyondOriginal = !isExpansion(scenario) && sel >= TECHS_ORIGINAL;
 
   const setDefault = (on: boolean) => edit(() => {
@@ -535,6 +537,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      guard={guard}
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every ability back to its dat costs, every player back to the default availability")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>

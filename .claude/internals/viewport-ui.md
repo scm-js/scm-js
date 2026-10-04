@@ -37,6 +37,17 @@ read in the first effect pass is still null.
   statically from anything on the startup path or Vite folds them back into the main chunk (Vite
   says so: `INEFFECTIVE_DYNAMIC_IMPORT`) — which is why `PluginIconView` lives in `components/ui/`,
   not in `PluginDialogs.tsx`. Splitting them took the main chunk from 1140 KB to 537 KB.
+- **Leaving a dialog with edits asks first** (2026-10-04). `useScenarioForm` returns a third value,
+  a `FormGuard` (`dirty`, set by the setter; `touch()` for the copies edited in place, as the
+  unit / upgrade / tech settings' typed arrays are; `clean()`), and `DialogFrame`'s `guard` prop
+  takes it: while dirty, everything that reaches Radix's `onOpenChange` — Escape, a press on the
+  dim, the close button — swaps the footer for "Discard the changes made in this dialog?" with
+  Discard / Keep editing instead of closing, and a second Escape goes back to editing. Cancel is
+  not asked about, and the frame calls `clean()` after OK / Apply (after the dialog's own
+  `setList(read…)`, so that write does not leave it dirty). Wired for the dialogs whose copy is
+  real work: Trigger Editor, Mission Briefing, String Editor, Sound Editor, Switches, Unit /
+  Upgrade / Technology Settings. The small settings dialogs keep Escape as a plain cancel on
+  purpose. It is "touched", not a diff: an edit typed and typed back still asks.
 - Preferences (`dialogs/PreferencesDialog.tsx`, its own chunk) is a `.split` with a page list
   (`.prefs-nav`) on the left and one page mounted on the right; `payload.page` picks the page
   (`?dialog=preferences&page=view` in a deep link, `dlgWith(…, { page })` in the menu). Every

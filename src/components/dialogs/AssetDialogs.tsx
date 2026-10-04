@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eraser, Lock, Music, Pencil, Play, Plus, RefreshCw, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
@@ -27,6 +27,26 @@ function NoMap({ entry, title, icon }: { entry: DialogProps["entry"]; title: str
 }
 
 /* ── String Editor ──────────────────────────────────────── */
+
+/**
+ * One row of the string table. Memoised on what it shows, so typing in one string renders
+ * that row and not the whole table — each row parses its text for colour codes.
+ */
+const StringRow = memo(function StringRow({ index, text, used, selected, onSelect }: {
+  index: number;
+  text: string | null;
+  used: string;
+  selected: boolean;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <tr className={selected ? "selected" : ""} onClick={() => onSelect(index)}>
+      <td className="num">{index}</td>
+      <td className={text === null ? "faint" : ""} style={{ maxWidth: 360 }}>{text === null ? t("(blank)") : <InlineString text={text} placeholder="(empty)" />}</td>
+      <td className={used ? "dim" : "faint"} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }} title={used}>{used || t("unused")}</td>
+    </tr>
+  );
+});
 
 /**
  * Scenario ▸ String Editor: every entry of STR / STRx with where it is referenced. Edits
@@ -109,13 +129,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
           <table className="table">
             <thead><tr><th style={{ width: 50 }}>#</th><th>{t("Text")}</th><th style={{ width: 220 }}>{t("Used by")}</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.index} className={sel === r.index ? "selected" : ""} onClick={() => setSel(r.index)}>
-                  <td className="num">{r.index}</td>
-                  <td className={r.text === null ? "faint" : ""} style={{ maxWidth: 360 }}>{r.text === null ? t("(blank)") : <InlineString text={r.text} placeholder="(empty)" />}</td>
-                  <td className={r.used ? "dim" : "faint"} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }} title={r.used}>{r.used || t("unused")}</td>
-                </tr>
-              ))}
+              {rows.map((r) => <StringRow key={r.index} index={r.index} text={r.text} used={r.used} selected={sel === r.index} onSelect={setSel} />)}
               {rows.length === 0 && <tr><td colSpan={3} className="hint">{q ? t("No strings match.") : t("The table is empty.")}</td></tr>}
             </tbody>
           </table>

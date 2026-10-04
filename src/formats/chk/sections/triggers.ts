@@ -80,6 +80,15 @@ export interface TriggerRecord {
   currentAction: number;
 }
 
+/** A trigger that is only read: nothing on it, its conditions or its actions may be written. */
+export interface ReadonlyTrigger {
+  readonly conditions: readonly Readonly<ConditionRecord>[];
+  readonly actions: readonly Readonly<ActionRecord>[];
+  readonly flags: number;
+  readonly players: readonly number[];
+  readonly currentAction: number;
+}
+
 /* ── Enumerations ────────────────────────────────────────── */
 
 export const ConditionType = {
@@ -244,7 +253,7 @@ function writeAction(w: Writer, a: ActionRecord) {
     .u16(a.unitId).u8(a.type).u8(a.modifier).u8(a.flags).u8(a.padding).u16(a.mask);
 }
 
-export function encodeTrigger(w: Writer, t: TriggerRecord) {
+export function encodeTrigger(w: Writer, t: ReadonlyTrigger) {
   if (t.conditions.length > MAX_CONDITIONS) throw new Error(`A trigger holds at most ${MAX_CONDITIONS} conditions (got ${t.conditions.length}).`);
   if (t.actions.length > MAX_ACTIONS) throw new Error(`A trigger holds at most ${MAX_ACTIONS} actions (got ${t.actions.length}).`);
   for (const c of t.conditions) writeCondition(w, c);
@@ -256,14 +265,14 @@ export function encodeTrigger(w: Writer, t: TriggerRecord) {
   w.u8(t.currentAction);
 }
 
-export function encodeTriggers(triggers: TriggerRecord[]): Uint8Array {
+export function encodeTriggers(triggers: readonly ReadonlyTrigger[]): Uint8Array {
   const w = new Writer(triggers.length * TRIGGER_STRIDE || 16);
   for (const t of triggers) encodeTrigger(w, t);
   return w.finish();
 }
 
 /** Deep copy, for working copies and duplicates. */
-export function cloneTrigger(t: TriggerRecord): TriggerRecord {
+export function cloneTrigger(t: ReadonlyTrigger): TriggerRecord {
   return {
     conditions: t.conditions.map((c) => ({ ...c })),
     actions: t.actions.map((a) => ({ ...a })),

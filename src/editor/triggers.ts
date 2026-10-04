@@ -14,6 +14,7 @@ import {
   ActionFlag, ActionType, Comparison, ConditionFlag, ConditionType, SetModifier, SwitchAction, SwitchState, UnitClass, UnitState,
   cloneTrigger, emptyAction, emptyCondition, emptyTrigger, PlayerGroup, PLAYER_GROUP_COUNT, SWITCH_COUNT, TriggerFlag,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
+  type ReadonlyTrigger,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
 import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName } from "../data/units";
@@ -221,12 +222,12 @@ export function newAction(type: number, briefing = false): ActionRecord {
 }
 
 /** Whether the trigger keeps running: a Preserve Trigger action or the equivalent flag. */
-export function isPreserved(t: TriggerRecord): boolean {
+export function isPreserved(t: ReadonlyTrigger): boolean {
   return (t.flags & 0x04) !== 0 || t.actions.some((a) => a.type === ActionType.PreserveTrigger);
 }
 
 /** Add or remove the Preserve Trigger action (StarEdit's checkbox); the flag is left alone. */
-export function setPreserved(t: TriggerRecord, on: boolean): TriggerRecord {
+export function setPreserved(t: ReadonlyTrigger, on: boolean): TriggerRecord {
   const next = cloneTrigger(t);
   const has = next.actions.some((a) => a.type === ActionType.PreserveTrigger);
   if (on && !has) next.actions.push(newAction(ActionType.PreserveTrigger));
@@ -252,7 +253,7 @@ export function insertTrigger(list: TriggerRecord[], at: number, t: TriggerRecor
   return next;
 }
 
-export function removeTriggers(list: TriggerRecord[], indices: number[]): TriggerRecord[] {
+export function removeTriggers(list: TriggerRecord[], indices: readonly number[]): TriggerRecord[] {
   const drop = new Set(indices);
   return list.filter((_, i) => !drop.has(i));
 }
@@ -283,7 +284,7 @@ export function actionStrings(a: ActionRecord, briefing = false): { index: numbe
   return out;
 }
 
-export function triggersFor(list: TriggerRecord[], groups: number[]): number[] {
+export function triggersFor(list: readonly ReadonlyTrigger[], groups: readonly number[]): number[] {
   const out: number[] = [];
   list.forEach((t, i) => { if (groups.some((g) => t.players[g])) out.push(i); });
   return out;
@@ -340,7 +341,7 @@ export function playerSlotsOf(player: number, owners: readonly number[]): number
  * allocates counters of its own must keep clear of. A cell is `[player, unit]`; deaths
  * of a unit class (`Any unit`, `Men`, …) are a sum the game computes and count for nothing.
  */
-export function triggerUsage(list: readonly TriggerRecord[]): { cells: [player: number, unit: number][]; switches: number[] } {
+export function triggerUsage(list: readonly ReadonlyTrigger[]): { cells: [player: number, unit: number][]; switches: number[] } {
   const cells = new Set<number>();
   const switches = new Set<number>();
   for (const t of list) {

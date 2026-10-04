@@ -273,6 +273,9 @@ version is kept for a change that would.
 - **What you add is removed for you.** Menu items, hotkeys, dialogs, panels, overlays,
   map tools and listeners are all tracked, and turning the plugin off, reloading or
   removing it takes them away whether or not you cleaned up.
+- **The map you read cannot be written by accident.** `document.scenario()` and a
+  transaction's `scenario` are typed read-only all the way down, so a change has to go
+  through `edit`, `update` or `sections`, where it is recorded.
 - **Reading is safe with no map open.** Reads answer `null`, `[]` or `false` instead of
   throwing. The exception is the raw-bytes path, `document.sections`, whose `file()` and
   `bytes()` throw.
@@ -491,8 +494,12 @@ do nothing and log a line in the Debug Console.
 The open map as a whole.
 
 - **Reading:** `isOpen()`, `info()` (name, size, tileset, whether modified), `history()`
-  (the undo and redo labels), and `scenario()` for the whole parsed map. Treat
-  `scenario()` as read-only: changing it directly skips undo and is not saved.
+  (the undo and redo labels), and `scenario()` for the whole parsed map. It is the
+  editor's own live object, typed read-only: a line that writes to it does not compile,
+  because a direct write skips undo, is not saved and never repaints. Copy what you want
+  to change (`{ ...scn.units[0], x: 64 }` is an ordinary record) and hand it to a
+  transaction. A helper of your own that only reads takes `ReadonlyScenario`, or
+  `readonly UnitRecord[]` for one of its lists.
 - **Writing:** `edit` and `update` (above), and `undo()` / `redo()`.
 - **Files:** `open`, `create`, `save`, `saveAs`, `close`, `export` (the map as a `File`,
   the way Save writes it, ready to upload) and `renderImage` (a PNG).

@@ -14,14 +14,14 @@
  */
 import { markDirty, strSectionName, type Scenario } from "../formats/chk/scenario";
 import { setString, type StringTable } from "../formats/chk/sections/strings";
-import { decodeTriggers, encodeTriggers, TRIGGER_STRIDE, type TriggerRecord } from "../formats/chk/sections/triggers";
+import { decodeTriggers, encodeTriggers, TRIGGER_STRIDE, type ReadonlyTrigger, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { formatTriggers, parseTriggers } from "../formats/triggers/text";
 import { triggerNames } from "./triggers";
 import { t } from "../i18n";
 
 /* ── Triggers ────────────────────────────────────────────── */
 
-export function encodeTrg(triggers: TriggerRecord[]): Uint8Array {
+export function encodeTrg(triggers: readonly ReadonlyTrigger[]): Uint8Array {
   return encodeTriggers(triggers);
 }
 

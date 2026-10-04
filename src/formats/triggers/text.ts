@@ -19,6 +19,7 @@
 import {
   ActionFlag, ConditionFlag, TriggerFlag, cloneTrigger, emptyAction, emptyCondition, emptyTrigger,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
+  type ReadonlyTrigger,
 } from "../chk/sections/triggers";
 import {
   actionDef, actionDefByName, aiScriptByName, aiScriptName, choiceLabel, choiceValue, conditionDef, conditionDefByName,
@@ -113,7 +114,7 @@ export function formatAction(a: ActionRecord, names: TriggerNames, briefing = fa
   return `${prefix}${def.name}(${args.join(", ")});`;
 }
 
-export function formatTrigger(t: TriggerRecord, names: TriggerNames, briefing = false): string {
+export function formatTrigger(t: ReadonlyTrigger, names: TriggerNames, briefing = false): string {
   const players: string[] = [];
   t.players.forEach((v, i) => { if (v) players.push(quote(PLAYER_GROUP_CHOICES[i]?.label ?? String(i))); });
   const flags = TRIGGER_FLAG_NAMES.filter(([bit]) => t.flags & bit).map(([, name]) => name);
@@ -128,7 +129,7 @@ export function formatTrigger(t: TriggerRecord, names: TriggerNames, briefing = 
   return lines.join("\n");
 }
 
-export function formatTriggers(triggers: TriggerRecord[], names: TriggerNames, briefing = false): string {
+export function formatTriggers(triggers: readonly ReadonlyTrigger[], names: TriggerNames, briefing = false): string {
   return triggers.map((t) => formatTrigger(t, names, briefing)).join(`\n\n${SEPARATOR}\n\n`) + (triggers.length ? "\n" : "");
 }
 
@@ -399,7 +400,7 @@ export function parseTriggers(text: string, names: TriggerNames, briefing = fals
 }
 
 /** A one-line summary of a trigger for lists: its comment, else its first condition and action. */
-export function summarizeTrigger(t: TriggerRecord, names: TriggerNames, briefing = false): { players: string; conditions: string; actions: string } {
+export function summarizeTrigger(t: ReadonlyTrigger, names: TriggerNames, briefing = false): { players: string; conditions: string; actions: string } {
   const players = t.players.map((v, i) => (v ? PLAYER_GROUP_CHOICES[i]?.label ?? String(i) : null)).filter((s): s is string => !!s).join(", ");
   const conditions = t.conditions.map((c) => formatCondition(c, names).replace(/;$/, "")).join(" && ");
   const actions = t.actions.map((a) => formatAction(a, names, briefing).replace(/;$/, "")).join("; ");
@@ -407,7 +408,7 @@ export function summarizeTrigger(t: TriggerRecord, names: TriggerNames, briefing
 }
 
 /** Text of the trigger's Comment action, if it has one. */
-export function triggerComment(t: TriggerRecord, names: TriggerNames): string | null {
+export function triggerComment(t: ReadonlyTrigger, names: TriggerNames): string | null {
   const c = t.actions.find((a) => a.type === 47);
   return c ? names.string(c.text) : null;
 }

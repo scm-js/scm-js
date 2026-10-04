@@ -146,12 +146,12 @@ export function spritesInBox(scn: Scenario, box: SpriteBox, sizeOf: SizeOf): num
 /* ── Building change lists ───────────────────────────────── */
 
 /** Append records to the end of the list. */
-export function addSprites(scn: Scenario, records: SpriteRecord[]): SpriteChange[] {
+export function addSprites(scn: Scenario, records: readonly SpriteRecord[]): SpriteChange[] {
   return records.map((r, i) => ({ index: scn.sprites.length + i, before: null, after: r }));
 }
 
 /** Remove the sprites at `indices`, highest first so the earlier indices stay valid. */
-export function removeSprites(scn: Scenario, indices: number[]): SpriteChange[] {
+export function removeSprites(scn: Scenario, indices: readonly number[]): SpriteChange[] {
   return [...new Set(indices)]
     .filter((i) => i >= 0 && i < scn.sprites.length)
     .sort((a, b) => b - a)
@@ -159,7 +159,7 @@ export function removeSprites(scn: Scenario, indices: number[]): SpriteChange[] 
 }
 
 /** Replace fields on the sprites at `indices`; unchanged records produce no entry. */
-export function updateSprites(scn: Scenario, indices: number[], patch: (r: SpriteRecord) => Partial<SpriteRecord>): SpriteChange[] {
+export function updateSprites(scn: Scenario, indices: readonly number[], patch: (r: SpriteRecord) => Partial<SpriteRecord>): SpriteChange[] {
   const out: SpriteChange[] = [];
   for (const i of new Set(indices)) {
     const before = scn.sprites[i];
@@ -171,7 +171,7 @@ export function updateSprites(scn: Scenario, indices: number[], patch: (r: Sprit
 }
 
 /** Shift sprites by a pixel delta, clamped to the map. */
-export function moveSprites(scn: Scenario, indices: number[], dx: number, dy: number): SpriteChange[] {
+export function moveSprites(scn: Scenario, indices: readonly number[], dx: number, dy: number): SpriteChange[] {
   return updateSprites(scn, indices, (r) => clampSprite(r.x + dx, r.y + dy, scn.width, scn.height));
 }
 

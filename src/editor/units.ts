@@ -221,12 +221,12 @@ export function makeUnit(units: UnitsDat | null, unitId: number, owner: number, 
 }
 
 /** Append records to the end of the list. */
-export function addUnits(scn: Scenario, records: UnitRecord[]): UnitChange[] {
+export function addUnits(scn: Scenario, records: readonly UnitRecord[]): UnitChange[] {
   return records.map((r, i) => ({ index: scn.units.length + i, before: null, after: r }));
 }
 
 /** Remove the units at `indices`, highest first so the earlier indices stay valid. */
-export function removeUnits(scn: Scenario, indices: number[]): UnitChange[] {
+export function removeUnits(scn: Scenario, indices: readonly number[]): UnitChange[] {
   return [...new Set(indices)]
     .filter((i) => i >= 0 && i < scn.units.length)
     .sort((a, b) => b - a)
@@ -234,7 +234,7 @@ export function removeUnits(scn: Scenario, indices: number[]): UnitChange[] {
 }
 
 /** Replace fields on the units at `indices`; unchanged records produce no entry. */
-export function updateUnits(scn: Scenario, indices: number[], patch: (u: UnitRecord) => Partial<UnitRecord>): UnitChange[] {
+export function updateUnits(scn: Scenario, indices: readonly number[], patch: (u: UnitRecord) => Partial<UnitRecord>): UnitChange[] {
   const out: UnitChange[] = [];
   for (const i of new Set(indices)) {
     const before = scn.units[i];
@@ -251,6 +251,6 @@ export function updateUnits(scn: Scenario, indices: number[], patch: (u: UnitRec
  * so a unit that was off the grid is brought onto it by moving it. Everything is clamped
  * to the map.
  */
-export function moveUnits(scn: Scenario, units: UnitsDat | null, indices: number[], dx: number, dy: number, snap = true): UnitChange[] {
+export function moveUnits(scn: Scenario, units: UnitsDat | null, indices: readonly number[], dx: number, dy: number, snap = true): UnitChange[] {
   return updateUnits(scn, indices, (u) => snapPlacement(unitGeometry(units, u.unitId), u.x + dx, u.y + dy, scn.width, scn.height, snap));
 }

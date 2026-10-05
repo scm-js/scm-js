@@ -159,6 +159,24 @@ describe("rendering", () => {
     expect(html).toContain('<span class="c">// note</span>');
   });
 
+  it("colours a guide's fenced blocks by the language the fence names", () => {
+    const ts = renderMarkdown("```ts\nconst r: Rect = f(); // note\n```", { code: { names: new Set(["Rect"]), urlFor: () => "/api/types/#rect" } });
+    expect(ts).toContain('<pre><code class="language-ts"><span class="k">const</span>');
+    expect(ts).toContain('<a class="t" href="/api/types/#rect">Rect</a>');
+    const sh = renderMarkdown("```sh\nnpm run dev   # it's the dev server\necho \"a#b\"\n```");
+    expect(sh).toContain('<span class="c"># it&#39;s the dev server</span>');
+    expect(sh).toContain('<span class="s">&quot;a#b&quot;</span>');
+    const trig = renderMarkdown('```trigedit\nSet Deaths("Player 1", "Terran Marine", Add, 1);\n```');
+    expect(trig).toContain('<span class="f">Set Deaths</span>(<span class="s">&quot;Player 1&quot;</span>');
+    expect(trig).toContain('<span class="n">1</span>');
+    expect(renderMarkdown("```yaml\n- name: build # ci\n```")).toContain('<span class="k">name</span>: build <span class="c"># ci</span>');
+  });
+
+  it("leaves a block in no language it knows as it was, escaped", () => {
+    expect(renderMarkdown("```text\na < b // not a comment\n```")).toBe('<pre><code class="language-text">a &lt; b // not a comment\n</code></pre>');
+    expect(renderMarkdown("```\nconst a = 1;\n```")).toBe("<pre><code>const a = 1;\n</code></pre>");
+  });
+
   it("escapes what it does not colour", () => {
     expect(highlight("a < b && c > d")).toContain("&lt;");
     expect(plainTextOf("<p>a &amp; <code>b</code></p>")).toBe("a & b");
@@ -336,7 +354,7 @@ describe("Try it links", () => {
     const html = renderMarkdown("```ts\napi.log(1);\n```\n\n```ts\napi.log(2);\n```", { tryIt: (code: string) => (code === "api.log(1);" ? "https://e/?a=1&b=2" : null) });
     expect(html.match(/class="try-it"/g)).toHaveLength(1);
     expect(html).toContain('href="https://e/?a=1&amp;b=2"');
-    expect(html).toContain("api.log(2);");
+    expect(html).toContain('api.log(<span class="n">2</span>);');
   });
 
   it.skipIf(!haveTypes)("only on examples that type-check as they are written", () => {

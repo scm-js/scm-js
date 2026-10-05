@@ -13,6 +13,7 @@
  * page's own contents list, which is what a heading three levels down is for.
  */
 import { Marked } from "marked";
+import { highlightAs } from "./highlight.mjs";
 
 /**
  * GitHub's heading slug, which is what the source documents' own `#fragment` links
@@ -97,6 +98,7 @@ export function splitPages(source) {
  * and everything else in the repository becomes a link to GitHub — see `links.mjs`.
  * `shift` moves the heading levels, because a page's own `<h1>` is the `##` it was split
  * at, so its `###` have to render as `<h2>` rather than starting a second level 3.
+ * `code` is `highlight`'s options: the names a ```ts block links to the reference.
  */
 const escapeText = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -106,7 +108,7 @@ export function withTryIt(pre, url) {
   return `<div class="code-try">${pre}<a class="try-it" href="${escapeText(url)}" target="_blank" rel="noopener" title="Open this example in the editor's API Playground. Nothing runs until you press Run.">Try it</a></div>`;
 }
 
-export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, headingIds = true, tryIt = () => null } = {}) {
+export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, headingIds = true, tryIt = () => null, code } = {}) {
   const seen = new Map();
   const marked = new Marked({ gfm: true }, {
     walkTokens: (token) => {
@@ -115,11 +117,14 @@ export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, head
   });
   marked.use({
     renderer: {
-      // An example that runs as written gets a "Try it" link (`tryit.mjs`); every other block is marked's own.
+      // A block in a language `highlight.mjs` knows is coloured, and an example that runs as
+      // written gets a "Try it" link (`tryit.mjs`); every other block is marked's own.
       code({ text, lang }) {
+        const name = (lang ?? "").split(/\s/)[0];
+        const html = highlightAs(name, text, code);
         const url = tryIt(text);
-        if (!url) return false;
-        return `${withTryIt(`<pre><code class="language-${escapeText((lang ?? "").split(/\s/)[0])}">${escapeText(text)}\n</code></pre>`, url)}\n`;
+        if (html === null && !url) return false;
+        return `${withTryIt(`<pre><code class="language-${escapeText(name)}">${html ?? escapeText(text)}\n</code></pre>`, url)}\n`;
       },
       heading({ tokens, depth }) {
         const inner = this.parser.parseInline(tokens);

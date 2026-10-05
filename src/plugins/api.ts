@@ -308,6 +308,12 @@ export interface PluginApi {
    * It is for a plugin that runs other code for a while and then takes it all back: the
    * API Playground runs each snippet in one. The child speaks as the same plugin — same
    * id, storage and log name.
+   *
+   * @example
+   * // Register things for ten seconds, then take them all back.
+   * const scope = api.scope();
+   * scope.api.menu.add("Tools", { label: "Temporary item", run: () => scope.api.ui.status("Still here") });
+   * setTimeout(() => scope.dispose(), 10_000);
    */
   scope(): PluginScope;
 }
@@ -409,6 +415,18 @@ export interface BuildStepInput {
  * A step that throws, or that the user stops waiting for, does not stop a save: the map is
  * written without the steps and a notice says why. Test Map stops instead, since a map
  * without its built part is not the one to test. A bare `.chk` is never built.
+ *
+ * @example
+ * api.document.buildSteps.add({
+ *   id: "stamp",
+ *   label: "Build stamp",
+ *   // Only maps that carry this file are built; every other Save is untouched.
+ *   applies: () => api.document.extras.get("my-plugin\\stamp.txt") !== null,
+ *   async run({ map, purpose }) {
+ *     api.log(`building ${map.length} bytes for ${purpose}`);
+ *     return map; // an archive in, an archive out
+ *   },
+ * });
  */
 export interface BuildStepSpec {
   /** Unique within the plugin; the file remembers `plugin id/id`. */
@@ -460,6 +478,14 @@ export interface BuildStepsApi {
  * The files stored in the map archive next to `staredit\scenario.chk`: custom sounds,
  * graphics, and anything a plugin wants to keep with the map. Names are archive paths
  * with backslashes (`staredit\wav\hello.wav`). They are written on Save.
+ *
+ * @example
+ * // Keep a small JSON file inside the map, in a folder of the plugin's own.
+ * const name = "my-plugin\\notes.json";
+ * const bytes = api.document.extras.get(name);
+ * const notes = bytes ? JSON.parse(new TextDecoder().decode(bytes)) : { opened: 0 };
+ * notes.opened++;
+ * api.document.extras.set(name, new TextEncoder().encode(JSON.stringify(notes)));
  */
 export interface ExtrasApi {
   list(): string[];
@@ -543,6 +569,13 @@ export interface DocumentApi {
   /**
    * The live scenario, for reading — see `ReadonlyScenario`. To change the map, use
    * `edit`, `update` or `sections`.
+   *
+   * @example
+   * const scn = api.document.scenario();
+   * if (scn) {
+   *   const marines = scn.units.filter((u) => u.unitId === 0);
+   *   api.ui.status(`${marines.length} marines on a ${scn.width} × ${scn.height} map`);
+   * }
    */
   scenario(): ReadonlyScenario | null;
   /**
@@ -559,9 +592,10 @@ export interface DocumentApi {
    *
    * @example
    * // One undo entry called "Fill", however many operations it takes.
-   * const ground = api.terrain.types()[1].id; // the tileset's second flat terrain
+   * await api.tileset.load();                 // the async part first
+   * const [, ground] = api.terrain.types();   // the tileset's second flat terrain; none without the graphics
    * const result = api.document.edit("Fill", (tx) => {
-   *   tx.stampTerrain({ x0: 0, y0: 0, x1: 8, y1: 8 }, ground);
+   *   if (ground) tx.stampTerrain({ x0: 0, y0: 0, x1: 8, y1: 8 }, ground.id);
    *   tx.placeUnit(api.consts.unit.startLocation, 0, 4 * api.consts.tile, 4 * api.consts.tile);
    * });
    * api.ui.status(`${result.tiles} tiles, ${result.units} units`);
@@ -587,7 +621,13 @@ export interface DocumentApi {
   update<R>(label: string, build: (tx: UpdateTransaction) => Sync<R>): UpdateResult;
   undo(): string | null;
   redo(): string | null;
-  /** The undo and redo stacks' tops — the labels the Edit menu shows — and their depths, without moving anything. */
+  /**
+   * The undo and redo stacks' tops — the labels the Edit menu shows — and their depths, without moving anything.
+   *
+   * @example
+   * const { undo } = api.document.history();
+   * if (undo && (await api.ui.confirm(`Undo "${undo}"?`))) api.document.undo();
+   */
   history(): DocumentHistory;
   /**
    * The id of the map in front — the one `info()`, `scenario()` and every write are
@@ -599,6 +639,9 @@ export interface DocumentApi {
    * Every open map, in the order the editor lists them, the one in front marked `active`.
    * Empty with no map. The list changes only through `open`, `create`, `activate` and
    * `close` (by any plugin or the user), each of which fires the `"document"` event.
+   *
+   * @example
+   * for (const map of api.document.list()) api.log(map.id, map.name, map.active ? "(in front)" : "");
    */
   list(): OpenDocumentInfo[];
   /**
@@ -616,6 +659,10 @@ export interface DocumentApi {
    * Scenario dialog comes first and the user may cancel. Resolves true once the file is
    * the map in front, false when the user kept the current map or the file could not be
    * read (the status bar says why).
+   *
+   * @example
+   * const [file] = await api.ui.pickFiles({ accept: ".scx,.scm,.chk" });
+   * if (file) await api.document.open(file, file.name, { into: "new" });
    */
   open(file: File | Blob | Uint8Array, fileName?: string, options?: OpenDocumentOptions): Promise<boolean>;
   /**
@@ -624,11 +671,19 @@ export interface DocumentApi {
    * the open map or in place of it as `open` decides, through the same unsaved-changes
    * gate. Resolves true once the new map is in front, false when the user kept the
    * current one.
+   *
+   * @example
+   * await api.document.create({ width: 128, height: 128, tileset: "jungle", name: "Sketch", startLocations: 4 });
    */
   create(options: NewDocumentOptions): Promise<boolean>;
   /**
    * The open map as a file, as Save would write it — the remembered save options, the
    * archive extras included — unless `saveOptions` says otherwise. Null when no map is open.
+   *
+   * @example
+   * // The bytes Save would write, without saving: ready to upload or hand to another tool.
+   * const file = await api.document.export({ format: "scx" });
+   * if (file) api.ui.status(`${file.name}: ${file.size} bytes`);
    */
   export(options?: ExportOptions): Promise<File | null>;
   /**
@@ -654,6 +709,11 @@ export interface DocumentApi {
    * is the one dial (32 is the game's art 1:1, 1 is a minimap); the other options
    * default as the dialog's do. Needs the tileset graphics — without them, or without
    * a map, null.
+   *
+   * @example
+   * // A minimap-sized picture of the whole map, four pixels to a tile.
+   * const png = await api.document.renderImage({ pixelsPerTile: 4 });
+   * if (png) await api.ui.saveFile(png, "minimap.png");
    */
   renderImage(options?: Partial<MapImageOptions>): Promise<Blob | null>;
   /**
@@ -705,6 +765,11 @@ export interface RawEditResult {
  *
  * Indices are positions in `list()` and shift when a section is inserted or removed
  * before them; take a fresh `list()` after every edit.
+ *
+ * @example
+ * // The file's sections, largest first.
+ * const sections = api.document.sections.list().sort((a, b) => b.size - a.size);
+ * for (const s of sections) api.log(s.name, `${s.size} bytes`, s.spec ? "" : "(unknown to the editor)");
  */
 export interface SectionsApi {
   /** Every occurrence in file order; empty without a map. */
@@ -793,7 +858,13 @@ export interface EditTransaction {
   groundAt(x: number, y: number): number;
   /** One tile into both sections. */
   setTile(x: number, y: number, id: number): void;
-  /** Many tiles into both sections; returns how many changed. */
+  /**
+   * Many tiles into both sections; returns how many changed.
+   *
+   * @example
+   * // Copy the tile in the top-left corner over a 4 × 4 square beside it.
+   * api.document.edit("Repeat a tile", (tx) => tx.setTiles({ x0: 1, y0: 0, x1: 5, y1: 4 }, tx.tileAt(0, 0)));
+   */
   setTiles(cells: Cells, id: number): number;
   /**
    * The Rect brush: flat left/right pairs by column parity, one random variation per
@@ -806,6 +877,15 @@ export interface EditTransaction {
    * The isometric brush on one diamond: sets its ISOM value and regenerates the tiles
    * around it, cliffs and shores included. Needs ISOM and the tileset; returns whether
    * the terrain could be painted there.
+   *
+   * @example
+   * await api.tileset.load();
+   * const [terrain] = api.terrain.isomTypes();
+   * if (terrain !== undefined) {
+   *   api.document.edit("Paint a patch", (tx) => {
+   *     for (const d of api.terrain.diamondsIn({ x0: 8, y0: 8, x1: 16, y1: 16 })) tx.paintIsom(d, terrain);
+   *   });
+   * }
    */
   paintIsom(d: Diamond, terrainId: number, extent?: number): boolean;
   /**
@@ -821,6 +901,12 @@ export interface EditTransaction {
   makeUnit(unitId: number, owner: number, x: number, y: number): UnitRecord;
   addUnits(records: readonly UnitRecord[]): number[];
   removeUnits(indices: readonly number[]): number;
+  /**
+   * @example
+   * // Give every selected unit to Player 2.
+   * const selected = api.selection.units();
+   * api.document.edit("Give to Player 2", (tx) => tx.updateUnits(selected, () => ({ owner: 1 })));
+   */
   updateUnits(indices: readonly number[], patch: (u: UnitRecord) => Partial<UnitRecord>): number;
   /**
    * A unit the way the Units palette places one: a building snaps its placement box to
@@ -829,7 +915,18 @@ export interface EditTransaction {
    * if you want them. Returns the record's index.
    */
   placeUnit(unitId: number, owner: number, x: number, y: number): number;
-  /** Whether the Units palette's placement checks, with its current options, allow a unit of this type centred there. */
+  /**
+   * Whether the Units palette's placement checks, with its current options, allow a unit of this type centred there.
+   *
+   * @example
+   * const marine = 0;
+   * const x = 10 * api.consts.tile;
+   * const y = 10 * api.consts.tile;
+   * api.document.edit("Place a marine", (tx) => {
+   *   if (tx.canPlaceUnit(marine, x, y)) tx.placeUnit(marine, 0, x, y);
+   *   else tx.note("no room there");
+   * });
+   */
   canPlaceUnit(unitId: number, x: number, y: number): boolean;
 
   makeSprite(kind: SpriteKind, id: number, owner: number, x: number, y: number, opts?: { flipped?: boolean; disabled?: boolean }): SpriteRecord;
@@ -857,15 +954,40 @@ export interface EditTransaction {
    * unless `parts` says otherwise; `mode` is `"merge"` unless given. Terrain and doodads
    * from another tileset are refused, as a paste refuses them, and anything off the map is
    * skipped, both said in the result's `notes`.
+   *
+   * @example
+   * // Stamp the marked area again ten tiles to the right, as one undo step.
+   * const area = api.selection.markedArea();
+   * const clip = area && api.clipboard.capture({ rect: area });
+   * if (area && clip) api.document.edit("Stamp", (tx) => { tx.paste(clip, area.x0 + 10, area.y0); });
    */
   paste(clip: Clip, tx: number, ty: number, options?: PasteOptionsSpec): PasteResult;
 
-  /** A location in the lowest free slot (pixel bounds); returns the slot, or -1 when the table is full. */
+  /**
+   * A location in the lowest free slot (pixel bounds); returns the slot, or -1 when the table is full.
+   *
+   * @example
+   * const t = api.consts.tile;
+   * api.document.edit("Add a location", (tx) => {
+   *   const slot = tx.addLocation({ left: 4 * t, top: 4 * t, right: 8 * t, bottom: 8 * t }, "Beacon Alpha");
+   *   if (slot < 0) tx.note("the location table is full");
+   * });
+   */
   addLocation(bounds: Bounds, name?: string, elevationFlags?: number): number;
   editLocation(index: number, patch: LocationPatch): boolean;
   removeLocations(indices: readonly number[]): number;
 
-  /** Set (`"fog"`) or clear the `players` bits (bit n = player n + 1) over cells; creates MASK on first use. */
+  /**
+   * Set (`"fog"`) or clear the `players` bits (bit n = player n + 1) over cells; creates MASK on first use.
+   *
+   * @example
+   * // Fog the left half of the map for Player 1 and Player 2.
+   * const info = api.document.info();
+   * if (info) {
+   *   const half = { x0: 0, y0: 0, x1: info.width >> 1, y1: info.height };
+   *   api.document.edit("Fog the west", (tx) => tx.setFog(half, 0b11, "fog"));
+   * }
+   */
   setFog(cells: Cells, players: number, mode: FogMode): number;
 
   /**
@@ -896,7 +1018,15 @@ export interface EditTransaction {
    * what the built-in brushes paint over. With the mode off, the cells as given.
    */
   mirror(cells: Cells): number[];
-  /** A map pixel and its images under the symmetry mode, the original first. */
+  /**
+   * A map pixel and its images under the symmetry mode, the original first.
+   *
+   * @example
+   * // Follow Tools ▸ Symmetry: one marine at the point and one at each of its images.
+   * api.document.edit("Marines", (tx) => {
+   *   for (const p of tx.mirrorPoint(320, 320)) tx.placeUnit(0, 0, p.x, p.y);
+   * });
+   */
   mirrorPoint(px: number, py: number): { x: number; y: number }[];
 
   /** Shift units by a pixel delta; buildings re-snap to the grid when `snap` (the palette's option when omitted). Returns records changed. */
@@ -905,6 +1035,12 @@ export interface EditTransaction {
    * Tools ▸ Auto-place Start Locations: one per player on a ring or in the corners, each
    * moved to the nearest spot the placement checks accept; `replace` removes the existing
    * ones first. Players count from 1.
+   *
+   * @example
+   * api.document.edit("Four starts", (tx) => {
+   *   const { placed } = tx.placeStartLocations({ players: 4, replace: true });
+   *   tx.note(`${placed.filter(Boolean).length} of 4 placed`);
+   * });
    */
   placeStartLocations(options: { players: number; layout?: StartLayout; margin?: number; replace?: boolean }): StartPlacementResult;
 
@@ -957,6 +1093,16 @@ export interface TriggerListUpdate {
    * Parse the text format (`triggers.text.print`'s inverse) and append the result, or
    * replace the list with `replace: true`. Strings the text names are interned as it
    * parses. Throws with the line number when the text does not parse.
+   *
+   * @example
+   * const source = `
+   * Trigger("Player 1"){
+   * Conditions:
+   *   Always();
+   * Actions:
+   *   Display Text Message(Always Display, "Welcome.");
+   * }`;
+   * api.document.update("Add a greeting", (tx) => { tx.triggers.fromText(source); });
    */
   fromText(source: string, options?: { replace?: boolean }): number;
 }
@@ -968,7 +1114,18 @@ export interface TriggerListUpdate {
  */
 export interface StringsUpdate {
   list(): (string | null)[];
-  /** The index of `text`: an identical entry when there is one, else a new one. 0 for `""`. */
+  /**
+   * The index of `text`: an identical entry when there is one, else a new one. 0 for `""`.
+   *
+   * @example
+   * // Point the first trigger's first action at a new string, without touching the old one.
+   * api.document.update("Reword", (tx) => {
+   *   const [trigger] = tx.triggers.list();
+   *   if (!trigger) return;
+   *   trigger.actions[0].text = tx.strings.intern("Hold the line!");
+   *   tx.triggers.replace(0, trigger);
+   * });
+   */
   intern(text: string): number;
   /** Overwrite one slot. */
   set(index: number, text: string): void;
@@ -983,7 +1140,12 @@ export interface StringsUpdate {
 
 export interface SwitchesUpdate {
   names(): string[];
-  /** Name a switch (0-based); `""` clears the name. Creates SWNM on the first one. */
+  /**
+   * Name a switch (0-based); `""` clears the name. Creates SWNM on the first one.
+   *
+   * @example
+   * api.document.update("Name a switch", (tx) => tx.switches.setName(0, "Gate is open"));
+   */
   setName(index: number, name: string): void;
 }
 
@@ -1030,6 +1192,15 @@ export interface UpdateTransaction {
   note(text: string): void;
 }
 
+/**
+ * @example
+ * // Make Player 2 a Zerg computer.
+ * const computer = api.names.playerTypes().find((t) => t.label === "Computer");
+ * const zerg = api.names.races().find((r) => r.label === "Zerg");
+ * if (computer && zerg) {
+ *   api.document.update("Player 2: Zerg computer", (tx) => { tx.players.set(1, { type: computer.value, race: zerg.value }); });
+ * }
+ */
 export interface PlayersUpdate {
   /** All 12 slots, 0-based, with the effective colour and force. */
   list(): PlayerSlotView[];
@@ -1049,6 +1220,10 @@ export interface UnitTypesUpdate {
    * Patch one type. Setting any number turns "use default" off for it (seeding the untouched
    * columns from the dat, as the dialog does); `useDefault: true` puts it back. Hit points are
    * whole points. `name` is the custom name (`""` restores the default); `available` edits PUNI.
+   *
+   * @example
+   * // Marines with 80 hit points and a name of their own.
+   * api.document.update("Tougher marines", (tx) => { tx.unitTypes.set(0, { hitPoints: 80, name: "Veteran Marine" }); });
    */
   set(unitId: number, patch: UnitTypePatch): boolean;
 }
@@ -1100,6 +1275,11 @@ export interface CuwpUpdate {
  * What the settings dialogs show, read without a transaction: the same views
  * `document.update`'s `tx.players` … `tx.techs` hand out. Every list is empty and every
  * single read null when no map is open.
+ *
+ * @example
+ * for (const p of api.settings.players().slice(0, 8)) {
+ *   api.log(`Player ${p.slot + 1}: ${p.typeName}, ${p.raceName}, ${p.forceName ?? "no force"}`);
+ * }
  */
 export interface SettingsApi {
   players(): PlayerSlotView[];
@@ -1128,6 +1308,12 @@ export interface SettingsApi {
  * TrigEdit shows it, each naming the record field it lives in and the kind of value it
  * is (a player group, a unit id, a location, a comparison, …). Everything that displays
  * or edits a trigger reads this table, the editor's own dialogs included.
+ *
+ * @example
+ * // What the first action of the first trigger is, with the name and kind of each argument.
+ * const action = api.triggers.list()[0]?.actions[0];
+ * const def = action && api.triggers.defs.action(action.type);
+ * if (def) api.log(def.name, def.args.map((a) => `${a.label} (${a.kind}) in .${a.field}`));
  */
 export interface TriggerDefsApi {
   conditions(): ConditionDef[];
@@ -1141,7 +1327,14 @@ export interface TriggerDefsApi {
   choiceValue(kind: ArgKind, text: string): number | undefined;
 }
 
-/** Printing and parsing the text trigger format (File ▸ Import / Export ▸ Triggers). */
+/**
+ * Printing and parsing the text trigger format (File ▸ Import / Export ▸ Triggers).
+ *
+ * @example
+ * // Save the triggers as text, the form File ▸ Export ▸ Triggers writes.
+ * const text = api.triggers.text.print(api.triggers.list());
+ * await api.ui.saveFile(new Blob([text], { type: "text/plain" }), "triggers.txt");
+ */
 export interface TriggerTextApi {
   print(triggers: readonly ReadonlyTrigger[], options?: { briefing?: boolean }): string;
   /**
@@ -1179,7 +1372,15 @@ export interface TriggersApi {
   setPreserved(trigger: ReadonlyTrigger, on: boolean): TriggerRecord;
   /** The indices of the triggers any of these player groups own. */
   triggersFor(list: readonly ReadonlyTrigger[], groups: readonly number[]): number[];
-  /** The three lines the trigger list shows: players, conditions, actions. */
+  /**
+   * The three lines the trigger list shows: players, conditions, actions.
+   *
+   * @example
+   * for (const trigger of api.triggers.list()) {
+   *   const line = api.triggers.summarize(trigger);
+   *   api.log(`${line.players}: ${line.conditions} → ${line.actions}`);
+   * }
+   */
   summarize(trigger: ReadonlyTrigger, briefing?: boolean): { players: string; conditions: string; actions: string };
   /** A trigger's `Comment` action text, when it has one. */
   comment(trigger: ReadonlyTrigger): string | null;
@@ -1205,6 +1406,12 @@ export interface TriggersApi {
    * (`Current Player` as the trigger's owners); a class unit (*Any unit*, *Men*, …)
    * counts for nothing, and an EUD player is an address, not a cell. What a plugin that
    * allocates counters or switches of its own must keep clear of.
+   *
+   * @example
+   * // A switch no trigger touches, for a plugin that needs one of its own.
+   * const taken = new Set(api.triggers.usage().switches);
+   * const free = Array.from({ length: 256 }, (_, i) => i).find((i) => !taken.has(i));
+   * api.log(free === undefined ? "every switch is in use" : `${api.names.switch(free)} is free`);
    */
   usage(list?: readonly ReadonlyTrigger[]): { cells: [player: number, unit: number][]; switches: number[] };
   /**
@@ -1241,6 +1448,25 @@ export interface TriggersApi {
    * place of the form; the Text Trigger Editor fences them in comments; Import Triggers
    * says what a replace would remove. The claim lives until `remove()` or the plugin's
    * deactivation; call `refresh()` after a rebuild so the editors ask `locate` again.
+   *
+   * @example
+   * // Fingerprints of the triggers this plugin generated, kept as it generates them.
+   * const mine = new Set<string>();
+   * const isMine = (t: Parameters<typeof api.triggers.fingerprint>[0]) => mine.has(api.triggers.fingerprint(t));
+   * const claim = api.triggers.claim({
+   *   label: "the wave generator",
+   *   badge: "waves",
+   *   locate(list) {
+   *     const start = list.findIndex(isMine);
+   *     if (start < 0) return null;
+   *     let count = 1;
+   *     while (start + count < list.length && isMine(list[start + count])) count++;
+   *     return { start, count };
+   *   },
+   *   describe: () => "Made by the wave generator. Change the waves there, not here.",
+   * });
+   * // After regenerating: update `mine`, then
+   * claim.refresh();
    */
   claim(spec: TriggerClaimSpec): TriggerClaimHandle;
   /**
@@ -1315,6 +1541,14 @@ export interface StartLocation {
  *
  * Everything here is a read: nothing changes the map, and nothing throws without one
  * (an empty list, or null).
+ *
+ * @example
+ * // Check Map's findings in the log, and the view taken to the first one that has a place.
+ * const issues = api.query.validate();
+ * for (const issue of issues) api.log(issue.level, issue.where, issue.text);
+ * const target = issues.find((i) => i.target)?.target;
+ * if (target?.kind === "dialog") api.ui.open(target.id);
+ * else if (target) api.view.goTo(target);
  */
 export interface QueryApi {
   /** The topmost unit whose sprite box covers a map pixel, or -1. */
@@ -1333,7 +1567,13 @@ export interface QueryApi {
   locationsIn(rect: Rect): number[];
   /** The map's start locations, by player. */
   startLocations(): StartLocation[];
-  /** Whether a unit type may be placed centred there, and what stops it; null with no map. */
+  /**
+   * Whether a unit type may be placed centred there, and what stops it; null with no map.
+   *
+   * @example
+   * const verdict = api.query.placement(106, 640, 640); // a Terran Command Center
+   * api.ui.status(verdict?.problem ? `Blocked: ${verdict.reason}` : "It fits.");
+   */
   placement(unitId: number, x: number, y: number): PlacementVerdict | null;
   /**
    * StarEdit's ground check for a doodad with its top-left tile at (tx, ty): `ok`, or the
@@ -1349,13 +1589,32 @@ export interface QueryApi {
   strings(): (string | null)[];
   /** Check Map: every issue the editor knows how to spot, with a `target` to go to. */
   validate(): Issue[];
-  /** Tools ▸ Statistics: tile, unit, resource and player counts. Null without a map. */
+  /**
+   * Tools ▸ Statistics: tile, unit, resource and player counts. Null without a map.
+   *
+   * @example
+   * const stats = api.query.statistics();
+   * if (stats) api.ui.status(`${stats.units.total} units, ${stats.resources.fields} mineral fields, ${stats.triggers.count} triggers`);
+   */
   statistics(): MapStatistics | null;
-  /** The Ctrl+F search over units, locations, sprites, strings and triggers. */
+  /**
+   * The Ctrl+F search over units, locations, sprites, strings and triggers.
+   *
+   * @example
+   * // Select every unit whose name contains "marine".
+   * const hits = api.query.find({ kind: "units", query: "marine" });
+   * api.selection.setLayer("units");
+   * api.selection.setUnits(hits.map((h) => h.index));
+   */
   find(options: FindOptions): FindResult[];
   /** Every record that refers to each string index. */
   stringUsage(): Map<number, StringUsage[]>;
-  /** String slots nothing refers to. */
+  /**
+   * String slots nothing refers to.
+   *
+   * @example
+   * for (const index of api.query.unusedStrings()) api.log(index, api.names.string(index));
+   */
   unusedStrings(): number[];
 }
 
@@ -1390,15 +1649,27 @@ export interface ViewApi {
    * own work around the map takes that as its cue to stop.
    *
    * @example
-   * if (!(await api.view.reveal(rect))) following = false;
+   * const shown = await api.view.reveal({ x0: 0, y0: 0, x1: 16, y1: 16 }, { fit: true });
+   * if (!shown) api.log("the user moved the view first");
    */
   reveal(rect: Rect, options?: RevealOptions): Promise<boolean>;
-  /** Scroll to an object (and select it, for a unit, sprite or location). */
+  /**
+   * Scroll to an object (and select it, for a unit, sprite or location).
+   *
+   * @example
+   * // Player 1's start location, selected and in the middle of the view.
+   * const start = api.query.startLocations().find((s) => s.owner === 0);
+   * if (start) api.view.goTo({ kind: "unit", index: start.index });
+   */
   goTo(target: GoTo): void;
   /** The tile under the pointer, as the status bar shows it. */
   cursorTile(): { x: number; y: number };
   /** The View menu's ticks: grid, locations, units, sprites, doodads, fog, … */
   flags(): ViewFlags;
+  /**
+   * @example
+   * api.view.setFlags({ grid: !api.view.flags().grid });
+   */
   setFlags(patch: Partial<ViewFlags>): void;
   /** Grid spacing in map pixels (32 = one tile). */
   gridSize(): number;
@@ -1409,8 +1680,9 @@ export interface ViewApi {
    * clean up.
    *
    * @example
-   * const rect = { x0: 4, y0: 4, x1: 12, y1: 12 };
-   * const r = api.document.edit("Fill", (tx) => tx.fillFlat(rect, api.terrain.types()[1].id));
+   * // Mark the top-left corner for Player 1's fog, and show where that was.
+   * const rect = { x0: 0, y0: 0, x1: 8, y1: 8 };
+   * const r = api.document.edit("Fog a corner", (tx) => tx.setFog(rect, 0b1, "fog"));
    * if (r.changed) api.view.flash({ rect });
    */
   flash(target: FlashTarget): void;
@@ -1452,6 +1724,13 @@ export interface CommandInfo {
  * Named things a plugin can do, so a menu item, a hotkey, a context entry and another
  * plugin all reach the same one. `menu.add`, `contextMenu.add` and `hotkeys.add` take a
  * `command` id in place of a `run`.
+ *
+ * @example
+ * api.commands.register({ id: "count", title: "Count units", run: () => api.document.scenario()?.units.length ?? 0 });
+ * api.menu.add("Tools", { label: "Count units", command: "count" });
+ * api.hotkeys.add("Ctrl+Alt+U", { command: "count" });
+ * // Any plugin can run it by its full id, and gets what it returns.
+ * api.log(api.commands.run(`${api.plugin.id}.count`));
  */
 export interface CommandsApi {
   register(spec: CommandSpec): Disposable;
@@ -1488,11 +1767,12 @@ export interface ServiceOptions {
  * the plugin (`"account"` → `"scmjs-dev.account"`); one with a dot is taken as it is.
  *
  * @example
- * // The provider:
- * api.services.provide("account", accountService);
- * // A consumer:
- * api.services.watch<AccountService>("scmjs-dev.account", (account) => {
- *   if (account) useSessionFrom(account); else useOwnSignIn();
+ * interface Clock { now(): number }
+ * // The provider. The name becomes "<plugin id>.clock".
+ * api.services.provide<Clock>("clock", { now: () => Date.now() }, { version: 1 });
+ * // A consumer, in any plugin, whichever of the two started first.
+ * api.services.watch<Clock>(`${api.plugin.id}.clock`, (clock, info) => {
+ *   api.log(clock ? `clock v${info?.version}: ${clock.now()}` : "no clock yet");
  * });
  */
 export interface ServicesApi {
@@ -1527,6 +1807,27 @@ export interface RenderClipOptions {
  * The pictures the viewport draws, for a plugin's own lists and previews: the same
  * cached canvases, so asking for one costs nothing after the first time. Everything is
  * null when the graphics it needs were never extracted — a plugin shows a name instead.
+ *
+ * @example
+ * // A marine in Player 2's colours. The picture is the editor's own cached canvas, so draw
+ * // from it instead of moving it into your page.
+ * await api.graphics.load();
+ * api.ui.panel({
+ *   title: "Marine",
+ *   mount(body) {
+ *     const show = () => {
+ *       const picture = api.graphics.unitImage(0, { owner: 1 });
+ *       if (!picture) { body.textContent = api.names.unit(0); return; } // not loaded, or no graphics
+ *       const canvas = api.ui.el("canvas", { width: picture.width, height: picture.height });
+ *       canvas.getContext("2d")?.drawImage(picture.image, 0, 0);
+ *       body.replaceChildren(canvas);
+ *     };
+ *     api.graphics.requestUnit(0);
+ *     const loaded = api.graphics.onImageLoaded(show);
+ *     show();
+ *     return () => loaded.dispose();
+ *   },
+ * });
  */
 export interface GraphicsApi {
   /** Whether the tileset graphics and the unit tables are in memory. */
@@ -1580,6 +1881,15 @@ export interface GraphicsApi {
  *
  * Everything is null until the tables are loaded (`load`), and stays null when the game
  * data was never extracted.
+ *
+ * @example
+ * if (await api.data.load()) {
+ *   const units = api.data.units()!;
+ *   // units.dat keeps hit points in 256ths.
+ *   api.log(`Marine: ${units.hitPoints[0] / 256} HP, ${units.mineralCost[0]} minerals, ${api.data.race(0)}`);
+ * } else {
+ *   api.log("no game data installed");
+ * }
  */
 export interface DataApi {
   ready(): boolean;
@@ -1653,8 +1963,8 @@ export interface GameDataFiles {
  * // A mod plugin: install its files once, then draw with them.
  * const sets = await api.gameData.profiles();
  * if (!sets.some((p) => p.id === "my-mod")) {
- *   const files = await api.ui.pickFiles({ multiple: true });
- *   if (files) await api.gameData.install({ id: "my-mod", name: "My Mod" }, { archives: files.map((f) => ({ name: f.name, data: f })) });
+ *   const files = await api.ui.pickFiles({ multiple: true }); // an empty list when the user cancels
+ *   if (files.length > 0) await api.gameData.install({ id: "my-mod", name: "My Mod" }, { archives: files.map((f) => ({ name: f.name, data: f })) });
  * }
  * await api.gameData.select("my-mod");
  */
@@ -1702,6 +2012,16 @@ export interface GameDataApi {
  * type-checks and is then undefined. Anything a plugin needs while it runs has to come
  * off `api`. Without this a plugin writes the hex itself, which is how a sprite's kind
  * came to be read as `flags & 0x1000` in three places.
+ *
+ * @example
+ * // Make the selected units invincible: the state bit, and the two masks that say it is set.
+ * const { state, valid, used } = api.consts.unit;
+ * const selected = api.selection.units();
+ * api.document.edit("Invincible", (tx) => tx.updateUnits(selected, (u) => ({
+ *   stateFlags: u.stateFlags | state.Invincible,
+ *   validProperties: u.validProperties | valid.Invincible,
+ *   validStates: u.validStates | used.State,
+ * })));
  */
 export interface ConstsApi {
   /** Map pixels to a tile. UNIT and THG2 store pixels; MTXM, MRGN and the brushes count tiles. */
@@ -1772,6 +2092,13 @@ export interface LocationConsts {
  * Generating a whole run of triggers is usually better done through
  * `tx.triggers.fromText`, which resolves names against the open map; these are for
  * editing a field of an existing record, and for reading one back.
+ *
+ * @example
+ * // "At most 30 seconds on the countdown timer", written field by field.
+ * const { condition, comparison } = api.consts.triggers;
+ * const timer = api.triggers.newCondition(condition.CountdownTimer);
+ * timer.comparison = comparison.AtMost;
+ * timer.amount = 30;
  */
 export interface TriggerConsts {
   /** Condition `type`. */
@@ -1829,7 +2156,13 @@ export interface ActiveBrush {
 }
 
 export interface TerrainApi {
-  /** Paintable flat terrains of the open map's tileset (empty without the graphics). */
+  /**
+   * Paintable flat terrains of the open map's tileset (empty without the graphics).
+   *
+   * @example
+   * await api.tileset.load();
+   * for (const t of api.terrain.types()) api.log(t.id, t.name, `height ${t.height}`, t.buildable ? "buildable" : "");
+   */
   types(): TerrainType[];
   /** Terrain ids the isometric brush can paint on this tileset. */
   isomTypes(): number[];
@@ -1848,7 +2181,7 @@ export interface TerrainApi {
    *
    * @example
    * const r = await api.terrain.checkIsom();
-   * if (r?.stale) await api.document.edit("Rebuild ISOM", (tx) => { tx.rebuildIsom(); });
+   * if (r?.stale) api.document.edit("Rebuild ISOM", (tx) => { tx.rebuildIsom(); });
    */
   checkIsom(): Promise<IsomReport | null>;
   tileInfo(id: number): TileInfo | null;
@@ -1857,6 +2190,12 @@ export interface TerrainApi {
    * the tile's own group when it is flat ground, else — under a cliff, a shore or a
    * doodad — what the ISOM lattice says the diamond there is. Null off the map, without
    * the tileset graphics, or when neither tells.
+   *
+   * @example
+   * // Name the terrain under the pointer.
+   * const { x, y } = api.view.cursorTile();
+   * const id = api.terrain.terrainAt(x, y);
+   * api.ui.status(api.terrain.types().find((t) => t.id === id)?.name ?? "unknown terrain");
    */
   terrainAt(tx: number, ty: number): number | null;
   /** The atlas average of a tile, packed `0xRRGGBB`, or null without graphics. */
@@ -1882,6 +2221,10 @@ export interface TerrainApi {
   flatGroupOf(terrainId: number): number;
   /** Tools ▸ Symmetry…: the mode the brushes paint and the palettes place under. */
   symmetry(): SymmetryMode;
+  /**
+   * @example
+   * if (api.terrain.symmetryAvailable("rot180")) api.terrain.setSymmetry("rot180");
+   */
   setSymmetry(mode: SymmetryMode): void;
   /** Whether a mode can run on the open map (the rotations and diagonals need a square one). */
   symmetryAvailable(mode: SymmetryMode): boolean;
@@ -1903,13 +2246,27 @@ export interface TilesetApi {
    * tileset changes nothing about the map: it is for `graphics.renderClip` drawing a clip
    * that came from a map on that tileset (a stamp, a recording), which answers null until
    * its tileset's graphics are loaded.
+   *
+   * @example
+   * if (!(await api.tileset.load())) {
+   *   api.ui.toast({ kind: "warn", title: "No tileset graphics", detail: "Install them from Help ▸ Game Data…" });
+   * }
    */
   load(tileset?: TilesetId): Promise<boolean>;
   raw(): LoadedTileset | null;
 }
 
-/* ── Selection ──────────────────────────────────────────── */
-
+/* ── Selection ────────────────────────────────────────────
+ *
+ * @example
+ * // Select Player 1's units inside the marked area.
+ * const area = api.selection.markedArea();
+ * if (area) {
+ *   const mine = new Set(api.query.unitsOf(0));
+ *   api.selection.setLayer("units");
+ *   api.selection.setUnits(api.query.unitsIn(area).filter((i) => mine.has(i)));
+ * }
+ */
 export interface SelectionApi {
   /** The Cut / Copy / Paste layer's marked rectangle, in tiles. */
   markedArea(): Rect | null;
@@ -1947,6 +2304,14 @@ export interface PasteOptionsSpec {
  * The Cut / Copy / Paste layer. The clip is self-contained (it outlives the map it came
  * from and pastes into another) and shared with the user's own clipboard, so a plugin
  * that copies here is copying for the user too.
+ *
+ * @example
+ * // Copy the top-left 8 × 8 tiles and paste them 16 tiles to the right.
+ * const clip = api.clipboard.copy({ rect: { x0: 0, y0: 0, x1: 8, y1: 8 } });
+ * if (clip) {
+ *   api.ui.status(api.clipboard.summary(clip));
+ *   api.clipboard.paste(16, 0);
+ * }
  */
 export interface ClipboardApi {
   /** What is on the clipboard, or null. */
@@ -1989,6 +2354,16 @@ export interface ClipboardApi {
 /**
  * The file formats File ▸ Import / Export read and write, so a plugin can keep triggers
  * or strings outside the map in a form the editor (and SCMDraft) take back.
+ *
+ * @example
+ * // The string table out to a text file, and back in after editing it elsewhere.
+ * await api.ui.saveFile(new Blob([api.exchange.formatStrings()], { type: "text/plain" }), "strings.txt");
+ * const [file] = await api.ui.pickFiles({ accept: ".txt" });
+ * if (file) {
+ *   const text = await file.text();
+ *   const { errors } = api.exchange.parseStrings(text);
+ *   if (errors.length === 0) api.document.update("Import strings", (tx) => { tx.strings.import(text); });
+ * }
  */
 export interface ExchangeApi {
   /** Raw 2400-byte TRIG records, SCMDraft's `.trg`; string indices are the map's own. */
@@ -2060,6 +2435,16 @@ export interface DoodadInfo {
   required: number[];
 }
 
+/**
+ * @example
+ * // Place whatever the Units palette has picked, for the player it has picked.
+ * const { unit, owner } = api.palette.active();
+ * const at = await api.ui.pickTile({ prompt: `Click where the ${api.palette.unitName(unit)} goes` });
+ * if (at) {
+ *   const t = api.consts.tile;
+ *   api.document.edit("Place", (tx) => { tx.placeUnit(unit, owner, at.x * t + t / 2, at.y * t + t / 2); });
+ * }
+ */
 export interface PaletteApi {
   active(): PaletteChoice;
   setActive(choice: Partial<PaletteChoice>): void;
@@ -2102,6 +2487,11 @@ export interface NamedValue {
  * carry the game's tables itself. The per-map ones (`string`, `location`, `switch`,
  * `player`) read the open scenario and answer a placeholder without one; the rest are
  * the editor's own tables — the same names StarEdit shows.
+ *
+ * @example
+ * api.log(api.names.unit(0), api.names.playerGroup(api.consts.triggers.player.Player1), api.names.location(api.consts.location.anywhere));
+ * // The list forms are ready for a drop-down.
+ * const upgrade = api.ui.widgets.select(api.names.upgrades());
  */
 export interface NamesApi {
   /** StarEdit's name for a units.dat id; `Any unit` / `Men` / `Buildings` / `Factories` for the trigger classes 229–232 (228 is the game's `None`). */
@@ -2165,6 +2555,21 @@ export type { Align, BleedingLine, CodeEffect, RunOptions, StackedLine, TextCode
  * alignment code on a line, stacking the pieces between them in one place: `stackedLines`
  * finds those lines and `flattenStacks` lays them out left to right. `runs` is one of the
  * renderers that cannot show them — `TextLine.align` is one alignment for the whole line.
+ *
+ * @example
+ * const text = "\x07Mission\nKill them all";    // byte 0x07 colours the first line
+ * api.log(api.text.plain(text));                          // "Mission\nKill them all"
+ * api.log(api.text.bleedingLines(text).map((l) => l.line));  // the second line inherits the colour
+ * api.log(api.text.fixBleeding(text) === text);           // false: a reset was written
+ *
+ * @example
+ * // Repair every string in the map that has the problem.
+ * const strings = api.query.strings();
+ * api.document.update("Fix carried colours", (tx) => {
+ *   strings.forEach((s, i) => {
+ *     if (s && api.text.bleedingLines(s).length > 0) tx.strings.set(i, api.text.fixBleeding(s));
+ *   });
+ * });
  */
 export interface TextApi {
   /** Every byte the game gives a meaning, in order; `rgb` is set for the colours only. */
@@ -2225,6 +2630,19 @@ export interface DialogTransfer {
   text: string;
 }
 
+/**
+ * @example
+ * const name = api.ui.widgets.text({ value: api.document.info()?.name ?? "" });
+ * api.ui.dialog({
+ *   title: "Rename the map",
+ *   size: "sm",
+ *   mount: (body) => body.append(api.ui.widgets.form([{ label: "Name", field: name }])),
+ *   buttons: [
+ *     { label: "Cancel" },
+ *     { label: "Rename", primary: true, run: () => { api.document.update("Rename", (tx) => tx.properties({ name: name.value })); } },
+ *   ],
+ * });
+ */
 export interface DialogSpec {
   title: string;
   size?: DialogSize;
@@ -2288,6 +2706,19 @@ export interface DialogHandle {
  * A panel floats over the map and does not block it: the user keeps drawing, scrolling
  * and using hotkeys while it is open (except while typing in one of its fields). It
  * is dragged by its title bar and closed with the × or `close()`.
+ *
+ * @example
+ * // A unit count that follows the map, docked under the built-in panels.
+ * api.ui.panel({
+ *   title: "Unit count",
+ *   dock: "right",
+ *   mount(body) {
+ *     const show = () => { body.textContent = `${api.document.scenario()?.units.length ?? 0} units`; };
+ *     show();
+ *     const sub = api.events.on("units", show);
+ *     return () => sub.dispose();
+ *   },
+ * });
  */
 export interface PanelSpec {
   title: string;
@@ -2331,6 +2762,14 @@ export interface PanelHandle {
  * One cell in the status bar (`ui.statusItem`): a line of text with the plugin's icon,
  * a spinner while `busy`, and a click. It is how a plugin that works in the background
  * stays visible without a panel — "AI · working 12 s", "3 problems", "Synced".
+ *
+ * @example
+ * const count = () => api.query.validate().filter((i) => i.level !== "info").length;
+ * const cell = api.ui.statusItem({ text: `${count()} problems`, onClick: () => api.ui.open("validateMap") });
+ * api.events.on("commit", () => {
+ *   const n = count();
+ *   cell.set({ text: `${n} problems`, warn: n > 0 });
+ * });
  */
 export interface StatusItemSpec {
   text: string;
@@ -2350,7 +2789,17 @@ export interface StatusItemHandle {
   isShown(): boolean;
 }
 
-/** A button on the map itself (`ui.mapButton`), in the row at its bottom-right corner. */
+/**
+ * A button on the map itself (`ui.mapButton`), in the row at its bottom-right corner.
+ *
+ * @example
+ * let notes = 3;
+ * const button = api.ui.mapButton({
+ *   label: "Notes",
+ *   badge: notes,
+ *   onClick: () => { notes = 0; button.set({ badge: null }); },
+ * });
+ */
 export interface MapButtonSpec {
   /** A word or two; the button is as wide as it. */
   label: string;
@@ -2426,13 +2875,16 @@ export interface DialogSlotSpec {
  * which is the simpler shape when nothing needs undoing on Cancel.
  *
  * @example
+ * const settings = api.storage.get("settings", { dock: "float" });
+ * let pending: (() => void) | null = null;
  * api.ui.preferencesPage({
  *   mount(body) {
  *     const w = api.ui.widgets;
  *     const dock = w.select([{ value: "float", label: "Floating" }, { value: "right", label: "Docked" }], { value: settings.dock });
  *     body.append(w.form([{ label: "Panel", field: dock }]), w.hint("Where the panel opens."));
- *     pending = () => save({ dock: dock.value });
+ *     pending = () => api.storage.set("settings", { dock: dock.value });
  *   },
+ *   // OK and Apply write it; Cancel leaves the stored value alone.
  *   apply: () => pending?.(),
  * });
  */
@@ -2512,6 +2964,23 @@ export type MapToolStopReason =
  * release ahead of the active layer's own tools, hides the layer's brush ghost, and
  * lets it draw an overlay. The map stays visible and scrollable, and a panel can stay
  * open beside it — which is how a plugin gets a drawing mode of its own.
+ *
+ * @example
+ * // Click to drop a marine, with a ring under the pointer. Esc or a right-click ends the tool.
+ * let at: { px: number; py: number } | null = null;
+ * const tool = api.ui.mapTool({
+ *   name: "Drop marines",
+ *   hint: "click to place, Esc to stop",
+ *   onMove(p) { at = p.inMap ? p : null; tool.redraw(); },
+ *   onDown(p) { api.document.edit("Drop a marine", (tx) => { tx.placeUnit(0, 0, p.px, p.py); }); },
+ *   draw(ctx, view) {
+ *     if (!at) return;
+ *     ctx.strokeStyle = "#ffd24a";
+ *     ctx.beginPath();
+ *     ctx.arc(view.x(at.px), view.y(at.py), view.tilePx / 2, 0, Math.PI * 2);
+ *     ctx.stroke();
+ *   },
+ * });
  */
 export interface MapToolSpec {
   /** Shown in the viewport's HUD and the status bar while the tool runs. */
@@ -2555,6 +3024,23 @@ export type OverlayAbove =
  * as usual. It hears the pointer through `onHover`, which is how a readout follows the
  * mouse while the user places units. Register one at activation and keep the handle;
  * it goes away with the plugin.
+ *
+ * @example
+ * // A ring twelve tiles wide round every start location, listed under View ▸ Overlays.
+ * const overlay = api.ui.overlay({
+ *   name: "Start rings",
+ *   above: "objects",
+ *   draw(ctx, view) {
+ *     ctx.strokeStyle = "#ffd24a";
+ *     ctx.lineWidth = 2;
+ *     for (const start of api.query.startLocations()) {
+ *       ctx.beginPath();
+ *       ctx.arc(view.x(start.x), view.y(start.y), 12 * view.tilePx, 0, Math.PI * 2);
+ *       ctx.stroke();
+ *     }
+ *   },
+ * });
+ * api.events.on("units", () => overlay.redraw());
  */
 export interface OverlaySpec {
   /** Shown in View ▸ Overlays and the Layers panel. Unique per plugin. In English, like a menu label: shown through the plugin's registered catalogues. */
@@ -2621,7 +3107,12 @@ export interface UiApi {
   status(text: string): void;
   /** The status bar line as it stands. */
   statusText(): string;
-  /** A short notice over the map that leaves by itself — how Save reports; `ttl` 0 keeps it until dismissed. */
+  /**
+   * A short notice over the map that leaves by itself — how Save reports; `ttl` 0 keeps it until dismissed.
+   *
+   * @example
+   * api.ui.toast({ kind: "ok", title: "Export finished", detail: "12 triggers written." });
+   */
   toast(toast: { kind?: Toast["kind"]; title: string; detail?: string; ttl?: number }): void;
   /**
    * Write a file to disk the way the editor's own exports do: into the file the browser's
@@ -2656,10 +3147,11 @@ export interface UiApi {
    * `dispose()` or the plugin.
    *
    * @example
+   * // A button in Map Properties that tidies the name in the form. The user still presses OK.
    * api.ui.dialogSlot("mapProperties", {
    *   mount(body, dlg) {
-   *     body.append(api.ui.widgets.button("Suggest a name", { onClick: async () => {
-   *       dlg.fields.name.set(await suggestName(dlg.fields.description.get()));
+   *     body.append(api.ui.widgets.button("Tidy name", { onClick: () => {
+   *       dlg.fields.name.set(dlg.fields.name.get().trim().replace(/\s+/g, " "));
    *     } }));
    *   },
    * });
@@ -2700,6 +3192,11 @@ export interface UiApi {
    * As `pickTile`, for an object: the user clicks a unit or a location. The viewport
    * outlines and names what is under the pointer as it moves; a click on nothing keeps
    * picking. Resolves with the kind and the record's index, or null as `pickArea` does.
+   *
+   * @example
+   * const picked = await api.ui.pickObject({ prompt: "Click a unit", kinds: ["unit"] });
+   * const unit = picked && api.document.scenario()?.units[picked.index];
+   * if (unit) await api.ui.alert(`${api.names.unit(unit.unitId)}, owned by ${api.names.player(unit.owner)}`);
    */
   pickObject(options?: PickObjectOptions): Promise<PickedObject | null>;
   /**
@@ -2714,9 +3211,29 @@ export interface UiApi {
   confirm(message: string, options?: ConfirmOptions): Promise<boolean>;
   /** Say something with a single OK. */
   alert(message: string, options?: ConfirmOptions): Promise<void>;
-  /** Ask for a line of text; null when the user cancelled. */
+  /**
+   * Ask for a line of text; null when the user cancelled.
+   *
+   * @example
+   * const name = await api.ui.prompt("Name the map", { value: api.document.info()?.name, confirmLabel: "Rename" });
+   * if (name) api.document.update("Rename", (tx) => tx.properties({ name }));
+   */
   prompt(message: string, options?: PromptOptions): Promise<string | null>;
-  /** A progress bar over the map for long work, with an optional Cancel. */
+  /**
+   * A progress bar over the map for long work, with an optional Cancel.
+   *
+   * @example
+   * const triggers = api.triggers.list();
+   * const job = api.ui.progress("Reading triggers", { cancellable: true });
+   * try {
+   *   for (let i = 0; i < triggers.length && !job.cancelled(); i++) {
+   *     job.report(i / triggers.length, `Trigger ${i + 1} of ${triggers.length}`);
+   *     await new Promise((next) => setTimeout(next, 20)); // the slow part of your work goes here
+   *   }
+   * } finally {
+   *   job.done();
+   * }
+   */
   progress(label: string, options?: ProgressOptions): ProgressHandle;
   /** `el("div", { className: "row" }, …)`: the DOM helper the widgets are built from. */
   el<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Record<string, unknown>, ...children: WidgetChild[]): HTMLElementTagNameMap[K];
@@ -3054,6 +3571,18 @@ export interface WidgetsApi {
   /** Small dimmed explanatory text. */
   hint(text: string): HTMLElement;
   separator(): HTMLElement;
+  /**
+   * @example
+   * // Player 1's units in a dialog; picking one closes it and goes there.
+   * const units = api.document.scenario()?.units ?? [];
+   * const items = api.query.unitsOf(0).map((index) => ({ label: api.names.unit(units[index].unitId), value: index, index }));
+   * api.ui.dialog({
+   *   title: "Player 1's units",
+   *   mount(body, dialog) {
+   *     body.append(api.ui.widgets.list(items, { height: 320, onPick: (index) => { dialog.close(); api.view.goTo({ kind: "unit", index }); } }));
+   *   },
+   * });
+   */
   list<T>(items: ListItem<T>[], options?: ListOptions<T>): HTMLElement;
 
   /* ── Waiting ── */
@@ -3134,20 +3663,23 @@ export interface MenuItemSpec {
 }
 
 export interface MenuApi {
-/**
- * Items in the editor's menu bar.
- *
- * @example
- * api.menu.add("Tools", {
- *   label: "Count units\u2026",
- *   icon: "plugin",
- *   run: () => api.ui.alert(`Player 1 has ${api.query.unitsOf(0).length} units.`),
- * });
- *
- * @example
- * // A path whose last segment names no submenu makes one, at the end of that menu.
- * api.menu.add("Tools/My plugin", { label: "Settings\u2026", command: "settings" });
- */
+  /**
+   * Add an item to the editor's menu bar.
+   *
+   * @example
+   * api.menu.add("Tools", {
+   *   label: "Count units…",
+   *   icon: "plugin",
+   *   enabled: () => api.document.isOpen(),
+   *   run: () => api.ui.alert(`Player 1 has ${api.query.unitsOf(0).length} units.`),
+   * });
+   *
+   * @example
+   * // A path whose last segment names no submenu makes one, at the end of that menu.
+   * api.menu.add("Tools/My plugin", { label: "About…", run: () => api.ui.alert(`${api.plugin.name} ${api.plugin.version ?? ""}`) });
+   * // `after` puts an item directly under a built-in one, named by its English label.
+   * api.menu.add("File", { label: "Open from My Site…", after: "Open Recent", run: () => api.ui.status("…") });
+   */
   add(path: MenuPath, item: MenuItemSpec): Disposable;
 }
 
@@ -3180,13 +3712,24 @@ export interface ContextItemSpec {
 }
 
 export interface ContextMenuApi {
+  /**
+   * @example
+   * // Right-click the map: copy the tile's position.
+   * api.contextMenu.add("viewport", {
+   *   label: (ctx) => (ctx.tile ? `Copy position (${ctx.tile.x}, ${ctx.tile.y})` : "Copy position"),
+   *   enabled: (ctx) => ctx.tile !== null,
+   *   run: (ctx) => { if (ctx.tile) void navigator.clipboard.writeText(`${ctx.tile.x}, ${ctx.tile.y}`); },
+   * });
+   */
   add(surface: ContextSurface, item: ContextItemSpec): Disposable;
 }
 
 export interface HotkeyApi {
-  /** `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name.    *
+  /**
+   * `"Ctrl+Shift+I"`, `"Alt+F9"`, `"F8"` — modifiers in any order, then a key name.
+   *
    * @example
-   * api.hotkeys.add("Ctrl+Shift+W", () => handle.setVisible(!handle.visible()));
+   * api.hotkeys.add("Ctrl+Alt+G", () => api.view.setFlags({ grid: !api.view.flags().grid }));
    */
   add(combo: string, run: (() => void) | { command: string }): Disposable;
 }
@@ -3243,9 +3786,11 @@ export type PluginEvent =
  * closing and switching maps are not commits — the `"document"` event says those.
  *
  * @example
+ * // Flash where each change landed, and log what kind of change it was.
  * api.events.on("commit", (e) => {
- *   if (e.parts.terrain && e.area) redrawTiles(e.area);
- *   else if (e.reason === "whole" || e.reason === "remote") redrawAll();
+ *   if (e.area) api.view.flash({ rect: e.area, kind: "attention" });
+ *   const parts = Object.entries(e.parts).filter(([, changed]) => changed).map(([part]) => part);
+ *   api.log(e.reason, e.label, parts);
  * });
  */
 export interface CommitEvent {
@@ -3381,9 +3926,15 @@ export interface DocumentEvent {
  * `{x, select, …}` and, for Korean, `{name|을}` (the particle agrees with the value).
  *
  * @example
- * api.i18n.register({ ko: { "Count units\u2026": "유닛 세기…", "{n} units": "유닛 {n}개" } });
- * api.menu.add("Tools", { label: api.i18n.t("Count units\u2026"), run: () => api.ui.alert(api.i18n.t("{n} units", { n: 3 })) });
- * api.events.on("language", () => relabel());
+ * api.i18n.register({ ko: { "Count units…": "유닛 세기…", "{n} units": "유닛 {n}개" } });
+ * // A menu label stays English: the menu shows it through the catalogue above.
+ * api.menu.add("Tools", {
+ *   label: "Count units…",
+ *   run: () => api.ui.alert(api.i18n.t("{n} units", { n: api.document.scenario()?.units.length ?? 0 })),
+ * });
+ * // Anything you drew yourself is yours to redraw when the language changes.
+ * const cell = api.ui.statusItem({ text: api.i18n.t("{n} units", { n: 0 }) });
+ * api.events.on("language", () => cell.set({ text: api.i18n.t("{n} units", { n: 0 }) }));
  */
 export interface I18nApi {
   /** The editor's language, a BCP 47 primary tag: `"en"`, `"ko"`. */
@@ -3403,29 +3954,29 @@ export interface I18nApi {
  * reason `"replace"`, which every other listener sees in turn.
  */
 export interface EventsApi {
-/**
- * @example
- * // Notifications, in activation order; a listener never intercepts what it hears.
- * api.events.on("document", (e) => {
- *   if (e.reason === "open") check(e.fileName);
- * });
- * api.events.on("terrain", () => redraw());
- * api.events.on("commit", (e) => console.log(e.reason, e.label, e.area));
- */
+  /**
+   * @example
+   * api.events.on("document", (e) => {
+   *   if (e.reason === "open") api.ui.status(`Opened ${e.fileName ?? "a map"}`);
+   * });
+   * const selection = api.events.on("selection", () => api.log(`${api.selection.units().length} units selected`));
+   * // Stop listening early; otherwise the listener goes when the plugin is turned off.
+   * setTimeout(() => selection.dispose(), 60_000);
+   */
   on(event: "document", listener: (event: DocumentEvent) => void): Disposable;
   on(event: "commit", listener: (event: CommitEvent) => void): Disposable;
   on(event: PluginEvent, listener: () => void): Disposable;
 }
 
 export interface StorageApi {
-/**
- * A small key-value store of the plugin's own, under its id in the browser's local
- * storage and listed in Preferences \u25b8 Browser storage.
- *
- * @example
- * const opts = api.storage.get("options", { showGrid: true });
- * api.storage.set("options", { ...opts, showGrid: false });
- */
+  /**
+   * Read a value, or `fallback` when the key was never set.
+   *
+   * @example
+   * const options = api.storage.get("options", { showGrid: true });
+   * const kept = api.storage.set("options", { ...options, showGrid: false });
+   * if (!kept) api.ui.toast({ kind: "error", title: "Could not save the options", detail: "The browser's storage is full." });
+   */
   get<T>(key: string, fallback: T): T;
   /**
    * Store a value. False when the browser refused the write — its storage quota is a few

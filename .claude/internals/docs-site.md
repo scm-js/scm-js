@@ -153,8 +153,13 @@ Every ```ts/```js block in the guides and every `@example` in the reference that
 type-checked **once, in one program** (`runnableSnippets`: each block a `/snippetN.ts`, a globals file
 `declare const api: PluginApi`, the bundled `index.d.ts` placed as `node_modules/@scm-js/plugin-api`,
 DOM lib, `moduleDetection: force` — the API Playground's own compile settings), and only the blocks
-with no diagnostic get a link: 14 of 30 candidates at the time, the rest being deliberate fragments
-(`socket`, `settings`). The whole pass is well under a second. An error outside the snippets throws,
+with no diagnostic get a link: 14 of 30 candidates at first; since 2026-10-04, 131, when every group in
+`docs/plugins.md` and most-used calls in `api.ts` got a self-contained example and the guide gained the
+*Your first plugin* walk-through. What is left without one is deliberate: the `api.sync` pair (needs a
+server) and the guide's "wrong" `async` builder. A new example should run as written — no undeclared
+helper, nothing that throws without the tileset graphics (`const [, ground] = api.terrain.types()`
+and a guard, not `types()[1].id`), and its own `api.storage` key, since every snippet in the playground
+shares one plugin id. The whole pass is well under a second. An error outside the snippets throws,
 because it would otherwise fail every link silently. Making an example runnable is how you give it a
 link — three were rewritten that way (`document.edit`, `view.flash`, the pickArea flatten in
 `plugins.md`). The link is `EDITOR_URL/?plugin=github:scm-js/plugin-api-playground&playground=1<raw
@@ -163,6 +168,27 @@ other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both
 (marked's `code` renderer returns `false` for every other block, so they stay marked's own). The
 `?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
 
+
+### The plugin guide's pictures (scene `plugin-guide`, 2026-10-04)
+
+Eight pictures (`plugin-base-check`, `-dialog`, `-waiting`, `-map-tool`, `-overlay`, `-trigger-editor`,
+`-recipes`, `-surfaces`) taken by running the guide's *own* examples: `p.example(markers, { before, after })` finds each
+fenced ```ts block of `docs/plugins.md` by a line of it, joins them into one snippet (a new run stops the
+one before), runs it in the API Playground and closes the playground's panel (a run outlives it; a modal the
+example opened is left covering it). The map is `PLUGIN_GUIDE_MAP`, made through the API — no fixture map,
+so the scene runs with only the extracted game data. `plugin-surfaces` is annotated from the elements'
+bounding boxes, not fixed coordinates; `annotate` now takes its marks. The map button in it is the scene's
+own line, the guide having no example for one.
+
+**A snippet in the playground speaks as the playground**: `api.commands.register({ id: "open" })` there
+replaced the playground's own `api-playground.open`, so Tools ▸ API Playground opened the snippet's panel
+instead. That is why the tutorial's command is the dotted `base-check.open`. An example that registers a
+command should use an id the playground is unlikely to own, or a dotted one.
+
+Every example was also run once in the real editor (a throwaway local plugin handing out `api`, each
+snippet in a `scope()`): the ones that wait for a click aside, all ran. That harness is not in the
+repository; `tests/docs.test.ts` and the Try it pass only type-check. The guide's `## Recipes` (a page of its own on the site) were driven the same
+way — the brush dragged, the prompts answered — before they were written down as working.
 
 `docs/chk.ksy` is linked from the CHK reference as a relative link, which the resolver sends
 to its GitHub blob page (the site does not copy it). The reference's SVG pictures live in

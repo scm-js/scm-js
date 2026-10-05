@@ -29,7 +29,7 @@
  * recipe answers are canned for the fixture maps. What those pictures show is the
  * editor's chrome around example content, not a model's output.
  */
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { startMock } from "./lib/guide-scmjs-mock.mjs";
 
@@ -487,7 +487,114 @@ const SCENES = [
     const right = Math.min(1400, Math.max(box.x + box.width, hover.x + hover.width + 12));
     await p.take("api-playground-hover", { x: box.x, y: top, width: right - box.x, height: Math.min(900, bottom) - top }, { lossless: true });
   }, { init: () => `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([{ spec: PLAYGROUND_PLUGIN, enabled: true }]))});` }),
+
+  // The plugin guide's pictures of what its own examples put on the screen. Each one is an
+  // example out of `docs/plugins.md`, found by a line of it and run in the API Playground —
+  // so a picture cannot show code the guide does not have — on a map the scene makes itself
+  // (no fixture map). The playground's panel is closed before each picture; a run outlives it.
+  scene("plugin-guide", "", async (p) => {
+    await p.example([], { before: PLUGIN_GUIDE_MAP, wait: 4000 });
+
+    // Your first plugin: the finished Base Check, opened from its menu item.
+    await p.example(['api.menu.add("Tools", { label: "Base Check…"']);
+    await p.menu("Tools", /^Base Check/);
+    await p.page.locator(".plugin-panel .list, .plugin-panel [role=listbox], .plugin-panel-body").first().waitFor(); await p.wait(600);
+    await p.page.mouse.move(1270, 800);
+    await p.take("plugin-base-check");
+    await p.page.locator(".plugin-panel .dlg-close").first().click(); await p.wait(300);
+
+    // A dialog built from widgets.
+    await p.example(['title: "Place marines"']);
+    await p.dialog("plugin-dialog");
+    await p.esc();
+
+    // The waiting widgets, caught mid-search.
+    await p.example(['title: "Find units"']);
+    await p.page.locator(".dlg input[type=text], .dlg input:not([type])").last().fill("marine");
+    await p.page.locator(".dlg button", { hasText: /^Search$/ }).click(); await p.wait(500);
+    await p.dialog("plugin-waiting");
+    await p.wait(1600); await p.esc();
+
+    // A map tool: two marines dropped, the ring under the pointer, the tool named in the status bar.
+    await p.example(['name: "Drop marines"']);
+    await p.click(...at(330, 300)); await p.click(...at(420, 340));
+    await p.page.mouse.move(...at(500, 300), { steps: 4 }); await p.wait(400);
+    await p.take("plugin-map-tool");
+    await p.esc();
+
+    // An overlay, zoomed out far enough to see the rings, with its row in the Layers panel.
+    await p.example(['name: "Start rings"'], { after: "api.view.setZoom(0.25);\napi.view.center(48, 48);" });
+    await p.page.mouse.move(1270, 800);
+    await p.take("plugin-overlay");
+
+    // A claimed trigger and a button in the Trigger Editor's slot, in one picture.
+    await p.example(['label: "the wave generator"', 'api.ui.dialogSlot("triggerEditor"'], { after: "api.view.setZoom(1);" });
+    await p.menu("Triggers", /^Trigger Editor/);
+    await p.page.locator(".dlg").last().waitFor(); await p.wait(800);
+    await p.dialog("plugin-trigger-editor");
+    await p.esc();
+
+    // Two of the recipes at once: the problems panel in the dock, the density overlay on the map.
+    await p.example(['title: "Problems"', 'name: "Unit density"'], { after: "api.view.setZoom(0.5);\napi.view.center(24, 24);" });
+    await p.page.mouse.move(1270, 500);
+    await p.take("plugin-recipes");
+
+    // Where plugin UI appears: a menu item, a floating and a docked panel, a status bar
+    // cell and a map button, numbered. The map button has no example in the guide.
+    await p.example(['label: "Count units…",\n  icon: "plugin"', 'title: "Unit count"', 'api.ui.open("validateMap")', 'title: "Marine"'], {
+      after: 'api.ui.mapButton({ label: "Notes", badge: 3, onClick: () => {} });\napi.view.setZoom(1);\napi.view.goTo({ kind: "unit", index: api.query.startLocations()[0].index });',
+      wait: 2500,
+    });
+    await p.page.click('.menubar button:has-text("Tools")'); await p.wait(400);
+    const boxOf = async (locator) => { const b = await locator.first().boundingBox(); if (!b) throw new Error("plugin-surfaces: a surface is not on screen"); return b; };
+    const item = await boxOf(p.page.locator(".menu-item", { hasText: /^Count units/ }));
+    const floating = await boxOf(p.page.locator(".plugin-panel .plugin-panel-title"));
+    const docked = await boxOf(p.page.locator(".plugin-docked .panel-head"));
+    const cell = await boxOf(p.page.locator(".statusbar *", { hasText: /^\d+ problems$/ }));
+    const button = await boxOf(p.page.locator(".hud-btn", { hasText: "Notes" }));
+    await p.page.mouse.move(item.x + 20, item.y + item.height / 2); await p.wait(300);
+    if (!ONLY.length || ONLY.includes("plugin-surfaces")) {
+      const raw = join(OUT, ".plugin-surfaces.png");
+      await p.page.screenshot({ path: raw });
+      await annotate(raw, join(OUT, "plugin-surfaces.webp"), [
+        [1, item.x + item.width + 16, item.y + item.height / 2],
+        [2, floating.x - 16, floating.y + floating.height / 2],
+        [3, docked.x - 16, docked.y + docked.height / 2],
+        [4, cell.x + cell.width / 2, cell.y - 16],
+        [5, button.x + button.width / 2, button.y - 16],
+      ]);
+      rmSync(raw);
+    }
+  }, { init: () => `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([{ spec: PLAYGROUND_PLUGIN, enabled: true }]))});` }),
 ];
+
+/**
+ * The map the plugin guide's pictures are taken on, made through the plugin API: a 96 × 96
+ * Jungle map with four start locations, a mineral line and a geyser by each (some fields
+ * short, for Base Check to top up), a few marines, and a lake and a plateau so that it reads
+ * as a map. Nothing of Blizzard's but the tileset.
+ */
+const PLUGIN_GUIDE_MAP = `await api.document.create({ width: 96, height: 96, tileset: "jungle", name: "Four Corners", startLocations: 4, startLayout: "corners", into: "current" });
+await api.graphics.load();
+const terrain = (name) => api.terrain.types().find((t) => t.name === name)?.id;
+api.document.edit("Lay out the map", (tx) => {
+  const paint = (rect, name) => { const id = terrain(name); if (id !== undefined) for (const d of api.terrain.diamondsIn(rect)) tx.paintIsom(d, id); };
+  paint({ x0: 40, y0: 40, x1: 56, y1: 56 }, "Water");
+  paint({ x0: 26, y0: 6, x1: 40, y1: 14 }, "High Dirt");
+  paint({ x0: 56, y0: 82, x1: 70, y1: 90 }, "High Dirt");
+  for (const s of api.query.startLocations()) {
+    const side = s.ty < 48 ? 1 : -1;
+    for (let i = 0; i < 7; i++) {
+      const at = tx.placeUnit(api.consts.unit.mineralFields[i % 3], 11, s.x - 192 + i * 64, s.y + side * 176);
+      if (i % 3 === 0 && s.owner < 2) tx.updateUnits([at], () => ({ resourceAmount: 500 }));
+    }
+    tx.placeUnit(api.consts.unit.vespeneGeyser, 11, s.x + (s.tx < 48 ? 224 : -224), s.y);
+    for (let i = 0; i < 4; i++) tx.placeUnit(0, s.owner, s.x - 48 + i * 32, s.y - side * 96);
+  }
+});
+api.view.setZoom(1);
+api.view.goTo({ kind: "unit", index: api.query.startLocations()[0].index });
+api.selection.setUnits([]);`;
 
 /**
  * The script in the TrigScript pictures: a few plain triggers (what the Trigger Editor
@@ -589,14 +696,16 @@ function seedScmjs(mockUrl) {
 
 /* ── the annotated overview ────────────────────────────────────────────────────── */
 
-/** Numbered callouts over the overview, in the order "The editor window" lists them. */
-async function annotate(from, to) {
-  const marks = [[1, 640, 13], [2, 1000, 45], [3, 18, 345], [4, 200, 75], [5, 720, 300], [6, 1335, 75], [7, 1335, 347], [8, 1335, 596], [9, 1000, 888]];
+/** The overview's callouts, in the order "The editor window" lists them. */
+const EDITOR_MARKS = [[1, 640, 13], [2, 1000, 45], [3, 18, 345], [4, 200, 75], [5, 720, 300], [6, 1335, 75], [7, 1335, 347], [8, 1335, 596], [9, 1000, 888]];
+
+/** Numbered callouts (`[n, x, y]`) over a picture of the window. */
+async function annotate(from, to, marks = EDITOR_MARKS) {
   const svg = `<svg width="1400" height="900" xmlns="http://www.w3.org/2000/svg">${marks.map(([n, x, y]) =>
     `<circle cx="${x}" cy="${y}" r="13" fill="#f3c04e" stroke="#1a1a1a" stroke-width="2"/>` +
     `<text x="${x}" y="${y + 5}" font-size="15" font-weight="bold" font-family="DejaVu Sans, sans-serif" fill="#1a1a1a" text-anchor="middle">${n}</text>`).join("")}</svg>`;
   await sharp(from).composite([{ input: Buffer.from(svg), left: 0, top: 0 }]).webp({ quality: 88 }).toFile(to);
-  console.log("wrote editor (annotated)");
+  console.log(`wrote ${to.slice(to.lastIndexOf("/") + 1)} (annotated)`);
 }
 
 /* ── the driver ────────────────────────────────────────────────────────────────── */
@@ -720,6 +829,28 @@ function driver(page, mock, other) {
         Object.assign(globalThis, args);
         new Function("monaco", "ed", `(${src})(monaco, ed)`)(monaco, ed);
       }, { src: fn.toString(), args });
+    },
+    /**
+     * Run examples out of the plugin guide in the API Playground, then close its panel.
+     * Each of `markers` is a piece of one fenced block in `docs/plugins.md`; the blocks are
+     * joined into one snippet, since a new run stops the one before. `before` / `after` are
+     * lines of the scene's own around them.
+     */
+    async example(markers, { before = "", after = "", wait: settle = 1500 } = {}) {
+      const blocks = [...readFileSync(join(root, "docs/plugins.md"), "utf8").matchAll(/^```ts\n([\s\S]*?)^```/gm)].map((m) => m[1]);
+      const code = [before, ...markers.map((marker) => {
+        const found = blocks.filter((b) => b.includes(marker));
+        if (found.length === 0) throw new Error(`docs/plugins.md has no example containing: ${marker}`);
+        // The whole plugin (the block with `activate`) over a step of the same code.
+        return found.find((b) => b.includes("export default")) ?? found[0];
+      }), after].filter(Boolean).join("\n");
+      if (!(await page.locator(".apg").count())) await p.menu("Tools", /^API Playground/);
+      await page.locator(".apg .monaco-editor .view-lines").waitFor({ timeout: 120_000 }); await wait(1200);
+      await p.playground((monaco, ed) => { ed.getModel().setValue(globalThis.__code); }, { __code: code });
+      await wait(1500);
+      await page.locator(".apg-bar button", { hasText: /^Run$/ }).click(); await wait(settle);
+      // A modal dialog the example opened covers the panel; it is closed on the next call.
+      if (!(await page.locator(".dlg").count())) { await page.locator(".plugin-panel:has(.apg) .dlg-close").click(); await wait(400); }
     },
     /** Wait for the TrigScript editor, put `text` in `main.ts`, and wait for the check to settle. */
     async script(text) {

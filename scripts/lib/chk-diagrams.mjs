@@ -439,9 +439,9 @@ function repeatsSvg(defs) {
   parts.push(text(rx, 28, "What the game has", { size: 12, anchor: "start", fill: MUTED }));
   const COPY1 = FIRST, COPY2 = INSIDE;
 
-  // Row 1: only the last copy counts.
+  // Row 1: the last copy replaces the others.
   let y = 44;
-  parts.push(text(lx, y + 14, "Only the last copy counts", { size: 14, anchor: "start", weight: 600 }));
+  parts.push(text(lx, y + 14, "The last copy replaces the others", { size: 14, anchor: "start", weight: 600 }));
   parts.push(fileSection(lx, y + 26, 150, "DIM  (first copy)", text(lx + 75, y + 60, "64 × 64", { size: 13 }), { faded: true }));
   parts.push(fileSection(lx + 170, y + 26, 150, "DIM  (second copy)", text(lx + 245, y + 60, "128 × 96", { size: 13, fill: GOLD })));
   parts.push(arrow(lx + fileW, y + 49, rx - 12, y + 49));
@@ -451,9 +451,9 @@ function repeatsSvg(defs) {
   parts.push(text(rx + 166, y + 62, "is ignored.", { size: 12, anchor: "start" }));
   parts.push(text(lx, y + 96, `Most sections: ${modes.last.slice(0, 8).join(", ")} and the rest.`, { size: 11, anchor: "start", fill: MUTED }));
 
-  // Row 2: every copy is written over the same space.
+  // Row 2: each copy is written over the start of the same space.
   y += 124;
-  parts.push(text(lx, y + 14, "Every copy is written over the same space", { size: 14, anchor: "start", weight: 600 }));
+  parts.push(text(lx, y + 14, "Each copy is written over the start of the same space", { size: 14, anchor: "start", weight: 600 }));
   const cols = 8, rows = 4, cell = 18;
   const mini = (x0, y0, n, fill) => {
     const out = [];
@@ -474,9 +474,9 @@ function repeatsSvg(defs) {
   parts.push(text(gx, y + 94, "is what the first copy left.", { size: 12, anchor: "start" }));
   parts.push(text(lx, y + 128, `Sections: ${modes.overlay.join(", ")}.`, { size: 11, anchor: "start", fill: MUTED }));
 
-  // Row 3: every copy counts.
+  // Row 3: the copies are joined into one list.
   y += 152;
-  parts.push(text(lx, y + 14, "Every copy counts", { size: 14, anchor: "start", weight: 600 }));
+  parts.push(text(lx, y + 14, "The copies are joined into one list", { size: 14, anchor: "start", weight: 600 }));
   const chip = (x0, y0, label, fill) => `<rect x="${x0}" y="${y0}" width="30" height="20" rx="3" fill="${fill}"/>` + text(x0 + 15, y0 + 14, label, { size: 11, weight: 600 });
   parts.push(fileSection(lx, y + 26, 150, "TRIG", [1, 2, 3].map((n, i) => chip(lx + 12 + i * 36, y + 46, `#${n}`, COPY1)).join("")));
   parts.push(fileSection(lx + 170, y + 26, 150, "TRIG", [4, 5].map((n, i) => chip(lx + 182 + i * 36, y + 46, `#${n}`, COPY2)).join("")));
@@ -486,7 +486,7 @@ function repeatsSvg(defs) {
   parts.push(text(rx + 190, y + 70, "in file order.", { size: 12, anchor: "start" }));
   parts.push(text(lx, y + 96, `Sections: ${modes.append.join(", ")}.`, { size: 11, anchor: "start", fill: MUTED }));
 
-  return svg(760, y + 112, "What the game does with a second copy of a section", "Three ways the game combines repeated sections. For most, only the last copy counts. For the terrain, fog and location sections, each copy is written over the start of the same space, so a half-length second MTXM rewrites the top half of the map. For units, sprites, doodads, triggers and briefings, the records of every copy make one list.", parts.join("\n"));
+  return svg(760, y + 112, "What the game does with a second copy of a section", "Three ways the game combines repeated sections. For most, the last copy replaces the others. For the terrain, fog and location sections, each copy is written over the start of the same space, so a half-length second MTXM rewrites the top half of the map. For units, sprites, doodads, triggers and briefings, the copies are joined into one list.", parts.join("\n"));
 }
 
 /* ── Picture 6: one doodad in four sections ─────────────── */

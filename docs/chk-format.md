@@ -60,6 +60,8 @@ which of these applies to it:
   `TRIG` sections are one longer trigger list. Units, sprites, doodads, triggers and
   briefings work this way.
 
+![The three ways the game combines a repeated section](images/chk-repeats.svg)
+
 ### Odd lengths
 
 A length can be shorter or longer than the section needs, or run past the end of the
@@ -529,6 +531,8 @@ A megatile is a 32 × 32 picture made of sixteen 8 × 8 minitiles, and leads to 
 as [Game data](game-data.md#how-terrain-is-drawn) describes. Walkability and height are
 kept per minitile, in the VF4 file.
 
+![From a tile number through the CV5, VX4, VR4 and WPE files to pixels](images/chk-tile-lookup.svg)
+
 A doodad's group keeps other things where terrain groups keep their links: the sprite or
 unit drawn over it at offset 4, its name in `stat_txt.tbl` at 8, its number in the
 tileset's doodad list (the number a [`DD2`](#dd2) record stores) at 12, and its width and
@@ -645,6 +649,8 @@ the hit points alone.
 
 The units of a human player slot nobody takes are removed when the game starts; Neutral
 units stay. (Found playing StarCraft: Remastered.)
+
+![The unit record, byte by byte](images/chk-unit-record.svg)
 
 <!-- generated: section UNIT -->
 | Name | `UNIT` (55 4E 49 54) |
@@ -1107,6 +1113,8 @@ Each doodad:
 ```
 <!-- /generated -->
 
+![One doodad as TILE, MTXM, DD2 and THG2 hold it](images/chk-doodad-layers.svg)
+
 This record is all an editor has to say a doodad is there. What the game shows comes from
 elsewhere: the doodad's tiles are written into [`MTXM`](#mtxm), where the game draws them,
 while [`TILE`](#tile) keeps the ground they cover so an editor can put it back when the
@@ -1122,6 +1130,8 @@ Sprites placed on the map. A *pure* sprite (flag 0x1000) is a picture drawn wher
 a tree top, a glow, a doodad's overlay. Without that flag the record is a unit sprite, and
 the game creates a unit of that type when the map loads; that is how StarEdit places the
 Installation's doors and traps. Flag 0x8000 starts such a unit disabled.
+
+![The sprite record, byte by byte](images/chk-sprite-record.svg)
 
 <!-- generated: section THG2 -->
 | Name | `THG2` (54 48 47 32) |
@@ -1412,6 +1422,8 @@ The elevation word works the other way round from how StarEdit shows it: a set b
 such as [Bring](triggers.md#bring) only count units on the elevations the location
 covers.
 
+![The location record, byte by byte](images/chk-location-record.svg)
+
 <!-- generated: section MRGN -->
 | Name | `MRGN` (4D 52 47 4E) |
 | --- | --- |
@@ -1466,6 +1478,8 @@ location leaves out:
 The triggers, 2400 bytes each, in the order they run. The record is laid out in the
 [trigger reference](triggers.md#the-trigger-record), which also has a page for every
 condition and action.
+
+![The trigger record, byte by byte](images/chk-trigger-record.svg)
 
 <!-- generated: section TRIG -->
 | Name | `TRIG` (54 52 49 47) |

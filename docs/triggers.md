@@ -317,6 +317,8 @@ set of actions.
 
 ### A trigger
 
+![The trigger record, byte by byte](images/chk-trigger-record.svg)
+
 | Bytes | Holds |
 | --- | --- |
 | 0–319 | 16 conditions, 20 bytes each |

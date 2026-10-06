@@ -126,7 +126,7 @@ describe("the CHK format reference", () => {
 
 describe("the files beside the CHK reference", () => {
   it("has pictures that are what chk-diagrams.mjs draws (npm run docs:reference)", () => {
-    for (const [file, svg] of chkDiagrams()) {
+    for (const [file, svg] of chkDiagrams(defs)) {
       expect(existsSync(join(root, file)), file).toBe(true);
       expect(readFileSync(join(root, file), "utf8") === svg, file).toBe(true);
     }

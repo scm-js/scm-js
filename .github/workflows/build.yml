@@ -1,10 +1,18 @@
 # Three channels, and the release list only grows when a version is cut:
 #
-#   ci        every push to main — lint, tests and the web bundle, which is then thrown
-#             away. Nothing is deployed and nothing is released; the build is here so a
-#             broken bundle fails the push (`tsc -b` covers desktop/ through
-#             tsconfig.desktop.json, so a main-process type error is caught here too).
-#             Only the packaging step waits for the nightly.
+#   ci        every push to main, and every pull request against it — lint, tests and
+#             the web bundle, which is then thrown away. Nothing is deployed and nothing
+#             is released; the build is here so a broken bundle fails the push (`tsc -b`
+#             covers desktop/ through tsconfig.desktop.json, so a main-process type error
+#             is caught here too). Only the packaging step waits for the nightly.
+#
+#             A pull request runs the `channel` and `web` jobs and nothing else, and both
+#             are read-only (`permissions: contents: read` on the job). That is the whole
+#             of what keeps a pull request from writing anything, so it rests on two
+#             things staying true: `channel` answers `ci` for a pull request before it
+#             looks at anything else, and `plugin-api` — the one publishing job the `ci`
+#             channel runs — says "not a pull request" in its own `if`. A job added later
+#             that runs on `ci` needs the same two questions asked of it.
 #   nightly   a daily cron (and manual dispatch) — installers for Windows, macOS and
 #             Linux plus a zip of the web bundle, on ONE rolling prerelease whose tag
 #             `nightly` is force-moved to the commit it was built from and whose assets
@@ -92,6 +100,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   schedule:
     # 07:17 UTC. Scheduled workflows run on the default branch only, and GitHub disables
     # them after 60 days with no repository activity.
@@ -112,9 +122,13 @@ permissions:
   pages: write
   id-token: write
 
+# A pull request's ref is its own (`refs/pull/<n>/merge`), so each queues behind itself
+# only — and there a newer push replaces the run of the one before, which nobody is
+# waiting for any more. Everywhere else a run in progress may be half way through
+# publishing something and is left to finish.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: 22
@@ -123,6 +137,9 @@ jobs:
   channel:
     name: Channel
     runs-on: ubuntu-latest
+    # Reads the tags and nothing else. With `web`, the whole of a pull request's run.
+    permissions:
+      contents: read
     outputs:
       channel: ${{ steps.pick.outputs.channel }}
       version: ${{ steps.pick.outputs.version }}
@@ -145,6 +162,15 @@ jobs:
           # choice that can never sort above the release that comes next.
           pkg=$(node -p "require('./package.json').version")
           emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
+          # A pull request is the `ci` channel whatever else is true of it: asked first,
+          # so nothing below can make one a nightly or a release.
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            emit channel ci
+            emit tag ""
+            emit version "$(node scripts/next-version.mjs)-dev.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+            exit 0
+          fi
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             tag=${GITHUB_REF#refs/tags/}
@@ -185,6 +211,11 @@ jobs:
     needs: channel
     if: needs.channel.outputs.channel != 'skip'
     runs-on: ubuntu-latest
+    # Everything this job makes leaves it as an artifact, which needs no permission; the
+    # jobs that put those somewhere hold the write scopes themselves. The token below is
+    # only there to read public repositories off the shared anonymous rate limit.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -228,6 +259,22 @@ jobs:
           # For `prebuild`'s vendoring step: one file-list request per plugin, off the
           # anonymous rate limit runners share.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The browser tests (`e2e/`, docs/development.md) drive the bundle just built, before
+      # anything is made of it — and before `Build (Pages)` below writes `dist/` again for
+      # another base path. The headless shell alone: nothing here opens a headed browser.
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Test (browser)
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Zip
         if: needs.channel.outputs.channel != 'ci'
         run: cd dist && zip -qr ../scmJS-web.zip .
@@ -293,7 +340,11 @@ jobs:
   plugin-api:
     name: Plugin API types
     needs: [channel, web]
-    if: needs.channel.outputs.channel != 'skip'
+    # Never for a pull request: this runs on the `ci` channel, a pull request from a
+    # branch of this repository is handed the deploy key and the OIDC identity like any
+    # other run, and what it would publish is a contract nobody has merged — under a
+    # version number npm will not give back.
+    if: needs.channel.outputs.channel != 'skip' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

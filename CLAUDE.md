@@ -45,6 +45,7 @@ reach, and the traps in them are not visible from the code.
 | `src/formats/tileset/**`, `useTileset` | `tileset.md` |
 | `src/components/**`, `MapViewport`, dialogs, hotkeys, drops, the close guard, `services/mapImage.ts` | `viewport-ui.md` |
 | `services/preload.ts`, `usePreload`, the splash, `devReactTracks.ts` | `startup.md` |
+| `e2e/**`, `playwright.config.ts` — the browser tests | `e2e.md` |
 
 ## Commands
 
@@ -55,6 +56,7 @@ npm run lint           # oxlint
 npm test               # vitest run (node environment, ~2s)
 npm run test:watch
 npm run test:maps      # tests/maps/*.scx|scm again from tests/support/testMaps.ts (no game data needed)
+npm run test:e2e       # Playwright (e2e/*.spec.ts) against dist/ — `npm run build` first; ~20s
 npx vitest run tests/chk.test.ts          # one file
 npx vitest run -t "flood fill"            # tests matching a name
 npm run extract        # StarDat/BrooDat.mpq → public/tileset, arr (incl. weapons/upgrades/techdata.dat), game, scripts, unit (BrooDat required)
@@ -124,6 +126,13 @@ files are absent — **a green run does not mean the terrain, doodad and StarEdi
 skipped describe's body to collect it, so a suite that reads those files in the body (not inside
 `it` / `beforeAll`) must be guarded with `if (have) describe(...)` instead, or CI — which has no
 game data — crashes on the read.
+
+**Browser tests.** `e2e/*.spec.ts` (Playwright, headless Chromium) drive the *built* bundle —
+`npm run test:e2e` serves `dist/` and does not build, so a change to `src/` needs `npm run build`
+before it is tested. Every spec runs with no game data, no network and no native file pickers
+(`e2e/support/editor.ts`), and fails if the page threw or logged an error. `dialogs.spec.ts`
+opens every id in `DialogHost`'s registry: a new dialog that renders nothing without a payload
+must be added to its `NEEDS_PAYLOAD`. See `e2e.md`.
 
 **TypeScript.** `tsconfig.app.json` is strict-ish: `noUnusedLocals`, `noUnusedParameters`,
 `verbatimModuleSyntax` (use `import type`), `erasableSyntaxOnly` (no enums / parameter properties).

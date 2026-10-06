@@ -53,9 +53,15 @@ it used to blank the game-data address) + the main bundle + electron-builder, wh
 step's platform, architecture and targets (`-- win nsis`, `-- linux AppImage arm64`, `-- --dir`
 for an unpacked check, `--skip-web` / `--skip-main` to reuse the bundles on disk, `--` for
 electron-builder verbatim); with no arguments it is this OS on `electron-builder.yml`'s targets, which
-is what CI runs. The workflow has three channels — `ci` (every push to main: lint, tests and the web
+is what CI runs. The workflow has three channels — `ci` (every push to main and, since 2026-10-06, every pull
+request against it: lint, tests and the web
 bundle built and thrown away, so a broken bundle fails the push that broke it; **nothing deployed,
-no installers and no release**), `nightly` (a daily cron, skipped when main has not moved: the
+no installers and no release**. A pull request runs only `channel` and `web`, both
+`permissions: contents: read` at the job; `permissions` takes no expressions, so the write scopes
+could not be made conditional at the top and were instead left where they were for the jobs a
+pull request never reaches. `plugin-api` runs on `ci` and **publishes to npm**, and a same-repo
+pull request gets the secrets and the OIDC identity, so its `if` excludes `pull_request` by name —
+any new job that runs on `ci` needs the same), `nightly` (a daily cron, skipped when main has not moved: the
 installers on ONE rolling prerelease whose `nightly` tag is force-moved and whose assets are
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).

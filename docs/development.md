@@ -42,6 +42,7 @@ npm run lint           # oxlint; does not type-check
 npm test               # vitest, a few seconds, no browser
 npm run test:watch
 npm run test:maps      # write tests/maps again from the code that makes them
+npm run test:e2e       # the browser tests, against dist/ (build first)
 npx vitest run tests/chk.test.ts      # one file
 npx vitest run -t "flood fill"        # tests matching a name
 npm run check:assets   # what game data is on disk
@@ -52,7 +53,8 @@ npm run docs:reference # rewrite the generated tables of the trigger and CHK ref
 main process (`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`). The
 app config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax` (so
 `import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
-parameter properties). Lint and build both run on every push, so run them before one.
+parameter properties). Lint, the tests and the build run on every pull request and every
+push to `main`, so run them before one.
 
 ### Dev deep-links
 
@@ -108,6 +110,7 @@ src/
 desktop/        The Electron shell: main process, preload bridge, updater
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
 tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
+e2e/            Browser tests: Playwright specs that drive the built editor
 docs/           These documents, the release notes, the guide's pictures
 docker/         The container image
 plugins/        Generated: the default plugins' source at their pinned versions (gitignored)
@@ -172,7 +175,8 @@ is rolled back through the same change lists. See [The plugin host](#the-plugin-
 ## Tests
 
 Tests are `tests/*.test.ts` (and any `src/**/*.test.ts`), run by vitest in Node with no
-browser. The whole suite takes a few seconds.
+browser. The whole suite takes a few seconds. A second, much smaller set drives the built
+editor in a real browser; see [Browser tests](#browser-tests).
 
 The suites open two sets of map files. `tests/maps/` is committed: five small `.scx` and
 `.scm` maps built by `tests/support/testMaps.ts` from the editor's own code, with nothing
@@ -498,7 +502,7 @@ version is cut:
 
 | channel | trigger | what lands |
 | --- | --- | --- |
-| `ci` | every push to `main` | lint, tests and the web bundle, built and thrown away. Nothing is deployed and nothing is released. |
+| `ci` | every push to `main`, and every pull request against it | lint, the tests (vitest and the browser tests) and the web bundle, built and thrown away. Nothing is deployed and nothing is released. A pull request's run is read-only and does not publish the plugin typings. |
 | `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus that zip unpacked onto `nightly.editor.scmjs.dev`. |
 | `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `editor.scmjs.dev`, and the docs site. |
 
@@ -642,6 +646,50 @@ The guides are written to be read on GitHub as well; the site's link rewriter tu
 relative link to one of the eight documents into a page and anything else in the
 repository into a link back to GitHub, and `tests/docs.test.ts` checks every link and
 picture.
+
+### Browser tests
+
+`e2e/*.spec.ts` are Playwright specs that drive the built editor in a headless Chromium.
+They cover what the vitest suites cannot reach, because those never render anything:
+that the bundle starts, that each dialog's chunk loads and mounts, and that a change made
+through the chrome ends up in the file the Save button writes.
+
+```sh
+npx playwright install chromium       # once
+npm run build                         # the specs run against dist/
+npm run test:e2e
+npx playwright test e2e/save.spec.ts  # one file
+npx playwright test --ui              # watch a spec run, step through it
+```
+
+`npm run test:e2e` serves `dist/` with `vite preview` on port 4173 and does not build, so
+it tests the last build: build again after changing the editor. To run against something
+already being served, the dev server included, set `SCMJS_E2E_URL` to its address.
+
+Every spec starts from the same three conditions, set up in `e2e/support/editor.ts`, so
+that a run on a machine with game data is the run CI makes:
+
+- No game data. Requests for the extracted files are answered as a build without them
+  answers, so terrain is flat colours and the editor offers Help ▸ Game Data… shortly
+  after it starts. A spec that clicks around closes that dialog first.
+- No network. Anything not served by the build under test is refused.
+- No native file pickers. Playwright cannot drive them, so the editor opens through a
+  file input and saves as a download, as it does in Firefox and Safari. Saving straight
+  back to an opened file is not covered.
+
+After each test the fixture fails it if the page threw or logged an error.
+
+There are three specs. `boot.spec.ts` is a first visit: splash, editor, the Game Data
+offer, a blank map drawn. `dialogs.spec.ts` opens every dialog through its deep link, in
+English and in Korean; it reads the dialog ids out of the registry, so a new dialog is
+covered without touching the spec, and the two that are only ever opened with a payload
+are listed in it as skipped. `save.spec.ts` opens one of the `tests/maps/` files, renames
+it in Map Properties, saves, and reads the download back with the editor's own format
+code: the new name is there and every other section is byte for byte what it was.
+
+A failure leaves a trace under `test-results/`; `npx playwright show-trace <trace.zip>`
+replays it with the DOM at each step. CI runs the specs in the web build, against the
+bundle it is about to publish, and keeps the report of a failed run as an artifact.
 
 ### Guide screenshots
 

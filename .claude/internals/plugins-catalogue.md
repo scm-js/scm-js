@@ -77,7 +77,7 @@ last-standing… — built by code into text triggers the editor parses; the ass
 `tests/convert.test.ts` under its own vitest). It used to be `plugins/terrain-from-image/` here; it was moved out precisely so the
 plugin the editor ships is loaded by the ordinary path, and its internals are documented there
 (`docs/plugins.md` only points at it). Changing `src/plugins/api.ts` reaches it through
-`github.com/scm-js/plugin-api`, which build.yml republishes on every push to main. `tests/plugins.test.ts` covers the host side
+`github.com/scm-js/plugin-api`, which build.yml republishes on every push to main (never from a pull request). `tests/plugins.test.ts` covers the host side
 (loader, host, transactions, lifecycle, menu merge, context rows, picks, transfers, the defaults
 list, the add-confirmation preview and install, map tools, panels, the palette API, placement, and the
 real-tileset suite via `primeTileset`).

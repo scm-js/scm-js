@@ -25,6 +25,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:maps": "node scripts/test-maps.mjs",
+    "test:e2e": "playwright test",
     "extract": "node scripts/extract-assets.mjs",
     "extract:tilesets": "node scripts/extract-tilesets.mjs",
     "extract:units": "node scripts/extract-units.mjs",
@@ -46,6 +47,7 @@
     "typescript": "~6.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

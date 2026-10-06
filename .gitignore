@@ -6,6 +6,10 @@ dist/
 desktop/dist/
 release/
 
+# Browser test output (`npm run test:e2e`)
+/test-results/
+/playwright-report/
+
 # Editor
 *.local
 .env*

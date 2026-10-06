@@ -213,12 +213,12 @@ function main(argv) {
     url: `${base}/`,
     section: "Home",
     body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "what-it-does")?.body ?? "",
-      (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt })),
+      (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt, code: codeOpts })),
   });
 
   /* ── the guides ── */
   for (const guide of guides) {
-    const intro = guide.intro ? renderMarkdown(guide.intro, { shift: 0, rewriteLink: (h) => resolveLink(guide.file, h), tryIt }) : "";
+    const intro = guide.intro ? renderMarkdown(guide.intro, { shift: 0, rewriteLink: (h) => resolveLink(guide.file, h), tryIt, code: codeOpts }) : "";
     emit({
       title: guide.title,
       description: guide.blurb,
@@ -241,7 +241,7 @@ ${guide.pages.map((p) => `<li><a class="card" href="${base}${p.url}"><b>${escape
         section: guide.title,
         headings: p.headings.map((h) => h.text),
         toc: tocHtml(p.headings),
-        body: `<h1>${escapeHtml(p.title)}</h1>\n${renderMarkdown(p.body, { shift: -1, rewriteLink: (h) => resolveLink(guide.file, h), tryIt })}`,
+        body: `<h1>${escapeHtml(p.title)}</h1>\n${renderMarkdown(p.body, { shift: -1, rewriteLink: (h) => resolveLink(guide.file, h), tryIt, code: codeOpts })}`,
       });
     }
   }
@@ -416,7 +416,7 @@ function apiIndexHtml(api, base, opts) {
   const { reference, apiVersion } = api;
   const rows = reference.groups.map((g) => `<tr>
 <th><a href="${base}/api/${g.slug}/"><code>api.${escapeHtml(g.property)}</code></a></th>
-<td>${g.summary ? renderMarkdown(g.summary, { shift: 4, headingIds: false, rewriteLink: opts.rewriteLink }) : `<p>${escapeHtml(g.name)}</p>`}</td>
+<td>${g.summary ? renderMarkdown(g.summary, { shift: 4, headingIds: false, rewriteLink: opts.rewriteLink, code: opts }) : `<p>${escapeHtml(g.name)}</p>`}</td>
 </tr>`).join("\n");
   const plain = reference.plain.map((m) => `<li><code>api.${escapeHtml(m.name)}</code> — ${m.summary ? escapeHtml(stripMd(m.summary)) : escapeHtml(m.type || m.signature)}</li>`).join("\n");
   return `<h1>API reference</h1>
@@ -446,8 +446,8 @@ ${EXAMPLE_PLUGINS.map((p) => `<li><a class="card" href="${REPO_URL.replace("/scm
 }
 
 function groupHtml(group, types, examples, opts) {
-  const summary = group.summary ? renderMarkdown(group.summary, { shift: 0, headingIds: false, rewriteLink: opts.rewriteLink }) : "";
-  const detail = group.detail ? renderMarkdown(group.detail, { shift: 0, headingIds: false, rewriteLink: opts.rewriteLink }) : "";
+  const summary = group.summary ? renderMarkdown(group.summary, { shift: 0, headingIds: false, rewriteLink: opts.rewriteLink, code: opts }) : "";
+  const detail = group.detail ? renderMarkdown(group.detail, { shift: 0, headingIds: false, rewriteLink: opts.rewriteLink, code: opts }) : "";
   const seeAlso = examples.length > 0
     ? `<h2 id="seen-in">Seen in</h2>
 <ul class="cards">${examples.map((p) => `<li><a class="card" href="https://github.com/scm-js/${p.repo}"><b>${escapeHtml(p.name)}</b><span>${escapeHtml(p.of)}</span></a></li>`).join("")}</ul>`

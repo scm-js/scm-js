@@ -138,8 +138,14 @@ files to that file itself (`withRuntimeNotices`, idempotent, throws on a runtime
 *adapted* algorithm or table needs an entry in `ATTRIBUTION.md` and a provenance comment
 (`tests/notices.test.ts`).
 
-`render.mjs` is the HTML and a small TypeScript colouriser whose real job is the links —
-every declared name in a signature links to where it is documented. The site is plain
+`render.mjs` is the HTML; `highlight.mjs` is the code colouring, for the reference's signatures
+and examples and for the guides' fenced blocks. Its TypeScript colouriser's real job is the links —
+every declared name in a signature links to where it is documented — and the guides' ```ts blocks
+get the same links (`renderMarkdown`'s `code` option, the build's `codeOpts`). `highlightAs` goes by
+the fence's language: the ts/js/json family, `sh`, `yaml` and `trigedit`, one regular expression
+each rather than a grammar, so the site keeps `marked` as its only dependency. A `text` fence or one
+with no language is left as marked's own block, uncoloured. The classes are `k s n c t f` under
+`pre` in `docs.css` (`f` is a trigger condition's or action's name). The site is plain
 static files in the editor's palette, like `scm-js/site`: one stylesheet, one script
 (`assets/search.js`, a JSON index fetched on first use and scanned in the page), no
 framework and nothing fetched at runtime. `tests/docs.test.ts` pins the split (a `#` inside

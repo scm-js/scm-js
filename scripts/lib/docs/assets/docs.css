@@ -283,6 +283,7 @@ main p.home-shot > img {
 pre .k { color: var(--violet); }
 pre .s { color: #8fd694; }
 pre .n { color: #d79b6a; }
+pre .f { color: var(--gold); }
 pre .c { color: var(--text-faint); font-style: italic; }
 pre .t { color: var(--teal); }
 pre .t:hover { text-decoration: underline; }

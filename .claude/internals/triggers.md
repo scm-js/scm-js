@@ -60,7 +60,8 @@ they went through `triggerNames` and every prefix typed was appended to the map'
 Cancel or not. A working copy can therefore hold negative `text` / `wav` values; nothing else may
 read one as a string index without those names. `tests/triggerDrafts.test.ts`. Trigger dialogs are settings-style
 transactions: `useScenarioForm(scenario, readTriggers)` → `applyTriggers` (marks `TRIG` only on a
-real change) → `commitTriggersAtom` (`triggersRevisionAtom`); nothing is in the undo model.
+real change) → `commitTriggersAtom` (`triggersRevisionAtom`), which records the OK as one history entry
+(`clipboard.md`, "Dialog undo"); the working copy inside an open dialog is not in the undo model.
 `newCondition` / `newAction` seed StarEdit-like defaults.
 **The list on a big map** (2026-10-04). `TriggerListEditor` used to call `summarizeTrigger` for every
 row on every render, and every keystroke in a comment or argument renders it — 3,000 triggers

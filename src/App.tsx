@@ -11,6 +11,7 @@ import type { PendingAction } from "./hooks/useMapFileActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
+import { useWhatsNew } from "./hooks/useWhatsNew";
 import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { usePluginLink } from "./hooks/usePluginLink";
@@ -76,6 +77,7 @@ export default function App() {
   useRecovery();
   useDesktopFiles();
   useUpdateCheck();
+  useWhatsNew();
 
   useEffect(() => {
     if (chrome) return;

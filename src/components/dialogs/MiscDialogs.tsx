@@ -475,6 +475,7 @@ const STACK = [
 
 export function AboutDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
+  const openDialog = useSetAtom(openDialogAtom);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const projectPage = (path: string) =>
     window.open(
@@ -535,11 +536,11 @@ export function AboutDialog({ entry }: DialogProps) {
           <h2 className="about-app-name">
             scm<span>JS</span>
           </h2>
-          <div>
+          <button className="about-version" title={t("What's New")} onClick={() => openDialog("whatsNew")}>
             {desktopBridge()
               ? `${desktopBridge()!.platform} · ${APP_VERSION}`
               : APP_VERSION}
-          </div>
+          </button>
           {/* <div className="about-tagline">
             StarCraft · Brood War · Remastered
           </div> */}

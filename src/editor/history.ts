@@ -15,6 +15,7 @@ import { applyFogChanges } from "./fog";
 import { applyDoodadChanges, type DoodadChange } from "./doodads";
 import { applySpriteChanges, type SpriteChange } from "./sprites";
 import { applyLocationChanges, type LocationChange } from "./locations";
+import type { TablesEdit } from "./tableHistory";
 
 /** The change lists of one edit; `HistoryEntry` adds the label. */
 export interface HistoryEdit {
@@ -54,6 +55,12 @@ export interface HistoryEdit {
    * on such a map). Undo removes the section again.
    */
   createdMask?: Uint8Array;
+  /**
+   * What a dialog wrote — settings, triggers, the briefing, strings (editor/tableHistory.ts).
+   * An entry with this part has no other: `applyEntry` leaves it alone, and the undo and
+   * redo atoms apply it with `applyTables`.
+   */
+  tables?: TablesEdit;
 }
 
 export interface HistoryEntry extends HistoryEdit {
@@ -111,7 +118,7 @@ export const hasEdits = (entry: HistoryEdit) =>
 
 /**
  * Why the map changed: an edit recorded in the history, an undo or redo of one, a dialog
- * writing its tables (settings, triggers, strings — outside the history), a change to the
+ * writing its tables (settings, triggers, strings), a change to the
  * whole document (resize, tileset change, raw section edit), or other people's edits on a
  * shared map.
  */
@@ -162,6 +169,9 @@ export function entryParts(entry: HistoryEdit): CommitParts {
     sprites: (entry.sprites?.length ?? 0) > 0,
     locations: (entry.locations?.length ?? 0) > 0,
     fog: (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined,
+    settings: entry.tables !== undefined && (entry.tables.values !== undefined || entry.tables.strings !== undefined
+      || entry.tables.stringsLength !== undefined || entry.tables.stringsFormat !== undefined || entry.tables.extras !== undefined),
+    triggers: entry.tables?.lists !== undefined,
   };
 }
 

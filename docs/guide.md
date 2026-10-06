@@ -90,8 +90,9 @@ Editing page of Preferences) sets its spacing, colour and style. The panels can 
 
 Every layer has its own selection and its own palette. Undo is Ctrl+Z, two hundred steps
 deep and shared across all the layers, so a terrain stroke and the units it stranded
-come back together. Anything done in a dialog — player settings, triggers, strings — is
-its own OK / Apply / Cancel transaction and is not in the undo history, as in StarEdit.
+come back together. A dialog — player settings, triggers, strings — is its own OK / Apply /
+Cancel transaction, and each OK or Apply that changed something is one more undo step
+("Edit triggers", "Edit settings"), in the same history as the strokes around it.
 
 ## Your first map
 
@@ -520,7 +521,8 @@ TrigScript has a guide of its own, [docs/trigscript.md](trigscript.md):
 ## Scenario settings
 
 The Scenario menu holds the map's own tables. Each dialog is its own OK / Apply / Cancel
-transaction; none of it is in the undo history.
+transaction, and what an OK or Apply wrote is one undo step: Ctrl+Z after closing the
+dialog takes the whole of it back, and Ctrl+Y puts it on again.
 
 ### Map Properties, Players, Forces, Colours
 
@@ -1033,10 +1035,9 @@ A few things are the same for every feature:
 - **What is sent.** Only what the feature needs: what you typed and the map's facts (size,
   tileset, players, what is where). Some features also send a picture of the map, the
   strings or the triggers. The map file itself is never sent.
-- **Undo.** Every change the AI makes is one undo step, labelled "AI: …". The exception is
-  anything written through a settings dialog (the name and description, strings, triggers,
-  players, unit settings). Those changes are left out of the undo history, just like when
-  you make them by hand, and the dialogs point this out.
+- **Undo.** Every change the AI makes is one undo step, labelled "AI: …". That includes
+  what it writes to the map's tables (the name and description, strings, triggers,
+  players, unit settings), just like when you change them by hand in a dialog.
 - **Cost.** Every AI dialog shows its progress while you wait, and the cost when it
   finishes.
 
@@ -1342,6 +1343,18 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
 Nothing is written until OK or Apply; **Reset to defaults** puts every page back. The
 placement options, the panels and the recent files are remembered too.
 
+### What's new
+
+**Help ▸ What's New…** lists what changed in each release, newest first, with the release
+you are running open and the older ones folded below it. The part written for plugin
+authors is folded as well. The notes come with the editor, so the list works offline and
+always matches the build in front of you; a nightly build shows the notes of the last
+release. The version line in **Help ▸ About scmJS…** opens the same list.
+
+The first time you start a release with new notes, a notice says the editor has been
+updated and offers the list. It appears once per release. The notes are written in
+English.
+
 ## When something goes wrong
 
 If the editor does something strange (or a bug happens) you can check the debug console to see
@@ -1394,12 +1407,15 @@ This section lists what is currently missing in the editor and the limits worth 
 
 ### Not implemented
 
-- **Undo for dialogs.** What a dialog writes (player settings, triggers, strings, the
-  scenario's tables) is not in the undo history, as in StarEdit; Cancel is the way back.
-  The larger editors (triggers, the briefing, strings, sounds, switches, and the unit,
-  upgrade and technology settings) ask before Escape, the close button or a click outside
-  the dialog throws away changes you have not applied.
-  Resizing and changing the tileset clear the undo history.
+- **Undo inside a dialog, and across a resize.** Undo takes back what a dialog's OK or
+  Apply wrote, as one step; what you change inside an open dialog before that is not in
+  the history, and Cancel is the way back. The larger editors (triggers, the briefing,
+  strings, sounds, switches, and the unit, upgrade and technology settings) ask before
+  Escape, the close button or a click outside the dialog throws away changes you have not
+  applied. Resizing and changing the tileset clear the undo history.
+- **Very large trigger edits shorten the history.** A step that rewrites thousands of
+  triggers (a TrigScript build, say) is kept, but the oldest steps are dropped sooner than
+  the undo-levels setting says, so the history cannot grow without bound.
 - **Remastered graphics.** The editor draws the classic graphics from the 1.16 archives,
   not Remastered's HD art.
 
@@ -1447,8 +1463,10 @@ This section lists what is currently missing in the editor and the limits worth 
 - The AI, keeping maps on an account and editing a map together all run on scmjs.dev
   and need a connection. The AI starts with a free trial; keeping and sharing maps need an
   account.
-- On a shared map, if two people press OK in the same dialog, the second OK wins. A
-  resize, a tileset change or a raw section edit starts everyone's undo history again.
+- On a shared map, if two people press OK in the same dialog, the second OK wins.
+  Undoing your own OK puts a table back only if nobody has written it since; a table
+  someone else changed after you stays as they left it. A resize, a tileset change or a
+  raw section edit starts everyone's undo history again.
 
 ### Plugins
 

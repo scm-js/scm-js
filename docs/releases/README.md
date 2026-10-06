@@ -13,6 +13,15 @@ Write the file as the release body itself: no title (the release is already titl
 `scmJS X.Y.Z`) and no "What's Changed" heading (the generated list brings its own).
 Markdown, addressed to someone deciding whether to update.
 
+## In the editor
+
+The same files are built into the editor and shown by Help ▸ What's New…, so a notes file
+is read by people who never open the release page. That reader draws a small part of
+Markdown: `##` headings, paragraphs, bullets (one level of nesting), bold, italic, inline
+code and links to web addresses. Leave out tables, images, code fences, numbered lists and
+HTML — the test suite fails on a file that uses them. A section whose heading starts with
+**For plugin authors** is shown folded.
+
 ## Style
 
 - Say what the reader will notice, not how it was done. "Scrolling is smoother on large

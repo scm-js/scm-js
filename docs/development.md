@@ -140,9 +140,11 @@ scenario must mark every section it touched, or the change is silently lost on s
 
 **Edits are invertible change lists.** A brush, a placement or a paste produces a list of
 `{ before, after }` changes per layer, applied by one function in one fixed order and
-reversed for undo. A stroke is one history entry (200 levels). The settings dialogs, the
-trigger editors, resize, and the tileset change are transactions outside the undo model,
-as in StarEdit: each is its own OK / Apply / Cancel.
+reversed for undo. A stroke is one history entry (200 levels). The settings dialogs and
+the trigger editors are OK / Apply / Cancel transactions that hand over no change list:
+what an OK wrote is found by comparing the tables with how they were, and that difference
+is the history entry. Resize and the tileset change are transactions outside the undo
+model, and clear it.
 
 **Dialogs are lazy.** Adding one means a `DialogId` in `src/components/dialogs/ids.ts`
 and an entry in the registry in `DialogHost.tsx`, which loads each dialog module on

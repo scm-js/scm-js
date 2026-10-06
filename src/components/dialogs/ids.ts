@@ -45,4 +45,5 @@ export type DialogId =
   | "confirmPlugin"
   | "pluginDialog"
   | "gameData"
-  | "update";
+  | "update"
+  | "whatsNew";

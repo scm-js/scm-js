@@ -490,6 +490,7 @@ function useMenus(): Menu[] {
         dlg(msg("Game Data…"), "gameData"),
         // Desktop only: the web build has nothing to update.
         ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),
+        dlg(msg("What's New…"), "whatsNew"),
         link(msg("Documentation"), DOCS_URL),
         sep,
         // The whole of a bug report: the build, the game data source, the plugins and the

@@ -602,16 +602,16 @@ export interface DocumentApi {
    */
   edit<R>(label: string, build: (tx: EditTransaction) => Sync<R>): EditResult;
   /**
-   * The second kind of write: the tables and settings that live outside the undo model
-   * — triggers, the string table, switch names, the scenario's own properties — as one
-   * transaction, the way a settings dialog's OK applies its whole form at once.
-   * Operations apply as they are called; the commit marks the map modified and bumps
-   * what the chrome reads. There is no undo entry: keep your own if you need one.
+   * The second kind of write: the tables and settings the dialogs edit — triggers, the
+   * string table, switch names, the scenario's own properties — as one transaction, the
+   * way a settings dialog's OK applies its whole form at once. Operations apply as they
+   * are called; the commit marks the map modified, bumps what the chrome reads and
+   * records what changed as one undo entry under `label`.
    * `build` is synchronous, as `edit`'s is, and closed when it returns.
    *
-   * There is nothing to roll an update back with, so a builder that throws leaves what
-   * it wrote: the sections it touched are committed — the map is modified and the
-   * chrome re-reads — and the error reaches you.
+   * An update is not rolled back, so a builder that throws leaves what it wrote: the
+   * sections it touched are committed — the map is modified, the chrome re-reads, the
+   * undo entry holds what was written — and the error reaches you.
    *
    * @example
    * api.document.update("Rename", (tx) => {

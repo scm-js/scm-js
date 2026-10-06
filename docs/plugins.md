@@ -1075,8 +1075,7 @@ if (file) {
 
 ### Find and replace in every string
 
-`document.update` has no undo entry, so the snippet keeps the table as it was and puts an
-**Undo replace** cell in the status bar that restores it.
+The whole replace is one `document.update`, so it is one undo step under the label given.
 
 ```ts
 const find = await api.ui.prompt("Find in every string");
@@ -1091,13 +1090,7 @@ if (find && replacement !== null) {
     api.document.update("Replace in strings", (tx) => {
       for (const index of hits) tx.strings.set(index, (before[index] ?? "").split(find).join(replacement));
     });
-    const undo = api.ui.statusItem({
-      text: "Undo replace",
-      onClick: () => {
-        api.document.update("Undo replace", (tx) => tx.strings.apply(before));
-        undo.remove();
-      },
-    });
+    api.ui.status(`Replaced in ${hits.length} strings. Ctrl+Z takes it back.`);
   }
 }
 ```
@@ -1188,7 +1181,7 @@ editor's own three ways of writing: a brush stroke, a dialog's OK, and a raw fil
 | Call | Covers | Undo | If your function throws |
 | --- | --- | --- | --- |
 | `document.edit(label, build)` | Terrain and objects: tiles, ISOM, units, sprites, doodads, locations, fog. | One history entry. | Rolled back. |
-| `document.update(label, build)` | Tables and settings: triggers, briefing, strings, switch names, name and description, players, forces, unit / upgrade / tech settings, sounds, map revision. | None, as with a settings dialog. | What was written stays. |
+| `document.update(label, build)` | Tables and settings: triggers, briefing, strings, switch names, name and description, players, forces, unit / upgrade / tech settings, sounds, map revision. | One history entry, as with a settings dialog's OK. | What was written stays, as one entry. |
 | `document.sections.*` | The file's raw bytes, any section. | None, and the history is cleared. | Nothing is written. |
 
 In both transactions each operation applies immediately, so a later one sees what an
@@ -1418,8 +1411,8 @@ api.document.update("Add a countdown", (tx) => {
 });
 ```
 
-There is no undo entry. To offer one, keep a copy of what you replaced
-(`api.triggers.list()` before) and put it back with `tx.triggers.set(...)`.
+The update is one undo entry under its label, like a dialog's OK: `api.document.undo()`
+or Ctrl+Z takes back everything it wrote.
 
 ### `api.settings`
 

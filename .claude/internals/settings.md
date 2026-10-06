@@ -16,8 +16,9 @@ slot that sets nothing. `tests/cuwp.test.ts`.
 ### Scenario settings (`src/editor/settings.ts`, `src/formats/chk/sections/{players,settings}.ts`)
 
 The Map Revision, Player Settings, Force Settings, Player Colors and Unit Settings dialogs edit the
-scenario directly and are **not** in the undo model — each dialog is its own OK / Apply / Cancel
-transaction, as in StarEdit. They read a working copy through `useScenarioForm(scenario, read)`
+scenario directly — each dialog is its own OK / Apply / Cancel transaction, as in StarEdit, and
+hands over no change list; `commitSettingsAtom` finds what the OK wrote by diffing against the
+map's tables baseline and records it as one history entry (`clipboard.md`, "Dialog undo"). They read a working copy through `useScenarioForm(scenario, read)`
 (re-read whenever the scenario *object* changes, so a `?dialog=` deep link that opens before the
 startup map exists fills in, and a dialog left open across File ▸ Open does not write stale values),
 write back through the `apply*` functions in `editor/settings.ts` (which `markDirty` only what

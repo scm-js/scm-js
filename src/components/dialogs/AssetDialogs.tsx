@@ -387,7 +387,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
     const changed = applySounds(scenario, form.wavs);
     const extrasChanged = form.extras.size !== extrasAtom.size || [...form.extras].some(([k, v]) => extrasAtom.get(k) !== v);
     if (extrasChanged) setExtras(new Map(form.extras));
-    if (changed || extrasChanged) commit();
+    if (changed || extrasChanged) commit({ extrasBefore: extrasAtom });
   };
 
   const length = (r: SoundRow) => {

@@ -81,6 +81,9 @@ offers the release page instead.
 
 A preference lets the app follow the nightly builds instead of the numbered releases.
 
+After an update, a notice offers the list of what changed; Help ▸ What's New… shows it at
+any time. The browser build, which is always the latest release, does the same.
+
 ### Where it keeps its files
 
 The app's data folder holds the extracted graphics, the window's size and position, and a

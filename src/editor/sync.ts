@@ -90,7 +90,7 @@ export const SYNC_FIELDS = [
 export type SyncField = (typeof SYNC_FIELDS)[number];
 
 /** The sections each field is written to, for `markDirty`. */
-const FIELD_SECTIONS: Record<SyncField, (scn: Scenario) => string[]> = {
+export const FIELD_SECTIONS: Record<SyncField, (scn: Scenario) => string[]> = {
   type: () => ["TYPE"],
   fileVersion: () => ["VER "],
   nameIndex: () => ["SPRP"],

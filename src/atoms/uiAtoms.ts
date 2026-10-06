@@ -35,6 +35,12 @@ export const closeDialogAtom = atom(null, (get, set, key?: number) => {
   else set(dialogStackAtom, stack.filter((d) => d.key !== key));
 });
 
+/**
+ * The release whose notes were last announced or opened in Help ▸ What's New
+ * (`scmjs.whatsNew`); a newer set of notes than this one raises the notice once.
+ */
+export const whatsNewSeenAtom = atomWithStorage<string | null>("scmjs.whatsNew", null, createJSONStorage(browserStorage), { getOnInit: true });
+
 /* ── Panels / docks ─────────────────────────────────────── */
 
 export interface PanelVisibility {

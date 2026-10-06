@@ -79,6 +79,7 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   pluginDialog: from(plugin, (m) => m.PluginDialog),
   gameData: from(() => import("./GameDataDialog"), (m) => m.GameDataDialog),
   update: from(() => import("./UpdateDialog"), (m) => m.UpdateDialog),
+  whatsNew: from(() => import("./WhatsNewDialog"), (m) => m.WhatsNewDialog),
 };
 
 /** Every dialog id the host can show — what a `?dialog=` deep link is checked against. */

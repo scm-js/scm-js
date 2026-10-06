@@ -31,6 +31,7 @@ import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
+import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
@@ -141,14 +142,14 @@ export const isomRevisionAtom = atom(0);
 
 /**
  * Bumped after a settings dialog writes to the scenario — players, forces, colours,
- * revision, unit settings (see editor/settings.ts). Those edits are outside the undo
- * model, and the scenario is mutated in place, so this is how the chrome learns of them.
+ * revision, unit settings (see editor/settings.ts). The scenario is mutated in place, so
+ * this is how the chrome learns of them.
  */
 export const settingsRevisionAtom = atom(0);
 
 /**
  * Bumped after a trigger dialog replaces `scenario.triggers` / `scenario.briefing`
- * (editor/triggers.ts) — like settings, a dialog transaction outside the undo model.
+ * (editor/triggers.ts) — like settings, a dialog transaction.
  */
 export const triggersRevisionAtom = atom(0);
 
@@ -169,19 +170,87 @@ export const noticeWholeAtom = atom(null, (_get, set, req: { reason: "whole" | "
   set(commitNoticeAtom, { reason: req.reason, label: req.label, area: null, parts: { ...ALL_PARTS } });
 });
 
-/** `notice: false` for a caller that announces the change itself (a plugin's `document.update` commits both tables as one). */
-export const commitTriggersAtom = atom(null, (get, set, notice: boolean = true) => {
+/**
+ * How a dialog's commit is recorded. A bare boolean is `notice`: false for a caller that
+ * announces the change itself (a plugin's `document.update` commits both tables as one).
+ */
+export type TablesCommit = boolean | {
+  notice?: boolean;
+  /** The Edit menu's words for the step; the kind of table that changed when omitted. */
+  label?: string;
+  /** The archive's files as they were before the dialog wrote them, when it did (the Sound Editor). */
+  extrasBefore?: Map<string, Uint8Array>;
+};
+
+function tablesLabel(edit: TablesEdit): string {
+  switch (tablesKind(edit)) {
+    case "triggers": return t("Edit triggers");
+    case "briefing": return t("Edit mission briefing");
+    case "sounds": return t("Edit sounds");
+    case "strings": return t("Edit strings");
+    default: return t("Edit settings");
+  }
+}
+
+/**
+ * Put what a dialog just wrote on the undo stack: the difference between the tables as
+ * the editor last knew them and as they are now (editor/tableHistory.ts). Both commit
+ * atoms call this, and a caller that runs both gets one entry — the second finds nothing
+ * left to record. Answers the entry's label, or null when nothing was recorded.
+ */
+function recordTables(get: Getter, set: Setter, how: TablesCommit): string | null {
+  const scn = get(scenarioAtom);
+  if (!scn) return null;
+  const options = typeof how === "object" ? how : {};
+  const edit: TablesEdit = takeTablesEdit(scn) ?? {};
+  const extras = get(archiveExtrasAtom);
+  if (options.extrasBefore && options.extrasBefore !== extras) edit.extras = { before: options.extrasBefore, after: extras };
+  if (Object.keys(edit).length === 0) return null;
+  const entry: HistoryEntry = { label: options.label ?? tablesLabel(edit), changes: [], tables: edit };
+  set(undoStackAtom, withinTablesBudget([...get(undoStackAtom), entry].slice(-Math.max(1, get(preferencesAtom).undoLevels))));
+  set(redoStackAtom, []);
+  return entry.label;
+}
+
+const tablesWeights = new WeakMap<TablesEdit, number>();
+
+/**
+ * Drop the oldest steps while the trigger records the stack keeps alive are over the
+ * budget; the newest step always stays. Whole steps from the old end, as the depth limit
+ * drops them, so what is left is still a history that undoes in order.
+ */
+function withinTablesBudget(stack: HistoryEntry[]): HistoryEntry[] {
+  const weight = (e: HistoryEntry) => {
+    if (!e.tables) return 0;
+    let w = tablesWeights.get(e.tables);
+    if (w === undefined) { w = tablesWeight(e.tables); tablesWeights.set(e.tables, w); }
+    return w;
+  };
+  let total = 0;
+  let keep = stack.length - 1;
+  for (; keep >= 0; keep--) {
+    total += weight(stack[keep]);
+    if (total > TABLES_BUDGET && keep < stack.length - 1) break;
+  }
+  return keep < 0 ? stack : stack.slice(keep + 1);
+}
+
+const wantsNotice = (how: TablesCommit) => (typeof how === "object" ? how.notice !== false : how);
+
+export const commitTriggersAtom = atom(null, (get, set, how: TablesCommit = true) => {
+  const label = recordTables(get, set, how);
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
   get(syncTapAtom)?.tables(get, set);
-  if (notice) set(commitNoticeAtom, { reason: "tables", label: "", area: null, parts: { ...NO_PARTS, triggers: true } });
+  if (wantsNotice(how)) set(commitNoticeAtom, { reason: "tables", label: label ?? "", area: null, parts: { ...NO_PARTS, triggers: true } });
 });
 
 /**
  * Record that a settings dialog changed the scenario. Player colours reach every drawn
  * unit and sprite, so the object layers repaint too.
  */
-export const commitSettingsAtom = atom(null, (get, set, notice: boolean = true) => {
+export const commitSettingsAtom = atom(null, (get, set, how: TablesCommit = true) => {
+  const label = recordTables(get, set, how);
   set(mapModifiedAtom, true);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
@@ -189,7 +258,7 @@ export const commitSettingsAtom = atom(null, (get, set, notice: boolean = true) 
   const scn = get(scenarioAtom);
   if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
   get(syncTapAtom)?.tables(get, set);
-  if (notice) set(commitNoticeAtom, { reason: "tables", label: "", area: null, parts: { ...NO_PARTS, settings: true } });
+  if (wantsNotice(how)) set(commitNoticeAtom, { reason: "tables", label: label ?? "", area: null, parts: { ...NO_PARTS, settings: true } });
 });
 
 export interface ResizeRequest {
@@ -275,6 +344,8 @@ function afterWholeDocumentChange(get: Getter, set: Setter) {
   set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
   set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
+  const scn = get(scenarioAtom);
+  if (scn) rebaseTables(scn);
 }
 
 export const tilesetFileNameAtom = atom<TilesetFileName>((get) => {
@@ -438,6 +509,8 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   });
   set(documentChangeAtom, { reason, scenario });
   set(scenarioAtom, scenario);
+  // From here on a dialog's write can be told from the tables as they were (dialog undo).
+  followTables(scenario);
   set(archiveExtrasAtom, p.extras);
   set(archiveStoredAtom, p.stored);
   set(mapFilePathAtom, p.fileName);
@@ -626,6 +699,9 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
       sprites: entry.sprites?.length, locations: entry.locations?.length,
     });
   }
+  // Naming a location adds a string; it belongs to this entry, not to the next dialog's.
+  const scn = get(scenarioAtom);
+  if (scn) rebaseStrings(scn);
   set(undoStackAtom, [...get(undoStackAtom), entry].slice(-Math.max(1, get(preferencesAtom).undoLevels)));
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);
@@ -685,6 +761,9 @@ export const commitTerrainAtom = atom(null, (get, set, req: { entry: HistoryEntr
  * Location slots do not shift, so that selection only loses slots that stopped being in use.
  */
 function afterUnitEdit(get: Getter, set: Setter, entry: HistoryEntry) {
+  // A location's name comes and goes with its entry; the next dialog's write starts from here.
+  const current = get(scenarioAtom);
+  if (current && entry.locations) rebaseStrings(current);
   if (entry.units) {
     set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
     set(selectedUnitsAtom, []);
@@ -709,6 +788,29 @@ function afterStep(get: Getter, set: Setter, entry: HistoryEntry) {
   bumpGround(get, set, entry);
 }
 
+/**
+ * Undo or redo an entry that holds a dialog's tables. Each table is put back only where
+ * the map still holds what the entry left there (on a shared map someone else may have
+ * written it since), the chrome's mirrors are read again, and a shared map sends the
+ * result as any dialog's write. The entry goes to the other stack as it is.
+ */
+function stepTables(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry, direction: "do" | "undo") {
+  const edit = entry.tables!;
+  applyTables(scn, edit, direction);
+  rebaseAfterTables(scn, edit, direction);
+  if (edit.extras && get(archiveExtrasAtom) === (direction === "do" ? edit.extras.before : edit.extras.after)) {
+    set(archiveExtrasAtom, direction === "do" ? edit.extras.after : edit.extras.before);
+  }
+  set(mapNameAtom, scenarioName(scn) ?? get(mapFilePathAtom) ?? "Untitled Scenario");
+  set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+  set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+  set(mapModifiedAtom, true);
+  // Names and colours reach the lists, the locations and every drawn sprite.
+  for (const a of [settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom, doodadsRevisionAtom, locationsRevisionAtom]) set(a, get(a) + 1);
+  get(syncTapAtom)?.tables(get, set);
+  noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);
+}
+
 export const undoAtom = atom(
   (get) => get(undoStackAtom).at(-1)?.label ?? null,
   (get, set) => {
@@ -716,6 +818,12 @@ export const undoAtom = atom(
     const stack = get(undoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
+    if (entry.tables) {
+      stepTables(get, set, scn, entry, "undo");
+      set(undoStackAtom, stack.slice(0, -1));
+      set(redoStackAtom, [...get(redoStackAtom), entry]);
+      return entry.label;
+    }
     const tap = get(syncTapAtom);
     if (tap?.owns(get)) {
       // A shared map: the entry's records are found again by content, and what could
@@ -761,6 +869,12 @@ export const redoAtom = atom(
     const stack = get(redoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry) return null;
+    if (entry.tables) {
+      stepTables(get, set, scn, entry, "do");
+      set(redoStackAtom, stack.slice(0, -1));
+      set(undoStackAtom, [...get(undoStackAtom), entry]);
+      return entry.label;
+    }
     const tap = get(syncTapAtom);
     if (tap?.owns(get)) {
       const other = tap.step(get, set, entry, "do");

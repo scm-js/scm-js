@@ -35,7 +35,8 @@ recording it. **A builder that throws is rolled back** in `runTransaction`: the 
 accumulated are the inverse, `documentAtoms.ts#rollbackEntryAtom` applies them backwards and
 repaints without touching the history or the modified flag, and the error is rethrown. `runUpdate`
 has no change lists, so on a throw it commits the sections touched (the map reads as modified, the
-chrome re-reads) and rethrows; leaving a renamed map under an unmodified title bar was the
+chrome re-reads, and the commit's tables diff makes it one undo entry — `clipboard.md`, "Dialog
+undo") and rethrows; leaving a renamed map under an unmodified title bar was the
 alternative. `Contributions.disposed` is the terminal state of a deactivation: `add` after it takes
 the contribution straight back with a `console.warn`, and `createPluginApi`'s `gone()` makes every
 document write (`edit`, `update`, `open`, `create`, `save`, `saveAs`, `close`, `resize`,
@@ -149,7 +150,8 @@ them: `document.edit` (terrain and objects, one `HistoryEntry`), **`document.upd
 `applyStrings`), `tx.switches`, `tx.properties`; operations apply as they are called, exactly as
 `runTransaction`'s do — which is what keeps a working-copy ordering hazard, switch names interning
 while a copy of the string table is held, from arising — and the commit runs *both*
-`commitTriggersAtom` and `commitSettingsAtom` and re-syncs `mapNameAtom` / `mapDescriptionAtom`;
+`commitTriggersAtom` and `commitSettingsAtom` (the first records the update's one history entry
+under its label, with `extrasBefore` for `tx.sounds`) and re-syncs `mapNameAtom` / `mapDescriptionAtom`;
 `UpdateResult.sections` is the sections actually touched, so `changed` is false on a no-op), and
 `document.sections` (raw bytes, re-parse, history dropped). `document.update` also carries the Scenario menu's
 dialogs — `tx.players` / `tx.forces` (OWNR+IOWN, SIDE, COLR, CRGB, FORC), `tx.unitTypes` (UNIS/UNIx + PUNI),

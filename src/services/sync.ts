@@ -28,6 +28,7 @@ import { isLocationUsed } from "../formats/chk/sections/objects";
 import {
   SyncCore, captureFields, captureStrings, forgetCells, isSyncOp, type FieldsBaseline, type SyncCells, type SyncDoc, type SyncOp,
 } from "../editor/sync";
+import { rebaseTables } from "../editor/tableHistory";
 import { logInfo, logWarn } from "../editor/log";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { writeMapBytes } from "./mapIo";
@@ -195,6 +196,8 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       store.set(noticeWholeAtom, { reason: "remote", label: "" });
       base = captureFields(doc.scn);
       extrasBase = doc.extras;
+      // Their changes are not the next dialog's to undo.
+      rebaseTables(doc.scn);
     } catch (err) {
       // An op this editor cannot apply leaves the copy out of step with everyone else's;
       // the only safe thing is to end the session and say so.

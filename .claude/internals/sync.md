@@ -98,6 +98,11 @@ the revision is current. The one host addition is `document.sections.chkOf(file)
 out of an archive), which the owner's "Put #N into the shared map" needs before
 `replaceFile` — that goes out as an ordinary `reset` op, no sync change.
 
+**Undo of a dialog's write (2026-10-05)** is not a new op: `stepTables` applies the entry's
+tables with a per-part content check (a table someone else wrote since is left alone) and calls
+`tap.tables()`, so it goes out as an ordinary `fields` op; the drain `rebaseTables` the history's
+own baseline, as it re-captures `base`. See `clipboard.md`, "Dialog undo".
+
 **Deliberately left out (v1).** Per-trigger merging (a dialog OK is
 whole-table LWW, the presence line says who is in which dialog); serial remapping;
 presence of the other person's selection. A server refusal of an op (`error.about ===

@@ -14,7 +14,7 @@ import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "./storage";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
-import { dockWidthsAtom, panelsAtom } from "./uiAtoms";
+import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { recentFilesAtom } from "./documentAtoms";
@@ -103,6 +103,7 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.doodadPlacement": (set) => set(doodadPlacementAtom, RESET),
   "scmjs.panels": (set) => set(panelsAtom, RESET),
   "scmjs.docks": (set) => set(dockWidthsAtom, RESET),
+  "scmjs.whatsNew": (set) => set(whatsNewSeenAtom, RESET),
   "scmjs.console": (set) => set(debugConsoleAtom, RESET),
   "scmjs.consoleHeight": (set) => set(consoleHeightAtom, RESET),
   "scmjs.recents": (set) => { set(recentFilesAtom, RESET); void clearHandles(); },
@@ -190,6 +191,7 @@ const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
   "scmjs.doodadPlacement": (get, set) => set(doodadPlacementAtom, parsedMerged("scmjs.doodadPlacement", get(doodadPlacementAtom))),
   "scmjs.panels": (get, set) => set(panelsAtom, parsedMerged("scmjs.panels", get(panelsAtom))),
   "scmjs.docks": (get, set) => set(dockWidthsAtom, parsedMerged("scmjs.docks", get(dockWidthsAtom))),
+  "scmjs.whatsNew": (_get, set) => set(whatsNewSeenAtom, parsed<string | null>("scmjs.whatsNew", null)),
   "scmjs.console": (_get, set) => set(debugConsoleAtom, parsed("scmjs.console", false)),
   "scmjs.consoleHeight": (_get, set) => set(consoleHeightAtom, parsed("scmjs.consoleHeight", 176)),
   "scmjs.recents": () => {},

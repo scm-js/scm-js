@@ -32,8 +32,8 @@ export interface DialogFrameProps {
   onEscapeKeyDown?: (e: KeyboardEvent) => void;
   /**
    * A working copy worth asking about: while it is dirty, Escape, a press on the dim and
-   * the close button ask before the copy is thrown away, since nothing a dialog holds is
-   * in the undo history. Cancel says what it does and is not asked about. Cleaned after
+   * the close button ask before the copy is thrown away, since a working copy is not
+   * in the undo history (only what OK / Apply wrote is). Cancel says what it does and is not asked about. Cleaned after
    * OK / Apply.
    */
   guard?: FormGuard;

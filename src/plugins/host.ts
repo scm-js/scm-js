@@ -828,6 +828,8 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
   if (!scn) return { changed: false, sections: [], notes: ["no map is open"] };
   const sections = new Set<string>();
   const notes: string[] = [];
+  // The archive's files as the update found them: undo puts a sound's file back with its slot.
+  const extrasBefore = store.get(archiveExtrasAtom);
   const touch = (name: string) => { sections.add(name); };
   const strSection = () => strSectionName(scn);
   /** Note the string table growing: interning happens deep inside several of these. */
@@ -1008,8 +1010,9 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
   // Both commits: triggers for the trigger lists and the script block's manifest, settings
   // for everything that reads names and colours (a string is shown in half the chrome).
   const commit = () => {
-    store.set(commitTriggersAtom, false);
-    store.set(commitSettingsAtom, false);
+    // One history entry for the update: the first commit records everything it wrote, under its label.
+    store.set(commitTriggersAtom, { notice: false, label, extrasBefore });
+    store.set(commitSettingsAtom, { notice: false, label });
     store.set(mapNameAtom, scenarioName(scn) ?? "");
     store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
     store.set(commitNoticeAtom, { reason: "tables", label, area: null, parts: { ...NO_PARTS, settings: true, triggers: true } });

@@ -182,6 +182,40 @@ is the only choice that can never be too high, so nothing has to be decided in a
 whether the next release is 0.9.0 or 1.0.0. That leaves package.json meaning the **last
 released version**, which is true without anyone maintaining it.
 
+### What's New (`src/editor/releaseNotes.ts`, `data/releaseNotes.ts`, `WhatsNewDialog.tsx`, `hooks/useWhatsNew.ts`)
+
+Added 2026-10-05. Help ▸ What's New… (`DialogId` `"whatsNew"`, its own chunk; the About
+dialog's version line opens it too) shows `docs/releases/*.md` — the files the release job
+already reads — **bundled at build time**, not fetched: `data/releaseNotes.ts` is an eager
+`import.meta.glob(…, "?raw")` reached only through `import()` (the dialog's chunk and the
+hook's delayed import), ~27 KB that never touches the startup path. Bundled rather than
+asked of GitHub so it works offline, has no rate limit and always describes the running
+build. Both builds, web included — the web build updates silently and had no way to say so.
+
+`editor/releaseNotes.ts` is the pure part (`tests/release-notes.test.ts`). It reads a
+deliberate subset of Markdown into a tree React draws — no `marked` (a dev dependency of
+the docs site only) and no `innerHTML`; only `http(s)` links become links. The test parses
+every committed notes file and fails on syntax the reader would show raw, so the subset is
+enforced on the writer (`docs/releases/README.md` says which). A `## For plugin authors…`
+section is folded.
+
+Which notes a build shows is `notesVersionFor`: the newest file no newer than the build's
+own release number. A nightly is a patch bump of the last tag, so it lands on the last
+release's notes (the user's call, 2026-10-05: nightlies show the last notes for now); a
+notes file committed ahead for a later minor is not shown until that version is the build.
+
+The notice is a toast for the update check's reasons (above), raised once by `useWhatsNew`
+5 s after mount, no `ttl`. `whatsNewSeenAtom` (`scmjs.whatsNew`, in `STORED_RESETS` /
+`RELOADS`) remembers the **notes'** version, not the build's — comparing builds would
+announce the same notes every night on the nightly line. It is written when the toast is
+raised and when the dialog is opened. With nothing remembered, `shouldAnnounce` tells only
+a *returning* user (any other `scmjs.*` key present, sampled at mount before the plugins
+write theirs), so the release that introduced this announced itself to existing users and a
+fresh install starts quietly. The notes are English only; the dialog chrome is translated.
+
+Not done: the update dialog does not show the *incoming* version's notes (`UpdateInfo.notes`
+is carried from electron-updater and unused by `UpdateDialog.tsx`).
+
 ### In-app updates (`desktop/updater.ts`, `src/editor/updates.ts`)
 
 Desktop only. `desktop/updater.ts` is `electron-updater` over the releases the workflow publishes

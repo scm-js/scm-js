@@ -24,7 +24,7 @@
  * archive travel whole (`extras`), and a change to the whole document — resize, tileset,
  * a raw section edit — travels as the scenario's bytes (`reset`).
  */
-import { markDirty, parseScenario, serializeScenario, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario } from "../formats/chk/scenario";
+import { markDirty, parseScenario, serializeScenario, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario, type SectionName } from "../formats/chk/scenario";
 import { isLocationUsed, type DoodadRecord, type LocationRecord, type SpriteRecord, type UnitRecord } from "../formats/chk/sections/objects";
 import type { TriggerRecord } from "../formats/chk/sections/triggers";
 import type { TextEncoding } from "../formats/text/encoding";
@@ -90,7 +90,7 @@ export const SYNC_FIELDS = [
 export type SyncField = (typeof SYNC_FIELDS)[number];
 
 /** The sections each field is written to, for `markDirty`. */
-export const FIELD_SECTIONS: Record<SyncField, (scn: Scenario) => string[]> = {
+export const FIELD_SECTIONS: Record<SyncField, (scn: Scenario) => SectionName[]> = {
   type: () => ["TYPE"],
   fileVersion: () => ["VER "],
   nameIndex: () => ["SPRP"],

@@ -126,7 +126,12 @@ export function scenarioDescription(scn: Scenario): string | null {
   return getString(scn.strings, scn.descriptionIndex);
 }
 
-export function markDirty(scn: Scenario, ...names: string[]) {
+/**
+ * Mark sections for re-encoding on save. Only a modelled section can be named: a misspelt
+ * name would be accepted by the set and then change nothing in the file, and a section the
+ * editor does not model has no encoder, so marking it would drop it from the file.
+ */
+export function markDirty(scn: Scenario, ...names: SectionName[]) {
   for (const n of names) scn.dirty.add(n);
 }
 
@@ -141,7 +146,7 @@ export function setScenarioDescription(scn: Scenario, text: string) {
 }
 
 /** Which section the string table is written to: STRx for Remastered maps, STR otherwise. */
-export function strSectionName(scn: Scenario): string {
+export function strSectionName(scn: Scenario): "STRx" | "STR " {
   return scn.strings.extended ? "STRx" : "STR ";
 }
 
@@ -209,9 +214,9 @@ export function setTextEncoding(scn: Scenario, encoding: TextEncoding) {
  * its revision reads, plus whichever of the two the file already has (a new map's CHK is
  * empty until its first save, so the dirty set counts as "has").
  */
-function revisionSections(scn: Scenario, original: string, expansion: string): string[] {
+function revisionSections(scn: Scenario, original: SectionName, expansion: SectionName): SectionName[] {
   const has = (name: string) => scn.chk.sections.some((s) => s.name === name) || scn.dirty.has(name);
-  const out: string[] = [];
+  const out: SectionName[] = [];
   if (scn.fileVersion < 205 || has(original)) out.push(original);
   if (isExpansion(scn) || has(expansion)) out.push(expansion);
   return out;
@@ -472,11 +477,16 @@ export const APPEND_ORDER = [
  * carried as bytes and written back unchanged; a raw edit to one of these is only seen
  * by the editor once the file is parsed again (`editor/sections.ts`).
  */
-export const MODELLED_SECTIONS: ReadonlySet<string> = new Set([
+const MODELLED = [
   "TYPE", "VER ", "DIM ", "ERA ", "SPRP", "STR ", "STRx", "OWNR", "IOWN", "SIDE", "COLR", "CRGB", "FORC",
   "UNIS", "UNIx", "PUNI", "UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV ", "UPRP", "UPUS",
   "MTXM", "TILE", "ISOM", "MASK", "UNIT", "THG2", "DD2 ", "MRGN", "TRIG", "MBRF", "SWNM",
-]);
+] as const;
+
+/** A section the editor models — the only names `markDirty` takes. */
+export type SectionName = typeof MODELLED[number];
+
+export const MODELLED_SECTIONS: ReadonlySet<string> = new Set(MODELLED);
 
 const appendRank = (name: string) => { const i = APPEND_ORDER.indexOf(name); return i < 0 ? APPEND_ORDER.length : i; };
 

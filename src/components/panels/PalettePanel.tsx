@@ -269,6 +269,7 @@ function UnitPalette() {
       .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitLabel(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
       .filter((g) => g.units.length > 0);
     // The revision is a dependency for the names: they follow the loaded data set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, dataRevision]);
 
   const races: RaceKey[] = ["terran", "zerg", "protoss", "neutral"];
@@ -393,6 +394,7 @@ function SpritePalette() {
     return cat.groups.map((g) => ({ label: g.label, items: g.ids.map((id) => ({ id, label: cat.entries[id].label })) }));
   }, [assets]);
   // `assets` for the names, which follow the loaded data set.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: translate(g.label), items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };

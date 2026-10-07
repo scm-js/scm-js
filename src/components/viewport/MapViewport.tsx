@@ -346,7 +346,7 @@ export default function MapViewport() {
   const showFog = scenario !== null && flags.fog;
   const locations = useAtomValue(locationsAtom);
   const mapStarts = useAtomValue(startLocationsAtom);
-  const startLocations = scenario ? mapStarts : [];
+  const startLocations = useMemo(() => (scenario ? mapStarts : []), [scenario, mapStarts]);
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
 
   const tilePx = TILE * zoom;
@@ -1354,7 +1354,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, painting, blending, blendAnchor, tools, activeTile, activeTerrain, rectVariation, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, grpRevision, unitsRevision, selectedUnits, activeUnit, unitOwner, showFog, fogViewPlayer, fogPainting, fogMode, fogPlayers, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, activeDoodad, doodadPlacement, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, mapToolRevision, overlays, overlayRevision, spritesEditing, spritePlacing, spriteTools, selectedSprites, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationsEditing, locationTools, selectedLocations, locationSnap, symmetry, repaintRequest, flashes]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —
@@ -1423,8 +1423,11 @@ export default function MapViewport() {
   }, []);
 
   // `draw` is in the deps on purpose: its identity changes with everything the picture is
-  // drawn from, so this effect is how a state change reaches the canvas. Setting width or
-  // height clears the bitmap, so only do it when the size really moved.
+  // drawn from, so this effect is how a state change reaches the canvas. The names after it
+  // are what `draw` reaches without closing over — a revision of something mutated in place,
+  // a palette choice the tools read from the store — so they are listed here, not in `draw`'s
+  // own deps, where the hooks lint would call them unnecessary. Setting width or height
+  // clears the bitmap, so only do it when the size really moved.
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -1436,7 +1439,7 @@ export default function MapViewport() {
       c.style.height = `${size.h}px`;
     }
     scheduleDraw();
-  }, [size, draw]);
+  }, [size, draw, scheduleDraw, activeTile, activeTerrain, rectVariation, grpRevision, unitsRevision, activeUnit, unitOwner, fogPlayers, activeDoodad, doodadPlacement, mapToolRevision, overlayRevision, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationSnap, repaintRequest]);
 
   /** The scale as the frame loops and effects below read it, without being re-created by a zoom. */
   const tilePxRef = useRef(tilePx);
@@ -1533,7 +1536,7 @@ export default function MapViewport() {
       arrived();
     };
     raf = requestAnimationFrame(frame);
-  }, [centerOn, clearCenterOn, draw]);
+  }, [centerOn, clearCenterOn, draw, scheduleDraw]);
   useEffect(() => () => { glideRef.current?.cancel(); if (panRef.current) cancelAnimationFrame(panRef.current.raf); }, []);
 
   /*
@@ -1555,7 +1558,7 @@ export default function MapViewport() {
     el.scrollTop = (el.scrollTop + ay) * ratio - ay;
     prevZoom.current = zoom;
     scheduleDraw();
-  }, [zoom, draw]);
+  }, [zoom, draw, scheduleDraw]);
 
   /*
    * The wheel: Ctrl (Cmd) + wheel always zooms — and is taken from the browser, whose own

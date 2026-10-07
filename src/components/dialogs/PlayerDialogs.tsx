@@ -198,8 +198,8 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   const setMode = (m: number) => {
     const next = rgb ?? defaultPlayerRgb();
     // Seed a fresh custom colour from the palette entry so the picker opens on something sensible.
-    if (m === ColorMode.Custom && next.rgb[sel].every((v) => v === 0)) next.rgb[sel] = hexToRgb(PLAYER_COLORS[colors[sel]]?.hex ?? "#000000") ?? [0, 0, 0];
-    setRgb({ rgb: next.rgb.map((c) => [...c] as [number, number, number]), mode: next.mode.map((v, i) => (i === sel ? m : v)) });
+    const seed = m === ColorMode.Custom && next.rgb[sel].every((v) => v === 0) ? hexToRgb(PLAYER_COLORS[colors[sel]]?.hex ?? "#000000") ?? [0, 0, 0] : null;
+    setRgb({ rgb: next.rgb.map((c, i) => [...(i === sel && seed ? seed : c)] as [number, number, number]), mode: next.mode.map((v, i) => (i === sel ? m : v)) });
     setHexText(null);
   };
   const setCustom = (hex: string) => {

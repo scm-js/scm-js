@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
   centerViewOnAtom, fogViewPlayerAtom, mapHeightAtom, mapTilesetAtom, mapWidthAtom, viewFlagsAtom, viewportRectAtom,
@@ -87,10 +87,9 @@ export default function MinimapPanel() {
   const mapStarts = useAtomValue(startLocationsAtom);
   const locations = mapLocations;
   const selectedLocations = useAtomValue(selectedLocationsAtom);
-  const startLocations = scenario ? mapStarts : [];
+  const startLocations = useMemo(() => (scenario ? mapStarts : []), [scenario, mapStarts]);
 
   // The picture: terrain, locations, units, start locations and fog, into a canvas of its own.
-  const pictureDeps = [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer];
   useEffect(() => {
     const size = SIZE;
     const c = pictureRef.current ?? (pictureRef.current = document.createElement("canvas"));
@@ -154,7 +153,7 @@ export default function MinimapPanel() {
       ctx.globalCompositeOperation = "source-over";
       ctx.imageSmoothingEnabled = true;
     }
-  }, pictureDeps);
+  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer]);
 
   // What is on screen: the picture, and the view rectangle over it. This is all a scroll costs.
   useEffect(() => {
@@ -174,7 +173,8 @@ export default function MinimapPanel() {
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
-  }, [...pictureDeps, rect]);
+  // The picture's own deps as well: this effect has to run after every repaint of it.
+  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer, rect]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.

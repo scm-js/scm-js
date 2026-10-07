@@ -38,7 +38,7 @@ Without it terrain is flat colours and units are markers, and everything else wo
 npm run dev            # Vite dev server
 npm run build          # tsc -b (the type-check) + vite build → dist/
 npm run preview        # serve dist/ locally
-npm run lint           # oxlint; does not type-check
+npm run lint           # oxlint, with the React hook rules; does not type-check
 npm test               # vitest, a few seconds, no browser
 npm run test:watch
 npm run test:maps      # write tests/maps again from the code that makes them

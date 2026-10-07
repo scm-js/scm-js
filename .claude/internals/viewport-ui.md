@@ -143,7 +143,11 @@ read in the first effect pass is still null.
   `requestAnimationFrame` and coalesces the rest, so a burst of events costs one paint and it
   lands immediately before the browser's own. Call it rather than `draw()` from anything
   event- or render-driven; `draw()` itself is only run by the frame and by the animation loop
-  (which serves a booked request instead of painting twice). The object layers' ghosts follow
+  (which serves a booked request instead of painting twice). **`draw`'s deps are only what
+  it closes over** — `react-hooks/exhaustive-deps` is on (`.oxlintrc.json`) and calls anything
+  else unnecessary. A value that should repaint without being read in `draw` (a revision of
+  something mutated in place, a palette choice the tools read from the store) goes in the
+  deps of that `[size, draw, …]` effect instead, where the lint allows extras. The object layers' ghosts follow
   the pointer in pixels, so `onMove` schedules a paint on every move there — a terrain or fog
   brush is tile-shaped and only repaints on the crossings.
 - **The view follows a drag** (2026-09-09). A gesture that reaches the edge used to do nothing:

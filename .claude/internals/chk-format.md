@@ -21,6 +21,15 @@
   them at the end instead left a map that got its ISOM back with the lattice past FORC, which no
   editor writes and the Repair plugin then reported as out of order. Any mutation of scenario state must call
   `markDirty(scn, "NAME", ...)` for every section it affects, or the change is silently dropped on save.
+  **The names are typed** (2026-10-06): `markDirty` takes `SectionName`, the union of the
+  `MODELLED` tuple that `MODELLED_SECTIONS` is built from, so a misspelt name, a missing trailing
+  space (`"STR"`) or a section with no encoder (`"VCOD"` — `encodeSection` answers null for it, and
+  a dirty section that encodes to null is *left out of the file*) fails `npm run build`;
+  `scenario.typecheck.ts` holds it to that. `strSectionName`, the `*Sections` helpers and `sync.ts`'s
+  `FIELD_SECTIONS` return the union. All 82 existing calls compiled unchanged — there was no typo
+  to find. What this does not catch is a call that is *missing*, and `Scenario.dirty` itself is
+  still `Set<string>`: `editor/sections.ts`, the plugin API's read-only view and a dozen tests
+  build or edit the set directly, and `tests/` is not type-checked at all.
 - **Text encoding.** `StringTable.encoding` (`text/encoding.ts`, `TextEncoding`) is how the string
   table's bytes spell characters — the file carries no note of it. `decodeStrings` guesses from the
   whole table's bytes unless told (`detectTextEncoding`: valid UTF-8 wins outright, else every legacy

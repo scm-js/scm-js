@@ -1378,6 +1378,23 @@ on any text. **Verbose** adds a line for every edit and every call a plugin make
 editor. It answers "which plugin did that?", it is noisy by design, and it turns itself off
 when you next load the editor.
 
+### When part of the editor fails
+
+If a panel, the palette or the map view hits an error it cannot draw past, that part alone
+is replaced by a short notice with the error in it. Everything else keeps working, your
+maps included. **Try again** draws the part afresh, and **Show the log** opens the debug
+console at the line that says what failed.
+
+A dialog that fails is closed, and a notice says so with the same **Show the log**
+button. What you had changed in it and not yet applied is lost; what you had applied is
+in the map.
+
+If the whole editor fails, a plain page takes its place with the error, the end of the
+log, and **Copy the log** and **Save the log…** for a bug report. Your maps are still
+open behind it: **Try again** brings the editor back with them. A recovery copy of each
+map with unsaved changes is written as that page appears (unless you switched recovery
+copies off in Preferences), so **Reload** offers them back too.
+
 ### Copying a bug report
 
 **Help ▸ Copy Bug Report** puts the log on the clipboard with a short header above it —

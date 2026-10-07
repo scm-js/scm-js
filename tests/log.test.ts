@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   baseName, BUG_REPORT_BUDGET, clearLog, formatData, formatEntry, formatLog, ISSUE_URL_LIMIT, issueUrl, log, logDropped,
-  logEntries, logError, LOG_CAPACITY, resetLogForTests, scrubFrame, stamp, subscribeLog,
+  logEntries, logError, logRenderError, LOG_CAPACITY, resetLogForTests, scrubFrame, stamp, subscribeLog,
 } from "../src/editor/log";
 import { diagnosticsHeader, shortAgent } from "../src/editor/diagnostics";
 
@@ -142,6 +142,31 @@ describe("errors", () => {
   it("says only the message when nothing was thrown with it", () => {
     logError("app", "Something went wrong");
     expect(logEntries()[0].message).toBe("Something went wrong");
+  });
+
+  it("puts the components a render threw inside under the error's own frames", () => {
+    const err = new Error("no such unit");
+    err.stack = ["Error: no such unit", ...Array.from({ length: 20 }, (_, i) => `    at fn${i} (http://localhost/src/a.ts:${i}:1)`)].join("\n");
+    const components = "\n    at PropertiesPanel (http://localhost/src/components/panels/PropertiesPanel.tsx:40:3)\n    at RightDock\n    at App";
+    logRenderError("Render failed", err, components, { surface: "properties panel" });
+    const entry = logEntries()[0];
+    expect(entry.message).toBe("Render failed: no such unit");
+    expect(entry.data).toEqual({ surface: "properties panel" });
+    const lines = entry.stack!.split("\n");
+    expect(lines.slice(0, 6)).toEqual(err.stack.split("\n").slice(0, 6));
+    expect(lines.slice(6)).toEqual(["in PropertiesPanel (http://localhost/src/components/panels/PropertiesPanel.tsx:40:3)", "in RightDock", "in App"]);
+    // All of it fits the twelve lines a copy prints, with the paths cut to their file.
+    const text = formatLog(logEntries());
+    expect(text).toContain("in PropertiesPanel (PropertiesPanel.tsx:40:3)");
+    expect(text).toContain("in App");
+  });
+
+  it("logs a render error that is not an Error, with only the components", () => {
+    logRenderError("Render failed", "bad payload", "\n    at Dialog");
+    expect(logEntries()[0].message).toBe("Render failed: bad payload");
+    expect(logEntries()[0].stack).toBe("in Dialog");
+    logRenderError("Render failed", undefined);
+    expect(logEntries()[1].stack).toBeUndefined();
   });
 });
 

@@ -1,6 +1,9 @@
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
-import { useAtomValue } from "jotai";
-import { dialogStackAtom, type DialogEntry, type DialogId } from "../../atoms/uiAtoms";
+import { useAtomValue, useSetAtom } from "jotai";
+import { debugConsoleAtom } from "../../atoms/logAtoms";
+import { closeDialogAtom, dialogStackAtom, pushToastAtom, type DialogEntry, type DialogId } from "../../atoms/uiAtoms";
+import { t } from "../../i18n";
+import { ErrorBoundary, errorText } from "../ui/ErrorBoundary";
 
 export interface DialogProps {
   entry: DialogEntry;
@@ -88,15 +91,31 @@ export const DIALOG_IDS: ReadonlySet<string> = new Set(Object.keys(REGISTRY));
 /** Renders every open dialog (stacked in order). */
 export default function DialogHost() {
   const stack = useAtomValue(dialogStackAtom);
+  const close = useSetAtom(closeDialogAtom);
+  const pushToast = useSetAtom(pushToastAtom);
+  const openConsole = useSetAtom(debugConsoleAtom);
+  // A dialog that cannot render (or whose chunk did not arrive) is closed and said so: the
+  // frame it would have drawn the notice in is part of what failed.
+  const failed = (entry: DialogEntry, error: unknown) => {
+    close(entry.key);
+    pushToast({
+      kind: "error",
+      title: t("A dialog hit an error and was closed"),
+      detail: t("Changes it had not applied are lost. {error}", { error: errorText(error) }),
+      action: { label: t("Show the log"), run: () => openConsole(true) },
+    });
+  };
   return (
     <>
       {stack.map((entry) => {
         const Cmp = REGISTRY[entry.id];
         // One boundary per dialog, so a chunk still loading never hides the dialogs under it.
         return (
-          <Suspense key={entry.key} fallback={null}>
-            <Cmp entry={entry} />
-          </Suspense>
+          <ErrorBoundary key={entry.key} surface={`dialog ${entry.id}`} fallback={() => null} onError={(error) => failed(entry, error)}>
+            <Suspense fallback={null}>
+              <Cmp entry={entry} />
+            </Suspense>
+          </ErrorBoundary>
         );
       })}
     </>

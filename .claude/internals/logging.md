@@ -94,6 +94,26 @@ the map path and the user agent: a desktop frame is `file:///C:/Users/<name>/…
 mirror keeps the clickable path a developer needs. A run with one separator and no scheme or
 drive letter in front is left alone, or `bad ratio 3/4` becomes `bad ratio 4`.
 
+**Render errors come from React's root, not from `window.onerror`** (2026-10-06,
+`components/ui/ErrorBoundary.tsx`). Until the boundaries existed a render that threw was
+"uncaught", React re-threw it at the window and `useErrorCapture` logged it — into a
+console that had just been unmounted with the rest of the tree. A boundary keeps the tree,
+but an error a boundary caught is *not* reported to the window (React 19's default for it
+is a bare `console.error`), so adding boundaries alone would have taken render errors out
+of the log altogether. `main.tsx` therefore passes `rootErrorHandlers` to `createRoot`:
+`onCaughtError` and `onUncaughtError` both call `logRenderError`, the one place a render
+error is logged whichever boundary caught it — the boundaries themselves log nothing.
+`surface` on the entry is the catching boundary's prop (`info.errorBoundary instanceof
+ErrorBoundary`), the only name that survives minification; the stack is the first six
+lines of the error's own and then React's component stack with `at` rewritten to `in`,
+cut so the two halves fit the twelve lines `formatLog` prints. Setting `onUncaughtError`
+replaces React's re-throw, so that case is logged here once instead of there. The
+mirrored `console.error` is still one per occurrence, which is what `e2e` fails on.
+`CrashScreen` is the log's second reader, for when the console is gone: `logEntries()` /
+`formatEntry` for the tail, `formatLog` for Copy and Save, and `diagnosticsTextAtom` read
+through the store inside a `try` in the handler, never at render — one of its dozen atoms
+may be what failed.
+
 **Instrumentation is one walk, not two hundred call sites.** `host.ts#instrument` wraps
 every function on the API object at the bottom of `createPluginApi`. That works because the
 function builds one fresh literal per plugin, so the wrappers are private to it and the path

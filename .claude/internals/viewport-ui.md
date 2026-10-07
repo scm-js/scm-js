@@ -37,6 +37,24 @@ read in the first effect pass is still null.
   statically from anything on the startup path or Vite folds them back into the main chunk (Vite
   says so: `INEFFECTIVE_DYNAMIC_IMPORT`) — which is why `PluginIconView` lives in `components/ui/`,
   not in `PluginDialogs.tsx`. Splitting them took the main chunk from 1140 KB to 537 KB.
+- **Error boundaries** (2026-10-06, `components/ui/ErrorBoundary.tsx`, `chrome/CrashScreen.tsx`).
+  Three tiers. `Guarded` (the in-place notice, Try again / Show the log) wraps `MapViewport` in
+  `App.tsx` and each panel body in `Docks.tsx` — inside the `.panel`, so the head and its hide
+  button survive; `.surface-error` is `flex: 1` so it takes the room of whatever it replaces, in
+  the body row or a dock column. `DialogHost` wraps each entry *outside* its `Suspense` (a chunk
+  that fails to load rejects the lazy and is a render error like any other) with a `null`
+  fallback and `onError` → `closeDialogAtom(entry.key)` + an error toast carrying Show the log:
+  the notice cannot be drawn inside the dialog, since `DialogFrame` is part of what failed.
+  `React.lazy` keeps a rejection, so a dialog whose chunk failed stays failed until a reload —
+  as it did before, when it took the editor with it. The last one is around `<App />` in
+  `main.tsx`, inside the jotai `Provider`, and shows `CrashScreen`. Its Try again remounts
+  `App` over the same store: the maps, the dialog stack and the plugins are all still there,
+  `useStartupMap` steps aside because a scenario is open, `usePlugins` re-activates nothing
+  already active, and `usePreload` runs again (its `started` is a ref) — a second game-data
+  probe and its log lines, nothing else. The menu bar, toolbar, tab strip and status bar have
+  no boundary of their own and fall to that last one. Logging is not done by any of them; see
+  `logging.md`. Checked in headless Chromium with a component rigged to throw in a panel, the
+  map and `App` (rig not committed); `e2e/errors.spec.ts` keeps the dialog path.
 - **Leaving a dialog with edits asks first** (2026-10-04). `useScenarioForm` returns a third value,
   a `FormGuard` (`dirty`, set by the setter; `touch()` for the copies edited in place, as the
   unit / upgrade / tech settings' typed arrays are; `clean()`), and `DialogFrame`'s `guard` prop

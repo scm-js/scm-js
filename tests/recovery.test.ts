@@ -13,7 +13,7 @@ import { createScenario } from "../src/formats/chk/create";
 import { markDirty, scenarioName, setScenarioName } from "../src/formats/chk/scenario";
 import { leftoverCopies, planRecovery } from "../src/editor/recovery";
 import { listCopies, putCopy, removeCopy, SESSION, type RecoveryRecord } from "../src/services/recovery";
-import { leftoverEntries, RecoveryCopier, restoreCopy } from "../src/hooks/useRecovery";
+import { leftoverEntries, RecoveryCopier, restoreCopy, writeCopiesNow } from "../src/hooks/useRecovery";
 import { serializeScenario } from "../src/formats/chk/scenario";
 
 afterEach(async () => {
@@ -115,6 +115,30 @@ describe("the copier", () => {
     // Close the parked one by dropping its slot, as closing it after switching would.
     store.set(documentsAtom, store.get(documentsAtom).filter((d) => d.parked === null));
     await c.flush(true);
+    expect(await listCopies()).toHaveLength(0);
+  });
+});
+
+describe("when the editor itself fails", () => {
+  it("writes the copies that are due and says how many maps have one", async () => {
+    const store = createStore();
+    openMap(store);
+    expect(await writeCopiesNow(store)).toBe(0);
+    edit(store);
+    expect(await writeCopiesNow(store)).toBe(1);
+    expect((await listCopies()).map((r) => r.fileName)).toEqual(["recover.scx"]);
+    // The same copier the next time, so a save afterwards still drops the copy it wrote.
+    store.set(mapModifiedAtom, false);
+    expect(await writeCopiesNow(store)).toBe(0);
+    expect(await listCopies()).toHaveLength(0);
+  });
+
+  it("writes nothing with copies switched off", async () => {
+    const store = createStore();
+    store.set(preferencesAtom, { ...DEFAULT_PREFERENCES, recovery: { enabled: false, minutes: 2 } });
+    openMap(store);
+    edit(store);
+    expect(await writeCopiesNow(store)).toBe(0);
     expect(await listCopies()).toHaveLength(0);
   });
 });

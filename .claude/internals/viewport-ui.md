@@ -4,8 +4,9 @@
 
 File ▸ Export ▸ Image is one dialog with one dial — `pixelsPerTile` — and `renderMapImage`
 is a standalone re-implementation of the viewport's draw pass with `sx = sy = 0` over the
-whole map (it deliberately shares no code with `MapViewport`, which is entangled with
-scroll, layers, hover and gestures). There is no "map vs minimap" mode: the two thresholds
+whole map (it deliberately shares no code with `MapViewport`, which was entangled with
+scroll, layers, hover and gestures when this was written; the viewport's passes are plain
+functions in `viewport/paint/` since 2026-10-07, and the export still has its own). There is no "map vs minimap" mode: the two thresholds
 where the picture changes character are the viewport's own far-zoom ones — `drawsSprites`
 (< 8 px/tile → `drawUnitDots`, the game's minimap dots, and sprites drop out) and `FLAT_PX`
 (< 4 px/tile → `atlas.averages` instead of atlas blits) — so 1 px/tile *is* the minimap and
@@ -87,9 +88,90 @@ read in the first effect pass is still null.
   `zoomAnchorRef` holds the pointer position when `view.zoomToCursor` is on; the zoom
   `useLayoutEffect` keeps that point in place, or the centre when nothing set it (menu,
   keyboard, toolbar).
+- **The viewport is five files and a folder** (2026-10-07; it was one 2,350-line component).
+  `MapViewport.tsx` keeps what needs the component: the atoms, the refs, the frame scheduling,
+  the animation / glide / zoom / wheel / auto-pan effects, and the pointer handlers. Around it:
+  - `paint/` — the draw passes, plain functions of a `PaintView` (context, scale, scroll, size,
+    visible tiles, fonts) and the thing they draw: `ground.ts` (the cached terrain layer, the
+    loading plate, the no-graphics noise), `grid.ts` (grid, rulers, symmetry axes), `objects.ts`
+    (`spritePainter` — how a unit / sprite / marker is put down — and `drawObjects`),
+    `locations.ts`, `ghosts.ts` (what a tool is about to do under the pointer) and `view.ts`
+    (the type, the `INK` / `DASH` constants, `strokeBox` / `strokeTileRect` / `sizeChip` /
+    `markedTiles` / `draggedBox`, flashes). `draw` is the list of passes in painter's order and
+    the conditions for each; a pass takes no refs and reads no atoms. `fog.ts` was already this
+    shape. `mapImage.ts` still has its own copies (it draws an area at an offset with its own
+    options); the passes are what it would share if that is ever worth the coupling.
+  - `gestures.ts` — one object per drag (`ObjectGesture` for units / doodads / sprites, which
+    were three copies of the same forty lines; `LocationGesture`; `AreaGesture` for the clip
+    area and a plugin's pick; `StrokeGesture` for terrain and fog; `{ kind: "tool" }` for a
+    plugin's tool, which the component serves itself because a tool also hears the pointer
+    with no button down). The viewport holds **one** `gestureRef` — a second button pressed
+    during a drag is a `pointermove`, never a second `pointerdown`, so there was never more
+    than one live — and `onDown` is `gestureFor(sample)` (which layer starts what), `onMove`
+    is `gesture.move(sample)`, `onUp` is `gesture.up()`. A gesture keeps the tools it started
+    with for its whole life. `draw` reads the gesture's public fields (`mode`, `from`, `to`)
+    for the marquee, the create box and the marked area. No DOM, no React:
+    `tests/viewport-gestures.test.ts` drives them with stand-in tools. A new layer's drag is a
+    `begin…Gesture` here and a branch in `gestureFor`, not a new ref and three new blocks.
+  - `ViewportMenu.tsx` — the context menu's rows, rendered *inside* `ContextMenu.Content`, so
+    they are built only while the menu is open (Radix mounts the content then). `onContextMenu`
+    puts the tile and pixel in `menuTarget` state; that replaced the `ctxMenuOpen` mirror and
+    the two refs read during render, and keeps the plugin contract (`visible` / `label` /
+    `enabled` run when the menu opens, with that click's context — see `plugins-host.md`).
+    It acts through the viewport's own tool objects (`tools` prop): the tool hooks hold drag
+    state in refs and must not be instantiated twice.
+  - `ViewportHud.tsx` — the corner chips and `PluginMapButtons`, with the atoms only they read.
+  **Repaint-only atoms are not subscriptions** (`REPAINT_ATOMS`): the palette picks, the
+  owner, the snap, `unitsRevisionAtom`, the plugin overlay / tool / `ui.repaint` counters and
+  `onGrpLoaded` are things `draw` reaches through the store or through objects mutated in
+  place, so the viewport listens with `store.sub(atom, scheduleDraw)` and does not render for
+  them. They used to be seventeen `useAtomValue`s "only read so … redraws", each a render of
+  the whole component and a new `ctxItems`. A value `draw` *closes over* still has to be a
+  subscription and a dep.
+  **How it was checked.** A script drove both builds in headless Chromium with the game data
+  through 127 states (every layer's hover, drag mid-way and result; grid / elevation /
+  buildability / fog; five zooms × seven scrolls; context menus; middle-button pan; wheel
+  zoom) with `Math.random` seeded and animation off, hashing the canvas and the rulers and
+  reading the HUD text, the menu rows and the surface's cursor after each. At 100%, 125% and
+  200% display scale everything is identical to the build before except the states with the
+  elevation / buildability overlays on, which changed on purpose (next bullet). Unticking
+  View ▸ Animate Water is not enough to make such a run repeatable: the water's palette step
+  follows the wall clock until then and stays where it was, so two builds (or one build
+  under load) can freeze on different steps and every state with water in it differs for
+  nothing. The script pins `performance.now` before the page loads, which holds it at step 0.
+- **The ground layer holds the elevation and buildability overlays too** (2026-10-07,
+  `paint/ground.ts`). They were redrawn on every paint — an animation frame, a ghost under the
+  pointer — at up to 16 `fillRect`s a visible tile, ~170,000 at 25% over high ground. They
+  are a property of the tile, so `blitTiles` now lays them down with the tile, in the tile's
+  own device pixels, and the two flags are part of the layer's key. Counted in headless
+  Chrome over 60 pointer moves on the Units layer at 25% with both overlays and the fog on:
+  394,978 `fillRect`s before, 238 after, and a tenth of the time in the frame callbacks.
+  Three things follow.
+  The grid is drawn over the tint rather than under it (it was terrain → grid → tint). A
+  tile's overlay must not spill onto its neighbours, because a tile is redrawn alone when it
+  cycles or a scroll uncovers it: the minitile tints partition the tile exactly (no more
+  `+ 0.5` overlap), and the hatch is `hatchStamp` — the diagonal drawn once per tile size
+  into a small canvas and copied — because one `stroke()` through every tile of a pass came
+  out a level different at the line ends depending on how many tiles the pass held (Skia
+  smooths a path by its whole shape; found by comparing a shifted layer with a whole redraw).
+  That comparison (toggle View ▸ Doodads twice to force the redraw) is 0 mismatches of 47 at
+  100% and 200% display scale, after scrolls and after water steps; at 125% and 150% it
+  finds strips of smoothed terrain a shift leaves up to 3/255 off at 25% and 50% zoom —
+  **in the build before as well**, with the same count, so the earlier entry's "identical
+  everywhere except 75% on a 125% display" was true of its noise tileset and not of real
+  graphics. Nothing shows; nobody has fixed it.
+  The fog is cached the same way (`fog.ts#drawFogLayer`, `fogLayerRef`): the tint filled
+  into a layer of its own, keyed by scenario, terrain revision (fog edits repaint through
+  it), player, tileset and view, and multiplied onto the canvas — pixel for pixel what the
+  `multiply` fill gave. It is redrawn whole on a scroll; what it saves is the path of every
+  visible tile and its four neighbours on each animation frame. Location names are measured
+  once (`paint/locations.ts#textWidth`, cleared when a web font arrives). `unitAt` no longer
+  sorts every unit to find the topmost hit. And the canvas-size effect compares in whole
+  device pixels: against `size.w * dpr` at 125% / 150% with an odd width it never matched,
+  so every run of the effect — each commit, selection, palette pick — reallocated the canvas.
 - `MapViewport.tsx` is a single canvas that draws terrain (atlas or fallback colours), overlays
   (grid, locations, start locations, brush ghost) and handles all mouse input for the active layer.
-  The terrain blits go into a cached layer canvas (`TerrainLayer`, `terrainLayerRef`) that `draw`
+  The terrain blits go into a cached layer canvas (`GroundLayer`, `groundLayerRef`) that `draw`
   copies with one `drawImage`: it is redrawn whole when the size, zoom, tiles, revisions,
   tileset or document change, shifted when the view scrolls (below), and only its cycling tiles
   are redrawn when the water step moves, so a unit
@@ -146,16 +228,15 @@ read in the first effect pass is still null.
   (which serves a booked request instead of painting twice). **`draw`'s deps are only what
   it closes over** — `react-hooks/exhaustive-deps` is on (`.oxlintrc.json`) and calls anything
   else unnecessary. A value that should repaint without being read in `draw` (a revision of
-  something mutated in place, a palette choice the tools read from the store) goes in the
-  deps of that `[size, draw, …]` effect instead, where the lint allows extras. The object layers' ghosts follow
+  something mutated in place, a palette choice the tools read from the store) goes in
+  `REPAINT_ATOMS` instead (above), which repaints without a render. The object layers' ghosts follow
   the pointer in pixels, so `onMove` schedules a paint on every move there — a terrain or fog
   brush is tile-shaped and only repaints on the crossings.
 - **The view follows a drag** (2026-09-09). A gesture that reaches the edge used to do nothing:
   the surface takes pointer capture on the press, and the stroke clamps to the map
   (`clampToMap`, "like StarEdit"), so a drag past the window repainted one edge tile forever
   while the view stood still. `autoPanFrom(e)` at the top of `onMove` books a rAF loop
-  (`panRef`) whenever any gesture is live — `strokeRef`, the four object gestures, the clip
-  and pick gestures, or a plugin tool's `toolDownRef` — and the pointer is inside the
+  (`panRef`) whenever a gesture is live — `gestureRef` holds one, whichever kind — and the pointer is inside the
   `EDGE_BAND` (28 px) of the scroller's client rect or beyond it. The speed ramps
   quadratically from `PAN_MIN` to `PAN_MAX` px/s with how far past the band the pointer
   pushed, in *screen* pixels, so the view moves at the same rate at every zoom; each frame

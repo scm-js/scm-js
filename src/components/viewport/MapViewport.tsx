@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { logError } from "../../editor/log";
+import { useAtomValue, useSetAtom, useStore, type Atom } from "jotai";
 import { ContextMenu } from "radix-ui";
 import { Crosshair, Loader2 } from "lucide-react";
 import {
@@ -56,48 +55,45 @@ import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginContextItemsAtom, pluginMapButtonsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
-import type { MapPointer, MapView, OverlayAbove } from "../../plugins/api";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
-import { pluginContextRows } from "../../plugins/contextMenu";
-import { inMap as inMapBounds, neighbourOf, SIDES } from "../../editor/blend";
 import { useUnitTools } from "../../hooks/useUnitTools";
-import { doodadLabel, useDoodadTools, type DoodadGhost } from "../../hooks/useDoodadTools";
-import { spriteName, useSpriteTools } from "../../hooks/useSpriteTools";
+import { useDoodadTools } from "../../hooks/useDoodadTools";
+import { useSpriteTools } from "../../hooks/useSpriteTools";
 import { useFogTools } from "../../hooks/useFogTools";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { clipLocationBounds, clipSummary, tileRect } from "../../editor/clipboard";
-import { boundsOf, HANDLE_CURSOR, HANDLES, handlePoint } from "../../editor/locations";
-import { drawFogOverlay } from "./fog";
-import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
-import { getImageFrame, getUnitSprite, subunitOf } from "../../formats/units/sprites";
-import { UnitAnimator, type SpriteState } from "../../formats/units/animate";
-import type { TeamColorSpec } from "../../formats/units/teamColor";
-import { NO_UNIT } from "../../formats/dat/dat";
-import { ANYWHERE_INDEX, SpriteFlag, UnitState, UnitUsed } from "../../formats/chk/sections/objects";
+import { tileRect } from "../../editor/clipboard";
+import { boundsOf, HANDLE_CURSOR, locationAt } from "../../editor/locations";
+import { drawFogLayer, type FogLayer } from "./fog";
+import { useUnitAssets } from "../../hooks/useUnitAssets";
+import { onGrpLoaded } from "../../formats/units/load";
+import { UnitAnimator } from "../../formats/units/animate";
+import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
-import { placementBox, unitAt, unitBox, unitGeometry } from "../../editor/units";
-import { locationAt } from "../../editor/locations";
-import type { PickedObject } from "../../plugins/api";
-import type { TileRect } from "../../editor/doodads";
-import { doodadOrigin } from "../../formats/tileset/doodads";
-import { START_LOCATION, unitLabel } from "../../data/units";
-import { linePoints } from "../../editor/terrain";
+import { unitAt, unitBox, unitGeometry } from "../../editor/units";
+import { unitLabel } from "../../data/units";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
 import { diamondAt } from "../../editor/isom";
-import { atlasSource, setAtlasStep } from "../../formats/tileset/atlas";
+import { inMap as inMapBounds } from "../../editor/blend";
+import { setAtlasStep } from "../../formats/tileset/atlas";
 import { cycleStepAt, GAME_FRAME_MS } from "../../formats/tileset/cycle";
-import { groupBuildable, groupHeight, megatileForTile, minitileHeight } from "../../formats/tileset/decode";
 import { LAYERS } from "../chrome/MenuBar";
 import { TILESET_BY_ID } from "../../data/tilesets";
-import { displayColorHex, playerTeamColor } from "../../data/players";
-import { hashNoise } from "./noise";
 import { t, translate } from "../../i18n";
-
-const TILE = 32;
-/** How far outside the view a unit is still drawn, in map pixels: the largest GRP box is a few hundred. */
-const UNIT_MARGIN = 512;
+import {
+  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginStrokeGesture, objectGestureOn,
+  type Gesture, type ObjectLayer, type PointerSample, type Tile,
+} from "./gestures";
+import { drawBlendAnchor, drawBrushSquare, drawClipGhost, drawDoodadGhost, drawIsomDiamonds, drawSpriteGhosts, drawTileGhost, drawUnitGhosts } from "./paint/ghosts";
+import { drawGrid, drawRuler, drawSymmetryAxes } from "./paint/grid";
+import { paintFlatGround, paintGround, paintLoadingPlate, type GroundLayer } from "./paint/ground";
+import { drawLocationHandles, drawLocations, drawStartLocations } from "./paint/locations";
+import { drawObjects, spritePainter, UNIT_MARGIN } from "./paint/objects";
+import { DASH, draggedBox, drawFlashes, drawMarquee, drawPickedObject, INK, markedTiles, sizeChip, strokeBox, strokeTileRect, TILE, type PaintView } from "./paint/view";
+import ViewportHud from "./ViewportHud";
+import ViewportMenuItems, { type MenuTarget } from "./ViewportMenu";
 
 /**
  * A drag that reaches the edge of the window scrolls the view under it: `EDGE_BAND` px
@@ -149,26 +145,20 @@ function useAutoShow(active: boolean, key: keyof ViewFlags, setFlags: (fn: (f: V
 
 const fmtTiles = (px: number) => (Number.isInteger(px / TILE) ? String(px / TILE) : (px / TILE).toFixed(2));
 
-/** The cached terrain picture and what it was drawn for. */
-interface TerrainLayer {
-  canvas: HTMLCanvasElement;
-  scenario: unknown;
-  tiles: ArrayLike<number>;
-  assets: unknown;
-  /** The scroll position the layer is drawn at, in whole device pixels. */
-  ox: number;
-  oy: number;
-  w: number;
-  h: number;
-  dpr: number;
-  tilePx: number;
-  terrainRevision: number;
-  doodadsRevision: number;
-  /** The water-cycle step the layer's cycling tiles show. */
-  step: number;
-  /** Whether any visible tile cycles — what decides if a step repaints. */
-  animated: boolean;
-}
+/**
+ * What `draw` reaches without closing over it — a revision of something mutated in place, a
+ * palette choice the tools read from the store when asked for a ghost. A change to any of
+ * them is a repaint and nothing else, so the viewport listens on the store instead of
+ * rendering for it.
+ */
+const REPAINT_ATOMS: readonly Atom<unknown>[] = [
+  activeTileAtom, activeTerrainAtom, rectVariationAtom,
+  unitsRevisionAtom, activeUnitAtom, unitOwnerAtom,
+  activeDoodadAtom, doodadPlacementAtom,
+  activeSpriteKindAtom, activeSpriteAtom, activeUnitSpriteAtom, spritePlaceOptionsAtom,
+  locationSnapAtom, fogPlayersAtom,
+  mapToolRevisionAtom, pluginOverlayRevisionAtom, viewportRepaintAtom,
+];
 
 export default function MapViewport() {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -176,39 +166,17 @@ export default function MapViewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
-  const hoverRef = useRef<{ x: number; y: number } | null>(null);
+  const hoverRef = useRef<Tile | null>(null);
   /** Pointer position in map pixels; the isometric brush needs finer than tile resolution. */
   const hoverPointRef = useRef<MapPoint | null>(null);
   /** Diamond under the pointer at the last redraw, so the isometric outline follows the pointer within a tile. */
   const hoverDiamondRef = useRef("");
-  /** Last tile a stroke painted, so a fast drag fills the gap with a line. */
-  const strokeRef = useRef<{ x: number; y: number } | null>(null);
-  /** Tile under the pointer when the context menu opened. */
-  const menuTileRef = useRef<{ x: number; y: number } | null>(null);
-  const menuPointRef = useRef<MapPoint | null>(null);
-  const [ctxMenuOpen, setCtxMenuOpen] = useState(false);
-  /**
-   * A Units-layer gesture in progress: moving the selection, a click that places (or, in
-   * select mode, clears the selection) unless it grows into a marquee.
-   */
-  const unitGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
-  /** The same for the Doodads layer; a move shows ghosts and lands on release. */
-  const doodadGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
-  /** And for the Sprites layer, which moves live like units do. */
-  const spriteGestureRef = useRef<{ mode: "move" | "click" | "select" | "marquee"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
-  /**
-   * A Locations-layer gesture: moving the selection, dragging a handle, a click on empty
-   * ground (clears the selection) that becomes a create-drag once it travels.
-   */
-  const locationGestureRef = useRef<{ mode: "move" | "resize" | "create" | "click"; from: MapPoint; to: MapPoint; additive: boolean } | null>(null);
-  /** A Cut / Copy / Paste-layer drag marking an area, in tiles. */
-  const clipGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
-  /** A plugin's `pickArea` / `pickTile` drag in progress (see `mapPickAtom`). */
-  const pickGestureRef = useRef<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  /** The drag in progress, if any: one at a time, whichever layer or plugin it belongs to (see `gestures.ts`). */
+  const gestureRef = useRef<Gesture | null>(null);
+  /** Where the right-click that opened the context menu landed. */
+  const [menuTarget, setMenuTarget] = useState<MenuTarget>({ tile: null, point: null });
   /** A plugin's `pickObject`: the unit or location under the pointer right now, outlined and named until the click. */
   const pickHoverRef = useRef<PickedObject | null>(null);
-  /** Whether a plugin's map tool holds the primary button (see `mapToolAtom`). */
-  const toolDownRef = useRef(false);
   /** The last pointer move, kept so an auto-pan frame can replay it after it scrolls. */
   const lastMoveRef = useRef<MoveEvent | null>(null);
   /** The auto-pan in progress: its speed in px/s and the sub-pixel remainder each axis carries. */
@@ -217,8 +185,9 @@ export default function MapViewport() {
   const panDragRef = useRef<{ x: number; y: number } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
-  /** The terrain blits, cached between paints; see the terrain block in `draw`. */
-  const terrainLayerRef = useRef<TerrainLayer | null>(null);
+  /** The ground and the fog, cached between paints; see `paint/ground.ts` and `fog.ts`. */
+  const groundLayerRef = useRef<GroundLayer | null>(null);
+  const fogLayerRef = useRef<FogLayer | null>(null);
   /** Whether the last paint drew any unit, so the unit animation loop can skip repaints of empty views. */
   const unitsInViewRef = useRef(false);
   const lastViewportRect = useRef({ x: -1, y: -1, w: -1, h: -1 });
@@ -238,7 +207,6 @@ export default function MapViewport() {
   const gridLook = useAtomValue(gridLookAtom);
   const layer = useAtomValue(activeLayerAtom);
   const lockedLayers = useAtomValue(lockedLayersAtom);
-  const repaintRequest = useAtomValue(viewportRepaintAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const setCursorPixel = useSetAtom(cursorPixelAtom);
   const setPointerHeld = useSetAtom(mapPointerHeldAtom);
@@ -257,55 +225,32 @@ export default function MapViewport() {
   const brush = useAtomValue(brushSizeAtom);
   const terrainMode = useAtomValue(terrainModeAtom);
   const symmetry = useAtomValue(symmetryAtom);
-  // Only read so the hover preview redraws when the brush changes.
-  const activeTile = useAtomValue(activeTileAtom);
-  const activeTerrain = useAtomValue(activeTerrainAtom);
-  const rectVariation = useAtomValue(rectVariationAtom);
   const blendAnchor = useAtomValue(blendAnchorAtom);
   const tools = useTerrainTools();
   const unitTools = useUnitTools();
   const { loaded: unitAssets, error: unitError } = useUnitAssets();
-  const grpRevision = useGrpRevision();
-  const unitsRevision = useAtomValue(unitsRevisionAtom);
   const selectedUnits = useAtomValue(selectedUnitsAtom);
-  // Only read so the placement ghost redraws when the palette choice changes.
-  const activeUnit = useAtomValue(activeUnitAtom);
-  const unitOwner = useAtomValue(unitOwnerAtom);
   const placing = useAtomValue(unitPlacingAtom);
   const doodadTools = useDoodadTools();
   const doodadsRevision = useAtomValue(doodadsRevisionAtom);
   const selectedDoodads = useAtomValue(selectedDoodadsAtom);
   const placingDoodad = useAtomValue(doodadPlacingAtom);
-  // Only read so the placement ghost redraws when the palette choice or its options change.
-  const activeDoodad = useAtomValue(activeDoodadAtom);
-  const doodadPlacement = useAtomValue(doodadPlacementAtom);
   const spriteTools = useSpriteTools();
   const selectedSprites = useAtomValue(selectedSpritesAtom);
   const placingSprite = useAtomValue(spritePlacingAtom);
-  // Only read so the placement ghost redraws when the palette choice or its options change.
-  const activeSpriteKind = useAtomValue(activeSpriteKindAtom);
-  const activeSprite = useAtomValue(activeSpriteAtom);
-  const activeUnitSprite = useAtomValue(activeUnitSpriteAtom);
-  const spritePlaceOptions = useAtomValue(spritePlaceOptionsAtom);
   const locationTools = useLocationTools();
   const selectedLocations = useAtomValue(selectedLocationsAtom);
-  // Only read so the HUD and the create ghost redraw when the snap changes.
-  const locationSnap = useAtomValue(locationSnapAtom);
   const clipTools = useClipboardTools();
   const clip = useAtomValue(clipboardAtom);
   const clipParts = useAtomValue(clipPartsAtom);
   const clipSelection = useAtomValue(clipSelectionAtom);
   const setClipSelection = useSetAtom(clipSelectionAtom);
-  const pluginContextItems = useAtomValue(pluginContextItemsAtom);
   const mapPick = useAtomValue(mapPickAtom);
   const cancelPick = useSetAtom(cancelMapPickAtom);
   const mapTool = useAtomValue(mapToolAtom);
   const cancelTool = useSetAtom(cancelMapToolAtom);
-  // Only read so the tool's overlay redraws when it asks (`MapToolHandle.redraw`).
-  const mapToolRevision = useAtomValue(mapToolRevisionAtom);
   // Plugin overlays (`api.ui.overlay`): drawn at their slot while visible, told the pointer, never given it.
   const overlays = useAtomValue(pluginOverlaysAtom);
-  const overlayRevision = useAtomValue(pluginOverlayRevisionAtom);
   // `api.view.flash`: boxes fading over the map; an effect below keeps repainting while any live and sweeps them after.
   const flashes = useAtomValue(viewFlashesAtom);
   const setFlashes = useSetAtom(viewFlashesAtom);
@@ -314,8 +259,6 @@ export default function MapViewport() {
   const fogMode = useAtomValue(fogModeAtom);
   const fogViewPlayer = useAtomValue(fogViewPlayerAtom);
   const setFlags = useSetAtom(viewFlagsAtom);
-  // Only read so the brush hint redraws when the selected players change.
-  const fogPlayers = useAtomValue(fogPlayersAtom);
   /** The iscript sprites for the placed units; lives as long as the unit tables do. */
   const animator = useMemo(() => (unitAssets ? new UnitAnimator(unitAssets) : null), [unitAssets]);
   const setCursor = useSetAtom(cursorTileAtom);
@@ -354,6 +297,10 @@ export default function MapViewport() {
   const worldH = mapH * tilePx;
 
   /* ── drawing ─────────────────────────────────────────── */
+  /**
+   * One paint: the passes of `paint/`, in painter's order. What each pass draws is its own
+   * business; what is here is which of them the state calls for, and in what order.
+   */
   const draw = useCallback(() => {
     const scroller = scrollerRef.current;
     const canvas = canvasRef.current;
@@ -375,9 +322,11 @@ export default function MapViewport() {
     // The chrome's fonts, read from the tokens once per paint at most: a style read per
     // label adds up over a few hundred locations.
     let uiFontName: string | undefined, monoFontName: string | undefined;
-    const uiFont = () => (uiFontName ??= getComputedStyle(document.body).getPropertyValue("--font-ui"));
-    const monoFont = () => (monoFontName ??= getComputedStyle(document.body).getPropertyValue("--font-mono"));
-
+    const v: PaintView = {
+      ctx, zoom, tilePx, sx, sy, w: size.w, h: size.h, dpr, x0, y0, x1, y1, mapW, mapH, worldW, worldH,
+      uiFont: () => (uiFontName ??= getComputedStyle(document.body).getPropertyValue("--font-ui")),
+      monoFont: () => (monoFontName ??= getComputedStyle(document.body).getPropertyValue("--font-mono")),
+    };
     /** Map pixels to canvas pixels, for plugin overlays and a plugin's map tool. */
     const view: MapView = {
       zoom,
@@ -396,891 +345,164 @@ export default function MapViewport() {
         ctx.restore();
       }
     };
+    const gesture = gestureRef.current;
+    const hoverPoint = hoverPointRef.current;
 
-    // terrain — with View ▸ Doodads off, the ground the doodads stand on (TILE) instead of the picture (MTXM)
+    // The ground — with View ▸ Doodads off, what the doodads stand on (TILE) instead of the picture (MTXM).
     const tiles = scenario ? (flags.doodads ? scenario.tiles : scenario.editorTiles) : undefined;
     let animatedInView = false;
     if (tiles && tilesetAssets) {
-      const { atlas, tileset: ts } = tilesetAssets;
-      // The terrain is blitted into a layer of its own and the layer is copied here, so a
-      // paint that changes nothing under the ground — a unit animation frame, a hover ghost,
-      // a selection — costs one drawImage instead of a thousand. The layer is redrawn whole
-      // when the size, zoom or tiles change, shifted when the view scrolls, and only its
-      // cycling tiles are redrawn when the water steps.
-      const step = atlas.animation?.step ?? 0;
-      let layer = terrainLayerRef.current;
-      const sameGround = layer !== null && layer.scenario === scenario && layer.tiles === tiles && layer.assets === tilesetAssets &&
-        layer.w === size.w && layer.h === size.h && layer.dpr === dpr && layer.tilePx === tilePx &&
-        layer.terrainRevision === terrainRevision && layer.doodadsRevision === doodadsRevision;
-      // The layer sits at the scroll position rounded to a device pixel, and every tile at
-      // its own place on the map rounded likewise. A tile's pixels then depend on the tile
-      // alone, not on the scroll, so a scroll moves the picture by a whole number of
-      // pixels and nothing else about it changes.
-      const ox = Math.round(sx * dpr), oy = Math.round(sy * dpr);
-      const same = sameGround && layer!.ox === ox && layer!.oy === oy;
-      // A scroll over the same ground therefore shifts the layer and blits only the strips
-      // the scroll uncovered, instead of every visible megatile.
-      const dx = sameGround ? ox - layer!.ox : 0, dy = sameGround ? oy - layer!.oy : 0;
-      // Not at a scale that enlarges a tile by anything but a whole factor (150%, or 100%
-      // on a display scaled to 125%): the blit is unsmoothed there and half its samples
-      // land exactly between two source pixels, where the side they fall depends on where
-      // on the canvas the tile is — a tile that was moved and one drawn afresh would differ
-      // by a pixel column here and there, and the next whole redraw would show it. (A
-      // smoothed blit can still round a channel one step the other way; nothing shows.)
-      const exact = tilePx < TILE || Number.isInteger((tilePx * dpr) / TILE);
-      const shifts = sameGround && !same && exact && Math.abs(dx) < layer!.canvas.width && Math.abs(dy) < layer!.canvas.height;
-      if (!same && !shifts) {
-        const canvas = layer?.canvas ?? document.createElement("canvas");
-        // Whole device pixels: a fractional backing size would be truncated and the copy
-        // below would then stretch the layer by a hair, doubling a row here and there.
-        const devW = Math.round(size.w * dpr), devH = Math.round(size.h * dpr);
-        if (canvas.width !== devW || canvas.height !== devH) {
-          canvas.width = devW;
-          canvas.height = devH;
-        }
-        layer = { canvas, scenario, tiles, assets: tilesetAssets, ox, oy, w: size.w, h: size.h, dpr, tilePx, terrainRevision, doodadsRevision, step, animated: false };
-        terrainLayerRef.current = layer;
-      }
-      if (!same || layer!.step !== step) {
-        const lc = layer!.canvas.getContext("2d")!;
-        const devW = layer!.canvas.width, devH = layer!.canvas.height;
-        // The layer is drawn in device pixels, every tile snapped to whole ones: a tile
-        // drawn at a fractional position (a fractional scroll offset, a display scaled to
-        // 125%) is blended over its edges, and a hairline of the dark ground behind the
-        // layer shows between it and its neighbour wherever the rounding lands the two
-        // apart. Snapped, neighbours share an edge exactly; a tile is a device pixel
-        // wider or narrower here and there, which nothing can see.
-        lc.setTransform(1, 0, 0, 1, 0, 0);
-        const devTile = tilePx * dpr;
-        const snapX = (tx: number) => Math.round(tx * devTile) - ox;
-        const snapY = (ty: number) => Math.round(ty * devTile) - oy;
-        // Below ~4px a tile the atlas blit costs more than it shows, so fill with the
-        // precomputed mean colour instead.
-        const flat = tilePx < 4;
-        /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */
-        const blitTiles = (tx0: number, ty0: number, tx1: number, ty1: number, onlyAnimated: boolean): boolean => {
-          let animated = false;
-          lc.imageSmoothingEnabled = tilePx < TILE;
-          for (let ty = ty0; ty < ty1; ty++) {
-            const row = ty * mapW;
-            const py = snapY(ty), ph = snapY(ty + 1) - py;
-            for (let tx = tx0; tx < tx1; tx++) {
-              const megatile = megatileForTile(ts, tiles[row + tx]);
-              const px = snapX(tx), pw = snapX(tx + 1) - px;
-              if (megatile < 0) {
-                if (onlyAnimated) continue;
-                lc.fillStyle = "#000";
-                lc.fillRect(px, py, pw, ph);
-                continue;
-              }
-              if (flat) {
-                if (onlyAnimated) continue;
-                const rgb = atlas.averages[megatile];
-                lc.fillStyle = `rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})`;
-                lc.fillRect(px, py, pw, ph);
-                continue;
-              }
-              const src = atlasSource(atlas, megatile);
-              if (src.animated) animated = true;
-              else if (onlyAnimated) continue;
-              lc.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, pw, ph);
-            }
-          }
-          return animated;
-        };
-        if (same) {
-          // A step change redraws only the tiles that cycle; everything else is still right.
-          layer!.animated = blitTiles(x0, y0, x1, y1, true);
-        } else if (shifts) {
-          // "copy" replaces what is there, so the part the shifted picture no longer
-          // covers comes out clear rather than keeping what was drawn before.
-          lc.globalCompositeOperation = "copy";
-          lc.imageSmoothingEnabled = false;
-          lc.drawImage(layer!.canvas, -dx, -dy);
-          lc.globalCompositeOperation = "source-over";
-          layer!.ox = ox;
-          layer!.oy = oy;
-          // The tiles under an uncovered strip, a tile to spare each way: one that straddles
-          // the strip's edge is drawn again whole, over the same pixels it already had.
-          const tileSpan = (from: number, to: number, origin: number, lo: number, hi: number): [number, number] =>
-            [Math.max(lo, Math.floor((from + origin) / devTile) - 1), Math.min(hi, Math.ceil((to + origin) / devTile) + 1)];
-          let animated = layer!.animated;
-          if (dx !== 0) {
-            const [tx0, tx1] = dx > 0 ? tileSpan(devW - dx, devW, ox, x0, x1) : tileSpan(0, -dx, ox, x0, x1);
-            if (blitTiles(tx0, y0, tx1, y1, false)) animated = true;
-          }
-          if (dy !== 0) {
-            const [ty0, ty1] = dy > 0 ? tileSpan(devH - dy, devH, oy, y0, y1) : tileSpan(0, -dy, oy, y0, y1);
-            if (blitTiles(x0, ty0, x1, ty1, false)) animated = true;
-          }
-          // Only ever raised here — the tiles that left are not counted out — and put
-          // right by the next step, which looks at every visible tile.
-          layer!.animated = animated;
-          // The kept part still shows the step it was drawn at.
-          if (layer!.step !== step) layer!.animated = blitTiles(x0, y0, x1, y1, true);
-        } else {
-          lc.clearRect(0, 0, devW, devH);
-          layer!.animated = blitTiles(x0, y0, x1, y1, false);
-        }
-        layer!.step = step;
-      }
-      animatedInView = layer!.animated;
-      // Device pixel for device pixel: no resampling of the layer on its way to the screen.
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(layer!.canvas, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      animatedInView = paintGround(v, groundLayerRef, {
+        scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability,
+      });
     } else if (tiles && tilesetLoading) {
-      // Map open, graphics still coming: a calm plate under the loading overlay. Anything
-      // tile-shaped here would just be wrong terrain for a moment.
-      ctx.fillStyle = "#12161d";
-      ctx.fillRect(-sx, -sy, worldW, worldH);
+      paintLoadingPlate(v);
     } else {
-      // No map or no tileset graphics installed: flat tileset colour with light noise.
-      const base = parseInt(tileset.color.slice(1), 16);
-      const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
-      ctx.fillStyle = tileset.color;
-      ctx.fillRect(-sx, -sy, worldW, worldH);
-      if (tilePx >= 4) {
-        for (let ty = y0; ty < y1; ty++) {
-          for (let tx = x0; tx < x1; tx++) {
-            const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
-            const k = 1 + n;
-            ctx.fillStyle = `rgb(${br * k | 0},${bg * k | 0},${bb * k | 0})`;
-            ctx.fillRect(tx * tilePx - sx, ty * tilePx - sy, tilePx + 0.5, tilePx + 0.5);
-          }
-        }
-      }
+      paintFlatGround(v, tileset.color);
     }
-
-    // grid: View ▸ Grid Settings picks the spacing, colour, opacity and style (lines / dots / crosses)
-    if (flags.grid) {
-      const step = (gridSize / TILE) * tilePx;
-      if (step >= 6) {
-        const alpha = (gridLook.opacity / 100) * (step >= 16 ? 1 : 0.65);
-        ctx.strokeStyle = gridLook.color;
-        ctx.fillStyle = gridLook.color;
-        ctx.globalAlpha = alpha;
-        ctx.lineWidth = 1;
-        const gx0 = Math.floor(sx / step) * step, gx1 = Math.min(worldW, sx + size.w);
-        const gy0 = Math.floor(sy / step) * step, gy1 = Math.min(worldH, sy + size.h);
-        ctx.beginPath();
-        if (gridLook.style === "lines") {
-          for (let gx = gx0; gx <= gx1; gx += step) {
-            const px = Math.round(gx - sx) + 0.5;
-            ctx.moveTo(px, Math.max(0, -sy));
-            ctx.lineTo(px, Math.min(size.h, worldH - sy));
-          }
-          for (let gy = gy0; gy <= gy1; gy += step) {
-            const py = Math.round(gy - sy) + 0.5;
-            ctx.moveTo(Math.max(0, -sx), py);
-            ctx.lineTo(Math.min(size.w, worldW - sx), py);
-          }
-          ctx.stroke();
-        } else {
-          const arm = gridLook.style === "crosses" ? Math.max(2, Math.min(6, step / 6)) : 0;
-          for (let gx = gx0; gx <= gx1; gx += step) {
-            for (let gy = gy0; gy <= gy1; gy += step) {
-              const px = Math.round(gx - sx), py = Math.round(gy - sy);
-              if (arm > 0) {
-                ctx.moveTo(px - arm, py + 0.5); ctx.lineTo(px + arm + 1, py + 0.5);
-                ctx.moveTo(px + 0.5, py - arm); ctx.lineTo(px + 0.5, py + arm + 1);
-              } else {
-                ctx.rect(px - 0.5, py - 0.5, 2, 2);
-              }
-            }
-          }
-          if (arm > 0) ctx.stroke(); else ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // elevation / buildability overlays (View menu): what the minitile flags say about the ground —
-    // ground height as a tint per minitile (mid amber, high red), unbuildable groups hatched in blue.
-    if ((flags.elevation || flags.buildability) && tiles && tilesetAssets && tilePx >= 4) {
-      const ts = tilesetAssets.tileset;
-      const mini = tilePx / 4;
-      const perMini = mini >= 2;
-      for (let ty = y0; ty < y1; ty++) {
-        for (let tx = x0; tx < x1; tx++) {
-          const id = tiles[ty * mapW + tx];
-          const megatile = megatileForTile(ts, id);
-          const px = tx * tilePx - sx, py = ty * tilePx - sy;
-          if (flags.elevation && megatile >= 0) {
-            if (perMini) {
-              for (let m = 0; m < 16; m++) {
-                const h = minitileHeight(ts, megatile, m);
-                if (h === 0) continue;
-                ctx.fillStyle = h === 2 ? "rgba(240,90,90,0.32)" : "rgba(230,185,92,0.30)";
-                ctx.fillRect(px + (m % 4) * mini, py + Math.floor(m / 4) * mini, mini + 0.5, mini + 0.5);
-              }
-            } else {
-              const h = groupHeight(ts.groups[id >> 4] ?? ts.groups[0]);
-              if (h > 0) { ctx.fillStyle = h === 2 ? "rgba(240,90,90,0.32)" : "rgba(230,185,92,0.30)"; ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5); }
-            }
-          }
-          if (flags.buildability) {
-            const g = ts.groups[id >> 4];
-            if (g && !groupBuildable(g)) {
-              ctx.fillStyle = "rgba(80,140,240,0.26)";
-              ctx.fillRect(px, py, tilePx + 0.5, tilePx + 0.5);
-              if (tilePx >= 12) {
-                ctx.strokeStyle = "rgba(80,140,240,0.55)";
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(px, py + tilePx);
-                ctx.lineTo(px + tilePx, py);
-                ctx.stroke();
-              }
-            }
-          }
-        }
-      }
-    }
-
+    if (flags.grid) drawGrid(v, gridSize, gridLook);
     drawOverlays("terrain");
 
-    // placed units: GRP sprites in the game's painter's order (ground by y, then flyers),
-    // team-coloured through tunit.pcx and the tileset palette. Types whose graphic is
-    // still loading — or everything, when the unit data is not installed — get a
-    // player-coloured marker instead.
+    // Units and sprites, then the selection's boxes over them.
+    const paint = spritePainter(v, scenario, unitAssets, tilesetAssets);
     const unitTables = unitAssets?.units ?? null;
-    const palette = tilesetAssets?.tileset.palette ?? null;
-    const paletteKey = tilesetAssets?.name ?? "";
-    const colors = scenario?.playerColors;
-    const playerRgb = scenario?.playerRgb;
-    const teamOf = (owner: number) => playerTeamColor(colors, playerRgb, owner);
-    const colorOf = (owner: number) => displayColorHex(colors, playerRgb, owner);
-    const drawUnitSprite = (unitId: number, owner: number, ux: number, uy: number, alpha = 1): boolean => {
-      if (!unitAssets || !palette || tilePx < 8) return false;
-      const team = teamOf(owner);
-      const sprite = getUnitSprite(unitAssets, unitId, team, palette, paletteKey);
-      if (!sprite) return false;
-      const w = sprite.width * zoom, h = sprite.height * zoom;
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(sprite.image, ux - w / 2, uy - h / 2, w, h);
-      const sub = subunitOf(unitAssets, unitId);
-      if (sub !== NO_UNIT) {
-        const turret = getUnitSprite(unitAssets, sub, team, palette, paletteKey);
-        if (turret) ctx.drawImage(turret.image, ux - (turret.width * zoom) / 2, uy - (turret.height * zoom) / 2, turret.width * zoom, turret.height * zoom);
-      }
-      ctx.globalAlpha = 1;
-      return true;
-    };
-    /**
-     * A unit as its iscript sprite: shadow, main graphic, overlays, turret, fires and
-     * smoke, each image at its own offset. False when the main graphic is not ready yet.
-     */
-    const drawSpriteImages = (sprite: SpriteState, team: TeamColorSpec, ux: number, uy: number): boolean => {
-      if (!unitAssets || !palette) return false;
-      for (const img of sprite.images) {
-        if (img.hidden) continue;
-        const frame = getImageFrame(unitAssets, img.imageId, img.frame, img.flip, team, palette, paletteKey);
-        if (!frame) {
-          if (img === sprite.main) return false;
-          continue;
-        }
-        const w = frame.width * zoom, h = frame.height * zoom;
-        ctx.globalCompositeOperation = frame.additive ? "lighter" : "source-over";
-        ctx.drawImage(frame.image, ux + img.x * zoom - w / 2, uy + img.y * zoom - h / 2, w, h);
-      }
-      ctx.globalCompositeOperation = "source-over";
-      return true;
-    };
-    const drawAnimatedUnit = (sprite: SpriteState, owner: number, ux: number, uy: number, alpha: number): boolean => {
-      ctx.globalAlpha = alpha;
-      const team = teamOf(owner);
-      const drawn = drawSpriteImages(sprite, team, ux, uy);
-      if (drawn && sprite.turret) drawSpriteImages(sprite.turret, team, ux, uy);
-      ctx.globalAlpha = 1;
-      return drawn;
-    };
-    const drawUnitMarker = (owner: number, ux: number, uy: number) => {
-      const r = Math.max(2, tilePx * 0.34);
-      ctx.fillStyle = colorOf(owner) + "cc";
-      ctx.fillRect(ux - r, uy - r, r * 2, r * 2);
-      if (tilePx >= 12) {
-        ctx.strokeStyle = "rgba(0,0,0,0.55)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(Math.round(ux - r) + 0.5, Math.round(uy - r) + 0.5, Math.round(r * 2), Math.round(r * 2));
-      }
-    };
-    /** A THG2 sprite in its editor pose: the sprites.dat image (pure) or the unit's picture. */
-    const drawThg2Sprite = (spriteId: number, flags: number, owner: number, px: number, py: number, alpha = 1): boolean => {
-      if (!unitAssets || !palette || tilePx < 8) return false;
-      if (!(flags & SpriteFlag.PureSprite)) return drawUnitSprite(spriteId, owner, px, py, alpha);
-      const imageId = unitAssets.sprites.image[spriteId];
-      if (imageId === undefined) return false;
-      const frame = getImageFrame(unitAssets, imageId, 0, (flags & SpriteFlag.Flipped) !== 0, teamOf(owner), palette, paletteKey);
-      if (!frame) return false;
-      const w = frame.width * zoom, h = frame.height * zoom;
-      ctx.globalAlpha = alpha;
-      ctx.globalCompositeOperation = frame.additive ? "lighter" : "source-over";
-      ctx.drawImage(frame.image, px - w / 2, py - h / 2, w, h);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      return true;
-    };
-    const drawSpriteMarker = (px: number, py: number) => {
-      const r = Math.max(2, tilePx * 0.25);
-      ctx.fillStyle = "rgba(201,168,255,0.85)";
-      ctx.beginPath();
-      ctx.moveTo(px, py - r);
-      ctx.lineTo(px + r, py);
-      ctx.lineTo(px, py + r);
-      ctx.lineTo(px - r, py);
-      ctx.closePath();
-      ctx.fill();
-    };
     let unitsInView = false;
     if ((flags.units || flags.sprites) && scenario && tilePx >= 3) {
-      const margin = UNIT_MARGIN * zoom;
-      const animated = animator?.enabled ? animator : null;
-      if (animated && flags.units) animated.sync(scenario.units, tilesetIndex(scenario));
-      if (animated && flags.sprites) animated.syncSprites(scenario.sprites, tilesetIndex(scenario));
-      // Units and THG2 sprites share the game's painter's order: everything on the
-      // ground by y (so a tree canopy over a unit works out by position), flyers last.
-      // Only what is near the view is sorted: the order among those is the same, and a
-      // paint no longer builds and sorts a record for every unit on the map.
-      type Drawable = { kind: "unit" | "sprite"; i: number; y: number; flyer: number };
-      const order: Drawable[] = [];
-      const near = (x: number, y: number) => {
-        const px = x * zoom - sx, py = y * zoom - sy;
-        return px >= -margin && py >= -margin && px <= size.w + margin && py <= size.h + margin;
-      };
-      if (flags.units) scenario.units.forEach((u, i) => { if (near(u.x, u.y)) order.push({ kind: "unit", i, y: u.y, flyer: unitGeometry(unitTables, u.unitId).flyer ? 1 : 0 }); });
-      if (flags.sprites) scenario.sprites.forEach((r, i) => { if (near(r.x, r.y)) order.push({ kind: "sprite", i, y: r.y, flyer: 0 }); });
-      order.sort((a, b) => a.flyer - b.flyer || a.y - b.y || (a.kind === b.kind ? a.i - b.i : a.kind === "unit" ? -1 : 1));
-      ctx.imageSmoothingEnabled = zoom < 1;
-      for (const d of order) {
-        if (d.kind === "sprite") {
-          const r = scenario.sprites[d.i];
-          const px = r.x * zoom - sx, py = r.y * zoom - sy;
-          unitsInView = true;
-          const alpha = r.flags & SpriteFlag.Disabled ? 0.5 : 1;
-          const sprite = animated?.spriteForRecord(r);
-          if (sprite && tilePx >= 8 && drawAnimatedUnit(sprite, r.owner, px, py, alpha)) continue;
-          if (drawThg2Sprite(r.spriteId, r.flags, r.owner, px, py, alpha)) continue;
-          drawSpriteMarker(px, py);
-          continue;
-        }
-        const u = scenario.units[d.i];
-        const ux = u.x * zoom - sx;
-        const uy = u.y * zoom - sy;
-        unitsInView = true;
-        // A cloaked unit is drawn faint, the way the game shows your own cloaked units.
-        const cloaked = (u.validStates & UnitUsed.State) !== 0 && (u.stateFlags & UnitState.Cloaked) !== 0;
-        const sprite = animated?.spriteFor(u);
-        if (sprite && tilePx >= 8 && drawAnimatedUnit(sprite, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;
-        if (drawUnitSprite(u.unitId, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;
-        // The numbered start-location marker below stands in for its sprite.
-        if (u.unitId !== START_LOCATION) drawUnitMarker(u.owner, ux, uy);
-      }
-      ctx.imageSmoothingEnabled = true;
-
-      if (layer === "units" && flags.units && selectedUnits.length > 0) {
-        ctx.strokeStyle = "#8ef0a4";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
+      unitsInView = drawObjects(v, paint, scenario, unitAssets, animator, flags);
+      if (layer === "units" && flags.units) {
         for (const i of selectedUnits) {
           const u = scenario.units[i];
-          if (!u) continue;
-          const b = unitBox(unitGeometry(unitTables, u.unitId), u.x, u.y);
-          ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom), Math.round((b.bottom - b.top) * zoom));
+          if (u) strokeBox(v, unitBox(unitGeometry(unitTables, u.unitId), u.x, u.y), INK.green, DASH.selected);
         }
-        ctx.setLineDash([]);
       }
-      // sprite layer: the selection's graphic boxes, and the sprite under the pointer in select mode
       if (spritesEditing && flags.sprites) {
-        ctx.lineWidth = 1;
-        const strokeSpriteBox = (b: { left: number; top: number; right: number; bottom: number }, color: string, dash: number[]) => {
-          ctx.strokeStyle = color;
-          ctx.setLineDash(dash);
-          ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom), Math.round((b.bottom - b.top) * zoom));
-          ctx.setLineDash([]);
-        };
         for (const i of selectedSprites) {
           const r = scenario.sprites[i];
-          if (r) strokeSpriteBox(spriteTools.boxOf(r), "#8ef0a4", [4, 3]);
+          if (r) strokeBox(v, spriteTools.boxOf(r), INK.green, DASH.selected);
         }
-        const hps = hoverPointRef.current;
-        if (hps && !spritePlacing && !spriteGestureRef.current) {
-          const hit = spriteTools.pickAt(hps);
+        // The sprite under the pointer in select mode.
+        if (hoverPoint && !spritePlacing && !objectGestureOn(gesture, "sprites")) {
+          const hit = spriteTools.pickAt(hoverPoint);
           const r = hit >= 0 ? scenario.sprites[hit] : null;
-          if (r && !selectedSprites.includes(hit)) strokeSpriteBox(spriteTools.boxOf(r), "rgba(230,185,92,0.7)", [2, 2]);
+          if (r && !selectedSprites.includes(hit)) strokeBox(v, spriteTools.boxOf(r), INK.goldHover, DASH.hover);
         }
       }
     }
 
-    // doodad layer: selected footprints, and the doodad under the pointer in select mode
-    const strokeTileRect = (r: TileRect, color: string, dash: number[] | null) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.setLineDash(dash ?? []);
-      ctx.strokeRect(Math.round(r.x0 * tilePx - sx) + 0.5, Math.round(r.y0 * tilePx - sy) + 0.5, Math.round((r.x1 - r.x0) * tilePx) - 1, Math.round((r.y1 - r.y0) * tilePx) - 1);
-      ctx.setLineDash([]);
-    };
-    /** A doodad as it would be placed: its tiles translucent, refused cells red, the overlay sprite ghosted. */
-    const drawDoodadGhost = (g: DoodadGhost, alpha: number) => {
-      const ok = g.verdict.ok;
-      const bad = new Set(g.verdict.bad);
-      ctx.imageSmoothingEnabled = tilePx < TILE;
-      for (let row = 0; row < g.def.height; row++) {
-        for (let col = 0; col < g.def.width; col++) {
-          const cell = row * g.def.width + col;
-          const id = g.def.tiles[cell];
-          const px = (g.x + col) * tilePx - sx, py = (g.y + row) * tilePx - sy;
-          if (id !== 0 && tilesetAssets && tilePx >= 4) {
-            const megatile = megatileForTile(tilesetAssets.tileset, id);
-            if (megatile > 0) {
-              const src = atlasSource(tilesetAssets.atlas, megatile);
-              ctx.globalAlpha = alpha;
-              ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
-              ctx.globalAlpha = 1;
-            }
-          }
-          if (bad.has(cell)) {
-            ctx.fillStyle = "rgba(240,90,90,0.45)";
-            ctx.fillRect(px, py, tilePx, tilePx);
-          } else if (id === 0 && g.def.required[cell] !== 0) {
-            // A cell the doodad needs but does not cover (a ramp's approach): hatch it lightly.
-            ctx.fillStyle = ok ? "rgba(230,185,92,0.10)" : "rgba(240,90,90,0.10)";
-            ctx.fillRect(px, py, tilePx, tilePx);
-          }
-        }
-      }
-      ctx.imageSmoothingEnabled = true;
-      if (g.def.overlay) {
-        const cx = (g.x * TILE + g.def.width * 16) * zoom - sx, cy = (g.y * TILE + g.def.height * 16) * zoom - sy;
-        ctx.imageSmoothingEnabled = zoom < 1;
-        drawThg2Sprite(g.def.overlay.id, g.def.flags, g.owner, cx, cy, alpha);
-        ctx.imageSmoothingEnabled = true;
-      }
-      strokeTileRect({ x0: g.x, y0: g.y, x1: g.x + g.def.width, y1: g.y + g.def.height }, ok ? "#e6b95c" : "#f05a5a", null);
-    };
+    // Doodads layer: the selected footprints, and the doodad under the pointer in select mode.
     if (doodadsEditing && scenario) {
       for (const i of selectedDoodads) {
         const rec = scenario.doodads[i];
         const f = rec && doodadTools.footprintOf(rec);
-        if (f) strokeTileRect(f, "#8ef0a4", [4, 3]);
+        if (f) strokeTileRect(v, f, INK.green, DASH.selected);
       }
       const hvd = hoverRef.current;
-      if (hvd && !doodadPlacing && !doodadGestureRef.current) {
+      if (hvd && !doodadPlacing && !objectGestureOn(gesture, "doodads")) {
         const hit = doodadTools.pickAt(hvd.x, hvd.y);
         const rec = hit >= 0 ? scenario.doodads[hit] : null;
         const f = rec && doodadTools.footprintOf(rec);
-        if (f && !selectedDoodads.includes(hit)) strokeTileRect(f, "rgba(230,185,92,0.7)", [2, 2]);
+        if (f && !selectedDoodads.includes(hit)) strokeTileRect(v, f, INK.goldHover, DASH.hover);
       }
     }
 
-    // locations: StarEdit's translucent plates with the name in the corner; overlaps
-    // stack darker, the selection goes gold and grows handles, the one under the pointer
-    // lights up. Anywhere (slot 63) is never drawn — it is the whole map.
     if (flags.locations && scenario) {
-      const selectedSet = new Set(locationsEditing ? selectedLocations : []);
-      const hvl = hoverPointRef.current;
-      const hoverLoc = locationsEditing && hvl && !locationGestureRef.current && !locationTools.handleAtPoint(hvl, zoom) ? locationTools.pickAt(hvl) : -1;
-      const fontPx = Math.max(10, Math.min(13, tilePx * 0.4));
-      ctx.font = `${fontPx}px ${uiFont()}`;
-      ctx.lineWidth = 1;
-      for (const l of locations) {
-        const lx = l.left * zoom - sx, ly = l.top * zoom - sy, lw = (l.right - l.left) * zoom, lh = (l.bottom - l.top) * zoom;
-        if (lx > size.w || ly > size.h || lx + lw < 0 || ly + lh < 0) continue;
-        const sel = selectedSet.has(l.index), hot = l.index === hoverLoc;
-        ctx.fillStyle = sel ? "rgba(230,185,92,0.22)" : hot ? "rgba(79,209,197,0.20)" : "rgba(79,209,197,0.13)";
-        ctx.fillRect(lx, ly, lw, lh);
-        const bx = Math.round(lx) + 0.5, by = Math.round(ly) + 0.5, bw = Math.round(lw), bh = Math.round(lh);
-        // A dark hairline inside the coloured edge keeps the box legible over bright ground.
-        if (bw > 2 && bh > 2) {
-          ctx.strokeStyle = "rgba(0,0,0,0.4)";
-          ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
-        }
-        ctx.strokeStyle = sel ? "#f4d08a" : hot ? "#bff5ef" : "rgba(79,209,197,0.9)";
-        ctx.strokeRect(bx, by, Math.max(1, bw), Math.max(1, bh));
-        if (flags.locationNames && tilePx >= 8) {
-          const tw = ctx.measureText(l.name).width;
-          const plateH = fontPx + 5;
-          ctx.fillStyle = sel ? "rgba(58,44,10,0.85)" : "rgba(10,12,16,0.78)";
-          ctx.fillRect(lx + 1, ly + 1, tw + 8, plateH);
-          // An elevation-restricted location gets an amber tab on its plate.
-          if (l.elevationFlags !== 0) {
-            ctx.fillStyle = "#e0a545";
-            ctx.fillRect(lx + 1, ly + 1, 2, plateH);
-          }
-          ctx.fillStyle = sel ? "#f4d08a" : "#bff5ef";
-          ctx.fillText(l.name, lx + 5, ly + 1 + fontPx);
-        }
-      }
+      const dragging = gesture?.kind === "location" ? gesture : null;
+      const hover = locationsEditing && hoverPoint && !dragging && !locationTools.handleAtPoint(hoverPoint, zoom) ? locationTools.pickAt(hoverPoint) : -1;
+      drawLocations(v, locations, { selected: new Set(locationsEditing ? selectedLocations : []), hover, names: flags.locationNames });
       if (locationsEditing) {
         // Resize handles on a single selection; Anywhere has none, it cannot be resized.
         const only = selectedLocations.length === 1 && selectedLocations[0] !== ANYWHERE_INDEX ? scenario.locations[selectedLocations[0]] : null;
-        if (only) {
-          const b = boundsOf(only);
-          for (const h of HANDLES) {
-            const p = handlePoint(b, h);
-            const hx = Math.round(p.x * zoom - sx), hy = Math.round(p.y * zoom - sy);
-            ctx.fillStyle = "#f4d08a";
-            ctx.fillRect(hx - 3, hy - 3, 7, 7);
-            ctx.strokeStyle = "rgba(0,0,0,0.75)";
-            ctx.strokeRect(hx - 3.5, hy - 3.5, 8, 8);
-          }
-        }
+        if (only) drawLocationHandles(v, boundsOf(only));
         // The box a create-drag is about to make, with its size in tiles.
-        const g = locationGestureRef.current;
-        const ghost = g?.mode === "create" ? locationTools.dragRect(g.from, g.to) : null;
+        const ghost = dragging?.mode === "create" ? locationTools.dragRect(dragging.from, dragging.to) : null;
         if (ghost) {
-          const gx = ghost.left * zoom - sx, gy = ghost.top * zoom - sy, gw = (ghost.right - ghost.left) * zoom, gh = (ghost.bottom - ghost.top) * zoom;
-          ctx.fillStyle = "rgba(230,185,92,0.14)";
-          ctx.fillRect(gx, gy, gw, gh);
-          ctx.strokeStyle = "#e6b95c";
-          ctx.setLineDash([4, 3]);
-          ctx.strokeRect(Math.round(gx) + 0.5, Math.round(gy) + 0.5, Math.round(gw), Math.round(gh));
-          ctx.setLineDash([]);
-          const label = `${fmtTiles(ghost.right - ghost.left)} × ${fmtTiles(ghost.bottom - ghost.top)}`;
-          ctx.font = `10px ${monoFont()}`;
-          const tw = ctx.measureText(label).width;
-          ctx.fillStyle = "rgba(10,12,16,0.8)";
-          ctx.fillRect(gx + gw + 4, gy + gh + 4, tw + 8, 15);
-          ctx.fillStyle = "#f4d08a";
-          ctx.fillText(label, gx + gw + 8, gy + gh + 15);
+          const corner = draggedBox(v, ghost, "rgba(230,185,92,0.14)", INK.gold);
+          sizeChip(v, `${fmtTiles(ghost.right - ghost.left)} × ${fmtTiles(ghost.bottom - ghost.top)}`, corner.right, corner.bottom, INK.goldPale);
         }
       }
     }
-
-    // start locations
-    if (flags.startLocations) {
-      for (const s of startLocations) {
-        const cx = s.x * tilePx - sx, cy = s.y * tilePx - sy, r = tilePx * 1.5;
-        if (cx + r < 0 || cy + r < 0 || cx - r > size.w || cy - r > size.h) continue;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = colorOf(s.player) + "55";
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = colorOf(s.player);
-        ctx.stroke();
-        if (tilePx >= 12) {
-          ctx.fillStyle = "#fff";
-          ctx.font = `bold ${Math.max(10, tilePx * 0.5)}px ${uiFont()}`;
-          ctx.textAlign = "center";
-          ctx.fillText(String(s.player + 1), cx, cy + tilePx * 0.18);
-          ctx.textAlign = "left";
-        }
-      }
-    }
-
+    if (flags.startLocations) drawStartLocations(v, startLocations, paint.colorOf);
     drawOverlays("objects");
 
-    // fog of war: over units, locations and markers alike, since in game it hides all of them
-    if (showFog && scenario) drawFogOverlay(ctx, scenario, tilesetIndex(scenario), fogViewPlayer, { x0, y0, x1, y1, tilePx, sx, sy });
+    // Fog of war: over units, locations and markers alike, since in game it hides all of them.
+    if (showFog && scenario) {
+      drawFogLayer(ctx, fogLayerRef, scenario, tilesetIndex(scenario), fogViewPlayer, terrainRevision, { x0, y0, x1, y1, tilePx, sx, sy, w: size.w, h: size.h, dpr });
+    }
 
-    // map boundary
+    // The map's edge.
     ctx.strokeStyle = "rgba(230,185,92,0.5)";
     ctx.lineWidth = 1;
     ctx.strokeRect(-sx + 0.5, -sy + 0.5, worldW - 1, worldH - 1);
 
-    // symmetry axes (Tools ▸ Symmetry…): the mirror lines the brushes paint and the palettes place across
-    if (symmetry !== "none" && layer !== "clipboard" && symmetryAvailable(symmetry, mapW, mapH)) {
-      const axes = symmetryAxes(symmetry, mapW, mapH);
-      ctx.strokeStyle = "rgba(142,240,164,0.85)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      for (const l of axes.lines) {
-        ctx.moveTo(Math.round(l.x0 * tilePx - sx) + 0.5, Math.round(l.y0 * tilePx - sy) + 0.5);
-        ctx.lineTo(Math.round(l.x1 * tilePx - sx) + 0.5, Math.round(l.y1 * tilePx - sy) + 0.5);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (axes.centre) {
-        const cx = (mapW / 2) * tilePx - sx, cy = (mapH / 2) * tilePx - sy;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-        ctx.moveTo(cx - 10, cy); ctx.lineTo(cx + 10, cy);
-        ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy + 10);
-        ctx.stroke();
-      }
-    }
+    if (symmetry !== "none" && layer !== "clipboard" && symmetryAvailable(symmetry, mapW, mapH)) drawSymmetryAxes(v, symmetryAxes(symmetry, mapW, mapH));
 
-    // A plugin's object pick: the unit or location under the pointer, outlined with its name.
+    // A plugin's object pick: the unit or location under the pointer.
     const ph = pickHoverRef.current;
     if (picking && mapPick?.kind === "object" && ph && scenario) {
-      let box: { left: number; top: number; right: number; bottom: number } | null = null;
-      let label = "";
       if (ph.kind === "unit") {
         const u = scenario.units[ph.index];
-        if (u) { box = unitBox(unitGeometry(unitAssets?.units ?? null, u.unitId), u.x, u.y); label = unitLabel(u.unitId); }
+        if (u) drawPickedObject(v, unitBox(unitGeometry(unitTables, u.unitId), u.x, u.y), unitLabel(u.unitId));
       } else {
         const l = locations.find((x) => x.index === ph.index);
-        if (l) { box = l; label = l.name; }
-      }
-      if (box) {
-        const bx = box.left * zoom - sx, by = box.top * zoom - sy, bw = (box.right - box.left) * zoom, bh = (box.bottom - box.top) * zoom;
-        ctx.strokeStyle = "#bff5ef";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(Math.round(bx) + 0.5, Math.round(by) + 0.5, Math.max(2, Math.round(bw)), Math.max(2, Math.round(bh)));
-        ctx.lineWidth = 1;
-        ctx.font = `11px ${uiFont()}`;
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(10,12,16,0.85)";
-        ctx.fillRect(bx, by - 18, tw + 10, 16);
-        ctx.fillStyle = "#bff5ef";
-        ctx.fillText(label, bx + 5, by - 6);
+        if (l) drawPickedObject(v, l, l.name);
       }
     }
-
     // A plugin's pick in progress: the rectangle being dragged, teal so it reads as "not the marked area".
-    const pg = pickGestureRef.current;
-    if (picking && pg && scenario) {
-      const r = tileRect(pg.from, pg.to);
-      const mx = r.x0 * tilePx - sx, my = r.y0 * tilePx - sy, mw = (r.x1 - r.x0) * tilePx, mh = (r.y1 - r.y0) * tilePx;
-      ctx.fillStyle = "rgba(79,209,197,0.12)";
-      ctx.fillRect(mx, my, mw, mh);
-      ctx.strokeStyle = "#4fd1c5";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 3]);
-      ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
-      ctx.setLineDash([]);
-      const label = mapPick?.kind === "tile" ? `${pg.to.x}, ${pg.to.y}` : `${r.x1 - r.x0} × ${r.y1 - r.y0} at ${r.x0}, ${r.y0}`;
-      ctx.font = `10px ${monoFont()}`;
-      const tw = ctx.measureText(label).width;
-      ctx.fillStyle = "rgba(10,12,16,0.8)";
-      ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
-      ctx.fillStyle = "#4fd1c5";
-      ctx.fillText(label, mx + mw + 8, my + mh + 15);
+    if (picking && gesture?.kind === "pick" && scenario) {
+      const r = tileRect(gesture.from, gesture.to);
+      const label = mapPick?.kind === "tile" ? `${gesture.to.x}, ${gesture.to.y}` : `${r.x1 - r.x0} × ${r.y1 - r.y0} at ${r.x0}, ${r.y0}`;
+      markedTiles(v, r, "rgba(79,209,197,0.12)", INK.teal, label, INK.teal);
     }
 
-    // Cut / Copy / Paste layer: the marked area with its size, and the clip under the pointer while pasting
+    // Cut / Copy / Paste layer: the marked area with its size, and the clip under the pointer while pasting.
     if (clipEditing && scenario) {
-      const g = clipGestureRef.current;
-      const marked = g ? tileRect(g.from, g.to) : clipSelection;
-      if (marked) {
-        const mx = marked.x0 * tilePx - sx, my = marked.y0 * tilePx - sy, mw = (marked.x1 - marked.x0) * tilePx, mh = (marked.y1 - marked.y0) * tilePx;
-        ctx.fillStyle = "rgba(230,185,92,0.10)";
-        ctx.fillRect(mx, my, mw, mh);
-        ctx.strokeStyle = "#e6b95c";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 3]);
-        ctx.strokeRect(Math.round(mx) + 0.5, Math.round(my) + 0.5, Math.round(mw) - 1, Math.round(mh) - 1);
-        ctx.setLineDash([]);
-        const label = `${marked.x1 - marked.x0} × ${marked.y1 - marked.y0}`;
-        ctx.font = `10px ${monoFont()}`;
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(10,12,16,0.8)";
-        ctx.fillRect(mx + mw + 4, my + mh + 4, tw + 8, 15);
-        ctx.fillStyle = "#f4d08a";
-        ctx.fillText(label, mx + mw + 8, my + mh + 15);
-      }
-      const hvc = hoverRef.current;
-      if (clipPasting && clip && hvc && !g) {
-        // The clip with its top-left tile under the pointer: the picture at three-quarter
-        // strength (its own tiles, or the catalogue's for a doodad-only clip), the objects
-        // as ghosts, and the outline — red when part of it would fall off the map.
-        const ax = hvc.x, ay = hvc.y;
-        const ox = ax * TILE, oy = ay * TILE;
-        const sameTileset = clip.era === tilesetIndex(scenario);
-        const blit = (tx: number, ty: number, id: number) => {
-          if (!tilesetAssets || tilePx < 4 || tx < 0 || ty < 0 || tx >= mapW || ty >= mapH) return;
-          const megatile = megatileForTile(tilesetAssets.tileset, id);
-          if (megatile <= 0) return;
-          const src = atlasSource(tilesetAssets.atlas, megatile);
-          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, tx * tilePx - sx, ty * tilePx - sy, tilePx, tilePx);
-        };
-        ctx.globalAlpha = 0.75;
-        ctx.imageSmoothingEnabled = tilePx < TILE;
-        if (sameTileset && clipParts.terrain && clip.tiles && clip.ground) {
-          const picture = clipParts.doodads ? clip.tiles : clip.ground;
-          for (let y = 0; y < clip.height; y++) for (let x = 0; x < clip.width; x++) blit(ax + x, ay + y, picture[y * clip.width + x]);
-        } else if (sameTileset && clipParts.doodads) {
-          for (const d of clip.doodads) {
-            const def = doodadTools.catalogue.byId.get(d.doodadId);
-            if (!def) continue;
-            const o = doodadOrigin(def, d.x + ox, d.y + oy);
-            for (let row = 0; row < def.height; row++) for (let col = 0; col < def.width; col++) {
-              const id = def.tiles[row * def.width + col];
-              if (id !== 0) blit(o.x + col, o.y + row, id);
-            }
-          }
-        }
-        ctx.globalAlpha = 1;
-        ctx.imageSmoothingEnabled = zoom < 1;
-        if (clipParts.units) {
-          for (const u of clip.units) {
-            const ux = (u.x + ox) * zoom - sx, uy = (u.y + oy) * zoom - sy;
-            if (!drawUnitSprite(u.unitId, u.owner, ux, uy, 0.6) && u.unitId !== START_LOCATION) drawUnitMarker(u.owner, ux, uy);
-          }
-        }
-        if (clipParts.sprites) {
-          for (const s of clip.sprites) {
-            const px = (s.x + ox) * zoom - sx, py = (s.y + oy) * zoom - sy;
-            if (!drawThg2Sprite(s.spriteId, s.flags, s.owner, px, py, 0.6)) drawSpriteMarker(px, py);
-          }
-        }
-        ctx.imageSmoothingEnabled = true;
-        if (clipParts.locations) {
-          ctx.lineWidth = 1;
-          for (const l of clip.locations) {
-            const b = boundsOf(clipLocationBounds(l, ax, ay));
-            ctx.fillStyle = "rgba(79,209,197,0.13)";
-            ctx.fillRect(b.left * zoom - sx, b.top * zoom - sy, (b.right - b.left) * zoom, (b.bottom - b.top) * zoom);
-            ctx.strokeStyle = "rgba(79,209,197,0.9)";
-            ctx.setLineDash([3, 2]);
-            ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom), Math.round((b.bottom - b.top) * zoom));
-            ctx.setLineDash([]);
-          }
-        }
-        const fits = ax + clip.width <= mapW && ay + clip.height <= mapH;
-        strokeTileRect({ x0: ax, y0: ay, x1: ax + clip.width, y1: ay + clip.height }, fits ? "#e6b95c" : "#f05a5a", null);
-      }
+      const marking = gesture?.kind === "clip" ? gesture : null;
+      const marked = marking ? tileRect(marking.from, marking.to) : clipSelection;
+      if (marked) markedTiles(v, marked, "rgba(230,185,92,0.10)", INK.gold, `${marked.x1 - marked.x0} × ${marked.y1 - marked.y0}`, INK.goldPale);
+      const at = hoverRef.current;
+      if (clipPasting && clip && at && !marking) drawClipGhost(v, paint, scenario, tilesetAssets, doodadTools.catalogue, clip, clipParts, at.x, at.y);
     }
 
-    /** The box-select rectangle of an object-layer drag. */
-    const drawMarquee = (g: { from: MapPoint; to: MapPoint }) => {
-      const left = Math.min(g.from.px, g.to.px) * zoom - sx, top = Math.min(g.from.py, g.to.py) * zoom - sy;
-      ctx.fillStyle = "rgba(142,240,164,0.10)";
-      ctx.fillRect(left, top, Math.abs(g.to.px - g.from.px) * zoom, Math.abs(g.to.py - g.from.py) * zoom);
-      ctx.strokeStyle = "#8ef0a4";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(Math.abs(g.to.px - g.from.px) * zoom), Math.round(Math.abs(g.to.py - g.from.py) * zoom));
-      ctx.setLineDash([]);
-    };
+    if (blending && blendAnchor && scenario && inMapBounds(scenario, blendAnchor)) drawBlendAnchor(v, scenario, blendAnchor);
 
-    // blend brush: the anchor cell and the four neighbours the palette can fill
-    if (blending && blendAnchor && scenario && inMapBounds(scenario, blendAnchor)) {
-      for (const side of SIDES) {
-        const n = neighbourOf(blendAnchor, side);
-        if (inMapBounds(scenario, n)) strokeTileRect({ x0: n.x, y0: n.y, x1: n.x + 1, y1: n.y + 1 }, "rgba(230,185,92,0.6)", [3, 2]);
-      }
-      ctx.strokeStyle = "#e6b95c";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(Math.round(blendAnchor.x * tilePx - sx) + 1, Math.round(blendAnchor.y * tilePx - sy) + 1, Math.round(tilePx) - 2, Math.round(tilePx) - 2);
-    }
-
-    // hover brush, with a preview of what the terrain brush would leave behind (not while a plugin's pick or tool owns the pointer)
+    // Under the pointer: what the active tool would do there, or the drag it is in the middle of
+    // (not while a plugin's pick or tool owns the pointer).
     const hv = picking || tooling ? null : hoverRef.current;
-    const hp = hoverPointRef.current;
+    const hp = hoverPoint;
+    const doodadDrag = doodadsEditing ? objectGestureOn(gesture, "doodads") : null;
+    const spriteDrag = spritesEditing ? objectGestureOn(gesture, "sprites") : null;
+    const unitDrag = unitsEditing ? objectGestureOn(gesture, "units") : null;
     if (hv && hp && painting && terrainMode === "isom") {
-      // The isometric brush works in diamonds — 4 tiles wide, 2 tall, centred on the
-      // lattice — so outline the ones this stroke would set rather than a tile square.
-      ctx.strokeStyle = "#e6b95c";
-      ctx.fillStyle = "rgba(230,185,92,0.12)";
-      ctx.lineWidth = 1.5;
-      for (const d of tools.ghostDiamondsAt(hp)) {
-        const cx = d.x * 2 * tilePx - sx, cy = d.y * tilePx - sy;
-        ctx.beginPath();
-        ctx.moveTo(cx - 2 * tilePx, cy);
-        ctx.lineTo(cx, cy - tilePx);
-        ctx.lineTo(cx + 2 * tilePx, cy);
-        ctx.lineTo(cx, cy + tilePx);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-    } else if (doodadsEditing && doodadGestureRef.current?.mode === "move") {
-      for (const g of doodadTools.dragGhosts()) drawDoodadGhost(g, 0.6);
-    } else if (hp && doodadsEditing && doodadGestureRef.current?.mode === "marquee") {
-      drawMarquee(doodadGestureRef.current);
-    } else if (hp && spritesEditing && spriteGestureRef.current?.mode === "marquee") {
-      drawMarquee(spriteGestureRef.current);
-    } else if (hv && hp && spritePlacing && !spriteGestureRef.current) {
-      // Where the active sprite would land: its graphic at half strength (a marker while
-      // the GRP loads) inside its frame box. Sprites have no placement rules to fail.
+      drawIsomDiamonds(v, tools.ghostDiamondsAt(hp));
+    } else if (doodadDrag?.mode === "move") {
+      for (const g of doodadTools.dragGhosts()) drawDoodadGhost(v, paint, tilesetAssets, g, 0.6);
+    } else if (hp && doodadDrag?.mode === "marquee") {
+      drawMarquee(v, doodadDrag.from, doodadDrag.to);
+    } else if (hp && spriteDrag?.mode === "marquee") {
+      drawMarquee(v, spriteDrag.from, spriteDrag.to);
+    } else if (hv && hp && spritePlacing && !objectGestureOn(gesture, "sprites")) {
+      drawSpriteGhosts(v, paint, spriteTools.ghostsAt(hp));
+    } else if (hv && hp && doodadPlacing && !objectGestureOn(gesture, "doodads")) {
       // Under a symmetry mode the images follow, drawn fainter.
-      spriteTools.ghostsAt(hp).forEach((ghost, i) => {
-        const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
-        ctx.imageSmoothingEnabled = zoom < 1;
-        if (!drawThg2Sprite(ghost.id, ghost.flags, ghost.owner, gx, gy, i === 0 ? 0.6 : 0.4)) drawSpriteMarker(gx, gy);
-        ctx.imageSmoothingEnabled = true;
-        const b = ghost.box;
-        ctx.strokeStyle = "#e6b95c";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(Math.round(b.left * zoom - sx) + 0.5, Math.round(b.top * zoom - sy) + 0.5, Math.round((b.right - b.left) * zoom) - 1, Math.round((b.bottom - b.top) * zoom) - 1);
-      });
-    } else if (hv && hp && doodadPlacing && !doodadGestureRef.current) {
-      doodadTools.ghostsAt(hp).forEach((ghost, i) => drawDoodadGhost(ghost, ghost.verdict.ok ? (i === 0 ? 0.75 : 0.5) : 0.45));
-    } else if (hp && unitsEditing && unitGestureRef.current?.mode === "marquee") {
-      drawMarquee(unitGestureRef.current);
-    } else if (hv && hp && unitPlacing && !unitGestureRef.current) {
-      // Where the active unit would land: its sprite at half strength, and the box that
-      // snaps to the grid for buildings (the collision box for everything else). Red when
-      // the placement checks would refuse the spot, with the unit in the way outlined.
-      unitTools.ghostsAt(hp).forEach((ghost, i) => {
-        const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
-        ctx.imageSmoothingEnabled = zoom < 1;
-        const drawn = drawUnitSprite(ghost.unitId, ghost.owner, gx, gy, ghost.problem ? 0.35 : i === 0 ? 0.6 : 0.4);
-        ctx.imageSmoothingEnabled = true;
-        const b = ghost.geometry.building ? placementBox(ghost.geometry, ghost.x, ghost.y) : unitBox(ghost.geometry, ghost.x, ghost.y);
-        const bx = b.left * zoom - sx, by = b.top * zoom - sy, bw = (b.right - b.left) * zoom, bh = (b.bottom - b.top) * zoom;
-        if (!drawn || ghost.problem) {
-          ctx.fillStyle = ghost.problem ? "rgba(240,90,90,0.28)" : colorOf(ghost.owner) + "66";
-          ctx.fillRect(bx, by, bw, bh);
-        }
-        ctx.strokeStyle = ghost.problem ? "#f05a5a" : "#e6b95c";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(Math.round(bx) + 0.5, Math.round(by) + 0.5, Math.round(bw) - 1, Math.round(bh) - 1);
-        const blocker = ghost.blocker >= 0 ? scenario?.units[ghost.blocker] : null;
-        if (blocker) {
-          const ob = unitBox(unitGeometry(unitTables, blocker.unitId), blocker.x, blocker.y);
-          ctx.setLineDash([3, 3]);
-          ctx.strokeRect(Math.round(ob.left * zoom - sx) + 0.5, Math.round(ob.top * zoom - sy) + 0.5, Math.round((ob.right - ob.left) * zoom), Math.round((ob.bottom - ob.top) * zoom));
-          ctx.setLineDash([]);
-        }
-      });
+      doodadTools.ghostsAt(hp).forEach((ghost, i) => drawDoodadGhost(v, paint, tilesetAssets, ghost, ghost.verdict.ok ? (i === 0 ? 0.75 : 0.5) : 0.45));
+    } else if (hp && unitDrag?.mode === "marquee") {
+      drawMarquee(v, unitDrag.from, unitDrag.to);
+    } else if (hv && hp && unitPlacing && !objectGestureOn(gesture, "units")) {
+      drawUnitGhosts(v, paint, scenario, unitTables, unitTools.ghostsAt(hp));
     } else if (hv && !doodadsEditing && !spritesEditing && !locationsEditing && !clipEditing) {
-      const b = (layer === "terrain" && !blending) || layer === "fog" ? brush : 1;
-      const off = Math.floor((b - 1) / 2);
-      const hx = (hv.x - off) * tilePx - sx, hy = (hv.y - off) * tilePx - sy;
-      if (painting && tilesetAssets && tilePx >= 4 && !strokeRef.current) {
-        const { atlas, tileset: ts } = tilesetAssets;
-        ctx.globalAlpha = 0.75;
-        ctx.imageSmoothingEnabled = tilePx < TILE;
-        for (const g of tools.ghostAt(hv.x, hv.y)) {
-          const megatile = megatileForTile(ts, g.id);
-          const px = g.x * tilePx - sx, py = g.y * tilePx - sy;
-          if (megatile <= 0) {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(px, py, tilePx, tilePx);
-            continue;
-          }
-          const src = atlasSource(atlas, megatile);
-          if (src.animated) animatedInView = true;
-          ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
-        }
-        ctx.globalAlpha = 1;
-        ctx.imageSmoothingEnabled = true;
+      const side = (layer === "terrain" && !blending) || layer === "fog" ? brush : 1;
+      if (painting && tilesetAssets && tilePx >= 4 && gesture?.kind !== "stroke") {
+        // A preview of what the terrain brush would leave behind.
+        if (drawTileGhost(v, tilesetAssets, tools.ghostAt(hv.x, hv.y))) animatedInView = true;
+        drawBrushSquare(v, hv, side, null);
       } else {
         // On the fog layer the brush previews its effect: black lays fog, light lifts it.
-        ctx.fillStyle = fogPainting ? (fogMode === "fog" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.22)") : "rgba(230,185,92,0.12)";
-        ctx.fillRect(hx, hy, tilePx * b, tilePx * b);
+        drawBrushSquare(v, hv, side, fogPainting ? (fogMode === "fog" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.22)") : "rgba(230,185,92,0.12)");
       }
-      ctx.strokeStyle = "#e6b95c";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(tilePx * b) - 1, Math.round(tilePx * b) - 1);
     }
 
     drawOverlays("everything");
-
-    // Flashes (`api.view.flash`): a box that swells a little and fades, gold for a change, teal for attention.
-    if (flashes.length > 0) {
-      const now = Date.now();
-      for (const f of flashes) {
-        const t = Math.min(1, Math.max(0, (now - f.start) / f.ms));
-        if (t >= 1) continue;
-        const a = 1 - t;
-        const grow = 2 + 6 * t;
-        const [r, g, b] = f.kind === "attention" ? [79, 209, 197] : [230, 185, 92];
-        const left = view.x(f.box.left) - grow, top = view.y(f.box.top) - grow;
-        const w = (f.box.right - f.box.left) * zoom + grow * 2, h = (f.box.bottom - f.box.top) * zoom + grow * 2;
-        ctx.fillStyle = `rgba(${r},${g},${b},${(0.22 * a).toFixed(3)})`;
-        ctx.fillRect(left, top, w, h);
-        ctx.strokeStyle = `rgba(${r},${g},${b},${a.toFixed(3)})`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w) - 1, Math.round(h) - 1);
-      }
-    }
+    if (flashes.length > 0) drawFlashes(v, flashes, Date.now());
 
     // A plugin's map tool draws last, over everything, in canvas pixels through the view it is given.
     if (tooling && mapTool) {
@@ -1289,62 +511,8 @@ export default function MapViewport() {
       ctx.restore();
     }
 
-    // rulers
-    const labelEvery = [1, 2, 4, 8, 16, 32].find((n) => n * tilePx >= 40) ?? 32;
-    const tick = tilePx >= 8 ? 1 : labelEvery / 2;
-    const drawRuler = (c: HTMLCanvasElement | null, horizontal: boolean) => {
-      if (!c) return;
-      const len = horizontal ? size.w : size.h;
-      // A ruler shows the scroll, the scale and the tile under the pointer along its own
-      // axis; most paints (an animation frame, a ghost following the pointer inside one
-      // tile, a scroll along the other axis) change none of them.
-      const key = `${len}|${dpr}|${horizontal ? sx : sy}|${tilePx}|${horizontal ? mapW : mapH}|${hv ? (horizontal ? hv.x : hv.y) : ""}`;
-      const drawn = rulerKeysRef.current;
-      if (drawn[horizontal ? "top" : "left"] === key) return;
-      drawn[horizontal ? "top" : "left"] = key;
-      // Setting a canvas's size reallocates it, even to the size it has.
-      const cw = Math.floor((horizontal ? len : 20) * dpr), ch = Math.floor((horizontal ? 20 : len) * dpr);
-      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
-      const rc = c.getContext("2d")!;
-      rc.setTransform(dpr, 0, 0, dpr, 0, 0);
-      rc.fillStyle = "#191d25";
-      rc.fillRect(0, 0, horizontal ? len : 20, horizontal ? 20 : len);
-      rc.font = `9.5px ${monoFont()}`;
-      rc.textAlign = "left";
-      rc.fillStyle = "#99a2b3";
-      rc.strokeStyle = "#3b4453";
-      rc.lineWidth = 1;
-      rc.beginPath();
-      const scroll = horizontal ? sx : sy;
-      const tiles = horizontal ? mapW : mapH;
-      for (let t = Math.floor(scroll / tilePx / tick) * tick; t <= tiles; t += tick) {
-        const p = Math.round(t * tilePx - scroll) + 0.5;
-        if (p < 0 || p > len) continue;
-        const major = t % labelEvery === 0;
-        const l = major ? 8 : 4;
-        if (horizontal) { rc.moveTo(p, 20); rc.lineTo(p, 20 - l); } else { rc.moveTo(20, p); rc.lineTo(20 - l, p); }
-        if (major && t < tiles) {
-          if (horizontal) rc.fillText(String(t), p + 3, 9);
-          else {
-            rc.save();
-            rc.translate(9, p + 3);
-            rc.rotate(-Math.PI / 2);
-            rc.textAlign = "right";
-            rc.fillText(String(t), 0, 0);
-            rc.restore();
-          }
-        }
-      }
-      rc.stroke();
-      // hover marker
-      if (hv) {
-        rc.fillStyle = "rgba(230,185,92,0.35)";
-        const p = (horizontal ? hv.x : hv.y) * tilePx - scroll;
-        if (horizontal) rc.fillRect(p, 0, tilePx, 20); else rc.fillRect(0, p, 20, tilePx);
-      }
-    };
-    drawRuler(topRef.current, true);
-    drawRuler(leftRef.current, false);
+    drawRuler(v, topRef.current, true, hv, rulerKeysRef.current);
+    drawRuler(v, leftRef.current, false, hv, rulerKeysRef.current);
 
     animatedInViewRef.current = animatedInView;
     unitsInViewRef.current = unitsInView;
@@ -1423,23 +591,31 @@ export default function MapViewport() {
   }, []);
 
   // `draw` is in the deps on purpose: its identity changes with everything the picture is
-  // drawn from, so this effect is how a state change reaches the canvas. The names after it
-  // are what `draw` reaches without closing over — a revision of something mutated in place,
-  // a palette choice the tools read from the store — so they are listed here, not in `draw`'s
-  // own deps, where the hooks lint would call them unnecessary. Setting width or height
-  // clears the bitmap, so only do it when the size really moved.
+  // drawn from, so this effect is how a state change reaches the canvas. Setting width or
+  // height clears the bitmap, so only do it when the size really moved — in whole device
+  // pixels, which is what a canvas holds: against the fractional product of a display
+  // scaled to 125% the comparison never matched and every run reallocated it.
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
     const dpr = window.devicePixelRatio || 1;
-    if (c.width !== size.w * dpr || c.height !== size.h * dpr) {
-      c.width = size.w * dpr;
-      c.height = size.h * dpr;
+    const devW = Math.round(size.w * dpr), devH = Math.round(size.h * dpr);
+    if (c.width !== devW || c.height !== devH) {
+      c.width = devW;
+      c.height = devH;
       c.style.width = `${size.w}px`;
       c.style.height = `${size.h}px`;
     }
     scheduleDraw();
-  }, [size, draw, scheduleDraw, activeTile, activeTerrain, rectVariation, grpRevision, unitsRevision, activeUnit, unitOwner, fogPlayers, activeDoodad, doodadPlacement, mapToolRevision, overlayRevision, activeSpriteKind, activeSprite, activeUnitSprite, spritePlaceOptions, locationSnap, repaintRequest]);
+  }, [size, draw, scheduleDraw]);
+
+  // What `draw` reads from the store or from something mutated in place repaints without a
+  // render: the frame runs the closure it already has.
+  useEffect(() => {
+    const stops = REPAINT_ATOMS.map((a) => store.sub(a, scheduleDraw));
+    stops.push(onGrpLoaded(scheduleDraw));
+    return () => { for (const stop of stops) stop(); };
+  }, [store, scheduleDraw]);
 
   /** The scale as the frame loops and effects below read it, without being re-created by a zoom. */
   const tilePxRef = useRef(tilePx);
@@ -1644,9 +820,7 @@ export default function MapViewport() {
   /* ── the view follows a drag that reaches the edge ───── */
 
   /** Whether a drag the view should follow is in progress. */
-  const gestureLive = () =>
-    !!strokeRef.current || !!unitGestureRef.current || !!doodadGestureRef.current || !!spriteGestureRef.current ||
-    !!locationGestureRef.current || !!clipGestureRef.current || !!pickGestureRef.current || toolDownRef.current;
+  const gestureLive = () => gestureRef.current !== null;
 
   const stopAutoPan = () => {
     if (!panRef.current) return;
@@ -1708,6 +882,95 @@ export default function MapViewport() {
     started.raf = requestAnimationFrame(panFrame);
   };
 
+  /** The pointer as a gesture is told of it. */
+  const sampleAt = (e: { clientX: number; clientY: number; shiftKey: boolean }): PointerSample => {
+    const tile = tileAt(e), point = pointAt(e);
+    return { tile, point, mapTile: clampToMap(tile), mapPoint: clampPoint(point), shift: e.shiftKey, zoom };
+  };
+
+  /** The active object layer as its gesture sees it; the three differ only in what they pick and box-select by. */
+  const objectLayer = (): ObjectLayer | null => {
+    if (unitsEditing) {
+      return {
+        id: "units", placing,
+        pickAt: (s) => unitTools.pickAt(s.point),
+        isSelected: (i) => selectedUnits.includes(i),
+        select: unitTools.select, beginDrag: unitTools.beginDrag, dragTo: unitTools.dragTo, endDrag: unitTools.endDrag,
+        selectInBox: (a, b, additive) => unitTools.selectInBox({ left: a.px, top: a.py, right: b.px, bottom: b.py }, additive),
+        placeAt: (p) => { unitTools.placeAt(p); },
+      };
+    }
+    if (doodadsEditing) {
+      const tileOf = (px: number) => Math.floor(px / TILE);
+      return {
+        id: "doodads", placing: placingDoodad,
+        pickAt: (s) => doodadTools.pickAt(s.tile.x, s.tile.y),
+        isSelected: (i) => selectedDoodads.includes(i),
+        select: doodadTools.select, beginDrag: doodadTools.beginDrag, dragTo: doodadTools.dragTo, endDrag: doodadTools.endDrag,
+        selectInBox: (a, b, additive) => doodadTools.selectInBox({ x0: tileOf(a.px), y0: tileOf(a.py), x1: tileOf(b.px), y1: tileOf(b.py) }, additive),
+        placeAt: (p) => { doodadTools.placeAt(p); },
+      };
+    }
+    if (spritesEditing) {
+      return {
+        id: "sprites", placing: placingSprite,
+        pickAt: (s) => spriteTools.pickAt(s.point),
+        isSelected: (i) => selectedSprites.includes(i),
+        select: spriteTools.select, beginDrag: spriteTools.beginDrag, dragTo: spriteTools.dragTo, endDrag: spriteTools.endDrag,
+        selectInBox: (a, b, additive) => spriteTools.selectInBox({ left: a.px, top: a.py, right: b.px, bottom: b.py }, additive),
+        placeAt: (p) => { spriteTools.placeAt(p); },
+      };
+    }
+    return null;
+  };
+
+  /**
+   * The gesture a primary press starts, if any: a plugin's pick ahead of every layer, then
+   * the active layer's. (A plugin's tool is served before this, since it also hears the
+   * pointer with no button down.) `"done"` where the press acted at once, null where it
+   * only read the map or did nothing.
+   */
+  const gestureFor = (s: PointerSample, alt: boolean): Gesture | "done" | null => {
+    const { tile } = s;
+    if (picking) {
+      if (mapPick?.kind === "object") {
+        // An object pick answers on the press with what is under it; nothing there keeps the pick going.
+        const o = objectUnder(s.point.px, s.point.py);
+        if (o) { pickHoverRef.current = null; mapPick.finish(o); }
+        return "done";
+      }
+      // Answered through the store, on the release: the pick may have been cancelled meanwhile.
+      return beginAreaGesture("pick", s, { done: (r, last) => { const pick = store.get(mapPickAtom); pick?.finish(pick.kind === "tile" ? last : r); } });
+    }
+    const objects = objectLayer();
+    if (objects) return beginObjectGesture(objects, s);
+    if (locationsEditing) return beginLocationGesture({ ...locationTools, selected: selectedLocations }, s);
+    if (clipEditing) {
+      if (clipPasting) { clipTools.pasteAt(tile.x, tile.y); return "done"; }
+      // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
+      return beginAreaGesture("clip", s, { change: setClipSelection, done: (r) => setClipSelection(r) });
+    }
+    if (fogPainting) {
+      // Alt-click reads the tile's fog into the player ticks; Shift paints the opposite of the palette's mode.
+      if (alt) { fogTools.pickAt(tile.x, tile.y); return null; }
+      return beginStrokeGesture({
+        everyMove: false,
+        begin: (at) => fogTools.beginStroke(at.tile.x, at.tile.y, at.shift),
+        paintAt: (x, y) => fogTools.paintAt(x, y),
+        end: fogTools.endStroke,
+      }, s);
+    }
+    if (blending) { tools.pickAt(tile.x, tile.y); return null; }
+    if (!painting) return null;
+    if (alt) { tools.pickAt(tile.x, tile.y, s.point); return null; }
+    return beginStrokeGesture({
+      everyMove: terrainMode === "isom",
+      begin: (at) => tools.beginStroke(at.tile.x, at.tile.y, at.point),
+      paintAt: tools.paintAt,
+      end: tools.endStroke,
+    }, s);
+  };
+
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button === 1) {
       // The middle button pans the view, on every layer and whatever the tool is doing.
@@ -1721,142 +984,31 @@ export default function MapViewport() {
       return;
     }
     if (e.button !== 0) return;
-    const tile = tileAt(e);
-    if (!inMap(tile)) return;
+    const s = sampleAt(e);
+    if (!inMap(s.tile)) return;
     // A layer locked in the Layers panel takes no edits; a plugin's tool or pick still runs.
     if (!tooling && !picking && lockedLayers[layer]) {
       setStatus(t("The {layer} layer is locked — unlock it in the Layers panel to edit", { layer: translate(LAYERS.find((l) => l.id === layer)?.label ?? layer) }));
       return;
     }
+    let started: Gesture | "done" | null;
     if (tooling) {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      toolDownRef.current = true;
-      hoverRef.current = tile;
-      hoverPointRef.current = pointAt(e);
-      setCursor(tile);
+      started = { kind: "tool" };
+      hoverRef.current = s.tile;
+      hoverPointRef.current = s.point;
+      setCursor(s.tile);
       callTool("onDown", toolPointer(e, true));
-      scheduleDraw();
-      return;
+    } else {
+      started = gestureFor(s, e.altKey);
     }
-    if (picking) {
-      e.preventDefault();
-      if (mapPick?.kind === "object") {
-        // An object pick answers on the press with what is under it; nothing there keeps the pick going.
-        const p = pointAt(e);
-        const o = objectUnder(p.px, p.py);
-        if (o) { pickHoverRef.current = null; mapPick.finish(o); }
-        scheduleDraw();
-        return;
-      }
-      e.currentTarget.setPointerCapture(e.pointerId);
-      pickGestureRef.current = { from: tile, to: tile };
-      scheduleDraw();
-      return;
-    }
-    if (doodadsEditing) {
-      const p = pointAt(e);
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const hit = doodadTools.pickAt(tile.x, tile.y);
-      if (hit >= 0) {
-        // Clicking a doodad selects it (shift toggles) and starts dragging the selection.
-        if (e.shiftKey) doodadTools.select([hit], true);
-        else if (!selectedDoodads.includes(hit)) doodadTools.select([hit]);
-        doodadGestureRef.current = { mode: "move", from: p, to: p, additive: false };
-        doodadTools.beginDrag(p);
-      } else {
-        doodadGestureRef.current = { mode: placingDoodad ? "click" : "select", from: p, to: p, additive: e.shiftKey };
-      }
-      scheduleDraw();
-      return;
-    }
-    if (spritesEditing) {
-      const p = pointAt(e);
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const hit = spriteTools.pickAt(p);
-      if (hit >= 0) {
-        if (e.shiftKey) spriteTools.select([hit], true);
-        else if (!selectedSprites.includes(hit)) spriteTools.select([hit]);
-        spriteGestureRef.current = { mode: "move", from: p, to: p, additive: false };
-        spriteTools.beginDrag(p);
-      } else {
-        spriteGestureRef.current = { mode: placingSprite ? "click" : "select", from: p, to: p, additive: e.shiftKey };
-      }
-      scheduleDraw();
-      return;
-    }
-    if (unitsEditing) {
-      const p = pointAt(e);
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const hit = unitTools.pickAt(p);
-      if (hit >= 0) {
-        // Clicking a unit selects it (shift toggles) and starts dragging the selection.
-        if (e.shiftKey) unitTools.select([hit], true);
-        else if (!selectedUnits.includes(hit)) unitTools.select([hit]);
-        unitGestureRef.current = { mode: "move", from: p, to: p, additive: false };
-        unitTools.beginDrag(p);
-      } else {
-        // Empty ground: a click places the active unit (or, in select mode, clears the
-        // selection), a drag box-selects.
-        unitGestureRef.current = { mode: placing ? "click" : "select", from: p, to: p, additive: e.shiftKey };
-      }
-      scheduleDraw();
-      return;
-    }
-    if (locationsEditing) {
-      const p = pointAt(e);
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const handle = locationTools.handleAtPoint(p, zoom);
-      if (handle) {
-        locationGestureRef.current = { mode: "resize", from: p, to: p, additive: false };
-        locationTools.beginResize(selectedLocations[0], handle);
-      } else {
-        const hit = locationTools.pickAt(p);
-        if (hit >= 0) {
-          // Clicking a location selects it (shift toggles) and starts dragging the selection.
-          if (e.shiftKey) locationTools.select([hit], true);
-          else if (!selectedLocations.includes(hit)) locationTools.select([hit]);
-          locationGestureRef.current = { mode: "move", from: p, to: p, additive: false };
-          locationTools.beginMove(p);
-        } else {
-          // Empty ground: a drag creates a location, a click clears the selection.
-          locationGestureRef.current = { mode: "click", from: p, to: p, additive: e.shiftKey };
-        }
-      }
-      scheduleDraw();
-      return;
-    }
-    if (clipEditing) {
-      e.preventDefault();
-      if (clipPasting) { clipTools.pasteAt(tile.x, tile.y); scheduleDraw(); return; }
-      // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
-      e.currentTarget.setPointerCapture(e.pointerId);
-      clipGestureRef.current = { from: tile, to: tile };
-      setClipSelection(tileRect(tile, tile));
-      scheduleDraw();
-      return;
-    }
-    if (fogPainting) {
-      // Alt-click reads the tile's fog into the player ticks; Shift paints the opposite of the palette's mode.
-      if (e.altKey) { fogTools.pickAt(tile.x, tile.y); return; }
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      strokeRef.current = tile;
-      fogTools.beginStroke(tile.x, tile.y, e.shiftKey);
-      scheduleDraw();
-      return;
-    }
-    if (blending) { tools.pickAt(tile.x, tile.y); return; }
-    if (!painting) return;
-    if (e.altKey) { tools.pickAt(tile.x, tile.y, pointAt(e)); return; }
+    // A press that only read the map (Alt, the Blend anchor) or did nothing is the browser's as it was.
+    if (!started) return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    strokeRef.current = tile;
-    tools.beginStroke(tile.x, tile.y, pointAt(e));
+    if (started !== "done") {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      gestureRef.current = started;
+    }
+    scheduleDraw();
   };
 
   const onMove = (e: MoveEvent) => {
@@ -1878,26 +1030,26 @@ export default function MapViewport() {
       return;
     }
     autoPanFrom(e);
-    const t = tileAt(e);
-    const point = pointAt(e);
+    const s = sampleAt(e);
+    const { tile, point } = s;
     setCursorPixel({ x: Math.max(0, Math.min(worldW, Math.round(point.px))), y: Math.max(0, Math.min(worldH, Math.round(point.py))) });
     if (overlays.length) hoverOverlays(toolPointer(e, (e.buttons & 1) !== 0));
-    if (tooling || toolDownRef.current) {
-      const c = clampToMap(t);
-      hoverRef.current = inMap(t) || toolDownRef.current ? c : null;
-      hoverPointRef.current = clampPoint(point);
-      setCursor(c);
-      callTool("onMove", toolPointer(e, toolDownRef.current));
+    const gesture = gestureRef.current;
+    if (tooling || gesture?.kind === "tool") {
+      const down = gesture?.kind === "tool";
+      hoverRef.current = inMap(tile) || down ? s.mapTile : null;
+      hoverPointRef.current = s.mapPoint;
+      setCursor(s.mapTile);
+      callTool("onMove", toolPointer(e, down));
       scheduleDraw();
       return;
     }
-    const pGesture = pickGestureRef.current;
-    if (pGesture) {
-      const c = clampToMap(t);
-      pGesture.to = c;
-      hoverRef.current = c;
-      hoverPointRef.current = clampPoint(point);
-      setCursor(c);
+    if (gesture && gesture.kind !== "stroke") {
+      // A drag follows the pointer along the map's edge once it leaves the map.
+      gesture.move(s);
+      hoverRef.current = s.mapTile;
+      hoverPointRef.current = s.mapPoint;
+      setCursor(s.mapTile);
       scheduleDraw();
       return;
     }
@@ -1907,83 +1059,9 @@ export default function MapViewport() {
       if (o?.kind !== was?.kind || o?.index !== was?.index) { pickHoverRef.current = o; scheduleDraw(); }
     }
     if (picking) e.currentTarget.style.cursor = "crosshair";
-    const cGesture = clipGestureRef.current;
-    if (cGesture) {
-      const c = clampToMap(t);
-      if (c.x !== cGesture.to.x || c.y !== cGesture.to.y) { cGesture.to = c; setClipSelection(tileRect(cGesture.from, c)); }
-      hoverRef.current = c;
-      hoverPointRef.current = clampPoint(point);
-      setCursor(c);
-      scheduleDraw();
-      return;
-    }
-    const dGesture = doodadGestureRef.current;
-    if (dGesture) {
-      const p = clampPoint(point);
-      dGesture.to = p;
-      if (dGesture.mode === "move") doodadTools.dragTo(p);
-      else if ((dGesture.mode === "click" || dGesture.mode === "select") && Math.hypot(p.px - dGesture.from.px, p.py - dGesture.from.py) * zoom > 4) dGesture.mode = "marquee";
-      hoverRef.current = clampToMap(t);
-      hoverPointRef.current = p;
-      setCursor(hoverRef.current);
-      scheduleDraw();
-      return;
-    }
-    const sGesture = spriteGestureRef.current;
-    if (sGesture) {
-      const p = clampPoint(point);
-      sGesture.to = p;
-      if (sGesture.mode === "move") spriteTools.dragTo(p);
-      else if ((sGesture.mode === "click" || sGesture.mode === "select") && Math.hypot(p.px - sGesture.from.px, p.py - sGesture.from.py) * zoom > 4) sGesture.mode = "marquee";
-      hoverRef.current = clampToMap(t);
-      hoverPointRef.current = p;
-      setCursor(hoverRef.current);
-      scheduleDraw();
-      return;
-    }
-    const gesture = unitGestureRef.current;
-    if (gesture) {
-      const p = clampPoint(point);
-      gesture.to = p;
-      if (gesture.mode === "move") unitTools.dragTo(p);
-      else if ((gesture.mode === "click" || gesture.mode === "select") && Math.hypot(p.px - gesture.from.px, p.py - gesture.from.py) * zoom > 4) gesture.mode = "marquee";
-      hoverRef.current = clampToMap(t);
-      hoverPointRef.current = p;
-      setCursor(hoverRef.current);
-      scheduleDraw();
-      return;
-    }
-    const lGesture = locationGestureRef.current;
-    if (lGesture) {
-      const p = clampPoint(point);
-      lGesture.to = p;
-      if (lGesture.mode === "move" || lGesture.mode === "resize") locationTools.dragTo(p);
-      else if (lGesture.mode === "click" && Math.hypot(p.px - lGesture.from.px, p.py - lGesture.from.py) * zoom > 4) lGesture.mode = "create";
-      hoverRef.current = clampToMap(t);
-      hoverPointRef.current = p;
-      setCursor(hoverRef.current);
-      scheduleDraw();
-      return;
-    }
-    const stroking = strokeRef.current;
-    if (stroking) {
-      // Dragging outside the map keeps painting along the edge, like StarEdit.
-      const c = clampToMap(t);
-      if (fogPainting) {
-        if (c.x !== stroking.x || c.y !== stroking.y) {
-          for (const p of linePoints(stroking.x, stroking.y, c.x, c.y).slice(1)) fogTools.paintAt(p.x, p.y);
-          strokeRef.current = c;
-        }
-      } else if (terrainMode === "isom") {
-        // The brush itself fires once per diamond, so every move can be forwarded.
-        tools.paintAt(c.x, c.y, clampPoint(point));
-        strokeRef.current = c;
-      } else if (c.x !== stroking.x || c.y !== stroking.y) {
-        for (const p of linePoints(stroking.x, stroking.y, c.x, c.y).slice(1)) tools.paintAt(p.x, p.y);
-        strokeRef.current = c;
-      }
-    }
-    if (!inMap(t)) {
+    // A stroke paints along the edge too, but the brush under the pointer is shown where the pointer is.
+    if (gesture) gesture.move(s);
+    if (!inMap(tile)) {
       if (hoverRef.current) { hoverRef.current = null; hoverPointRef.current = null; scheduleDraw(); }
       return;
     }
@@ -1993,13 +1071,14 @@ export default function MapViewport() {
       const h = locationTools.handleAtPoint(point, zoom);
       e.currentTarget.style.cursor = h ? HANDLE_CURSOR[h] : locationTools.pickAt(point) >= 0 ? "move" : "";
     }
-    const diamondKey = terrainMode === "isom" ? `${diamondAt(point.px, point.py).x},${diamondAt(point.px, point.py).y}` : "";
-    const moved = !hoverRef.current || hoverRef.current.x !== t.x || hoverRef.current.y !== t.y || diamondKey !== hoverDiamondRef.current;
+    const diamond = terrainMode === "isom" ? diamondAt(point.px, point.py) : null;
+    const diamondKey = diamond ? `${diamond.x},${diamond.y}` : "";
+    const moved = !hoverRef.current || hoverRef.current.x !== tile.x || hoverRef.current.y !== tile.y || diamondKey !== hoverDiamondRef.current;
     if (moved) {
-      hoverRef.current = t;
+      hoverRef.current = tile;
       hoverDiamondRef.current = diamondKey;
       // The status bar's tile only changes with the tile, so leave the atom alone in between.
-      setCursor(t);
+      setCursor(tile);
     }
     // The object layers' ghosts follow the pointer in pixels, not tiles, so they repaint on
     // every move; a terrain or fog brush is tile-shaped and only needs the crossings. The
@@ -2009,106 +1088,25 @@ export default function MapViewport() {
 
   const onUp = (e: React.PointerEvent<HTMLDivElement>) => {
     stopAutoPan();
+    const release = () => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); };
     if (panDragRef.current) {
       panDragRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      release();
       e.currentTarget.style.cursor = "";
       return;
     }
-    if (toolDownRef.current) {
-      toolDownRef.current = false;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      callTool("onUp", toolPointer(e, false));
-      scheduleDraw();
-      return;
-    }
-    const pGesture = pickGestureRef.current;
-    if (pGesture) {
-      pickGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      mapPick?.finish(mapPick.kind === "tile" ? pGesture.to : tileRect(pGesture.from, pGesture.to));
-      e.currentTarget.style.cursor = "";
-      scheduleDraw();
-      return;
-    }
-    const cGesture = clipGestureRef.current;
-    if (cGesture) {
-      clipGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      setClipSelection(tileRect(cGesture.from, cGesture.to));
-      scheduleDraw();
-      return;
-    }
-    const dGesture = doodadGestureRef.current;
-    if (dGesture) {
-      doodadGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      if (dGesture.mode === "move") doodadTools.endDrag();
-      else if (dGesture.mode === "marquee") {
-        const tileOf = (v: number) => Math.floor(v / TILE);
-        doodadTools.selectInBox({ x0: tileOf(dGesture.from.px), y0: tileOf(dGesture.from.py), x1: tileOf(dGesture.to.px), y1: tileOf(dGesture.to.py) }, dGesture.additive);
-      } else if (dGesture.mode === "click") {
-        if (!dGesture.additive) doodadTools.select([]);
-        doodadTools.placeAt(dGesture.from);
-      } else if (!dGesture.additive) {
-        doodadTools.select([]);
-      }
-      scheduleDraw();
-      return;
-    }
-    const sGesture = spriteGestureRef.current;
-    if (sGesture) {
-      spriteGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      if (sGesture.mode === "move") spriteTools.endDrag();
-      else if (sGesture.mode === "marquee") spriteTools.selectInBox({ left: sGesture.from.px, top: sGesture.from.py, right: sGesture.to.px, bottom: sGesture.to.py }, sGesture.additive);
-      else if (sGesture.mode === "click") {
-        if (!sGesture.additive) spriteTools.select([]);
-        spriteTools.placeAt(sGesture.from);
-      } else if (!sGesture.additive) {
-        spriteTools.select([]);
-      }
-      scheduleDraw();
-      return;
-    }
-    const gesture = unitGestureRef.current;
-    if (gesture) {
-      unitGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      if (gesture.mode === "move") unitTools.endDrag();
-      else if (gesture.mode === "marquee") unitTools.selectInBox({ left: gesture.from.px, top: gesture.from.py, right: gesture.to.px, bottom: gesture.to.py }, gesture.additive);
-      else if (gesture.mode === "click") {
-        if (!gesture.additive) unitTools.select([]);
-        unitTools.placeAt(gesture.from);
-      } else if (!gesture.additive) {
-        unitTools.select([]);
-      }
-      scheduleDraw();
-      return;
-    }
-    const lGesture = locationGestureRef.current;
-    if (lGesture) {
-      locationGestureRef.current = null;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      if (lGesture.mode === "move" || lGesture.mode === "resize") locationTools.endDrag();
-      else if (lGesture.mode === "create") {
-        const box = locationTools.dragRect(lGesture.from, lGesture.to);
-        if (box) locationTools.create(box);
-      } else if (!lGesture.additive) {
-        locationTools.select([]);
-      }
-      scheduleDraw();
-      return;
-    }
-    if (!strokeRef.current) return;
-    strokeRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    if (fogPainting) fogTools.endStroke(); else tools.endStroke();
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+    gestureRef.current = null;
+    release();
+    if (gesture.kind === "tool") callTool("onUp", toolPointer(e, false));
+    else gesture.up();
+    if (gesture.kind === "pick") e.currentTarget.style.cursor = "";
     scheduleDraw();
   };
 
   const onLeave = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (tooling && !toolDownRef.current) callTool("onMove", toolPointer(e, false, false));
+    if (tooling && gestureRef.current?.kind !== "tool") callTool("onMove", toolPointer(e, false, false));
     if (overlays.length) hoverOverlays(null);
     hoverRef.current = null;
     hoverPointRef.current = null;
@@ -2116,10 +1114,12 @@ export default function MapViewport() {
     scheduleDraw();
   };
   const onContextMenu = (e: React.MouseEvent) => {
+    /** Drop a plugin's drag without finishing it. */
+    const drop = (kind: Gesture["kind"]) => { if (gestureRef.current?.kind === kind) gestureRef.current = null; };
     // While a plugin waits for a pick, a right-click cancels it instead of opening the menu.
-    if (picking) { e.preventDefault(); pickGestureRef.current = null; cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; scheduleDraw(); return; }
+    if (picking) { e.preventDefault(); drop("pick"); cancelPick(); (e.currentTarget as HTMLElement).style.cursor = ""; scheduleDraw(); return; }
     // A plugin's tool: the right-click is its cancel (the tool may keep running and only drop a gesture).
-    if (tooling) { e.preventDefault(); toolDownRef.current = false; cancelTool(); scheduleDraw(); return; }
+    if (tooling) { e.preventDefault(); drop("tool"); cancelTool(); scheduleDraw(); return; }
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); scheduleDraw(); return; }
     if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); scheduleDraw(); return; }
@@ -2135,8 +1135,8 @@ export default function MapViewport() {
       const hit = doodadTools.pickAt(hoverRef.current.x, hoverRef.current.y);
       if (hit >= 0 && !selectedDoodads.includes(hit)) doodadTools.select([hit]);
     }
-    menuTileRef.current = hoverRef.current;
-    menuPointRef.current = hoverPointRef.current;
+    // The menu's rows are built once it opens, for where this click landed.
+    setMenuTarget({ tile: hoverRef.current, point: hoverPointRef.current });
   };
   const onDoubleClick = (e: React.MouseEvent) => {
     if (locationsEditing) {
@@ -2162,94 +1162,17 @@ export default function MapViewport() {
     open("unitProperties", { indices });
   };
 
-  const withMenuTile = (fn: (x: number, y: number) => void) => () => {
-    const t = menuTileRef.current;
-    if (t) fn(t.x, t.y);
-  };
-
-  const ctxItems: { label: string; onSelect?: () => void; disabled?: boolean; sep?: boolean }[] = [
-    ...(layer === "units"
-      ? [
-          {
-            label: t("Unit Properties…"),
-            disabled: selectedUnits.length === 0,
-            onSelect: () => open("unitProperties", { indices: selectedUnits }),
-          },
-          { label: t("Delete {n, plural, one {Unit} other {# Units}}", { n: selectedUnits.length }), disabled: selectedUnits.length === 0, onSelect: () => unitTools.deleteSelected() },
-        ]
-      : []),
-    ...(layer === "doodads"
-      ? [
-          { label: t("Delete {n, plural, one {Doodad} other {# Doodads}}", { n: selectedDoodads.length }), disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.deleteSelected() },
-          { label: t("Convert {n, plural, one {Doodad} other {# Doodads}} to Terrain", { n: selectedDoodads.length }), disabled: selectedDoodads.length === 0, onSelect: () => doodadTools.convertSelected() },
-          {
-            label: t("Pick Doodad Here"),
-            disabled: !scenario || !menuTileRef.current || doodadTools.pickAt(menuTileRef.current.x, menuTileRef.current.y) < 0,
-            onSelect: withMenuTile((x, y) => {
-              const hit = doodadTools.pickAt(x, y);
-              const rec = hit >= 0 ? scenario?.doodads[hit] : null;
-              if (rec) doodadTools.startPlacing(rec.doodadId);
-            }),
-          },
-        ]
-      : []),
-    ...(layer === "fog"
-      ? [
-          { label: fogMode === "fog" ? t("Fill Area with Fog") : t("Clear Fog in Area"), onSelect: withMenuTile(fogTools.fillAt), disabled: !fogPainting },
-          { label: t("Pick Fogged Players Here"), onSelect: withMenuTile(fogTools.pickAt), disabled: !fogPainting },
-        ]
-      : []),
-    ...(layer === "locations"
-      ? [
-          { label: t("Location Properties…"), disabled: selectedLocations.length === 0, onSelect: () => open("locationProperties", { index: selectedLocations[0] }) },
-          { label: t("Delete {n, plural, one {Location} other {# Locations}}", { n: selectedLocations.length }), disabled: !selectedLocations.some((i) => i !== ANYWHERE_INDEX), onSelect: () => locationTools.deleteSelected() },
-          { label: t("New Location Here"), disabled: !locationsEditing, onSelect: withMenuTile((x, y) => locationTools.create({ left: x * TILE, top: y * TILE, right: (x + 4) * TILE, bottom: (y + 4) * TILE })) },
-        ]
-      : []),
-    ...(layer === "sprites"
-      ? [
-          { label: t("Sprite Properties…"), disabled: selectedSprites.length === 0, onSelect: () => open("spriteProperties", { indices: selectedSprites }) },
-          { label: t("Delete {n, plural, one {Sprite} other {# Sprites}}", { n: selectedSprites.length }), disabled: selectedSprites.length === 0, onSelect: () => spriteTools.deleteSelected() },
-        ]
-      : []),
-    ...(layer === "terrain"
-      ? [
-          { label: terrainMode === "rect" || terrainMode === "isom" ? t("Pick Terrain") : terrainMode === "blend" ? t("Blend From Here") : t("Pick Tile"), onSelect: withMenuTile((x, y) => tools.pickAt(x, y, menuPointRef.current ?? undefined)), disabled: !scenario },
-          { label: t("Fill Area"), onSelect: withMenuTile(tools.fillAt), disabled: !painting || terrainMode === "isom" },
-        ]
-      : []),
-    { label: "", sep: true },
-    { label: t("Cut"), disabled: !clipTools.source(), onSelect: () => { clipTools.cut(); } },
-    { label: t("Copy"), disabled: !clipTools.source(), onSelect: () => { clipTools.copy(); } },
-    // Paste Here stamps at the clicked tile straight away; Paste arms the layer so the clip follows the pointer.
-    { label: t("Paste Here"), disabled: !scenario || !clip, onSelect: withMenuTile((x, y) => { clipTools.pasteAt(x, y); }) },
-    { label: t("Paste"), disabled: !scenario || !clip, onSelect: () => { clipTools.paste(); } },
-    { label: "", sep: true },
-    { label: t("Center View Here"), disabled: !scenario, onSelect: withMenuTile((x, y) => clearCenterOn({ x: x + 0.5, y: y + 0.5 })) },
-    { label: t("Map Properties…"), onSelect: () => open("mapProperties") },
-  ];
-  // What plugins registered for the map, after their own separator.
-  // The menu's open state is Radix's own, so opening it does not re-render this component by
-  // itself; mirroring it here does, after `onContextMenu` has recorded the tile and pixel — a
-  // plugin's `visible` and `label` then see the pointer's context, and run only while the menu
-  // is open rather than on every hover.
-  const pluginRows = ctxMenuOpen ? pluginContextRows(pluginContextItems, "viewport", {
-    surface: "viewport",
-    tile: menuTileRef.current,
-    point: menuPointRef.current,
-    layer,
-    terrainMode,
-    terrain: activeTerrain,
-    markedArea: clipSelection,
-  }) : [];
-  if (pluginRows.length > 0) ctxItems.push({ label: "", sep: true }, ...pluginRows.map((r) => ({ label: r.label, disabled: r.disabled, onSelect: r.onSelect })));
+  const menuTools = useMemo(
+    () => ({ terrain: tools, units: unitTools, doodads: doodadTools, sprites: spriteTools, locations: locationTools, fog: fogTools, clip: clipTools }),
+    [tools, unitTools, doodadTools, spriteTools, locationTools, fogTools, clipTools],
+  );
 
   return (
     <div className="viewport">
       <div className="ruler-corner"><Crosshair size={11} /></div>
       <div className="ruler top"><canvas ref={topRef} /></div>
       <div className="ruler left"><canvas ref={leftRef} /></div>
-      <ContextMenu.Root onOpenChange={setCtxMenuOpen}>
+      <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
           <div ref={scrollerRef} className="scroller" onScroll={scheduleDraw} tabIndex={0}>
             <div
@@ -2271,15 +1194,7 @@ export default function MapViewport() {
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content className="menu-content">
-            {ctxItems.map((it, i) =>
-              it.sep ? (
-                <ContextMenu.Separator key={i} className="menu-separator" />
-              ) : (
-                <ContextMenu.Item key={i} className="menu-item" disabled={it.disabled} onSelect={it.onSelect}>
-                  {it.label}
-                </ContextMenu.Item>
-              ),
-            )}
+            <ViewportMenuItems target={menuTarget} tools={menuTools} painting={painting} fogPainting={fogPainting} locationsEditing={locationsEditing} />
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>
@@ -2304,51 +1219,13 @@ export default function MapViewport() {
       )}
       </div>
       <PluginPanels />
-      <div className="map-hud">
-        <PluginMapButtons />
-        <span className="hud-chip"><b>{translate(tileset.name)}</b></span>
-        <span className="hud-chip">{mapW}×{mapH}</span>
-        <span className="hud-chip">{Math.round(zoom * 100)}%</span>
-        {tilesetLoading && <span className="hud-chip">{t("loading tileset…")}</span>}
-        {picking && mapPick && <span className="hud-chip pick"><b>{mapPick.prompt}</b> · {mapPick.kind === "area" ? t("drag a rectangle") : mapPick.kind === "tile" ? t("click a tile") : t("click a unit or a location")} {" "}{t("· Esc cancels")}</span>}
-        {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} {" "}{t("· Esc / right-click to stop")}</span>}
-        {unitPlacing && !tooling && <span className="hud-chip">{t("placing")}{" "}<b>{unitLabel(activeUnit)}</b> {" "}{t("· Esc / right-click to stop")}</span>}
-        {spritePlacing && !tooling && <span className="hud-chip">{t("placing sprite")}{" "}<b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? t(" · flipped") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
-        {doodadPlacing && !tooling && doodadTools.activeDef() && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodadTools.activeDef()!)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
-        {locationsEditing && <span className="hud-chip">{t("locations · drag empty ground to create · snap")}{" "}<b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
-        {clipEditing && !clipPasting && (
-          <span className="hud-chip">
-            {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
-          </span>
-        )}
-        {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · Esc / right-click to stop")}</span>}
-        {showFog && <span className="hud-chip">{t("fog of war")}{" "}<b>{t("P{v}", { v: fogViewPlayer + 1 })}</b>{fogPainting && <> · {fogMode === "fog" ? t("painting") : t("clearing")} {" "}{t("· Shift inverts")}</>}</span>}
-      </div>
+      <ViewportHud
+        tilesetName={translate(tileset.name)}
+        tilesetLoading={tilesetLoading}
+        unitAssets={unitAssets}
+        doodadTools={doodadTools}
+        mode={{ picking, tooling, unitPlacing, spritePlacing, doodadPlacing, locationsEditing, clipEditing, clipPasting, showFog, fogPainting }}
+      />
     </div>
-  );
-}
-
-/**
- * `ui.mapButton`: the plugins' buttons at the head of the corner row. Its own component so
- * a badge changing does not render the viewport.
- */
-function PluginMapButtons() {
-  const buttons = useAtomValue(pluginMapButtonsAtom);
-  return (
-    <>
-      {buttons.map(({ key, plugin, spec }) => (
-        <button
-          key={key}
-          type="button"
-          className={`hud-chip hud-btn${spec.active ? " active" : ""}`}
-          title={spec.title ?? `${spec.label} (${plugin.name})`}
-          aria-pressed={spec.active ?? undefined}
-          onClick={() => { try { spec.onClick(); } catch (err) { logError("plugins", `${plugin.name}: its map button failed`, err); } }}
-        >
-          {spec.label}
-          {spec.badge !== undefined && spec.badge !== null && spec.badge !== 0 && spec.badge !== "" && <span className="hud-badge">{spec.badge}</span>}
-        </button>
-      ))}
-    </>
   );
 }

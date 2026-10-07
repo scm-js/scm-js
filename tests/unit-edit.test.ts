@@ -111,6 +111,22 @@ describe("picking", () => {
     expect(unitAt(scn, null, 100, 100)).toBe(0);
     expect(unitAt(scn, null, 300, 300)).toBe(-1);
   });
+
+  it("answers with the last unit in draw order among those under the point", () => {
+    const scn = fresh();
+    // A pile of overlapping boxes, several sharing a y, so every tie-break is in play.
+    const pile = Array.from({ length: 40 }, (_, i) => makeUnit(null, 0, 0, 200 + ((i * 7) % 24), 200 + ((i * 5) % 12) * 2, i + 1));
+    applyUnitChanges(scn, addUnits(scn, pile));
+    const order = drawOrder(scn, null);
+    for (let px = 180; px <= 250; px += 5) {
+      for (let py = 180; py <= 250; py += 5) {
+        const hits = order.filter((i) => Math.abs(scn.units[i].x - px) <= 16 && Math.abs(scn.units[i].y - py) <= 16);
+        const top = unitAt(scn, null, px, py);
+        if (top >= 0) expect(top).toBe(hits[hits.length - 1]);
+      }
+    }
+    expect(unitAt(scn, null, 210, 210)).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe.skipIf(!realUnits)("StarEdit-style defaults from units.dat", () => {

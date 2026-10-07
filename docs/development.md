@@ -102,7 +102,7 @@ src/
   components/
     chrome/     Menu bar, toolbar, status bar, toasts
     panels/     Left dock (layers and palettes), right dock (minimap, layers, properties), plugin panels
-    viewport/   The map canvas, rulers, hover ghosts, context menu
+    viewport/   The map canvas: its draw passes, the drags, the context menu, the corner chips
     dialogs/    Every dialog, and the registry that lazy-loads them
     splash/     The splash screen
     ui/         Primitives: buttons, inputs, lists, tabs, the dialog frame

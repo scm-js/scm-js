@@ -136,6 +136,15 @@ All copies of a pass are built synchronously before the first IndexedDB await, s
 one instant. Over `MAX_COPY_BYTES` (64 MB) is skipped with one `logWarn` per map. Passes are chained
 on one promise, never overlapping.
 
+**When the editor's tree is gone** (2026-10-06). `CrashScreen` calls `writeCopiesNow(store)` as it
+mounts: one more pass of the same copier, so the preference, the size limit and the "due" rule all
+still apply, and it answers how many maps have a copy for the page to say. For that the copier is
+now kept per store in a `WeakMap` (`copierFor`) instead of made by each mount of `useRecovery` —
+`App` has unmounted by then, and an `App` mounted again by Try again must find the same `written`
+set, or a save afterwards would not remove the copy and the next start would offer a map that was
+saved. The module's `copier` (what `flushRecovery` / `forgetSessionCopies` use) is still cleared on
+unmount.
+
 **Whose copies.** `SESSION` is a UUID per page; `holdSessionLock` takes the Web Lock
 `scmjs.session:<id>` for the page's life, and `liveSessions` (`navigator.locks.query()`) tells a
 window still running from one that ended — `leftoverCopies` offers only the latter. Without Web Locks

@@ -5,6 +5,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { Provider } from "jotai";
 import App from "./App";
+import CrashScreen from "./components/chrome/CrashScreen";
+import { ErrorBoundary, rootErrorHandlers } from "./components/ui/ErrorBoundary";
 import { storedPreference } from "./atoms/preferencesAtoms";
 import { resolveLocale, setLocale } from "./i18n";
 import "./index.css";
@@ -14,10 +16,13 @@ import "./index.css";
 setLocale(resolveLocale(storedPreference("language", "auto"), navigator.language));
 document.documentElement.lang = resolveLocale(storedPreference("language", "auto"), navigator.language);
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+ReactDOM.createRoot(document.getElementById("root")!, rootErrorHandlers).render(
   <React.StrictMode>
     <Provider>
-      <App />
+      {/* The last boundary: the panels, the map and the dialogs have their own inside. */}
+      <ErrorBoundary surface="editor" fallback={(error, retry) => <CrashScreen error={error} retry={retry} />}>
+        <App />
+      </ErrorBoundary>
     </Provider>
   </React.StrictMode>,
 );

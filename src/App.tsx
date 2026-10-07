@@ -22,6 +22,7 @@ import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
 import { droppedHandle } from "./services/mapIo";
 import { TooltipProvider } from "./components/ui";
+import { Guarded } from "./components/ui/ErrorBoundary";
 import MenuBar from "./components/chrome/MenuBar";
 import ToolBar from "./components/chrome/ToolBar";
 import TabStrip from "./components/chrome/TabStrip";
@@ -159,7 +160,7 @@ export default function App() {
             <TabStrip />
             <div className="body">
               {panels.palette && <LeftDock />}
-              <MapViewport />
+              <Guarded surface="map view"><MapViewport /></Guarded>
               {rightVisible && <RightDock />}
             </div>
             <DebugConsole />

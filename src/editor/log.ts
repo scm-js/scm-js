@@ -179,9 +179,29 @@ export const logWarn = (source: string, message: string, data?: LogData) => log(
  * carry the part that identifies the bug.
  */
 export function logError(source: string, message: string, err?: unknown, data?: LogData): void {
+  log("error", source, withDetail(message, err), data, err instanceof Error ? err.stack : undefined);
+}
+
+function withDetail(message: string, err: unknown): string {
   const detail = err === undefined ? "" : err instanceof Error ? err.message : String(err);
-  const text = detail && !message.includes(detail) ? `${message}: ${detail}` : message;
-  log("error", source, text, data, err instanceof Error ? err.stack : undefined);
+  return detail && !message.includes(detail) ? `${message}: ${detail}` : message;
+}
+
+/** Lines of the error's own stack a render error keeps; the components it threw inside get the rest of the twelve `formatLog` prints. */
+const RENDER_OWN_LINES = 6;
+const RENDER_LINES = 12;
+
+/**
+ * A render that threw, from React's root handlers (`components/ui/ErrorBoundary.tsx`). The
+ * stack is the top of the error's own and then the components it threw inside, innermost
+ * first and marked `in` — that half is the one that says which panel or dialog it was, and
+ * a boundary that caught the error keeps it from ever reaching `window.onerror`.
+ */
+export function logRenderError(message: string, err: unknown, componentStack?: string | null, data?: LogData): void {
+  const own = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, RENDER_OWN_LINES) : [];
+  const inside = (componentStack ?? "").split("\n").map((l) => l.trim()).filter(Boolean)
+    .slice(0, RENDER_LINES - own.length).map((l) => l.replace(/^at /, "in "));
+  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined);
 }
 
 /** Everything held, oldest first. A fresh array; the ring is not exposed. */

@@ -167,6 +167,17 @@ mirrored to the browser's console as before. The chatty tier — every plugin AP
 every edit — is behind the console's *Verbose* tick and off by default, and code on a hot
 path checks that flag before it builds a message.
 
+**A render that throws is contained.** React drops the whole tree when a component throws
+while rendering and nothing catches it, which used to take the Debug Console down with
+everything else. Error boundaries now sit around each dock panel, the palette, the map
+view and every dialog, with one last boundary around the application: a panel or the map
+is replaced by a notice with Try again, a dialog is closed with a toast, and a failure of
+the application itself shows a page with the log's tail and writes the recovery copies
+that are due. A caught error does not reach the window's error event, so the log line
+comes from the handlers given to React's root, with the component stack under the
+error's own. A new top-level surface (a dock, a strip, a floating panel host) should get
+a boundary of its own; anything inside an existing one is already covered.
+
 **Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract; the
 host builds it over the store with no React and no atoms exposed. A plugin's edit goes
 through the same transaction and history as a brush stroke, and a builder that throws
@@ -679,13 +690,15 @@ that a run on a machine with game data is the run CI makes:
 
 After each test the fixture fails it if the page threw or logged an error.
 
-There are three specs. `boot.spec.ts` is a first visit: splash, editor, the Game Data
+There are four specs. `boot.spec.ts` is a first visit: splash, editor, the Game Data
 offer, a blank map drawn. `dialogs.spec.ts` opens every dialog through its deep link, in
 English and in Korean; it reads the dialog ids out of the registry, so a new dialog is
 covered without touching the spec, and the two that are only ever opened with a payload
 are listed in it as skipped. `save.spec.ts` opens one of the `tests/maps/` files, renames
 it in Map Properties, saves, and reads the download back with the editor's own format
 code: the new name is there and every other section is byte for byte what it was.
+`errors.spec.ts` refuses one dialog's chunk and checks that the dialog is closed with a
+notice, the failure is in the Debug Console, and the editor carries on.
 
 A failure leaves a trace under `test-results/`; `npx playwright show-trace <trace.zip>`
 replays it with the DOM at each step. CI runs the specs in the web build, against the

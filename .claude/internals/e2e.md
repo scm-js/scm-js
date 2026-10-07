@@ -52,6 +52,16 @@ including the ones that are normally opened *for* something (`unitProperties`, `
 preference follows `navigator.language` — and one test per language checks the first menu's
 label against `ko.json`, so a run that silently fell back to English fails.
 
+**`errors.spec.ts` fails a dialog without a test hook.** A second `page.route` for
+`**/assets/StatisticsDialog-*.js` aborts the chunk (later routes win over the fixture's), the
+lazy rejects, and the dialog's boundary closes it. Three console errors are expected and allowed
+by pattern: Chromium's `Failed to load resource`, Vite's `dynamically imported module`, and the
+log's own mirrored `Render failed`. It opens the dialog from the menu *after*
+`dismissGameDataOffer()` rather than by deep link, because the offer lands the moment the stack
+empties — which is exactly what closing the failed dialog does. The panel, map and crash-screen
+fallbacks have no spec: nothing in the bundle throws on request, and a hook to make it do so was
+not thought worth shipping.
+
 **Reading a saved file in the spec (`e2e/support/formats.ts`).** Importing
 `src/formats/chk/scenario` from a spec fails: the section registry imports `src/i18n`, which
 imports `ko.json` bare, and Node's ESM loader (which Playwright's transform leaves in charge

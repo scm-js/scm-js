@@ -39,6 +39,11 @@ export class RecoveryCopier {
     this.store = store;
   }
 
+  /** How many open maps have a copy written. */
+  get held(): number {
+    return this.written.size;
+  }
+
   markFront() {
     const id = this.store.get(activeDocumentIdAtom);
     if (id !== null) this.changed.add(id);
@@ -102,6 +107,18 @@ export class RecoveryCopier {
 let copier: RecoveryCopier | null = null;
 
 /**
+ * One copier a store, kept when the hook unmounts: the crash screen writes through it once
+ * `App` is gone, and an `App` mounted again must still know which copies were written or a
+ * later save would leave one behind.
+ */
+const copiers = new WeakMap<Store, RecoveryCopier>();
+function copierFor(store: Store): RecoveryCopier {
+  let c = copiers.get(store);
+  if (!c) copiers.set(store, c = new RecoveryCopier(store));
+  return c;
+}
+
+/**
  * Keep a recovery copy of every map with unsaved changes (`Preferences.recovery`): every
  * few minutes, and when the page is hidden (another tab, the window minimised, the laptop
  * lid), each map changed since its last copy is written to IndexedDB. A copy goes as soon
@@ -114,7 +131,7 @@ export function useRecovery() {
 
   useEffect(() => {
     holdSessionLock();
-    const c = new RecoveryCopier(store);
+    const c = copierFor(store);
     copier = c;
     const unsubs = EDIT_SIGNALS.map((a) => store.sub(a, () => c.markFront()));
     // A save or a close drops its copy straight away, not at the next tick.
@@ -146,6 +163,16 @@ export function useRecovery() {
 /** Write the due copies now (a test, or a plugin-free way to force one). */
 export function flushRecovery(): Promise<void> {
   return copier?.flush() ?? Promise.resolve();
+}
+
+/**
+ * Write the due copies with the editor's own tree gone (`CrashScreen`), and say how many
+ * maps have one. Nothing when copies are switched off — the preference still decides.
+ */
+export async function writeCopiesNow(store: Store): Promise<number> {
+  const c = copierFor(store);
+  await c.flush();
+  return c.held;
 }
 
 /** Drop this session's copies; see `RecoveryCopier.forgetAll`. */

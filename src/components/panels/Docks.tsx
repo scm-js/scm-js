@@ -4,6 +4,7 @@ import { activeLayerAtom } from "../../atoms/editorAtoms";
 import { leftDockWidthAtom, panelsAtom, rightDockWidthAtom } from "../../atoms/uiAtoms";
 import { useDockResize } from "../../hooks/useDockResize";
 import { Button, Tip } from "../ui";
+import { Guarded } from "../ui/ErrorBoundary";
 import { LAYERS } from "../chrome/MenuBar";
 import { t, translate } from "../../i18n";
 import PalettePanel from "./PalettePanel";
@@ -33,7 +34,7 @@ export function LeftDock() {
           title={<>{t("Palette")}{" "}<span className="faint">·</span> <span className="gold">{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span></>}
           right={<Tip label={t("Hide palette")}><Button icon onClick={() => setPanels({ ...panels, palette: false })}><PanelLeftClose size={13} /></Button></Tip>}
         />
-        <PalettePanel />
+        <Guarded surface="palette"><PalettePanel /></Guarded>
       </div>
       <div className={`dock-resizer ${dragging ? "dragging" : ""}`} onPointerDown={onPointerDown} />
     </aside>
@@ -50,24 +51,24 @@ export function RightDock() {
       {panels.minimap && (
         <div className="panel">
           <PanelHead title={t("Minimap")} right={<Tip label={t("Hide minimap")}><Button icon onClick={() => setPanels({ ...panels, minimap: false })}><PanelRightClose size={13} /></Button></Tip>} />
-          <MinimapPanel />
+          <Guarded surface="minimap"><MinimapPanel /></Guarded>
         </div>
       )}
       {panels.layers && (
         <div className="panel">
           <PanelHead title={t("Layers")} right={<Tip label={t("Hide layers")}><Button icon onClick={() => setPanels({ ...panels, layers: false })}><PanelRightClose size={13} /></Button></Tip>} />
-          <LayersPanel />
+          <Guarded surface="layers panel"><LayersPanel /></Guarded>
         </div>
       )}
       {panels.properties && (
         <div className="panel grow">
           <PanelHead title={t("Properties")} right={<Tip label={t("Hide properties")}><Button icon onClick={() => setPanels({ ...panels, properties: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <div className="panel-body">
-            <PropertiesPanel />
+            <Guarded surface="properties panel"><PropertiesPanel /></Guarded>
           </div>
         </div>
       )}
-      <DockedPluginPanels />
+      <Guarded surface="plugin panels"><DockedPluginPanels /></Guarded>
     </aside>
   );
 }

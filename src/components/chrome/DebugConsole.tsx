@@ -65,6 +65,7 @@ export default function DebugConsole() {
       out.push(e);
     }
     return out.reverse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tick` stands for the log, which is appended to in place
   }, [open, filter, needle, tick]);
 
   useLayoutEffect(() => {

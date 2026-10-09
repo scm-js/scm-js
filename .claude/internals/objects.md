@@ -69,7 +69,8 @@ so undo sets the mask back to `null` (`encodeSection` then omits the section, li
 brush paints the bit mask in `fogPlayersAtom` in `fogModeAtom` ("fog" / "clear"; Shift inverts a
 stroke), reuses `brushSizeAtom` / `brushRect` and `Stroke`, and repaints through
 `terrainRevisionAtom`. `drawFogOverlay` draws the *viewed* player's (`fogViewPlayerAtom`) fogged tiles last
-in `MapViewport` — over units and locations — as a `multiply` fill of `FOG_TINT[tileset]` (the
+— over units and locations; the viewport through `drawFogLayer`, which keeps the shape between paints
+(see `viewport-ui.md`), the image export directly — as a `multiply` fill of `FOG_TINT[tileset]` (the
 per-channel mean of the game's `dark.pcx` row 18, the remap it uses for explored-but-unseen
 ground; ~52% luminance, Ice ~66%) with 45° chamfers where two explored tiles meet a fogged corner;
 explored tiles are untouched. It shows while `viewFlags.fog` is on; the viewport turns that flag

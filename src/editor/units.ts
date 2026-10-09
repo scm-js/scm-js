@@ -128,13 +128,17 @@ export function drawOrder(scn: Scenario, units: UnitsDat | null): number[] {
 
 /** Index of the topmost unit whose box contains map pixel (px, py), or -1. */
 export function unitAt(scn: Scenario, units: UnitsDat | null, px: number, py: number): number {
-  const order = drawOrder(scn, units);
-  for (let k = order.length - 1; k >= 0; k--) {
-    const u = scn.units[order[k]];
-    const b = unitBox(unitGeometry(units, u.unitId), u.x, u.y);
-    if (px >= b.left && px <= b.right && py >= b.top && py <= b.bottom) return order[k];
-  }
-  return -1;
+  // The topmost is the hit that comes last in `drawOrder`, found by comparing the hits: a
+  // pointer move asks this, and sorting every unit on the map to answer it adds up.
+  let best = -1, bestFlyer = 0, bestY = 0;
+  scn.units.forEach((u, i) => {
+    const g = unitGeometry(units, u.unitId);
+    const b = unitBox(g, u.x, u.y);
+    if (px < b.left || px > b.right || py < b.top || py > b.bottom) return;
+    const flyer = g.flyer ? 1 : 0;
+    if (best < 0 || flyer > bestFlyer || (flyer === bestFlyer && u.y >= bestY)) { best = i; bestFlyer = flyer; bestY = u.y; }
+  });
+  return best;
 }
 
 /** Indices of units whose boxes intersect the pixel rectangle. */

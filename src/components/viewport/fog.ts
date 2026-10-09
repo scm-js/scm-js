@@ -51,6 +51,15 @@ export interface FogView {
 
 /** Darken `player`'s fogged tiles over whatever is on the canvas already. */
 export function drawFogOverlay(ctx: CanvasRenderingContext2D, scn: Scenario, tileset: number, player: number, view: FogView) {
+  fogPath(ctx, scn, player, view);
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = fogTintColor(tileset);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/** The outline of `player`'s fog over the visible tiles, as the context's current path. */
+function fogPath(ctx: CanvasRenderingContext2D, scn: Scenario, player: number, view: FogView) {
   const { width, height, mask } = scn;
   const bit = playerBit(player);
   const { x0, y0, x1, y1, tilePx, sx, sy } = view;
@@ -89,10 +98,59 @@ export function drawFogOverlay(ctx: CanvasRenderingContext2D, scn: Scenario, til
       }
     }
   }
+}
+
+/** The fog as last drawn, and what it was drawn for. */
+export interface FogLayer {
+  canvas: HTMLCanvasElement;
+  scenario: Scenario;
+  /** The terrain revision: fog edits repaint through it. */
+  revision: number;
+  key: string;
+}
+
+/**
+ * `drawFogOverlay` through a layer of its own. The fog's outline is a path of every visible
+ * tile and its four neighbours; it only changes with the fog, the player or the view, so a
+ * paint for anything else — a unit animation frame, a ghost under the pointer — multiplies
+ * the kept shape onto the canvas instead of building it again.
+ */
+export function drawFogLayer(
+  ctx: CanvasRenderingContext2D,
+  cache: { current: FogLayer | null },
+  scn: Scenario,
+  tileset: number,
+  player: number,
+  revision: number,
+  view: FogView & { w: number; h: number; dpr: number },
+) {
+  const { w, h, dpr } = view;
+  const key = `${tileset}|${player}|${view.x0}|${view.y0}|${view.x1}|${view.y1}|${view.tilePx}|${view.sx}|${view.sy}|${w}|${h}|${dpr}`;
+  let layer = cache.current;
+  if (!layer || layer.scenario !== scn || layer.revision !== revision || layer.key !== key) {
+    const canvas = layer?.canvas ?? document.createElement("canvas");
+    const devW = Math.round(w * dpr), devH = Math.round(h * dpr);
+    if (canvas.width !== devW || canvas.height !== devH) {
+      canvas.width = devW;
+      canvas.height = devH;
+    }
+    const lc = canvas.getContext("2d")!;
+    lc.setTransform(1, 0, 0, 1, 0, 0);
+    lc.clearRect(0, 0, devW, devH);
+    lc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // The tint itself, where the fog is: multiplied onto the picture below, it darkens
+    // exactly as filling the path there with the `multiply` blend does.
+    fogPath(lc, scn, player, view);
+    lc.fillStyle = fogTintColor(tileset);
+    lc.fill();
+    layer = { canvas, scenario: scn, revision, key };
+    cache.current = layer;
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = "multiply";
-  ctx.fillStyle = fogTintColor(tileset);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(layer.canvas, 0, 0);
+  ctx.restore();
 }
 
 /**

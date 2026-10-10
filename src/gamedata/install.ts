@@ -8,11 +8,15 @@
  * A third is a *data set* of its own (`profiles.ts`): the same extraction over the game's
  * archives plus whatever a mod adds — more archives, or loose files by member path laid
  * over them (`installDataSet`) — stored under the set's id rather than as the game's own.
+ *
+ * And a StarCraft: Remastered installation (`installFromRemastered`), which has no archives
+ * to pick: its folder is handed to the worker and read there (`remastered.ts`).
  */
 import { isGameArchive, memberKey, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
 import { DEFAULT_PROFILE, isDefaultProfile, normalizeProfile, type GameDataProfile } from "./profiles";
-import { keepInMemory, type StoredCopy } from "./store";
+import { BUILD_INFO, installRootOf, type PickedFile } from "./remasteredFolder";
+import { forgetStoredFolders, keepInMemory, type StoredCopy } from "./store";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 
 export type InstallProgress = (fraction: number, label: string) => void;
@@ -190,12 +194,56 @@ export async function installFromZipUrl(url: string, progress?: InstallProgress)
   return runWorker(inputs, url, (f, label) => progress?.(0.5 + f * 0.5, label));
 }
 
+/* ── StarCraft: Remastered ──────────────────────────────── */
+
+/** A Remastered installation as the user handed it over: the folder, or (no folder picker here) the files in it. */
+export type RemasteredFolder = FileSystemDirectoryHandle | readonly File[];
+
+/** Whether a picked folder is an installation the launcher made — it has `.build.info` at the top. */
+export async function isRemasteredFolder(folder: RemasteredFolder): Promise<boolean> {
+  if (Array.isArray(folder)) return installRootOf(pickedPaths(folder)) !== null;
+  try {
+    await (folder as FileSystemDirectoryHandle).getFileHandle(BUILD_INFO);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const pickedPaths = (files: readonly File[]) => files.map((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name);
+
+/**
+ * Extract from a StarCraft: Remastered installation and store the result — as the game's
+ * own data, or under `profile` as a data set beside it. Nothing is copied but the files
+ * the extraction asks for: the folder is read in place, a range at a time.
+ */
+export function installFromRemastered(folder: RemasteredFolder, progress?: InstallProgress, profile?: GameDataProfile): Promise<StoredCopy> {
+  let remastered: ExtractRequest["remastered"];
+  if (Array.isArray(folder)) {
+    const paths = pickedPaths(folder);
+    // Only the storage itself goes to the worker: the folder's other files are of no use to it.
+    const root = installRootOf(paths);
+    if (root === null) return Promise.reject(new InstallError("That folder is not a StarCraft: Remastered installation."));
+    const picked: PickedFile[] = [];
+    (folder as readonly File[]).forEach((file, i) => {
+      const rel = paths[i].replaceAll("\\", "/");
+      if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
+    });
+    remastered = picked;
+  } else {
+    remastered = folder as FileSystemDirectoryHandle;
+  }
+  progress?.(0, "Opening the installation");
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], remastered);
+}
+
 function runWorker(
   archives: ExtractRequest["archives"],
   from: string,
   progress?: InstallProgress,
   profile?: GameDataProfile,
   overlay: NonNullable<ExtractRequest["overlay"]> = [],
+  remastered?: ExtractRequest["remastered"],
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -221,12 +269,13 @@ function runWorker(
         return;
       }
       for (const p of msg.problems) console.warn("game data:", p);
+      forgetStoredFolders();
       if (msg.where === "memory") {
         keepInMemory(new Map((msg.files ?? []).map(([path, buf]) => [path, new Uint8Array(buf)])), msg.stamp, profile?.id ?? DEFAULT_PROFILE.id);
       }
       resolve({ ...msg.stamp, where: msg.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay };
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

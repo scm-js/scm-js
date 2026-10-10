@@ -39,6 +39,7 @@
   "dependencies": {
     "electron-updater": "^6.8.9",
     "jotai": "^2.20.3",
+    "kascade": "^0.1.1",
     "lucide-react": "^1.38.0",
     "mopaq": "^1.5.2",
     "radix-ui": "^1.6.7",

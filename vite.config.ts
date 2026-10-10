@@ -21,6 +21,10 @@ function shortVersion(v: string): string {
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  // kascade is only imported inside the extraction worker, on the Remastered route, so the
+  // dev server does not see it at startup. Left to find it then, it pre-bundles it mid-install
+  // and reloads the page — which looks like the editor restarting and loses the install.
+  optimizeDeps: { include: ['kascade'] },
   plugins: [
     react(),
     // `index.html` carries the boot splash (the markup that paints before the bundle

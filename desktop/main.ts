@@ -18,7 +18,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { openArchives, readerFor } from "../src/gamedata/archives";
-import { describeExtraction, extractGameData } from "../src/gamedata/extract";
+import { describeExtraction, extractGameData, type GameDataExtraction } from "../src/gamedata/extract";
+import { BUILD_INFO, extractRemastered } from "../src/gamedata/remastered";
 import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
 import { updaterIpc } from "./updater";
 import { MapFiles } from "./mapFiles";
@@ -135,42 +136,63 @@ function status(): DesktopLocateResult {
   return stamp ? { status: "ready", ...stamp } : { status: "missing", searched: [] };
 }
 
-/** Extract from the archives in `dir` into the data directory, replacing what was there. */
-function extractFrom(dir: string): DesktopLocateResult {
+/** Whether `dir` is an installation the launcher made — StarCraft: Remastered, which has no archives. */
+const isInstallation = (dir: string) => existsSync(join(dir, BUILD_INFO));
+
+/** Whether `dir` has anything to extract from: the 1.16 archives, or a Remastered installation. */
+const hasGameData = (dir: string) => archivesIn(dir).length > 0 || isInstallation(dir);
+
+/** Replace the data directory with an extraction's files and stamp it. */
+function writeCopy(result: GameDataExtraction, from: string, problems: string[]): DesktopLocateResult {
+  const out = dataDir();
+  rmSync(out, { recursive: true, force: true });
+  let i = 0;
+  for (const [path, data] of result.files) {
+    const target = join(out, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, data);
+    if (++i % 100 === 0) report(0.9 + (i / result.files.size) * 0.1, "Writing the files");
+  }
+  const stamp: Stamp = { from, at: new Date().toISOString(), files: result.files.size, bytes: result.bytes, summary: describeExtraction(result) };
+  writeFileSync(join(out, STAMP), JSON.stringify(stamp));
+  report(1, "Done");
+  return { status: "ready", ...stamp, ...(problems.length > 0 ? { problems } : {}) };
+}
+
+/**
+ * Extract from `dir` into the data directory, replacing what was there: from the 1.16
+ * archives when the folder has them, otherwise from a StarCraft: Remastered installation
+ * (`src/gamedata/remastered.ts`), whose files are read out of its storage in place.
+ */
+async function extractFrom(dir: string): Promise<DesktopLocateResult> {
   const paths = archivesIn(dir);
-  if (paths.length === 0) return { status: "missing", searched: [dir] };
+  if (paths.length === 0 && !isInstallation(dir)) return { status: "missing", searched: [dir] };
   try {
+    if (paths.length === 0) {
+      report(0, "Opening the installation");
+      const { Storage } = await import("kascade");
+      const { nodeSource } = await import("kascade/node");
+      const read = await extractRemastered(await Storage.open(nodeSource(dir)), (f, label) => report(f * 0.9, label));
+      return writeCopy(read.result, `${read.from} in ${dir}`, read.problems);
+    }
     report(0, "Reading the archives");
     const { archives, problems } = openArchives(paths.map((p) => ({ name: p.split(/[\\/]/).pop()!, bytes: new Uint8Array(readFileSync(p)) })));
     if (archives.length === 0) return { status: "failed", message: problems[0] ?? "No archive could be opened." };
     const result = extractGameData(readerFor(archives), (f, label) => report(f * 0.9, label));
-
-    const out = dataDir();
-    rmSync(out, { recursive: true, force: true });
-    let i = 0;
-    for (const [path, data] of result.files) {
-      const target = join(out, path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, data);
-      if (++i % 100 === 0) report(0.9 + (i / result.files.size) * 0.1, "Writing the files");
-    }
-    const stamp: Stamp = { from: dir, at: new Date().toISOString(), files: result.files.size, bytes: result.bytes, summary: describeExtraction(result) };
-    writeFileSync(join(out, STAMP), JSON.stringify(stamp));
-    report(1, "Done");
-    return { status: "ready", ...stamp, ...(problems.length > 0 ? { problems } : {}) };
+    return writeCopy(result, dir, problems);
   } catch (err) {
     return { status: "failed", message: err instanceof Error ? err.message : String(err) };
   }
 }
 
-/** The copy if it is there, else the first searched directory with the archives. */
-function locate(): DesktopLocateResult {
+/** The copy if it is there, else the first searched directory with the archives or an installation. */
+async function locate(): Promise<DesktopLocateResult> {
   const have = status();
   if (have.status === "ready") return have;
   const searched = searchDirs();
   for (const dir of searched) {
-    if (archivesIn(dir).length === 0) continue;
-    const result = extractFrom(dir);
+    if (!hasGameData(dir)) continue;
+    const result = await extractFrom(dir);
     if (result.status !== "missing") return result;
   }
   return { status: "missing", searched };
@@ -674,7 +696,7 @@ app.whenReady().then(() => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const picked = await dialog.showOpenDialog(win ?? undefined as never, {
       title: "Choose the StarCraft folder",
-      message: "The folder holding StarDat.mpq and BrooDat.mpq",
+      message: "A StarCraft: Remastered folder, or the folder holding StarDat.mpq and BrooDat.mpq",
       properties: ["openDirectory"],
     });
     if (picked.canceled || picked.filePaths.length === 0) return null;

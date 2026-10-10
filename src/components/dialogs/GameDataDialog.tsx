@@ -6,11 +6,13 @@ import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
 import { hostTerms } from "../../editor/platform";
 import {
-  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromZipUrl, pickArchives, splitPickedFiles, type InstallProgress,
+  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives, splitPickedFiles,
+  type InstallProgress, type RemasteredFolder,
 } from "../../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
+import { isRemasteredOrigin, REMASTERED_PROFILE } from "../../gamedata/profiles";
 import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../../gamedata/source";
-import { adoptSource, installDataSetInto, listDataSets, removeDataSet, sameFiles, switchDataSet } from "../../services/gameData";
+import { adoptSource, installDataSetInto, installRemasteredInto, listDataSets, removeDataSet, sameFiles, switchDataSet, turnOnRemasteredGraphics } from "../../services/gameData";
 import { Button, Check, Group, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -46,6 +48,13 @@ import { t } from "../../i18n";
  * it; adding one is a name and a folder — the mod's files with the game's two archives
  * among them — and the rest goes through `services/gameData.ts`, as a plugin's
  * `api.gameData.install` does.
+ *
+ * A StarCraft: Remastered installation is a folder with no archives in it
+ * (`gamedata/remastered.ts`), and it comes in at both ends. With no data, the folder
+ * button takes it as it takes a 1.16 folder and it becomes the game's own copy. With data
+ * already in place it is offered under *Data sets* and installed beside the copy that is
+ * there, because its tile tables are longer — the tiles Remastered added — and someone
+ * with the 1.16 files has no other way to them short of removing what they have.
  */
 
 interface Busy {
@@ -93,6 +102,7 @@ export function GameDataDialog({ entry }: DialogProps) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const setFolderInput = useRef<HTMLInputElement>(null);
+  const remasteredInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let cancelled = false;
     listDataSets().then((list) => { if (!cancelled) setSets(list); }, () => {});
@@ -141,38 +151,39 @@ export function GameDataDialog({ entry }: DialogProps) {
     installed(await installFromFiles(files, progress), files.length === 1 ? files[0].name : t("the archives you picked"));
   });
 
-  const chooseFolder = async () => {
-    const picker = (window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
-    if (!picker) {
-      folderInput.current?.click();
-      return;
-    }
-    let dir: FileSystemDirectoryHandle;
-    try {
-      dir = await picker();
-    } catch {
-      return; // dismissed
-    }
-    const files: File[] = [];
-    for (const name of ARCHIVE_NAMES) {
-      for (const variant of [name, name.toLowerCase(), name.toUpperCase()]) {
-        try {
-          files.push(await (await dir.getFileHandle(variant)).getFile());
-          break;
-        } catch {
-          // not under this spelling
-        }
-      }
-    }
-    void fromFiles(files);
+  /** What the result says after a copy from Remastered: the option was turned on, and where it is. */
+  const remasteredOn = () => " " + t("Remastered graphics are on; View ▸ Remastered Graphics goes back to the classic ones.");
+
+  const fromRemastered = (folder: RemasteredFolder) => run(async () => {
+    const copy = await installFromRemastered(folder, progress);
+    turnOnRemasteredGraphics(store);
+    adopted(adoptStoredCopy(copy), t("Installed {summary} from your StarCraft: Remastered installation.", { summary: copy.summary }) + remasteredOn() + kept(copy.where), true);
+  });
+
+  /** A folder picked through the plain file input: an installation, or a folder to look for the archives in. */
+  const fromPickedFolder = async (files: File[]) => {
+    if (await isRemasteredFolder(files)) void fromRemastered(files);
+    else void fromFiles(files);
   };
+
+  /*
+   * Both folder buttons go through the plain folder input, not `showDirectoryPicker`.
+   * Chromium's picker refuses any folder under Program Files ("…can't open this folder
+   * because it contains system files"), which is where the installer puts StarCraft, so
+   * the nicer API cannot reach the one folder this is for. The input has no such list: the
+   * browser asks whether to "upload" the folder's files, nothing leaves the machine, and a
+   * `File` is a handle that is only read where the extraction asks.
+   */
+  const chooseFolder = () => folderInput.current?.click();
 
   const desktopResult = (found: DesktopLocateResult | null) => {
     if (!found) return;
     if (found.status === "ready") {
       resetAssetSource();
       const problems = found.problems?.length ? " " + t("{n, plural, one {# archive} other {# archives}} could not be opened: {list}", { n: found.problems.length, list: found.problems.join("; ") }) : "";
-      return resolveAssetSource().then((next) => adopted(next, t("Extracted from {from}.", { from: found.from }) + problems));
+      const remastered = isRemasteredOrigin(found.from);
+      if (remastered) turnOnRemasteredGraphics(store);
+      return resolveAssetSource().then((next) => adopted(next, t("Extracted from {from}.", { from: found.from }) + (remastered ? remasteredOn() : "") + problems));
     }
     throw new Error(found.status === "missing" ? t("No StarCraft archives in the {n} places searched.", { n: found.searched.length }) : found.message);
   };
@@ -208,6 +219,15 @@ export function GameDataDialog({ entry }: DialogProps) {
     toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name }) });
   });
 
+  /** Data sets: StarCraft: Remastered beside the copy already here. */
+  const addRemastered = (folder: RemasteredFolder) => run(async () => {
+    if (!(await isRemasteredFolder(folder))) throw new Error(t("That folder is not a StarCraft: Remastered installation. Choose the folder the game is installed in."));
+    const next = await installRemasteredInto(store, folder, progress);
+    setMessage({ text: t("Installed {summary} from your StarCraft: Remastered installation.", { summary: next.stored?.summary ?? next.label }) + remasteredOn() + kept(next.stored?.where ?? "opfs") });
+    toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name: REMASTERED_PROFILE.name }) + remasteredOn() });
+  });
+  const chooseRemastered = () => remasteredInput.current?.click();
+
   useEffect(() => {
     if (!desktop) return;
     return desktop.gameData.onProgress((fraction, label) => setBusy((b) => (b ? { fraction, label } : b)));
@@ -218,6 +238,7 @@ export function GameDataDialog({ entry }: DialogProps) {
   const removable = source?.kind === "stored" || source?.desktop === true;
   const active = source?.profile.id ?? DEFAULT_PROFILE.id;
   const showSets = have && (sets.length > 1 || adding || !isDefaultProfile(active));
+  const haveRemastered = sets.some((p) => p.id === REMASTERED_PROFILE.id);
 
   return (
     <DialogFrame
@@ -288,9 +309,16 @@ export function GameDataDialog({ entry }: DialogProps) {
                 </p>
               </div>
             ) : (
-              <div className="row" style={{ marginTop: 6 }}>
+              <div className="row" style={{ marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                 <Button size="sm" disabled={!!busy} onClick={() => setAdding(true)}><Layers size={11} /> {" "}{t("Add a data set…")}</Button>
+                {!haveRemastered && <Button size="sm" disabled={!!busy} onClick={chooseRemastered}><FolderOpen size={11} /> {" "}{t("Add StarCraft: Remastered…")}</Button>}
               </div>
+            )}
+            <input ref={remasteredInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void addRemastered(f); }} />
+            {!haveRemastered && !adding && (
+              <p className="hint" style={{ marginTop: 4 }}>
+                {t("StarCraft: Remastered added tiles to most tilesets, which a 1.16 copy cannot draw. Choose the folder the game is installed in: its files are read from there and kept beside the copy you have.")}
+              </p>
             )}
           </Group>
         )}
@@ -312,7 +340,7 @@ export function GameDataDialog({ entry }: DialogProps) {
             </section>
 
             <section className="gd-alt">
-              <div className="gd-alt-head"><HardDrive size={13} /> {" "}{t("Already have StarCraft 1.16? Use your own files")}</div>
+              <div className="gd-alt-head"><HardDrive size={13} /> {" "}{t("Already have StarCraft? Use your own files")}</div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 {desktop && <Button size="sm" disabled={!!busy} onClick={desktopSearch}><Search size={11} /> {" "}{t("Search this computer")}</Button>}
                 {desktop && <Button size="sm" disabled={!!busy} onClick={desktopFolder}><FolderOpen size={11} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
@@ -320,9 +348,9 @@ export function GameDataDialog({ entry }: DialogProps) {
                 {!desktop && <Button size="sm" disabled={!!busy} onClick={chooseFolder}><FolderOpen size={11} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
               </div>
               <input ref={fileInput} type="file" accept=".mpq" multiple hidden onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromFiles(f); }} />
-              <input ref={folderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromFiles(f); }} />
+              <input ref={folderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromPickedFolder(f); }} />
               <p className="hint" style={{ marginTop: 4 }}>
-                {t("A classic (1.16) installation keeps")}{" "}<span className="mono">StarDat.mpq</span> and <span className="mono">BrooDat.mpq</span> {" "}{t("in the game folder. Remastered installs do not have them, so download above instead.")}
+                {t("A classic (1.16) installation keeps")}{" "}<span className="mono">StarDat.mpq</span> and <span className="mono">BrooDat.mpq</span> {" "}{t("in the game folder. A StarCraft: Remastered installation has neither: choose its folder and the files are read out of it.")}
                 {desktop ? t(" The search also looks next to the app, so the two files dropped beside it are found.") : ""}
               </p>
               {desktop && desktopCopy?.status === "ready" && (

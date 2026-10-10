@@ -125,15 +125,17 @@ use it asks where to get them:
   account, nothing to find on your own disk, about 80 MB. Take this route if you have
   never had the 1.16 game installed.
 - **Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
-  them, from a classic (1.16) installation. Remastered installations do not carry these
-  archives; use the download above instead.
+  them, from a classic (1.16) installation. Or pick the folder StarCraft: Remastered is
+  installed in: it has no such archives, and the editor reads the same files out of the
+  installation instead, along with the tiles Remastered added to most tilesets.
 
 The extraction runs in the browser and the result is kept for next time; the desktop
 app looks for an installation on its own first. If the editor was opened from a link (a
 shared map to join, or a copy of a map), that comes first, and the question about the
 graphics follows once you have answered it. **Help ▸ Game Data…** brings the dialog
-back later, to remove the copy or to install a mod's files beside the game's own as a
-second *data set* (see [game-data.md](game-data.md#data-sets)).
+back later, to remove the copy or to install a second *data set* beside it: a mod's
+files, or a StarCraft: Remastered installation's (see
+[game-data.md](game-data.md#data-sets)).
 
 Without any graphics the editor still runs: terrain is drawn in flat colours and units as
 coloured markers, and everything else works.

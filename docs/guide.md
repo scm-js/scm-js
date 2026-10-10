@@ -88,6 +88,14 @@ edge you push and stops when you let go. Ctrl++ and Ctrl+− zoom, as do the too
 Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings (the
 Editing page of Preferences) sets its spacing, colour and style. The panels can be hidden from View ▸ Panels and their widths dragged.
 
+View ▸ Remastered Graphics draws the terrain, units and sprites with StarCraft:
+Remastered's own pictures, at twice the detail of the classic ones. It needs game data
+taken from a Remastered installation (Help ▸ Game Data…; see
+[game-data.md](game-data.md#remastered-graphics)), and changes only how the map looks:
+the map itself, the brushes and everything worked out from the tiles are the same. Water
+ripples and lava shimmers as they do in Remastered while View ▸ Animate Water is on. It is turned on for you when the graphics are installed from a
+Remastered folder; untick it for the classic look.
+
 Every layer has its own selection and its own palette. Undo is Ctrl+Z, two hundred steps
 deep and shared across all the layers, so a terrain stroke and the units it stranded
 come back together. A dialog — player settings, triggers, strings — is its own OK / Apply /
@@ -1314,7 +1322,7 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   brush size, the size of a new location; and how many undo levels each map keeps.
 - **View** — whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a
   wheel zoom keeps the tile under the pointer in place; whether water and units animate
-  and how fast; which cells the status bar shows (the tile, pixel and tile id under the
+  and how fast; whether the map starts out drawn with Remastered's graphics; which cells the status bar shows (the tile, pixel and tile id under the
   cursor, the map size, tileset, layer, zoom and revision); and whether string previews
   follow Remastered's colour rule or 1.16.1's.
 - **Testing** — Test Map's folder, and in the desktop app whether the game starts after

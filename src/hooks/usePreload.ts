@@ -4,6 +4,8 @@ import { preloadLogAtom, preloadStepAtom } from "../atoms/preloadAtoms";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { isRemasteredOrigin } from "../gamedata/profiles";
+import { turnOnRemasteredGraphics } from "../services/gameData";
 import { logInfo } from "../editor/log";
 import { dialogStackAtom, openDialogAtom } from "../atoms/uiAtoms";
 import { pluginsStartedAtom } from "../atoms/pluginAtoms";
@@ -55,10 +57,13 @@ export function usePreload() {
 
   useEffect(() => onAssetSource((source) => {
     setSource(source);
+    // The desktop app found a Remastered installation and copied from it on this launch,
+    // with no dialog: the pictures it copied are what the user should be looking at.
+    if (isRemasteredOrigin(source.extractedFrom)) turnOnRemasteredGraphics(store);
     // Where the graphics came from explains a whole class of "the map draws wrong", so it
     // is the one startup fact a shared log always carries.
     logInfo("gamedata", source.kind === "none" ? "No game data" : `Game data: ${source.label}`, { kind: source.kind, profile: source.profile.id, tried: source.tried.length || undefined });
-  }), [setSource]);
+  }), [setSource, store]);
 
   useEffect(() => {
     if (started.current) return;

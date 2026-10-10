@@ -47,6 +47,12 @@ export interface AssetSource {
   stored?: StoredCopy;
   /** Set when the desktop app extracted the files into its own data folder (served as bundled). */
   desktop?: true;
+  /**
+   * Where the desktop app's search took the files from, when it extracted them just now —
+   * on this run of the chain, not on an earlier launch. Later launches find the copy at
+   * the bundled step and do not carry it.
+   */
+  extractedFrom?: string;
 }
 
 /* ── The chain ──────────────────────────────────────────── */
@@ -101,7 +107,7 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
     const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, label));
     try {
       const found = await deps.desktop.gameData.locate();
-      if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: t("Extracted from {from}", { from: found.from }), tried, desktop: true };
+      if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: t("Extracted from {from}", { from: found.from }), tried, desktop: true, extractedFrom: found.from };
       tried.push(found.status === "missing" ? `No StarCraft archives in ${found.searched.length} places on this computer` : `Extraction failed: ${found.message}`);
     } catch (err) {
       tried.push(`Desktop search failed: ${err instanceof Error ? err.message : String(err)}`);

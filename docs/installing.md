@@ -156,6 +156,9 @@ editor reads what it needs from the files where they are. It takes about half a 
 and keeps about 375 MB. The desktop app looks for a Remastered installation itself and
 needs none of this when it finds one.
 
+Remastered's files also add doodads the 1.16 ones do not have; a map that uses them
+needs these files to be drawn (see the guide section linked below).
+
 When the install finishes, **View ▸ Remastered Graphics** is on. Untick it for the classic
 look and tick it again to go back; the guide's
 [Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows the

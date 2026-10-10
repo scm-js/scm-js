@@ -94,9 +94,9 @@ Editing page of Preferences) sets its spacing, colour and style. The panels can 
 
 The editor can draw a map with the classic graphics or with StarCraft: Remastered's.
 **View ▸ Remastered Graphics** switches between them at any time, for the terrain, the
-units and the sprites together. Only the look changes: the map, the brushes and
-everything worked out from the tiles are the same either way, and the map you save is the
-same file.
+units and the sprites together. The switch changes only how the map is drawn. It does not
+touch the map, and the brushes and everything worked out from the tiles behave the same
+with it on or off.
 
 Remastered's pictures have twice the detail, which shows most when you zoom in: at 200%
 they are drawn pixel for pixel, where the classic ones are each pixel doubled.
@@ -111,6 +111,13 @@ The Remastered graphics come from a Remastered installation, so the option needs
 Either way the option is turned on for you when the install finishes. The files are read
 from the folder and a copy of what the editor needs is kept (about 375 MB), so this
 happens once. [Installing](installing.md#the-graphics) has the steps in full.
+
+Installing Remastered's files does change one thing about what you can make, whichever
+look you draw with. Remastered added several hundred doodads to seven of the eight
+tilesets, and with its files installed they are in the Doodads palette. A map you place
+one on depends on them: it draws correctly here only with the Remastered files, shows
+blank tiles there with a 1.16 copy, and uses tiles the 1.16 game's own files do not have.
+Maps that keep to the older doodads are unaffected.
 
 ![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
 

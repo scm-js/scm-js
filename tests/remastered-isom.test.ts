@@ -58,6 +58,26 @@ if (installDir && existsSync("public/tileset/badlands.cv5")) {
         expect(b.mismatched, name).toBe(a.mismatched);
       }
     }, 300_000);
+
+    it("has the tile groups Check Map says only Remastered has, and no others", async () => {
+      const { Storage } = await import("kascade");
+      const { nodeSource } = await import("kascade/node");
+      const { isRemasteredOnlyTile, tileGroupRanges } = await import("../src/data/remasteredTiles");
+      const { result } = await extractRemastered(await Storage.open(nodeSource(installDir)));
+      const names = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"];
+      const filled = (cv5: Uint8Array, group: number) => { for (let i = 0; i < 32; i++) if (cv5[group * 52 + 20 + i] !== 0) return true; return false; };
+      for (const [era, name] of names.entries()) {
+        const classic = new Uint8Array(readFileSync(`public/tileset/${name}.cv5`));
+        const remastered = result.files.get(`tileset/${name}.cv5`)!;
+        const ranges = tileGroupRanges(era);
+        expect([ranges.classic, ranges.remastered], name).toEqual([classic.length / 52, remastered.length / 52]);
+        for (let group = 0; group < ranges.remastered + 8; group++) {
+          // Remastered's alone: past the 1.16 table, or a group 1.16 left empty that Remastered filled.
+          const only = group < ranges.remastered && (group >= ranges.classic || (!filled(classic, group) && filled(remastered, group)));
+          expect(isRemasteredOnlyTile(era, group << 4), `${name} group ${group}`).toBe(only);
+        }
+      }
+    }, 120_000);
   });
 } else {
   it.skip("the isometric brush over Remastered's tile tables (needs public/tileset and SCM_REMASTERED_DIR)", () => {});

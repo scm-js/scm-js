@@ -117,7 +117,8 @@ look you draw with. Remastered added several hundred doodads to seven of the eig
 tilesets, and with its files installed they are in the Doodads palette. A map you place
 one on depends on them: it draws correctly here only with the Remastered files, shows
 blank tiles there with a 1.16 copy, and uses tiles the 1.16 game's own files do not have.
-Maps that keep to the older doodads are unaffected.
+Maps that keep to the older doodads are unaffected. **Tools ▸ Check Map** says when a map
+uses any of these tiles, how many, and where the first one is.
 
 ![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
 

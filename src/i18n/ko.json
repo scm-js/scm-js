@@ -2480,6 +2480,7 @@
   "Switch {v} is tested by a condition but no action ever sets it.": "스위치 {v}을(를) 조건이 검사하지만 어떤 액션도 설정하지 않습니다.",
   "The map has no ISOM section: the isometric brush needs one (the Repair plugin rebuilds it: Tools ▸ Repair Map…).": "맵에 ISOM 섹션이 없습니다. 아이소메트릭 브러시에 필요합니다 (복구 플러그인이 다시 만듭니다: 도구 ▸ 맵 복구…).",
   "ISOM is behind the tiles on {pct}% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).": "맵의 {pct}%에서 ISOM이 타일과 맞지 않습니다 (복구 플러그인이 다시 만듭니다: 도구 ▸ 맵 복구…).",
+  "{n, plural, one {# tile is} other {# tiles are}} from what StarCraft: Remastered added to this tileset (the first at {x}, {y}). The map draws in full only with Remastered's game data, and the 1.16 game's files do not have these tiles.": "타일 {n}개가 스타크래프트: 리마스터가 이 타일셋에 추가한 것입니다(첫 타일: {x}, {y}). 이 맵은 리마스터 게임 데이터가 있어야 온전히 그려지며, 1.16 게임 파일에는 이 타일이 없습니다.",
   "No trigger gives {list} Victory; in a scenario a player wins only when a trigger says so.": "{list}에게 승리를 주는 트리거가 없습니다. 시나리오에서는 트리거가 있어야만 플레이어가 이깁니다.",
   "No trigger gives {list} Defeat; without one that player can never lose (a scenario does not end when their units are gone).": "{list}에게 패배를 주는 트리거가 없습니다. 없으면 그 플레이어는 절대 지지 않습니다 (시나리오는 유닛이 사라져도 끝나지 않습니다).",
   "No Set Mission Objectives for {list}; the objectives box will show the melee text.": "{list}에 대한 임무 목표 설정이 없습니다. 목표 상자에 밀리 텍스트가 표시됩니다.",

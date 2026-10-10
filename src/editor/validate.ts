@@ -4,7 +4,7 @@
  * extras for sound paths and the ISOM health the hook already measured), so the checks
  * are testable; `ValidateMapDialog` renders the list and jumps to the targets.
  */
-import { MAP_VERSIONS, mapVersionOf, type Scenario } from "../formats/chk/scenario";
+import { MAP_VERSIONS, mapVersionOf, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { PlayerType } from "../formats/chk/sections/players";
@@ -13,6 +13,7 @@ import { textEncodingInfo } from "../formats/text/encoding";
 import { msg, t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
+import { isRemasteredOnlyTile } from "../data/remasteredTiles";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel } from "../data/units";
 import { UnitClass } from "../formats/chk/sections/triggers";
 import type { DialogId } from "../components/dialogs/ids";
@@ -202,6 +203,19 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const { rects, mismatched, inherent } = ctx.isom.report;
     const pct = Math.round(((mismatched - inherent) / Math.max(1, rects)) * 100);
     add("warn", t("ISOM is behind the tiles on {pct}% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).", { pct }), msg("Terrain"));
+  }
+
+  // Tiles only Remastered has: doodads it added. Worth knowing rather than wrong — the map
+  // plays in Remastered — but it is drawn only from Remastered's files, here and in the game.
+  const era = tilesetIndex(scn);
+  let added = 0, first = -1;
+  for (let i = 0; i < scn.tiles.length; i++) {
+    if (!isRemasteredOnlyTile(era, scn.tiles[i])) continue;
+    if (first < 0) first = i;
+    added++;
+  }
+  if (added > 0) {
+    add("info", t("{n, plural, one {# tile is} other {# tiles are}} from what StarCraft: Remastered added to this tileset (the first at {x}, {y}). The map draws in full only with Remastered's game data, and the 1.16 game's files do not have these tiles.", { n: added, x: first % scn.width, y: Math.floor(first / scn.width) }), msg("Terrain"));
   }
 
   const order: Record<IssueLevel, number> = { error: 0, warn: 1, info: 2 };

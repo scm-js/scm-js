@@ -247,21 +247,106 @@ describe.skipIf(!haveDat)("upgrades.dat / techdata.dat", () => {
 const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
 const fixtures = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.(scx|scm)$/i.test(f)) : [];
 
+/*
+ * A file with both of a pair, where the two do not agree. Editors have written the Brood
+ * War sections into original StarCraft maps and left them behind; the game reads one of
+ * the two by the file's revision, and that one is the map's settings.
+ */
+describe("a file that carries both of a pair, disagreeing", () => {
+  /** A hybrid file's bytes with its PUPx changed under it and its VER set, as such a map is found. */
+  function disagreeing(ver: number): Uint8Array {
+    const scn = fresh();
+    setMapVersion(scn, "hybrid");
+    const r = scn.upgradeRestrictions!;
+    r.playerUsesDefault[upgradeIndex(2, 5)] = 0;
+    r.playerMax[upgradeIndex(2, 5)] = 2;
+    markDirty(scn, ...upgradeRestrictionSections(scn));
+    const bytes = serializeScenario(scn);
+    expect(names(bytes)).toEqual(expect.arrayContaining(["UPGR", "PUPx"]));
+    // PUPx: player-major max, start, the default pair, then the uses-default flags.
+    const pupx = sectionData(bytes, "PUPx")!;
+    const flags = UPGRADES_BW * 12 * 2 + UPGRADES_BW * 2;
+    pupx[2 * UPGRADES_BW + 5] = 1;              // shared: player 3's max for upgrade 5, where UPGR says 2
+    pupx[flags + 2 * UPGRADES_BW + 5] = 1;      // shared: and "uses the default", where UPGR says no
+    pupx[4 * UPGRADES_BW + 50] = 3;             // Brood War only: player 5's max for upgrade 50
+    pupx[flags + 4 * UPGRADES_BW + 50] = 0;
+    const version = sectionData(bytes, "VER ")!;
+    version[0] = ver & 255;
+    version[1] = ver >> 8;
+    return bytes;
+  }
+
+  it("reads an original file's settings from the original section, keeping what only the other holds", () => {
+    const scn = parseScenario(disagreeing(59));
+    const r = scn.upgradeRestrictions!;
+    // What the game reads for this file.
+    expect(upgradeLevels(r, 2, 5)).toEqual({ start: 0, max: 2 });
+    expect(r.playerUsesDefault[upgradeIndex(2, 5)]).toBe(0);
+    // An upgrade the original section has no column for.
+    expect(r.playerMax[upgradeIndex(4, 50)]).toBe(3);
+    expect(r.playerUsesDefault[upgradeIndex(4, 50)]).toBe(0);
+  });
+
+  it("reads a Brood War file's settings from the Brood War section", () => {
+    for (const ver of [63, 205]) {
+      const r = parseScenario(disagreeing(ver)).upgradeRestrictions!;
+      expect(r.playerUsesDefault[upgradeIndex(2, 5)], `VER ${ver}`).toBe(1);
+      expect(upgradeLevels(r, 2, 5).max, `VER ${ver}`).toBe(DEFAULT_UPGRADE_MAX[5]);
+      expect(r.playerMax[upgradeIndex(4, 50)], `VER ${ver}`).toBe(3);
+    }
+  });
+
+  it("writes the original section back as it was, and the other in step with it", () => {
+    const bytes = disagreeing(59);
+    const before = Array.from(sectionData(bytes, "UPGR")!);
+    const scn = parseScenario(bytes);
+    markDirty(scn, "UPGR", "PUPx");
+    const out = serializeScenario(scn);
+    expect(Array.from(sectionData(out, "UPGR")!)).toEqual(before);
+    const other = decodeUpgradeRestrictions(sectionData(out, "PUPx")!);
+    expect(other.playerMax[upgradeIndex(2, 5)]).toBe(2);
+    expect(other.playerUsesDefault[upgradeIndex(2, 5)]).toBe(0);
+    expect(other.playerMax[upgradeIndex(4, 50)]).toBe(3);
+    expect(other.playerUsesDefault[upgradeIndex(4, 50)]).toBe(0);
+    // Untouched, neither is rewritten at all.
+    const untouched = serializeScenario(parseScenario(bytes));
+    expect(Array.from(sectionData(untouched, "PUPx")!)).toEqual(Array.from(sectionData(bytes, "PUPx")!));
+  });
+});
+
+const PAIRS: [original: string, expansion: string][] = [["UPGS", "UPGx"], ["UPGR", "PUPx"], ["TECS", "TECx"], ["PTEC", "PTEx"]];
+
 describe.skipIf(fixtures.length === 0)("fixture maps", () => {
   for (const file of fixtures) {
     it(`re-encodes the settings sections of ${file} byte for byte`, async () => {
       const { chk } = await loadMap(new Uint8Array(readFileSync(join(MAPS, file))));
       const scn = parseScenario(chk);
       const original = parseChk(chk).sections;
-      const present = ["UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV "].filter((n) => original.some((s) => s.name === n));
+      const has = (n: string) => original.some((s) => s.name === n);
+      const present = ["UPGS", "UPGx", "UPGR", "PUPx", "TECS", "TECx", "PTEC", "PTEx", "WAV "].filter(has);
       expect(present.length).toBeGreaterThan(0);
-      markDirty(scn, ...present);
-      const out = parseChk(serializeScenario(scn)).sections;
+      markDirty(scn, ...(present as Parameters<typeof markDirty>[1][]));
+      const bytes = serializeScenario(scn);
+      const out = parseChk(bytes).sections;
+      // Of a pair the file has both of, the game reads one by the file's revision, and that
+      // one is what must come back as it was. The other is written in step with it, which
+      // is byte for byte too unless the file's own two disagreed (a map an editor gave the
+      // Brood War sections and then left) — and then it is the same settings read again.
+      const secondary = new Set(PAIRS.filter(([o, x]) => has(o) && has(x)).map(([o, x]) => (scn.fileVersion >= 63 ? o : x)));
       for (const name of present) {
+        if (secondary.has(name)) continue;
         const a = original.find((s) => s.name === name)!.data;
         const b = out.find((s) => s.name === name)!.data;
-        expect(Array.from(b), name).toEqual(Array.from(a));
+        expect(Buffer.compare(b, a), name).toBe(0);
       }
+      const again = parseScenario(bytes);
+      expect(again.upgradeSettings).toEqual(scn.upgradeSettings);
+      expect(again.upgradeRestrictions).toEqual(scn.upgradeRestrictions);
+      expect(again.techSettings).toEqual(scn.techSettings);
+      expect(again.techRestrictions).toEqual(scn.techRestrictions);
+      // And writing that again changes nothing.
+      markDirty(again, ...(present as Parameters<typeof markDirty>[1][]));
+      expect(Buffer.compare(serializeScenario(again), bytes), "second save").toBe(0);
     });
   }
 });

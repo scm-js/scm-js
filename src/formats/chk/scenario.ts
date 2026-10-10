@@ -235,6 +235,27 @@ export const techRestrictionSections = (scn: Scenario) => revisionSections(scn, 
 
 /* ── Parsing ─────────────────────────────────────────────── */
 
+/**
+ * One model out of a revision-specific pair (UNIS / UNIx and the four like it).
+ *
+ * A file can carry both, and they need not agree: an original StarCraft map (`VER` 59)
+ * that an editor also gave the Brood War sections keeps whatever those held when they were
+ * last written. The game reads one of the two by the file's revision — the original five
+ * below `VER` 63, the `x` five from there up (`isExpansion`) — so that is the one the model
+ * is read from; reading `x` whenever it was present showed, and on a save wrote back over
+ * the real ones, settings the game never used for that file.
+ *
+ * Where the section the game reads is the original, the other is decoded first and the
+ * original laid over it. The original is the narrower of the two (46 upgrades of 61, 24
+ * technologies of 44, 100 weapons of 130), and the columns only the `x` section has
+ * would otherwise be reset to defaults the next time the pair was written.
+ */
+function readPair<T>(fileVersion: number, original: Uint8Array | null, expansion: Uint8Array | null, decode: (data: Uint8Array, over?: T) => T): T | null {
+  if (fileVersion >= 63) return expansion ? decode(expansion) : original ? decode(original) : null;
+  if (!original) return expansion ? decode(expansion) : null;
+  return decode(original, expansion ? decode(expansion) : undefined);
+}
+
 export function parseScenario(bytes: Uint8Array): Scenario {
   const chk = parseChk(bytes);
   const warnings: string[] = [];
@@ -267,6 +288,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
 
   const typeData = take("TYPE");
   const verData = take("VER ");
+  const fileVersion = verData && verData.length >= 2 ? new Reader(verData).u16() : 205;
   const eraData = take("ERA ");
 
   // Remastered maps carry STRx; when both are present STRx wins.
@@ -313,7 +335,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     dirty: new Set(),
     warnings,
     type: typeData ? new TextDecoder("latin1").decode(typeData.subarray(0, 4)) : "RAWB",
-    fileVersion: verData && verData.length >= 2 ? new Reader(verData).u16() : 205,
+    fileVersion,
     width,
     height,
     era: eraData && eraData.length >= 2 ? new Reader(eraData).u16() : 0,
@@ -326,12 +348,12 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     playerColors: colr ? decodeBytes(colr, FORCE_SLOTS) : [0, 1, 2, 3, 4, 5, 6, 7],
     playerRgb: crgb ? decodePlayerRgb(crgb) : null,
     forces: forcData ? decodeForces(forcData) : defaultForces(),
-    unitSettings: unix ? decodeUnitSettings(unix) : unis ? decodeUnitSettings(unis) : null,
+    unitSettings: readPair(fileVersion, unis, unix, decodeUnitSettings),
     unitAvailability: puni ? decodeUnitAvailability(puni) : null,
-    upgradeSettings: upgx ? decodeUpgradeSettings(upgx) : upgs ? decodeUpgradeSettings(upgs) : null,
-    upgradeRestrictions: pupx ? decodeUpgradeRestrictions(pupx) : upgr ? decodeUpgradeRestrictions(upgr) : null,
-    techSettings: tecx ? decodeTechSettings(tecx) : tecs ? decodeTechSettings(tecs) : null,
-    techRestrictions: ptex ? decodeTechRestrictions(ptex) : ptec ? decodeTechRestrictions(ptec) : null,
+    upgradeSettings: readPair(fileVersion, upgs, upgx, decodeUpgradeSettings),
+    upgradeRestrictions: readPair(fileVersion, upgr, pupx, decodeUpgradeRestrictions),
+    techSettings: readPair(fileVersion, tecs, tecx, decodeTechSettings),
+    techRestrictions: readPair(fileVersion, ptec, ptex, decodeTechRestrictions),
     wavs: wav ? decodeWavs(wav) : null,
     cuwp: uprp ? decodeCuwp(uprp) : null,
     cuwpUsed: upus ? decodeCuwpUsed(upus) : null,

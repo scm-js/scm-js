@@ -37,7 +37,7 @@ anywhere in the chrome and `playerTeamColor` what its sprites are painted with (
 row for the sixteen classic colours, else an RGB — Pink … Black and any CRGB custom colour — for which
 `teamColor.ts` synthesises a ramp and `sprites.ts` draws through a palette copy with slots 8–15 overridden,
 since the tileset palettes have no pink to remap to; `tests/team-color.test.ts`). `unitSettings` is
-one model for UNIS (100 weapons) and UNIx (130), read from UNIx when both exist; `unitSettingsSections`
+one model for UNIS (100 weapons) and UNIx (130), read from whichever the game reads for the file's `VER` when both exist (see *Pairs that disagree* below; it was UNIx unconditionally until 2026-10-09); `unitSettingsSections`
 decides which to write (the file's revision plus whichever it already carries, so a hybrid map keeps
 both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` when the file has no
 section (a new map has them). The upgrade and technology tables follow the same pattern:
@@ -77,3 +77,28 @@ tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`
 (a turreted vehicle's weapons live on its subunit) and `weapons.dat` ships as `assets.weapons`
 (optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
 the section choice per revision and byte-for-byte re-encoding against the fixture maps.
+
+### Pairs that disagree (`scenario.ts#readPair`, 2026-10-09)
+
+Found through a fixture the user added, `(8)Ashworld Hunters.scm`: `VER` 59 (original StarCraft)
+carrying all five `x` sections as well, with UPGR ≠ PUPx (184 uses-default flags) and PTEC ≠ PTEx.
+An editor had written the Brood War sections once and later changed only the original ones. The
+parser took the `x` section whenever it was present, so for such a file the dialogs showed
+settings the game does not use, and the first save that dirtied the pair wrote those stale values
+over the real ones in UPGR / PTEC.
+
+`readPair(fileVersion, original, expansion, decode)` picks by revision, the rule `isExpansion`
+already stated for *writing*: `VER` ≥ 63 reads `x`, below reads the original. Below 63 with both
+present, the `x` section is decoded first and the original decoded **over** it (every decoder
+takes an optional `over` model), because the original is the narrower table and the columns only
+`x` has — upgrades 46–60, technologies 24–43, weapons 100–129 — would otherwise go back to
+defaults the next time the pair is written. Untouched sections are still emitted verbatim; a
+dirtied pair is written both ways from the one model, so the secondary comes out in step with the
+primary (which changes its bytes exactly where the file's two disagreed, on purpose).
+
+Tests: `tests/data-settings.test.ts` builds such a file from the codec (runs in CI) for both
+revisions and the write-back; the fixture loop now requires byte-for-byte only of the section the
+game reads, plus "the saved file parses to the same settings" and "saving it again changes
+nothing". The old expectation — every present section byte for byte after marking it dirty —
+cannot hold for a file whose two sections disagree unless both are modelled separately, which
+nothing needs.

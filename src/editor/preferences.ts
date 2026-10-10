@@ -11,6 +11,28 @@ import type { HotkeyOverrides } from "./commands";
 
 export type { LanguagePreference };
 
+/**
+ * The adjustable part of Remastered's moving water and lava (`viewport/effectPass.ts`).
+ * How far the picture bends and how the ripple layers drift are the game's own figures;
+ * how large the ripples lie on the map and how fast their pictures change are not in its
+ * files, so these start from values set by eye and can be moved.
+ */
+export interface RemasteredEffects {
+  /** How far water bends the ground under it, as a multiple of the game's amount. 0 leaves it still. */
+  bend: number;
+  /** How much the ripples catch the light. 0 is none. */
+  glint: number;
+  /** The size of the large, slow ripples and of the fine ones over them, in map pixels a repeat. */
+  large: number;
+  fine: number;
+  /** How many ripple pictures go by a second. */
+  rate: number;
+  /** How far lava's heat reaches, in map pixels at its strongest. 0 leaves it still. */
+  heat: number;
+}
+
+export const DEFAULT_REMASTERED_EFFECTS: RemasteredEffects = { bend: 1, glint: 0.2, large: 256, fine: 96, rate: 15, heat: 0.5 };
+
 export interface Preferences {
   /** The editor's own language: `"auto"` follows the browser's (the system's, in the desktop app), else one of `LOCALES`. Applied live. */
   language: LanguagePreference;
@@ -70,6 +92,10 @@ export interface Preferences {
   /** Initial View ▸ Animate Water / Animate Units. */
   animateWater: boolean;
   animateUnits: boolean;
+  /** Initial View ▸ Remastered Graphics: the 2x terrain and sprites, where the data set in use has them. */
+  hdGraphics: boolean;
+  /** How Remastered's water and lava move — the part of the effect the game's files do not fix. */
+  remasteredEffects: RemasteredEffects;
   /**
    * How fast the two animations run, as a multiple of the game's own speed (1 = the
    * game's "Fastest"). One of `ANIMATION_SPEEDS`; applied live, not just at startup.
@@ -161,6 +187,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   placement: { owner: 0, brushSize: 1, locationTiles: 4 },
   animateWater: true,
   animateUnits: true,
+  hdGraphics: false,
+  remasteredEffects: DEFAULT_REMASTERED_EFFECTS,
   animateWaterSpeed: 1,
   animateUnitsSpeed: 1,
   classicText: false,

@@ -6,10 +6,11 @@
  * (`tileset/badlands.cv5`, `arr/units.dat`, `unit/…/marine.grp`, the two manifests) — to
  * bytes. Nothing here touches a file system or the network.
  *
- * This module imports only `iscript.ts`, which has no imports of its own, so Node can
- * run it under its built-in type stripping without a build step. Keep it that way: the
- * import specifiers carry the `.ts` extension for the same reason.
+ * This module imports only `iscript.ts` and `anim.ts`, which have no imports of their
+ * own, so Node can run it under its built-in type stripping without a build step. Keep it
+ * that way: the import specifiers carry the `.ts` extension for the same reason.
  */
+import { animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
 import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../formats/dat/iscript.ts";
 
 /** The member from whichever archive has it (later archives win), or null when none does. */
@@ -25,8 +26,27 @@ const OPTIONAL = ["vx4", "vx4ex"];
 const REMAPS = ["ofire", "gfire", "bfire", "bexpl"];
 /** Per-tileset files under `tileset\<name>\`, written as `<name>.<file>`. */
 const SUBFILES = ["dddata.bin"];
+/**
+ * StarCraft: Remastered's terrain at twice the size, one file per tileset, written as
+ * `<name>.hd.vr4`. Only a Remastered installation has them (the archives answer null), and
+ * a tileset is complete without one: they are what View ▸ Remastered Terrain draws from.
+ */
+const HD_TILES: [member: (name: string) => string, ext: string][] = [
+  [(name) => `HD2\\tileset\\${name}.dds.vr4`, "hd.vr4"],
+  // Where that tileset's water or lava is, for the effect that moves it: the table from
+  // megatile to mask, and the masks. Space Platform and Installation have neither.
+  [(name) => `HD2\\tileset\\${name}.tmsk`, "hd.tmsk"],
+  [(name) => `HD2\\tileset\\${name}_mask.dds.grp`, "hd.mask"],
+];
 /** Files shared by every tileset, written under their own name. */
-const SHARED: [member: string, file: string][] = [["rez\\stat_txt.tbl", "stat_txt.tbl"]];
+const SHARED: [member: string, file: string][] = [
+  ["rez\\stat_txt.tbl", "stat_txt.tbl"],
+  // What Remastered's water and lava are bent through (`formats/tileset/hd.ts`): two
+  // sequences of ripple pictures and a square of noise. Only a Remastered installation has them.
+  ["HD2\\effect\\water_normal_1.dds.grp", "water_large.hd.grp"],
+  ["HD2\\effect\\water_normal_2.dds.grp", "water_fine.hd.grp"],
+  ["HD2\\effect\\noise.dds", "heat_noise.hd.dds"],
+];
 
 export interface TilesetManifest {
   [name: string]: { complete: boolean; files: string[] } | string[];
@@ -59,6 +79,7 @@ export function extractTilesets(read: ReadMember, progress?: ExtractProgress): T
     for (const ext of [...REQUIRED, ...OPTIONAL]) take(`tileset\\${name}.${ext}`, ext);
     for (const table of REMAPS) take(`tileset\\${name}\\${table}.pcx`, `${table}.pcx`);
     for (const file of SUBFILES) take(`tileset\\${name}\\${file}`, file);
+    for (const [member, ext] of HD_TILES) take(member(name), ext);
     have.set(name, got);
   });
   const shared: string[] = [];
@@ -110,6 +131,12 @@ export interface UnitManifest {
   grps: string[];
   overlays: string[];
   missing: string[];
+  /**
+   * The images that also have StarCraft: Remastered's 2x sprite, written as
+   * `unit/hd/main_NNN.anim`. Only an extraction from a Remastered installation has any;
+   * absent from a manifest written before there were.
+   */
+  hd?: number[];
 }
 
 export interface UnitExtraction {
@@ -221,11 +248,24 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
     else missing.push(member);
   });
 
+  // Remastered's own sprites for the same images, where the source has them (the archives
+  // never do): the two layers the editor draws from, out of the seven the game keeps.
+  const imageIds = [...reachable].sort((a, b) => a - b);
+  const hd: number[] = [];
+  imageIds.forEach((image, i) => {
+    const data = read(animMember(image));
+    if (!data) return;
+    if (i % 25 === 0) progress?.(1, `Remastered sprites · ${i} of ${imageIds.length}`);
+    files.set(animPath(image), slimAnim(data));
+    hd.push(image);
+  });
+
   const manifest: UnitManifest = {
-    images: [...reachable].sort((a, b) => a - b),
+    images: imageIds,
     grps: [...grpPaths].sort().map((p) => p.toLowerCase()),
     overlays: [...loPaths].sort().map((p) => p.toLowerCase()),
     missing,
+    ...(hd.length > 0 ? { hd } : {}),
   };
   files.set("unit/manifest.json", json(manifest));
   progress?.(1, "Unit graphics");
@@ -256,6 +296,7 @@ export function extractGameData(read: ReadMember, progress?: ExtractProgress): G
 /** A one-line account of what an extraction produced, for logs and the dialog. */
 export function describeExtraction(x: GameDataExtraction): string {
   const parts = [`${x.tilesets.complete.length} of ${TILESET_NAMES.length} tilesets`, `${x.units.manifest.grps.length} unit graphics`];
+  if (x.units.manifest.hd?.length) parts.push(`${x.units.manifest.hd.length} Remastered sprites`);
   if (x.units.manifest.missing.length) parts.push(`${x.units.manifest.missing.length} missing`);
   return parts.join(", ");
 }

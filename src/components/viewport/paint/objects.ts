@@ -10,7 +10,14 @@ import { NO_UNIT } from "../../../formats/dat/dat";
 import type { LoadedTileset } from "../../../formats/tileset/load";
 import type { UnitAnimator, SpriteState } from "../../../formats/units/animate";
 import type { UnitAssets } from "../../../formats/units/load";
+import { hdSprites } from "../../../formats/units/load";
 import { getImageFrame, getUnitSprite, subunitOf } from "../../../formats/units/sprites";
+
+/**
+ * Sprite pixels per map pixel: 2 with View ▸ Remastered Graphics on. A 2x sprite is being
+ * reduced, and wants smoothing, up to 200% — where a classic one is enlarged from 100%.
+ */
+export const spritePx = (): number => (hdSprites() ? 2 : 1);
 import type { TeamColorSpec } from "../../../formats/units/teamColor";
 import { displayColorHex, playerTeamColor } from "../../../data/players";
 import { START_LOCATION } from "../../../data/units";
@@ -153,7 +160,7 @@ export function drawObjects(
   if (show.units) scenario.units.forEach((u, i) => { if (near(u.x, u.y)) order.push({ kind: "unit", i, y: u.y, flyer: unitGeometry(unitTables, u.unitId).flyer ? 1 : 0 }); });
   if (show.sprites) scenario.sprites.forEach((r, i) => { if (near(r.x, r.y)) order.push({ kind: "sprite", i, y: r.y, flyer: 0 }); });
   order.sort((a, b) => a.flyer - b.flyer || a.y - b.y || (a.kind === b.kind ? a.i - b.i : a.kind === "unit" ? -1 : 1));
-  ctx.imageSmoothingEnabled = zoom < 1;
+  ctx.imageSmoothingEnabled = zoom < spritePx();
   for (const d of order) {
     if (d.kind === "sprite") {
       const r = scenario.sprites[d.i];

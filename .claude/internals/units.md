@@ -73,3 +73,54 @@ canvas cache; shadows draw as 50% black, `DrawFunction.Remap` images through the
 `<name>.<ofire|gfire|bfire|bexpl>.pcx` table (column 0, blended "lighter"). Anything that needs the
 running game (attacks, sounds, projectile sprites, condition jumps) is a no-op. `tests/iscript.test.ts`
 and `tests/animate.test.ts` run against the real files when `public/` is populated.
+
+### Remastered sprites: the 2x pictures (`dat/anim.ts`, `dds.ts`, 2026-10-09)
+
+View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) makes
+`sprites.ts#getImageFrame` draw from `unit/hd/main_NNN.anim` — the installation's
+`HD2/anim/main_NNN.anim`, one per images.dat id — where the data set has one.
+
+- **The file** (measured on the real install, all 780): `ANIM`, u16 version (0x0202 for 2x),
+  u16, u16 layer count (7), u16 entries (1), ten 32-byte layer names (`diffuse`, `bright`,
+  `teamcolor`, `emissive`, `normal`, `specular`, `ao_depth`), then one entry: u16 frames, u16,
+  u16 box w, u16 box h, u32 frame-table offset, and per layer {u32 offset, u32 size, u16 w, u16 h}
+  → a whole DDS (diffuse DXT5; teamcolor DXT1, present on only 143 of the 780). Frames are 16
+  bytes {x, y, offset x, offset y, w, h, …}. **The frame table and the box are in 4x pixels even
+  in the 2x file** — `parseAnim` halves them, so offsets can land on a half pixel. **Frame N is
+  the GRP's frame N** (counts equal for every image with a GRP; `tests/remastered.test.ts`
+  checks it when `SCM_REMASTERED_DIR` is set), which is why the animator, facings and `.lo`
+  offsets need no HD knowledge at all. The *box* is not the GRP's (49 × 45.5 against 48 × 48 for
+  the Scourge) and is centred on the image position the same way.
+- **`slimAnim`.** Whole, the 780 files are 502 MB; `diffuse` + `teamcolor` are 216 MB. The
+  extraction keeps those two and writes the others' table rows as absent (offset, size, w, h all
+  zero — how the game itself writes a missing layer), so one parser reads both and `slimAnim` is
+  idempotent. `extractRemastered` slims *as it reads*: the passes hold every file until the last
+  one, and half a gigabyte of sprite sheets in a worker is the difference between working and not.
+  `anim.ts` has no imports for the reason `iscript.ts` has none.
+- **A rectangle at a time.** A sheet is up to 12 megapixels and a frame is fifty pixels square.
+  DXT blocks decode independently, so `dds.ts#decodeDxtRect` decodes only the blocks under the
+  frame; no sheet is ever expanded. The parsed anim holds just the file bytes (avg 280 KB).
+- **What a frame is.** `ImageFrame` gained `scale` (canvas pixels per map pixel: 1 or 2) and
+  `width` / `height` stay in *map* pixels, because every draw already gives the destination size
+  from them — so the viewport, ghosts, export and previews needed no change beyond smoothing
+  (`zoom < spritePx`, a 2x sprite is being reduced up to 200%). The two callers that read the
+  canvas's own pixels did: `UnitPreview` crops by `frame.opaque` (the frame's rectangle, which
+  the anim knows without a GRP), and the plugin image producers in `plugins/graphics.ts` pass
+  `hd = false`, since `PluginImage` promises a canvas of `width` × `height`.
+- **Colour.** Team colour is the mask's red channel: `rgb × (1 − m) + rgb × team × m`, with
+  `team` the brightest entry of the `tunit.pcx` ramp through the tileset palette (the row's own
+  colour — 244, 4, 4 for red) or the CRGB value. Shadows are the diffuse alpha as black at half
+  strength; `DrawFunction.Remap` effects are already in their own colours with the glow in the
+  alpha and are drawn "lighter" as before, with no remap table.
+- **Fallbacks, all to the GRP:** no anim for the image (105 of the 885 reachable ones, mostly
+  shadows and effects — `unit/manifest.json`'s `hd` list says which, fetched once on first use so
+  a 1.16 copy costs one request rather than hundreds of failed ones), the anim still on its way
+  (nothing waits and nothing flashes a marker), and the eight files with **no box** (503, 582,
+  588 — the start location — 756, 787–790), which cannot be centred. So classic and 2x frames
+  are mixed on purpose; both live in the one LRU under an `hd:` key prefix, sized by real pixels.
+- **Image export** waits for both (`awaitAnims` beside `awaitGrps`): which images have no 2x
+  sprite is not known until asked.
+- **Checked** in headless Chromium on the real install: 1722 files / 366 MB installed in ~28 s;
+  Big Game Hunters and Enslavers 1 at 100% and 200% in both modes — positions, team colour and
+  shadows agree with classic; no errors. Not looked at: a damaged building's fire, cloaked units,
+  the unit palette thumbnails, an exported image.

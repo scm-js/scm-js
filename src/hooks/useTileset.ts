@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useStore } from "jotai";
 import { parkedTilesetsAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
+import { viewFlagsAtom } from "../atoms/editorAtoms";
 import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
+import { pushToastAtom } from "../atoms/uiAtoms";
 import {
   ensureTileset,
+  hdTerrainMissing,
   peekTileset,
   releaseTileset,
+  setHdTerrain,
+  tilesetSettled,
   type LoadedTileset,
   type TilesetFileName,
 } from "../formats/tileset/load";
+import { t } from "../i18n";
 
 export interface TilesetState {
   loaded: LoadedTileset | null;
@@ -28,6 +34,21 @@ function initial(name: TilesetFileName): Internal {
 }
 
 /**
+ * Remastered Graphics was asked for and the data set has no such pictures: said once per
+ * game data revision, however many panels are showing the tileset.
+ */
+let toldMissingAt = -1;
+function tellHdMissing(store: ReturnType<typeof useStore>, revision: number) {
+  if (toldMissingAt === revision) return;
+  toldMissingAt = revision;
+  store.set(pushToastAtom, {
+    kind: "info",
+    title: t("No Remastered graphics here"),
+    detail: t("The game data in use has only the classic pictures. Help ▸ Game Data… adds StarCraft: Remastered from your installation."),
+  });
+}
+
+/**
  * Fetch and rasterise the tileset the open map uses. Missing files are a normal state
  * (nobody has run scripts/extract-tilesets.mjs yet), not a crash.
  *
@@ -40,6 +61,8 @@ export function useTileset(): TilesetState {
   const name = useAtomValue(tilesetFileNameAtom);
   // Bumped when Help ▸ Game Data… installs a source, so a tileset that failed is asked for again.
   const revision = useAtomValue(gameDataRevisionAtom);
+  // View ▸ Remastered Graphics: the loader answers with the tileset's 2x variant while it is on.
+  const hd = useAtomValue(viewFlagsAtom).hdGraphics;
   const [state, setState] = useState<Internal>(() => initial(name));
   const previous = useRef(name);
 
@@ -56,21 +79,28 @@ export function useTileset(): TilesetState {
   }, [name, store]);
 
   useEffect(() => {
-    void revision;
+    // Every instance of this hook sets it, to the same value; the first one to run decides.
+    setHdTerrain(hd);
     const cached = peekTileset(name);
-    if (cached) {
+    if (cached && tilesetSettled(name)) {
       setState({ name, loaded: cached, loading: false, error: null });
+      if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision);
       return;
     }
 
     let cancelled = false;
-    setState({ name, loaded: null, loading: true, error: null });
+    // The classic pictures keep drawing while the 2x file is fetched.
+    setState({ name, loaded: cached, loading: cached === null, error: null });
     ensureTileset(name).then(
-      (loaded) => { if (!cancelled) setState({ name, loaded, loading: false, error: null }); },
+      (loaded) => {
+        if (cancelled) return;
+        setState({ name, loaded, loading: false, error: null });
+        if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision);
+      },
       (error: Error) => { if (!cancelled) setState({ name, loaded: null, loading: false, error }); },
     );
     return () => { cancelled = true; };
-  }, [name, revision]);
+  }, [name, revision, hd, store]);
 
   // The effect has not run yet on the render where `name` changed, so derive that first
   // frame from the cache rather than showing the previous tileset's assets.

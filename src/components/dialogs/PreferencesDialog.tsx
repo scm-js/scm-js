@@ -533,7 +533,7 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
         <Hint>{t("Keeps the tile under the pointer in place when the wheel zooms; the menu and keyboard zoom on the centre.")}</Hint>
       </Section>
       <Section title={t("Animation")}>
-        <Check label={t("Animate water (palette cycling)")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
+        <Check label={t("Animate water and lava")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
         <Check label={t("Animate units (idle animations)")} checked={p.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
         <div className="form wide" style={{ marginTop: 4 }}>
           <SpeedField label={t("Water speed")} value={p.animateWaterSpeed} onChange={(v) => patch({ animateWaterSpeed: v })} />

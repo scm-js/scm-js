@@ -137,6 +137,30 @@ back later, to remove the copy or to install a second *data set* beside it: a mo
 files, or a StarCraft: Remastered installation's (see
 [game-data.md](game-data.md#data-sets)).
 
+### Remastered graphics
+
+If you own StarCraft: Remastered, the editor can draw maps with its graphics as well as
+the classic ones, and you can switch between the two whenever you like.
+
+- **With no graphics yet:** in the dialog above, choose **Choose the StarCraft folder…**
+  and pick the folder Remastered is installed in (on Windows, usually
+  `C:\Program Files (x86)\StarCraft`).
+- **With graphics already installed:** open **Help ▸ Game Data…** and choose
+  **Add StarCraft: Remastered…** under *Data sets*. It is installed beside the copy you
+  have, and the list switches between them.
+
+![The Game Data dialog after adding a Remastered installation, with both data sets listed](images/game-data-remastered.webp)
+
+The browser asks whether to upload the folder's files. Nothing is uploaded anywhere: the
+editor reads what it needs from the files where they are. It takes about half a minute
+and keeps about 375 MB. The desktop app looks for a Remastered installation itself and
+needs none of this when it finds one.
+
+When the install finishes, **View ▸ Remastered Graphics** is on. Untick it for the classic
+look and tick it again to go back; the guide's
+[Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows the
+difference.
+
 Without any graphics the editor still runs: terrain is drawn in flat colours and units as
 coloured markers, and everything else works.
 

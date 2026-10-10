@@ -88,13 +88,38 @@ edge you push and stops when you let go. Ctrl++ and Ctrl+− zoom, as do the too
 Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings (the
 Editing page of Preferences) sets its spacing, colour and style. The panels can be hidden from View ▸ Panels and their widths dragged.
 
-View ▸ Remastered Graphics draws the terrain, units and sprites with StarCraft:
-Remastered's own pictures, at twice the detail of the classic ones. It needs game data
-taken from a Remastered installation (Help ▸ Game Data…; see
-[game-data.md](game-data.md#remastered-graphics)), and changes only how the map looks:
-the map itself, the brushes and everything worked out from the tiles are the same. Water
-ripples and lava shimmers as they do in Remastered while View ▸ Animate Water is on. It is turned on for you when the graphics are installed from a
-Remastered folder; untick it for the classic look.
+### Classic or Remastered graphics
+
+![The same view drawn with the classic graphics on the left and Remastered's on the right](images/remastered-compare.webp)
+
+The editor can draw a map with the classic graphics or with StarCraft: Remastered's.
+**View ▸ Remastered Graphics** switches between them at any time, for the terrain, the
+units and the sprites together. Only the look changes: the map, the brushes and
+everything worked out from the tiles are the same either way, and the map you save is the
+same file.
+
+Remastered's pictures have twice the detail, which shows most when you zoom in: at 200%
+they are drawn pixel for pixel, where the classic ones are each pixel doubled.
+
+The Remastered graphics come from a Remastered installation, so the option needs one:
+
+- With no graphics installed yet, choose **Choose the StarCraft folder…** in the dialog
+  the editor opens on first use, and pick the folder Remastered is installed in.
+- With graphics already installed, open **Help ▸ Game Data…** and choose
+  **Add StarCraft: Remastered…** under *Data sets*.
+
+Either way the option is turned on for you when the install finishes. The files are read
+from the folder and a copy of what the editor needs is kept (about 375 MB), so this
+happens once. [Installing](installing.md#the-graphics) has the steps in full.
+
+![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
+
+With **View ▸ Animate Water** on, water ripples and lava shimmers as they do in
+Remastered. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
+how fast, and the tick above it sets whether the editor starts with the Remastered
+graphics on. A few things differ from the game: units are drawn without its lighting, the
+minimap keeps the classic colours, and an exported map image has still water.
+[game-data.md](game-data.md#remastered-graphics) explains how it is drawn.
 
 Every layer has its own selection and its own palette. Undo is Ctrl+Z, two hundred steps
 deep and shared across all the layers, so a terrain stroke and the units it stranded

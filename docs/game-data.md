@@ -289,8 +289,10 @@ and the far zoom levels, which draw average tile colours, do not animate.
 
 ### Remastered graphics
 
+![The same view drawn with the classic graphics on the left and Remastered's on the right](images/remastered-compare.webp)
+
 **View ▸ Remastered Graphics** draws the terrain, units and sprites from StarCraft:
-Remastered's own pictures in place of the classic ones. It needs game data that came
+Remastered's own pictures in place of the classic ones, and switches back at any time. It needs game data that came
 from a [Remastered installation](#starcraft-remastered); with a 1.16 copy the option
 says so and the classic graphics stay. Installing from a Remastered installation turns
 the option on, since those pictures are most of what was just copied; from then on it is
@@ -333,7 +335,10 @@ How far the picture bends and how the ripples drift are the game's own figures. 
 the ripples lie on the map and how fast they change are not in its files, so those were
 set by eye and can be changed: Preferences ▸ View ▸ Graphics ▸ *Water and lava* has the
 bend, the glint, the two ripple sizes, their rate and the lava's heat, and the water
-speed on the same page applies to both. This needs WebGL, which every current browser
+speed on the same page applies to both.
+
+![Preferences, the View page, with the Water and lava settings open](images/preferences-graphics.webp)
+ This needs WebGL, which every current browser
 has; without it the water and lava are drawn still, and nothing else changes. An
 exported map image is always still.
 

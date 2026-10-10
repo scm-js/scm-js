@@ -24,6 +24,10 @@ does some things other editors do not. Each links to where it is explained; the 
 *Browse Plugins* are one click away under Plugins ▸ Browse Plugins… rather than installed
 from the start.
 
+- **Classic or Remastered graphics.** Point the editor at a StarCraft: Remastered
+  installation and it draws the map with Remastered's terrain, units and moving water,
+  at twice the detail. View ▸ Remastered Graphics switches between that and the classic
+  look at any time. See [Classic or Remastered graphics](docs/guide.md#classic-or-remastered-graphics).
 - **Several people on one map.** Share the map you have open, and anyone you send the
   link to edits it with you from their own editor, seeing the others' changes and
   pointers as they happen. See [Editing a map together](docs/guide.md#editing-a-map-together).

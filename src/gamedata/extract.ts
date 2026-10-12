@@ -123,6 +123,13 @@ export const UNIT_TABLES = [
  * Walkability plugin's game pathing, will not start without the orders table.
  */
 export const EXTRA_TABLES = ["arr\\orders.dat"];
+/**
+ * The game's list of its own sounds — which file each sound id plays — copied when the
+ * archives have it. Only the list: the sounds themselves stay where they are. The sound
+ * picker (`editor/stockSounds.ts`) names them from this, and does without when a copy
+ * made before 2026-10-12 lacks it.
+ */
+export const SOUND_TABLES = ["arr\\sfxdata.dat", "arr\\sfxdata.tbl"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 
@@ -235,7 +242,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   const files = new Map<string, Uint8Array>();
   const missing: string[] = [];
   for (const [member, data] of tables) files.set(assetPath(member), data);
-  for (const member of EXTRA_TABLES) {
+  for (const member of [...EXTRA_TABLES, ...SOUND_TABLES]) {
     const data = read(member);
     if (data) files.set(assetPath(member), data);
   }

@@ -1,3 +1,4 @@
+import { buildStockSounds } from "../src/editor/stockSounds";
 import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX } from "../src/formats/chk/sections/objects";
@@ -121,6 +122,14 @@ describe("validateScenario", () => {
     // Present in the archive: no complaint.
     const ok = texts(scn, { extras: new Map([["StarEdit/Wav/BOOM.wav", new Uint8Array(1)]]) });
     expect(ok.some((x) => x.includes("not in the archive"))).toBe(false);
+    // One of the game's own sounds needs no file; a path into its folder the list does not have is a typo.
+    scn.strings.strings[2] = "sound\\Terran\\Marine\\TMaYes00.wav";
+    const stockSounds = buildStockSounds(["Terran\\MARINE\\TMaYes00.WAV"], null, null);
+    expect(texts(scn, { extras: new Map() }).some((x) => x.includes("not in the archive"))).toBe(false);
+    expect(texts(scn, { extras: new Map(), stockSounds }).some((x) => x.includes("not in the archive"))).toBe(false);
+    scn.strings.strings[2] = "sound\\Terran\\Marine\\TMaYes99.wav";
+    expect(texts(scn, { extras: new Map(), stockSounds })).toContain("warn: Trigger 1: Play WAV plays 'sound\\Terran\\Marine\\TMaYes99.wav', which is not in the archive and not one of the sounds the game lists.");
+    scn.strings.strings[2] = "staredit\\wav\\boom.wav";
     const only = triggerIssues(validateScenario(scn, { extras: new Map() }));
     expect(only.every((i) => i.where === "Triggers")).toBe(true);
     // The five about these triggers, plus the scenario checks (no Victory, no Defeat, no objectives) a map with triggers earns.

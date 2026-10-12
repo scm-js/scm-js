@@ -35,6 +35,7 @@ Out of the archives come about 930 files, 30 MB in all:
 | `tileset/<name>.ofire.pcx` and the other three remaps, `<name>.dddata.bin`, `stat_txt.tbl` | the fire and explosion colours, the doodad placement table, the doodad and unit names |
 | `arr/units.dat`, `flingy.dat`, `sprites.dat`, `images.dat`, `images.tbl` | the chain from a unit type to its picture |
 | `arr/weapons.dat`, `upgrades.dat`, `techdata.dat` | the defaults the Unit, Upgrade and Technology Settings dialogs show |
+| `arr/sfxdata.dat`, `sfxdata.tbl` | the list of the game's own sounds, which the Trigger Editor's sound picker shows; the sounds themselves are not copied |
 | `game/tunit.pcx` | the team colour rows |
 | `scripts/iscript.bin` | the animation scripts |
 | `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |

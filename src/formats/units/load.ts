@@ -1,5 +1,5 @@
 import {
-  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeTechdataDat, decodeUnitsDat, decodeUpgradesDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
+  decodeFlingyDat, decodeImagesDat, decodeSfxdataDat, decodeSpritesDat, decodeTechdataDat, decodeUnitsDat, decodeUpgradesDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
   SPRITES_DAT_SIZE, TECHDATA_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, UPGRADES_DAT_SIZE, WEAPONS_DAT_SIZE,
   type FlingyDat, type ImagesDat, type SpritesDat, type TechdataDat, type UnitsDat, type UpgradesDat, type WeaponsDat,
 } from "../dat/dat";
@@ -13,6 +13,7 @@ import { TEAM_COLOR_ROWS, TEAM_SLOT_COUNT } from "./teamColor";
 import { fetchAsset } from "../../gamedata/source";
 import { installNames } from "../../data/units";
 import { namesFromAssets } from "../../data/gameNames";
+import { buildStockSounds, type StockSounds } from "../../editor/stockSounds";
 
 /**
  * The unit data tables, fetched once from `arr/` + `game/` (mirroring the MPQ tree; see
@@ -119,6 +120,42 @@ export function getUnitAssets(): Promise<UnitAssets> {
     }
   })();
   return assetsPromise;
+}
+
+let stockPromise: Promise<StockSounds | null> | null = null;
+let stockReady: StockSounds | null = null;
+/** Advanced when the list is dropped, so a fetch that was under way does not put the old one back. */
+let stockEpoch = 0;
+
+/**
+ * The game's own sounds as a list (`editor/stockSounds.ts`), fetched the first time
+ * something asks — the sound picker, Check Map. Null when the copy has no `sfxdata.tbl`:
+ * one made before the extraction copied it, or no game data at all. Without `units.dat`
+ * the list still stands, only without whose voice each sound is.
+ */
+export function getStockSounds(): Promise<StockSounds | null> {
+  if (stockPromise) return stockPromise;
+  const epoch = stockEpoch;
+  stockPromise = (async () => {
+    try {
+      const [tbl, dat, assets] = await Promise.all([
+        fetchPart("arr/sfxdata.tbl", (d) => d.length > 2 && (d[0] | (d[1] << 8)) > 0),
+        fetchPart("arr/sfxdata.dat", (d) => d.length >= 9 && d.length % 9 === 0).catch(() => null),
+        getUnitAssets().catch(() => null),
+      ]);
+      const stock = buildStockSounds(decodeTbl(tbl), dat ? decodeSfxdataDat(dat) : null, assets?.units ?? null);
+      if (epoch === stockEpoch) stockReady = stock;
+      return stock;
+    } catch {
+      return null;
+    }
+  })();
+  return stockPromise;
+}
+
+/** The list if it has been fetched, for synchronous callers. */
+export function peekStockSounds(): StockSounds | null {
+  return stockReady;
 }
 
 /** Already-loaded tables, for synchronous render paths. */
@@ -277,6 +314,8 @@ export function retryFailedParts(): void {
   anims.forgetFailed();
   // A data set found to have no 2x sprites may have them now.
   if (hdImages === null) hdImages = undefined;
+  // Likewise the sound list: a copy that lacked it may have been replaced by one that has it.
+  if (!stockReady) stockPromise = null;
   for (const l of listeners) l();
 }
 
@@ -289,6 +328,9 @@ export function retryFailedParts(): void {
 export function resetUnitAssets(): void {
   assetsPromise = null;
   assetsReady = null;
+  stockPromise = null;
+  stockReady = null;
+  stockEpoch++;
   installNames(null);
   grps.clear();
   los.clear();

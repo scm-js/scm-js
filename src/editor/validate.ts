@@ -21,6 +21,7 @@ import type { IsomStatus } from "./isom";
 import { CUWP_SLOTS, cuwpSlotActive } from "./cuwp";
 import { isAnywhereIntact, locationName } from "./locations";
 import { TILE_PX } from "./units";
+import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
 
 export type IssueLevel = "error" | "warn" | "info";
 
@@ -40,6 +41,8 @@ export interface Issue {
 export interface ValidateContext {
   /** Non-scenario archive members, for the sound paths triggers play. */
   extras?: Map<string, Uint8Array>;
+  /** The game's own sounds, when the game data lists them: a trigger may play one with no file in the map. */
+  stockSounds?: StockSounds | null;
   /** The ISOM health `useIsomStatus` measured; omitted = not checked. */
   isom?: IsomStatus;
 }
@@ -169,7 +172,10 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
           checkString(a[arg.field], def.name);
           const path = a[arg.field] > 0 ? getString(scn.strings, a[arg.field]) : null;
           if (path && ctx.extras && ![...ctx.extras.keys()].some((k) => normalize(k) === normalize(path))) {
-            add("warn", t("{label}: {name} plays '{path}', which is not in the archive.", { label, name: def.name, path }), where, target);
+            // A path into the game's sound folder plays from the game's files. Without the
+            // list there is no telling a real one from a typo, so only a listed miss is said.
+            if (!isStockPath(path)) add("warn", t("{label}: {name} plays '{path}', which is not in the archive.", { label, name: def.name, path }), where, target);
+            else if (ctx.stockSounds && !findStockSound(ctx.stockSounds, path)) add("warn", t("{label}: {name} plays '{path}', which is not in the archive and not one of the sounds the game lists.", { label, name: def.name, path }), where, target);
           }
         }
         if (arg.kind === "switch" && a.type === ActionType.SetSwitch && a.modifier !== SwitchAction.Clear) set.add(a[arg.field]);

@@ -16,7 +16,7 @@
  */
 import { slimAnim } from "../formats/dat/anim";
 import { memberKey } from "./archives";
-import { ExtractError, EXTRA_TABLES, extractGameData, UNIT_TABLES, type ExtractProgress, type GameDataExtraction } from "./extract";
+import { ExtractError, EXTRA_TABLES, extractGameData, SOUND_TABLES, UNIT_TABLES, type ExtractProgress, type GameDataExtraction } from "./extract";
 import { REMASTERED_ORIGIN } from "./profiles";
 
 export { BUILD_INFO, installRootOf, pickedFilesSource, type PickedFile } from "./remasteredFolder";
@@ -61,7 +61,7 @@ export async function extractRemastered(storage: RemasteredStorage, progress?: E
   const have = new Map<string, Uint8Array | null>();
   const problems: string[] = [];
   // The unit half stops at the first table it lacks, so the tables are asked for up front.
-  let wanted = [...UNIT_TABLES, ...EXTRA_TABLES].map(memberKey);
+  let wanted = [...UNIT_TABLES, ...EXTRA_TABLES, ...SOUND_TABLES].map(memberKey);
 
   for (let pass = 0; pass < MAX_PASSES && wanted.length > 0; pass++) {
     let done = 0;

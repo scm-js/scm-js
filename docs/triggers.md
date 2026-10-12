@@ -1508,8 +1508,10 @@ Pause Timer();
 ## Play WAV
 
 Plays a sound for the player. The file is one stored in the map archive, which the
-editor's Sound Editor adds, or one of the game's own sounds by its path. Duration is the
-sound's length in milliseconds, which editors fill in from the file.
+editor's Sound Editor adds, or one of the game's own sounds by its path, such as
+`sound\Terran\Marine\TMaYes00.wav`. A sound of the game's needs no file in the map; the
+Trigger Editor's **Browse…** lists them. Duration is the sound's length in milliseconds,
+which editors fill in from the file.
 
 <!-- generated: action 8 -->
 **Action 8** · `Play WAV(WAV, Duration);`

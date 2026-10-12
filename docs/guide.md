@@ -645,6 +645,16 @@ and writes it as PCM WAV in the format picked next to the button; the default, 2
 16-bit mono, is what the game's own sounds are, and the smaller presets are for maps
 chasing the size limit. A *Play WAV* action then names the file.
 
+A trigger can also play one of the game's own sounds, a unit's voice or an interface
+click, without the file being in the map. In the Trigger Editor, **Browse…** beside a
+WAV argument lists the map's sounds and the game's together. Search by file name, by
+unit, or by when the unit says the line: "marine yes" finds the four things a Marine says
+when ordered. In a Transmission the list opens on the lines of the unit the action
+already names. The line under the field says what the path is, and warns when it is
+neither in the map nor one of the game's. The list comes from the game data; a copy
+installed before version 0.7 does not have it, and installing the game data again from
+**Help ▸ Game Data…** adds it. The picker lists the sounds but does not play them yet.
+
 **Switches** names the 256 switches triggers set and test, so the trigger editors show
 "Gate open" rather than "Switch 3".
 

@@ -66,6 +66,7 @@ import {
 } from "../ui";
 import WireSphere from "../ui/WireSphere";
 import { drawNebula, drawStars, generateStars } from "../splash/starfield";
+import { useStockSounds } from "../../hooks/useStockSounds";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { hotkeyRows } from "./hotkeys";
@@ -180,12 +181,13 @@ export function ValidateMapDialog({ entry }: DialogProps) {
     info: true,
   });
   const [run, setRun] = useState(0);
+  const stockSounds = useStockSounds().stock;
   const issues = useMemo(() => {
     void run;
     if (!scenario) return [];
-    const all = validateScenario(scenario, { extras, isom });
+    const all = validateScenario(scenario, { extras, isom, stockSounds });
     return only ? triggerIssues(all) : all;
-  }, [scenario, extras, isom, only, run]);
+  }, [scenario, extras, isom, stockSounds, only, run]);
   const counts = issueCounts(issues);
   const listed = issues.filter((i) => show[i.level]);
   const title = only ? t("Validate Triggers") : t("Check Map");

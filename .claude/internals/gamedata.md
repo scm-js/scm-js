@@ -139,6 +139,12 @@ when the dialog first listed the data sets, stayed "missing" after the first dat
 was installed and the new set was absent from the list until a reload. `forgetStoredFolders()`
 after every worker install is the fix.
 
+`extract.ts#SOUND_TABLES` (`arr/sfxdata.dat`, `arr/sfxdata.tbl`, 2026-10-12) are copied beside
+`EXTRA_TABLES` when the source has them, and seeded in `extractRemastered` with the other tables —
+both sources carry identical files (31985 / 10296 bytes). They are the *list* of the game's
+sounds for the trigger sound picker (`strings-sounds.md`); a copy made before lacks them and the
+picker says to install again.
+
 Not done: the 4x terrain and sprites, sounds
 (1123 PCM WAVs, 278 MB; nothing in the editor plays a game sound yet, and they should be read from
 the folder on demand rather than copied), and `npm run extract` from a Remastered folder.

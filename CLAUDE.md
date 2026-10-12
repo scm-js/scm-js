@@ -30,7 +30,7 @@ reach, and the traps in them are not visible from the code.
 | `src/editor/{clipboard,history}.ts`, `useClipboardTools` | `clipboard.md` |
 | `src/editor/sync.ts`, `services/sync.ts`, `syncTapAtom`, `api.sync` — shared maps | `sync.md` |
 | `src/editor/{settings,cuwp,tileset}.ts`, `sections/{players,settings,cuwp}.ts`, the Scenario menu's dialogs | `settings.md` |
-| `src/editor/{strings,sounds,switches,textColors}.ts`, `formats/wav.ts`, `audioConvert.ts`, `ui/ColorCodes.tsx` | `strings-sounds.md` |
+| `src/editor/{strings,sounds,stockSounds,switches,textColors}.ts`, `formats/wav.ts`, `audioConvert.ts`, `ui/{ColorCodes,SoundPicker}.tsx` | `strings-sounds.md` |
 | `sections/triggers.ts`, `data/triggerDefs.ts`, `formats/triggers/text.ts`, `src/editor/triggers.ts`, trigger claims | `triggers.md` |
 | `src/editor/{save,mapBuild,recovery}.ts`, `services/{mapIo,mapBuild,recovery,previousVersions,diskFiles}.ts`, `desktop/{backup,mapFiles}.ts`, `saveDocument`, `SaveMapDialog`, build steps, recovery copies, `.bak` | `saving.md` |
 | `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`; adding an `atomWithStorage` | `editor-operations.md` |

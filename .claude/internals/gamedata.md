@@ -225,6 +225,14 @@ is 3166 files / 897 MB, 66 s with them and 698 MB, 45 s without, as it was. The 
 versions 1–4 and offers the lighting from a version 4 copy whose stamp says `lit`; from any other
 its option is greyed and says to choose the folder again with the box ticked.
 
+**Version 5 (2026-10-13): the button faces.** Three more optional members (the fixed part is 136),
+`hd2/game/consoles/<race>/cmdbtns.dds.grp`, 166 KB each: 37 pictures, of which the play page uses
+the first two — a 72×70 dark button face and the same held down. `console_right.dds` has the
+hazard-striped plate of an *empty* place baked in, and the yellow icons straight on that were hard
+to read; the game draws a face between the two. The play page takes versions 1–5 and draws the
+icons on the plates from an earlier copy. (The other pictures — green frames, the digits 1–5,
+larger frames in four colours — are not mapped.)
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the

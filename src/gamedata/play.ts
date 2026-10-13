@@ -34,9 +34,11 @@ import { ANIM_KEPT_LAYERS, ANIM_LIT_LAYERS, animMember, animPath, slimAnim } fro
  * 4 (2026-10-13): where the person asked for it at install (`lighting`), every Remastered
  * sprite with the layers the game's real-time lighting reads, the ones the editor's own copy
  * holds cut down among them — about 200 MB more, and the stamp says `lit`. The play page
- * offers the lighting from such a copy and plays without it from any other.
+ * offers the lighting from such a copy and plays without it from any other. 5 (2026-10-13):
+ * the faces Remastered's command icons are drawn on, which the play page draws the icons
+ * straight on the console without.
  */
-export const PLAY_VERSION = 4;
+export const PLAY_VERSION = 5;
 
 /**
  * Remastered's lights: for every image's every frame one light or none — where, what colour,
@@ -66,6 +68,9 @@ export const PLAY_MEMBERS: readonly string[] = [
   // command icons at twice the size. The play page draws them with Remastered's graphics and the classic console without.
   ...["terran", "zerg", "protoss"].flatMap((race) => ["left", "center", "right"].map((piece) => `hd2\\game\\consoles\\${race}\\console_${piece}.dds`)),
   "hd2\\unit\\cmdicons\\cmdicons.dds.grp",
+  // The faces those icons are drawn on (the console's picture has the plate of an empty place there), with the
+  // rest of a race's button pictures.
+  ...["terran", "zerg", "protoss"].map((race) => `hd2\\game\\consoles\\${race}\\cmdbtns.dds.grp`),
   // And the rest of its interface at that size: the cursors, the wireframe of the selection window (the small ones
   // of a group and of a transport's load are the classic drawings doubled, and are left), the resource icons, and
   // each tileset's creep edges (the creep itself is among the terrain's pictures).

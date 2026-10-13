@@ -7,9 +7,15 @@
  * A StarCraft: Remastered installation arrives as a folder instead of archives
  * (`remastered.ts`): a directory handle, or the folder's files where the browser has no
  * folder picker. Both can be posted to a worker, and neither is read until asked.
+ *
+ * After the editor's own files the play set is copied (`play.ts`: what the game itself runs
+ * on, the sounds among it), straight from the source into the storage a file at a time. A
+ * source that is not a full installation has none and the copy is the editor's alone; so is
+ * a copy that could only be kept in memory.
  */
 import { memberKey, openArchives, readerFor } from "./archives";
 import { describeExtraction, ExtractError, extractGameData, type GameDataExtraction } from "./extract";
+import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
 import { writeStoredCopy, type StoredStamp } from "./store";
@@ -41,6 +47,8 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     let result: GameDataExtraction;
     let problems: string[];
     let from = req.from;
+    /** A file of the source by the game's name for it, for the play set. */
+    let member: (name: string) => Promise<Uint8Array | null>;
     if (req.remastered) {
       post({ kind: "progress", fraction: 0, label: "Opening the installation" });
       const { Storage, directoryHandleSource } = await import("kascade");
@@ -49,8 +57,10 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
         : directoryHandleSource(req.remastered as unknown as Parameters<typeof directoryHandleSource>[0]);
       if (!source) throw new ExtractError("The folder is not a StarCraft: Remastered installation.");
       // Reading and extracting are 0–80% of the bar, the write the rest.
-      const read = await extractRemastered(await Storage.open(source), (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      const storage = await Storage.open(source);
+      const read = await extractRemastered(storage, (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
       ({ result, problems, from } = read);
+      member = async (name) => (storage.fileInfo(memberKey(name))?.installed ? storage.readFile(memberKey(name)) : null);
     } else {
       post({ kind: "progress", fraction: 0, label: "Opening the archives" });
       const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
@@ -61,7 +71,9 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
 
       // Extraction is 0–80% of the bar, the write the rest.
-      result = extractGameData(readerFor(opened.archives, overlay.size ? overlay : undefined), (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      const reader = readerFor(opened.archives, overlay.size ? overlay : undefined);
+      result = extractGameData(reader, (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      member = async (name) => reader(name);
     }
     const stamp: StoredStamp = {
       from,
@@ -73,8 +85,27 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     };
 
     try {
-      await writeStoredCopy(result.files, stamp, (f) => post({ kind: "progress", fraction: 0.8 + f * 0.2, label: "Saving in the browser" }), req.profile?.id ?? DEFAULT_PROFILE.id);
-      post({ kind: "done", stamp, where: "opfs", problems });
+      // The editor's files are 80–88% of the bar, the play set the rest.
+      let playing = false;
+      const written = await writeStoredCopy(
+        result.files,
+        stamp,
+        (f) => { if (!playing) post({ kind: "progress", fraction: 0.8 + f * 0.08, label: "Saving in the browser" }); },
+        req.profile?.id ?? DEFAULT_PROFILE.id,
+        async (write) => {
+          playing = true;
+          let play = null;
+          try {
+            play = await copyPlaySet(member, write, { dat: result.files.get("arr/sfxdata.dat"), tbl: result.files.get("arr/sfxdata.tbl") }, (f, label) => post({ kind: "progress", fraction: 0.88 + f * 0.12, label }));
+          } catch (err) {
+            // The editor's copy is whole without it.
+            problems.push(`The game's own files for playing were not copied: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          if (!play) return {};
+          return { play, files: stamp.files + play.files + play.sounds, bytes: stamp.bytes + play.bytes, summary: `${stamp.summary}, ${play.sounds} game sounds` };
+        },
+      );
+      post({ kind: "done", stamp: written, where: "opfs", problems });
     } catch {
       const files: [string, ArrayBuffer][] = [];
       const transfer: Transferable[] = [];

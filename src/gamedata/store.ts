@@ -13,6 +13,7 @@
  * Where there is no OPFS (a browser that blocks site data, tests) the files stay in
  * memory for the session (`keepInMemory`); `storedCopy()` reports which.
  */
+import type { PlayStamp } from "./play";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "./profiles";
 
 const DIR = "gamedata";
@@ -35,6 +36,12 @@ export interface StoredStamp {
   summary: string;
   /** The data set this is a copy of; absent on a copy an older editor wrote, which is the game's own. */
   profile?: GameDataProfile;
+  /**
+   * The copy also holds the files the game itself runs on (`play.ts`), which the site's play
+   * page reads. Absent on a copy made from Blizzard's free package, or by an editor before
+   * there were any.
+   */
+  play?: PlayStamp;
 }
 
 export interface StoredCopy extends StoredStamp {
@@ -201,13 +208,18 @@ interface SyncHandle {
 /**
  * Replace a data set's copy with `files`, stamp last. Throws when OPFS is unavailable
  * here, in which case the caller falls back to `keepInMemory` on the main thread.
+ *
+ * `more` writes further files after those and before the stamp, one at a time through the
+ * writer it is handed — for what is too large to hold in a map first (`play.ts`) — and
+ * answers what the stamp gains by them. The stamp as written is returned.
  */
 export async function writeStoredCopy(
   files: Map<string, Uint8Array>,
   stamp: StoredStamp,
   progress?: (fraction: number) => void,
   profileId = DEFAULT_PROFILE.id,
-): Promise<void> {
+  more?: (write: (path: string, data: Uint8Array) => Promise<void>) => Promise<Partial<StoredStamp>>,
+): Promise<StoredStamp> {
   const root = await opfsRoot();
   if (!root) throw new Error("This browser has no private file storage.");
   const segments = profileDir(profileId);
@@ -249,6 +261,8 @@ export async function writeStoredCopy(
     await write(path, data);
     if (++i % 50 === 0) progress?.(i / files.size);
   }
-  await write(STAMP, new TextEncoder().encode(JSON.stringify(stamp)));
+  const written = more ? { ...stamp, ...(await more(write)) } : stamp;
+  await write(STAMP, new TextEncoder().encode(JSON.stringify(written)));
   progress?.(1);
+  return written;
 }

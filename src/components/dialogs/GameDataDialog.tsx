@@ -73,8 +73,44 @@ function explain(source: AssetSource | null): string {
 }
 
 export function GameDataDialog({ entry }: DialogProps) {
-  const store = useStore();
   const close = useSetAtom(closeDialogAtom);
+  const source = useAtomValue(gameDataSourceAtom);
+  /** The handle of the "it opened itself, now it can go" timer, so unmounting cancels it. */
+  const leaving = useRef<number | null>(null);
+  const auto = entry.payload?.auto === true;
+  const have = source !== null && source.kind !== "none";
+  useEffect(() => () => { if (leaving.current) window.clearTimeout(leaving.current); }, []);
+
+  // The dialog that opened itself because there was nothing has nothing left to say once
+  // there is: it closes and leaves the editor, now drawing real terrain, in front. Long
+  // enough that the finished bar and the message are seen rather than flashing past; the
+  // toast repeats it for anyone who looked away. A dialog the user opened themselves is
+  // theirs to close.
+  const ready = (next: AssetSource) => {
+    if (auto && next.kind !== "none") leaving.current = window.setTimeout(() => close(entry.key), 900);
+  };
+
+  return (
+    <DialogFrame
+      dialogKey={entry.key}
+      title={t("Game Data")}
+      icon={<HardDrive size={14} />}
+      size={have ? "md" : "lg"}
+      footer={<Button variant={have ? "primary" : "default"} onClick={() => close(entry.key)}>{have ? t("Close") : t("Continue without graphics")}</Button>}
+    >
+      <GameDataBody onReady={ready} />
+    </DialogFrame>
+  );
+}
+
+/**
+ * Everything the dialog shows between its title and its footer, on its own so the Game
+ * Data page (`pages/GameDataPage.tsx`, the site's "what this browser holds") is the same
+ * controls and the same wording rather than a second copy of them. `onReady` is told when
+ * a source has been put in place.
+ */
+export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => void }) {
+  const store = useStore();
   const toast = useSetAtom(pushToastAtom);
   const source = useAtomValue(gameDataSourceAtom);
   const revision = useAtomValue(gameDataRevisionAtom);
@@ -83,10 +119,7 @@ export function GameDataDialog({ entry }: DialogProps) {
   const [searchDirs, setSearchDirs] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  /** The handle of the "it opened itself, now it can go" timer, so unmounting cancels it. */
-  const leaving = useRef<number | null>(null);
   const desktop = desktopBridge();
-  const auto = entry.payload?.auto === true;
   const have = source !== null && source.kind !== "none";
 
   const [desktopCopy, setDesktopCopy] = useState<DesktopLocateResult | null>(null);
@@ -116,12 +149,7 @@ export function GameDataDialog({ entry }: DialogProps) {
     adoptSource(store, next, switched);
     setMessage({ text });
     toast({ kind: "ok", title: t("Game data ready"), detail: text });
-    // The dialog that opened itself because there was nothing has nothing left to say once
-    // there is: it closes and leaves the editor, now drawing real terrain, in front. Long
-    // enough that the finished bar and the message are seen rather than flashing past; the
-    // toast repeats it for anyone who looked away. A dialog the user opened themselves is
-    // theirs to close.
-    if (auto && next.kind !== "none") leaving.current = window.setTimeout(() => close(entry.key), 900);
+    onReady?.(next);
   };
 
   const run = async (work: () => Promise<void>) => {
@@ -233,21 +261,12 @@ export function GameDataDialog({ entry }: DialogProps) {
     return desktop.gameData.onProgress((fraction, label) => setBusy((b) => (b ? { fraction, label } : b)));
   }, [desktop]);
 
-  useEffect(() => () => { if (leaving.current) window.clearTimeout(leaving.current); }, []);
-
   const removable = source?.kind === "stored" || source?.desktop === true;
   const active = source?.profile.id ?? DEFAULT_PROFILE.id;
   const showSets = have && (sets.length > 1 || adding || !isDefaultProfile(active));
   const haveRemastered = sets.some((p) => p.id === REMASTERED_PROFILE.id);
 
   return (
-    <DialogFrame
-      dialogKey={entry.key}
-      title={t("Game Data")}
-      icon={<HardDrive size={14} />}
-      size={have ? "md" : "lg"}
-      footer={<Button variant={have ? "primary" : "default"} onClick={() => close(entry.key)}>{have ? t("Close") : t("Continue without graphics")}</Button>}
-    >
       <div className="stack">
         {have ? (
           <Group title={t("Now")}>
@@ -373,6 +392,5 @@ export function GameDataDialog({ entry }: DialogProps) {
           </>
         )}
       </div>
-    </DialogFrame>
   );
 }

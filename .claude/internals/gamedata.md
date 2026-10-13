@@ -57,6 +57,27 @@ palette's and the settings dialogs' item lists are built per render or on the re
 (`UPGRADE_NAMES` had Plasma Shields at 7 where `upgrades.dat` has it at 15; fixed, with
 `UPGRADE_RACE`.)
 
+**The Game Data page** (`data.html` → `src/pages/data.tsx` → `pages/GameDataPage.tsx`, 2026-10-12): a
+second Vite input (`build.rollupOptions.input` in `vite.config.ts`; the editor's entry chunk is
+therefore `main-*.js`, not `index-*.js`), served at `scmjs.dev/editor/data` (Pages answers `/data`
+with `data.html`; `vite preview` and the dev server want `/data.html`). It is the site's "what has
+this browser been given": the list of `listStoredCopies()` with `gamedata/copies.ts#copyKind` saying
+what each is (`download` = the stamp's `from` is an address, `classic` = archive names, `remastered` =
+`isRemasteredOrigin` or the Remastered profile, `mod` = any other profile), over `GameDataBody` — the
+dialog's whole body, split out of `GameDataDialog` so the page and the dialog are one set of controls
+(`onReady` is how the dialog still closes itself after an automatic offer). The page resolves the
+source itself and starts nothing else of the editor, but `services/gameData.ts` drags `documentAtoms`
+and the map services in, so it loads ~900 KB of chunks the editor shares (cached for whoever has
+opened the editor); splitting `adoptSource`'s editor half off would fix that and has not been done.
+Its entry imports `moveIn` first, like `main.tsx`. `styles/pages.css` undoes `base.css`'s
+`overflow: hidden` with `html:has(.pg)`. `e2e/dataPage.spec.ts` seeds a stamp in OPFS and reads the
+list back. **`site/header.js` is a second reader of the stamps** (plain JS, no build, so it cannot
+import `copies.ts`): it walks `gamedata/` and `gamedata-profiles/*/` for `stamp.json` and applies
+the same rule to label the site's top bar. Change the rule or the stamp's shape and change both. The
+same script is a second client of the scmjs.dev account: it reads and writes the session in
+`scmjs.plugin.scmjs-dev.settings` and runs the plugin's popup sign-in (`/v1/auth/start`, the
+`scmjs-ai-auth` message), so those names are a contract with the site too.
+
 `GameDataDialog.tsx` shows one thing at a time: with data it is a status line ("Now") and Remove copy;
 without, the status line is replaced by a caution notice (`.gd-alert`) saying what the editor cannot draw,
 because flat colours and coloured markers read as broken rather than unconfigured, and the two routes are

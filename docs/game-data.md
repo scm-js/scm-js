@@ -88,6 +88,14 @@ plugins and a sign-in are carried over the first time the new address is opened.
 Help ▸ Game Data… shows the current source and, when there is none, the two ways to get
 one.
 
+The hosted editor also has the same controls on a page of their own,
+[scmjs.dev/editor/data](https://scmjs.dev/editor/data), which lists every copy the
+browser holds: what it is, where it came from, how many files and how large, and when it
+was made. The top bar of [scmjs.dev](https://scmjs.dev) shows which of them you have (no
+game data, the editor's graphics from Blizzard's download, or files from your own
+StarCraft 1.16 or Remastered) and links to that page. Nothing is read but each copy's
+record of where it came from, and nothing leaves the browser.
+
 **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
 free download, and the package carries both archives. They are the trimmed StarEdit
 distribution rather than the game's own, which matters only in that they are enough:
@@ -397,6 +405,8 @@ under `src/formats/`:
 | File | Does |
 | --- | --- |
 | `src/gamedata/source.ts` | The search order above, as a chain over injected probes so `tests/gamedata.test.ts` can pin it without a browser. |
+| `src/gamedata/copies.ts` | What kind of thing a stored copy is (Blizzard's download, your own 1.16 files, Remastered, a mod), for the Game Data page. |
+| `src/pages/GameDataPage.tsx` | The Game Data page, a second page of the same build (`data.html`) around the dialog's own controls. |
 | `src/gamedata/store.ts` | The browser's copies, in the Origin Private File System: `gamedata/` for the game's own, `gamedata-profiles/<id>/` per data set, a stamp file written last so a half-written copy counts as nothing. |
 | `src/gamedata/install.ts`, `zip.ts` | The two install routes. `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
 | `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only `iscript.ts`, so Node runs it without a build step. |

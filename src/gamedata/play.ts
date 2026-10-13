@@ -36,9 +36,17 @@ import { ANIM_KEPT_LAYERS, ANIM_LIT_LAYERS, animMember, animPath, slimAnim } fro
  * holds cut down among them — about 200 MB more, and the stamp says `lit`. The play page
  * offers the lighting from such a copy and plays without it from any other. 5 (2026-10-13):
  * the faces Remastered's command icons are drawn on, which the play page draws the icons
- * straight on the console without.
+ * straight on the console without. 6 (2026-10-13): the beat of the count down to a game between
+ * people (`PLAY_COUNTDOWN`), which the play page sounds a tone of its own without.
  */
-export const PLAY_VERSION = 5;
+export const PLAY_VERSION = 6;
+
+/**
+ * The one sound a game between people needs that the game's list of sounds does not name: the
+ * beat of the lobby's count down, a menu's sound. A 1.16 installation has one; Remastered has
+ * its own at this name, as it has of every sound, and the old one under `SD\`.
+ */
+export const PLAY_COUNTDOWN = "sound\\glue\\countdown.wav";
 
 /**
  * Remastered's lights: for every image's every frame one light or none — where, what colour,
@@ -64,6 +72,7 @@ export const PLAY_MEMBERS: readonly string[] = [
   ...["grpwire", "tranwire", "wirefram"].map((n) => `unit\\wirefram\\${n}.grp`),
   ...TILESETS.flatMap((t) => [`tileset\\${t}.grp`, ...["dark", "green", "red", "shift", "trans50"].map((n) => `tileset\\${t}\\${n}.pcx`)]),
   ...CURSORS.map((c) => `cursor\\${c}.grp`),
+  PLAY_COUNTDOWN,
   // StarCraft: Remastered's own console, which only a Remastered installation has: three pieces a race, and the
   // command icons at twice the size. The play page draws them with Remastered's graphics and the classic console without.
   ...["terran", "zerg", "protoss"].flatMap((race) => ["left", "center", "right"].map((piece) => `hd2\\game\\consoles\\${race}\\console_${piece}.dds`)),
@@ -82,10 +91,10 @@ export const PLAY_MEMBERS: readonly string[] = [
 
 /**
  * Members of the fixed part a game cannot start without. The rest (the other game types'
- * rules, a cursor, Remastered's console) is copied when it is there and done without when
- * it is not.
+ * rules, a cursor, the count down's beat, Remastered's console) is copied when it is there
+ * and done without when it is not.
  */
-export const PLAY_REQUIRED: readonly string[] = PLAY_MEMBERS.filter((m) => !m.startsWith("cursor\\") && !m.startsWith("hd2\\") && (!m.startsWith("triggers\\") || m === "triggers\\melee.trg"));
+export const PLAY_REQUIRED: readonly string[] = PLAY_MEMBERS.filter((m) => m !== PLAY_COUNTDOWN && !m.startsWith("cursor\\") && !m.startsWith("hd2\\") && (!m.startsWith("triggers\\") || m === "triggers\\melee.trg"));
 
 /** How many sounds sfxdata.dat lists (the first is none). */
 const SFX_COUNT = 1144;

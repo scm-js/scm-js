@@ -4,7 +4,7 @@
  * and the copy itself with what its stamp comes to say.
  */
 import { describe, expect, it } from "vitest";
-import { copyPlaySet, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playImageMembers, playSoundMembers } from "../src/gamedata/play";
+import { copyPlaySet, PLAY_COUNTDOWN, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playImageMembers, playSoundMembers } from "../src/gamedata/play";
 
 /** sfxdata.dat with the given sound ids pointing at entries of the table, and that table. */
 function sfx(names: string[], ids: [id: number, index1: number][]) {
@@ -32,6 +32,9 @@ describe("the play set", () => {
     expect(PLAY_REQUIRED).toContain("triggers\\melee.trg");
     expect(PLAY_REQUIRED).not.toContain("triggers\\ctf.trg");
     expect(PLAY_REQUIRED).not.toContain("cursor\\arrow.grp");
+    // The lobby's count down: kept from every installation, and no game waits for it.
+    expect(PLAY_MEMBERS).toContain("sound\\glue\\countdown.wav");
+    expect(PLAY_REQUIRED).not.toContain(PLAY_COUNTDOWN);
     // Remastered's console is there for a Remastered installation and no 1.16 one has it.
     expect(PLAY_MEMBERS).toContain("hd2\\game\\consoles\\zerg\\console_center.dds");
     expect(PLAY_REQUIRED.some((m) => m.startsWith("hd2\\"))).toBe(false);

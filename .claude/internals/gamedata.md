@@ -182,6 +182,17 @@ are stored under the game's own paths (`assetPath`), unlike the tileset remaps t
 (`tileset/<name>.ofire.pcx`, `tileset/stat_txt.tbl`) — the play page maps those two itself
 (scm-sim `web/gameSource.ts#copyPath`).
 
+**Version 2 (2026-10-12): every image's picture.** The editor's extraction walks from the
+units and sprites that can be placed (885 of 999 images); the game creates the other 114
+images itself in play — the protoss warp texture and rift, terran and zerg construction, zerg
+births, the nuke, every spell's overlay, the selection circles — and a game played from the
+copy drew boxes or nothing for them (found by the user on a pylon warping in).
+`playImageMembers` lists every GRP and overlay file images.dat names and every image's
+`main_NNN.anim`; `copyPlaySet` takes the ones the copy has not got (`has`, the worker passing
+`result.files`), the sprites slimmed as the editor's are. From Remastered that is 174 files
+more, 26 MB: a copy is 3137 files / 668 MB, 48 s. `PLAY_VERSION` is 2; the play page still
+plays from a version 1 copy, without those pictures, and says to renew it.
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the

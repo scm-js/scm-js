@@ -112,8 +112,18 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
   colour — 244, 4, 4 for red) or the CRGB value. Shadows are the diffuse alpha as black at half
   strength; `DrawFunction.Remap` effects are already in their own colours with the glow in the
   alpha and are drawn "lighter" as before, with no remap table.
-- **Fallbacks, all to the GRP:** no anim for the image (105 of the 885 reachable ones, mostly
-  shadows and effects — `unit/manifest.json`'s `hd` list says which, fetched once on first use so
+- **A file per GRP, not per image (found 2026-10-12, by the user: a Command Center drew its
+  classic body under Remastered's working overlay).** `HD2/anim/` has 868 files for 999 images:
+  where two images.dat entries name one GRP only one has a `main_NNN.anim`, and the other is
+  drawn from it — a Command Center is image 275 and its file is 63's. 128 of the 131 images
+  with no file are so. `anim.ts#imagesSharingGrp` names an image's GRP-mates;
+  `load.ts#requestAnim` falls to the first of them the manifest's `hd` list has
+  (`sharedAnims`, cleared with the data set); and the extraction takes a GRP-mate's file
+  where the mate is not itself reachable (329 for 330, 547 for 548 — in `hd` without being in
+  `images`), under the mate's own number, so nothing is stored twice. A copy made before this
+  has 101 of the 103 already and lacks those two until it is installed again.
+- **Fallbacks, all to the GRP:** no anim for the image or any image of its GRP (2 of the 885
+  reachable ones — `unit/manifest.json`'s `hd` list says which have one, fetched once on first use so
   a 1.16 copy costs one request rather than hundreds of failed ones), the anim still on its way
   (nothing waits and nothing flashes a marker), and the eight files with **no box** (503, 582,
   588 — the start location — 756, 787–790), which cannot be centred. So classic and 2x frames

@@ -3,7 +3,7 @@ import {
   SPRITES_DAT_SIZE, TECHDATA_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, UPGRADES_DAT_SIZE, WEAPONS_DAT_SIZE,
   type FlingyDat, type ImagesDat, type SpritesDat, type TechdataDat, type UnitsDat, type UpgradesDat, type WeaponsDat,
 } from "../dat/dat";
-import { animPath, isAnim, parseAnim, type Anim } from "../dat/anim";
+import { animPath, imagesSharingGrp, isAnim, parseAnim, type Anim } from "../dat/anim";
 import { decodeGrp, type Grp } from "../dat/grp";
 import { decodeIscript, type IscriptBin } from "../dat/iscript";
 import { decodeLo, type LoFile } from "../dat/lo";
@@ -267,6 +267,8 @@ let hdSpriteMode = false;
  */
 let hdImages: Set<number> | null | undefined;
 let hdImagesLoading = false;
+/** For an image with no 2x sprite of its own, the image whose file it is drawn from (null: none has one). Per data set. */
+const sharedAnims = new Map<number, number | null>();
 
 /** Turn the 2x sprites on or off for every reader, and tell the canvases when that changed. */
 export function setHdSprites(on: boolean): boolean {
@@ -298,8 +300,17 @@ export function requestAnim(imageId: number): Anim | null | undefined {
     }
     return undefined;
   }
-  if (!hdImages?.has(imageId)) return null;
-  return anims.get(animPath(imageId));
+  if (!hdImages) return null;
+  if (hdImages.has(imageId)) return anims.get(animPath(imageId));
+  // No file of its own: the file of another image of the same GRP, where the data set has that.
+  let from = sharedAnims.get(imageId);
+  if (from === undefined) {
+    if (!assetsReady) return null;
+    const have = hdImages;
+    from = imagesSharingGrp(assetsReady.images.grp, imageId).find((other) => have.has(other)) ?? null;
+    sharedAnims.set(imageId, from);
+  }
+  return from === null ? null : anims.get(animPath(from));
 }
 
 /**
@@ -314,6 +325,7 @@ export function retryFailedParts(): void {
   anims.forgetFailed();
   // A data set found to have no 2x sprites may have them now.
   if (hdImages === null) hdImages = undefined;
+  sharedAnims.clear();
   // Likewise the sound list: a copy that lacked it may have been replaced by one that has it.
   if (!stockReady) stockPromise = null;
   for (const l of listeners) l();
@@ -337,6 +349,7 @@ export function resetUnitAssets(): void {
   remaps.clear();
   anims.clear();
   hdImages = undefined;
+  sharedAnims.clear();
   for (const l of listeners) l();
 }
 

@@ -4,7 +4,7 @@
  * and the copy itself with what its stamp comes to say.
  */
 import { describe, expect, it } from "vitest";
-import { copyPlaySet, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playSoundMembers } from "../src/gamedata/play";
+import { copyPlaySet, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playImageMembers, playSoundMembers } from "../src/gamedata/play";
 
 /** sfxdata.dat with the given sound ids pointing at entries of the table, and that table. */
 function sfx(names: string[], ids: [id: number, index1: number][]) {
@@ -49,7 +49,7 @@ describe("the play set", () => {
     const play = await copyPlaySet(
       async (member) => (member === "sound\\b.wav" || member === "cursor\\time.grp" ? null : new Uint8Array(member.length)),
       async (path, data) => { written.set(path, data.length); },
-      { dat, tbl },
+      { sfxDat: dat, sfxTbl: tbl },
     );
     expect(play).toEqual({ version: PLAY_VERSION, files: PLAY_MEMBERS.length - 1, sounds: 1, bytes: [...written.values()].reduce((a, b) => a + b, 0) });
     expect(written.has("sound/a.wav")).toBe(true);
@@ -57,11 +57,35 @@ describe("the play set", () => {
     expect(written.has("cursor/time.grp")).toBe(false);
   });
 
+  it("takes every image's picture the copy has not got, and its Remastered sprite", async () => {
+    // images.dat: 999 images, the first two on GRP 1 and 2, image 0 with an overlay file (GRP column, then the overlay columns from 14).
+    const images = new Uint8Array(999 * 38);
+    const iv = new DataView(images.buffer);
+    iv.setUint32(0, 1, true); iv.setUint32(4, 2, true); iv.setUint32(999 * 14, 3, true);
+    const { tbl: imagesTbl } = sfx(["Terran\\Marine.grp", "Thingy\\Dust.grp", "Terran\\Marine.los"], []);
+    expect(playImageMembers(images, imagesTbl).files).toEqual(["unit\\terran\\marine.grp", "unit\\terran\\marine.los", "unit\\thingy\\dust.grp"]);
+    const { dat, tbl } = sfx(["A.wav"], [[1, 1]]);
+    const asked: string[] = [], written: string[] = [];
+    await copyPlaySet(
+      async (member) => { asked.push(member); return new Uint8Array(4); },
+      async (path) => { written.push(path); },
+      { sfxDat: dat, sfxTbl: tbl, imagesDat: images, imagesTbl },
+      undefined,
+      (path) => path === "unit/terran/marine.grp" || path === "unit/hd/main_000.anim",
+    );
+    // What the copy has is not read again; the rest is, the sprite of every other image among it.
+    expect(asked).not.toContain("unit\\terran\\marine.grp");
+    expect(written).toContain("unit/thingy/dust.grp");
+    expect(written).toContain("unit/terran/marine.los");
+    expect(asked).not.toContain("HD2\\anim\\main_000.anim");
+    expect(written).toContain("unit/hd/main_001.anim");
+  });
+
   it("says nothing of a source without the sounds, or without a file a game needs", async () => {
     const { dat, tbl } = sfx(["A.wav"], [[1, 1]]);
     const none = async () => {};
-    expect(await copyPlaySet(async (m) => (m.startsWith("sound\\") ? null : new Uint8Array(1)), none, { dat, tbl })).toBeNull();
-    expect(await copyPlaySet(async (m) => (m === "scripts\\aiscript.bin" ? null : new Uint8Array(1)), none, { dat, tbl })).toBeNull();
-    expect(await copyPlaySet(async () => new Uint8Array(1), none, { dat: undefined, tbl: undefined })).toBeNull();
+    expect(await copyPlaySet(async (m) => (m.startsWith("sound\\") ? null : new Uint8Array(1)), none, { sfxDat: dat, sfxTbl: tbl })).toBeNull();
+    expect(await copyPlaySet(async (m) => (m === "scripts\\aiscript.bin" ? null : new Uint8Array(1)), none, { sfxDat: dat, sfxTbl: tbl })).toBeNull();
+    expect(await copyPlaySet(async () => new Uint8Array(1), none, { sfxDat: undefined, sfxTbl: undefined })).toBeNull();
   });
 });

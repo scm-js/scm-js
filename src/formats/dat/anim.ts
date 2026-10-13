@@ -3,7 +3,8 @@
  * entry, in the GRP's place. Where a GRP is a list of palette-indexed frames, this is a
  * sprite sheet — several of them, one per *layer* (colour, team mask, normals, …), each
  * a DDS picture — and a table saying where each frame sits on the sheet and where in the
- * image's box it goes. Frame N is the GRP's frame N.
+ * image's box it goes. Frame N is the GRP's frame N. One per GRP, in fact: an entry that
+ * shares its GRP with another has no file of its own (`imagesSharingGrp`).
  *
  * This module has no imports, like `iscript.ts`, so the extraction can use it under
  * Node's type stripping. Only the 2x files (`0x0202`) are read: the 4x ones are the same
@@ -134,6 +135,20 @@ export function slimAnim(bytes: Uint8Array): Uint8Array {
       out.fill(0, entry, entry + LAYER_SIZE);
     }
   });
+  return out;
+}
+
+/**
+ * The other images drawn from the same GRP as `image`, lowest number first. Remastered
+ * keeps a sprite file per *picture*, not per image: where two images.dat entries name one
+ * GRP only one of them has a `main_NNN.anim`, and the other is drawn from it (a Command
+ * Center is image 275 and its file is 63's; 128 of the 999 images are so). `grp` is
+ * images.dat's GRP column.
+ */
+export function imagesSharingGrp(grp: ArrayLike<number>, image: number): number[] {
+  const out: number[] = [];
+  if (image < 0 || image >= grp.length) return out;
+  for (let i = 0; i < grp.length; i++) if (i !== image && grp[i] === grp[image]) out.push(i);
   return out;
 }
 

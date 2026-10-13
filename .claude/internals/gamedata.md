@@ -166,9 +166,39 @@ both sources carry identical files (31985 / 10296 bytes). They are the *list* of
 sounds for the trigger sound picker (`strings-sounds.md`); a copy made before lacks them and the
 picker says to install again.
 
-Not done: the 4x terrain and sprites, sounds
-(1123 PCM WAVs, 278 MB; nothing in the editor plays a game sound yet, and they should be read from
-the folder on demand rather than copied), and `npm run extract` from a Remastered folder.
+Not done: the 4x terrain and sprites, and `npm run extract` from a Remastered folder.
+
+**The play set** (`gamedata/play.ts`, 2026-10-12): what the game itself runs on, kept in a stored
+copy for the site's play page (scm-sim at `scmjs.dev/play/`, same origin, so it reads the copy in
+OPFS rather than asking for the game twice — the user's call: an owner of Remastered alone must be
+able to play). The editor never opens any of it. `PLAY_MEMBERS` is the fixed part (104 files, ~5 MB:
+`arr/portdata.*`, `scripts/{aiscript,bwscript}.bin`, `triggers/*.trg`, eight `game/` pictures,
+`dlgs/tile.grp`, the three wireframe GRPs, per tileset the creep-edge GRP and five palette PCXs,
+the cursors, and — optional, a Remastered installation's only — Remastered's console: nine
+`hd2/game/consoles/<race>/console_{left,center,right}.dds` and `hd2/unit/cmdicons/cmdicons.dds.grp`,
+~2 MB); `playSoundMembers` reads the rest out of `sfxdata.dat` + `.tbl` (1118 of the 1123
+named are in either source; 279 MB from Remastered, ~95 MB decoded from the 1.16 archives). They
+are stored under the game's own paths (`assetPath`), unlike the tileset remaps the editor renames
+(`tileset/<name>.ofire.pcx`, `tileset/stat_txt.tbl`) — the play page maps those two itself
+(scm-sim `web/gameSource.ts#copyPath`).
+
+It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
+Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
+counts every test pins. Instead the worker copies it after the editor's files and before the
+stamp — `writeStoredCopy(…, more)` hands `copyPlaySet` its own writer, so one file is in memory at
+a time — reading straight from the source (`storage.readFile` or the archive reader). The stamp
+gains `play: { version, files, sounds, bytes }` (and its `files` / `bytes` / `summary` include
+them) only when every `PLAY_REQUIRED` member and at least one sound were there: Blizzard's
+StarEdit package has no sounds, so a download copy never has it, which is also how the play page
+tells a copy it may play from. A failure while copying is a `problems` line and a copy without
+`play`, never a failed install. A memory-only copy (no OPFS) has none. The desktop's own
+extraction (`desktop/main.ts`) does not write it either: the desktop frames the hosted play page.
+
+**The stamp is now read by three programs**: `copies.ts`, `site/header.js`, and scm-sim's
+`web/gameSource.ts` (which needs `from`, `at`, `profile`, `play`, and `PLAY_VERSION` = 1). Bump
+`PLAY_VERSION` when the list changes so that an old copy cannot serve; the play page then asks
+for a reinstall. What the classic game's interface needs beyond the play set (fonts, dialogs,
+console art — Remastered has none of it) is scm-sim's interface pack, not ours.
 
 **Chromium's folder picker cannot open the install (found by the user, 2026-10-09).**
 `showDirectoryPicker` refuses any folder under Program Files — "can't open this folder because it

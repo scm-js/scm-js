@@ -163,6 +163,24 @@ Of Remastered's high-definition art, the terrain and the sprites are read at twi
 classic size. The four-times-size versions of both are in the same installation and are
 left alone.
 
+### Files for playing
+
+A copy made from your own game, whether a 1.16 installation or Remastered, also keeps the
+files the game itself runs on: its computer players' scripts, the rules of each game type,
+the cursors, the wireframes and palette tables of its interface, and its sounds. The editor
+opens none of them. They are there for the play page at scmjs.dev/play, which runs a map in
+the browser from the same copy, so the game is installed once for both.
+
+The sounds are most of it: about 1,100 files, roughly 95 MB from a 1.16 installation and
+280 MB from Remastered, whose sounds are stored uncompressed. A Remastered copy comes to
+about 640 MB in all, and installing takes correspondingly longer. The files are written
+one at a time as they are read, so the size is on disk and not in memory.
+
+Blizzard's free download has no sounds and is not the game, so a copy made from it has no
+such files and cannot be played from. Neither can a copy made by a version of the editor
+from before these files were kept; the play page says so and asks for the game to be
+installed again, which replaces the copy.
+
 ### The container image
 
 The container image at `ghcr.io/scm-js/scm-js` carries no game data and refuses to

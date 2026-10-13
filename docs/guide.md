@@ -690,6 +690,14 @@ folder, where Single Player ▸ Custom Game lists it. The desktop app finds the
 installation (or takes a folder you pick) and starts the game as well; in Chrome and
 Edge the map goes into a folder you pick once, and other browsers download it.
 
+In the editor at scmjs.dev there is a second way that needs no installed game running:
+**Tools ▸ Test Map in Browser** opens the map on the site's play page, scmjs.dev/play,
+which runs the game itself in a browser tab from your own copy of StarCraft. The map goes
+straight from the editor's tab to that one, with its own forces, units and triggers, and
+testing again sends the new version to the same tab. The first time, the play page asks
+for the folder StarCraft is installed in. The item comes with the scmjs.dev plugin and is
+not shown in the desktop app or an editor hosted elsewhere.
+
 ### Saving
 
 Ctrl+S writes the map back where it came from. In Chrome, Edge and the desktop app the

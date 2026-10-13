@@ -218,23 +218,30 @@ const pickedPaths = (files: readonly File[]) => files.map((f) => (f as File & { 
  * the extraction asks for: the folder is read in place, a range at a time.
  */
 export function installFromRemastered(folder: RemasteredFolder, progress?: InstallProgress, profile?: GameDataProfile): Promise<StoredCopy> {
-  let remastered: ExtractRequest["remastered"];
   if (Array.isArray(folder)) {
     const paths = pickedPaths(folder);
-    // Only the storage itself goes to the worker: the folder's other files are of no use to it.
-    const root = installRootOf(paths);
-    if (root === null) return Promise.reject(new InstallError("That folder is not a StarCraft: Remastered installation."));
-    const picked: PickedFile[] = [];
-    (folder as readonly File[]).forEach((file, i) => {
-      const rel = paths[i].replaceAll("\\", "/");
-      if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
-    });
-    remastered = picked;
-  } else {
-    remastered = folder as FileSystemDirectoryHandle;
+    return installFromPickedRemastered((folder as readonly File[]).map((file, i) => ({ path: paths[i], file })), progress, profile);
   }
   progress?.(0, "Opening the installation");
-  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], remastered);
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], folder as FileSystemDirectoryHandle);
+}
+
+/**
+ * The same from a folder pick given as paths and files. A `File` loses its path in the
+ * folder when it is handed from one page to another, so a page that picked the folder
+ * elsewhere (`pages/install.ts`) sends the two side by side.
+ */
+export function installFromPickedRemastered(files: readonly PickedFile[], progress?: InstallProgress, profile?: GameDataProfile): Promise<StoredCopy> {
+  // Only the storage itself goes to the worker: the folder's other files are of no use to it.
+  const root = installRootOf(files.map((f) => f.path));
+  if (root === null) return Promise.reject(new InstallError("That folder is not a StarCraft: Remastered installation."));
+  const picked: PickedFile[] = [];
+  for (const { path, file } of files) {
+    const rel = path.replaceAll("\\", "/");
+    if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
+  }
+  progress?.(0, "Opening the installation");
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], picked);
 }
 
 function runWorker(

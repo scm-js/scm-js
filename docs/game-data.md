@@ -176,6 +176,11 @@ The sounds are most of it: about 1,100 files, roughly 95 MB from a 1.16 installa
 about 640 MB in all, and installing takes correspondingly longer. The files are written
 one at a time as they are read, so the size is on disk and not in memory.
 
+The play page can also make the copy itself: choose a StarCraft: Remastered folder there
+and it is installed by the same code, into the same place, without leaving the page. If
+your own 1.16 copy is already in the browser, the Remastered one is added beside it as a
+data set rather than replacing it.
+
 Blizzard's free download has no sounds and is not the game, so a copy made from it has no
 such files and cannot be played from. Neither can a copy made by a version of the editor
 from before these files were kept; the play page says so and asks for the game to be

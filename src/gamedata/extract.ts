@@ -10,7 +10,7 @@
  * own, so Node can run it under its built-in type stripping without a build step. Keep it
  * that way: the import specifiers carry the `.ts` extension for the same reason.
  */
-import { animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
+import { animMember, animPath, imagesSharingGrp, slimAnim } from "../formats/dat/anim.ts";
 import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../formats/dat/iscript.ts";
 
 /** The member from whichever archive has it (later archives win), or null when none does. */
@@ -139,9 +139,11 @@ export interface UnitManifest {
   overlays: string[];
   missing: string[];
   /**
-   * The images that also have StarCraft: Remastered's 2x sprite, written as
+   * The images whose StarCraft: Remastered 2x sprite is here, written as
    * `unit/hd/main_NNN.anim`. Only an extraction from a Remastered installation has any;
-   * absent from a manifest written before there were.
+   * absent from a manifest written before there were. An image that is not in the list
+   * may still be drawn from the file of another image of its GRP that is (a few of those
+   * are in this list without being in `images`, kept for that reason alone).
    */
   hd?: number[];
 }
@@ -266,6 +268,22 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
     files.set(animPath(image), slimAnim(data));
     hd.push(image);
   });
+  // An image with no file of its own is drawn from the file of another image of its GRP
+  // (`imagesSharingGrp`). That one is usually reachable itself and already here; where it
+  // is not, its file is taken too, under its own number, so the loader finds it there.
+  const grpColumn = Array.from({ length: IMAGE_COUNT }, (_, i) => u32(images, i * 4));
+  for (const image of imageIds) {
+    if (files.has(animPath(image))) continue;
+    for (const other of imagesSharingGrp(grpColumn, image)) {
+      if (files.has(animPath(other))) break;
+      const data = read(animMember(other));
+      if (!data) continue;
+      files.set(animPath(other), slimAnim(data));
+      hd.push(other);
+      break;
+    }
+  }
+  hd.sort((a, b) => a - b);
 
   const manifest: UnitManifest = {
     images: imageIds,

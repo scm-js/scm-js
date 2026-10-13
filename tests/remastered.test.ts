@@ -221,3 +221,14 @@ if (installDir) {
     }, 120_000);
   });
 }
+
+describe("images that share a GRP", () => {
+  it("names the other images of the same GRP, lowest first, and none for an image alone on its GRP", async () => {
+    const { imagesSharingGrp } = await import("../src/formats/dat/anim");
+    const grp = [5, 9, 5, 7, 5];
+    expect(imagesSharingGrp(grp, 2)).toEqual([0, 4]);
+    expect(imagesSharingGrp(grp, 0)).toEqual([2, 4]);
+    expect(imagesSharingGrp(grp, 1)).toEqual([]);
+    expect(imagesSharingGrp(grp, 99)).toEqual([]);
+  });
+});

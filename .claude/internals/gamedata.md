@@ -233,6 +233,15 @@ to read; the game draws a face between the two. The play page takes versions 1�
 icons on the plates from an earlier copy. (The other pictures — green frames, the digits 1–5,
 larger frames in four colours — are not mapped.)
 
+**Version 6 (2026-10-13): the count down's beat.** One more optional member, `sound\glue\countdown.wav`
+(`PLAY_COUNTDOWN`): the play page's lobby counts down to a game between people with it, and it is a
+menu's sound, which `sfxdata.dat` does not list — so no copy had it, and the page sounded a tone of its
+own. Measured on the three sources: 1.16.1 has it in StarDat and BrooDat (8,008 bytes, 22 kHz mono, the
+same bytes); Remastered has its own at that name (31,608 bytes, 44.1 kHz stereo) and the old one, byte
+for byte, at `SD\sound\glue\countdown.wav`. A copy takes the one at the game's name, as it does for
+every other sound, so a Remastered copy counts down with Remastered's. Not required: a copy without it
+plays. The play page reads versions 1–6 (scm-sim `PLAY_VERSIONS`) and must be deployed first.
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the

@@ -167,7 +167,8 @@ left alone.
 
 A copy made from your own game, whether a 1.16 installation or Remastered, also keeps the
 files the game itself runs on: its computer players' scripts, the rules of each game type,
-the cursors, the wireframes and palette tables of its interface, and its sounds. The editor
+the cursors, the wireframes and palette tables of its interface, its sounds, and the beat
+of the count down before a game between people starts. The editor
 opens none of them. They are there for the play page at scmjs.dev/play, which runs a map in
 the browser from the same copy, so the game is installed once for both.
 

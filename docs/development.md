@@ -515,7 +515,7 @@ version is cut:
 | --- | --- | --- |
 | `ci` | every push to `main`, and every pull request against it | lint, the tests (vitest and the browser tests) and the web bundle, built and thrown away. Nothing is deployed and nothing is released. A pull request's run is read-only and does not publish the plugin typings. |
 | `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus that zip unpacked onto `nightly.editor.scmjs.dev`. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `editor.scmjs.dev`, and the docs site. |
+| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `scmjs.dev/editor`, and the docs site. |
 
 The cron exits early when `main` has not moved since the last nightly. The nightly is
 updated in place: its `nightly` tag is force-moved and its assets replaced, never deleted
@@ -609,14 +609,14 @@ prerelease identifiers as strings.
 
 | | deployed by | from |
 | --- | --- | --- |
-| `editor.scmjs.dev` | the `pages` job, on a tag | GitHub Pages on this repository |
+| `scmjs.dev/editor` | the `pages` job, on a tag | GitHub Pages on this repository, built for the `/editor/` path (the `PAGES_BASE` repository variable) and served there by a Cloudflare Worker in front of it |
 | `nightly.editor.scmjs.dev` | the `nightly-site` job, each nightly | one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch, carrying `CNAME` |
 | `docs.scmjs.dev` | the `docs` job, on a tag | the same shape, on `scm-js/docs` |
 
 The hosted editor is a release like every other way of running the editor: the site, the
 installers, the image and the notes are one tag. The nightly site is the nightly's own
 web zip unpacked, never a second build, which is why the nightly's notes can point at it:
-the page and the installers on that release are the same version. To put `editor.scmjs.dev` back on an older
+the page and the installers on that release are the same version. To put `scmjs.dev/editor` back on an older
 version, dispatch Build on that tag; the deploy is the only thing a re-run rewrites.
 
 The two editors are separate origins on purpose. The extracted game data lives in the

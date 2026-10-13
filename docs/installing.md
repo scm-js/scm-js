@@ -7,7 +7,7 @@ that first question. The [user guide](guide.md) starts once the editor is open.
 
 ## In the browser
 
-[editor.scmjs.dev](https://editor.scmjs.dev) is the newest numbered release. There is
+[scmjs.dev/editor](https://scmjs.dev/editor/) is the newest numbered release. There is
 nothing to install. Your maps stay on your own disk, and nothing is sent anywhere unless
 you use a network feature: a copy kept on your scmjs.dev account, a map you share for
 others to edit with you, or a question for the AI, all described in the user guide.

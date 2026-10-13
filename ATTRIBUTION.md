@@ -242,8 +242,8 @@ offline (`scripts/bundle-plugin-runtimes.mjs`), and add its license files to the
 - The **container image** is built on `nginx:alpine` (nginx, BSD-2-Clause; Alpine Linux
   packages under their own licenses).
 - **npm** publishes `@scm-js/plugin-api`.
-- **Cloudflare** serves `editor.scmjs.dev` and runs the Workers for the game-data
-  download, the scmscx.com plugin and editor link previews. The hosted editor (`editor.scmjs.dev` and its nightly) and the
+- **Cloudflare** serves `scmjs.dev` (the site and the editor at `scmjs.dev/editor`) and runs the Workers for the game-data
+  download, the scmscx.com plugin and editor link previews. The hosted editor (`scmjs.dev/editor` and its nightly) and the
   documentation load Cloudflare Web Analytics, which counts page views without cookies; a
   desktop app or container build does not load it.
 - **scmjs.dev** accounts, the AI assistant and shared maps are served by the project's

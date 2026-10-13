@@ -69,6 +69,13 @@ virus scanner, or the launch path: a Windows build run from `\\wsl.localhost\…
 to evaluate its main script and never reaches `dom-ready`, so copy `release/win-unpacked` to
 `/mnt/c/…` before running it (`docs/development.md`).
 
+`src/moveIn.ts` is `main.tsx`'s second import and ends in a top-level `await`: on the first visit
+to `scmjs.dev/editor/` it holds every module after it until the settings kept under the editor's
+old address have arrived (`desktop-releases.md`, the hosted editor). Anything that must read
+storage at evaluation time has to stay *after* it in `main.tsx`'s imports — and a static chunk
+split out of the entry is evaluated before the entry's body, so it must not read storage as it
+loads.
+
 `src/devReactTracks.ts` (imported first by `main.tsx`, and only there) exists because React 19's
 dev-only "Components" performance track made startup unusable: it logs every component render to the
 performance timeline and serialises its props, and mounting the chrome is ~1700 renders in one commit —

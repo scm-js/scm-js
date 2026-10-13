@@ -8,7 +8,8 @@
  *
  * The conversation, all of it with this page's own origin and no other:
  *   → `{ type: "scmjs.install.ready" }`                          said once, to the framing page
- *   ← `{ type: "scmjs.install", files: [{ path, file }] }`       a folder pick: each file with its path in the folder
+ *   ← `{ type: "scmjs.install", files: [{ path, file }], lighting? }`  a folder pick: each file with its path in the
+ *                                                                 folder; `lighting`: keep what the real-time lighting reads
  *   → `{ type: "scmjs.install.progress", fraction, label }`
  *   → `{ type: "scmjs.install.done", copy }`                     the new copy's stamp
  *   → `{ type: "scmjs.install.error", message }`
@@ -33,7 +34,7 @@ let busy = false;
 
 window.addEventListener("message", (e: MessageEvent) => {
   if (e.origin !== location.origin || !e.source) return;
-  const data = e.data as { type?: unknown; files?: unknown } | null;
+  const data = e.data as { type?: unknown; files?: unknown; lighting?: unknown } | null;
   if (!data || data.type !== "scmjs.install") return;
   const reply = (message: object) => (e.source as Window).postMessage(message, location.origin);
   if (busy) { reply({ type: "scmjs.install.error", message: "An installation is already running." }); return; }
@@ -44,7 +45,7 @@ window.addEventListener("message", (e: MessageEvent) => {
       const existing = await storedCopy();
       const kind = existing ? copyKind(existing) : null;
       const beside = kind === "classic" || kind === "mod";
-      const copy = await installFromPickedRemastered(files, (fraction, label) => reply({ type: "scmjs.install.progress", fraction, label }), beside ? REMASTERED_PROFILE : undefined);
+      const copy = await installFromPickedRemastered(files, (fraction, label) => reply({ type: "scmjs.install.progress", fraction, label }), beside ? REMASTERED_PROFILE : undefined, { lighting: data.lighting === true });
       startWithRemastered(browserStorage(), beside ? REMASTERED_PROFILE.id : undefined);
       reply({ type: "scmjs.install.done", copy });
     } catch (err) {

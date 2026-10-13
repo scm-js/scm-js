@@ -206,6 +206,25 @@ play page plays from versions 1–3 and draws a version 2 copy with the classic 
 and icons, saying nothing. **The play page must accept a version before an editor that writes it
 is released** (scm-sim `web/gameSource.ts#PLAY_VERSIONS`), or a new copy is refused there.
 
+**Version 4 (2026-10-13): the lighting's layers.** The play page lights Remastered's sprites as the
+game's real-time lighting does (scm-sim `web/spritePass.ts`), from four layers of a sprite file the
+editor has no use for and `slimAnim` drops: `normal`, `specular`, `ao_depth`, `emissive`
+(`ANIM_LIT_LAYERS`; `slimAnim(bytes, kept)` takes the list). **Asked for at install** — the user's
+decision: a tick box, off, in the Game Data dialog (web only; dialog state, not kept) and on the
+play page's Game Files dialog, which passes `lighting` in its `scmjs.install` message;
+`ExtractRequest.lighting` → `copyPlaySet(…, { lighting })`, and the stamp's `play.lit` says the
+copy has them. With it `copyPlaySet` reads **every**
+image's `main_NNN.anim` — the ones the extraction already wrote among them — and writes it with
+six layers — and takes `anim/main.lit` (`PLAY_LIGHTS`, 462 KB: the game's lights, a frame of an
+image at a time; scm-sim `src/render/lit.ts` has the format) — over the editor's two-layer file where the copy has one (the store truncates and
+writes; the editor reads either, `parseAnim` taking the layers by name). A file written over is
+not counted again and its bytes are the difference. Measured over the installation's 868
+`HD2/anim/main_*.anim` (513 MB whole): diffuse 209 MB, teamcolor 30, normal 74, ao_depth 74,
+specular 37, emissive 15, bright 74 (kept by nobody); 216 files have a normal layer at all. A copy
+is 3166 files / 897 MB, 66 s with them and 698 MB, 45 s without, as it was. The play page takes
+versions 1–4 and offers the lighting from a version 4 copy whose stamp says `lit`; from any other
+its option is greyed and says to choose the folder again with the box ticked.
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the

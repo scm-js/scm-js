@@ -20,7 +20,7 @@ import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
 import { resetUnitAssets, retryFailedParts } from "../formats/units/load";
 import { clearFrameCache } from "../formats/units/sprites";
-import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder } from "../gamedata/install";
+import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder, type RemasteredOptions } from "../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "../gamedata/profiles";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";
 import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../gamedata/source";
@@ -108,8 +108,8 @@ export async function installDataSetInto(store: Store, profile: GameDataProfile,
  * switch to it — the route for someone who already has the 1.16 files and wants the tiles
  * Remastered added.
  */
-export async function installRemasteredInto(store: Store, folder: RemasteredFolder, progress?: InstallProgress): Promise<AssetSource> {
-  const copy = await installFromRemastered(folder, progress, REMASTERED_PROFILE);
+export async function installRemasteredInto(store: Store, folder: RemasteredFolder, progress?: InstallProgress, options?: RemasteredOptions): Promise<AssetSource> {
+  const copy = await installFromRemastered(folder, progress, REMASTERED_PROFILE, options);
   const before = store.get(gameDataSourceAtom);
   store.set(gameDataProfileAtom, { profile: profileOf(copy).id });
   const next = adoptStoredCopy(copy);

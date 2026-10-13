@@ -198,6 +198,12 @@ export async function installFromZipUrl(url: string, progress?: InstallProgress)
 
 /** A Remastered installation as the user handed it over: the folder, or (no folder picker here) the files in it. */
 export type RemasteredFolder = FileSystemDirectoryHandle | readonly File[];
+/**
+ * What a copy from Remastered may keep beyond the usual. `lighting`: the layers of its
+ * sprites the play page's real-time lighting reads, about 200 MB more — left out unless
+ * asked for, the editor drawing with none of them.
+ */
+export interface RemasteredOptions { lighting?: boolean }
 
 /** Whether a picked folder is an installation the launcher made — it has `.build.info` at the top. */
 export async function isRemasteredFolder(folder: RemasteredFolder): Promise<boolean> {
@@ -217,13 +223,13 @@ const pickedPaths = (files: readonly File[]) => files.map((f) => (f as File & { 
  * own data, or under `profile` as a data set beside it. Nothing is copied but the files
  * the extraction asks for: the folder is read in place, a range at a time.
  */
-export function installFromRemastered(folder: RemasteredFolder, progress?: InstallProgress, profile?: GameDataProfile): Promise<StoredCopy> {
+export function installFromRemastered(folder: RemasteredFolder, progress?: InstallProgress, profile?: GameDataProfile, options: RemasteredOptions = {}): Promise<StoredCopy> {
   if (Array.isArray(folder)) {
     const paths = pickedPaths(folder);
-    return installFromPickedRemastered((folder as readonly File[]).map((file, i) => ({ path: paths[i], file })), progress, profile);
+    return installFromPickedRemastered((folder as readonly File[]).map((file, i) => ({ path: paths[i], file })), progress, profile, options);
   }
   progress?.(0, "Opening the installation");
-  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], folder as FileSystemDirectoryHandle);
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], folder as FileSystemDirectoryHandle, options.lighting);
 }
 
 /**
@@ -231,7 +237,7 @@ export function installFromRemastered(folder: RemasteredFolder, progress?: Insta
  * folder when it is handed from one page to another, so a page that picked the folder
  * elsewhere (`pages/install.ts`) sends the two side by side.
  */
-export function installFromPickedRemastered(files: readonly PickedFile[], progress?: InstallProgress, profile?: GameDataProfile): Promise<StoredCopy> {
+export function installFromPickedRemastered(files: readonly PickedFile[], progress?: InstallProgress, profile?: GameDataProfile, options: RemasteredOptions = {}): Promise<StoredCopy> {
   // Only the storage itself goes to the worker: the folder's other files are of no use to it.
   const root = installRootOf(files.map((f) => f.path));
   if (root === null) return Promise.reject(new InstallError("That folder is not a StarCraft: Remastered installation."));
@@ -241,7 +247,7 @@ export function installFromPickedRemastered(files: readonly PickedFile[], progre
     if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
   }
   progress?.(0, "Opening the installation");
-  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], picked);
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], picked, options.lighting);
 }
 
 function runWorker(
@@ -251,6 +257,7 @@ function runWorker(
   profile?: GameDataProfile,
   overlay: NonNullable<ExtractRequest["overlay"]> = [],
   remastered?: ExtractRequest["remastered"],
+  lighting = false,
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -282,7 +289,7 @@ function runWorker(
       }
       resolve({ ...msg.stamp, where: msg.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}) };
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

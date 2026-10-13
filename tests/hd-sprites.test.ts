@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { ANIM_VERSION_HD2, animMember, animPath, isAnim, parseAnim, slimAnim } from "../src/formats/dat/anim";
+import { ANIM_KEPT_LAYERS, ANIM_LIT_LAYERS, ANIM_VERSION_HD2, animMember, animPath, isAnim, parseAnim, slimAnim } from "../src/formats/dat/anim";
 import { decodeDxtRect, parseDds } from "../src/formats/dds";
 
 /* ── Files built from the formats ───────────────────────── */
@@ -180,6 +180,20 @@ describe("a 2x sprite file", () => {
       expect(Buffer.compare(slim.subarray(b.offset, b.offset + b.size), bytes.subarray(a.offset, a.offset + a.size)), name).toBe(0);
       expect([b.width, b.height]).toEqual([a.width, a.height]);
     }
+  });
+
+  it("keeps the layers it is asked to: a copy for playing has the lighting's too", () => {
+    const bytes = fullAnim();
+    const lit = slimAnim(bytes, [...ANIM_KEPT_LAYERS, ...ANIM_LIT_LAYERS]);
+    const before = parseAnim(bytes)!, after = parseAnim(lit)!;
+    // All but the second colour picture, which nothing reads.
+    expect(after.layers.filter((l) => l.size > 0).map((l) => l.name)).toEqual(before.layers.filter((l) => l.size > 0 && l.name !== "bright").map((l) => l.name));
+    expect(lit.length).toBeGreaterThan(slimAnim(bytes).length);
+    expect(lit.length).toBeLessThan(bytes.length);
+    const a = before.layers.find((l) => l.name === "normal")!, b = after.layers.find((l) => l.name === "normal")!;
+    expect(Buffer.compare(lit.subarray(b.offset, b.offset + b.size), bytes.subarray(a.offset, a.offset + a.size))).toBe(0);
+    // And the editor's own cut of it is the cut of the whole file.
+    expect(Buffer.compare(slimAnim(lit), slimAnim(bytes))).toBe(0);
   });
 
   it("is left as it is when already cut down, or when it is not a sprite file", () => {

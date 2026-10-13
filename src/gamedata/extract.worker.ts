@@ -31,6 +31,8 @@ export interface ExtractRequest {
   overlay?: { path: string; bytes: ArrayBuffer }[];
   /** A StarCraft: Remastered installation folder, read in the archives' place. */
   remastered?: FileSystemDirectoryHandle | PickedFile[];
+  /** Keep what the play page's real-time lighting reads of Remastered's sprites (about 200 MB more). */
+  lighting?: boolean;
 }
 
 export type ExtractResponse =
@@ -102,6 +104,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
               { sfxDat: result.files.get("arr/sfxdata.dat"), sfxTbl: result.files.get("arr/sfxdata.tbl"), imagesDat: result.files.get("arr/images.dat"), imagesTbl: result.files.get("arr/images.tbl") },
               (f, label) => post({ kind: "progress", fraction: 0.88 + f * 0.12, label }),
               (path) => result.files.has(path),
+              { lighting: req.lighting === true },
             );
           } catch (err) {
             // The editor's copy is whole without it.

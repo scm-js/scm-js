@@ -23,7 +23,7 @@
  * Pure, and importing only what `extract.ts` does.
  */
 
-import { animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
+import { ANIM_KEPT_LAYERS, ANIM_LIT_LAYERS, animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
 
 /**
  * Bumped when the list grows. 2 (2026-10-12): the pictures of every image, not only the
@@ -31,8 +31,22 @@ import { animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
  * draws without what it lacks. 3 (2026-10-13): Remastered's cursors, wireframes, resource
  * icons and creep edges, which the play page falls back to the classic ones without. (What
  * its water and lava move by is among the editor's own files, in every Remastered copy.)
+ * 4 (2026-10-13): where the person asked for it at install (`lighting`), every Remastered
+ * sprite with the layers the game's real-time lighting reads, the ones the editor's own copy
+ * holds cut down among them — about 200 MB more, and the stamp says `lit`. The play page
+ * offers the lighting from such a copy and plays without it from any other.
  */
-export const PLAY_VERSION = 3;
+export const PLAY_VERSION = 4;
+
+/**
+ * Remastered's lights: for every image's every frame one light or none — where, what colour,
+ * how far, how strong — which its real-time lighting lights what is near a shot, a fire, an
+ * explosion by. Kept with the lighting's layers, and of no use without them.
+ */
+export const PLAY_LIGHTS = "anim\\main.lit";
+
+/** What a sprite file keeps in a copy for playing: the editor's two layers and the lighting's four. */
+const PLAY_ANIM_LAYERS: readonly string[] = [...ANIM_KEPT_LAYERS, ...ANIM_LIT_LAYERS];
 
 const TILESETS = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"];
 const GAME_TYPES = ["melee", "ctf", "greed2500", "greed5000", "greed7500", "greed10000", "slaughter15", "slaughter30", "slaughter45", "slaughter60", "suddendeath"];
@@ -125,6 +139,8 @@ export interface PlayStamp {
   files: number;
   sounds: number;
   bytes: number;
+  /** The Remastered sprites kept the layers the real-time lighting reads (asked for at install). */
+  lit?: boolean;
 }
 
 /** A member under the stored copy: the game's path, lower case, forward slashes. */
@@ -139,6 +155,8 @@ const stored = (member: string) => member.toLowerCase().replaceAll("\\", "/");
  *
  * `tables`: the sound and image tables, which the extraction has already read. `has`:
  * whether the copy holds a path already (the editor's own files), so nothing is read twice.
+ * `options.lighting`: keep the lighting's layers in every Remastered sprite — then the
+ * sprites the copy holds are read again too, and written over whole.
  */
 export async function copyPlaySet(
   read: (member: string) => Promise<Uint8Array | null>,
@@ -146,13 +164,17 @@ export async function copyPlaySet(
   tables: { sfxDat: Uint8Array | undefined; sfxTbl: Uint8Array | undefined; imagesDat?: Uint8Array; imagesTbl?: Uint8Array },
   progress?: (fraction: number, label: string) => void,
   has: (path: string) => boolean = () => false,
+  options: { lighting?: boolean } = {},
 ): Promise<PlayStamp | null> {
+  const lighting = options.lighting === true;
   const sounds = tables.sfxDat && tables.sfxTbl ? playSoundMembers(tables.sfxDat, tables.sfxTbl) : [];
   const images = tables.imagesDat && tables.imagesTbl ? playImageMembers(tables.imagesDat, tables.imagesTbl) : { files: [], sprites: [] };
   const pictures = images.files.filter((member) => !has(stored(member)));
-  const sprites = images.sprites.filter((image) => !has(animPath(image)));
+  // The sprites the copy has not got; with the lighting kept, every image's — the copy's own are the editor's, cut
+  // down to what it draws with.
+  const sprites = lighting ? images.sprites : images.sprites.filter((image) => !has(animPath(image)));
   const total = PLAY_MEMBERS.length + pictures.length + sprites.length + sounds.length;
-  let done = 0, files = 0, heard = 0, bytes = 0, lacking = false;
+  let done = 0, files = 0, heard = 0, bytes = 0, lacking = false, lit = false;
   for (const member of PLAY_MEMBERS) {
     const data = await read(member);
     if (data) { await write(stored(member), data); files++; bytes += data.length; }
@@ -160,7 +182,9 @@ export async function copyPlaySet(
     done++;
   }
   if (lacking) return null;
-  // The pictures the editor's own copy leaves out, and their Remastered sprites cut down as the editor's are.
+  // The pictures the editor's own copy leaves out, and their Remastered sprites cut down as the editor's are — or,
+  // with the lighting kept, every sprite with its layers, written over the editor's own where the copy has it
+  // (the editor reads either).
   for (const member of pictures) {
     const data = await read(member);
     if (data) { await write(stored(member), data); files++; bytes += data.length; }
@@ -168,8 +192,20 @@ export async function copyPlaySet(
   }
   for (const image of sprites) {
     const whole = await read(animMember(image));
-    if (whole) { const data = slimAnim(whole); await write(animPath(image), data); files++; bytes += data.length; }
+    if (whole) {
+      const data = slimAnim(whole, lighting ? PLAY_ANIM_LAYERS : ANIM_KEPT_LAYERS), path = animPath(image);
+      await write(path, data);
+      // (One the copy had is counted there already, at the size the editor keeps it.)
+      const more = lighting ? data.length - slimAnim(whole).length : 0;
+      if (has(path)) bytes += more;
+      else { files++; bytes += data.length; }
+      if (more > 0) lit = true;
+    }
     if (++done % 25 === 0) progress?.(done / total, "Game pictures");
+  }
+  if (lit) {
+    const data = await read(PLAY_LIGHTS);
+    if (data) { await write(stored(PLAY_LIGHTS), data); files++; bytes += data.length; }
   }
   for (const member of sounds) {
     const data = await read(member);
@@ -177,5 +213,6 @@ export async function copyPlaySet(
     if (++done % 25 === 0) progress?.(done / total, `Game sounds · ${heard} of ${sounds.length}`);
   }
   progress?.(1, "Game sounds");
-  return heard > 0 ? { version: PLAY_VERSION, files, sounds: heard, bytes } : null;
+  // (`lit` only where a sprite did keep such a layer: a 1.16 installation has no such sprites to keep.)
+  return heard > 0 ? { version: PLAY_VERSION, files, sounds: heard, bytes, ...(lit ? { lit: true } : {}) } : null;
 }

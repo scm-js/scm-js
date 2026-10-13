@@ -180,9 +180,19 @@ From a Remastered installation it keeps the rest of Remastered's interface as we
 the play page draws with and the editor does not: the console, the command and resource
 icons, the cursors, the wireframes and each tileset's creep edges, about 35 MB.
 
+It can keep more of every Remastered sprite too. A unit's sprite file holds its colours
+and, beside them, what the game's real-time lighting reads: which way each pixel faces,
+what shines, how much light reaches it, what glows. The editor draws with the colours alone
+and keeps only those. Tick "Keep the files for real-time lighting" when you choose the
+folder, here or on the play page, and the copy keeps the lighting's layers as well, about
+200 MB more; the play page can then light units as Remastered does, under its Options. A
+copy made without them plays the same in every other way, and choosing the folder again
+with the box ticked adds them.
+
 The sounds are most of it: about 1,100 files, roughly 95 MB from a 1.16 installation and
 280 MB from Remastered, whose sounds are stored uncompressed. A Remastered copy comes to
-about 700 MB in all, and installing takes correspondingly longer. The files are written
+about 700 MB in all, 900 MB with the lighting's files, and installing takes correspondingly
+longer. The files are written
 one at a time as they are read, so the size is on disk and not in memory.
 
 The play page can also make the copy itself: choose a StarCraft: Remastered folder there

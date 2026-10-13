@@ -136,6 +136,8 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const [newName, setNewName] = useState("");
   const setFolderInput = useRef<HTMLInputElement>(null);
   const remasteredInput = useRef<HTMLInputElement>(null);
+  // Asked for at install and not kept: what the play page's real-time lighting reads of Remastered's sprites.
+  const [lighting, setLighting] = useState(false);
   useEffect(() => {
     let cancelled = false;
     listDataSets().then((list) => { if (!cancelled) setSets(list); }, () => {});
@@ -183,7 +185,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const remasteredOn = () => " " + t("Remastered graphics are on; View ▸ Remastered Graphics goes back to the classic ones.");
 
   const fromRemastered = (folder: RemasteredFolder) => run(async () => {
-    const copy = await installFromRemastered(folder, progress);
+    const copy = await installFromRemastered(folder, progress, undefined, { lighting });
     turnOnRemasteredGraphics(store);
     adopted(adoptStoredCopy(copy), t("Installed {summary} from your StarCraft: Remastered installation.", { summary: copy.summary }) + remasteredOn() + kept(copy.where), true);
   });
@@ -250,7 +252,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   /** Data sets: StarCraft: Remastered beside the copy already here. */
   const addRemastered = (folder: RemasteredFolder) => run(async () => {
     if (!(await isRemasteredFolder(folder))) throw new Error(t("That folder is not a StarCraft: Remastered installation. Choose the folder the game is installed in."));
-    const next = await installRemasteredInto(store, folder, progress);
+    const next = await installRemasteredInto(store, folder, progress, { lighting });
     setMessage({ text: t("Installed {summary} from your StarCraft: Remastered installation.", { summary: next.stored?.summary ?? next.label }) + remasteredOn() + kept(next.stored?.where ?? "opfs") });
     toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name: REMASTERED_PROFILE.name }) + remasteredOn() });
   });
@@ -339,6 +341,9 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
                 {t("StarCraft: Remastered added tiles to most tilesets, which a 1.16 copy cannot draw. Choose the folder the game is installed in: its files are read from there and kept beside the copy you have.")}
               </p>
             )}
+            {!haveRemastered && !adding && !desktop && (
+              <Check label={t("Keep the files for real-time lighting on the play page (about 200 MB more)")} checked={lighting} disabled={!!busy} onChange={(e) => setLighting(e.target.checked)} />
+            )}
           </Group>
         )}
 
@@ -372,6 +377,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
                 {t("A classic (1.16) installation keeps")}{" "}<span className="mono">StarDat.mpq</span> and <span className="mono">BrooDat.mpq</span> {" "}{t("in the game folder. A StarCraft: Remastered installation has neither: choose its folder and the files are read out of it.")}
                 {desktop ? t(" The search also looks next to the app, so the two files dropped beside it are found.") : ""}
               </p>
+              {!desktop && <Check label={t("Keep the files for real-time lighting on the play page (about 200 MB more)")} checked={lighting} disabled={!!busy} onChange={(e) => setLighting(e.target.checked)} />}
               {desktop && desktopCopy?.status === "ready" && (
                 <p className="hint" style={{ marginTop: 4 }}>{t("App copy: {files} files from {from}, {toLocaleDateString}", { files: desktopCopy.files, from: desktopCopy.from, toLocaleDateString: new Date(desktopCopy.at).toLocaleDateString() })}</p>
               )}

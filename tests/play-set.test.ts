@@ -32,6 +32,9 @@ describe("the play set", () => {
     expect(PLAY_REQUIRED).toContain("triggers\\melee.trg");
     expect(PLAY_REQUIRED).not.toContain("triggers\\ctf.trg");
     expect(PLAY_REQUIRED).not.toContain("cursor\\arrow.grp");
+    // Remastered's console is there for a Remastered installation and no 1.16 one has it.
+    expect(PLAY_MEMBERS).toContain("hd2\\game\\consoles\\zerg\\console_center.dds");
+    expect(PLAY_REQUIRED.some((m) => m.startsWith("hd2\\"))).toBe(false);
   });
 
   it("reads the sounds out of the game's table: each file once, the unused ids skipped", () => {

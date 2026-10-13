@@ -171,10 +171,12 @@ Not done: the 4x terrain and sprites, and `npm run extract` from a Remastered fo
 **The play set** (`gamedata/play.ts`, 2026-10-12): what the game itself runs on, kept in a stored
 copy for the site's play page (scm-sim at `scmjs.dev/play/`, same origin, so it reads the copy in
 OPFS rather than asking for the game twice — the user's call: an owner of Remastered alone must be
-able to play). The editor never opens any of it. `PLAY_MEMBERS` is the fixed part (94 files, ~3 MB:
+able to play). The editor never opens any of it. `PLAY_MEMBERS` is the fixed part (104 files, ~5 MB:
 `arr/portdata.*`, `scripts/{aiscript,bwscript}.bin`, `triggers/*.trg`, eight `game/` pictures,
 `dlgs/tile.grp`, the three wireframe GRPs, per tileset the creep-edge GRP and five palette PCXs,
-the cursors); `playSoundMembers` reads the rest out of `sfxdata.dat` + `.tbl` (1118 of the 1123
+the cursors, and — optional, a Remastered installation's only — Remastered's console: nine
+`hd2/game/consoles/<race>/console_{left,center,right}.dds` and `hd2/unit/cmdicons/cmdicons.dds.grp`,
+~2 MB); `playSoundMembers` reads the rest out of `sfxdata.dat` + `.tbl` (1118 of the 1123
 named are in either source; 279 MB from Remastered, ~95 MB decoded from the 1.16 archives). They
 are stored under the game's own paths (`assetPath`), unlike the tileset remaps the editor renames
 (`tileset/<name>.ofire.pcx`, `tileset/stat_txt.tbl`) — the play page maps those two itself

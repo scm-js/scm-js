@@ -35,13 +35,18 @@ export const PLAY_MEMBERS: readonly string[] = [
   ...["grpwire", "tranwire", "wirefram"].map((n) => `unit\\wirefram\\${n}.grp`),
   ...TILESETS.flatMap((t) => [`tileset\\${t}.grp`, ...["dark", "green", "red", "shift", "trans50"].map((n) => `tileset\\${t}\\${n}.pcx`)]),
   ...CURSORS.map((c) => `cursor\\${c}.grp`),
+  // StarCraft: Remastered's own console, which only a Remastered installation has: three pieces a race, and the
+  // command icons at twice the size. The play page draws them with Remastered's graphics and the classic console without.
+  ...["terran", "zerg", "protoss"].flatMap((race) => ["left", "center", "right"].map((piece) => `hd2\\game\\consoles\\${race}\\console_${piece}.dds`)),
+  "hd2\\unit\\cmdicons\\cmdicons.dds.grp",
 ];
 
 /**
  * Members of the fixed part a game cannot start without. The rest (the other game types'
- * rules, a cursor) is copied when it is there and done without when it is not.
+ * rules, a cursor, Remastered's console) is copied when it is there and done without when
+ * it is not.
  */
-export const PLAY_REQUIRED: readonly string[] = PLAY_MEMBERS.filter((m) => !m.startsWith("cursor\\") && (!m.startsWith("triggers\\") || m === "triggers\\melee.trg"));
+export const PLAY_REQUIRED: readonly string[] = PLAY_MEMBERS.filter((m) => !m.startsWith("cursor\\") && !m.startsWith("hd2\\") && (!m.startsWith("triggers\\") || m === "triggers\\melee.trg"));
 
 /** How many sounds sfxdata.dat lists (the first is none). */
 const SFX_COUNT = 1144;

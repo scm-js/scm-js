@@ -4,22 +4,33 @@
  * the same folder, under the game's own paths — for the site's play page (scmjs.dev/play),
  * which runs the game on the same origin and reads the copy in place of a second one.
  *
- * Two parts. The fixed list below is small (a few megabytes): the tables and scripts the
+ * Three parts. The fixed list below is small (a few megabytes): the tables and scripts the
  * game's start reads, its interface's shared pictures, the creep edges and palette tables
  * of each tileset, the cursors. The sounds are the large part — eleven hundred files, about
  * 90 MB from a 1.16 installation and 280 MB from Remastered's — and which they are is the
- * game's own list (`arr/sfxdata.dat` over `arr/sfxdata.tbl`).
+ * game's own list (`arr/sfxdata.dat` over `arr/sfxdata.tbl`). And the pictures the editor
+ * leaves out: it copies the graphics of what can be placed on a map and what those lead to
+ * (885 of the 999 images), and the game in play draws the rest too — a building under
+ * construction, a zerg birth, the protoss warp-in, every spell's mark on a unit, the
+ * selection circles — about a hundred more files, with their Remastered sprites where the
+ * installation has them.
  *
  * Only a full installation has all of it: Blizzard's free StarEdit package has no sounds,
  * and a copy made from it carries no `play` in its stamp. What the classic game's own
  * interface needs beyond this (fonts, dialogs, console art) is not here: a Remastered
  * installation has not got it, and the play page brings its own.
  *
- * Pure and free of imports, like `extract.ts`.
+ * Pure, and importing only what `extract.ts` does.
  */
 
-/** Bumped when the list changes in a way a copy made before cannot serve. */
-export const PLAY_VERSION = 1;
+import { animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
+
+/**
+ * Bumped when the list grows. 2 (2026-10-12): the pictures of every image, not only the
+ * ones the editor can place — the play page plays from a copy of an earlier version and
+ * draws without what it lacks.
+ */
+export const PLAY_VERSION = 2;
 
 const TILESETS = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"];
 const GAME_TYPES = ["melee", "ctf", "greed2500", "greed5000", "greed7500", "greed10000", "slaughter15", "slaughter30", "slaughter45", "slaughter60", "suddendeath"];
@@ -71,6 +82,33 @@ export function playSoundMembers(sfxdataDat: Uint8Array, sfxdataTbl: Uint8Array)
   return [...out];
 }
 
+const IMAGE_COUNT = 999;
+
+/**
+ * Everything images.dat can draw, as members: each image's GRP and the overlay position
+ * files its six columns name (`unit\\…`, from `arr/images.tbl`), each once, and its
+ * Remastered sprite by number. Empty when the tables are not the game's.
+ */
+export function playImageMembers(imagesDat: Uint8Array, imagesTbl: Uint8Array): { files: string[]; sprites: number[] } {
+  if (imagesDat.length < IMAGE_COUNT * 38 || imagesTbl.length < 2) return { files: [], sprites: [] };
+  const dat = new DataView(imagesDat.buffer, imagesDat.byteOffset, imagesDat.byteLength);
+  const tbl = new DataView(imagesTbl.buffer, imagesTbl.byteOffset, imagesTbl.byteLength);
+  const count = tbl.getUint16(0, true);
+  const files = new Set<string>();
+  const take = (index: number) => {
+    if (index < 1 || index > count) return;
+    let name = "";
+    for (let at = tbl.getUint16(index * 2, true); at < imagesTbl.length && imagesTbl[at] !== 0; at++) name += String.fromCharCode(imagesTbl[at]);
+    if (name) files.add(`unit\\${name.toLowerCase()}`);
+  };
+  for (let i = 0; i < IMAGE_COUNT; i++) {
+    take(dat.getUint32(i * 4, true));
+    // The GRP column, six columns of a byte, the script column, then the six overlay columns.
+    for (let k = 0; k < 6; k++) take(dat.getUint32(IMAGE_COUNT * (14 + k * 4) + i * 4, true));
+  }
+  return { files: [...files], sprites: Array.from({ length: IMAGE_COUNT }, (_, i) => i) };
+}
+
 /** What a stamp says of a copy's play set. */
 export interface PlayStamp {
   version: number;
@@ -90,16 +128,21 @@ const stored = (member: string) => member.toLowerCase().replaceAll("\\", "/");
  * — a required file or every sound is missing — in which case what was written is left
  * (it is small) and the copy simply does not say it can be played from.
  *
- * `sfx`: the two sound tables, which the extraction has already read.
+ * `tables`: the sound and image tables, which the extraction has already read. `has`:
+ * whether the copy holds a path already (the editor's own files), so nothing is read twice.
  */
 export async function copyPlaySet(
   read: (member: string) => Promise<Uint8Array | null>,
   write: (path: string, data: Uint8Array) => Promise<void>,
-  sfx: { dat: Uint8Array | undefined; tbl: Uint8Array | undefined },
+  tables: { sfxDat: Uint8Array | undefined; sfxTbl: Uint8Array | undefined; imagesDat?: Uint8Array; imagesTbl?: Uint8Array },
   progress?: (fraction: number, label: string) => void,
+  has: (path: string) => boolean = () => false,
 ): Promise<PlayStamp | null> {
-  const sounds = sfx.dat && sfx.tbl ? playSoundMembers(sfx.dat, sfx.tbl) : [];
-  const total = PLAY_MEMBERS.length + sounds.length;
+  const sounds = tables.sfxDat && tables.sfxTbl ? playSoundMembers(tables.sfxDat, tables.sfxTbl) : [];
+  const images = tables.imagesDat && tables.imagesTbl ? playImageMembers(tables.imagesDat, tables.imagesTbl) : { files: [], sprites: [] };
+  const pictures = images.files.filter((member) => !has(stored(member)));
+  const sprites = images.sprites.filter((image) => !has(animPath(image)));
+  const total = PLAY_MEMBERS.length + pictures.length + sprites.length + sounds.length;
   let done = 0, files = 0, heard = 0, bytes = 0, lacking = false;
   for (const member of PLAY_MEMBERS) {
     const data = await read(member);
@@ -108,6 +151,17 @@ export async function copyPlaySet(
     done++;
   }
   if (lacking) return null;
+  // The pictures the editor's own copy leaves out, and their Remastered sprites cut down as the editor's are.
+  for (const member of pictures) {
+    const data = await read(member);
+    if (data) { await write(stored(member), data); files++; bytes += data.length; }
+    if (++done % 25 === 0) progress?.(done / total, "Game pictures");
+  }
+  for (const image of sprites) {
+    const whole = await read(animMember(image));
+    if (whole) { const data = slimAnim(whole); await write(animPath(image), data); files++; bytes += data.length; }
+    if (++done % 25 === 0) progress?.(done / total, "Game pictures");
+  }
   for (const member of sounds) {
     const data = await read(member);
     if (data) { await write(stored(member), data); heard++; bytes += data.length; }

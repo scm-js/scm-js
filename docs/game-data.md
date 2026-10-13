@@ -171,9 +171,14 @@ the cursors, the wireframes and palette tables of its interface, and its sounds.
 opens none of them. They are there for the play page at scmjs.dev/play, which runs a map in
 the browser from the same copy, so the game is installed once for both.
 
+It also keeps the pictures the editor has no use for. The editor copies the graphics of
+what can be placed on a map; a game in play draws more than that: a building going up, a
+zerg unit hatching, a protoss building warping in, the mark every spell leaves on a unit,
+the selection circles. Those are about 170 more files.
+
 The sounds are most of it: about 1,100 files, roughly 95 MB from a 1.16 installation and
 280 MB from Remastered, whose sounds are stored uncompressed. A Remastered copy comes to
-about 640 MB in all, and installing takes correspondingly longer. The files are written
+about 670 MB in all, and installing takes correspondingly longer. The files are written
 one at a time as they are read, so the size is on disk and not in memory.
 
 The play page can also make the copy itself: choose a StarCraft: Remastered folder there

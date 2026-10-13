@@ -96,7 +96,13 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
           playing = true;
           let play = null;
           try {
-            play = await copyPlaySet(member, write, { dat: result.files.get("arr/sfxdata.dat"), tbl: result.files.get("arr/sfxdata.tbl") }, (f, label) => post({ kind: "progress", fraction: 0.88 + f * 0.12, label }));
+            play = await copyPlaySet(
+              member,
+              write,
+              { sfxDat: result.files.get("arr/sfxdata.dat"), sfxTbl: result.files.get("arr/sfxdata.tbl"), imagesDat: result.files.get("arr/images.dat"), imagesTbl: result.files.get("arr/images.tbl") },
+              (f, label) => post({ kind: "progress", fraction: 0.88 + f * 0.12, label }),
+              (path) => result.files.has(path),
+            );
           } catch (err) {
             // The editor's copy is whole without it.
             problems.push(`The game's own files for playing were not copied: ${err instanceof Error ? err.message : String(err)}`);

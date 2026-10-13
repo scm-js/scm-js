@@ -66,13 +66,16 @@ export default defineConfig(() => ({
   // Where the site is served from: GitHub Pages under a repository path needs `/scm-js/`,
   // a custom domain and the desktop app want `/`. The build workflow sets it.
   base: process.env.SCMJS_BASE || '/',
-  // Two pages of one build: the editor, and the Game Data page (`data.html`) — what a
-  // browser holds of the game's files, without the editor around it. They share chunks.
+  // Three pages of one build: the editor, the Game Data page (`data.html`) — what a
+  // browser holds of the game's files, without the editor around it — and the installer
+  // (`install.html`), which another page of the site frames to have a folder installed.
+  // They share chunks.
   build: {
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         data: fileURLToPath(new URL('./data.html', import.meta.url)),
+        install: fileURLToPath(new URL('./install.html', import.meta.url)),
       },
     },
   },

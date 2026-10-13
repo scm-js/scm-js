@@ -194,6 +194,19 @@ tells a copy it may play from. A failure while copying is a `problems` line and 
 `play`, never a failed install. A memory-only copy (no OPFS) has none. The desktop's own
 extraction (`desktop/main.ts`) does not write it either: the desktop frames the hosted play page.
 
+**The installer page** (`install.html` → `src/pages/install.ts`, a third Vite input, 2026-10-12):
+no interface, a `message` listener. The play page frames it out of sight and posts a Remastered
+folder pick (`{ type: "scmjs.install", files: [{ path, file }] }` — pairs, because a `File` posted to
+another window keeps its bytes and loses `webkitRelativePath`; `installFromPickedRemastered` is
+`installFromRemastered`'s file-list half taking them), and is told `scmjs.install.ready` /
+`.progress` / `.done` (the stamp) / `.error`. Same origin only, both ways. Built because the user,
+on the live play page, picked their Remastered folder and was sent to another page to pick it
+again. Where it installs: the default copy when there is none or it is the free download or an
+older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. It deliberately does
+not switch the editor's data set or turn Remastered Graphics on (that is `services/gameData`,
+which drags the document atoms in). The message names are a contract with scm-sim's
+`web/editorInstall.ts`. `e2e/installPage.spec.ts`.
+
 **The stamp is now read by three programs**: `copies.ts`, `site/header.js`, and scm-sim's
 `web/gameSource.ts` (which needs `from`, `at`, `profile`, `play`, and `PLAY_VERSION` = 1). Bump
 `PLAY_VERSION` when the list changes so that an old copy cannot serve; the play page then asks

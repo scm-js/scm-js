@@ -537,3 +537,16 @@ built bundle (a registry install, not this compiled-in default) handed its worke
 and every compile failed — the worker now reports that as fatal and the bundle route takes over; a failed Save build
 reads *Saved without its programs* and a good one *edited since* once the script changes. The shared plugin CI gained
 an `artifacts` input so `dist/compiler.js` is compared with its source at a tag as `dist/plugin.js` is.
+
+**scm-sim** (`github.com/scm-js/plugin-scm-sim`, a default that starts on since 2026-10-13, v0.1.0) is the way from the
+editor to scm-sim, the game engine served beside it at `/play/` — a library plugin in eudplib's shape, but with no
+runtime of its own: the engine is another program on the same origin (private, never vendored), and the plugin only
+talks to its pages by message. One service, `scm-sim.engine` version 1 (`contract.d.ts`): `present` (is there a play
+page beside this editor — `src/address.ts`, scmjs.dev or a localhost stand-in under `/editor/`), `status()`,
+`analyse(replay, { onProgress, signal })` → a `ReplayTimeline` (units born / done / morph / given / died, each
+player's numbers every 48 frames, research, positions), and `play(map?)`. `src/bridge.ts` frames `/play/analyse.html`
+out of sight (`scmjs.sim.ready / analyse / progress / result / error / cancel`; the frame sits behind a `FrameHost` so
+the conversation is tested without a DOM); `src/play.ts` is the `scmjs.play` hand-off that used to be the scmjs.dev
+plugin's `play.ts`, and with it Tools ▸ Test Map in Browser moved here (scmjs.dev 1.36.0 dropped it; the two pins
+moved in one commit so the item was never there twice). The timeline's types are a copy of scm-sim's
+`src/analysis/timeline.ts`; `ReplayTimeline.version` says which form. Nothing in the host's API was added for it.

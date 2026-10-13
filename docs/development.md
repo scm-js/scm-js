@@ -452,7 +452,7 @@ fetching it. Reload drops the copy and fetches again; turning the option off dro
 ### Defaults and vendoring
 
 The default plugins (scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit,
-TrigScript, Stamp Library and scmjs.dev, of which TrigEdit and scmjs.dev are installed but
+TrigScript, Stamp Library, scm-sim and scmjs.dev, of which TrigEdit and scmjs.dev are installed but
 start off) are ordinary plugins from their own repositories, each pinned in `src/plugins/defaults.ts`
 to a **tag**, never a branch, so that a push to a plugin repository cannot change every
 editor already in use and any release can be rebuilt as it shipped. Moving a default

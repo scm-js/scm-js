@@ -29,7 +29,7 @@ and what you are trusting when you do.
 
 ### What is available
 
-Nine plugins are installed and on from the start, and one more is installed but off. The
+Ten plugins are installed and on from the start, and one more is installed but off. The
 rest are in Plugins ▸ **Browse Plugins…**. The [user guide](guide.md#plugins)
 describes each in more detail, and each repository has its own README.
 
@@ -43,6 +43,7 @@ describes each in more detail, and each repository has its own README.
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | on | Tools ▸ Stamp Library… | Saved pieces of map (a ramp, a mineral line) to lay down again on any map. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | on | File ▸ Find on scmscx.com… | Searches the scmscx.com map archive and opens the map you pick. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | on | Account menu | Your scmjs.dev account: stored maps, share links, editing a map together. |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | on | Tools ▸ Test Map in Browser | Plays the open map on the site's play page, and lets other plugins use the game engine behind it. |
 | [eudplib](https://github.com/scm-js/plugin-eudplib) | on | (none of its own) | A library other plugins build EUD maps with. TrigScript and Magenta use it. |
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | off | Triggers ▸ Text Trigger Editor… | The text trigger format, for triggers carried over from SCMDraft. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Browse | Tools ▸ Melee Wizard… | Symmetric start locations, mineral lines and geysers. |
@@ -2474,6 +2475,7 @@ closest to what you are writing.
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | Printing and parsing the text format, `claims`, and a dialog offering a slot to other plugins. |
 | [Magenta](https://github.com/scm-js/plugin-magenta) | `requires` and a service from another plugin, `document.update` for single records, EUD constants. |
 | [eudplib](https://github.com/scm-js/plugin-eudplib) | A library plugin: one versioned service, a Web Worker, a large runtime downloaded once. |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | A library plugin with no runtime of its own: a service that talks by message to another page of the same origin, with progress and cancellation. |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | `api.storage` for user data, `clipboard.capture`, `tx.paste`, rendered thumbnails. |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | `triggers.references`, a large resizable panel drawn in SVG, a button in the Trigger Editor's slot, `view.goTo` a trigger. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | The `"commit"` event, `graphics.renderClip`, IndexedDB for large data, a preferences page. |

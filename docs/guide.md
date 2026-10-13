@@ -695,7 +695,7 @@ In the editor at scmjs.dev there is a second way that needs no installed game ru
 which runs the game itself in a browser tab from your own copy of StarCraft. The map goes
 straight from the editor's tab to that one, with its own forces, units and triggers, and
 testing again sends the new version to the same tab. The first time, the play page asks
-for the folder StarCraft is installed in. The item comes with the scmjs.dev plugin and is
+for the folder StarCraft is installed in. The item comes with the scm-sim plugin and is
 not shown in the desktop app or an editor hosted elsewhere.
 
 ### Saving
@@ -1286,7 +1286,8 @@ other dialogs. Your account and the maps stored on it are not affected.
 
 Plugins add tools to the editor, and some of what this guide describes is a plugin:
 Walkability, Paint, Repair, Terrain from Image, TrigScript, Stamp Library, scmjs.dev
-(the account) and the scmscx.com search are installed and on from the start. One more is
+(the account), scm-sim (Test Map in Browser) and the scmscx.com search are installed and
+on from the start. One more is
 installed but starts *off*: TrigEdit, the Text Trigger Editor, which is for text carried
 in from SCMDraft rather than for every map. Tick it on in Plugins ▸ Manage Plugins… and
 Triggers ▸ Text Trigger Editor… appears. Melee Wizard, Section Explorer, Timelapse and
@@ -1316,6 +1317,7 @@ and the addresses it will fetch from.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | View ▸ Timelapse…, the status-bar cell while it records | Records the map as you build it, one frame per change, and plays the recording back with a box around each change. Export it as a GIF or a WebM video. Recordings stay in the browser, and opening the same file again carries on the same recording. |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | Triggers ▸ Trigger Map…, Show in Trigger Map in the Trigger Editor, right-click a location | The triggers as a graph. Pick a trigger to see what it waits for and which triggers set that, and what it changes and which triggers read it; pick a switch, a death counter, a location or Victory to see who writes it and who reads it. A Findings list names switches nothing sets, counters nothing reads, locations that are not there and triggers that never run. |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | Tools ▸ Test Map in Browser | The way to the game engine behind the site's play page, scmjs.dev/play: it plays the open map there in a browser tab, and lets other plugins have a replay played to its end to learn what happened in it. Only in the editor at scmjs.dev. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, links that give anyone a copy of one, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](images/walkability.webp)

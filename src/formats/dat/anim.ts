@@ -97,25 +97,33 @@ export function parseAnim(bytes: Uint8Array): Anim | null {
 
 /** The layers the editor draws from: the colour picture, and the mask of what takes the player's colour. */
 export const ANIM_KEPT_LAYERS = ["diffuse", "teamcolor"];
+/**
+ * The layers the game's real-time lighting reads beside those: which way each pixel faces,
+ * what shines, how much light reaches a pixel and how far it stands out of the screen, and
+ * what glows of its own. The editor draws with none of them; a copy for playing keeps them
+ * (`gamedata/play.ts`). Units and buildings have them — about a quarter of the files — and
+ * effects do not. The seventh layer, a second colour picture, nothing here reads.
+ */
+export const ANIM_LIT_LAYERS = ["normal", "specular", "ao_depth", "emissive"];
 
 /**
- * The same anim with only `ANIM_KEPT_LAYERS` in it. The game's other layers (normals,
+ * The same anim with only `kept` (`ANIM_KEPT_LAYERS` unless said) in it. The game's other layers (normals,
  * specular, ambient occlusion, a second colour picture) are three quarters of a file the
  * editor would otherwise copy for nothing. The header and both tables keep their layout,
  * the dropped layers simply have no size, so `parseAnim` reads either. Returns the input
  * when it is not an anim, or is already this.
  */
-export function slimAnim(bytes: Uint8Array): Uint8Array {
+export function slimAnim(bytes: Uint8Array, kept: readonly string[] = ANIM_KEPT_LAYERS): Uint8Array {
   const anim = parseAnim(bytes);
   if (!anim) return bytes;
-  if (anim.layers.every((layer) => layer.size === 0 || ANIM_KEPT_LAYERS.includes(layer.name))) return bytes;
+  if (anim.layers.every((layer) => layer.size === 0 || kept.includes(layer.name))) return bytes;
 
   const frameCount = anim.frames.length;
   const layersAt = ENTRY_AT + 12;
   const framesFrom = u32(bytes, ENTRY_AT + 8);
   const head = layersAt + anim.layers.length * LAYER_SIZE;
   let size = head + frameCount * FRAME_SIZE;
-  for (const layer of anim.layers) if (ANIM_KEPT_LAYERS.includes(layer.name)) size += layer.size;
+  for (const layer of anim.layers) if (kept.includes(layer.name)) size += layer.size;
 
   const out = new Uint8Array(size);
   out.set(bytes.subarray(0, head));
@@ -126,7 +134,7 @@ export function slimAnim(bytes: Uint8Array): Uint8Array {
   at += frameCount * FRAME_SIZE;
   anim.layers.forEach((layer, i) => {
     const entry = layersAt + i * LAYER_SIZE;
-    if (layer.size > 0 && ANIM_KEPT_LAYERS.includes(layer.name)) {
+    if (layer.size > 0 && kept.includes(layer.name)) {
       view.setUint32(entry, at, true);
       out.set(bytes.subarray(layer.offset, layer.offset + layer.size), at);
       at += layer.size;

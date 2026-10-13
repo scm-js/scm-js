@@ -79,6 +79,21 @@ describe("the play set", () => {
     expect(written).toContain("unit/terran/marine.los");
     expect(asked).not.toContain("HD2\\anim\\main_000.anim");
     expect(written).toContain("unit/hd/main_001.anim");
+
+    // Asked to keep the lighting's layers: every image's sprite is read, the copy's own among them, and written again.
+    // (These are not sprite files, so nothing was kept and the stamp does not say so.)
+    const again: string[] = [];
+    const play = await copyPlaySet(
+      async () => new Uint8Array(4),
+      async (path) => { again.push(path); },
+      { sfxDat: dat, sfxTbl: tbl, imagesDat: images, imagesTbl },
+      undefined,
+      (path) => path === "unit/terran/marine.grp" || path === "unit/hd/main_000.anim",
+      { lighting: true },
+    );
+    expect(again).toContain("unit/hd/main_000.anim");
+    expect(again).toContain("unit/hd/main_001.anim");
+    expect(play?.lit).toBeUndefined();
   });
 
   it("says nothing of a source without the sounds, or without a file a game needs", async () => {

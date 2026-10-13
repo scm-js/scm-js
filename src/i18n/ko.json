@@ -643,6 +643,7 @@
   "Add a data set…": "데이터 세트 추가…",
   "Add StarCraft: Remastered…": "스타크래프트: 리마스터 추가…",
   "StarCraft: Remastered added tiles to most tilesets, which a 1.16 copy cannot draw. Choose the folder the game is installed in: its files are read from there and kept beside the copy you have.": "스타크래프트: 리마스터는 대부분의 타일셋에 타일을 추가했고, 1.16 사본으로는 그 타일을 그릴 수 없습니다. 게임이 설치된 폴더를 선택하면 그곳에서 파일을 읽어 지금 있는 사본 옆에 보관합니다.",
+  "Keep the files for real-time lighting on the play page (about 200 MB more)": "플레이 페이지의 실시간 조명에 쓰는 파일도 보관 (약 200MB 추가)",
   "Download from Blizzard": "블리자드에서 다운로드",
   "Recommended": "권장",
   "Blizzard offers the StarCraft map editor as a free download, and it carries the two archives the graphics come from. You do not need StarCraft installed, or a copy of the game at all. The files are extracted here and kept in {here}, so this happens once.": "블리자드는 스타크래프트 맵 에디터를 무료로 배포하며, 그 안에 그래픽의 출처인 아카이브 두 개가 들어 있습니다. 스타크래프트가 설치되어 있거나 게임을 가지고 있을 필요가 없습니다. 파일은 여기서 추출해 {here}에 보관하므로 한 번만 하면 됩니다.",

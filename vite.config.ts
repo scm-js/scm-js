@@ -21,6 +21,10 @@ function shortVersion(v: string): string {
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  // kascade is only imported inside the extraction worker, on the Remastered route, so the
+  // dev server does not see it at startup. Left to find it then, it pre-bundles it mid-install
+  // and reloads the page — which looks like the editor restarting and loses the install.
+  optimizeDeps: { include: ['kascade'] },
   plugins: [
     react(),
     // `index.html` carries the boot splash (the markup that paints before the bundle
@@ -62,6 +66,16 @@ export default defineConfig(() => ({
   // Where the site is served from: GitHub Pages under a repository path needs `/scm-js/`,
   // a custom domain and the desktop app want `/`. The build workflow sets it.
   base: process.env.SCMJS_BASE || '/',
+  // Two pages of one build: the editor, and the Game Data page (`data.html`) — what a
+  // browser holds of the game's files, without the editor around it. They share chunks.
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        data: fileURLToPath(new URL('./data.html', import.meta.url)),
+      },
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },

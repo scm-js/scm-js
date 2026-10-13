@@ -36,6 +36,7 @@ import {
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, ListBox, NumberInput, Select, Tabs, TextInput } from "../ui";
 import { ColorTextField } from "../ui/ColorCodes";
+import { SoundField } from "../ui/SoundPicker";
 import { escapeControls } from "../../editor/strings";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -82,6 +83,8 @@ interface ArgProps {
   onChange: (v: number) => void;
   names: TriggerNames;
   scenario: Scenario;
+  /** The unit the same condition or action names, for the widgets that follow it (the sound list). */
+  unit?: number;
 }
 
 /** A select whose current value is kept selectable even when the table does not list it. */
@@ -121,7 +124,7 @@ function PlayerArg({ value, onChange }: { value: number; onChange: (v: number) =
   );
 }
 
-function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
+function ArgWidget({ kind, value, onChange, names, scenario, unit }: ArgProps) {
   const open = useSetAtom(openDialogAtom);
   switch (kind) {
     case "cuwp": {
@@ -168,14 +171,7 @@ function ArgWidget({ kind, value, onChange, names, scenario }: ArgProps) {
         />
       );
     case "wav":
-      return (
-        <TextInput
-          style={{ width: 360 }}
-          value={names.string(value) ?? ""}
-          placeholder={t("sound\\\\file.wav")}
-          onChange={(e) => onChange(names.intern(e.target.value))}
-        />
-      );
+      return <SoundField value={names.string(value) ?? ""} onChange={(v) => onChange(names.intern(v))} scenario={scenario} unit={unit} />;
     case "textFlags":
       return <Check label={t("Always display")} checked={(value & ActionFlag.AlwaysDisplay) !== 0} onChange={(e) => onChange(e.target.checked ? ActionFlag.AlwaysDisplay : 0)} />;
     case "count":
@@ -210,13 +206,14 @@ function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onC
     else next[arg.field] = v;
     onChange(next as unknown as R);
   };
+  const unitArg = def.args.find((arg) => arg.kind === "unit");
   return (
     <div className="trig-args">
       {def.args.length === 0 && <span className="hint">{t("No arguments.")}</span>}
       {def.args.map((arg, i) => (
         <label key={i} className="trig-arg">
           <span className="lbl">{arg.label}</span>
-          <ArgWidget kind={arg.kind} value={arg.kind === "textFlags" ? r.flags & ActionFlag.AlwaysDisplay : r[arg.field]} onChange={(v) => set(arg, v)} names={names} scenario={scenario} />
+          <ArgWidget kind={arg.kind} value={arg.kind === "textFlags" ? r.flags & ActionFlag.AlwaysDisplay : r[arg.field]} onChange={(v) => set(arg, v)} names={names} scenario={scenario} unit={unitArg ? r[unitArg.field] : undefined} />
         </label>
       ))}
     </div>

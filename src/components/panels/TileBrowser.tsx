@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { atlasSource } from "../../formats/tileset/atlas";
+import { atlasSource, atlasTileSize } from "../../formats/tileset/atlas";
 import { megatileForTile, MEGATILE_PX } from "../../formats/tileset/decode";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import type { TileGroupInfo } from "../../formats/tileset/palette";
@@ -18,8 +18,8 @@ export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, i
     ctx.stroke();
     return;
   }
-  const { image, sx, sy } = atlasSource(loaded.atlas, megatile);
-  ctx.drawImage(image, sx, sy, MEGATILE_PX, MEGATILE_PX, x, y, px, px);
+  const { image, sx, sy, size } = atlasSource(loaded.atlas, megatile);
+  ctx.drawImage(image, sx, sy, size, size, x, y, px, px);
 }
 
 /* ── Single tile thumbnail ──────────────────────────────── */
@@ -34,7 +34,7 @@ export const TileThumb = memo(function TileThumb({ loaded, id, size, className, 
     c.height = size * dpr;
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = size < MEGATILE_PX;
+    ctx.imageSmoothingEnabled = size < (loaded ? atlasTileSize(loaded.atlas) : MEGATILE_PX);
     if (loaded) drawTile(ctx, loaded, id, 0, 0, size);
     else {
       ctx.fillStyle = "#2b313e";
@@ -74,7 +74,7 @@ const GroupRow = memo(function GroupRow({ loaded, group, tilePx, top, selected, 
     c.height = h * dpr;
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = tilePx < MEGATILE_PX;
+    ctx.imageSmoothingEnabled = tilePx < (loaded ? atlasTileSize(loaded.atlas) : MEGATILE_PX);
     ctx.fillStyle = "#12151b";
     ctx.fillRect(0, 0, w, h);
     const has = new Set(group.slots);
@@ -201,7 +201,7 @@ const GridRow = memo(function GridRow({ loaded, tiles, from, count, cols, top, s
     c.height = GRID_PX * dpr;
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = GRID_PX < MEGATILE_PX;
+    ctx.imageSmoothingEnabled = GRID_PX < (loaded ? atlasTileSize(loaded.atlas) : MEGATILE_PX);
     ctx.fillStyle = "#12151b";
     ctx.fillRect(0, 0, w, GRID_PX);
     for (let i = 0; i < count; i++) drawTile(ctx, loaded, tiles[from + i], i * GRID_PX, 0, GRID_PX);

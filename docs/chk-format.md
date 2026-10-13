@@ -194,6 +194,14 @@ file needs the original five, a Brood War file the `x` five, and a hybrid file b
 original game reads one set and Brood War the other. Blizzard's own Brood War maps carry
 only the `x` tables.
 
+A file can hold both of a pair whatever its `VER` says, and the two need not agree: some
+editors write the `x` tables into an original StarCraft map and later change only the
+original ones, so the `x` tables keep what they held before. Which set counts is decided
+by `VER` alone: below 63 the original five, from 63 up the `x` five. The editor reads the
+settings from that set. When it saves a change it writes both, the other one in step,
+and keeps the columns only the `x` tables have (the Brood War upgrades, technologies and
+weapons) from the file.
+
 
 ## How the sections fit together
 

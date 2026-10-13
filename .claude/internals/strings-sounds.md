@@ -57,6 +57,33 @@ decoders against it). A file already a PCM WAV in the target format is kept byte
 converted one is renamed `.wav`. `mopaq` cannot read the MPQ-ADPCM-*compressed* members of the game's
 own archives — that is the archive's compression, not the WAV encoding, and out of this repository's
 hands.
+**The game's own sounds** (`editor/stockSounds.ts`, `ui/SoundPicker.tsx`, 2026-10-12). A trigger's
+`wav` is a path the game opens through its archives, so `sound\Terran\Marine\TMaYes00.wav` plays
+with no file in the map and no WAV entry (the game never reads WAV). The list is `arr/sfxdata.tbl`
+(1127 names under `sound\`, 1123 distinct: a few files repeat and the first spelling stands), and
+whose voice a sound is comes from `units.dat`'s voice columns — ready u16[106], what start/end
+u16[228], annoyed start/end u16[106], yes start/end u16[106], all **sfxdata.dat ids**, which
+`sfxdata.dat`'s first column (u32 per sound, 9 bytes a sound, 1144 of them) turns into 1-based tbl
+entries. `buildStockSounds` is pure and complete without the two dat files (then no voices);
+folders are grouped case aside (the table has `Protoss\CARRIER` and `Protoss\Carrier`) and ordered
+races first. `formats/units/load.ts#getStockSounds` fetches on first use, null when the copy has no
+tbl (one made before the extraction copied it — the picker says to reinstall), dropped with the
+unit tables on a data-set switch and retried after an install; `useStockSounds` is the hook.
+`SoundField` replaced the bare text input of the `wav` arg kind in `TriggerDialogs.tsx`: the text
+field stays (any path can be typed), **Browse…** is a radix Popover (portalled, so it works inside
+the dialog; Escape closes it alone) with the unit's lines first when the same action has a `unit`
+arg (`ItemEditor` passes it), then the map's sounds, then the game's by folder; search is every
+word in the path, a unit's shown name or the moment (`pissed` is accepted for annoyed). The labels
+are `tc("unit voice", …)` because Ready / What / Yes already mean other things in the catalogue.
+1100 rows are plain DOM with `content-visibility: auto` per folder; no virtual list was needed.
+Check Map (`validate.ts`) used to call every stock path "not in the archive": now a path under
+`sound\` is silent unless the list is loaded and lacks it. **Nothing plays a stock sound yet.**
+Measured the same day: in BrooDat/StarDat 3 of 1127 open, the rest are MPQ IMA-ADPCM members
+`mopaq` does not decode (needs ADPCM, likely Huffman with it); a Remastered install has the same
+two tables and its sounds are plain PCM (1123 files, 278 MB), to be read on demand or copied
+opt-in. Not verified in the game: that a stock path plays in both 1.16 and Remastered from a map
+with no WAV entry — standard practice among map makers, and what the format says, but no probe map
+has been played.
 `editor/switches.ts` edits SWNM (`applySwitchNames` creates the section on the first name and interns
 names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
 `tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.

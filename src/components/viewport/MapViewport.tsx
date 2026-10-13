@@ -50,7 +50,7 @@ import {
   ZOOM_STEPS,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
-import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom } from "../../atoms/preferencesAtoms";
+import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom, remasteredEffectsAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
@@ -88,12 +88,16 @@ import {
 } from "./gestures";
 import { drawBlendAnchor, drawBrushSquare, drawClipGhost, drawDoodadGhost, drawIsomDiamonds, drawSpriteGhosts, drawTileGhost, drawUnitGhosts } from "./paint/ghosts";
 import { drawGrid, drawRuler, drawSymmetryAxes } from "./paint/grid";
+import { EffectPass } from "./effectPass";
 import { paintFlatGround, paintGround, paintLoadingPlate, type GroundLayer } from "./paint/ground";
 import { drawLocationHandles, drawLocations, drawStartLocations } from "./paint/locations";
 import { drawObjects, spritePainter, UNIT_MARGIN } from "./paint/objects";
 import { DASH, draggedBox, drawFlashes, drawMarquee, drawPickedObject, INK, markedTiles, sizeChip, strokeBox, strokeTileRect, TILE, type PaintView } from "./paint/view";
 import ViewportHud from "./ViewportHud";
 import ViewportMenuItems, { type MenuTarget } from "./ViewportMenu";
+
+/** The least time between two frames of Remastered's water or lava. */
+const EFFECT_FRAME_MS = 1000 / 30;
 
 /**
  * A drag that reaches the edge of the window scrolls the view under it: `EDGE_BAND` px
@@ -185,6 +189,26 @@ export default function MapViewport() {
   const panDragRef = useRef<{ x: number; y: number } | null>(null);
   /** Whether the last paint blitted any cycling (water/lava) megatile, so the animation loop knows when a repaint shows anything. */
   const animatedInViewRef = useRef(false);
+  /** Whether the last paint ran Remastered's water or lava over the terrain, so the loop keeps it moving. */
+  const movingInViewRef = useRef(false);
+  /**
+   * The pass that moves them, made the first time it is wanted. A context the browser
+   * took back is replaced once or twice and then given up on — still water from there on.
+   */
+  const effectPassRef = useRef<{ pass: EffectPass | null; tries: number }>({ pass: null, tries: 0 });
+  const effectPass = useCallback((): EffectPass | null => {
+    const held = effectPassRef.current;
+    if (held.pass?.dead) {
+      held.pass.dispose();
+      held.pass = null;
+    }
+    if (!held.pass && held.tries < 3) {
+      held.tries++;
+      held.pass = EffectPass.create();
+    }
+    return held.pass;
+  }, []);
+  useEffect(() => () => { effectPassRef.current.pass?.dispose(); effectPassRef.current.pass = null; }, []);
   /** The ground and the fog, cached between paints; see `paint/ground.ts` and `fog.ts`. */
   const groundLayerRef = useRef<GroundLayer | null>(null);
   const fogLayerRef = useRef<FogLayer | null>(null);
@@ -202,6 +226,7 @@ export default function MapViewport() {
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const flags = useAtomValue(viewFlagsAtom);
   const waterSpeed = useAtomValue(animateWaterSpeedAtom);
+  const effectTune = useAtomValue(remasteredEffectsAtom);
   const unitSpeed = useAtomValue(animateUnitsSpeedAtom);
   const gridSize = useAtomValue(gridSizeAtom);
   const gridLook = useAtomValue(gridLookAtom);
@@ -351,10 +376,12 @@ export default function MapViewport() {
     // The ground — with View ▸ Doodads off, what the doodads stand on (TILE) instead of the picture (MTXM).
     const tiles = scenario ? (flags.doodads ? scenario.tiles : scenario.editorTiles) : undefined;
     let animatedInView = false;
+    let movingInView = false;
     if (tiles && tilesetAssets) {
-      animatedInView = paintGround(v, groundLayerRef, {
+      ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
         scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability,
-      });
+        motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
+      }));
     } else if (tiles && tilesetLoading) {
       paintLoadingPlate(v);
     } else {
@@ -515,6 +542,7 @@ export default function MapViewport() {
     drawRuler(v, leftRef.current, false, hv, rulerKeysRef.current);
 
     animatedInViewRef.current = animatedInView;
+    movingInViewRef.current = movingInView;
     unitsInViewRef.current = unitsInView;
     const rect = { x: sx / tilePx, y: sy / tilePx, w: size.w / tilePx, h: size.h / tilePx };
     const prev = lastViewportRect.current;
@@ -522,7 +550,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —
@@ -624,8 +652,11 @@ export default function MapViewport() {
   useEffect(() => {
     const anim = flags.animateWater ? tilesetAssets?.atlas.animation : undefined;
     const units = flags.animateUnits && (flags.units || flags.sprites) && animator?.enabled ? animator : null;
-    if (!scenario || (!anim && !units)) return;
+    // Remastered's water and lava have no steps to wait for: they move every frame they are in view.
+    const moving = flags.animateWater && tilesetAssets?.atlas.hd?.effects ? true : false;
+    if (!scenario || (!anim && !units && !moving)) return;
     let raf = 0;
+    let lastMoved = 0;
     // Both speeds are multiples of the game's own rate (Preferences ▸ Display); moving a
     // slider re-runs this effect, so the frame counter starts again at the new rate.
     let lastFrame = Math.floor((performance.now() * unitSpeed) / GAME_FRAME_MS);
@@ -653,8 +684,10 @@ export default function MapViewport() {
         for (let i = 0; i < steps; i++) if (units.tick(view)) repaint = true;
         if (!unitsInViewRef.current) repaint = repaint && animatedInViewRef.current;
       }
+      // Thirty frames a second is as smooth as ripples need, and half the repaints of sixty.
+      if (moving && movingInViewRef.current && now - lastMoved >= EFFECT_FRAME_MS) repaint = true;
       // A repaint booked for this frame is served here rather than painted twice over.
-      if (repaint || drawPending.current) { drawPending.current = false; drawRef.current(); }
+      if (repaint || drawPending.current) { drawPending.current = false; lastMoved = now; drawRef.current(); }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

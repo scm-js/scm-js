@@ -1,3 +1,4 @@
+import { buildStockSounds } from "../src/editor/stockSounds";
 import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX } from "../src/formats/chk/sections/objects";
@@ -121,6 +122,14 @@ describe("validateScenario", () => {
     // Present in the archive: no complaint.
     const ok = texts(scn, { extras: new Map([["StarEdit/Wav/BOOM.wav", new Uint8Array(1)]]) });
     expect(ok.some((x) => x.includes("not in the archive"))).toBe(false);
+    // One of the game's own sounds needs no file; a path into its folder the list does not have is a typo.
+    scn.strings.strings[2] = "sound\\Terran\\Marine\\TMaYes00.wav";
+    const stockSounds = buildStockSounds(["Terran\\MARINE\\TMaYes00.WAV"], null, null);
+    expect(texts(scn, { extras: new Map() }).some((x) => x.includes("not in the archive"))).toBe(false);
+    expect(texts(scn, { extras: new Map(), stockSounds }).some((x) => x.includes("not in the archive"))).toBe(false);
+    scn.strings.strings[2] = "sound\\Terran\\Marine\\TMaYes99.wav";
+    expect(texts(scn, { extras: new Map(), stockSounds })).toContain("warn: Trigger 1: Play WAV plays 'sound\\Terran\\Marine\\TMaYes99.wav', which is not in the archive and not one of the sounds the game lists.");
+    scn.strings.strings[2] = "staredit\\wav\\boom.wav";
     const only = triggerIssues(validateScenario(scn, { extras: new Map() }));
     expect(only.every((i) => i.where === "Triggers")).toBe(true);
     // The five about these triggers, plus the scenario checks (no Victory, no Defeat, no objectives) a map with triggers earns.
@@ -180,5 +189,49 @@ describe("scenario (UMS) checks", () => {
     // Without hyper triggers a preserved Wait is an ordinary timer.
     scn.triggers.splice(1, 1);
     expect(texts(scn).some((t) => /Wait and Preserve/.test(t))).toBe(false);
+  });
+});
+
+describe("tiles only StarCraft: Remastered has", () => {
+  const remastered = (scn: ReturnType<typeof fresh>) => texts(scn).filter((line) => line.includes("StarCraft: Remastered added"));
+
+  it("says nothing of a map that keeps to the 1.16 tiles", () => {
+    const scn = fresh(); // Badlands
+    scn.tiles[0] = (1664 << 4) | 3; // the last group the 1.16 Badlands table has
+    scn.tiles[1] = (1023 << 4) | 0; // a low group, which Badlands never had filled in
+    expect(remastered(scn)).toEqual([]);
+  });
+
+  it("counts the tiles past the 1.16 table and says where the first is", () => {
+    const scn = fresh();
+    scn.tiles[5 * scn.width + 7] = (1665 << 4) | 0; // the first group Remastered added to Badlands
+    scn.tiles[9 * scn.width + 2] = (1978 << 4) | 15; // and the last
+    scn.tiles[9 * scn.width + 3] = (1979 << 4) | 0; // past Remastered's own table: not its tile either
+    expect(remastered(scn)).toEqual([expect.stringMatching(/^info: 2 tiles are from what StarCraft: Remastered added to this tileset \(the first at 7, 5\)/)]);
+    scn.tiles[9 * scn.width + 2] = 0;
+    expect(remastered(scn)[0]).toMatch(/^info: 1 tile is from/);
+  });
+
+  it("knows the low groups Remastered filled in on the three tilesets where it did", () => {
+    const desert = createScenario({ width: 64, height: 64, era: 5, name: "v" });
+    desert.tiles[0] = (769 << 4) | 0; // the last low group Desert had in 1.16
+    expect(validateScenario(desert).some((i) => i.text.includes("Remastered added"))).toBe(false);
+    desert.tiles[0] = (770 << 4) | 0; // the first Remastered filled
+    desert.tiles[1] = (1023 << 4) | 0;
+    desert.tiles[2] = (1024 << 4) | 0; // an ordinary 1.16 doodad group
+    expect(validateScenario(desert).find((i) => i.text.includes("Remastered added"))!.text).toMatch(/^2 tiles are/);
+    // The same on Space Platform and Twilight, each from its own group.
+    for (const [tilesetEra, from] of [[1, 933], [7, 797]]) {
+      const scn = createScenario({ width: 64, height: 64, era: tilesetEra, name: "v" });
+      scn.tiles[0] = ((from - 1) << 4) | 0;
+      expect(validateScenario(scn).some((i) => i.text.includes("Remastered added")), `era ${tilesetEra}`).toBe(false);
+      scn.tiles[0] = (from << 4) | 0;
+      expect(validateScenario(scn).some((i) => i.text.includes("Remastered added")), `era ${tilesetEra}`).toBe(true);
+    }
+    // Installation gained nothing.
+    const install = createScenario({ width: 64, height: 64, era: 2, name: "v" });
+    install.tiles.fill((1264 << 4) | 0);
+    install.tiles[0] = (1265 << 4) | 0;
+    expect(validateScenario(install).some((i) => i.text.includes("Remastered added"))).toBe(false);
   });
 });

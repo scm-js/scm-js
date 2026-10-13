@@ -29,7 +29,7 @@ export function useApplyPreferences() {
     applied.current = true;
     const prefs = store.get(preferencesAtom);
     if (!prefs.splash) store.set(screenAtom, "editor");
-    store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), animateWater: prefs.animateWater, animateUnits: prefs.animateUnits });
+    store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), animateWater: prefs.animateWater, animateUnits: prefs.animateUnits, hdGraphics: prefs.hdGraphics });
     store.set(mapTilesetAtom, prefs.newMap.tileset);
     store.set(unitOwnerAtom, prefs.placement.owner);
     store.set(brushSizeAtom, prefs.placement.brushSize);

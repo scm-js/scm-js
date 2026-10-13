@@ -7,7 +7,7 @@ that first question. The [user guide](guide.md) starts once the editor is open.
 
 ## In the browser
 
-[editor.scmjs.dev](https://editor.scmjs.dev) is the newest numbered release. There is
+[scmjs.dev/editor](https://scmjs.dev/editor/) is the newest numbered release. There is
 nothing to install. Your maps stay on your own disk, and nothing is sent anywhere unless
 you use a network feature: a copy kept on your scmjs.dev account, a map you share for
 others to edit with you, or a question for the AI, all described in the user guide.
@@ -125,15 +125,44 @@ use it asks where to get them:
   account, nothing to find on your own disk, about 80 MB. Take this route if you have
   never had the 1.16 game installed.
 - **Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
-  them, from a classic (1.16) installation. Remastered installations do not carry these
-  archives; use the download above instead.
+  them, from a classic (1.16) installation. Or pick the folder StarCraft: Remastered is
+  installed in: it has no such archives, and the editor reads the same files out of the
+  installation instead, along with the tiles Remastered added to most tilesets.
 
 The extraction runs in the browser and the result is kept for next time; the desktop
 app looks for an installation on its own first. If the editor was opened from a link (a
 shared map to join, or a copy of a map), that comes first, and the question about the
 graphics follows once you have answered it. **Help ▸ Game Data…** brings the dialog
-back later, to remove the copy or to install a mod's files beside the game's own as a
-second *data set* (see [game-data.md](game-data.md#data-sets)).
+back later, to remove the copy or to install a second *data set* beside it: a mod's
+files, or a StarCraft: Remastered installation's (see
+[game-data.md](game-data.md#data-sets)).
+
+### Remastered graphics
+
+If you own StarCraft: Remastered, the editor can draw maps with its graphics as well as
+the classic ones, and you can switch between the two whenever you like.
+
+- **With no graphics yet:** in the dialog above, choose **Choose the StarCraft folder…**
+  and pick the folder Remastered is installed in (on Windows, usually
+  `C:\Program Files (x86)\StarCraft`).
+- **With graphics already installed:** open **Help ▸ Game Data…** and choose
+  **Add StarCraft: Remastered…** under *Data sets*. It is installed beside the copy you
+  have, and the list switches between them.
+
+![The Game Data dialog after adding a Remastered installation, with both data sets listed](images/game-data-remastered.webp)
+
+The browser asks whether to upload the folder's files. Nothing is uploaded anywhere: the
+editor reads what it needs from the files where they are. It takes about half a minute
+and keeps about 375 MB. The desktop app looks for a Remastered installation itself and
+needs none of this when it finds one.
+
+Remastered's files also add doodads the 1.16 ones do not have; a map that uses them
+needs these files to be drawn (see the guide section linked below).
+
+When the install finishes, **View ▸ Remastered Graphics** is on. Untick it for the classic
+look and tick it again to go back; the guide's
+[Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows the
+difference.
 
 Without any graphics the editor still runs: terrain is drawn in flat colours and units as
 coloured markers, and everything else works.

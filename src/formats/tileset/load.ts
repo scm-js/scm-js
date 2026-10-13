@@ -2,6 +2,10 @@ import { buildAtlas, type TilesetAtlas } from "./atlas";
 import { cycleBands } from "./cycle";
 import { loadTileset, type Tileset } from "./decode";
 import { buildDoodadCatalogue, DDDATA_SIZE, type DoodadCatalogue } from "./doodads";
+import {
+  buildHdEffects, createHdTiles, decodeRawDds, looksLikeHdTiles, parseDdsGrp, parseHdTiles, parseTileMasks,
+  type HdEffectKind, type HdEffects, type HdEffectTextures, type HdTileFile, type PictureSequence,
+} from "./hd";
 import { decodeTbl } from "../dat/tbl";
 import { fetchAsset } from "../../gamedata/source";
 
@@ -209,14 +213,132 @@ export function getTileset(name: TilesetFileName): Promise<LoadedTileset> {
 /** Already-resolved tileset, for synchronous render paths. */
 const ready = new Map<TilesetFileName, LoadedTileset>();
 
+/* ── Remastered terrain (the 2x pictures) ───────────────── */
+
+/**
+ * View ▸ Remastered Terrain. A module variable rather than an argument because the readers
+ * are everywhere — `peekTileset` has thirty callers, most of them after the tables and not
+ * the pictures — and they all have to agree: with it on, `peekTileset` / `ensureTileset`
+ * answer with the *2x variant* of a tileset where there is one. The variant is a second
+ * `LoadedTileset` sharing the tables, the doodads and the classic atlas image, whose atlas
+ * carries `hd` (`atlas.ts`); being a different object is the point, since everything that
+ * memoises on the loaded tileset — the viewport's terrain layer, the palette thumbnails —
+ * redraws when the option flips without knowing why.
+ */
+let hdMode = false;
+/** A tileset's 2x variant; null when the data set in use has no 2x file for it. Kept while the option is off, so flipping back is instant. */
+const hdReady = new Map<TilesetFileName, LoadedTileset | null>();
+const hdLoading = new Map<TilesetFileName, Promise<LoadedTileset | null>>();
+
+/** Turn the 2x pictures on or off for every reader. Returns whether that changed anything. */
+export function setHdTerrain(on: boolean): boolean {
+  if (hdMode === on) return false;
+  hdMode = on;
+  return true;
+}
+
+export const hdTerrain = (): boolean => hdMode;
+
+/**
+ * Whether `name` has been asked for its 2x pictures and has none — the data set is a 1.16
+ * copy, or a Remastered one installed before the pictures were copied. False while unknown.
+ */
+export function hdTerrainMissing(name: TilesetFileName): boolean {
+  return hdReady.get(name) === null;
+}
+
+/** Whether a `peekTileset` right now is the final answer for the current option, or a load would improve on it. */
+export function tilesetSettled(name: TilesetFileName): boolean {
+  return ready.has(name) && (!hdMode || hdReady.has(name));
+}
+
+/**
+ * Which effect a tileset's masked ground takes. The mask table does not say — the game
+ * knows its tilesets — so this does: Ashworld's is lava, seen through heat, and every
+ * other tileset's is water (Desert's handful of tar tiles included, as the liquid they are).
+ */
+const effectKind = (name: TilesetFileName): HdEffectKind => (name === "ashworld" ? "heat" : "water");
+
+/** The shared textures of each effect, fetched once per data set; null when the copy has none. */
+const effectTextures = new Map<HdEffectKind, Promise<HdEffectTextures | null>>();
+
+function getEffectTextures(kind: HdEffectKind): Promise<HdEffectTextures | null> {
+  let loading = effectTextures.get(kind);
+  if (!loading) {
+    const sequence = async (file: string): Promise<PictureSequence | null> => {
+      const bytes = await fetchOptional(file, (d) => parseDdsGrp(d) !== null);
+      const pictures = bytes ? parseDdsGrp(bytes) : null;
+      return bytes && pictures ? { bytes, pictures } : null;
+    };
+    loading = (async (): Promise<HdEffectTextures | null> => {
+      if (kind === "heat") {
+        const bytes = await fetchOptional("heat_noise.hd.dds", (d) => decodeRawDds(d) !== null);
+        const noise = bytes ? decodeRawDds(bytes) : null;
+        return noise ? { noise } : null;
+      }
+      const [large, fine] = await Promise.all([sequence("water_large.hd.grp"), sequence("water_fine.hd.grp")]);
+      return large && fine ? { large, fine } : null;
+    })();
+    effectTextures.set(kind, loading);
+  }
+  return loading;
+}
+
+/**
+ * A tileset's moving water or lava, or null: a tileset with none (Space Platform,
+ * Installation), or a copy made before these files were taken. The terrain is then still.
+ */
+async function loadHdEffects(name: TilesetFileName, megatileCount: number): Promise<HdEffects | null> {
+  const [tableBytes, maskBytes] = await Promise.all([
+    fetchOptional(`${name}.hd.tmsk`, (d) => parseTileMasks(d) !== null),
+    fetchOptional(`${name}.hd.mask`, looksLikeHdTiles),
+  ]);
+  const table = tableBytes ? parseTileMasks(tableBytes) : null;
+  const masks: HdTileFile | null = maskBytes ? parseHdTiles(maskBytes) : null;
+  if (!table || !masks) return null;
+  const kind = effectKind(name);
+  const textures = await getEffectTextures(kind);
+  return textures ? buildHdEffects(kind, megatileCount, table, masks, textures) : null;
+}
+
+/** The 2x variant of a loaded tileset, fetched once; null when there is no usable file. */
+function ensureHd(loaded: LoadedTileset): Promise<LoadedTileset | null> {
+  const { name } = loaded;
+  if (hdReady.has(name)) return Promise.resolve(hdReady.get(name)!);
+  let loading = hdLoading.get(name);
+  if (!loading) {
+    loading = (async () => {
+      const bytes = await fetchOptional(`${name}.hd.vr4`, looksLikeHdTiles);
+      const file = bytes ? parseHdTiles(bytes) : null;
+      // The pictures are numbered as the megatiles of the tables they shipped with; a file
+      // shorter than this tileset's table belongs to other tables and would draw the wrong ground.
+      const usable = file !== null && file.count >= loaded.tileset.megatileCount;
+      let variant: LoadedTileset | null = null;
+      if (usable) {
+        const hd = createHdTiles(file);
+        hd.effects = await loadHdEffects(name, loaded.tileset.megatileCount).catch(() => null);
+        variant = { ...loaded, atlas: { ...loaded.atlas, hd } };
+      }
+      // Released or replaced while this was in flight: the answer describes a tileset nobody holds.
+      if (ready.get(name) === loaded) hdReady.set(name, variant);
+      hdLoading.delete(name);
+      return variant;
+    })();
+    hdLoading.set(name, loading);
+  }
+  return loading;
+}
+
 export function peekTileset(name: TilesetFileName): LoadedTileset | null {
-  return ready.get(name) ?? null;
+  const loaded = ready.get(name) ?? null;
+  return (hdMode && loaded ? hdReady.get(name) : null) ?? loaded;
 }
 
 export async function ensureTileset(name: TilesetFileName): Promise<LoadedTileset> {
   const loaded = await getTileset(name);
   ready.set(name, loaded);
-  return loaded;
+  if (!hdMode) return loaded;
+  return (await ensureHd(loaded)) ?? loaded;
 }
 
 /**
@@ -232,12 +354,17 @@ export function releaseTileset(name: TilesetFileName): boolean {
   if (!loaded) return false;
   ready.delete(name);
   cache.delete(name);
+  hdReady.delete(name);
+  hdLoading.delete(name);
   return true;
 }
 
 /** After the game data source changes: the shared names file may now be there, so ask again next time. */
 export function retryTilesetParts(): void {
   statTxt = null;
+  // A tileset found to have no 2x file may have one now.
+  for (const [name, variant] of hdReady) if (variant === null) hdReady.delete(name);
+  effectTextures.clear();
 }
 
 /**
@@ -251,6 +378,9 @@ export function releaseAllTilesets(): number {
   const held = ready.size;
   ready.clear();
   cache.clear();
+  hdReady.clear();
+  hdLoading.clear();
+  effectTextures.clear();
   statTxt = null;
   return held;
 }
@@ -259,4 +389,6 @@ export function releaseAllTilesets(): number {
 export function primeTileset(loaded: LoadedTileset) {
   cache.set(loaded.name, Promise.resolve(loaded));
   ready.set(loaded.name, loaded);
+  hdReady.delete(loaded.name);
+  hdLoading.delete(loaded.name);
 }

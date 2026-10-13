@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAtomValue } from "jotai";
+import { viewFlagsAtom } from "../atoms/editorAtoms";
 import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
-import { getUnitAssets, onGrpLoaded, peekUnitAssets, type UnitAssets } from "../formats/units/load";
+import { getUnitAssets, onGrpLoaded, peekUnitAssets, setHdSprites, type UnitAssets } from "../formats/units/load";
 
 export interface UnitAssetsState {
   loaded: UnitAssets | null;
@@ -15,6 +16,10 @@ export function useUnitAssets(): UnitAssetsState {
   // Bumped when Help ▸ Game Data… installs a source (so tables that failed are asked for
   // again) or switches data sets (so the ones held are dropped for the new set's).
   const revision = useAtomValue(gameDataRevisionAtom);
+  // View ▸ Remastered Graphics, for sprites: every instance sets the same value, the first to
+  // run decides, and the loader tells the canvases (`useGrpRevision`) when it changed.
+  const hd = useAtomValue(viewFlagsAtom).hdGraphics;
+  useEffect(() => { setHdSprites(hd); }, [hd]);
   const [state, setState] = useState<UnitAssetsState>(() => {
     const cached = peekUnitAssets();
     return { loaded: cached, loading: cached === null, error: null };

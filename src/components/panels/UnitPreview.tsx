@@ -38,7 +38,7 @@ export const UnitPreview = memo(function UnitPreview({ unitId, owner, colors, rg
     }
     const scale = Math.min(1, size / Math.max(sprite.width, sprite.height));
     const w = sprite.width * scale, h = sprite.height * scale;
-    ctx.imageSmoothingEnabled = scale < 1;
+    ctx.imageSmoothingEnabled = scale < sprite.scale;
     ctx.drawImage(sprite.image, (size - w) / 2, (size - h) / 2, w, h);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `team` is re-derived per render; `teamKey` is its identity
   }, [assets, tileset, grpRevision, unitId, teamKey, size]);
@@ -87,14 +87,19 @@ export const SpritePreview = memo(function SpritePreview({ kind, id, owner, colo
     }
     // Crop to the frame's opaque rectangle: a GRP box can be far larger than what it shows
     // (a critter sits in a 128×128 box), and the preview should fill its square.
-    let sx = 0, sy = 0, sw = frame.width, sh = frame.height;
+    // The rectangle is in the canvas's own pixels, which a 2x sprite has twice as many of.
+    const k = frame.scale;
+    let sx = 0, sy = 0, sw = frame.width * k, sh = frame.height * k;
     const grp = spriteGrp(assets, kind, id);
-    if (assets && grp && grp.frames.length > 0) {
+    if (frame.opaque) {
+      ({ x: sx, y: sy, width: sw, height: sh } = frame.opaque);
+    } else if (assets && grp && grp.frames.length > 0 && k === 1) {
       const { frame: index, flip } = spriteFrame(assets, kind, id, flipped);
       const f = grp.frames[Math.min(index, grp.frames.length - 1)];
       if (f.width > 0 && f.height > 0) { sx = flip ? grp.width - f.x - f.width : f.x; sy = f.y; sw = f.width; sh = f.height; }
     }
-    const scale = Math.min(1, size / Math.max(sw, sh));
+    // Never larger than the sprite is on the map, however many pixels it has.
+    const scale = Math.min(1 / k, size / Math.max(sw, sh));
     const w = sw * scale, h = sh * scale;
     ctx.imageSmoothingEnabled = scale < 1;
     ctx.globalCompositeOperation = frame.additive ? "lighter" : "source-over";

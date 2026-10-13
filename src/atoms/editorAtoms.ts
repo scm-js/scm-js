@@ -178,6 +178,7 @@ export const viewFlagsAtom = atom<ViewFlags>({
   startLocations: true,
   animateWater: true,
   animateUnits: true,
+  hdGraphics: false,
 });
 
 /** View ▸ Grid Settings' spacing, remembered like the grid's look (`scmjs.gridSize`). */

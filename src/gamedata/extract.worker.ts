@@ -3,10 +3,15 @@
  * `extractGameData`, writes the result into the browser's private file storage and
  * reports progress. When there is no such storage here the files are posted back for
  * the main thread to keep for the session (`store.ts#keepInMemory`).
+ *
+ * A StarCraft: Remastered installation arrives as a folder instead of archives
+ * (`remastered.ts`): a directory handle, or the folder's files where the browser has no
+ * folder picker. Both can be posted to a worker, and neither is read until asked.
  */
 import { memberKey, openArchives, readerFor } from "./archives";
-import { describeExtraction, ExtractError, extractGameData } from "./extract";
+import { describeExtraction, ExtractError, extractGameData, type GameDataExtraction } from "./extract";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
+import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
 import { writeStoredCopy, type StoredStamp } from "./store";
 
 export interface ExtractRequest {
@@ -18,6 +23,8 @@ export interface ExtractRequest {
   profile?: GameDataProfile;
   /** Loose files laid over the archives, by member path. */
   overlay?: { path: string; bytes: ArrayBuffer }[];
+  /** A StarCraft: Remastered installation folder, read in the archives' place. */
+  remastered?: FileSystemDirectoryHandle | PickedFile[];
 }
 
 export type ExtractResponse =
@@ -31,17 +38,33 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
   const req = e.data;
   if (req.kind !== "extract") return;
   try {
-    post({ kind: "progress", fraction: 0, label: "Opening the archives" });
-    const { archives, problems } = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
-    if (archives.length === 0) throw new ExtractError(problems[0] ?? "No archive could be opened.");
+    let result: GameDataExtraction;
+    let problems: string[];
+    let from = req.from;
+    if (req.remastered) {
+      post({ kind: "progress", fraction: 0, label: "Opening the installation" });
+      const { Storage, directoryHandleSource } = await import("kascade");
+      const source = Array.isArray(req.remastered)
+        ? pickedFilesSource(req.remastered)
+        : directoryHandleSource(req.remastered as unknown as Parameters<typeof directoryHandleSource>[0]);
+      if (!source) throw new ExtractError("The folder is not a StarCraft: Remastered installation.");
+      // Reading and extracting are 0–80% of the bar, the write the rest.
+      const read = await extractRemastered(await Storage.open(source), (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      ({ result, problems, from } = read);
+    } else {
+      post({ kind: "progress", fraction: 0, label: "Opening the archives" });
+      const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
+      problems = opened.problems;
+      if (opened.archives.length === 0) throw new ExtractError(problems[0] ?? "No archive could be opened.");
 
-    const overlay = new Map<string, Uint8Array>();
-    for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
+      const overlay = new Map<string, Uint8Array>();
+      for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
 
-    // Extraction is 0–80% of the bar, the write the rest.
-    const result = extractGameData(readerFor(archives, overlay.size ? overlay : undefined), (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      // Extraction is 0–80% of the bar, the write the rest.
+      result = extractGameData(readerFor(opened.archives, overlay.size ? overlay : undefined), (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+    }
     const stamp: StoredStamp = {
-      from: req.from,
+      from,
       at: new Date().toISOString(),
       files: result.files.size,
       bytes: result.bytes,

@@ -1,8 +1,9 @@
 import {
-  decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeTechdataDat, decodeUnitsDat, decodeUpgradesDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
+  decodeFlingyDat, decodeImagesDat, decodeSfxdataDat, decodeSpritesDat, decodeTechdataDat, decodeUnitsDat, decodeUpgradesDat, decodeWeaponsDat, FLINGY_DAT_SIZE, IMAGES_DAT_SIZE, LO_KINDS, REMAP_TABLES,
   SPRITES_DAT_SIZE, TECHDATA_DAT_SIZE, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY, UPGRADES_DAT_SIZE, WEAPONS_DAT_SIZE,
   type FlingyDat, type ImagesDat, type SpritesDat, type TechdataDat, type UnitsDat, type UpgradesDat, type WeaponsDat,
 } from "../dat/dat";
+import { animPath, isAnim, parseAnim, type Anim } from "../dat/anim";
 import { decodeGrp, type Grp } from "../dat/grp";
 import { decodeIscript, type IscriptBin } from "../dat/iscript";
 import { decodeLo, type LoFile } from "../dat/lo";
@@ -12,6 +13,7 @@ import { TEAM_COLOR_ROWS, TEAM_SLOT_COUNT } from "./teamColor";
 import { fetchAsset } from "../../gamedata/source";
 import { installNames } from "../../data/units";
 import { namesFromAssets } from "../../data/gameNames";
+import { buildStockSounds, type StockSounds } from "../../editor/stockSounds";
 
 /**
  * The unit data tables, fetched once from `arr/` + `game/` (mirroring the MPQ tree; see
@@ -120,6 +122,42 @@ export function getUnitAssets(): Promise<UnitAssets> {
   return assetsPromise;
 }
 
+let stockPromise: Promise<StockSounds | null> | null = null;
+let stockReady: StockSounds | null = null;
+/** Advanced when the list is dropped, so a fetch that was under way does not put the old one back. */
+let stockEpoch = 0;
+
+/**
+ * The game's own sounds as a list (`editor/stockSounds.ts`), fetched the first time
+ * something asks — the sound picker, Check Map. Null when the copy has no `sfxdata.tbl`:
+ * one made before the extraction copied it, or no game data at all. Without `units.dat`
+ * the list still stands, only without whose voice each sound is.
+ */
+export function getStockSounds(): Promise<StockSounds | null> {
+  if (stockPromise) return stockPromise;
+  const epoch = stockEpoch;
+  stockPromise = (async () => {
+    try {
+      const [tbl, dat, assets] = await Promise.all([
+        fetchPart("arr/sfxdata.tbl", (d) => d.length > 2 && (d[0] | (d[1] << 8)) > 0),
+        fetchPart("arr/sfxdata.dat", (d) => d.length >= 9 && d.length % 9 === 0).catch(() => null),
+        getUnitAssets().catch(() => null),
+      ]);
+      const stock = buildStockSounds(decodeTbl(tbl), dat ? decodeSfxdataDat(dat) : null, assets?.units ?? null);
+      if (epoch === stockEpoch) stockReady = stock;
+      return stock;
+    } catch {
+      return null;
+    }
+  })();
+  return stockPromise;
+}
+
+/** The list if it has been fetched, for synchronous callers. */
+export function peekStockSounds(): StockSounds | null {
+  return stockReady;
+}
+
 /** Already-loaded tables, for synchronous render paths. */
 export function peekUnitAssets(): UnitAssets | null {
   return assetsReady;
@@ -206,6 +244,63 @@ class LazyFiles<T> {
 const grps = new LazyFiles<Grp>(decodeGrp, (d) => d.length >= 6 && (d[0] | (d[1] << 8)) > 0);
 const los = new LazyFiles<LoFile>(decodeLo, (d) => d.length >= 8 && d[0] + (d[1] << 8) > 0);
 const remaps = new LazyFiles<Uint8Array>((d) => decodePcx(d).pixels, (d) => d.length > 128 && d[0] === 0x0a);
+const anims = new LazyFiles<Anim>((d) => {
+  const anim = parseAnim(d);
+  if (!anim) throw new Error("not a 2x sprite file");
+  return anim;
+}, isAnim);
+
+/* ── Remastered sprites (the 2x pictures) ───────────────── */
+
+/**
+ * View ▸ Remastered Graphics, for sprites: `sprites.ts#getImageFrame` asks this before it
+ * draws a frame, and draws from the image's `.anim` where the data set has one. A module
+ * variable for the reason `tileset/load.ts#setHdTerrain` is: the frame cache is asked from
+ * the viewport, the palettes, the exporter and plugins, and they have to agree.
+ */
+let hdSpriteMode = false;
+/**
+ * The images that have a 2x sprite, from `unit/manifest.json`: `undefined` until it has
+ * been asked for, `null` when the data set has none (a 1.16 copy) or no manifest. Asking a
+ * hundred images for files that are not there, one failed fetch and one console line
+ * each, is what this saves.
+ */
+let hdImages: Set<number> | null | undefined;
+let hdImagesLoading = false;
+
+/** Turn the 2x sprites on or off for every reader, and tell the canvases when that changed. */
+export function setHdSprites(on: boolean): boolean {
+  if (hdSpriteMode === on) return false;
+  hdSpriteMode = on;
+  for (const l of listeners) l();
+  return true;
+}
+
+export const hdSprites = (): boolean => hdSpriteMode;
+
+/**
+ * An image's 2x sprite, per the `LazyFiles` contract: the anim once it has arrived, `null`
+ * when the data set has none for this image, `undefined` while it (or the list of which
+ * images have one) is on its way.
+ */
+export function requestAnim(imageId: number): Anim | null | undefined {
+  if (hdImages === undefined) {
+    if (!hdImagesLoading) {
+      hdImagesLoading = true;
+      void fetchAsset("unit/manifest.json")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((manifest: { hd?: unknown } | null) => (Array.isArray(manifest?.hd) ? new Set(manifest.hd as number[]) : null), () => null)
+        .then((found) => {
+          hdImages = found && found.size > 0 ? found : null;
+          hdImagesLoading = false;
+          for (const l of listeners) l();
+        });
+    }
+    return undefined;
+  }
+  if (!hdImages?.has(imageId)) return null;
+  return anims.get(animPath(imageId));
+}
 
 /**
  * After the game data source changes (Help ▸ Game Data… installed a copy): forget every
@@ -216,6 +311,11 @@ export function retryFailedParts(): void {
   grps.forgetFailed();
   los.forgetFailed();
   remaps.forgetFailed();
+  anims.forgetFailed();
+  // A data set found to have no 2x sprites may have them now.
+  if (hdImages === null) hdImages = undefined;
+  // Likewise the sound list: a copy that lacked it may have been replaced by one that has it.
+  if (!stockReady) stockPromise = null;
   for (const l of listeners) l();
 }
 
@@ -228,10 +328,15 @@ export function retryFailedParts(): void {
 export function resetUnitAssets(): void {
   assetsPromise = null;
   assetsReady = null;
+  stockPromise = null;
+  stockReady = null;
+  stockEpoch++;
   installNames(null);
   grps.clear();
   los.clear();
   remaps.clear();
+  anims.clear();
+  hdImages = undefined;
   for (const l of listeners) l();
 }
 
@@ -263,6 +368,27 @@ export function awaitGrps(paths: readonly string[]): Promise<void> {
     off = onGrpLoaded(check);
     // A fetch can settle between the first check and the subscription above; without this
     // second look that notification is missed and the wait hangs.
+    check();
+  });
+}
+
+/**
+ * Wait for the 2x sprites of a set of images, as `awaitGrps` waits for GRPs: until each
+ * has arrived or is known not to exist. Resolves at once with the option off.
+ */
+export function awaitAnims(imageIds: readonly number[]): Promise<void> {
+  if (!hdSpriteMode) return Promise.resolve();
+  const anyPending = () => imageIds.map((id) => requestAnim(id)).some((a) => a === undefined);
+  if (!anyPending()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let off = () => {};
+    const check = () => {
+      if (hdSpriteMode && anyPending()) return false;
+      off();
+      resolve();
+      return true;
+    };
+    off = onGrpLoaded(check);
     check();
   });
 }

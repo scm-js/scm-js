@@ -60,9 +60,13 @@
 #
 # The hosted editor is a release, like every other way of running this:
 #
-#   editor.scmjs.dev          the newest tag, deployed by the `pages` job on the stable
+#   scmjs.dev/editor/         the newest tag, deployed by the `pages` job on the stable
 #                             channel — the same commit as the installers, the same
-#                             version in About, the same notes to read.
+#                             version in About, the same notes to read. Pages serves it
+#                             at editor.scmjs.dev, built for the /editor/ path
+#                             (PAGES_BASE); a Cloudflare Worker in front answers
+#                             scmjs.dev/editor/* with those files and sends the old
+#                             address on (scm-js/cloudflare-link-previews).
 #   nightly.editor.scmjs.dev  main as of the last nightly, deployed by the `nightly-site`
 #                             job into scm-js/nightly's gh-pages branch (one force-pushed
 #                             orphan commit, so that repository never grows).
@@ -73,13 +77,14 @@
 # preferences, recents and installed plugins. That is the price of a nightly that cannot
 # write a stored shape the stable build then reads.
 #
-# To put editor.scmjs.dev back on an older version, dispatch this workflow on that tag —
+# To put the hosted editor back on an older version, dispatch this workflow on that tag —
 # the deploy is the only thing a re-run rewrites (`gh release create` would refuse the
 # existing tag, and nothing else in a stable run is idempotent-unsafe). Un-promoting a
 # release moves the download redirect but not the site.
 #
 # Repository variables (Settings ▸ Variables): PAGES_BASE is the hosted build's base path
-# ("/" for a custom domain; the default is the repository name), and NIGHTLY_DOMAIN is the
+# ("/editor/" for scmjs.dev/editor/, "/" for a custom domain's root; the default is the
+# repository name), and NIGHTLY_DOMAIN is the
 # custom domain written into the nightly site's CNAME — unset, and the nightly deploy is
 # skipped, as it is without the NIGHTLY_PAT secret — a fine-grained token whose only
 # permission is Contents: write on <owner>/nightly, kept as a *repository* secret since
@@ -286,8 +291,9 @@ jobs:
           if-no-files-found: error
       # The same bundle again under the path GitHub Pages serves this repository from —
       # only when that is not the root, which is to say only for a fork with no custom
-      # domain. editor.scmjs.dev is at the root and takes the build above as it is, so the
-      # site and the release zip are then the same files rather than two builds that agree.
+      # domain's root, and it is for scmjs.dev/editor/ (PAGES_BASE = /editor/). At the root
+      # the site takes the build above as it is, and the site and the release zip are then
+      # the same files rather than two builds that agree.
       - name: Build (Pages)
         if: needs.channel.outputs.channel == 'stable' && vars.PAGES_BASE != '/'
         run: npm run build

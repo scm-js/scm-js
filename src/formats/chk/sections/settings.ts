@@ -37,7 +37,12 @@ export interface UnitSettings {
   weaponBonus: Uint16Array;
 }
 
-export function decodeUnitSettings(data: Uint8Array): UnitSettings {
+/**
+ * Decode UNIS or UNIx. `over` is the other of the pair, already decoded, for a file that
+ * carries both: what this section does not reach (the Brood War weapons, when this is the
+ * original) is kept from it instead of being reset — see `scenario.ts#readPair`.
+ */
+export function decodeUnitSettings(data: Uint8Array, over?: UnitSettings): UnitSettings {
   const weapons = data.length >= UNIX_SIZE ? WEAPONS_BW : WEAPONS_ORIGINAL;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const n = UNIT_TYPES;
@@ -54,8 +59,8 @@ export function decodeUnitSettings(data: Uint8Array): UnitSettings {
     mineralCost: u16(n),
     gasCost: u16(n),
     nameIndex: u16(n),
-    weaponDamage: new Uint16Array(WEAPONS_BW),
-    weaponBonus: new Uint16Array(WEAPONS_BW),
+    weaponDamage: over ? over.weaponDamage.slice() : new Uint16Array(WEAPONS_BW),
+    weaponBonus: over ? over.weaponBonus.slice() : new Uint16Array(WEAPONS_BW),
   };
   s.weaponDamage.set(u16(weapons));
   s.weaponBonus.set(u16(weapons));
@@ -209,9 +214,10 @@ class Columns {
   skip(bytes: number) { this.at += bytes; }
 }
 
-export function decodeUpgradeSettings(data: Uint8Array): UpgradeSettings {
+/** Decode UPGS or UPGx, over the other of the pair where the file has both (`decodeUnitSettings`). */
+export function decodeUpgradeSettings(data: Uint8Array, over?: UpgradeSettings): UpgradeSettings {
   const count = data.length >= UPGX_SIZE ? UPGRADES_BW : UPGRADES_ORIGINAL;
-  const s = defaultUpgradeSettings();
+  const s = over ?? defaultUpgradeSettings();
   const c = new Columns(data);
   c.u8(count, s.useDefault);
   if (count === UPGRADES_BW) c.skip(1);
@@ -284,9 +290,10 @@ function writePerPlayer(w: Writer, from: Uint8Array, count: number, stride: numb
   for (let p = 0; p < PLAYER_SLOTS; p++) for (let i = 0; i < count; i++) w.u8(from[p * stride + i] ?? 0);
 }
 
-export function decodeUpgradeRestrictions(data: Uint8Array): UpgradeRestrictions {
+/** Decode UPGR or PUPx, over the other of the pair where the file has both (`decodeUnitSettings`). */
+export function decodeUpgradeRestrictions(data: Uint8Array, over?: UpgradeRestrictions): UpgradeRestrictions {
   const count = data.length >= PUPX_SIZE ? UPGRADES_BW : UPGRADES_ORIGINAL;
-  const r = defaultUpgradeRestrictions();
+  const r = over ?? defaultUpgradeRestrictions();
   const c = new Columns(data);
   readPerPlayer(c, count, r.playerMax, UPGRADES_BW);
   readPerPlayer(c, count, r.playerStart, UPGRADES_BW);
@@ -347,9 +354,10 @@ export interface TechSettings {
 
 const TECH_COLUMNS = ["mineralCost", "gasCost", "researchTime", "energyCost"] as const;
 
-export function decodeTechSettings(data: Uint8Array): TechSettings {
+/** Decode TECS or TECx, over the other of the pair where the file has both (`decodeUnitSettings`). */
+export function decodeTechSettings(data: Uint8Array, over?: TechSettings): TechSettings {
   const count = data.length >= TECX_SIZE ? TECHS_BW : TECHS_ORIGINAL;
-  const s = defaultTechSettings();
+  const s = over ?? defaultTechSettings();
   const c = new Columns(data);
   c.u8(count, s.useDefault);
   for (const col of TECH_COLUMNS) c.u16(count, s[col]);
@@ -390,9 +398,10 @@ export function techIndex(player: number, techId: number): number {
   return player * TECHS_BW + techId;
 }
 
-export function decodeTechRestrictions(data: Uint8Array): TechRestrictions {
+/** Decode PTEC or PTEx, over the other of the pair where the file has both (`decodeUnitSettings`). */
+export function decodeTechRestrictions(data: Uint8Array, over?: TechRestrictions): TechRestrictions {
   const count = data.length >= PTEX_SIZE ? TECHS_BW : TECHS_ORIGINAL;
-  const r = defaultTechRestrictions();
+  const r = over ?? defaultTechRestrictions();
   const c = new Columns(data);
   readPerPlayer(c, count, r.playerAvailable, TECHS_BW);
   readPerPlayer(c, count, r.playerResearched, TECHS_BW);

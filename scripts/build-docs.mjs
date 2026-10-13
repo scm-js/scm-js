@@ -33,7 +33,7 @@ import { codeBlocksOf, playgroundUrl, runnableSnippets } from "./lib/docs/tryit.
 import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
 
 const root = resolve(import.meta.dirname, "..");
-const EDITOR_URL = "https://editor.scmjs.dev";
+const EDITOR_URL = "https://scmjs.dev/editor";
 const SITE_URL = "https://scmjs.dev/";
 const API_DTS = join(root, "plugin-api/index.d.ts");
 
@@ -396,7 +396,7 @@ function homeHtml(guides, api, base, features, render) {
   return `<h1>scmJS documentation</h1>
 <p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files.</p>
 <p class="home-shot"><img src="${base}/images/editor-plain.webp" width="1400" height="900" alt="The editor with Big Game Hunters open on the Terrain layer"></p>
-<p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}" target="_blank" rel="noopener noreferrer">${EDITOR_URL}</a>.</p>
+<p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}/" target="_blank" rel="noopener noreferrer">${EDITOR_URL.replace("https://", "")}</a>.</p>
 ${featuresHtml}<h2 id="documents">The documents</h2>
 <ul class="cards">
 ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.blurb)}</span></a></li>`).join("\n")}

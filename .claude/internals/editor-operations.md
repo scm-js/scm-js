@@ -83,3 +83,15 @@ every `scmjs.*` key but the caches and the recents (`NOT_EXPORTED`); an import w
 storage through `RELOADS` — keep `RELOADS` in step with `STORED_RESETS` (a merged atom
 merges over the value the store holds). `mergedStorage` merges one level down as well
 (`mergeDefaults`), so a field added to a nested group (`newMap.version`) has its default.
+
+**Check Map: tiles only Remastered has** (`data/remasteredTiles.ts`, 2026-10-09). An `info`
+finding under Terrain when MTXM holds a tile from a group Remastered added: every group past the
+end of the 1.16 table, and on Space Platform (933–1023), Desert (770–1023) and Twilight (797–1023)
+the low groups 1.16 left empty and Remastered filled with doodads. `validateScenario` is pure over
+the scenario and must answer whichever data set is loaded (a map with such tiles opened over a
+1.16 copy is exactly when the finding matters), so the ranges are a table of the two files'
+group counts, not a look at the loaded tileset. `tests/validate.test.ts` pins each boundary;
+`tests/remastered-isom.test.ts` checks the whole table group by group against the real 1.16 and
+Remastered files when `SCM_REMASTERED_DIR` is set — which is what caught Twilight's row being
+written without its low range. Info, not warn: the map is fine in Remastered. No jump target —
+`IssueTarget` has no tile kind — so the text carries the first tile's coordinates.

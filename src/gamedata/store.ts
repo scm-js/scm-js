@@ -64,6 +64,16 @@ async function opfsRoot(): Promise<FileSystemDirectoryHandle | null> {
 
 const dirCache = new Map<string, Promise<FileSystemDirectoryHandle | null>>();
 
+/**
+ * Forget which folders were found and which were not. The worker writes a copy behind this
+ * thread's back, and a folder looked for before the write (`gamedata-profiles/`, by the
+ * dialog listing the data sets) is remembered as missing until this is called — which left
+ * a data set just installed out of that list until the page was reloaded.
+ */
+export function forgetStoredFolders(): void {
+  dirCache.clear();
+}
+
 /** `gamedata/<a>/<b>` as a handle, cached; null when any segment is missing. */
 function directory(root: FileSystemDirectoryHandle, segments: string[]): Promise<FileSystemDirectoryHandle | null> {
   const key = segments.join("/");

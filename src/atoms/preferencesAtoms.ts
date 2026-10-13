@@ -69,6 +69,7 @@ export const gridLookAtom = atomWithStorage<GridLook>("scmjs.grid", DEFAULT_GRID
  * either slider without re-running for every other preference.
  */
 export const animateWaterSpeedAtom = atom((get) => get(preferencesAtom).animateWaterSpeed);
+export const remasteredEffectsAtom = atom((get) => get(preferencesAtom).remasteredEffects);
 export const animateUnitsSpeedAtom = atom((get) => get(preferencesAtom).animateUnitsSpeed);
 
 /** The status bar's cells on their own, so the bar does not re-render for every other preference. */

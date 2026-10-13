@@ -57,7 +57,7 @@ import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } 
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
 import { hostTerms, isDesktop } from "../../editor/platform";
-import { PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
+import { DEFAULT_REMASTERED_EFFECTS, PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
@@ -522,6 +522,8 @@ const STATUS_CELLS: [keyof StatusBarCells, string][] = [
 function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
   const p = w.prefs;
   const view = (v: Partial<Preferences["view"]>) => patch({ view: { ...p.view, ...v } });
+  const fx = p.remasteredEffects;
+  const effects = (v: Partial<Preferences["remasteredEffects"]>) => patch({ remasteredEffects: { ...fx, ...v } });
   return (
     <div className="stack">
       <Section title={t("Mouse wheel")}>
@@ -531,13 +533,32 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
         <Hint>{t("Keeps the tile under the pointer in place when the wheel zooms; the menu and keyboard zoom on the centre.")}</Hint>
       </Section>
       <Section title={t("Animation")}>
-        <Check label={t("Animate water (palette cycling)")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
+        <Check label={t("Animate water and lava")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
         <Check label={t("Animate units (idle animations)")} checked={p.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
         <div className="form wide" style={{ marginTop: 4 }}>
           <SpeedField label={t("Water speed")} value={p.animateWaterSpeed} onChange={(v) => patch({ animateWaterSpeed: v })} />
           <SpeedField label={t("Unit speed")} value={p.animateUnitsSpeed} onChange={(v) => patch({ animateUnitsSpeed: v })} />
         </div>
         <Hint>{t("The ticks are what the View menu starts with; 1× is the speed the game itself runs at.")}</Hint>
+      </Section>
+      <Section title={t("Graphics")}>
+        <Check label={t("Remastered graphics")} checked={p.hdGraphics} onChange={(e) => patch({ hdGraphics: e.target.checked })} />
+        <Hint>{t("What View ▸ Remastered Graphics starts with. It draws terrain, units and sprites from StarCraft: Remastered's own pictures at twice the detail, and needs the Remastered data set (Help ▸ Game Data…).")}</Hint>
+        <details style={{ marginTop: 6 }}>
+          <summary>{t("Water and lava")}</summary>
+          <div className="form wide" style={{ marginTop: 6 }}>
+            <Field label={t("Water bend")}><NumberInput value={fx.bend} min={0} max={4} step={0.1} width={90} onChange={(v) => effects({ bend: v })} /></Field>
+            <Field label={t("Water glint")}><NumberInput value={fx.glint} min={0} max={2} step={0.05} width={90} onChange={(v) => effects({ glint: v })} /></Field>
+            <Field label={t("Large ripples")}><NumberInput value={fx.large} min={16} max={2048} step={8} unit="px" width={110} onChange={(v) => effects({ large: v })} /></Field>
+            <Field label={t("Fine ripples")}><NumberInput value={fx.fine} min={8} max={1024} step={4} unit="px" width={110} onChange={(v) => effects({ fine: v })} /></Field>
+            <Field label={t("Ripple pictures a second")}><NumberInput value={fx.rate} min={1} max={60} step={1} width={90} onChange={(v) => effects({ rate: v })} /></Field>
+            <Field label={t("Lava heat")}><NumberInput value={fx.heat} min={0} max={4} step={0.1} unit="px" width={110} onChange={(v) => effects({ heat: v })} /></Field>
+          </div>
+          <div className="row" style={{ marginTop: 4 }}>
+            <Button size="sm" onClick={() => patch({ remasteredEffects: DEFAULT_REMASTERED_EFFECTS })}>{t("Put these back")}</Button>
+          </div>
+          <Hint>{t("How Remastered's water and lava move while View ▸ Animate Water is on. Sizes are in map pixels, 32 to a tile; a bend or heat of 0 leaves them still. The water speed above applies to these too.")}</Hint>
+        </details>
       </Section>
       <Section title={t("Status bar")}>
         <div className="prefs-checks">

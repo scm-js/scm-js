@@ -14,11 +14,17 @@
  *                                      [--only editor,units,fog] [--scenes scmjs-ai] [--out docs/images]
  *                                      [--plugin http://localhost:3121/]   # a local scmjs.dev plugin build
  *                                      [--playground http://localhost:3110/]  # a local API Playground build
+ *                                      [--remastered "/path/to/StarCraft"]    # a StarCraft: Remastered installation
  *
  * Needs the game data extracted (the pictures are of real graphics) and, in
  * `fixtures/maps/`, Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero from
  * the game's own Maps folder. Nothing here is a test: a picture that comes out wrong is
  * seen by looking at it.
+ *
+ * The Remastered pictures need the real thing: `--remastered` (or `SCM_REMASTERED_DIR`)
+ * names an installation, which the scene installs through Help ▸ Game Data… as a user
+ * would, beside the copy the dev server serves. Without it that scene is skipped and its
+ * pictures are left as they are.
  *
  * Coordinates are for a 1400×900 window with the default panel widths: the map area is
  * x 292..1150, y 85..870, which is why the strokes below are written against (292, 85).
@@ -49,6 +55,8 @@ const SCMJS_PLUGIN = opt("--plugin", PINNED_SCMJS);
 const FIXTURES = join(root, "fixtures/maps");
 /** The API Playground plugin: not a default, so it is installed for its scene; `--playground` points at a local build. */
 const PLAYGROUND_PLUGIN = opt("--playground", "github:scm-js/plugin-api-playground");
+/** A StarCraft: Remastered installation folder, for the scene that pictures its graphics. */
+const REMASTERED = opt("--remastered", process.env.SCM_REMASTERED_DIR ?? "");
 
 const { chromium } = await load("playwright");
 const sharp = (await load("sharp")).default;
@@ -147,6 +155,55 @@ const SCENES = [
     await p.menu("Triggers", /^Text Trigger Editor/); await p.wait(1200); await p.dialog("text-triggers"); await p.esc();
     await p.page.keyboard.press("Control+Shift+W"); await p.wait(4000); await p.take("walkability");
     await p.page.keyboard.press("Control+Shift+W"); await p.wait(500);
+  }),
+
+  scene("remastered", "dialog=gameData&zoom=2", async (p) => {
+    if (!REMASTERED) { console.log("remastered: skipped — no --remastered <StarCraft folder>"); return; }
+    // Installed as a user would: the dialog's own button, the folder handed to its chooser.
+    const [chooser] = await Promise.all([p.page.waitForEvent("filechooser"), p.page.locator(".dlg button", { hasText: "Add StarCraft: Remastered" }).click()]);
+    await chooser.setFiles(REMASTERED);
+    await p.page.locator(".toast", { hasText: "Data set ready" }).waitFor({ timeout: 300_000 });
+    await p.wait(1500);
+    await p.dialog("game-data-remastered");
+    await p.page.locator(".dlg .dlg-close").last().click(); await p.wait(400);
+
+    // A small base by the top-left start of Big Game Hunters, so the picture has terrain,
+    // resources, buildings and units of all three races in it.
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.page.click(rail(2)); await p.wait(600);
+    const place = async (name, spots) => { await p.unit(name); for (const [x, y] of spots) await p.click(...at(x, y)); };
+    await place("Terran Command Center", [[360, 360]]);
+    await place("Terran SCV", [[230, 300], [250, 380], [300, 470]]);
+    await place("Terran Marine", [[500, 330], [540, 370], [500, 410]]);
+    await place("Terran Siege Tank (Tank Mode)", [[620, 470]]);
+    await place("Protoss Zealot", [[380, 560], [440, 590]]);
+    await place("Protoss Dragoon", [[540, 600]]);
+    await place("Zerg Hydralisk", [[230, 580], [290, 640]]);
+    await place("Zerg Mutalisk", [[640, 250]]);
+    await p.esc(); await p.search("");
+    await p.page.click(rail(0)); await p.wait(600);
+    await p.page.mouse.move(1300, 500);
+
+    // The option is on after the install. One picture of each, the same view, joined down the middle.
+    await p.wait(3000);
+    const remastered = await p.page.screenshot({ clip: MAP });
+    await p.menu("View", /Remastered Graphics/); await p.wait(1500);
+    const classic = await p.page.screenshot({ clip: MAP });
+    await p.menu("View", /Remastered Graphics/); await p.wait(1500);
+    if (!ONLY.length || ONLY.includes("remastered-compare")) await sideBySide(classic, remastered, join(OUT, "remastered-compare.webp"));
+
+    // Water, which a still picture can only show standing: the shore at 100%.
+    await p.goto("zoom=1");
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.page.evaluate(() => { const el = document.querySelector(".scroller"); el.scrollLeft = 30 * 32; el.scrollTop = 34 * 32; });
+    await p.wait(3000);
+    await p.take("remastered-water", MAP);
+
+    // Where the water and lava are adjusted.
+    await p.goto("dialog=preferences&page=view");
+    await p.page.locator(".dlg summary", { hasText: "Water and lava" }).click(); await p.wait(400);
+    await p.page.locator(".dlg summary", { hasText: "Water and lava" }).scrollIntoViewIfNeeded(); await p.wait(300);
+    await p.dialog("preferences-graphics");
   }),
 
   scene("objects", "layer=units", async (p) => {
@@ -709,6 +766,22 @@ async function annotate(from, to, marks = EDITOR_MARKS) {
 }
 
 /* ── the driver ────────────────────────────────────────────────────────────────── */
+
+/**
+ * Two pictures of the same view as one: the left half of `left`, the right half of `right`,
+ * a rule between them and a label on each side.
+ */
+async function sideBySide(left, right, to) {
+  const { width, height } = await sharp(left).metadata();
+  const half = Math.floor(width / 2);
+  const rightHalf = await sharp(right).extract({ left: half, top: 0, width: width - half, height }).toBuffer();
+  const label = (text, x, anchor) => `<rect x="${anchor === "start" ? x - 10 : x - 10 - text.length * 9.6}" y="14" width="${text.length * 9.6 + 20}" height="30" rx="4" fill="#0b0d12" fill-opacity="0.82"/>` +
+    `<text x="${x}" y="35" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="16" font-weight="600" fill="#e8c06a" text-anchor="${anchor}">${text}</text>`;
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<rect x="${half - 1}" y="0" width="2" height="${height}" fill="#e8c06a"/>${label("Classic", 24, "start")}${label("Remastered", width - 24, "end")}</svg>`);
+  const info = await sharp(left).composite([{ input: rightHalf, left: half, top: 0 }, { input: overlay, left: 0, top: 0 }]).webp({ quality: 90 }).toFile(to);
+  console.log(`wrote ${to.split("/").pop().replace(/\.webp$/, "")} (${(info.size / 1024).toFixed(0)} KB)`);
+}
 
 function scene(name, query, run, { seed = false, init = null } = {}) { return { name, query, run, seed, init }; }
 

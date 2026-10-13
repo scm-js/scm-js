@@ -1,6 +1,9 @@
 // Must come first: it silences React's dev render-profiling track, and the only thing
 // that makes that work is being evaluated before react-dom. See the file for why.
 import "./devReactTracks";
+// Next, and before anything that reads storage while it is evaluated: on the first visit
+// to scmjs.dev/editor/ it waits for the settings kept under the editor's old address.
+import "./moveIn";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Provider } from "jotai";

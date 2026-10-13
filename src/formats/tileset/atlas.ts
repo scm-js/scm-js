@@ -1,5 +1,6 @@
 import { cycleLength, cyclePalette, cyclingMegatiles, type PaletteBand } from "./cycle";
 import { drawMegatile, MEGATILE_PX, type Tileset } from "./decode";
+import { hdSource, type HdTiles } from "./hd";
 
 /**
  * All of a tileset's megatiles rendered once into a single image, so the viewport can
@@ -16,6 +17,15 @@ export interface TilesetAtlas {
   averages: Uint32Array;
   /** The cycling (water/lava) megatiles, or null when the tileset has none. */
   animation: AtlasAnimation | null;
+  /**
+   * StarCraft: Remastered's 2x pictures (`hd.ts`), when View ▸ Remastered Terrain is on
+   * and the data set has them. `atlasSource` then answers from these, at twice the source
+   * size, and nothing cycles: Remastered moves water and lava by bending the finished
+   * picture (`hd.effects`, `viewport/effectPass.ts`), so a megatile here is always the
+   * still one. `image`, `averages` and `animation` stay the classic ones — the minimap
+   * and the far zooms use the averages either way.
+   */
+  hd?: HdTiles | null;
 }
 
 /**
@@ -192,18 +202,33 @@ export interface AtlasSource {
   image: CanvasImageSource;
   sx: number;
   sy: number;
+  /** The megatile's side in source pixels: 32, or 64 from the 2x pictures. Blit `size` × `size` from (`sx`, `sy`). */
+  size: number;
   /** True when the megatile comes from the animated atlas. */
   animated: boolean;
 }
 
+/**
+ * The source pixels per megatile this atlas is being drawn at — what `atlasSource` will
+ * mostly answer with. Smoothing and whole-factor decisions are made against this rather
+ * than against 32, since a 2x tile drawn at 100% is being halved, not copied.
+ */
+export function atlasTileSize(atlas: TilesetAtlas): number {
+  return atlas.hd ? atlas.hd.tileSize : MEGATILE_PX;
+}
+
 /** Image and source rectangle to blit one megatile from, at the atlas's current step. */
 export function atlasSource(atlas: TilesetAtlas, megatile: number): AtlasSource {
+  if (atlas.hd) {
+    const hd = hdSource(atlas.hd, megatile);
+    if (hd) return { image: hd.image, sx: hd.sx, sy: hd.sy, size: atlas.hd.tileSize, animated: false };
+  }
   const anim = atlas.animation;
   const slot = anim ? anim.slot[megatile] : -1;
   if (anim && slot >= 0) {
     const { x, y } = atlasCell(slot, anim.columns);
-    return { image: anim.image, sx: x, sy: y, animated: true };
+    return { image: anim.image, sx: x, sy: y, size: MEGATILE_PX, animated: true };
   }
   const { x, y } = atlasCell(megatile, atlas.columns);
-  return { image: atlas.image, sx: x, sy: y, animated: false };
+  return { image: atlas.image, sx: x, sy: y, size: MEGATILE_PX, animated: false };
 }

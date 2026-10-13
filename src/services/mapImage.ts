@@ -1,13 +1,13 @@
 import { ANYWHERE_INDEX, isLocationUsed, SpriteFlag, UnitState, UnitUsed } from "../formats/chk/sections/objects";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { NO_UNIT } from "../formats/dat/dat";
-import { atlasSource, type TilesetAtlas } from "../formats/tileset/atlas";
+import { atlasSource, atlasTileSize, type TilesetAtlas } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import {
   ensureTileset, peekTileset, TILESET_FILENAMES, type LoadedTileset,
 } from "../formats/tileset/load";
 import {
-  awaitGrps, getUnitAssets, imageGrpPath, peekUnitAssets, unitImageId, type UnitAssets,
+  awaitAnims, awaitGrps, getUnitAssets, hdSprites, imageGrpPath, peekUnitAssets, unitImageId, type UnitAssets,
 } from "../formats/units/load";
 import { getImageFrame, getUnitSprite, subunitOf } from "../formats/units/sprites";
 import { displayColorHex, playerTeamColor } from "../data/players";
@@ -121,17 +121,21 @@ export async function loadMapImageAssets(scn: Scenario, options: MapImageOptions
   // The tables are wanted either way — the dots are sized from units.dat placement boxes.
   const units = peekUnitAssets() ?? await getUnitAssets().catch(() => null);
   if (units && drawsSprites(options.pixelsPerTile) && (options.units || options.sprites)) {
-    await awaitGrps(grpPaths(scn, units, options));
+    const wanted = spriteParts(scn, units, options);
+    // Both: an image with no 2x sprite is drawn from its GRP, and which those are is not known until asked.
+    await Promise.all([awaitGrps(wanted.paths), awaitAnims(wanted.images)]);
   }
   return { tileset, units };
 }
 
-/** Every GRP the export will ask for, so they can all be fetched before the single draw pass. */
-function grpPaths(scn: Scenario, assets: UnitAssets, options: MapImageOptions): string[] {
+/** Every GRP and image the export will ask for, so they can all be fetched before the single draw pass. */
+function spriteParts(scn: Scenario, assets: UnitAssets, options: MapImageOptions): { paths: string[]; images: number[] } {
   const paths = new Set<string>();
+  const images = new Set<number>();
   const addImage = (imageId: number) => {
     const path = imageId >= 0 ? imageGrpPath(assets, imageId) : null;
     if (path) paths.add(path);
+    if (imageId >= 0) images.add(imageId);
   };
   const addUnit = (unitId: number) => {
     addImage(unitImageId(assets, unitId));
@@ -145,7 +149,7 @@ function grpPaths(scn: Scenario, assets: UnitAssets, options: MapImageOptions): 
       else addUnit(r.spriteId);
     }
   }
-  return [...paths];
+  return { paths: [...paths], images: [...images] };
 }
 
 /** The whole map on a fresh canvas. Everything it needs must already be loaded (see above). */
@@ -197,7 +201,7 @@ function drawTerrain(ctx: CanvasRenderingContext2D, scn: Scenario, loaded: Loade
   }
   const { atlas, tileset } = loaded;
   const flat = tilePx < FLAT_PX;
-  ctx.imageSmoothingEnabled = !flat && tilePx < TILE;
+  ctx.imageSmoothingEnabled = !flat && tilePx < atlasTileSize(atlas);
   for (let ty = area.y0; ty < area.y1; ty++) {
     for (let tx = area.x0; tx < area.x1; tx++) {
       const megatile = megatileForTile(tileset, scn.tiles[ty * scn.width + tx]);
@@ -211,7 +215,7 @@ function drawTerrain(ctx: CanvasRenderingContext2D, scn: Scenario, loaded: Loade
         ctx.fillRect(px, py, tilePx, tilePx);
       } else {
         const src = atlasSource(atlas, megatile);
-        ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
+        ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, px, py, tilePx, tilePx);
       }
     }
   }
@@ -297,7 +301,7 @@ function drawObjects(
   if (options.sprites) scn.sprites.forEach((r, i) => order.push({ kind: "sprite", i, y: r.y, flyer: 0 }));
   order.sort((a, b) => a.flyer - b.flyer || a.y - b.y || (a.kind === b.kind ? a.i - b.i : a.kind === "unit" ? -1 : 1));
 
-  ctx.imageSmoothingEnabled = zoom < 1;
+  ctx.imageSmoothingEnabled = zoom < (hdSprites() ? 2 : 1);
   for (const d of order) {
     if (d.kind === "sprite") {
       const r = scn.sprites[d.i];

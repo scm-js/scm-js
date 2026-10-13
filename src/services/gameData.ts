@@ -14,12 +14,15 @@
  * memory is wrong, only missing, so the failed parts are retried and the rest kept.
  */
 import type { getDefaultStore } from "jotai";
+import { viewFlagsAtom } from "../atoms/editorAtoms";
 import { gameDataProfileAtom, gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
 import { resetUnitAssets, retryFailedParts } from "../formats/units/load";
 import { clearFrameCache } from "../formats/units/sprites";
-import { installDataSet, InstallError, type GameDataFiles, type InstallProgress } from "../gamedata/install";
+import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder } from "../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "../gamedata/profiles";
+import { REMASTERED_PROFILE } from "../gamedata/profiles";
 import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../gamedata/source";
 import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store";
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
@@ -44,6 +47,18 @@ export function adoptSource(store: Store, next: AssetSource, switched: boolean):
   store.set(gameDataSourceAtom, next);
   store.set(gameDataRevisionAtom, (n) => n + 1);
   void relayBlankTerrain(store);
+}
+
+/**
+ * Turn View ▸ Remastered Graphics on, now and for later sessions. Called when a copy has
+ * just been made from a Remastered installation: someone who pointed the editor at
+ * Remastered and then saw the 1.16 pictures would not go looking for a menu item, and the
+ * copy they just waited for is mostly those pictures. Only ever at that moment — the
+ * option is the user's from then on, and unticking it (or the preference) stays unticked.
+ */
+export function turnOnRemasteredGraphics(store: Store): void {
+  if (!store.get(preferencesAtom).hdGraphics) store.set(preferencesAtom, { ...store.get(preferencesAtom), hdGraphics: true });
+  if (!store.get(viewFlagsAtom).hdGraphics) store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), hdGraphics: true });
 }
 
 /** Forget every decoded tileset, table, GRP and picture: the source now serves different files. */
@@ -84,6 +99,21 @@ export async function installDataSetInto(store: Store, profile: GameDataProfile,
   const before = store.get(gameDataSourceAtom);
   store.set(gameDataProfileAtom, { profile: profileOf(copy).id });
   const next = adoptStoredCopy(copy);
+  adoptSource(store, next, !sameFiles(before, next) || before?.kind === "stored");
+  return next;
+}
+
+/**
+ * Install a StarCraft: Remastered installation as a data set beside the game's own and
+ * switch to it — the route for someone who already has the 1.16 files and wants the tiles
+ * Remastered added.
+ */
+export async function installRemasteredInto(store: Store, folder: RemasteredFolder, progress?: InstallProgress): Promise<AssetSource> {
+  const copy = await installFromRemastered(folder, progress, REMASTERED_PROFILE);
+  const before = store.get(gameDataSourceAtom);
+  store.set(gameDataProfileAtom, { profile: profileOf(copy).id });
+  const next = adoptStoredCopy(copy);
+  turnOnRemasteredGraphics(store);
   adoptSource(store, next, !sameFiles(before, next) || before?.kind === "stored");
   return next;
 }

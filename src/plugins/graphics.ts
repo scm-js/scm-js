@@ -15,10 +15,10 @@ import type { createStore } from "jotai";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { displayColorHex, playerTeamColor } from "../data/players";
 import { logError } from "../editor/log";
-import { atlasSource } from "../formats/tileset/atlas";
+import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
-import { getUnitAssets, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
+import { getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
 import { getImageFrame, getUnitSprite, subunitOf } from "../formats/units/sprites";
 import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
@@ -62,7 +62,7 @@ function buildTile(loaded: LoadedTileset, tileId: number): PluginImage | null {
   const made = canvasOf(TILE, TILE);
   if (!made) return null;
   const src = atlasSource(loaded.atlas, megatile);
-  made.ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, 0, 0, TILE, TILE);
+  made.ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, 0, 0, TILE, TILE);
   return { image: made.canvas, width: TILE, height: TILE };
 }
 
@@ -79,7 +79,7 @@ function buildDoodad(loaded: LoadedTileset, doodadId: number): PluginImage | nul
       const megatile = megatileForTile(loaded.tileset, tile);
       if (megatile < 0) continue;
       const src = atlasSource(loaded.atlas, megatile);
-      made.ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, x * TILE, y * TILE, TILE, TILE);
+      made.ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, x * TILE, y * TILE, TILE, TILE);
     }
   }
   return { image: made.canvas, width: def.width * TILE, height: def.height * TILE };
@@ -103,9 +103,9 @@ function renderClip(clip: Clip, loaded: LoadedTileset, assets: UnitAssets | null
     const megatile = megatileForTile(loaded.tileset, id);
     if (megatile <= 0) return;
     const src = atlasSource(loaded.atlas, megatile);
-    ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, x * ppt, y * ppt, ppt, ppt);
+    ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, x * ppt, y * ppt, ppt, ppt);
   };
-  ctx.imageSmoothingEnabled = ppt < TILE;
+  ctx.imageSmoothingEnabled = ppt < atlasTileSize(loaded.atlas);
   if (parts.terrain && clip.tiles && clip.ground) {
     const picture = parts.doodads ? clip.tiles : clip.ground;
     for (let y = 0; y < clip.height; y++) for (let x = 0; x < clip.width; x++) blit(x, y, picture[y * clip.width + x]);
@@ -120,7 +120,7 @@ function renderClip(clip: Clip, loaded: LoadedTileset, assets: UnitAssets | null
       }
     }
   }
-  ctx.imageSmoothingEnabled = scale < 1;
+  ctx.imageSmoothingEnabled = scale < (hdSprites() ? 2 : 1);
   const { palette, key } = { palette: loaded.tileset.palette, key: loaded.name };
   const drawFrame = (frame: { image: CanvasImageSource; width: number; height: number } | null, cx: number, cy: number) => {
     if (!frame) return false;
@@ -196,7 +196,9 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
     const l = loaded();
     if (!l || imageId < 0) return null;
     const { palette, key } = paletteOf(l);
-    const frame = getImageFrame(assets, imageId, 0, flip, teamOf(owner), palette, key);
+    // A plugin is handed the canvas itself and may read its pixels, so it is the GRP's
+    // own size whatever View ▸ Remastered Graphics says.
+    const frame = getImageFrame(assets, imageId, 0, flip, teamOf(owner), palette, key, false);
     return frame ? { image: frame.image, width: frame.width, height: frame.height } : null;
   };
 
@@ -213,7 +215,7 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
       const l = loaded();
       if (!assets || !l) return null;
       const { palette, key } = paletteOf(l);
-      const sprite = getUnitSprite(assets, unitId, teamOf(options.owner ?? 0), palette, key);
+      const sprite = getUnitSprite(assets, unitId, teamOf(options.owner ?? 0), palette, key, false);
       return sprite ? { image: sprite.image, width: sprite.width, height: sprite.height } : null;
     },
 
@@ -224,7 +226,7 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
         const l = loaded();
         if (!l) return null;
         const { palette, key } = paletteOf(l);
-        const sprite = getUnitSprite(assets, id, teamOf(options.owner ?? 0), palette, key);
+        const sprite = getUnitSprite(assets, id, teamOf(options.owner ?? 0), palette, key, false);
         return sprite ? { image: sprite.image, width: sprite.width, height: sprite.height } : null;
       }
       const imageId = assets.sprites.image[id];

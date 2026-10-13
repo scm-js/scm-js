@@ -21,8 +21,11 @@ The editor needs two archives from a classic (1.16) installation, `StarDat.mpq` 
 `BrooDat.mpq`. Brood
 War's is required: its unit table is the layout the editor reads, and the Ice, Desert and
 Twilight tilesets exist only there. A `patch_rt.mpq` beside them is applied over both,
-as the game applies it. Remastered installations carry none of these files; the download
-route below is for them.
+as the game applies it.
+
+A StarCraft: Remastered installation works too, though it carries none of those archives.
+Its files are kept in a different kind of storage (the `Data` folder), and the editor
+reads the ones it needs out of that; see [Remastered](#starcraft-remastered) below.
 
 Out of the archives come about 930 files, 30 MB in all:
 
@@ -32,6 +35,7 @@ Out of the archives come about 930 files, 30 MB in all:
 | `tileset/<name>.ofire.pcx` and the other three remaps, `<name>.dddata.bin`, `stat_txt.tbl` | the fire and explosion colours, the doodad placement table, the doodad and unit names |
 | `arr/units.dat`, `flingy.dat`, `sprites.dat`, `images.dat`, `images.tbl` | the chain from a unit type to its picture |
 | `arr/weapons.dat`, `upgrades.dat`, `techdata.dat` | the defaults the Unit, Upgrade and Technology Settings dialogs show |
+| `arr/sfxdata.dat`, `sfxdata.tbl` | the list of the game's own sounds, which the Trigger Editor's sound picker shows; the sounds themselves are not copied |
 | `game/tunit.pcx` | the team colour rows |
 | `scripts/iscript.bin` | the animation scripts |
 | `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |
@@ -62,8 +66,9 @@ The editor settles on one source of game data when it starts, in this order:
    `STARCRAFT_DIR` from the environment, in the platform's usual install locations
    (`C:\Program Files (x86)\StarCraft`, `/Applications/StarCraft`, a Wine prefix on
    Linux), and in `~/StarCraft` and `~/Games/StarCraft`. The first folder with the
-   archives is extracted into the app's data folder, which is then step 2. Someone whose
-   game is where the installer put it never sees a dialog.
+   archives, or with a StarCraft: Remastered installation, is extracted into the app's
+   data folder, which is then step 2. Someone whose game is where the installer put it
+   never sees a dialog.
 5. **Nothing.** The editor runs without graphics and opens Help ▸ Game Data… to offer
    the routes below.
 
@@ -72,14 +77,24 @@ web address to load the files from; that route was removed once Blizzard's own p
 became installable in one click, because a chain that runs out and asks is easier to
 understand than a silent fetch.
 
-The browser's private storage is per site, so [editor.scmjs.dev](https://editor.scmjs.dev)
+The browser's private storage is per address, so [scmjs.dev/editor](https://scmjs.dev/editor/)
 and [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) each keep their own copy
-and each ask once.
+and each ask once. The editor used to be at `editor.scmjs.dev`; a copy installed there
+stays there, and the editor at its new address asks for the files again. Preferences,
+plugins and a sign-in are carried over the first time the new address is opened.
 
 ## Getting the files
 
 Help ▸ Game Data… shows the current source and, when there is none, the two ways to get
 one.
+
+The hosted editor also has the same controls on a page of their own,
+[scmjs.dev/editor/data](https://scmjs.dev/editor/data), which lists every copy the
+browser holds: what it is, where it came from, how many files and how large, and when it
+was made. The top bar of [scmjs.dev](https://scmjs.dev) shows which of them you have (no
+game data, the editor's graphics from Blizzard's download, or files from your own
+StarCraft 1.16 or Remastered) and links to that page. Nothing is read but each copy's
+record of where it came from, and nothing leaves the browser.
 
 **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
 free download, and the package carries both archives. They are the trimmed StarEdit
@@ -101,12 +116,52 @@ rules.
 **Use your own files.** Pick `StarDat.mpq` and `BrooDat.mpq`, or the folder holding
 them. The desktop app can also search the computer, or take the StarCraft folder you
 point it at. A `patch_rt.mpq` in the folder is applied over the two, as it is in the
-game.
+game. The folder can also be a StarCraft: Remastered installation, which is read as
+described [below](#starcraft-remastered).
 
 Either way the extraction runs on your machine, in a background thread in the browser
 and in the app's own process on the desktop, and the result is kept so it happens once.
 Open maps pick the graphics up as they arrive. The same dialog removes a copy, which puts
 the editor back to whatever step of the search it would have reached without it.
+
+### StarCraft: Remastered
+
+A Remastered installation has no `.mpq` archives. The launcher keeps the game in the
+`Data` folder as a few large files with an index over them, and the editor reads the
+files it needs out of that with [kascade](https://github.com/jeany55/kascade). Choose
+the folder the game is installed in, the one that holds `.build.info`. Nothing in the
+folder is changed, and only the files the editor uses are read: about 1,700 of them,
+365 MB, out of an installation of several gigabytes. Most of that is Remastered's own
+terrain and sprite pictures (and what its water and lava need to move), which the 1.16 archives do not have (see
+[Remastered graphics](#remastered-graphics)); the files both kinds of copy share are
+about 45 MB of it.
+
+What comes out is the same set of files as from the 1.16 archives, plus the terrain
+pictures above, with one difference worth knowing. Remastered added tiles to seven of the eight tilesets (Installation is the
+one it left alone), so its tile tables are longer. Everything the 1.16 tables hold is in
+them unchanged, and a map made for 1.16 draws the same from either. A map that uses the
+added tiles needs the Remastered files to be drawn: from a 1.16 copy those tiles have no
+picture.
+
+There are two ways in, depending on what the editor already has:
+
+- **With no graphics yet**, the folder button under *Use your own files* takes a
+  Remastered folder as it takes a 1.16 one, and the result is the editor's copy of the
+  game's files. The desktop app's search finds a Remastered installation in the usual
+  places the same way.
+- **With a copy already in place**, *Add StarCraft: Remastered…* under *Data sets*
+  installs it beside that copy as a [data set](#data-sets) of its own, so you can switch
+  between the two.
+
+The folder is chosen through the browser's ordinary folder upload, so the browser asks
+whether to upload the folder's files. Nothing is uploaded anywhere: the editor is handed
+the files where they are and reads only the parts it needs. (Chrome and Edge have a newer
+folder picker that would not ask, but it refuses anything under Program Files, which is
+where StarCraft is installed.)
+
+Of Remastered's high-definition art, the terrain and the sprites are read at twice the
+classic size. The four-times-size versions of both are in the same installation and are
+left alone.
 
 ### The container image
 
@@ -133,7 +188,9 @@ data; see [ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
 
 The editor draws from one set of game files at a time, and a *data set* names one. The
 default is the game's own. Any other is a mod's: the same files in the same formats with
-some of them replaced, its own `units.dat`, graphics, sounds or `stat_txt.tbl`. Help ▸
+some of them replaced, its own `units.dat`, graphics, sounds or `stat_txt.tbl`. (A
+[StarCraft: Remastered](#starcraft-remastered) installation added beside a 1.16 copy is
+one too, and needs only its folder.) Help ▸
 Game Data… installs one beside the game's files and switches between them; the *Data
 sets* list appears once there is a second one, and the choice is remembered.
 
@@ -241,6 +298,66 @@ touch those bands and redraws it on each step. View ▸ Animate Water turns it o
 Preferences ▸ View sets the speed from a quarter to four times the game's. The minimap
 and the far zoom levels, which draw average tile colours, do not animate.
 
+### Remastered graphics
+
+![The same view drawn with the classic graphics on the left and Remastered's on the right](images/remastered-compare.webp)
+
+**View ▸ Remastered Graphics** draws the terrain, units and sprites from StarCraft:
+Remastered's own pictures in place of the classic ones, and switches back at any time. It needs game data that came
+from a [Remastered installation](#starcraft-remastered); with a 1.16 copy the option
+says so and the classic graphics stay. Installing from a Remastered installation turns
+the option on, since those pictures are most of what was just copied; from then on it is
+yours, and Preferences ▸ View holds whether the editor starts with it.
+
+**Terrain.** Remastered keeps one picture per megatile, 64 pixels square where the
+classic one is 32, and numbers them as the same installation's tile tables do. So the map
+is untouched, and so is everything the editor works out from the tiles (walkability,
+height, buildability, the terrain brushes): only where a megatile's pixels come from
+changes. The pictures are compressed in the file and there are six to nine thousand per
+tileset, of which a map uses a few hundred, so each is decoded the first time it is drawn
+and kept. Turning the option on fetches the tileset's file once (3 to 21 MB from the
+stored copy); the classic terrain keeps drawing until it has arrived.
+
+**Units and sprites.** Where the classic game has a GRP per image, Remastered has a
+sprite sheet with a table of where each frame sits on it, and frame N is the GRP's
+frame N. So the animation scripts, the facings and the positions are the same, and only
+the pixels differ. A sheet comes with a second picture marking what takes the player's
+colour, and the editor multiplies those parts by it. The game keeps five more pictures
+per image for its lighting; the copy holds only the two that are drawn. About 780 of the
+885 images the editor uses have a Remastered sprite; the rest (and any whose file has not
+arrived yet) are drawn from their GRP, so the two can appear side by side.
+
+At 100% both are drawn at half their size, at 200% pixel for pixel, where the classic
+graphics are each pixel doubled. The tile palette, doodad and unit thumbnails, the paste
+preview and an exported map image follow the same option. A plugin that asks for a
+unit's or a sprite's picture is always given the classic one, since it may read the
+pixels.
+
+**Water and lava.** Remastered does not animate these by rotating the palette. It draws
+the ground and then bends the picture: water is the ground seen through two layers of
+ripples drifting across the map, and lava the ground seen through heat, which shows on
+whatever glows red and leaves dark rock alone. A table per tileset says which megatiles
+take the effect, and a mask picture for each says where on it, so a shoreline tile moves
+on its water side only. The editor does the same with View ▸ Animate Water on, as one
+pass over the finished terrain. Ashworld's is the lava; the other tilesets' is water;
+Space Platform and Installation have neither.
+
+How far the picture bends and how the ripples drift are the game's own figures. How large
+the ripples lie on the map and how fast they change are not in its files, so those were
+set by eye and can be changed: Preferences ▸ View ▸ Graphics ▸ *Water and lava* has the
+bend, the glint, the two ripple sizes, their rate and the lava's heat, and the water
+speed on the same page applies to both.
+
+![Preferences, the View page, with the Water and lava settings open](images/preferences-graphics.webp)
+ This needs WebGL, which every current browser
+has; without it the water and lava are drawn still, and nothing else changes. An
+exported map image is always still.
+
+Three things are not the same as in the game. The water's glint comes from the ripples
+alone, where the game places a highlight by the middle of the screen, which in an editor
+would follow the window about. The sprites are drawn flat, without the game's lighting.
+And the minimap and the far zoom levels keep the classic average colours.
+
 ## How units are drawn
 
 A unit type leads to its picture through four tables:
@@ -288,13 +405,19 @@ under `src/formats/`:
 | File | Does |
 | --- | --- |
 | `src/gamedata/source.ts` | The search order above, as a chain over injected probes so `tests/gamedata.test.ts` can pin it without a browser. |
+| `src/gamedata/copies.ts` | What kind of thing a stored copy is (Blizzard's download, your own 1.16 files, Remastered, a mod), for the Game Data page. |
+| `src/pages/GameDataPage.tsx` | The Game Data page, a second page of the same build (`data.html`) around the dialog's own controls. |
 | `src/gamedata/store.ts` | The browser's copies, in the Origin Private File System: `gamedata/` for the game's own, `gamedata-profiles/<id>/` per data set, a stamp file written last so a half-written copy counts as nothing. |
 | `src/gamedata/install.ts`, `zip.ts` | The two install routes. `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
 | `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only `iscript.ts`, so Node runs it without a build step. |
 | `src/gamedata/extract.worker.ts`, `scripts/extract-*.mjs`, `desktop/main.ts` | The three places it runs: a browser worker, the Node scripts, the desktop's main process (which also holds the disk search and Test Map). |
+| `src/gamedata/remastered.ts` | A StarCraft: Remastered installation in the archives' place, over [kascade](https://github.com/jeany55/kascade). The storage answers asynchronously and the extraction reads synchronously, so the extraction is run until it asks for nothing new; `tests/remastered.test.ts` checks the result against a direct extraction, and against a real installation when `SCM_REMASTERED_DIR` names one. |
 | `src/gamedata/archives.ts`, `scripts/lib/archives.mjs` | Opening the archives with [mopaq](https://github.com/jeany55/mopaq), later archives winning, with a mod's loose files as an overlay; and finding them on disk. |
 | `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
 | `src/data/gameNames.ts` | The per-entry naming rule; `tests/names.test.ts` pins the differences against the real files. |
+| `src/formats/tileset/hd.ts` | Remastered's 2x terrain: the picture table of a `.dds.vr4`, the DXT1 decoder, and the atlas pages megatiles are decoded into on first use; and where its water and lava are (the mask table, the masks, the ripple and noise textures). `tests/hd-terrain.test.ts`. |
+| `src/components/viewport/effectPass.ts` | The WebGL pass that moves Remastered's water and lava over the terrain layer. |
+| `src/formats/dat/anim.ts`, `src/formats/dds.ts` | Remastered's 2x sprites: the `.anim` tables and the cut-down copy the extraction keeps, and DXT1 / DXT5 decoded a rectangle at a time. `tests/hd-sprites.test.ts`. |
 | `src/formats/tileset/` | `decode.ts` for the five files, `atlas.ts` for the atlas, `terrain.ts` for the terrain catalogue read from the CV5, `palette.ts` for the terrain names, `cycle.ts` for the palette bands, `doodads.ts` for `dddata.bin`, `load.ts` for fetching and the per-tileset cache. |
 | `src/formats/dat/` | Decoders for the `.dat` tables, `.tbl`, GRP, PCX, `.lo` and the iscript bytecode. |
 | `src/formats/units/` | The unit tables and lazy sprite loading, the per-frame canvas cache with its byte budget, team colours, and the animator. |

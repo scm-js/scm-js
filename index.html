@@ -9,7 +9,7 @@
     <title>scmJS — StarCraft Scenario Editor</title>
     <!--
       What a search result or a pasted link shows for the editor itself. A shared map's link
-      (/map/…, /share/…) on editor.scmjs.dev gets its own title, description and picture from
+      (/map/…, /share/…) on scmjs.dev/editor gets its own title, description and picture from
       the link-previews worker, which takes these out first so a reader sees only the map's.
     -->
     <meta
@@ -163,7 +163,7 @@
       }
     </style>
     <!--
-      Cloudflare Web Analytics: visits and referrers, no cookies. Only on the two hosted
+      Cloudflare Web Analytics: visits and referrers, no cookies. Only on the hosted
       sites — the same bundle is the release zip, the container image and the desktop app
       (served from `scmjs://`), and none of those may report, so the switch is the
       hostname rather than a build flag. A fork on its own domain matches nothing either.
@@ -171,6 +171,9 @@
     <script>
       (function () {
         var token = {
+          // The site's own token: the editor is a path of it (scmjs.dev/editor/).
+          "scmjs.dev": "4f6f300eb17c49e8b16331e1e96f6b2a",
+          // The address the editor had, for as long as it still serves it.
           "editor.scmjs.dev": "84b275d150b84a8294f735b811518112",
           "nightly.editor.scmjs.dev": "3411da8934ed49829502fc55b16ff84b",
         }[location.hostname];
@@ -185,7 +188,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- The link-preview worker in front of editor.scmjs.dev only adds its card tags to a page with
+    <!-- The worker in front of the hosted editor only adds its card tags to a page with
          this id in it (scm-js/cloudflare-link-previews): renaming it stops the cards. -->
     <div id="boot-splash" role="presentation">
       <div class="card">

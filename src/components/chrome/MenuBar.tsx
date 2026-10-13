@@ -389,6 +389,7 @@ function useMenus(): Menu[] {
         flag("fog", msg("Fog of War")),
         flag("animateWater", msg("Animate Water")),
         flag("animateUnits", msg("Animate Units")),
+        flag("hdGraphics", msg("Remastered Graphics")),
         sep,
         flag("elevation", msg("Elevation Overlay")),
         flag("buildability", msg("Buildability Overlay")),

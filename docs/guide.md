@@ -13,7 +13,7 @@ listed in the [README](../README.md#documentation).
 
 There are three ways to run scmJS, each covered in [docs/installing.md](installing.md):
 
-- **In the browser** at [editor.scmjs.dev](https://editor.scmjs.dev). Nothing to install,
+- **In the browser** at [scmjs.dev/editor](https://scmjs.dev/editor/). Nothing to install,
   and your maps stay on your own disk.
 - **As a desktop app** for Windows, macOS and Linux, from the [releases](https://github.com/scm-js/scm-js/releases)
   page. It finds a StarCraft installation on its own and opens a map on a double-click.
@@ -32,7 +32,7 @@ already open, in its own tab (see [The editor window](#the-editor-window)); the 
 exception is the blank map the editor starts on, which the first map opened takes the
 place of. File ▸ Open Recent lists what you have had open before; in Chrome, Edge and the desktop app it reopens the file
 from disk directly. File ▸ Find on scmscx.com… searches the community map archive and
-opens the map you pick (see [Plugins](#plugins)); a link like `https://editor.scmjs.dev/scmscx/35b32Dsq`, the id taken from the map's address on the site, opens the editor with that map picked in it. File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
+opens the map you pick (see [Plugins](#plugins)); a link like `https://scmjs.dev/editor/scmscx/35b32Dsq`, the id taken from the map's address on the site, opens the editor with that map picked in it. File ▸ Open from scmjs.dev… lists the maps kept on your scmjs.dev
 account, every revision you saved there (see [Your scmjs.dev account](#your-scmjsdev-account)).
 
 The Repair plugin checks every map as it opens, the way the game reads it. When something
@@ -87,6 +87,47 @@ a unit being moved can carry on past what is on screen; it speeds up the further
 edge you push and stops when you let go. Ctrl++ and Ctrl+− zoom, as do the toolbar's magnifiers; Ctrl+0 is 100% and
 Ctrl+Shift+0 fits the whole map in the window. Ctrl+G shows the grid, and View ▸ Grid Settings (the
 Editing page of Preferences) sets its spacing, colour and style. The panels can be hidden from View ▸ Panels and their widths dragged.
+
+### Classic or Remastered graphics
+
+![The same view drawn with the classic graphics on the left and Remastered's on the right](images/remastered-compare.webp)
+
+The editor can draw a map with the classic graphics or with StarCraft: Remastered's.
+**View ▸ Remastered Graphics** switches between them at any time, for the terrain, the
+units and the sprites together. The switch changes only how the map is drawn. It does not
+touch the map, and the brushes and everything worked out from the tiles behave the same
+with it on or off.
+
+Remastered's pictures have twice the detail, which shows most when you zoom in: at 200%
+they are drawn pixel for pixel, where the classic ones are each pixel doubled.
+
+The Remastered graphics come from a Remastered installation, so the option needs one:
+
+- With no graphics installed yet, choose **Choose the StarCraft folder…** in the dialog
+  the editor opens on first use, and pick the folder Remastered is installed in.
+- With graphics already installed, open **Help ▸ Game Data…** and choose
+  **Add StarCraft: Remastered…** under *Data sets*.
+
+Either way the option is turned on for you when the install finishes. The files are read
+from the folder and a copy of what the editor needs is kept (about 375 MB), so this
+happens once. [Installing](installing.md#the-graphics) has the steps in full.
+
+Installing Remastered's files does change one thing about what you can make, whichever
+look you draw with. Remastered added several hundred doodads to seven of the eight
+tilesets, and with its files installed they are in the Doodads palette. A map you place
+one on depends on them: it draws correctly here only with the Remastered files, shows
+blank tiles there with a 1.16 copy, and uses tiles the 1.16 game's own files do not have.
+Maps that keep to the older doodads are unaffected. **Tools ▸ Check Map** says when a map
+uses any of these tiles, how many, and where the first one is.
+
+![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
+
+With **View ▸ Animate Water** on, water ripples and lava shimmers as they do in
+Remastered. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
+how fast, and the tick above it sets whether the editor starts with the Remastered
+graphics on. A few things differ from the game: units are drawn without its lighting, the
+minimap keeps the classic colours, and an exported map image has still water.
+[game-data.md](game-data.md#remastered-graphics) explains how it is drawn.
 
 Every layer has its own selection and its own palette. Undo is Ctrl+Z, two hundred steps
 deep and shared across all the layers, so a terrain stroke and the units it stranded
@@ -603,6 +644,16 @@ Import takes any file the browser can decode (MP3, FLAC, AAC, Ogg, WAV in any en
 and writes it as PCM WAV in the format picked next to the button; the default, 22050 Hz
 16-bit mono, is what the game's own sounds are, and the smaller presets are for maps
 chasing the size limit. A *Play WAV* action then names the file.
+
+A trigger can also play one of the game's own sounds, a unit's voice or an interface
+click, without the file being in the map. In the Trigger Editor, **Browse…** beside a
+WAV argument lists the map's sounds and the game's together. Search by file name, by
+unit, or by when the unit says the line: "marine yes" finds the four things a Marine says
+when ordered. In a Transmission the list opens on the lines of the unit the action
+already names. The line under the field says what the path is, and warns when it is
+neither in the map nor one of the game's. The list comes from the game data; a copy
+installed before version 0.7 does not have it, and installing the game data again from
+**Help ▸ Game Data…** adds it. The picker lists the sounds but does not play them yet.
 
 **Switches** names the 256 switches triggers set and test, so the trigger editors show
 "Gate open" rather than "Switch 3".
@@ -1250,7 +1301,7 @@ and the addresses it will fetch from.
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
 | [Repair](https://github.com/scm-js/plugin-repair) | on open, Tools ▸ Repair Map… | Reads a map the way the game does and lists what is missing, damaged, repeated or the wrong size, each with the repair and what the game does without it. Rebuilds a stripped isometric record. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
-| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; its page in Edit ▸ Preferences ▸ Plugins holds its address and how many minimaps to ask for. A link to `editor.scmjs.dev/scmscx/` followed by a map's id on the site opens the editor with the search on that map. |
+| [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; its page in Edit ▸ Preferences ▸ Plugins holds its address and how many minimaps to ask for. A link to `scmjs.dev/editor/scmscx/` followed by a map's id on the site opens the editor with the search on that map. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Triggers ▸ TrigScript… | Triggers as code: TypeScript files kept inside the map and built into a block of the trigger list — ordinary code that runs when you build, and `program()` bodies that run in the game, built into the saved map by the eudplib plugin (StarCraft: Remastered). See [TrigScript](#trigscript). |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | Tools ▸ Stamp Library… (Ctrl+Shift+L), Edit ▸ Save as Stamp… (Ctrl+Shift+K) | Named pieces — a ramp, a bridge, a cliff corner, a mineral line — saved from the marked area and kept across maps in the browser's storage. Click one and it hangs under the pointer, drawn with the map's graphics, aligned to the isometric lattice it came off; click to lay it down. Search, tags, JSON export and import, and one stamp as a line of text to share. |
@@ -1314,7 +1365,7 @@ Preferences (Ctrl+,) are kept in the browser. The pages down the left:
   brush size, the size of a new location; and how many undo levels each map keeps.
 - **View** — whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a
   wheel zoom keeps the tile under the pointer in place; whether water and units animate
-  and how fast; which cells the status bar shows (the tile, pixel and tile id under the
+  and how fast; whether the map starts out drawn with Remastered's graphics; which cells the status bar shows (the tile, pixel and tile id under the
   cursor, the map size, tileset, layer, zoom and revision); and whether string previews
   follow Remastered's colour rule or 1.16.1's.
 - **Testing** — Test Map's folder, and in the desktop app whether the game starts after

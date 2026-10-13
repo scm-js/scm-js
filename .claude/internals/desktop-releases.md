@@ -110,9 +110,43 @@ preferences, plugins and recents rather than writing a stored shape the stable b
 Repository variables `PAGES_BASE` (`/` for a custom domain; when it is not `/` the `web` job builds
 a second time for Pages) and `NIGHTLY_DOMAIN`, secret `NIGHTLY_PAT` (Contents: write on
 `<owner>/nightly`, the `PLUGIN_API_PAT` shape); the nightly deploy skips with a notice without them.
+**The hosted editor is at `scmjs.dev/editor/` (built 2026-10-12; live once `PAGES_BASE` is
+`/editor/`, the worker is deployed and `scmjs.dev` is proxied).** One origin with the site, because
+OPFS game data and `localStorage` (the sign-in among it) are per origin and the site is to show and
+manage both. Nothing in the editor is path-aware beyond Vite's `base`: `SCMJS_BASE` was already
+there for forks, game data is fetched under `import.meta.env.BASE_URL`, and the plugins' link
+helpers take the base off the page's own path. The parts:
+- **Pages is unchanged in place** — still this repository's site on `editor.scmjs.dev` — but built
+  a second time for `/editor/` (`Build (Pages)`), so the hosted bundle is no longer the release zip
+  byte for byte; it differs in the base path alone. The browser tests run before that second build,
+  at the root; `SCMJS_BASE=/editor/ npm run build`, `vite preview` with the same variable and
+  `SCMJS_E2E_URL=http://localhost:<port>/editor/` run them under the path (the fixture matches game
+  data paths under the base for that; 100/100 on 2026-10-12).
+- **The worker** (`scm-js/cloudflare-link-previews`, now the editor's front door) answers
+  `scmjs.dev/editor*` by fetching `editor.scmjs.dev` with the prefix taken off, and does the cards
+  on the way. On `editor.scmjs.dev/*` it takes the prefix off too — the `/editor/` build is deployed
+  *before* the old address redirects, and the page there asks for `/editor/assets/…` — until its
+  `MOVED` variable is `"1"`, when it answers 301 to the new address, path and query kept. Order:
+  worker (MOVED 0) and the proxy → `PAGES_BASE` → a release → check the new address → MOVED 1.
+  Any other order leaves one of the two addresses asking for assets that are not there.
+- **`src/moveIn.ts`** brings the `scmjs.` keys of `localStorage` over from the old origin, once: a
+  hidden frame on `editor.scmjs.dev/moved.html` (the worker's own page, `frame-ancestors` and the
+  `postMessage` target both `https://scmjs.dev`) posts them back, and keys already present at the new
+  address are kept. `main.tsx` imports it second and it ends in a top-level `await`, which is what
+  holds every later module — the ones that read storage as they are evaluated — until the answer is
+  in (`e2e/moveIn.spec.ts` checks the first paint is in the old address's language). It runs only
+  when `location.origin` is `https://scmjs.dev`, so the desktop app, the nightly, a container and
+  the dev server never wait. Its two marks (`scmjs-moved`, `scmjs-moved-tries`) are **not** under
+  `scmjs.` on purpose: Clear all data removes that prefix, and the next visit would bring everything
+  back. It gives up after three visits with no answer (4 s each). The two origins are one *site*, so
+  the frame's storage is not partitioned in Chromium, Firefox or Safari — reasoned, not yet seen
+  outside headless Chromium. OPFS game data and IndexedDB (file handles) are not carried.
+- The server's `AI_SERVER_ALLOWED_ORIGINS` must include `https://scmjs.dev`, and the sign-in
+  provider's redirect list whatever it holds for the old origin.
+
 **Analytics** are Cloudflare Web Analytics only (visits, referrers, countries, load timings; no
 cookies, no events): an inline script in `index.html` loads the beacon when `location.hostname` is
-`editor.scmjs.dev` or `nightly.editor.scmjs.dev`, each with its own token, and
+`scmjs.dev` (the site's own token, the editor being a path of it), `editor.scmjs.dev` (while it still serves) or `nightly.editor.scmjs.dev`, and
 `scripts/lib/docs/render.mjs` does the same for `docs.scmjs.dev`. The switch is the hostname and not
 a build flag because the stable Pages site *is* the release zip, the container image and the desktop
 bundle (`scmjs://`), and none of those may report. Decided 2026-09-21: no editor event counter

@@ -24,7 +24,8 @@ import { basename } from "node:path";
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { loadFormats, type Formats } from "./formats";
 
-const GAME_DATA = /^\/(tileset|unit|arr|game|scripts)\//;
+/** Under the path the editor is served from, which is not always the root (`SCMJS_E2E_URL=…/editor/`). */
+const GAME_DATA = /^(tileset|unit|arr|game|scripts)\//;
 
 export interface Editor {
   page: Page;
@@ -62,7 +63,7 @@ export const test = base.extend<{ editor: Editor }, { formats: Formats }>({
   }, { scope: "worker" }],
 
   editor: async ({ page, baseURL }, use) => {
-    const origin = new URL(baseURL!).origin;
+    const { origin, pathname: basePath } = new URL(baseURL!);
     const errors: string[] = [];
     const allowed: RegExp[] = [];
     page.on("pageerror", (err) => errors.push(`uncaught: ${err.message}`));
@@ -72,7 +73,7 @@ export const test = base.extend<{ editor: Editor }, { formats: Formats }>({
       const url = new URL(route.request().url());
       if (url.protocol === "data:" || url.protocol === "blob:") return route.continue();
       if (url.origin !== origin) return route.abort();
-      if (GAME_DATA.test(url.pathname)) return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html>" });
+      if (url.pathname.startsWith(basePath) && GAME_DATA.test(url.pathname.slice(basePath.length))) return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html>" });
       return route.continue();
     });
     await page.addInitScript(() => {

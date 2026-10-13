@@ -186,6 +186,7 @@ own license; being listed here does not relicense it.
 | [Radix UI](https://github.com/radix-ui/primitives) | menus, tabs, tooltips, popovers, context menus | MIT, copyright 2022 WorkOS |
 | [Lucide](https://github.com/lucide-icons/lucide), through `lucide-react` | the interface icons | ISC, Lucide Icons and Contributors; some icons derive from Feather Icons, MIT, copyright Cole Bemis |
 | [mopaq](https://github.com/jeany55/mopaq) | reading and writing MPQ archives, including PKWARE DCL | MIT, copyright 2026 Jeany |
+| [kascade](https://github.com/jeany55/kascade) | reading files out of a StarCraft: Remastered installation (CASC storage) | MIT, copyright 2026 Jeany |
 | [TypeScript](https://github.com/microsoft/TypeScript) | transpiling `.ts` plugins in the browser, in a worker | Apache-2.0, Microsoft Corporation |
 | The ten default plugins | compiled into the bundle from their repositories at the tags pinned in `src/plugins/defaults.ts` | MIT, copyright scmJS |
 
@@ -241,8 +242,8 @@ offline (`scripts/bundle-plugin-runtimes.mjs`), and add its license files to the
 - The **container image** is built on `nginx:alpine` (nginx, BSD-2-Clause; Alpine Linux
   packages under their own licenses).
 - **npm** publishes `@scm-js/plugin-api`.
-- **Cloudflare** serves `editor.scmjs.dev` and runs the Workers for the game-data
-  download, the scmscx.com plugin and editor link previews. The hosted editor (`editor.scmjs.dev` and its nightly) and the
+- **Cloudflare** serves `scmjs.dev` (the site and the editor at `scmjs.dev/editor`) and runs the Workers for the game-data
+  download, the scmscx.com plugin and editor link previews. The hosted editor (`scmjs.dev/editor` and its nightly) and the
   documentation load Cloudflare Web Analytics, which counts page views without cookies; a
   desktop app or container build does not load it.
 - **scmjs.dev** accounts, the AI assistant and shared maps are served by the project's
@@ -274,7 +275,7 @@ adapted material under this notice carry these copyrights:
 - Copyright (c) Meta Platforms, Inc. and affiliates (React and React DOM)
 - Copyright (c) 2020 Poimandres (Jotai)
 - Copyright (c) 2022 WorkOS (Radix UI)
-- Copyright (c) 2026 Jeany (mopaq)
+- Copyright (c) 2026 Jeany (mopaq, kascade)
 - Copyright (c) 2026 scmJS (the default plugins)
 - Copyright (c) 2013-present Cole Bemis (Feather-derived Lucide icons)
 - Copyright (c) Electron contributors (Electron, desktop app)

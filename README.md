@@ -24,6 +24,10 @@ does some things other editors do not. Each links to where it is explained; the 
 *Browse Plugins* are one click away under Plugins ▸ Browse Plugins… rather than installed
 from the start.
 
+- **Classic or Remastered graphics.** Point the editor at a StarCraft: Remastered
+  installation and it draws the map with Remastered's terrain, units and moving water,
+  at twice the detail. View ▸ Remastered Graphics switches between that and the classic
+  look at any time. See [Classic or Remastered graphics](docs/guide.md#classic-or-remastered-graphics).
 - **Several people on one map.** Share the map you have open, and anyone you send the
   link to edits it with you from their own editor, seeing the others' changes and
   pointers as they happen. See [Editing a map together](docs/guide.md#editing-a-map-together).
@@ -55,7 +59,7 @@ from the start.
 - **A recording of the build.** Timelapse (*Browse Plugins*) records the map one change
   at a time and exports it as a GIF or a WebM video. See [Plugins](docs/guide.md#plugins).
 - **Maps from scmscx.com.** File ▸ Find on scmscx.com… searches the community map archive
-  and opens the map you pick; a link to `editor.scmjs.dev/scmscx/` and the map's id opens
+  and opens the map you pick; a link to `scmjs.dev/editor/scmscx/` and the map's id opens
   it straight away. See [Opening a map](docs/guide.md#opening-a-map).
 - **Work kept.** Several maps open at once in tabs, a recovery copy of unsaved work if the
   editor closes, and the version a save replaced kept as a `.bak` or under File ▸ Previous
@@ -67,7 +71,7 @@ from the start.
 
 ## Getting started
 
-- **In the browser** at [editor.scmjs.dev](https://editor.scmjs.dev). Nothing to install,
+- **In the browser** at [scmjs.dev/editor](https://scmjs.dev/editor/). Nothing to install,
   and your maps stay on your own disk.
 - **As a desktop app** for Windows, macOS and Linux, from the [releases](../../releases)
   page. It finds a StarCraft installation on its own and opens a map on a double-click.
@@ -84,7 +88,7 @@ from Blizzard, or takes the `.mpq` files of a classic installation. See
 All of this documentation is also a site — [docs.scmjs.dev](https://docs.scmjs.dev) — with these documents
 as pages, a search box, and a reference for every call in the plugin API generated from
 the editor's own declarations. It is built from the tag the hosted editor runs, so the
-version in its footer is the one at [editor.scmjs.dev](https://editor.scmjs.dev). These
+version in its footer is the one at [scmjs.dev/editor](https://scmjs.dev/editor/). These
 files stay the source; the site renders them.
 
 | Document | Covers |

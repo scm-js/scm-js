@@ -82,7 +82,7 @@ ${BEACON}
   <label class="menu-button" for="menu" aria-label="Menu">Menu</label>
   <nav class="top-links">
     <a href="${siteUrl}#download">Download</a>
-    <a href="${editorUrl}">Editor</a>
+    <a href="${editorUrl}/">Editor</a>
     <a href="${repoUrl}">GitHub</a>
   </nav>
 </header>

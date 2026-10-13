@@ -802,8 +802,8 @@ sees no service.
 
 You call `fetch` yourself. Two things only show up in the desktop app:
 
-- **The desktop app's origin is `app://scmjs`.** The web builds are
-  `https://editor.scmjs.dev` and `https://nightly.editor.scmjs.dev`. Your server's CORS
+- **The desktop app's origin is `app://scmjs`.** The web builds' origins are
+  `https://scmjs.dev` and `https://nightly.editor.scmjs.dev`. Your server's CORS
   settings need to allow all three, or desktop requests fail as if the server were down.
 - **Open a sign-in popup blank, then point it.** A link opens in the user's real browser,
   which cannot post a session back. Open an empty named window

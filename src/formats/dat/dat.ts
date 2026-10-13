@@ -101,7 +101,22 @@ export interface UnitsDat {
   groupFlags: Uint8Array;
   /** StarEdit availability flags; all zero for the legacy layout. */
   availability: Uint16Array;
+  /**
+   * The unit's voice, as sfxdata.dat ids (0 for none): the one it says when trained, and
+   * first–last ranges for a click, repeated clicks and an order. Only the first
+   * `VOICED_UNITS` have ready / annoyed / yes sounds; every unit has a "what".
+   */
+  readySound: Uint16Array;
+  whatSoundStart: Uint16Array;
+  whatSoundEnd: Uint16Array;
+  annoyedSoundStart: Uint16Array;
+  annoyedSoundEnd: Uint16Array;
+  yesSoundStart: Uint16Array;
+  yesSoundEnd: Uint16Array;
 }
+
+/** Units 0–105 — the ones that are trained and ordered about — carry the full set of voice columns. */
+export const VOICED_UNITS = 106;
 
 export interface FlingyDat {
   /** sprites.dat index. */
@@ -216,7 +231,13 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
   f.skip(n * 4); // acquisition range, sight, armour upgrade, size
   const armor = f.u8(n);
   f.skip(n); // right-click action
-  f.skip(106 * 2 + n * 2 * 2 + 106 * 2 * 4); // ready / what / pissed / yes sounds
+  const readySound = f.u16(VOICED_UNITS);
+  const whatSoundStart = f.u16(n);
+  const whatSoundEnd = f.u16(n);
+  const annoyedSoundStart = f.u16(VOICED_UNITS);
+  const annoyedSoundEnd = f.u16(VOICED_UNITS);
+  const yesSoundStart = f.u16(VOICED_UNITS);
+  const yesSoundEnd = f.u16(VOICED_UNITS);
   const placementWidth = f.u16Strided(n, 4, 0);
   const placementHeight = f.u16Strided(n, 4, 2);
   f.skip(n * 4);
@@ -243,7 +264,22 @@ export function decodeUnitsDat(data: Uint8Array): UnitsDat {
     flingy, subunit, direction, shieldEnable, shieldAmount, hitPoints, elevation, flags,
     placementWidth, placementHeight, extentLeft, extentUp, extentRight, extentDown,
     mineralCost, vespeneCost, buildTime, armor, groundWeapon, airWeapon, groupFlags, availability,
+    readySound, whatSoundStart, whatSoundEnd, annoyedSoundStart, annoyedSoundEnd, yesSoundStart, yesSoundEnd,
   };
+}
+
+export interface SfxdataDat {
+  /** The sound's file: a 1-based `sfxdata.tbl` index, 0 for none. */
+  file: Uint32Array;
+}
+
+/** Bytes per sound: the file (u32), priority, flags, length adjust (u16) and minimum volume, struct of arrays. */
+const SFXDATA_ENTRY = 9;
+
+/** The file column; the table is as long as the game has sounds (1144 in Brood War), so the count comes off the size. */
+export function decodeSfxdataDat(data: Uint8Array): SfxdataDat {
+  const n = Math.floor(data.length / SFXDATA_ENTRY);
+  return { file: new Fields(data).u32(n) };
 }
 
 export interface WeaponsDat {

@@ -4,7 +4,7 @@
  * extras for sound paths and the ISOM health the hook already measured), so the checks
  * are testable; `ValidateMapDialog` renders the list and jumps to the targets.
  */
-import { MAP_VERSIONS, mapVersionOf, type Scenario } from "../formats/chk/scenario";
+import { MAP_VERSIONS, mapVersionOf, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { PlayerType } from "../formats/chk/sections/players";
@@ -13,6 +13,7 @@ import { textEncodingInfo } from "../formats/text/encoding";
 import { msg, t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
+import { isRemasteredOnlyTile } from "../data/remasteredTiles";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel } from "../data/units";
 import { UnitClass } from "../formats/chk/sections/triggers";
 import type { DialogId } from "../components/dialogs/ids";
@@ -20,6 +21,7 @@ import type { IsomStatus } from "./isom";
 import { CUWP_SLOTS, cuwpSlotActive } from "./cuwp";
 import { isAnywhereIntact, locationName } from "./locations";
 import { TILE_PX } from "./units";
+import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
 
 export type IssueLevel = "error" | "warn" | "info";
 
@@ -39,6 +41,8 @@ export interface Issue {
 export interface ValidateContext {
   /** Non-scenario archive members, for the sound paths triggers play. */
   extras?: Map<string, Uint8Array>;
+  /** The game's own sounds, when the game data lists them: a trigger may play one with no file in the map. */
+  stockSounds?: StockSounds | null;
   /** The ISOM health `useIsomStatus` measured; omitted = not checked. */
   isom?: IsomStatus;
 }
@@ -168,7 +172,10 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
           checkString(a[arg.field], def.name);
           const path = a[arg.field] > 0 ? getString(scn.strings, a[arg.field]) : null;
           if (path && ctx.extras && ![...ctx.extras.keys()].some((k) => normalize(k) === normalize(path))) {
-            add("warn", t("{label}: {name} plays '{path}', which is not in the archive.", { label, name: def.name, path }), where, target);
+            // A path into the game's sound folder plays from the game's files. Without the
+            // list there is no telling a real one from a typo, so only a listed miss is said.
+            if (!isStockPath(path)) add("warn", t("{label}: {name} plays '{path}', which is not in the archive.", { label, name: def.name, path }), where, target);
+            else if (ctx.stockSounds && !findStockSound(ctx.stockSounds, path)) add("warn", t("{label}: {name} plays '{path}', which is not in the archive and not one of the sounds the game lists.", { label, name: def.name, path }), where, target);
           }
         }
         if (arg.kind === "switch" && a.type === ActionType.SetSwitch && a.modifier !== SwitchAction.Clear) set.add(a[arg.field]);
@@ -202,6 +209,19 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const { rects, mismatched, inherent } = ctx.isom.report;
     const pct = Math.round(((mismatched - inherent) / Math.max(1, rects)) * 100);
     add("warn", t("ISOM is behind the tiles on {pct}% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).", { pct }), msg("Terrain"));
+  }
+
+  // Tiles only Remastered has: doodads it added. Worth knowing rather than wrong — the map
+  // plays in Remastered — but it is drawn only from Remastered's files, here and in the game.
+  const era = tilesetIndex(scn);
+  let added = 0, first = -1;
+  for (let i = 0; i < scn.tiles.length; i++) {
+    if (!isRemasteredOnlyTile(era, scn.tiles[i])) continue;
+    if (first < 0) first = i;
+    added++;
+  }
+  if (added > 0) {
+    add("info", t("{n, plural, one {# tile is} other {# tiles are}} from what StarCraft: Remastered added to this tileset (the first at {x}, {y}). The map draws in full only with Remastered's game data, and the 1.16 game's files do not have these tiles.", { n: added, x: first % scn.width, y: Math.floor(first / scn.width) }), msg("Terrain"));
   }
 
   const order: Record<IssueLevel, number> = { error: 0, warn: 1, info: 2 };

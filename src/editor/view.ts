@@ -35,6 +35,8 @@ export interface ViewFlags {
   animateWater: boolean;
   /** Run the units' iscript idle animations (turrets, pulsing buildings, fires, smoke). */
   animateUnits: boolean;
+  /** Draw terrain and sprites from StarCraft: Remastered's 2x pictures, where the data set in use has them. */
+  hdGraphics: boolean;
 }
 
 /**

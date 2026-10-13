@@ -21,6 +21,22 @@ export interface GameDataProfile {
 
 export const DEFAULT_PROFILE: GameDataProfile = { id: "starcraft", name: "StarCraft: Brood War" };
 
+/**
+ * The data set a StarCraft: Remastered installation is installed as, beside a copy of the
+ * 1.16 files (`remastered.ts`). Here, with the two below, rather than there: the startup
+ * path asks whether a copy is Remastered's, and that module brings the extraction with it.
+ */
+export const REMASTERED_PROFILE: GameDataProfile = { id: "remastered", name: "StarCraft: Remastered" };
+
+/** What the origin of every copy made from a Remastered installation starts with (its stamp's `from`). */
+export const REMASTERED_ORIGIN = "StarCraft: Remastered";
+
+/**
+ * Whether a copy came from a Remastered installation, by where its stamp says it is from —
+ * which is what says the copy carries Remastered's own pictures and not only the tables.
+ */
+export const isRemasteredOrigin = (from: string | undefined): boolean => from?.startsWith(REMASTERED_ORIGIN) ?? false;
+
 /** The stored key: `{ "profile": "<id>" }`. */
 export const PROFILE_KEY = "scmjs.gameData";
 

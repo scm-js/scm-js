@@ -1,0 +1,111 @@
+/* ── Pages beside the editor (data.html) ───────────────────
+   A page of the same build that is not the editor: it scrolls, and it is a column of text
+   rather than an application. Imported by the page's own entry after the editor's layers,
+   so the tokens, the controls and the Game Data dialog's own classes are all there.  */
+
+html:has(.pg),
+html:has(.pg) body,
+html:has(.pg) #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.pg {
+  min-height: 100vh;
+  background: var(--bg-1);
+}
+
+.pg-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 52px;
+  padding: 0 24px;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--border);
+}
+
+.pg-mark {
+  color: #ff5fa2;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+}
+.pg-mark span { color: var(--text); }
+
+.pg-cta {
+  padding: 6px 14px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 4px;
+  background: rgba(230, 185, 92, 0.1);
+  color: var(--gold);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pg-cta:hover { background: rgba(230, 185, 92, 0.18); }
+
+.pg-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.pg-main h1 {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 650;
+}
+
+.pg-lede {
+  margin: 0 0 28px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.pg-section { margin-top: 28px; }
+.pg-section > h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.pg-none { color: var(--text-dim); }
+
+.pg-copies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-copies li {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold-dim);
+  border-radius: 4px;
+  background: var(--bg-2);
+}
+.pg-copies li[data-kind="download"] { border-left-color: var(--border-strong); }
+.pg-copy-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.pg-copy-what { margin-top: 3px; }
+.pg-copy-facts { margin-top: 3px; font-size: 12px; }
+
+.pg-crash {
+  padding: 40px 24px;
+  color: var(--danger, #e66);
+}

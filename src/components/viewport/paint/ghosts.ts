@@ -5,7 +5,7 @@
 import type { Scenario } from "../../../formats/chk/scenario";
 import { tilesetIndex } from "../../../formats/chk/scenario";
 import type { LoadedTileset } from "../../../formats/tileset/load";
-import { atlasSource } from "../../../formats/tileset/atlas";
+import { atlasSource, atlasTileSize } from "../../../formats/tileset/atlas";
 import { megatileForTile } from "../../../formats/tileset/decode";
 import { doodadOrigin, type DoodadCatalogue } from "../../../formats/tileset/doodads";
 import type { UnitsDat } from "../../../formats/dat/dat";
@@ -17,7 +17,7 @@ import { START_LOCATION } from "../../../data/units";
 import type { DoodadGhost } from "../../../hooks/useDoodadTools";
 import type { useSpriteTools } from "../../../hooks/useSpriteTools";
 import type { useUnitTools } from "../../../hooks/useUnitTools";
-import type { SpritePainter } from "./objects";
+import { spritePx, type SpritePainter } from "./objects";
 import { INK, strokeBox, strokeTileRect, TILE, type PaintView } from "./view";
 
 type UnitGhost = ReturnType<ReturnType<typeof useUnitTools>["ghostsAt"]>[number];
@@ -28,7 +28,7 @@ function blitTile(v: PaintView, assets: LoadedTileset, id: number, tx: number, t
   const megatile = megatileForTile(assets.tileset, id);
   if (megatile <= 0) return;
   const src = atlasSource(assets.atlas, megatile);
-  v.ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, tx * v.tilePx - v.sx, ty * v.tilePx - v.sy, v.tilePx, v.tilePx);
+  v.ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, tx * v.tilePx - v.sx, ty * v.tilePx - v.sy, v.tilePx, v.tilePx);
 }
 
 /** A doodad as it would be placed: its tiles translucent, refused cells red, the overlay sprite ghosted. */
@@ -36,7 +36,7 @@ export function drawDoodadGhost(v: PaintView, paint: SpritePainter, assets: Load
   const { ctx, zoom, sx, sy, tilePx } = v;
   const ok = g.verdict.ok;
   const bad = new Set(g.verdict.bad);
-  ctx.imageSmoothingEnabled = tilePx < TILE;
+  ctx.imageSmoothingEnabled = tilePx < (assets ? atlasTileSize(assets.atlas) : TILE);
   for (let row = 0; row < g.def.height; row++) {
     for (let col = 0; col < g.def.width; col++) {
       const cell = row * g.def.width + col;
@@ -60,7 +60,7 @@ export function drawDoodadGhost(v: PaintView, paint: SpritePainter, assets: Load
   ctx.imageSmoothingEnabled = true;
   if (g.def.overlay) {
     const cx = (g.x * TILE + g.def.width * 16) * zoom - sx, cy = (g.y * TILE + g.def.height * 16) * zoom - sy;
-    ctx.imageSmoothingEnabled = zoom < 1;
+    ctx.imageSmoothingEnabled = zoom < spritePx();
     paint.thg2(g.def.overlay.id, g.def.flags, g.owner, cx, cy, alpha);
     ctx.imageSmoothingEnabled = true;
   }
@@ -91,7 +91,7 @@ export function drawClipGhost(
     blitTile(v, assets, id, tx, ty);
   };
   ctx.globalAlpha = 0.75;
-  ctx.imageSmoothingEnabled = tilePx < TILE;
+  ctx.imageSmoothingEnabled = tilePx < (assets ? atlasTileSize(assets.atlas) : TILE);
   if (sameTileset && parts.terrain && clip.tiles && clip.ground) {
     const picture = parts.doodads ? clip.tiles : clip.ground;
     for (let y = 0; y < clip.height; y++) for (let x = 0; x < clip.width; x++) blit(ax + x, ay + y, picture[y * clip.width + x]);
@@ -107,7 +107,7 @@ export function drawClipGhost(
     }
   }
   ctx.globalAlpha = 1;
-  ctx.imageSmoothingEnabled = zoom < 1;
+  ctx.imageSmoothingEnabled = zoom < spritePx();
   if (parts.units) {
     for (const u of clip.units) {
       const ux = (u.x + ox) * zoom - sx, uy = (u.y + oy) * zoom - sy;
@@ -143,7 +143,7 @@ export function drawUnitGhosts(v: PaintView, paint: SpritePainter, scenario: Sce
   const { ctx, zoom, sx, sy } = v;
   ghosts.forEach((ghost, i) => {
     const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
-    ctx.imageSmoothingEnabled = zoom < 1;
+    ctx.imageSmoothingEnabled = zoom < spritePx();
     const drawn = paint.unit(ghost.unitId, ghost.owner, gx, gy, ghost.problem ? 0.35 : i === 0 ? 0.6 : 0.4);
     ctx.imageSmoothingEnabled = true;
     const b = ghost.geometry.building ? placementBox(ghost.geometry, ghost.x, ghost.y) : unitBox(ghost.geometry, ghost.x, ghost.y);
@@ -163,7 +163,7 @@ export function drawSpriteGhosts(v: PaintView, paint: SpritePainter, ghosts: rea
   const { ctx, zoom, sx, sy } = v;
   ghosts.forEach((ghost, i) => {
     const gx = ghost.x * zoom - sx, gy = ghost.y * zoom - sy;
-    ctx.imageSmoothingEnabled = zoom < 1;
+    ctx.imageSmoothingEnabled = zoom < spritePx();
     if (!paint.thg2(ghost.id, ghost.flags, ghost.owner, gx, gy, i === 0 ? 0.6 : 0.4)) paint.spriteMarker(gx, gy);
     ctx.imageSmoothingEnabled = true;
     strokeBox(v, ghost.box, INK.gold, null, 1);
@@ -197,7 +197,7 @@ export function drawTileGhost(v: PaintView, assets: LoadedTileset, ghost: readon
   const { ctx, sx, sy, tilePx } = v;
   let animated = false;
   ctx.globalAlpha = 0.75;
-  ctx.imageSmoothingEnabled = tilePx < TILE;
+  ctx.imageSmoothingEnabled = tilePx < atlasTileSize(assets.atlas);
   for (const g of ghost) {
     const megatile = megatileForTile(assets.tileset, g.id);
     const px = g.x * tilePx - sx, py = g.y * tilePx - sy;
@@ -208,7 +208,7 @@ export function drawTileGhost(v: PaintView, assets: LoadedTileset, ghost: readon
     }
     const src = atlasSource(assets.atlas, megatile);
     if (src.animated) animated = true;
-    ctx.drawImage(src.image, src.sx, src.sy, TILE, TILE, px, py, tilePx, tilePx);
+    ctx.drawImage(src.image, src.sx, src.sy, src.size, src.size, px, py, tilePx, tilePx);
   }
   ctx.globalAlpha = 1;
   ctx.imageSmoothingEnabled = true;

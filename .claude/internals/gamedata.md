@@ -193,6 +193,19 @@ copy drew boxes or nothing for them (found by the user on a pylon warping in).
 more, 26 MB: a copy is 3137 files / 668 MB, 48 s. `PLAY_VERSION` is 2; the play page still
 plays from a version 1 copy, without those pictures, and says to renew it.
 
+**Version 3 (2026-10-13): the rest of Remastered's interface.** 29 more optional `hd2/` members
+(the fixed part is 133): the nineteen cursors' `hd2/cursor/<name>.dds.grp`,
+`hd2/unit/wirefram/wirefram.dds.grp` (30 MB: a 1024×128 picture a unit type, eight squares — four
+body parts in white, two shield outlines, the whole, one empty), `hd2/game/icons.dds.grp` (the
+resource icons, 28 px) and each tileset's creep edges `hd2/tileset/<name>.dds.grp`. `grpwire` and
+`tranwire.dds.grp` are deliberately left: they are the classic drawings with every pixel doubled.
+Nothing for water and lava: the play page moves them from the editor's own files
+(`tileset/<name>.hd.tmsk`, `.hd.mask`, `water_large.hd.grp`, `water_fine.hd.grp`,
+`heat_noise.hd.dds`), which every Remastered copy has. A copy is 3166 files / 698 MB, 45 s. The
+play page plays from versions 1–3 and draws a version 2 copy with the classic cursors, wireframes
+and icons, saying nothing. **The play page must accept a version before an editor that writes it
+is released** (scm-sim `web/gameSource.ts#PLAY_VERSIONS`), or a new copy is refused there.
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the
@@ -213,9 +226,13 @@ another window keeps its bytes and loses `webkitRelativePath`; `installFromPicke
 `.progress` / `.done` (the stamp) / `.error`. Same origin only, both ways. Built because the user,
 on the live play page, picked their Remastered folder and was sent to another page to pick it
 again. Where it installs: the default copy when there is none or it is the free download or an
-older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. It deliberately does
-not switch the editor's data set or turn Remastered Graphics on (that is `services/gameData`,
-which drags the document atoms in). The message names are a contract with scm-sim's
+older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. Since 2026-10-13 (the user:
+a Remastered folder given to the play page should make the editor default to Remastered too) it
+then writes the editor's two stored choices as the atoms would — `hdGraphics: true` into
+`scmjs.prefs`, and the Remastered data set into `scmjs.gameData` when the copy went in beside
+another (`gamedata/remasteredDefault.ts`, `tests/remastered-default.test.ts`). Straight to storage
+because `services/gameData` drags the document atoms in; only at that moment, like the dialog's
+`turnOnRemasteredGraphics`. An editor tab already open picks it up at its next load. The message names are a contract with scm-sim's
 `web/editorInstall.ts`. `e2e/installPage.spec.ts`.
 
 **The stamp is now read by three programs**: `copies.ts`, `site/header.js`, and scm-sim's

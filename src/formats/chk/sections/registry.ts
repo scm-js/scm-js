@@ -19,6 +19,12 @@ export interface SectionSpec {
   size?: number | ((dim: Dim) => number);
   /** Record stride for list sections. */
   stride?: number;
+  /**
+   * The shortest copy the game takes, for a "last" or "first" section. A shorter one is
+   * passed over: it does not count and does not replace an earlier copy. Protected maps put
+   * such a decoy after the real section.
+   */
+  minimum?: number;
   what: string;
   /**
    * Read by StarEdit and other editors only — the game skips it. Leaving one out of a
@@ -48,7 +54,9 @@ const SPECS: SectionSpec[] = [
   { name: "DD2 ", mode: "append", stride: 8, what: msg("Isometric doodads"), editorOnly: true },
   { name: "THG2", mode: "append", stride: 10, what: msg("Sprites") },
   { name: "MASK", mode: "overlay", size: (d) => d.width * d.height, what: msg("Fog of war") },
-  { name: "STR ", mode: "last", what: msg("String table") },
+  // Measured in Remastered: a 1-byte copy after the real table is passed over, a 2-byte one
+  // (no strings) is taken and leaves every string missing.
+  { name: "STR ", mode: "last", minimum: 2, what: msg("String table") },
   { name: "UPRP", mode: "last", size: 1280, what: msg("CUWP slots") },
   { name: "UPUS", mode: "last", size: 64, what: msg("CUWP slots used"), editorOnly: true },
   { name: "MRGN", mode: "overlay", stride: 20, what: msg("Locations") },

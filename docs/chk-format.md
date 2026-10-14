@@ -49,7 +49,9 @@ The game reads the sections one after another into fixed places in memory, so a 
 that appears twice is not simply replaced by its second copy. Each section's page says
 which of these applies to it:
 
-- **Only the last copy counts.** Most sections.
+- **Only the last copy counts.** Most sections. For the string table, a copy too short
+  to hold its string count (under 2 bytes) is passed over: it does not count and does not
+  replace the copy before it.
 - **Every copy is written over the start of the same fixed-size space**, in file order, so
   a later copy replaces only as many bytes as it carries. A second `MTXM` half the size of
   the map rewrites the top half of the terrain and leaves the bottom as the first copy had
@@ -96,6 +98,7 @@ missing file list or a renamed scenario; those are in
 | --- | --- | --- |
 | [`ISOM`](#isom), [`TILE`](#tile), [`DD2`](#dd2) | Leaves them out, or fills them with zeros | The game never reads them, so the map plays the same. An editor loses the isometric brush, the ground under each doodad, and the doodads as objects it can select. `ISOM` can be rebuilt from the tiles (exactly where the terrain was painted isometrically), and a new `TILE` copied from `MTXM`, which gives back the ground but keeps the doodads' tiles in it. |
 | [`IVER`](#iver), [`IVE2`](#ive2), [`IOWN`](#iown), [`UPUS`](#upus), [`SWNM`](#swnm), [`WAV`](#wav) | Leaves them out | Only editors read these either. The switch names and the list of sounds are gone; the sounds themselves stay in the archive, and the trigger actions that play them still name them. |
+| [`STR`](#str) | Adds a 1-byte copy after the real string table | The game passes over a copy too short to hold its string count and reads the real table. A reader that takes the last copy finds no text, and a file saved with only that copy no longer loads: Remastered says the scenario is intended for an expansion set. |
 | [`MTXM`](#mtxm), [`MASK`](#mask), [`MRGN`](#mrgn) | Splits them into several copies, some of them short or full of junk | Only the combined result counts: each copy written over the one before, in file order. A copy of junk followed by a full copy of the real terrain draws the real terrain. |
 | [`UNIT`](#unit), [`THG2`](#thg2), [`TRIG`](#trig), [`MBRF`](#mbrf) | Splits the records across several copies | Every copy's records count, in file order. A reader that keeps only one copy loses units or triggers. |
 | [`STR`](#str) | Makes strings overlap, share bytes, or start inside the offset table | A string is whatever lies between its offset and the next 0 byte. Read each one from its own offset and assume nothing about where it sits. An editor that writes the table back has to lay the strings out afresh. |
@@ -1220,7 +1223,7 @@ is in [Opening and saving maps](file-formats.md#what-the-editor-does-with-it).
 | Size | Whatever the text needs. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | Only the last copy counts. A copy shorter than 2 bytes does not count and does not replace an earlier one. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 

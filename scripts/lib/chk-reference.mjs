@@ -304,7 +304,7 @@ function sectionBlock(spec, defs) {
     `| Size | ${sizeText(name, spec, layout)} |`,
     `| Read by | ${spec.editorOnly ? "Editors only. The game skips it." : "The game."} |`,
     `| Required | ${requirement(name, defs)} |`,
-    `| More than one copy | ${MODES[spec.mode]} |`,
+    `| More than one copy | ${MODES[spec.mode]}${spec.minimum ? ` A copy shorter than ${spec.minimum} bytes does not count and does not replace an earlier one.` : ""} |`,
     `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : "Kept as it is and written back unchanged."} |`,
   ];
   if (layout.rows) {

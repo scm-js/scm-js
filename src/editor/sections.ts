@@ -29,6 +29,8 @@ export interface SectionKnowledge {
   size: number | null;
   /** The record length of a list section, or null. */
   stride: number | null;
+  /** The shortest copy the game takes, for a "last" or "first" section; shorter ones are passed over. Null when any length is taken. */
+  minimum: number | null;
   /** Whether the editor decodes the section into its model and re-encodes it on save. */
   modelled: boolean;
 }
@@ -70,6 +72,7 @@ export function sectionKnowledge(name: string, dim: Dim): SectionKnowledge | nul
     mode: spec.mode,
     size: sizeOf(spec, dim) ?? null,
     stride: spec.stride ?? null,
+    minimum: spec.minimum ?? null,
     modelled: MODELLED_SECTIONS.has(spec.name),
   };
 }
@@ -107,11 +110,11 @@ export function sectionInfos(scn: Scenario, file: ChkFile = currentChk(scn)): Se
   });
 }
 
-/** The bytes the game acts on for a name — repeats combined the way the registry says — or null when absent. */
+/** The bytes the game acts on for a name — repeats combined the way the registry says — or null when absent (or no copy is one the game takes). */
 export function combinedSection(scn: Scenario, name: string, file: ChkFile = currentChk(scn)): Uint8Array | null {
   const spec = specFor(name);
   const dim = { width: scn.width, height: scn.height };
-  return combine(file, name, spec?.mode ?? "last", spec ? sizeOf(spec, dim) : undefined);
+  return combine(file, name, spec?.mode ?? "last", spec ? sizeOf(spec, dim) : undefined, spec?.minimum);
 }
 
 /* ── Raw edits ──────────────────────────────────────────── */

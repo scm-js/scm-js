@@ -369,3 +369,11 @@ was disposed" rather than "the plugin was deactivated". The child has the same `
 command namespacing and log names are the plugin's; `preferencesPage` is still one per plugin, so a
 scope registering one replaces the plugin's own. Added for the API Playground, which runs each snippet in
 one. `tests/plugins.test.ts` "takes back a scope's contributions…".
+
+**View-only documents** (2026-10-14). `document.open(…, { viewOnly: true | { label } })` opens a
+map that refuses every write; `info().viewOnly` / `list()[i].viewOnly` report it. The host side
+is `assertWritable(store)` at the top of each writer (see `viewport-ui.md` for the whole design,
+the UI gates and the commit-atom backstop). It throws rather than returning a note because the
+caller asked for a write that cannot happen; `replaceFile` with `asOpened` is the one write let
+through. Built for Aftermath's replay tabs.
+

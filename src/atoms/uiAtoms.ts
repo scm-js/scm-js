@@ -4,6 +4,7 @@ import { browserStorage } from "./storage";
 import type { DialogId } from "../components/dialogs/ids";
 import type { Toast } from "../editor/view";
 import { msg } from "../i18n";
+import { viewOnlyAtom, viewOnlyMessage } from "./editorAtoms";
 
 export type { DialogId, Toast };
 
@@ -21,8 +22,21 @@ let dialogSeq = 0;
 
 export const dialogStackAtom = atom<DialogEntry[]>([]);
 
-/** Push a dialog onto the stack (dialogs may stack, e.g. Player Colors from Player Settings). Returns its key. */
+/**
+ * The dialogs that change the map. None opens while the map in front is view-only
+ * (`viewOnlyAtom`): the status bar says why, and however it was asked for — a menu, a
+ * hotkey, a double-click, a context menu, a plugin's `ui.open` — nothing appears.
+ */
+export const EDITING_DIALOGS: ReadonlySet<DialogId> = new Set<DialogId>([
+  "mapProperties", "resizeMap", "mapRevision", "playerSettings", "forceSettings", "playerColors", "unitSettings", "upgradeSettings", "techSettings",
+  "stringEditor", "soundEditor", "switches", "locationList", "unitProperties", "locationProperties", "spriteProperties", "triggerEditor", "missionBriefing",
+  "cuwpEditor", "replaceTerrain", "autoStarts", "importTriggers", "importStrings",
+]);
+
+/** Push a dialog onto the stack (dialogs may stack, e.g. Player Colors from Player Settings). Returns its key; -1 for an editing dialog refused on a view-only map. */
 export const openDialogAtom = atom(null, (get, set, id: DialogId, payload?: Record<string, unknown>): number => {
+  const viewOnly = get(viewOnlyAtom);
+  if (viewOnly && EDITING_DIALOGS.has(id)) { set(statusMessageAtom, viewOnlyMessage(viewOnly)); return -1; }
   const key = ++dialogSeq;
   set(dialogStackAtom, [...get(dialogStackAtom), { id, key, payload }]);
   return key;

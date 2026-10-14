@@ -1,6 +1,6 @@
 import { useAtom, useAtomValue } from "jotai";
 import { PanelLeftClose, PanelRightClose } from "lucide-react";
-import { activeLayerAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, viewOnlyAtom } from "../../atoms/editorAtoms";
 import { leftDockWidthAtom, panelsAtom, rightDockWidthAtom } from "../../atoms/uiAtoms";
 import { useDockResize } from "../../hooks/useDockResize";
 import { Button, Tip } from "../ui";
@@ -45,6 +45,7 @@ export function RightDock() {
   const [width, setWidth] = useAtom(rightDockWidthAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
   const { dragging, onPointerDown } = useDockResize("right", width, setWidth, 200, 420);
+  const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   return (
     <aside className="dock right" style={{ width }}>
       <div className={`dock-resizer ${dragging ? "dragging" : ""}`} onPointerDown={onPointerDown} />
@@ -64,7 +65,10 @@ export function RightDock() {
         <div className="panel grow">
           <PanelHead title={t("Properties")} right={<Tip label={t("Hide properties")}><Button icon onClick={() => setPanels({ ...panels, properties: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <div className="panel-body">
-            <Guarded surface="properties panel"><PropertiesPanel /></Guarded>
+            {/* On a view-only map the fields show what is selected and take no input. */}
+            <fieldset className="view-only-fields" disabled={viewOnly}>
+              <Guarded surface="properties panel"><PropertiesPanel /></Guarded>
+            </fieldset>
           </div>
         </div>
       )}

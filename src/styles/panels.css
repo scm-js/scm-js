@@ -78,6 +78,13 @@
   background: var(--bg-4);
   color: var(--text);
 }
+/* The Properties panel's wrapper: a fieldset only so a view-only map can disable every field at once. */
+.view-only-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
 .panel-body {
   flex: 1;
   min-height: 0;

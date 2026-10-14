@@ -2,13 +2,13 @@ import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
+  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewOnlyAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
 } from "../atoms/editorAtoms";
 import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
 } from "../atoms/documentAtoms";
 import { hotkeysAtom } from "../atoms/preferencesAtoms";
-import { commandById, comboOf, firesWhileTyping, isModifierKey } from "../editor/commands";
+import { commandById, comboOf, firesWhileTyping, isModifierKey, takesText, type TextTarget } from "../editor/commands";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
@@ -66,7 +66,7 @@ export function useHotkeys() {
       "file.new": () => open("newMap"),
       "file.open": () => open("openMap"),
       "file.save": () => { void save(); },
-      "file.saveAs": () => open("saveAs"),
+      "file.saveAs": () => { void save("saveAs"); },
       "file.close": () => open("confirmClose"),
       "file.properties": () => open("mapProperties"),
       "edit.undo": () => { const l = undo(); setStatus(l ? t("Undid: {l}", { l }) : t("Nothing to undo")); },
@@ -114,10 +114,8 @@ export function useHotkeys() {
       // key it reports is not the character being typed.
       if (e.isComposing || e.keyCode === 229) return;
       if (isModifierKey(e.key)) return;
-      const target = e.target as HTMLElement | null;
-      // A tick box or radio button keeps focus after a click but has no text to edit, so the hotkeys still apply there.
-      const textInput = target?.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes((target as HTMLInputElement).type);
-      const typing = !!target && (textInput || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
+      const target = e.target as (HTMLElement & TextTarget) | null;
+      const typing = takesText(target) || target?.tagName === "SELECT";
       const mod = e.ctrlKey || e.metaKey;
       const combo = comboOf(e);
       const id = hotkeys.byCombo.get(combo);
@@ -201,7 +199,7 @@ export function useHotkeys() {
         // On the Locations layer with something selected the arrows nudge it by the snap
         // step (a tile when snapping is off), Shift by a pixel. Otherwise they scroll the
         // view — two tiles, or half a screen with Shift.
-        if (activeLayer === "locations" && store.get(selectedLocationsAtom).length > 0) {
+        if (activeLayer === "locations" && store.get(selectedLocationsAtom).length > 0 && !store.get(viewOnlyAtom)) {
           const step = e.shiftKey ? 1 : locationSnap || 32;
           const n = nudgeLocations({ dx: arrow[0] * step, dy: arrow[1] * step });
           if (n > 0) setStatus(t("Moved {n, plural, one {# location} other {# locations}} by {step} px", { n, step }));

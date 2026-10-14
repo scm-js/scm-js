@@ -13,6 +13,7 @@ import { ANYWHERE_INDEX, isLocationUsed, type LocationRecord } from "../formats/
 import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
+  viewOnlyAtom, viewOnlyMessage, type ViewOnly,
   centerViewOnAtom, clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
@@ -79,6 +80,21 @@ export const archiveStoredAtom = atom<StoredMembers | null>(null);
  * null for a plain map. Save reads it to say so when one of them is no longer running.
  */
 export const builtByAtom = atom<BuiltBy[] | null>(null);
+
+// The view-only flag lives beside the other per-document registers in `editorAtoms.ts`
+// (so `uiAtoms.ts` can refuse an editing dialog without importing this module).
+export { viewOnlyAtom, viewOnlyMessage, type ViewOnly } from "./editorAtoms";
+
+/**
+ * The guard every write path starts with: false — and the reason on the status bar — when
+ * the map in front is view-only, true otherwise.
+ */
+export function canEdit(get: Getter, set: Setter): boolean {
+  const v = get(viewOnlyAtom);
+  if (!v) return true;
+  set(statusMessageAtom, viewOnlyMessage(v));
+  return false;
+}
 
 
 /**
@@ -237,7 +253,24 @@ function withinTablesBudget(stack: HistoryEntry[]): HistoryEntry[] {
 
 const wantsNotice = (how: TablesCommit) => (typeof how === "object" ? how.notice !== false : how);
 
+/**
+ * A dialog wrote to a view-only map's tables: what it wrote is worked out the way the
+ * history would record it and applied backwards, so the map is as it was. True when the
+ * write was refused (the commit then does nothing else).
+ */
+function refuseTables(get: Getter, set: Setter, how: TablesCommit): boolean {
+  if (canEdit(get, set)) return false;
+  const scn = get(scenarioAtom);
+  const edit = scn ? takeTablesEdit(scn) : null;
+  if (scn && edit) { applyTables(scn, edit, "undo"); rebaseAfterTables(scn, edit, "undo"); }
+  const before = typeof how === "object" ? how.extrasBefore : undefined;
+  if (before) set(archiveExtrasAtom, before);
+  for (const a of [settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom, doodadsRevisionAtom, locationsRevisionAtom]) set(a, get(a) + 1);
+  return true;
+}
+
 export const commitTriggersAtom = atom(null, (get, set, how: TablesCommit = true) => {
+  if (refuseTables(get, set, how)) return;
   const label = recordTables(get, set, how);
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
@@ -250,6 +283,7 @@ export const commitTriggersAtom = atom(null, (get, set, how: TablesCommit = true
  * unit and sprite, so the object layers repaint too.
  */
 export const commitSettingsAtom = atom(null, (get, set, how: TablesCommit = true) => {
+  if (refuseTables(get, set, how)) return;
   const label = recordTables(get, set, how);
   set(mapModifiedAtom, true);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
@@ -278,6 +312,7 @@ export interface ResizeRequest {
  */
 export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): ResizeResult | null => {
   const scn = get(scenarioAtom);
+  if (scn && !canEdit(get, set)) return null;
   if (!scn) return null;
   get(syncTapAtom)?.beforeWhole(get);
   const loaded = peekTileset(get(tilesetFileNameAtom));
@@ -310,7 +345,7 @@ export interface ChangeTilesetRequest {
  */
 export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest): ChangeTilesetResult | null => {
   const scn = get(scenarioAtom);
-  if (!scn) return null;
+  if (!scn || !canEdit(get, set)) return null;
   get(syncTapAtom)?.beforeWhole(get);
   const era = Math.max(0, TILESETS.findIndex((t) => t.id === req.tileset));
   const previous = peekTileset(get(tilesetFileNameAtom));
@@ -379,6 +414,8 @@ export interface LoadedDocument {
    * preference; the atom itself has no opinion.
    */
   into?: "tab" | "replace";
+  /** Open to look at only (`viewOnlyAtom`); a `"replace"` reason keeps what the document had. */
+  viewOnly?: ViewOnly | null;
 }
 
 /**
@@ -422,6 +459,8 @@ export interface ParkedDocument {
   zoom: number;
   /** The tile at the middle of the view, so the map comes back where it was left; null for a map never shown. */
   center: { x: number; y: number } | null;
+  /** Open to look at only — see `viewOnlyAtom`. */
+  viewOnly: ViewOnly | null;
 }
 
 /** One open map: the one in front (`parked` null — the registers hold it) or one waiting behind it. */
@@ -463,8 +502,9 @@ export const documentTabsAtom = atom<OpenDocumentInfo[]>((get) =>
       ? {
         id, name: scenarioName(p.scenario) ?? p.fileName ?? "Untitled Scenario", fileName: p.fileName,
         tileset: (TILESETS[tilesetIndex(p.scenario)]?.id ?? "jungle") as TilesetId, width: p.scenario.width, height: p.scenario.height, modified: p.modified, active: false,
+        viewOnly: p.viewOnly !== null,
       }
-      : { id, name: get(mapNameAtom), fileName: get(mapFilePathAtom), tileset: get(mapTilesetAtom), width: get(mapWidthAtom), height: get(mapHeightAtom), modified: get(mapModifiedAtom), active: true }));
+      : { id, name: get(mapNameAtom), fileName: get(mapFilePathAtom), tileset: get(mapTilesetAtom), width: get(mapWidthAtom), height: get(mapHeightAtom), modified: get(mapModifiedAtom), active: true, viewOnly: get(viewOnlyAtom) !== null }));
 
 /** The registers as a record: what parking the front map keeps. Null with no map. */
 function parkRegisters(get: Getter): ParkedDocument | null {
@@ -475,7 +515,7 @@ function parkRegisters(get: Getter): ParkedDocument | null {
     scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom),
     builtBy: get(builtByAtom), saveOptions: get(saveOptionsAtom), modified: get(mapModifiedAtom), blankFill: get(blankFillAtom), undo: get(undoStackAtom), redo: get(redoStackAtom),
     selected: { units: get(selectedUnitsAtom), doodads: get(selectedDoodadsAtom), sprites: get(selectedSpritesAtom), locations: get(selectedLocationsAtom) },
-    clipSelection: get(clipSelectionAtom), zoom: get(zoomAtom),
+    clipSelection: get(clipSelectionAtom), zoom: get(zoomAtom), viewOnly: get(viewOnlyAtom),
     // The viewport has not measured itself before the first paint (w = h = 1): nothing to come back to.
     center: v.w > 1 || v.h > 1 ? { x: v.x + v.w / 2, y: v.y + v.h / 2 } : null,
   };
@@ -518,6 +558,7 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   set(mapOriginAtom, p.origin);
   set(builtByAtom, p.builtBy);
   set(saveOptionsAtom, p.saveOptions);
+  set(viewOnlyAtom, p.viewOnly);
 
   set(mapNameAtom, scenarioName(scenario) ?? p.fileName ?? "Untitled Scenario");
   set(mapDescriptionAtom, scenarioDescription(scenario) ?? "");
@@ -585,9 +626,11 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
     blankFill: null,
     undo: [], redo: [], selected: { units: [], doodads: [], sprites: [], locations: [] }, clipSelection: null,
     zoom: get(zoomAtom), center: null,
+    viewOnly: reason === "replace" ? get(viewOnlyAtom) : doc.viewOnly ?? null,
   }, reason);
 
-  if (doc.fileName) {
+  // A map opened to look at is not one the person opened to work on.
+  if (doc.fileName && !get(viewOnlyAtom)) {
     set(pushRecentAtom, { name: doc.fileName, handle: doc.handle ?? null });
   }
 });
@@ -602,6 +645,8 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * does not ask about them.
  */
 export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario, options?: { asOpened?: boolean }) => {
+  // `asOpened` is a reading of the opened file, not an edit: a view-only map takes it.
+  if (options?.asOpened !== true && !canEdit(get, set)) return;
   const tap = get(syncTapAtom);
   tap?.beforeWhole(get);
   set(loadDocumentAtom, {
@@ -656,6 +701,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(mapOriginAtom, null);
   set(builtByAtom, null);
   set(saveOptionsAtom, null);
+  set(viewOnlyAtom, null);
   set(mapModifiedAtom, false);
   set(blankFillAtom, null);
   set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
@@ -693,6 +739,8 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  */
 export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   if (!hasEdits(entry)) return;
+  // The entry is already applied; on a view-only map it is taken back instead of recorded.
+  if (!canEdit(get, set)) { set(rollbackEntryAtom, entry); return; }
   get(syncTapAtom)?.edit(get, set, entry);
   // Verbose only: a painting session commits a stroke every time the mouse comes up, and
   // at the always-on tier that would push everything worth reading out of the ring.
@@ -729,6 +777,7 @@ export const commitTerrainAtom = atom(null, (get, set, req: { entry: HistoryEntr
   const scn = get(scenarioAtom);
   if (!scn) return;
   const { entry } = req;
+  if (!canEdit(get, set)) { set(rollbackEntryAtom, entry); return; }
   const loaded = peekTileset(get(tilesetFileNameAtom));
   let note = "";
   if (loaded && entry.changes.length > 0) {
@@ -820,7 +869,7 @@ export const undoAtom = atom(
     const scn = get(scenarioAtom);
     const stack = get(undoStackAtom);
     const entry = stack.at(-1);
-    if (!scn || !entry) return null;
+    if (!scn || !entry || !canEdit(get, set)) return null;
     if (entry.tables) {
       stepTables(get, set, scn, entry, "undo");
       set(undoStackAtom, stack.slice(0, -1));
@@ -871,7 +920,7 @@ export const redoAtom = atom(
     const scn = get(scenarioAtom);
     const stack = get(redoStackAtom);
     const entry = stack.at(-1);
-    if (!scn || !entry) return null;
+    if (!scn || !entry || !canEdit(get, set)) return null;
     if (entry.tables) {
       stepTables(get, set, scn, entry, "do");
       set(redoStackAtom, stack.slice(0, -1));
@@ -985,7 +1034,7 @@ export const selectAllAtom = atom(null, (get, set, layer: EditorLayer): number =
 export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedDoodadsAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const loaded = peekTileset(get(tilesetFileNameAtom));
   const edit = removeDoodads(scn, loaded?.tileset ?? null, loaded?.doodads ?? NO_DOODADS, selected);
   applyChanges(scn, edit.tiles, "do", "mtxm");
@@ -1005,7 +1054,7 @@ export const deleteSelectedDoodadsAtom = atom(null, (get, set) => {
 export const convertSelectedDoodadsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedDoodadsAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const loaded = peekTileset(get(tilesetFileNameAtom));
   const edit = convertDoodads(scn, loaded?.doodads ?? NO_DOODADS, selected);
   applyChanges(scn, edit.tiles);
@@ -1022,7 +1071,7 @@ export const convertSelectedDoodadsAtom = atom(null, (get, set) => {
 export const deleteSelectedSpritesAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedSpritesAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const sprites = removeSprites(scn, selected);
   applySpriteChanges(scn, sprites);
   set(selectedSpritesAtom, []);
@@ -1036,7 +1085,7 @@ export const deleteSelectedSpritesAtom = atom(null, (get, set) => {
 export const deleteSelectedUnitsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedUnitsAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const units = removeUnits(scn, selected);
   applyUnitChanges(scn, units);
   set(selectedUnitsAtom, []);
@@ -1050,7 +1099,7 @@ export const deleteSelectedUnitsAtom = atom(null, (get, set) => {
 export const deleteSelectedLocationsAtom = atom(null, (get, set) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedLocationsAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const locations = removeLocations(scn, selected);
   if (locations.length === 0) return 0;
   const label = locations.length === 1 ? t("Delete location {name}", { name: locationName(scn, locations[0].index) }) : t("Delete {n} locations", { n: locations.length });
@@ -1064,7 +1113,7 @@ export const deleteSelectedLocationsAtom = atom(null, (get, set) => {
 export const nudgeSelectedLocationsAtom = atom(null, (get, set, d: { dx: number; dy: number }) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedLocationsAtom);
-  if (!scn || selected.length === 0) return 0;
+  if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
   const locations = moveLocations(scn, selected, d.dx, d.dy);
   if (locations.length === 0) return 0;
   applyLocationChanges(scn, locations);

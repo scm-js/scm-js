@@ -39,8 +39,8 @@ describe("several maps open at once", () => {
     const b = store.get(activeDocumentIdAtom)!;
     expect(b).not.toBe(a);
     expect(store.get(documentTabsAtom)).toEqual([
-      { id: a, name: "a", fileName: "a.scx", tileset: "badlands", width: 8, height: 6, modified: true, active: false },
-      { id: b, name: "b", fileName: null, tileset: "jungle", width: 16, height: 6, modified: false, active: true },
+      { id: a, name: "a", fileName: "a.scx", tileset: "badlands", width: 8, height: 6, modified: true, active: false, viewOnly: false },
+      { id: b, name: "b", fileName: null, tileset: "jungle", width: 16, height: 6, modified: false, active: true, viewOnly: false },
     ]);
     // The registers are b's: clean, nothing selected, empty history; the zoom carries over.
     expect(store.get(mapModifiedAtom)).toBe(false);
@@ -246,8 +246,8 @@ describe("the plugin API over several maps", () => {
     const b = api.document.id()!;
     expect(b).not.toBe(a);
     expect(api.document.list()).toEqual([
-      { id: a, name: "a", fileName: "a.chk", tileset: "badlands", width: 8, height: 6, modified: false, active: false },
-      { id: b, name: "Frost", fileName: null, tileset: "ice", width: 16, height: 8, modified: false, active: true },
+      { id: a, name: "a", fileName: "a.chk", tileset: "badlands", width: 8, height: 6, modified: false, active: false, viewOnly: false },
+      { id: b, name: "Frost", fileName: null, tileset: "ice", width: 16, height: 8, modified: false, active: true, viewOnly: false },
     ]);
     // In place, by explicit choice: b goes, c takes its slot.
     expect(await api.document.open(file("c"), undefined, { into: "current" })).toBe(true);

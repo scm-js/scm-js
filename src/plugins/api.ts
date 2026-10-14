@@ -339,6 +339,8 @@ export interface DocumentInfo {
   version: number;
   fileName: string | null;
   modified: boolean;
+  /** Open to look at only (`OpenDocumentOptions.viewOnly`): every write throws and it is never saved. */
+  viewOnly: boolean;
 }
 
 /** What one `document.edit` changed, per list. */
@@ -527,6 +529,18 @@ export type OpenInto = "new" | "current";
 
 export interface OpenDocumentOptions {
   into?: OpenInto;
+  /**
+   * Open the map to look at, not to change — a replay's map, a preview. It always opens
+   * beside the open map (`into` is ignored), so nothing is replaced and nothing is asked.
+   * Panning, zooming, the layers and selecting work; every tool, menu and dialog that
+   * would change it is off, and every write throws — `edit`, `update`, `sections` (except
+   * `replaceFile(…, { asOpened: true })`, a reading of the file rather than an edit), `resize`,
+   * `changeTileset`, `extras`, the clipboard's `cut` and `paste`, `save` and `saveAs` unless
+   * as a copy, `sync.start`. It is never kept in Open Recent, and closing it asks nothing. File ▸ Edit a Copy
+   * opens an ordinary copy. `label` is what the tab and the status bar call it ("Replay");
+   * `true` is the plain "View only".
+   */
+  viewOnly?: boolean | { label?: string };
 }
 
 /** One open map, as `document.list()` reports it. `active` marks the one in front — the one every other call reads and writes. */
@@ -541,6 +555,8 @@ export interface OpenDocumentInfo {
   height: number;
   modified: boolean;
   active: boolean;
+  /** Open to look at only; see `OpenDocumentOptions.viewOnly`. */
+  viewOnly: boolean;
 }
 
 /** File ▸ New's form: size, tileset, and the two strings the dialog asks for. */
@@ -658,11 +674,14 @@ export interface DocumentApi {
    * In place of a map with unsaved changes, when Preferences say to ask, the Close
    * Scenario dialog comes first and the user may cancel. Resolves true once the file is
    * the map in front, false when the user kept the current map or the file could not be
-   * read (the status bar says why).
+   * read (the status bar says why). `options.viewOnly` opens it to look at only.
    *
    * @example
    * const [file] = await api.ui.pickFiles({ accept: ".scx,.scm,.chk" });
    * if (file) await api.document.open(file, file.name, { into: "new" });
+   * @example
+   * // A replay's map, to draw over and not to change.
+   * await api.document.open(chk, "Lost Temple.scx", { viewOnly: { label: "Replay" } });
    */
   open(file: File | Blob | Uint8Array, fileName?: string, options?: OpenDocumentOptions): Promise<boolean>;
   /**

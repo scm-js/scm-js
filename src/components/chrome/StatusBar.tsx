@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, zoomAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom, zoomAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
@@ -26,6 +26,7 @@ export default function StatusBar() {
   const zoom = useAtomValue(zoomAtom);
   const status = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
+  const viewOnly = useAtomValue(viewOnlyAtom);
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
   const pluginItems = useAtomValue(pluginStatusItemsAtom);
@@ -97,6 +98,11 @@ export default function StatusBar() {
           <span>{item.spec.text}</span>
         </span>
       ))}
+      {viewOnly && (
+        <span className="status-cell" title={t("This map is open to look at; File ▸ Edit a Copy opens one you can change.")}>
+          <span className="badge">{viewOnly.label ? t("{label} · view only", { label: viewOnly.label }) : t("View only")}</span>
+        </span>
+      )}
       {show.revision && (
         <span className="status-cell" title={t("Map revision")}>
           <span className="badge gold">{translate(VERSION_LABEL[version])}</span>

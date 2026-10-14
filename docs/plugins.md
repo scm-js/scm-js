@@ -1215,6 +1215,13 @@ The open map as a whole.
 - **Files inside the archive:** `extras` lists, reads and writes files stored next to the
   scenario (`list`, `get`, `set`, `remove`). Keep yours in a folder of your own
   (`my-plugin\notes.json`); they are written on the next Save.
+- **Maps to look at, not change:** `open(bytes, name, { viewOnly: { label: "Replay" } })`
+  opens a map beside the others that can't be edited. That suits a replay's map, or a
+  preview of one from a website. It can be panned, zoomed and selected in, but the editing
+  tools, menus and dialogs are switched off. Every write throws with the reason: `edit`,
+  `update`, the clipboard, `extras`, `save` (as anything but a copy) and the rest.
+  `info().viewOnly` and `list()` say which maps are like this. File ▸ Edit a Copy gives the
+  person an ordinary copy to change.
 
 Reading, and a file of the plugin's own that travels with the map:
 

@@ -1,5 +1,5 @@
 import { useAtomValue, useStore } from "jotai";
-import { X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { documentTabsAtom } from "../../atoms/documentAtoms";
 import { activateDocumentIn, closeDocumentIn } from "../../hooks/useMapFileActions";
 import type { OpenDocumentInfo } from "../../plugins/api";
@@ -33,13 +33,14 @@ export default function TabStrip() {
             role="tab"
             aria-selected={doc.active}
             tabIndex={0}
-            className={`tab${doc.active ? " active" : ""}${doc.modified ? " modified" : ""}`}
-            title={doc.modified ? t("{title} — {w}×{h}, unsaved changes", { title, w: doc.width, h: doc.height }) : t("{title} — {w}×{h}", { title, w: doc.width, h: doc.height })}
+            className={`tab${doc.active ? " active" : ""}${doc.modified ? " modified" : ""}${doc.viewOnly ? " view-only" : ""}`}
+            title={doc.viewOnly ? t("{title} — {w}×{h}, view only", { title, w: doc.width, h: doc.height })
+              : doc.modified ? t("{title} — {w}×{h}, unsaved changes", { title, w: doc.width, h: doc.height }) : t("{title} — {w}×{h}", { title, w: doc.width, h: doc.height })}
             onClick={() => { activateDocumentIn(store, doc.id); }}
             onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); void closeDocumentIn(store, doc.id); } }}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateDocumentIn(store, doc.id); } }}
           >
-            <span className="dot" aria-hidden />
+            {doc.viewOnly ? <Eye className="tab-view-only" size={11} aria-label={t("View only")} /> : <span className="dot" aria-hidden />}
             <span className="tab-title">{title}</span>
             <button
               type="button"

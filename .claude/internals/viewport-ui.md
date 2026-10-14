@@ -292,6 +292,30 @@ read in the first effect pass is still null.
   asks the Close Scenario dialog about it in turn (Don't Save moves on, Cancel keeps the window).
   `tests/documents.test.ts` covers all of it; headless check 2026-09-07 (two fixtures dropped, switch,
   scroll restored, both tilesets held then one released on close, Window menu, preference off).
+- **View-only maps** (2026-10-14, for the replay viewer). `viewOnlyAtom` (`editorAtoms.ts`, so
+  `uiAtoms.ts` can read it without a cycle; re-exported from `documentAtoms.ts`) is a per-document
+  register — parked/installed with the rest, kept on a `"replace"` reload, cleared on close — set
+  from `LoadedDocument.viewOnly`, which only `openFileInto(…, viewOnly)` passes (from a plugin's
+  `document.open(…, { viewOnly })`, always beside, never through the unsaved gate). A view-only map
+  never enters Open Recent. **The trap:** almost every edit path mutates the scenario *before* its
+  commit (strokes paint live, drags move live, dialogs write the tables), so a guard at the commit
+  alone is too late. The gates are where edits *start*: `MapViewport` (`objectLayer()` wraps the
+  layer so select/marquee still work and drag/place are no-ops; the location adapter loses handles,
+  move and create; terrain/fog strokes and paste-at return before starting), `openDialogAtom`
+  refuses `EDITING_DIALOGS` (covers double-click, menus, context menu, `ui.open`), the menu bar /
+  toolbar / context menu disable their editing rows, `App` hides the left dock, the Properties
+  panel sits in a `<fieldset disabled>`, the delete/convert/nudge atoms and the clipboard hook call
+  `canEdit`, `save()` and `saveDocument` refuse anything but a copy. The **backstop** is in the
+  commit atoms: `commitEditAtom` / `commitTerrainAtom` roll the already-applied entry back
+  (`rollbackEntryAtom`), the table commits take the diff and `applyTables(…, "undo")` it, resize /
+  change tileset / replace / undo / redo refuse. `canEdit(get, set)` puts the reason on the status
+  bar. Plugins: `assertWritable` in `host.ts` throws from `runTransaction`, `runUpdate`, section
+  writes, `extras`, clipboard cut/paste, `resize`, `changeTileset`, `save`/`saveAs` unless a copy,
+  `sync.start`. Exception: `sections.replaceFile(…, { asOpened: true })` is taken (Repair's on-open
+  pass is a reading of the file, and replay maps are often protected ones it makes readable).
+  Not covered: a plugin writing through `scenario()`/`tx.scenario` directly — typed read-only, no
+  proxy. File ▸ Edit a Copy (`editCopyIn`) re-parses the serialised scenario into a new unsaved,
+  modified tab. `tests/viewOnly.test.ts`.
 - `src/hooks/useWindowTitle.ts` keeps `document.title` on the open map — the file name when there is
   one, else the scenario name, with a leading `*` while it is modified, and the plain
   `scmJS — StarCraft Scenario Editor` of `index.html` when nothing is open. Electron mirrors the page
@@ -342,8 +366,12 @@ read in the first effect pass is still null.
   `reservedReason` keeps off-limits for binding. MenuBar / ToolBar / F1 (`dialogs/hotkeys.ts`
   `hotkeyRows`) read labels through `shortcutOf`; `LAYERS` no longer carries a key. The
   Hotkeys page captures on a window **capture-phase** listener with stopPropagation, so neither
-  DialogFrame's Escape nor the editor's hotkeys see the key being bound. Tests:
-  `tests/hotkeys.test.ts`.
+  DialogFrame's Escape nor the editor's hotkeys see the key being bound. "Typing" is
+  `takesText` (commands.ts), shared with plugin dialogs' paste: text inputs, textareas,
+  contentEditable **and an element with an `editContext`** — Monaco 0.56+ takes text through the
+  EditContext API on a plain `div.native-edit-context`, and before 2026-10-14 that was not
+  counted, so typing S in the API Playground's code box switched layers and Ctrl+V pasted onto
+  the map. Tests: `tests/hotkeys.test.ts`.
 - Status bar cells: `Preferences.statusBar` (eight booleans, Preferences ▸ View), read by
   `StatusBar.tsx` through `statusBarCellsAtom` so the bar does not re-render on unrelated
   preference changes. The message, the symmetry badge and plugin status items are not

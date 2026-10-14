@@ -21,7 +21,7 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, zoomAtom, zoomToFitAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, viewOnlyAtom, zoomAtom, zoomToFitAtom, type EditorLayer } from "../../atoms/editorAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
@@ -62,6 +62,8 @@ export default function ToolBar() {
   const key = (command: string) => shortcutOf(hotkeys, command);
 
   const dlg = (id: DialogId) => () => open(id);
+  // A map open to look at only: the buttons that would change or save it are off.
+  const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   const clipTools = useClipboardTools();
   const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
   const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
@@ -70,14 +72,14 @@ export default function ToolBar() {
     <div className="toolbar" role="toolbar">
       <TB icon={FilePlus2} label={t("New Map")} shortcut={key("file.new")} onClick={dlg("newMap")} />
       <TB icon={FolderOpen} label={t("Open Map")} shortcut={key("file.open")} onClick={dlg("openMap")} />
-      <TB icon={Save} label={t("Save Map")} shortcut={key("file.save")} onClick={() => { void save(); }} />
+      <TB icon={Save} label={t("Save Map")} shortcut={key("file.save")} disabled={viewOnly} onClick={() => { void save(); }} />
       <Sep />
       <TB icon={Undo2} label={undoLabel ? t("Undo {what}", { what: undoLabel }) : t("Undo")} shortcut={key("edit.undo")} disabled={!undoLabel} onClick={() => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); }} />
       <TB icon={Redo2} label={redoLabel ? t("Redo {what}", { what: redoLabel }) : t("Redo")} shortcut={key("edit.redo")} disabled={!redoLabel} onClick={() => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); }} />
       <Sep />
-      <TB icon={Scissors} label={t("Cut")} shortcut={key("edit.cut")} onClick={() => { clipTools.cut(); }} />
+      <TB icon={Scissors} label={t("Cut")} shortcut={key("edit.cut")} disabled={viewOnly} onClick={() => { clipTools.cut(); }} />
       <TB icon={Copy} label={t("Copy")} shortcut={key("edit.copy")} onClick={() => { clipTools.copy(); }} />
-      <TB icon={ClipboardPaste} label={t("Paste")} shortcut={key("edit.paste")} onClick={() => { clipTools.paste(); }} />
+      <TB icon={ClipboardPaste} label={t("Paste")} shortcut={key("edit.paste")} disabled={viewOnly} onClick={() => { clipTools.paste(); }} />
       <Sep />
       <div className="tb-group">
         <span className="lbl">{t("Layer")}</span>
@@ -110,8 +112,8 @@ export default function ToolBar() {
       <TB icon={ZoomIn} label={t("Zoom In")} shortcut={key("view.zoomIn")} onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
       <TB icon={Maximize} label={t("Zoom to Fit")} shortcut={key("view.zoomFit")} onClick={() => { zoomToFit(); }} />
       <span className="tb-spacer" />
-      <TB icon={Users} label={t("Player Settings…")} onClick={dlg("playerSettings")} text={t("Players")} />
-      <TB icon={Zap} label={t("Trigger Editor…")} shortcut={key("tools.triggers")} onClick={dlg("triggerEditor")} text={t("Triggers")} accent />
+      <TB icon={Users} label={t("Player Settings…")} disabled={viewOnly} onClick={dlg("playerSettings")} text={t("Players")} />
+      <TB icon={Zap} label={t("Trigger Editor…")} shortcut={key("tools.triggers")} disabled={viewOnly} onClick={dlg("triggerEditor")} text={t("Triggers")} accent />
       <Sep />
       <TB icon={Play} label={t("Test Map — write the map where StarCraft lists it")} shortcut={key("tools.testMap")} onClick={() => open("testMap", { run: true })} text={t("Test")} />
     </div>

@@ -92,6 +92,29 @@ export function isModifierKey(key: string): boolean {
   return key === "Control" || key === "Shift" || key === "Alt" || key === "Meta" || key === "AltGraph" || key === "CapsLock" || key === "OS";
 }
 
+/** The parts of an element `takesText` looks at, so tests need no DOM. */
+export interface TextTarget {
+  tagName: string;
+  type?: string;
+  isContentEditable?: boolean;
+  /** The EditContext API's handle: an element with one takes typed text without being a field. */
+  editContext?: unknown;
+}
+
+/**
+ * Whether keys pressed in `el` are someone typing, which the editor's own hotkeys and paste
+ * must leave alone: a text box or text area, an editable region, and an element that takes
+ * text through the EditContext API — the code box of Monaco 0.56 and later is a plain
+ * `div` with one, and was not counted, so S switched to the Sprites layer and Ctrl+V pasted
+ * onto the map instead. A tick box, radio button, button or slider keeps focus after a click
+ * but has no text, so the hotkeys still apply there.
+ */
+export function takesText(el: TextTarget | null | undefined): boolean {
+  if (!el) return false;
+  if (el.tagName === "INPUT") return !["checkbox", "radio", "button", "range"].includes(el.type ?? "text");
+  return el.tagName === "TEXTAREA" || el.isContentEditable === true || (el.editContext !== undefined && el.editContext !== null);
+}
+
 /** The fields of a `KeyboardEvent` a combo is made from, so tests need no DOM. */
 export interface KeyLike {
   key: string;

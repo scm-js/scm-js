@@ -24,7 +24,7 @@ import {
 import { desktopBridge } from "../../gamedata/desktop";
 import {
   activeDocumentIdAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
-  selectAllAtom, undoAtom,
+  selectAllAtom, undoAtom, viewOnlyAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
@@ -34,7 +34,7 @@ import { hotkeysAtom } from "../../atoms/preferencesAtoms";
 import { shortcutOf } from "../../editor/commands";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
-import { activateDocumentIn, clearRecents, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
+import { activateDocumentIn, clearRecents, editCopyIn, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { msg, pluginText, t, translate } from "../../i18n";
@@ -223,6 +223,9 @@ function useMenus(): Menu[] {
   const desktop = desktopBridge();
   const zoomToFit = useSetAtom(zoomToFitAtom);
   const hasMap = useAtomValue(scenarioAtom) !== null;
+  // A map open to look at only: everything that would change it is off, and Edit a Copy is the way to.
+  const viewOnly = useAtomValue(viewOnlyAtom) !== null;
+  const canEdit = hasMap && !viewOnly;
   const { fillMap } = useTerrainTools();
   const recent = useAtomValue(recentFilesAtom);
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
@@ -258,7 +261,9 @@ function useMenus(): Menu[] {
     onChange: (v) => setPanels({ ...panels, [k]: v }),
   });
   const dlg = (label: string, dialog: DialogId, shortcut?: string, disabled?: boolean): Item => ({ kind: "item", label, dialog, shortcut, disabled });
-  const dlgWith = (label: string, dialog: DialogId, payload: Record<string, unknown>, shortcut?: string): Item => ({ kind: "item", label, dialog, payload, shortcut });
+  const dlgWith = (label: string, dialog: DialogId, payload: Record<string, unknown>, shortcut?: string, disabled?: boolean): Item => ({ kind: "item", label, dialog, payload, shortcut, disabled });
+  /** A dialog that changes the map: off while the map in front is view-only. */
+  const edits = (label: string, dialog: DialogId, shortcut?: string): Item => dlg(label, dialog, shortcut, viewOnly);
   const link = (label: string, url: string): Item => ({ kind: "item", label, onSelect: () => { window.open(url, "_blank", "noopener,noreferrer"); } });
 
   // Edit ▸ Delete / Select All / Deselect act on the active layer's selection, as the Del / Esc keys do.
@@ -313,17 +318,18 @@ function useMenus(): Menu[] {
         dlg(msg("Recover Maps…"), "recovery"),
         dlg(msg("Previous Versions…"), "previousVersions"),
         sep,
-        { kind: "item", label: msg("Save"), shortcut: key("file.save"), onSelect: () => { void save(); } },
-        dlg(msg("Save As…"), "saveAs", key("file.saveAs")),
+        { kind: "item", label: msg("Save"), shortcut: key("file.save"), disabled: viewOnly, onSelect: () => { void save(); } },
+        dlg(msg("Save As…"), "saveAs", key("file.saveAs"), viewOnly),
         dlgWith(msg("Save Copy As…"), "saveAs", { copy: true }),
+        ...(viewOnly ? [{ kind: "item", label: msg("Edit a Copy"), onSelect: () => { editCopyIn(store); } } as Item] : []),
         sep,
         {
           kind: "sub",
           label: msg("Import"),
           items: [
-            dlgWith(msg("Triggers (.trg)…"), "importTriggers", { format: "trg" }),
-            dlgWith(msg("Text Triggers (.txt)…"), "importTriggers", { format: "txt" }),
-            dlg(msg("Strings (.txt)…"), "importStrings"),
+            dlgWith(msg("Triggers (.trg)…"), "importTriggers", { format: "trg" }, undefined, viewOnly),
+            dlgWith(msg("Text Triggers (.txt)…"), "importTriggers", { format: "txt" }, undefined, viewOnly),
+            edits(msg("Strings (.txt)…"), "importStrings"),
           ],
         },
         {
@@ -338,7 +344,7 @@ function useMenus(): Menu[] {
           ],
         },
         sep,
-        dlg(msg("Map Properties…"), "mapProperties", key("file.properties")),
+        edits(msg("Map Properties…"), "mapProperties", key("file.properties")),
         sep,
         // Ctrl+W is the browser's own (it closes the tab); only the desktop build can take it.
         dlg(msg("Close Map"), "confirmClose", key("file.close")),
@@ -352,10 +358,10 @@ function useMenus(): Menu[] {
         { kind: "item", label: undoLabel ? t("Undo {what}", { what: undoLabel }) : msg("Undo"), shortcut: key("edit.undo"), disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); } },
         { kind: "item", label: redoLabel ? t("Redo {what}", { what: redoLabel }) : msg("Redo"), shortcut: key("edit.redo"), disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); } },
         sep,
-        { kind: "item", label: msg("Cut"), shortcut: key("edit.cut"), disabled: !hasMap, onSelect: () => { clipTools.cut(); } },
+        { kind: "item", label: msg("Cut"), shortcut: key("edit.cut"), disabled: !canEdit, onSelect: () => { clipTools.cut(); } },
         { kind: "item", label: msg("Copy"), shortcut: key("edit.copy"), disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
-        { kind: "item", label: msg("Paste"), shortcut: key("edit.paste"), disabled: !hasMap || !hasClip, onSelect: () => { clipTools.paste(); } },
-        { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !hasMap, onSelect: deleteSelection },
+        { kind: "item", label: msg("Paste"), shortcut: key("edit.paste"), disabled: !canEdit || !hasClip, onSelect: () => { clipTools.paste(); } },
+        { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !canEdit, onSelect: deleteSelection },
         sep,
         { kind: "item", label: msg("Select All"), shortcut: key("edit.selectAll"), disabled: !hasMap, onSelect: selectAll },
         { kind: "item", label: msg("Deselect"), shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
@@ -412,34 +418,34 @@ function useMenus(): Menu[] {
     {
       label: msg("Scenario"),
       items: [
-        dlg(msg("Map Properties…"), "mapProperties"),
-        dlg(msg("Resize / Crop Map…"), "resizeMap"),
-        dlg(msg("Map Revision…"), "mapRevision"),
+        edits(msg("Map Properties…"), "mapProperties"),
+        edits(msg("Resize / Crop Map…"), "resizeMap"),
+        edits(msg("Map Revision…"), "mapRevision"),
         sep,
-        dlg(msg("Player Settings…"), "playerSettings"),
-        dlg(msg("Force Settings…"), "forceSettings"),
-        dlg(msg("Player Colors…"), "playerColors"),
+        edits(msg("Player Settings…"), "playerSettings"),
+        edits(msg("Force Settings…"), "forceSettings"),
+        edits(msg("Player Colors…"), "playerColors"),
         sep,
-        dlg(msg("Unit Settings…"), "unitSettings"),
-        dlg(msg("Upgrade Settings…"), "upgradeSettings"),
-        dlg(msg("Technology Settings…"), "techSettings"),
+        edits(msg("Unit Settings…"), "unitSettings"),
+        edits(msg("Upgrade Settings…"), "upgradeSettings"),
+        edits(msg("Technology Settings…"), "techSettings"),
         sep,
-        dlg(msg("String Editor…"), "stringEditor"),
-        dlg(msg("Sound Editor…"), "soundEditor"),
-        dlg(msg("Switches…"), "switches"),
-        dlg(msg("Locations…"), "locationList"),
+        edits(msg("String Editor…"), "stringEditor"),
+        edits(msg("Sound Editor…"), "soundEditor"),
+        edits(msg("Switches…"), "switches"),
+        edits(msg("Locations…"), "locationList"),
         sep,
-        dlg(msg("Mission Briefing…"), "missionBriefing"),
+        edits(msg("Mission Briefing…"), "missionBriefing"),
       ],
     },
     {
       label: msg("Triggers"),
       items: [
-        dlg(msg("Trigger Editor…"), "triggerEditor", key("tools.triggers")),
-        dlg(msg("Mission Briefing Editor…"), "missionBriefing"),
-        dlg(msg("Unit Properties Slots…"), "cuwpEditor"),
+        edits(msg("Trigger Editor…"), "triggerEditor", key("tools.triggers")),
+        edits(msg("Mission Briefing Editor…"), "missionBriefing"),
+        edits(msg("Unit Properties Slots…"), "cuwpEditor"),
         sep,
-        dlg(msg("Import Triggers…"), "importTriggers"),
+        edits(msg("Import Triggers…"), "importTriggers"),
         dlg(msg("Export Triggers…"), "exportTriggers"),
         sep,
         dlgWith(msg("Validate Triggers"), "validateMap", { only: "triggers" }),
@@ -451,9 +457,9 @@ function useMenus(): Menu[] {
         dlg(msg("Symmetry…"), "symmetry"),
         { kind: "sub", label: msg("Brush Size"), items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,
-        { kind: "item", label: msg("Fill Terrain"), disabled: !hasMap, onSelect: fillMap },
-        dlg(msg("Replace Terrain…"), "replaceTerrain"),
-        dlg(msg("Auto-place Start Locations…"), "autoStarts"),
+        { kind: "item", label: msg("Fill Terrain"), disabled: !canEdit, onSelect: fillMap },
+        edits(msg("Replace Terrain…"), "replaceTerrain"),
+        edits(msg("Auto-place Start Locations…"), "autoStarts"),
         sep,
         dlg(msg("Check Map…"), "validateMap"),
         dlg(msg("Statistics…"), "statistics"),

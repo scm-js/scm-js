@@ -19,6 +19,7 @@ import { specLabel } from "../../plugins/failures";
 
 import { transferOf } from "../../plugins/images";
 import { hostTerms } from "../../editor/platform";
+import { takesText, type TextTarget } from "../../editor/commands";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
 import { msg, pluginText, t, translate } from "../../i18n";
@@ -82,8 +83,7 @@ export function PluginDialog({ entry }: DialogProps) {
     if (!onPaste || !topmost) return;
     const listener = (e: ClipboardEvent) => {
       const transfer = transferOf(e.clipboardData);
-      const t = e.target as HTMLElement | null;
-      const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      const inField = takesText(e.target as (HTMLElement & TextTarget) | null);
       if (inField && transfer.files.length === 0) return;
       if (transfer.files.length === 0 && !transfer.text) return;
       e.preventDefault();

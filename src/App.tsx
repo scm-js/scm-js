@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
-import { screenAtom } from "./atoms/editorAtoms";
+import { screenAtom, viewOnlyAtom } from "./atoms/editorAtoms";
 import { panelsAtom } from "./atoms/uiAtoms";
 import { pluginPanelsAtom } from "./atoms/pluginAtoms";
 import { useHotkeys } from "./hooks/useHotkeys";
@@ -50,6 +50,8 @@ function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boo
 export default function App() {
   const screen = useAtomValue(screenAtom);
   const panels = useAtomValue(panelsAtom);
+  // The palette is all tools; a map open to look at only has nothing for it to do.
+  const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   // A plugin's docked panel (`api.ui.panel` with `dock: "right"`) keeps the dock on screen even with every built-in panel hidden.
   const dockedPanels = useAtomValue(pluginPanelsAtom).some((p) => p.spec.dock === "right");
   const { guard } = useMapFileActions();
@@ -159,7 +161,7 @@ export default function App() {
             {panels.toolbar && <ToolBar />}
             <TabStrip />
             <div className="body">
-              {panels.palette && <LeftDock />}
+              {panels.palette && !viewOnly && <LeftDock />}
               <Guarded surface="map view"><MapViewport /></Guarded>
               {rightVisible && <RightDock />}
             </div>

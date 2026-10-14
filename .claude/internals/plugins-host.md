@@ -214,6 +214,14 @@ the map raises a fresh `"replace"` for the rest — there is deliberately no plu
 `api.document.sections` also has `trailing()`, `required()`, `defaults(name)` and `rebuild(names?)`
 (`editor/sections.ts#defaultSectionBytes` / `rebuildSections` / `requiredSectionNames`), and
 `EditTransaction` has `rebuildIsom()`; `api.terrain.checkIsom()` awaits the tileset.
+`replaceFile(bytes, { asOpened: true })` (2026-10-14, for Repair's on-open pass) installs through
+`replaceScenarioAtom(scn, { asOpened })`, which then leaves `mapModifiedAtom` false: the bytes count
+as the reading of the opened file, so the close guard does not ask and Save still writes them (the
+re-parsed scenario's raw bytes are the base). Everything else about a raw edit is unchanged — the
+history is dropped, `"replace"` fires and `syncTapAtom` still sees it. Only `replaceFile` takes the
+option; a plugin whose repair also goes through the model (`rebuild`, `tx.rebuildIsom`) settles it with
+one more `replaceFile(sections.file(), { asOpened: true })`. It hides a change from the user if used
+after they edited — the doc comment says to use it only right after `"open"`; there is no host check.
 `api.ui` also has `confirm` / `alert` / `prompt` / `progress` (`plugins/prompts.ts`, built on the
 plugin dialog and panel — a promise settled from `mount`'s cleanup, since a dismissal presses no
 button) and `el` / `widgets` (`plugins/widgets.ts`: plain DOM in the editor's own classes, so a

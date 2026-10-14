@@ -37,7 +37,7 @@ describes each in more detail, and each repository has its own README.
 | --- | --- | --- | --- |
 | [Walkability](https://github.com/scm-js/plugin-walkability) | on | View ▸ Walkability | Shows the ground as units walk it: islands, chokes and their widths, distances between starts. |
 | [Paint](https://github.com/scm-js/plugin-paint) | on | Tools ▸ Paint… | Freehand, lines, shapes, spray and text with whatever the active layer's palette has picked. |
-| [Repair](https://github.com/scm-js/plugin-repair) | on | on open, Tools ▸ Repair Map… | Finds what is missing, damaged or the wrong size in a map file, and repairs it. |
+| [Repair](https://github.com/scm-js/plugin-repair) | on | on open, status bar, Tools ▸ Repair Map… | Finds what is missing, damaged or the wrong size in a map file, repairs what is safe as the map opens, and lists the rest. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | on | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain with the isometric brush. |
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | on | Triggers ▸ TrigScript… | Triggers written as TypeScript, kept inside the map. |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | on | Tools ▸ Stamp Library… | Saved pieces of map (a ramp, a mineral line) to lay down again on any map. |
@@ -1254,7 +1254,10 @@ edits already included. Section Explorer is built on it, and Repair uses its hel
   every part of the editor even for sections it does not understand. The undo history and
   selections are cleared, and the `"document"` event fires with reason `"replace"`. Each
   returns the parser's `warnings`. Indices shift after an insert or remove, so call
-  `list()` again.
+  `list()` again. Every write marks the map modified, except `replaceFile(bytes, {
+  asOpened: true })`, which takes the bytes as the file that was opened: for a repair
+  made right after `"open"`, before the user changed anything, so the map does not ask
+  to be saved when nothing the user did changed it. Save still writes the bytes.
 - **Helpers for repairs:** `required()` (the sections this map's revision must have),
   `defaults(name)` (what File ▸ New would write), `trailing()` (bytes after the last
   readable section), `chkOf(file)` (the scenario inside an `.scx` / `.scm`) and

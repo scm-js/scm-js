@@ -135,8 +135,19 @@ itself, and the worked example for the `"document"` payload, `sections.defaults`
 / `required` and `tx.rebuildIsom`: on every `"open"` it parses `sections.file()` with its own container
 reader (`chk.ts`), runs `analyze.ts` (pure: chunks + `known()` + `required()` + the default VCOD + the
 ISOM report → findings, each with a level, what the game does with the file as it is, a `Repair` and a
-recommended tick) and opens its dialog only when an error or warning came back; Tools ▸ Repair Map… is
-the manual run. `repair.ts` applies the byte-level repairs to the chunk list by object identity (one
+recommended tick). Since 1.6.0 (2026-10-14, the user found the on-open dialog annoying "since it's
+going to be on basically every map") `plan.ts` splits them: **safe** = `repair && recommended`, made
+straight away on open with `replaceFile(…, { asOpened: true })` so the map stays unmodified (a rebuild /
+`tx.rebuildIsom` is settled by one more `replaceFile(sections.file(), { asOpened: true })`); **review** =
+any other error/warning; **notes** = other info. What is left shows in a `ui.statusItem` cell
+("Repaired 3 · 1 to review", none for a clean map) that opens the dialog: per-finding *Apply* buttons
+instead of the old tick grid, a folded *Repaired* list with *Undo* (= Restore original, which marks the
+map modified — the plugin cannot tell whether a Save happened since), notes and an *Advanced* fold.
+The safe pass is skipped when the map is already modified by the time the async check lands, or a
+`sync` session is running (it would broadcast a whole replace); the cell then says "Repair: N to fix".
+The Preferences page is a select, key `on-open`: `auto` (default) / `ask` (old behaviour: dialog when an
+error or warning came back) / `off`; the 1.4 `ask-on-open: false` reads as `off`. Tools ▸ Repair Map…
+is the manual run. `repair.ts` applies the byte-level repairs to the chunk list by object identity (one
 `replaceFile`), then the plugin runs `sections.rebuild` and one `document.edit` with `tx.rebuildIsom`.
 The bytes as the map came in stay in memory until the next open for *Restore original*.
 The one **content** finding is the Remastered newline-colour change: `analyze` takes the table

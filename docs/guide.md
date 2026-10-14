@@ -36,9 +36,15 @@ opens the map you pick (see [Plugins](#plugins)); a link like `https://scmjs.dev
 account, every revision you saved there (see [Your scmjs.dev account](#your-scmjsdev-account)).
 
 The Repair plugin checks every map as it opens, the way the game reads it. When something
-is missing, damaged or repeated, as it often is in a protected map, it lists each finding
-with what the game does about it and a repair you can tick; nothing is changed that you
-did not tick, and Tools ▸ Repair Map… runs the check again. Section Explorer, from Plugins ▸ Browse
+is missing, damaged or repeated, as it often is in a protected map, it makes the repairs
+that only write what the game already does, or put back what the editor needs, such as
+the terrain record a protector stripped. These do not mark the map as changed, and Save
+writes them. Anything that is a judgement call, such as a player slot with a race the
+game does not have, is left alone: a cell in the status bar (*Repaired 3 · 1 to review*)
+opens a list that says what the game does about each one and what the repair would
+change, and Undo there puts the file back as it opened. Edit ▸ Preferences ▸ Plugins ▸
+Repair can make it ask before repairing anything, or not check at all; Tools ▸ Repair
+Map… runs the check again. Section Explorer, from Plugins ▸ Browse
 Plugins…, shows the file section by section and byte by byte. See
 [Protected and damaged maps](file-formats.md#protected-and-damaged-maps).
 
@@ -248,8 +254,8 @@ the new terrain becomes the intermediate one, and cliff faces stack as tall as t
 tileset draws them. A single click of high ground gives a small mesa; a wider brush gives
 flat high ground inside a cliff ring. It needs the map's `ISOM` section, which is the
 editor's own record rather than anything the game reads, and which protected maps often
-strip. Where a map has none, the tab says so and the Repair plugin (Tools ▸ Repair Map…)
-reconstructs it: exact for ground that was laid down isometrically, a best guess under
+strip. Where a map has none, the Repair plugin reconstructs it as the map opens (or from
+Tools ▸ Repair Map…, and the tab says so until it has): exact for ground that was laid down isometrically, a best guess under
 doodads and hand-placed tiles. The tab also warns when Rect or Tile edits have left the
 record out of step with the terrain — but only where a rebuild would put it back. Ground
 no diamond lattice can describe, which is what hand-placed tiles, blends and other
@@ -1308,7 +1314,7 @@ and the addresses it will fetch from.
 | --- | --- | --- |
 | [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them with their widths, height seams with no ramp, and the distances between start locations. Reads only. |
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
-| [Repair](https://github.com/scm-js/plugin-repair) | on open, Tools ▸ Repair Map… | Reads a map the way the game does and lists what is missing, damaged, repeated or the wrong size, each with the repair and what the game does without it. Rebuilds a stripped isometric record. |
+| [Repair](https://github.com/scm-js/plugin-repair) | on open, status bar, Tools ▸ Repair Map… | Reads a map the way the game does and repairs what is missing, damaged, repeated or the wrong size as it opens, including a stripped isometric record. The judgement calls wait in the status bar, each with what the game does without the repair. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | File ▸ Find on scmscx.com… | Searches the map archive at [scmscx.com](https://scmscx.com) by name, tileset, players and size, shows each map's minimap and details, and opens the one you pick. The site's API sends no cross-origin header, so unless the editor is served from scmscx.com the requests go by way of a small forwarder the plugin comes with; its page in Edit ▸ Preferences ▸ Plugins holds its address and how many minimaps to ask for. A link to `scmjs.dev/editor/scmscx/` followed by a map's id on the site opens the editor with the search on that map. |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Symmetric start locations, and mineral lines and geysers laid out at the distance the game mines fastest from; presets for main, natural and third; a symmetry check and a resource summary. |

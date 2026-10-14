@@ -597,14 +597,17 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
  * place of the open one: the same file name and archive extras, the map marked modified,
  * and, as with Resize, the history dropped and every selection cleared, since any part
  * of the document may have changed. The mirror atoms are refilled from the new object.
+ * `asOpened` leaves the map unmodified instead: the bytes are taken as the reading of the
+ * file that was opened (Repair's on-open pass), so Save still writes them but closing
+ * does not ask about them.
  */
-export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario) => {
+export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario, options?: { asOpened?: boolean }) => {
   const tap = get(syncTapAtom);
   tap?.beforeWhole(get);
   set(loadDocumentAtom, {
     scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), reason: "replace",
   });
-  set(mapModifiedAtom, true);
+  set(mapModifiedAtom, options?.asOpened !== true);
   tap?.whole(get, set, t("Edit sections"));
   set(noticeWholeAtom, { reason: "whole", label: t("Edit sections") });
 });

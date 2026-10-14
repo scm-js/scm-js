@@ -752,6 +752,25 @@ export interface RawEditResult {
   warnings: string[];
 }
 
+/** How `document.sections.replaceFile` installs the bytes. */
+export interface ReplaceFileOptions {
+  /**
+   * Take the bytes as the file that was opened rather than as an edit: the map stays
+   * unmodified, so closing it does not ask to save, while Save writes the bytes as given.
+   * For a plugin that repairs a map as it opens — nothing the user did changed it. Use it
+   * only right after an `"open"`, or to put back what was opened; anything else would
+   * hide a change from the user. The history is dropped either way.
+   *
+   * @example
+   * api.events.on("document", (e) => {
+   *   if (e.reason !== "open") return;
+   *   const fixed = repair(api.document.sections.file());
+   *   if (fixed) api.document.sections.replaceFile(fixed, { asOpened: true });
+   * });
+   */
+  asOpened?: boolean;
+}
+
 /**
  * The scenario file at the byte level: every section occurrence in the order Save would
  * write them, with the bytes it would write — unsaved edits already encoded — and raw
@@ -796,8 +815,11 @@ export interface SectionsApi {
   remove(index: number): RawEditResult;
   /** Move the occurrence at `from` so that it sits at `to`. */
   move(from: number, to: number): RawEditResult;
-  /** Replace the whole CHK, the way File ▸ Open reads one. */
-  replaceFile(bytes: Uint8Array): RawEditResult;
+  /**
+   * Replace the whole CHK, the way File ▸ Open reads one. The map is marked modified,
+   * unless `asOpened` says the bytes are a reading of the file as it was opened.
+   */
+  replaceFile(bytes: Uint8Array, options?: ReplaceFileOptions): RawEditResult;
   /**
    * The CHK inside a map file — an `.scx` / `.scm` archive's `staredit\scenario.chk`, or
    * the bytes themselves for a bare CHK — the way File ▸ Open reads it, for `replaceFile`.

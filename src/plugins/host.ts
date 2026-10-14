@@ -791,10 +791,10 @@ export function sectionsApi(store: Store, alive: () => boolean = () => true): Se
     remove: (index) => edit((file) => removeSection(file, index)),
     move: (from, to) => edit((file) => moveSection(file, from, to)),
     chkOf: async (file) => (await loadMap(file)).chk.slice(),
-    replaceFile: (bytes) => {
+    replaceFile: (bytes, options) => {
       writable();
       const next = parseRaw(bytes);
-      store.set(replaceScenarioAtom, next);
+      store.set(replaceScenarioAtom, next, { asOpened: options?.asOpened === true });
       return { warnings: [...next.warnings] };
     },
     trailing: () => { const scn = store.get(scenarioAtom); return scn ? currentChk(scn).trailing?.slice() ?? null : null; },

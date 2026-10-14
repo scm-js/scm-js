@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  COMMANDS, comboOf, conflictsOf, firesWhileTyping, formatCombo, pluginComboAsCommand, reservedReason, resolveHotkeys, shortcutOf, withBinding, type KeyLike,
+  COMMANDS, comboOf, conflictsOf, firesWhileTyping, formatCombo, pluginComboAsCommand, reservedReason, resolveHotkeys, shortcutOf, takesText, withBinding, type KeyLike,
 } from "../src/editor/commands";
 import { DEFAULT_PREFERENCES } from "../src/editor/preferences";
 
@@ -105,5 +105,21 @@ describe("resolving the bindings", () => {
   it("ignores a stored value that is not a list", () => {
     const r = resolveHotkeys({ "edit.find": "Ctrl+Q" as never }, false);
     expect(r.byCommand["edit.find"]).toEqual(["Ctrl+F"]);
+  });
+});
+
+describe("what counts as typing", () => {
+  it("is text boxes, text areas, editable regions and EditContext hosts, and not tick boxes or plain elements", () => {
+    expect(takesText({ tagName: "INPUT", type: "text" })).toBe(true);
+    expect(takesText({ tagName: "INPUT" })).toBe(true);
+    expect(takesText({ tagName: "INPUT", type: "checkbox" })).toBe(false);
+    expect(takesText({ tagName: "INPUT", type: "range" })).toBe(false);
+    expect(takesText({ tagName: "TEXTAREA" })).toBe(true);
+    expect(takesText({ tagName: "DIV", isContentEditable: true })).toBe(true);
+    // Monaco 0.56's code box: a plain div that takes text through the EditContext API.
+    expect(takesText({ tagName: "DIV", isContentEditable: false, editContext: {} })).toBe(true);
+    expect(takesText({ tagName: "DIV", isContentEditable: false, editContext: null })).toBe(false);
+    expect(takesText({ tagName: "BUTTON" })).toBe(false);
+    expect(takesText(null)).toBe(false);
   });
 });

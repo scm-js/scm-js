@@ -100,6 +100,9 @@ function report(tally: Tally | null, force = false) {
 async function fetchPart(name: string, check: (data: Uint8Array) => boolean, tally: Tally | null = null): Promise<Uint8Array> {
   const res = await fetchAsset(BASE + name);
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  // A dev server answers a missing file with the app's page. Its size alone can pass a check
+  // (an 8,704-byte page is a whole number of VX4EX records, and every tile then drew black).
+  if (res.headers.get("content-type")?.startsWith("text/html")) throw new Error(`${name}: not on the server (the page came back instead)`);
   const data = tally && res.body ? await readCounted(res, tally) : new Uint8Array(await res.arrayBuffer());
   if (!check(data)) throw new Error(`${name}: not a tileset file (${data.length} bytes)`);
   return data;

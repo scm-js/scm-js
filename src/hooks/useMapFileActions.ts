@@ -2,8 +2,8 @@ import { baseName, logError, logInfo, logWarn } from "../editor/log";
 import { useCallback } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, builtByAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
-  recentFilesAtom, redoStackAtom, scenarioAtom, terrainRevisionAtom, undoStackAtom, type RecentEntry,
+  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
+  recentFilesAtom, redoStackAtom, scenarioAtom, terrainRevisionAtom, undoStackAtom, canEdit, viewOnlyAtom, viewOnlyMessage, type RecentEntry, type ViewOnly,
 } from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
@@ -12,7 +12,7 @@ import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
-import { mapVersionOf, markDirty, setMapVersion, tilesetIndex } from "../formats/chk/scenario";
+import { mapVersionOf, markDirty, parseScenario, serializeScenario, setMapVersion, tilesetIndex } from "../formats/chk/scenario";
 import type { NewMapVersion } from "../editor/preferences";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
@@ -111,12 +111,12 @@ export function openTarget(store: Store, into?: OpenInto): "tab" | "replace" {
  * Read a map file and install it as the open document, reporting on the status bar.
  * The store-level half of `openFile`, so the plugin host can open a map without React.
  */
-export async function openFileInto(store: Store, file: File, handle: MapFileHandle | null = null, into?: OpenInto): Promise<boolean> {
+export async function openFileInto(store: Store, file: File, handle: MapFileHandle | null = null, into?: OpenInto, viewOnly: ViewOnly | null = null): Promise<boolean> {
   const target = openTarget(store, into);
   store.set(statusMessageAtom, `Opening ${file.name}…`);
   try {
     const doc = await openMapFile(file, handle);
-    store.set(loadDocumentAtom, { ...doc, into: target });
+    store.set(loadDocumentAtom, { ...doc, into: target, viewOnly });
     store.set(screenAtom, "editor");
     const warnings = doc.scenario.warnings.length;
     store.set(
@@ -304,6 +304,9 @@ const explained = new Set<KeptPrevious["kind"]>();
 export async function saveDocument(store: Store, req: SaveRequest, write: SaveWriter = saveBytes): Promise<boolean> {
   const scenario = store.get(scenarioAtom);
   if (!scenario) { store.set(statusMessageAtom, "Nothing to save — open or create a map first."); return false; }
+  // A view-only map is never saved as itself; a copy of it is still the person's to keep.
+  const viewOnly = store.get(viewOnlyAtom);
+  if (viewOnly && !req.copy) { store.set(statusMessageAtom, viewOnlyMessage(viewOnly)); return false; }
   const what = req.copy ? "copy" : "map";
   try {
     // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
@@ -413,6 +416,25 @@ export function closeMapIn(store: Store) {
   store.set(statusMessageAtom, next ? t("Closed {name} — {next} is in front.", { name, next }) : t("Closed the scenario — File ▸ New or Open to continue."));
 }
 
+/**
+ * File ▸ Edit a Copy: the map in front — a view-only one, usually — opened again beside
+ * it as an ordinary map with no file behind it, so the first Save asks where. The copy is
+ * read back from the bytes Save would write, which leaves nothing shared with the original.
+ * Marked modified, since it exists nowhere else yet. False with no map.
+ */
+export function editCopyIn(store: Store): boolean {
+  const scn = store.get(scenarioAtom);
+  if (!scn) return false;
+  const name = store.get(mapNameAtom);
+  store.set(loadDocumentAtom, {
+    scenario: parseScenario(serializeScenario(scn)), extras: new Map(store.get(archiveExtrasAtom)), stored: store.get(archiveStoredAtom),
+    fileName: null, reason: "new", into: "tab",
+  });
+  store.set(mapModifiedAtom, true);
+  store.set(statusMessageAtom, t("A copy of {name} to edit — Save asks where to keep it.", { name }));
+  return true;
+}
+
 /** Bring an open map to the front (the tab strip, the Window menu, a plugin's `document.activate`). False for an id that is not open. */
 export function activateDocumentIn(store: Store, id: number): boolean {
   return store.set(activateDocumentAtom, id);
@@ -517,6 +539,8 @@ export function useMapFileActions() {
    */
   const save = useCallback(async (mode: "save" | "saveAs" | "copy" = "save"): Promise<boolean> => {
     if (!scenario) { setStatus(t("Nothing to save — open or create a map first.")); return false; }
+    // A view-only map is saved only as a copy; Save and Save As say why instead.
+    if (mode !== "copy" && !canEdit(store.get, store.set)) return false;
     if (mode === "save" && path) {
       const options = store.get(saveOptionsAtom) ?? defaultSaveOptions(scenario, store.get(mapOriginAtom), path);
       return saveDocument(store, { fileName: path, handle: store.get(mapFileHandleAtom), options, copy: false });

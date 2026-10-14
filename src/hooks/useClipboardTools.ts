@@ -4,7 +4,7 @@ import {
   activeLayerAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, selectedDoodadsAtom, selectedLocationsAtom,
   selectedSpritesAtom, selectedUnitsAtom,
 } from "../atoms/editorAtoms";
-import { commitEditAtom, scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
+import { canEdit, commitEditAtom, scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects, removeObjects, selectionSize, type Clip, type ObjectSelection,
@@ -105,6 +105,7 @@ export function useClipboardTools() {
 
   /** Copy, then take the objects off the map. Terrain and fog are copied but never cut out. */
   const cut = useCallback((): boolean => {
+    if (!canEdit(store.get, store.set)) return false;
     const src = source();
     const clip = src && take(src);
     if (!src || !clip) {
@@ -120,7 +121,7 @@ export function useClipboardTools() {
   /** The Delete key on the clipboard layer: the marked area's objects go, nothing is copied. */
   const deleteRegion = useCallback((): number => {
     const rect = store.get(clipSelectionAtom);
-    if (!rect) return 0;
+    if (!rect || !canEdit(store.get, store.set)) return 0;
     const n = remove({ kind: "region", rect }, t("Delete"));
     setStatus(n > 0 ? t("Deleted {plural} in the marked area", { plural: plural(n, "object") }) : t("No objects in the marked area (terrain and fog are not deleted)"));
     return n;
@@ -131,6 +132,7 @@ export function useClipboardTools() {
     const clip = store.get(clipboardAtom);
     if (!store.get(scenarioAtom)) { setStatus(t("No map open")); return false; }
     if (!clip) { setStatus(t("Nothing to paste — copy something first")); return false; }
+    if (!canEdit(store.get, store.set)) return false;
     if (store.get(activeLayerAtom) !== "clipboard") setLayer("clipboard");
     setPasting(true);
     setStatus(t("Pasting {clipSummary} — click where its top-left corner goes; Esc or right-click to stop", { clipSummary: clipSummary(clip) }));
@@ -148,7 +150,7 @@ export function useClipboardTools() {
   const pasteAt = useCallback((tx: number, ty: number): boolean => {
     const scn = store.get(scenarioAtom);
     const clip = store.get(clipboardAtom);
-    if (!scn || !clip) return false;
+    if (!scn || !clip || !canEdit(store.get, store.set)) return false;
     const { catalogue, tileset } = graphics();
     const result = pasteClip(scn, clip, tx, ty, { parts: store.get(clipPartsAtom), mode: store.get(clipPasteModeAtom), catalogue, tileset });
     const c = result.counts;

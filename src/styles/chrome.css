@@ -492,6 +492,14 @@
   background: var(--gold);
   box-shadow: 0 0 6px var(--gold);
 }
+/* A map open to look at only (a replay's map): an eye where the modified dot would be. */
+.tabstrip .tab .tab-view-only {
+  flex: none;
+  color: var(--text-faint);
+}
+.tabstrip .tab.active .tab-view-only {
+  color: var(--text-dim);
+}
 .tabstrip .tab-close {
   display: flex;
   align-items: center;

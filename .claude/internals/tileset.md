@@ -135,3 +135,10 @@ and the tune, or null with Animate Water off) and answers `{ animated, moving }`
 are `paint/ghosts.ts` and take `src.size`; sprite smoothing is `paint/objects.ts#spritePx`. The
 elevation and buildability overlays are part of the ground layer since that PR, so over moving
 water they bend with it.)
+
+**A dev server's page is not a tileset file** (2026-10-14). Vite answers a missing file with
+`index.html`, status 200, and the part checks are only sizes — `isVx4Ex` is "a multiple of 64".
+The page at the root base was 8,704 bytes = 136 records, so with no `.vx4ex` extracted it was taken
+as the Remastered tile table and every tile drew black (under `/editor/` the page is 8,755 bytes and
+the bug hid). `fetchPart` now refuses a `text/html` response, which `fetchOptional` turns into
+"absent" and the classic `.vx4` is fetched. `tests/tileset-fetch.test.ts`.

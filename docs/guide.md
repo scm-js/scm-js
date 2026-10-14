@@ -86,6 +86,14 @@ undo history, selection and view, so switching back lands where you left off. Wi
 open there is no row: the window looks as it always has. Preferences ▸ General can turn
 this off, and then Open and New replace the open map as StarEdit does.
 
+Some maps open to look at only. A plugin can open one this way, as the replay viewer does
+with a replay's map. Its tab has an eye where the dot would be, and the status bar says
+*View only*. You can scroll, zoom, switch layers and select things to read their
+properties. Nothing can be changed or saved: the palette is hidden, the tools don't act,
+and every menu item, button and dialog that would change the map is switched off. Save a
+Copy still works. To change such a map, use File ▸ Edit a Copy: it opens an ordinary copy
+in a new tab, which asks where to save the first time you save it.
+
 Scroll with the mouse wheel (Shift for sideways), the arrow keys (Shift for half a
 screen), a middle-button drag, or the scrollbars, or click on the minimap. A drag that
 reaches the edge of the window scrolls the view along with it, so a stroke, a marquee or

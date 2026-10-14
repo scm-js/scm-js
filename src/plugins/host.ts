@@ -19,7 +19,7 @@ import {
 import {
   activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom, objectEditRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
-  undoAtom, undoStackAtom, unitsRevisionAtom, type HistoryEntry,
+  undoAtom, undoStackAtom, unitsRevisionAtom, viewOnlyAtom, viewOnlyMessage, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { claimBadge, locateClaims } from "./claims";
@@ -237,6 +237,12 @@ const isFunctionGroup = (v: unknown): v is object => {
 /** `edit` and `update` on a plugin that has been deactivated do nothing and say so. */
 export const DEACTIVATED_NOTE = "the plugin is deactivated";
 
+/** Every write to the map in front starts here: a view-only map (`viewOnlyAtom`) throws, in the words the status bar uses. */
+export function assertWritable(store: Store): void {
+  const v = store.get(viewOnlyAtom);
+  if (v) throw new Error(viewOnlyMessage(v));
+}
+
 /**
  * Run `build` against a transaction over the open scenario and commit what it did as
  * one undo entry. Operations apply as they are called and accumulate change lists in
@@ -246,6 +252,7 @@ export const DEACTIVATED_NOTE = "the plugin is deactivated";
 export function runTransaction(store: Store, label: string, build: (tx: EditTransaction) => unknown): EditResult {
   const scn = store.get(scenarioAtom);
   if (!scn) return { ...EMPTY_RESULT, notes: ["no map is open"] };
+  assertWritable(store);
   const loaded = peekTileset(store.get(tilesetFileNameAtom));
   const names = TILESET_BY_ID[store.get(mapTilesetAtom)].terrain;
   const w = scn.width, h = scn.height;
@@ -735,7 +742,12 @@ function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?:
   const file = source instanceof File && !fileName
     ? source
     : new File([source as unknown as BlobPart], name, { type: "application/octet-stream" });
-  const { into } = options;
+  const { into, viewOnly } = options;
+  if (viewOnly) {
+    // Beside whatever is open, so nothing is replaced and nothing needs asking about.
+    const label = typeof viewOnly === "object" && typeof viewOnly.label === "string" && viewOnly.label.trim() ? viewOnly.label.trim() : null;
+    return openFileInto(store, file, null, "new", { label });
+  }
   return guardedAction(store, () => openFileInto(store, file, null, into), (done) => ({ action: "open", file, into, done }));
 }
 
@@ -765,6 +777,7 @@ export function sectionsApi(store: Store, alive: () => boolean = () => true): Se
   /** A write from a deactivated plugin is refused outright: a raw edit replaces the whole scenario. */
   const writable = () => {
     if (!alive()) throw new Error("The plugin is deactivated; document.sections no longer writes.");
+    assertWritable(store);
     return open();
   };
   const dim = () => { const scn = store.get(scenarioAtom); return { width: scn?.width ?? 0, height: scn?.height ?? 0 }; };
@@ -792,7 +805,8 @@ export function sectionsApi(store: Store, alive: () => boolean = () => true): Se
     move: (from, to) => edit((file) => moveSection(file, from, to)),
     chkOf: async (file) => (await loadMap(file)).chk.slice(),
     replaceFile: (bytes, options) => {
-      writable();
+      // The reading of the file that was opened (Repair's on-open pass) is not an edit, so a view-only map takes it too.
+      if (options?.asOpened === true) { if (!alive()) throw new Error("The plugin is deactivated; document.sections no longer writes."); open(); } else writable();
       const next = parseRaw(bytes);
       store.set(replaceScenarioAtom, next, { asOpened: options?.asOpened === true });
       return { warnings: [...next.warnings] };
@@ -826,6 +840,7 @@ export function sectionsApi(store: Store, alive: () => boolean = () => true): Se
 export function runUpdate(store: Store, label: string, build: (tx: UpdateTransaction) => unknown): UpdateResult {
   const scn = store.get(scenarioAtom);
   if (!scn) return { changed: false, sections: [], notes: ["no map is open"] };
+  assertWritable(store);
   const sections = new Set<string>();
   const notes: string[] = [];
   // The archive's files as the update found them: undo puts a sound's file back with its slot.
@@ -1527,6 +1542,7 @@ function clipboardApi(store: Store): ClipboardApi {
     capture: (source, options = {}) => take(source, options.parts)?.clip ?? null,
     cut: (source) => {
       const scn = scenario();
+      if (scn) assertWritable(store);
       const taken = take(source);
       if (!scn || !taken) return null;
       store.set(clipboardAtom, taken.clip);
@@ -1544,6 +1560,7 @@ function clipboardApi(store: Store): ClipboardApi {
     },
     paste: (tx, ty, options = {}) => {
       const scn = scenario();
+      if (scn) assertWritable(store);
       const clip = store.get(clipboardAtom);
       if (!scn || !clip) return null;
       const { catalogue, tileset } = graphics();
@@ -1753,6 +1770,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           version: scn.fileVersion,
           fileName: store.get(mapFilePathAtom),
           modified: store.get(mapModifiedAtom),
+          viewOnly: store.get(viewOnlyAtom) !== null,
         };
       },
       scenario,
@@ -1792,6 +1810,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       resize: (options) => {
         const scn = scenario();
         if (!scn || gone("document.resize")) return null;
+        assertWritable(store);
         const width = Math.max(1, Math.min(256, Math.round(options.width)));
         const height = Math.max(1, Math.min(256, Math.round(options.height)));
         const anchor = Math.max(0, Math.min(8, Math.round(options.anchor ?? 4)));
@@ -1819,6 +1838,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       save: async (options = {}) => {
         const scn = scenario();
         if (!scn || gone("document.save")) return false;
+        if (!options.copy) assertWritable(store);
         const path = store.get(mapFilePathAtom);
         if (!options.copy && path) {
           const saveOptions = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), path);
@@ -1826,10 +1846,15 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return askDialog(store, "saveAs", { copy: options.copy === true });
       },
-      saveAs: (options = {}) => (scenario() && !gone("document.saveAs") ? askDialog(store, "saveAs", { copy: options.copy === true }) : Promise.resolve(false)),
+      saveAs: (options = {}) => {
+        if (!scenario() || gone("document.saveAs")) return Promise.resolve(false);
+        if (options.copy !== true) assertWritable(store);
+        return askDialog(store, "saveAs", { copy: options.copy === true });
+      },
       close: (id) => (!scenario() || gone("document.close") ? Promise.resolve(false) : closeDocumentIn(store, id)),
       changeTileset: async (options) => {
         if (!scenario() || gone("document.changeTileset")) return null;
+        assertWritable(store);
         const era = Math.max(0, TILESETS.findIndex((t) => t.id === options.tileset));
         try { await loadTilesetFiles(TILESET_FILENAMES[era]); } catch { /* the fill uses the base ids without the graphics */ }
         if (!scenario() || gone("document.changeTileset")) return null;
@@ -1850,6 +1875,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         get: (name) => (scenario() ? store.get(archiveExtrasAtom).get(name) ?? null : null),
         set: (name, bytes) => {
           if (!scenario() || gone("document.extras.set")) return;
+          assertWritable(store);
           const next = new Map(store.get(archiveExtrasAtom));
           next.set(name, bytes);
           store.set(archiveExtrasAtom, next);
@@ -1857,6 +1883,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         },
         remove: (name) => {
           if (!scenario() || !store.get(archiveExtrasAtom).has(name) || gone("document.extras.remove")) return false;
+          assertWritable(store);
           const next = new Map(store.get(archiveExtrasAtom));
           next.delete(name);
           store.set(archiveExtrasAtom, next);
@@ -2198,6 +2225,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     sync: {
       start: (options) => {
         if (gone("sync.start")) return null;
+        // Sharing is editing together; a view-only map is shared by sharing an editable copy.
+        if (store.get(scenarioAtom)) assertWritable(store);
         const session = startSync(store, options);
         if (session) bag.add(() => session.stop());
         return session;

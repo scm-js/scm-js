@@ -1,4 +1,5 @@
 import { atom } from "jotai";
+import { t } from "../i18n";
 import type { MapFileHandle } from "../services/mapIo";
 import type { MemberInfo } from "../formats/mpq/scm";
 import type { SaveOptions } from "../editor/save";
@@ -125,6 +126,26 @@ export const mapTilesetAtom = atom<TilesetId>("badlands");
 export const mapWidthAtom = atom<number>(128);
 export const mapHeightAtom = atom<number>(128);
 export const mapModifiedAtom = atom<boolean>(false);
+
+/**
+ * A map open to look at, not to change: a replay's map, a preview. Every write is refused
+ * — the tools, the menus, the dialogs and a plugin's transactions check it before they
+ * start, and the commit atoms take back anything that reached them regardless — and the
+ * map is never saved as itself or listed in Open Recent. `label` is what the status bar
+ * and a refusal call it ("Replay"); null for the plain "View only". Null for an ordinary
+ * map. Per document: `documentAtoms.ts` parks and installs it with the rest.
+ */
+export interface ViewOnly {
+  label: string | null;
+}
+export const viewOnlyAtom = atom<ViewOnly | null>(null);
+
+/** The words for a refused write, for the status bar and a plugin's error alike. */
+export function viewOnlyMessage(v: ViewOnly): string {
+  return v.label
+    ? t("{label} is open to view only. File ▸ Edit a Copy opens a copy you can change.", { label: v.label })
+    : t("This map is open to view only. File ▸ Edit a Copy opens a copy you can change.");
+}
 export const mapFilePathAtom = atom<string | null>(null);
 /**
  * The file the open map can be written straight back to — a File System Access handle from

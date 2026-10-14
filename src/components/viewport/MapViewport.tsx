@@ -52,7 +52,7 @@ import {
 } from "../../atoms/editorAtoms";
 import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom, remasteredEffectsAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
+import { canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
@@ -232,6 +232,9 @@ export default function MapViewport() {
   const gridLook = useAtomValue(gridLookAtom);
   const layer = useAtomValue(activeLayerAtom);
   const lockedLayers = useAtomValue(lockedLayersAtom);
+  // A map open to look at only: presses select, and nothing that would change the map starts.
+  const viewOnly = useAtomValue(viewOnlyAtom) !== null;
+  const refuseViewOnly = () => { canEdit(store.get, store.set); };
   const setStatus = useSetAtom(statusMessageAtom);
   const setCursorPixel = useSetAtom(cursorPixelAtom);
   const setPointerHeld = useSetAtom(mapPointerHeldAtom);
@@ -295,14 +298,15 @@ export default function MapViewport() {
   const terrainRevision = useAtomValue(terrainRevisionAtom);
   /** Blend mode: a click picks the anchor cell; tiles are placed from the palette, never by stroke. */
   const blending = layer === "terrain" && scenario !== null && terrainMode === "blend";
-  const painting = layer === "terrain" && scenario !== null && !blending && (paintsTiles(terrainMode) || tools.isomReady);
+  // (Never on a view-only map, so no brush outline promises a stroke that will not happen.)
+  const painting = layer === "terrain" && scenario !== null && !blending && !viewOnly && (paintsTiles(terrainMode) || tools.isomReady);
   const unitsEditing = layer === "units" && scenario !== null;
   const unitPlacing = unitsEditing && placing;
   const doodadsEditing = layer === "doodads" && scenario !== null;
   const doodadPlacing = doodadsEditing && placingDoodad;
   const spritesEditing = layer === "sprites" && scenario !== null;
   const spritePlacing = spritesEditing && placingSprite;
-  const fogPainting = layer === "fog" && scenario !== null;
+  const fogPainting = layer === "fog" && scenario !== null && !viewOnly;
   const locationsEditing = layer === "locations" && scenario !== null;
   const clipEditing = layer === "clipboard" && scenario !== null;
   /** A plugin is waiting for a rectangle or a tile; the gesture goes to it ahead of every layer. */
@@ -921,8 +925,17 @@ export default function MapViewport() {
     return { tile, point, mapTile: clampToMap(tile), mapPoint: clampPoint(point), shift: e.shiftKey, zoom };
   };
 
-  /** The active object layer as its gesture sees it; the three differ only in what they pick and box-select by. */
+  /**
+   * The active object layer as its gesture sees it; on a view-only map a press still picks
+   * and box-selects, and moving and placing do nothing.
+   */
   const objectLayer = (): ObjectLayer | null => {
+    const layer = editableObjectLayer();
+    return layer && viewOnly ? { ...layer, placing: false, beginDrag: () => {}, dragTo: () => {}, endDrag: () => {}, placeAt: () => {} } : layer;
+  };
+
+  /** The active object layer as its gesture sees it; the three differ only in what they pick and box-select by. */
+  const editableObjectLayer = (): ObjectLayer | null => {
     if (unitsEditing) {
       return {
         id: "units", placing,
@@ -975,11 +988,17 @@ export default function MapViewport() {
       // Answered through the store, on the release: the pick may have been cancelled meanwhile.
       return beginAreaGesture("pick", s, { done: (r, last) => { const pick = store.get(mapPickAtom); pick?.finish(pick.kind === "tile" ? last : r); } });
     }
+    // A press meant for the terrain or fog brush on a view-only map: say why nothing happens.
+    if (viewOnly && (layer === "terrain" || layer === "fog")) { refuseViewOnly(); return null; }
     const objects = objectLayer();
     if (objects) return beginObjectGesture(objects, s);
-    if (locationsEditing) return beginLocationGesture({ ...locationTools, selected: selectedLocations }, s);
+    if (locationsEditing) {
+      // A view-only map's locations can be picked and box-selected; no handle, move or new box.
+      const still = viewOnly ? { handleAtPoint: () => null, beginMove: () => {}, dragTo: () => {}, endDrag: () => {}, create: () => {} } : {};
+      return beginLocationGesture({ ...locationTools, ...still, selected: selectedLocations }, s);
+    }
     if (clipEditing) {
-      if (clipPasting) { clipTools.pasteAt(tile.x, tile.y); return "done"; }
+      if (clipPasting) { if (!viewOnly) clipTools.pasteAt(tile.x, tile.y); return "done"; }
       // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
       return beginAreaGesture("clip", s, { change: setClipSelection, done: (r) => setClipSelection(r) });
     }

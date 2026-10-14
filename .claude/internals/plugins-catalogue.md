@@ -549,4 +549,4 @@ out of sight (`scmjs.sim.ready / analyse / progress / result / error / cancel`; 
 the conversation is tested without a DOM); `src/play.ts` is the `scmjs.play` hand-off that used to be the scmjs.dev
 plugin's `play.ts`, and with it Tools ▸ Test Map in Browser moved here (scmjs.dev 1.36.0 dropped it; the two pins
 moved in one commit so the item was never there twice). The timeline's types are a copy of scm-sim's
-`src/analysis/timeline.ts`; `ReplayTimeline.version` says which form (2, from plugin 0.2.0's contract: a `died` event names the unit the game credited with the kill). Nothing in the host's API was added for it.
+`src/analysis/timeline.ts`; `ReplayTimeline.version` says which form (2, from plugin 0.2.0's contract: a `died` event names the unit the game credited with the kill; 3, from 0.3.0's: `check.parted`, the frame from which the game the engine played is no longer the replay's, the engine having taken replays from 1.18 and Remastered by rewriting them in 1.16.1's form). Nothing in the host's API was added for it.

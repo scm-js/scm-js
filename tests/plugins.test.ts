@@ -1505,6 +1505,15 @@ describe("plugin sections", () => {
     expect(r.warnings).toEqual([]);
     expect(store.get(scenarioAtom)).toMatchObject({ width: 2, height: 2, era: 3 });
     expect(api.document.info()).toMatchObject({ name: "tiny", tileset: "ashworld", modified: true });
+    // As the reading of the file that was opened: written on Save, not a change to ask about on close.
+    store.set(mapModifiedAtom, false);
+    api.document.edit("tile", (tx) => { tx.setTile(0, 0, 0x321); });
+    expect(api.document.info()!.modified).toBe(true);
+    const repaired = serializeScenario(createScenario({ width: 3, height: 2, era: 3, name: "repaired" }));
+    api.document.sections.replaceFile(repaired, { asOpened: true });
+    expect(api.document.info()).toMatchObject({ name: "repaired", width: 3, modified: false });
+    expect(store.get(undoStackAtom)).toEqual([]);
+    expect(api.document.sections.file()).toEqual(repaired);
     // A file the parser has to guess at reports it.
     expect(api.document.sections.replaceFile(new Uint8Array([0x54, 0x59, 0x50, 0x45, 4, 0, 0, 0, 0x52, 0x41])).warnings).toEqual(expect.arrayContaining([expect.stringContaining("TYPE declares 4 bytes")]));
     expect(() => createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.sections.write(0, new Uint8Array())).toThrow(/No map/);

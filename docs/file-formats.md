@@ -201,13 +201,16 @@ trick depends on an editor reading the file differently from the game.
 
 The editor opens what the game would play. Where the archive itself is damaged so that
 the scenario cannot be read, the error says so. Where the scenario is readable, the
-Repair plugin, on by default, checks it on every open and shows a dialog only when it
-finds something: a missing required section, a repeat, a wrong size, a stripped
-isometric record, and the one content finding, strings whose colours render differently
-since Remastered changed how a line break resets the colour. Each finding says what the
-game does with the file as it is, what the repair would change, and whether it is
-recommended; nothing is changed until you say so, and the original bytes stay available
-to restore. Tools ▸ Repair Map… runs the same check by hand.
+Repair plugin, on by default, checks it on every open: a missing required section, a
+repeat, a wrong size, a stripped isometric record, and the content findings, such as
+strings whose colours render differently since Remastered changed how a line break
+resets the colour. A repair that only writes what the game already does with the file,
+or puts back what the editor needs, is made as the map opens, and the map does not count
+as changed for it. The rest change what the map is, so they wait in the status bar; each
+says what the game does with the file as it is and what the repair would change, and
+nothing is changed until you say so. The original bytes stay available to restore, and
+Edit ▸ Preferences ▸ Plugins ▸ Repair can make the plugin ask first instead. Tools ▸
+Repair Map… runs the same check by hand.
 
 The editor does not add protection. Its Save dialog can strip the editor-only sections,
 which is the part of protection that costs an editor something, and that is as far as it

@@ -97,7 +97,12 @@ red. A mask limits both. All of it measured on the real install:
   `tileset/<name>.hd.tmsk`, `<name>.hd.mask`, `water_large.hd.grp`, `water_fine.hd.grp`,
   `heat_noise.hd.dds` (15 files, ~9 MB; a Remastered copy is now 1737 files / 375 MB).
 - **Which effect** is not in the table — the game knows its tilesets — so `load.ts#effectKind`
-  does: Ashworld heat, everything else water (Desert's tar included, a guess).
+  does: Ashworld heat, Desert **none**, everything else water. Desert's table (8 plain tar
+  megatiles 51–58, one all-white mask) was first given water as a guess; the user checked
+  Remastered (2026-10-14) and the game leaves tar still. With water on, the glint lit plain tar
+  and not the doodad tiles beside it, which outlined every tar doodad. The doodads' own faint
+  squares are in Blizzard's 2x pictures (their tar is lighter than plain tar's 5,2,0) and show
+  in the game too — not something to fix.
 - **Constants.** The build ships its shaders as text (`ShadersGLSL/water.glsl`,
   `heat_distortion.glsl`). The *amounts* are taken from them — water drift `time / 20`, layer
   offsets −(t/2, t) and −(2t, 1.8t), fine layer × 0.6, bend 0.019 × 0.029 of the screen; heat

@@ -256,11 +256,12 @@ export function tilesetSettled(name: TilesetFileName): boolean {
 }
 
 /**
- * Which effect a tileset's masked ground takes. The mask table does not say — the game
- * knows its tilesets — so this does: Ashworld's is lava, seen through heat, and every
- * other tileset's is water (Desert's handful of tar tiles included, as the liquid they are).
+ * Which effect a tileset's masked ground takes, or null for none. The mask table does not
+ * say — the game knows its tilesets — so this does: Ashworld's is lava, seen through heat,
+ * and the rest water. Desert has a table (its eight plain tar tiles) but the game leaves
+ * the tar still, as seen in Remastered itself.
  */
-const effectKind = (name: TilesetFileName): HdEffectKind => (name === "ashworld" ? "heat" : "water");
+const effectKind = (name: TilesetFileName): HdEffectKind | null => (name === "ashworld" ? "heat" : name === "desert" ? null : "water");
 
 /** The shared textures of each effect, fetched once per data set; null when the copy has none. */
 const effectTextures = new Map<HdEffectKind, Promise<HdEffectTextures | null>>();
@@ -289,9 +290,11 @@ function getEffectTextures(kind: HdEffectKind): Promise<HdEffectTextures | null>
 
 /**
  * A tileset's moving water or lava, or null: a tileset with none (Space Platform,
- * Installation), or a copy made before these files were taken. The terrain is then still.
+ * Installation, and Desert's still tar), or a copy made before these files were taken. The terrain is then still.
  */
 async function loadHdEffects(name: TilesetFileName, megatileCount: number): Promise<HdEffects | null> {
+  const kind = effectKind(name);
+  if (!kind) return null;
   const [tableBytes, maskBytes] = await Promise.all([
     fetchOptional(`${name}.hd.tmsk`, (d) => parseTileMasks(d) !== null),
     fetchOptional(`${name}.hd.mask`, looksLikeHdTiles),
@@ -299,7 +302,6 @@ async function loadHdEffects(name: TilesetFileName, megatileCount: number): Prom
   const table = tableBytes ? parseTileMasks(tableBytes) : null;
   const masks: HdTileFile | null = maskBytes ? parseHdTiles(maskBytes) : null;
   if (!table || !masks) return null;
-  const kind = effectKind(name);
   const textures = await getEffectTextures(kind);
   return textures ? buildHdEffects(kind, megatileCount, table, masks, textures) : null;
 }

@@ -137,7 +137,7 @@ uses any of these tiles, how many, and where the first one is.
 ![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
 
 With **View ▸ Animate Water** on, water ripples and lava shimmers as they do in
-Remastered. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
+Remastered; Desert's tar stays still, as it does in the game. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
 how fast, and the tick above it sets whether the editor starts with the Remastered
 graphics on. A few things differ from the game: units are drawn without its lighting, the
 minimap keeps the classic colours, and an exported map image has still water.

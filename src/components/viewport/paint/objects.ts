@@ -11,7 +11,7 @@ import type { LoadedTileset } from "../../../formats/tileset/load";
 import type { UnitAnimator, SpriteState } from "../../../formats/units/animate";
 import type { UnitAssets } from "../../../formats/units/load";
 import { hdSprites } from "../../../formats/units/load";
-import { getImageFrame, getUnitSprite, subunitOf } from "../../../formats/units/sprites";
+import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../../../formats/units/sprites";
 
 /**
  * Sprite pixels per map pixel: 2 with View ▸ Remastered Graphics on. A 2x sprite is being
@@ -61,7 +61,8 @@ export function spritePainter(v: PaintView, scenario: Scenario | null, unitAsset
     const sub = subunitOf(unitAssets, unitId);
     if (sub !== NO_UNIT) {
       const turret = getUnitSprite(unitAssets, sub, team, palette, paletteKey);
-      if (turret) ctx.drawImage(turret.image, ux - (turret.width * zoom) / 2, uy - (turret.height * zoom) / 2, turret.width * zoom, turret.height * zoom);
+      const at = turretOffset(unitAssets, unitId);
+      if (turret) ctx.drawImage(turret.image, ux + (at.x - turret.width / 2) * zoom, uy + (at.y - turret.height / 2) * zoom, turret.width * zoom, turret.height * zoom);
     }
     ctx.globalAlpha = 1;
     return true;

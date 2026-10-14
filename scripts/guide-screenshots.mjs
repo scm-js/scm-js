@@ -167,19 +167,25 @@ const SCENES = [
     await p.dialog("game-data-remastered");
     await p.page.locator(".dlg .dlg-close").last().click(); await p.wait(400);
 
-    // A small base by the top-left start of Big Game Hunters, so the picture has terrain,
-    // resources, buildings and units of all three races in it.
+    // The top-left start of Big Game Hunters, scrolled so that the start location's middle
+    // (384, 240 on the map) is under the rule: the Command Center put in its place is drawn
+    // half in each look, and the same units stand on either side of it. The start location
+    // goes first, since a click on it would select it rather than place anything.
     await p.drop("(8)Big Game Hunters.scm");
+    await p.page.evaluate(() => { const el = document.querySelector(".scroller"); el.scrollLeft = 384 * 2 - 429; el.scrollTop = 60; });
+    await p.wait(800);
     await p.page.click(rail(2)); await p.wait(600);
+    await p.click(...at(429, 420)); await p.page.keyboard.press("Delete"); await p.wait(300);
     const place = async (name, spots) => { await p.unit(name); for (const [x, y] of spots) await p.click(...at(x, y)); };
-    await place("Terran Command Center", [[360, 360]]);
-    await place("Terran SCV", [[230, 300], [250, 380], [300, 470]]);
-    await place("Terran Marine", [[500, 330], [540, 370], [500, 410]]);
-    await place("Terran Siege Tank (Tank Mode)", [[620, 470]]);
-    await place("Protoss Zealot", [[380, 560], [440, 590]]);
-    await place("Protoss Dragoon", [[540, 600]]);
-    await place("Zerg Hydralisk", [[230, 580], [290, 640]]);
-    await place("Zerg Mutalisk", [[640, 250]]);
+    const both = (name, spots) => place(name, spots.flatMap(([x, y]) => [[x, y], [858 - x, y]]));
+    await place("Terran Command Center", [[429, 420]]);
+    await both("Terran SCV", [[330, 210], [250, 270]]);
+    await both("Terran Marine", [[200, 420], [160, 470]]);
+    await both("Terran Siege Tank (Tank Mode)", [[176, 568]]);
+    await both("Protoss Zealot", [[384, 672]]);
+    await both("Protoss Dragoon", [[296, 704]]);
+    await both("Zerg Hydralisk", [[56, 700]]);
+    await both("Zerg Mutalisk", [[110, 300]]);
     await p.esc(); await p.search("");
     await p.page.click(rail(0)); await p.wait(600);
     await p.page.mouse.move(1300, 500);
@@ -410,7 +416,7 @@ const SCENES = [
     await p.take("share-editing");
     await p.menu("Account", /^Share this Map/); await p.wait(800);
     // The link as the hosted editor makes it, not the dev server and the stand-in's address.
-    await p.page.locator(".dlg .sd-link input").evaluate((el, invite) => { el.value = `https://editor.scmjs.dev/share/${invite}`; }, room.invite);
+    await p.page.locator(".dlg .sd-link input").evaluate((el, invite) => { el.value = `https://scmjs.dev/editor/share/${invite}`; }, room.invite);
     await p.dialog("share-dialog"); await p.esc();
 
     // The account's list of shared maps: this one, plus two from earlier for the list to hold.

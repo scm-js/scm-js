@@ -9,7 +9,7 @@ import {
 import {
   awaitAnims, awaitGrps, getUnitAssets, hdSprites, imageGrpPath, peekUnitAssets, unitImageId, type UnitAssets,
 } from "../formats/units/load";
-import { getImageFrame, getUnitSprite, subunitOf } from "../formats/units/sprites";
+import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../formats/units/sprites";
 import { displayColorHex, playerTeamColor } from "../data/players";
 import { TILESETS } from "../data/tilesets";
 import { START_LOCATION } from "../data/units";
@@ -272,7 +272,8 @@ function drawObjects(
     ctx.drawImage(sprite.image, ux - (sprite.width * zoom) / 2, uy - (sprite.height * zoom) / 2, sprite.width * zoom, sprite.height * zoom);
     const sub = subunitOf(unitAssets, unitId);
     const turret = sub === NO_UNIT ? null : getUnitSprite(unitAssets, sub, team, palette, paletteKey);
-    if (turret) ctx.drawImage(turret.image, ux - (turret.width * zoom) / 2, uy - (turret.height * zoom) / 2, turret.width * zoom, turret.height * zoom);
+    const at = turret ? turretOffset(unitAssets, unitId) : null;
+    if (turret && at) ctx.drawImage(turret.image, ux + (at.x - turret.width / 2) * zoom, uy + (at.y - turret.height / 2) * zoom, turret.width * zoom, turret.height * zoom);
     ctx.globalAlpha = 1;
     return true;
   };

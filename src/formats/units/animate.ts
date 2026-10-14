@@ -60,6 +60,8 @@ export interface SpriteState {
   main: ImageState;
   /** The subunit's own sprite, drawn over this one. */
   turret: SpriteState | null;
+  /** On a turret's sprite: the unit it stands on and that unit's special overlay file, which places it. */
+  mount?: { of: SpriteState; path: string };
   /** For THG2 sprites: the record this state belongs to. */
   spriteRecord?: SpriteRecord;
   damageLevel: number;
@@ -280,9 +282,19 @@ export class UnitAnimator {
     const hasStarEditInit = this.hasAnim(main, Anim.StarEditInit);
     if (hasStarEditInit) this.play(s, main, Anim.StarEditInit);
     else if (building) this.play(s, main, Anim.Built);
-    if (withSubunit && !hasStarEditInit && unitId < NO_UNIT) {
-      const sub = this.assets.units.subunit[unitId];
-      if (sub !== NO_UNIT && sub < NO_UNIT) s.turret = this.createSprite(record, sub, false);
+    const sub = withSubunit && unitId < NO_UNIT ? this.assets.units.subunit[unitId] : NO_UNIT;
+    if (sub !== NO_UNIT && sub < NO_UNIT) {
+      // The game stands a turret where the body's special overlay file says, by the body's
+      // frame (a Siege Tank's is some way behind the middle of the hull and above it). The
+      // editor pose draws the turret as an overlay of the body, at no offset of its own.
+      const mount = imageLoPath(this.assets, imageId, "special");
+      if (!hasStarEditInit) {
+        s.turret = this.createSprite(record, sub, false);
+        if (mount) { s.turret.mount = { of: s, path: mount }; this.settle(s.turret); }
+      } else if (mount) {
+        const turretImage = unitImageId(this.assets, sub);
+        for (const img of s.images) if (img !== main && img.imageId === turretImage) img.lo = { path: mount, slot: 0 };
+      }
     }
     this.settle(s);
     return s;
@@ -377,10 +389,15 @@ export class UnitAnimator {
       flip = img.flipState;
     }
     if (frame !== img.frame || flip !== img.flip) { img.frame = frame; img.flip = flip; s.changed = true; }
-    if (img.lo) {
-      const lo = requestLo(img.lo.path);
-      const at = lo ? loOffset(lo, main.frame, img.lo.slot) : null;
-      if (at && (at.x !== img.x || at.y !== img.y)) { img.x = at.x; img.y = at.y; s.changed = true; }
+    // Pinned to a slot of an offset file: the body's own, or (a turret's main image) its unit's.
+    const pin = img.lo ?? (s.mount && img === main ? { path: s.mount.path, slot: 0 } : null);
+    if (pin) {
+      const of = img.lo ? main : s.mount!.of.main;
+      const lo = requestLo(pin.path);
+      const at = lo ? loOffset(lo, of.frame, pin.slot) : null;
+      // The file is written for the frame as drawn; mirrored, the offset is too.
+      const x = at ? (of.flip ? -at.x : at.x) : img.x;
+      if (at && (x !== img.x || at.y !== img.y)) { img.x = x; img.y = at.y; s.changed = true; }
     }
   }
 

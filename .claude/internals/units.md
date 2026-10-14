@@ -122,6 +122,34 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
   where the mate is not itself reachable (329 for 330, 547 for 548 — in `hd` without being in
   `images`), under the mate's own number, so nothing is stored twice. A copy made before this
   has 101 of the 103 already and lacks those two until it is installed again.
+- **A frame may reach past the box, and a shared sheet is in the other image's colours (2026-10-13,
+  both found on the play page first and ported from scm-sim's `web/renderer.ts`).** The box is what
+  a frame is centred by, not what holds it: an Overlord flying north reaches a tenth of its height
+  past it, a Pylon's shadow does too. `drawAnimFrame` used to push such a frame back inside (the
+  unit jerked between facings, the shadow sat short); it now places the frame at its own offset
+  and grows the canvas by the overhang **on both sides**, so the middle is still the box's and
+  every caller goes on centring by `width` / `height` — which are therefore per frame, not per
+  image. And a glow drawn from a GRP-mate's sheet (`load.ts#animImage` says whose) is that image's
+  finished picture: protoss building fire (488–490) came out in the terran fire's orange.
+  `glowOrder` turns red, green and blue round to the order that brings the one remap table's
+  colour nearest the other's (red and blue swap). How Remastered itself colours it is in no file
+  read here. Neither was looked at in a browser in the editor; the comparison picture in the
+  guide was re-shot after them.
+- **A turret stands where the body's special overlay file says (2026-10-13, found by the user on
+  a Remastered Siege Tank).** The game sets a subunit's image offset to slot 0 of the body's
+  images.dat special overlay `.lo` at the body's frame (`tank.lol`: about 10 px up and 9–13
+  behind the hull's middle; `stank.lol` −9, −16; `goliath.lol` all zero) — OpenBW's
+  `set_image_offset(…, get_image_lo_offset(main_image, 2, 0))`, and what the play page reads
+  from the engine as each image's own offset. The editor drew the turret at the body's centre in
+  both modes. Classic hid it (the turret's GRP frames sit in the middle of their box, so it read
+  as a tank with the turret a little far forward); Remastered's frames have the pivot at the
+  box's middle and the barrels ahead of it, and the turret hung off the front of the hull.
+  `animate.ts` pins the pose's turret overlay (`StarEditInit`'s `imgol` of the subunit's image)
+  to that slot through `ImageState.lo`, or gives a subunit sprite a `mount`; `settleImage`
+  mirrors a pinned x when the body's frame is flipped. The still pose goes through
+  `sprites.ts#turretOffset` (viewport below the animator, map image, plugin graphics). The map
+  image does not wait for the `.lo`, so a turret whose file has never been asked for is exported
+  at the centre.
 - **Fallbacks, all to the GRP:** no anim for the image or any image of its GRP (2 of the 885
   reachable ones — `unit/manifest.json`'s `hd` list says which have one, fetched once on first use so
   a 1.16 copy costs one request rather than hundreds of failed ones), the anim still on its way

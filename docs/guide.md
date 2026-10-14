@@ -707,8 +707,19 @@ Edge the map goes into a folder you pick once, and other browsers download it.
 In the editor at scmjs.dev there is a second way that needs no installed game running:
 **Tools ▸ Test Map in Browser** opens the map on the site's play page, scmjs.dev/play,
 which runs the game itself in a browser tab from your own copy of StarCraft. The map goes
-straight from the editor's tab to that one, with its own forces, units and triggers, and
-testing again sends the new version to the same tab. The first time, the play page asks
+straight from the editor's tab to that one, and testing again sends the new version to
+the same tab. How it is played is set under **Edit ▸ Preferences ▸ Plugins ▸ scm-sim**:
+
+- **Game type.** *From the map* (the default) plays with the map's own settings when it
+  has computer players or units placed beyond the start locations, and as a melee game
+  otherwise. *Use Map Settings* and *Melee* always play that way. *Choose on the play
+  page* opens the map on the play page's setup screen, which lists the map's forces and
+  slots as the game's own lobby does, and nothing starts until you press Start Game.
+- **Your race**, **your slot** for Use Map Settings (the first open one, or a player you
+  name), and for melee the number of **computers** and their race. Where the map fixes a
+  slot's race or has fewer places, the map's settings win.
+
+The first time, the play page asks
 for the folder StarCraft is installed in. The item comes with the scm-sim plugin and is
 not shown in the desktop app or an editor hosted elsewhere.
 

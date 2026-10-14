@@ -1252,13 +1252,14 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships ten defaults in order, TrigEdit starting off, each pinned to a version", () => {
-    // Which ten, in alphabetical order of their names (what Manage Plugins shows), and
+  it("ships eleven defaults in order, TrigEdit starting off, each pinned to a version", () => {
+    // Which eleven, in alphabetical order of their names (what Manage Plugins shows), and
     // which of them start on — the versions deliberately not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
       "github:scm-js/plugin-eudplib",
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-repair",
+      "github:scm-js/plugin-scm-sim",
       "github:scm-js/plugin-scmjs-dev",
       "github:scm-js/plugin-scm-scx",
       "github:scm-js/plugin-stamp-library",
@@ -1275,6 +1276,7 @@ describe("plugin lifecycle", () => {
       ["github:scm-js/plugin-eudplib", true],
       ["github:scm-js/plugin-paint", true],
       ["github:scm-js/plugin-repair", true],
+      ["github:scm-js/plugin-scm-sim", true],
       ["github:scm-js/plugin-scmjs-dev", true],
       ["github:scm-js/plugin-scm-scx", true],
       ["github:scm-js/plugin-stamp-library", true],

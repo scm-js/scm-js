@@ -35,3 +35,6 @@ fixtures/
 
 # The documentation site (regenerate with `npm run build:docs`)
 /docs-site/
+
+# The demo video's recordings and cuts (scripts/trailer.mjs, scripts/trailer-cut.mjs): gigabytes of frames.
+/trailer/build/

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useStore } from "jotai";
 import { screenAtom, viewOnlyAtom } from "./atoms/editorAtoms";
 import { panelsAtom } from "./atoms/uiAtoms";
 import { pluginPanelsAtom } from "./atoms/pluginAtoms";
@@ -21,6 +21,7 @@ import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
 import { droppedHandle } from "./services/mapIo";
+import { handFilesToPlugins } from "./plugins/fileTypes";
 import { TooltipProvider } from "./components/ui";
 import { Guarded } from "./components/ui/ErrorBoundary";
 import MenuBar from "./components/chrome/MenuBar";
@@ -30,20 +31,28 @@ import StatusBar from "./components/chrome/StatusBar";
 import DebugConsole from "./components/chrome/DebugConsole";
 import Toasts from "./components/chrome/Toasts";
 import { LeftDock, RightDock } from "./components/panels/Docks";
+import { BottomDockedPluginPanels } from "./components/panels/PluginPanels";
 import MapViewport from "./components/viewport/MapViewport";
 import DialogHost from "./components/dialogs/DialogHost";
 import SplashScreen from "./components/splash/SplashScreen";
 import { removeBootSplash } from "./components/splash/bootSplash";
 
+type Store = ReturnType<typeof useStore>;
+
 /**
- * The first file of a drop, opened through the unsaved-changes gate. False when the drop
- * carried no file, so the caller can leave the event alone. `droppedHandle` has to be
- * *called* inside the event — its answer may come later.
+ * A drop: the files a plugin claimed (`api.ui.fileType` — replays, say) go to it, all of them
+ * together, and the first of the rest is opened through the unsaved-changes gate. False when
+ * the drop carried no file, so the caller can leave the event alone. `droppedHandle` has to
+ * be *called* inside the event — its answer may come later — and it is the first file's.
  */
-function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boolean): boolean {
-  const file = data?.files[0];
-  if (!file || !data) return false;
-  void droppedHandle(data).then((handle) => guard({ action: "open", file, handle }));
+function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boolean, store: Store): boolean {
+  const files = data ? [...data.files] : [];
+  if (!files.length || !data) return false;
+  const rest = handFilesToPlugins(store, files);
+  const file = rest[0];
+  if (!file) return true;
+  if (file === files[0]) void droppedHandle(data).then((handle) => guard({ action: "open", file, handle }));
+  else guard({ action: "open", file, handle: null });
   return true;
 }
 
@@ -55,6 +64,7 @@ export default function App() {
   // A plugin's docked panel (`api.ui.panel` with `dock: "right"`) keeps the dock on screen even with every built-in panel hidden.
   const dockedPanels = useAtomValue(pluginPanelsAtom).some((p) => p.spec.dock === "right");
   const { guard } = useMapFileActions();
+  const store = useStore();
   const [dropTarget, setDropTarget] = useState(false);
   // Mounting the chrome is one big commit (menu bar, toolbar, both docks, the viewport and
   // the dialog host — well over a thousand renders), and the desktop window is not shown
@@ -117,19 +127,19 @@ export default function App() {
       const taken = e.defaultPrevented;
       e.preventDefault();
       setDropTarget(false);
-      if (!taken) openDropped(e.dataTransfer, guard);
+      if (!taken) openDropped(e.dataTransfer, guard, store);
     };
     document.addEventListener("dragover", over);
     document.addEventListener("drop", drop);
     return () => { document.removeEventListener("dragover", over); document.removeEventListener("drop", drop); };
-  }, [guard]);
+  }, [guard, store]);
 
-  const rightVisible = panels.minimap || panels.layers || panels.properties || dockedPanels;
+  const rightVisible = panels.minimap || ((panels.layers || panels.properties) && !viewOnly) || dockedPanels;
 
   // Dropping a map anywhere in the window opens it — the dialog's own drop zone is
   // just the discoverable version of the same thing.
   const onDrop = (e: React.DragEvent) => {
-    if (!openDropped(e.dataTransfer, guard)) return;
+    if (!openDropped(e.dataTransfer, guard, store)) return;
     e.preventDefault();
     setDropTarget(false);
   };
@@ -162,7 +172,11 @@ export default function App() {
             <TabStrip />
             <div className="body">
               {panels.palette && !viewOnly && <LeftDock />}
-              <Guarded surface="map view"><MapViewport /></Guarded>
+              {/* The map, and under it the strip plugins dock along its width (`dock: "bottom"`). */}
+              <div className="map-column">
+                <Guarded surface="map view"><MapViewport /></Guarded>
+                <Guarded surface="plugin panels"><BottomDockedPluginPanels /></Guarded>
+              </div>
               {rightVisible && <RightDock />}
             </div>
             <DebugConsole />

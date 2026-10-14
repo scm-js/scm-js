@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FlashKind, MapButtonSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -390,6 +390,17 @@ export interface PluginPanelEntry {
 }
 
 export const pluginPanelsAtom = atom<PluginPanelEntry[]>([]);
+
+/** One `api.ui.fileType`: a kind of file a plugin opens instead of the editor (`plugins/fileTypes.ts`). */
+export interface PluginFileTypeEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: FileTypeSpec;
+  /** `spec.extensions` lower-cased, each with its dot. */
+  extensions: string[];
+}
+
+export const pluginFileTypesAtom = atom<PluginFileTypeEntry[]>([]);
 
 /* ── Status bar items ───────────────────────────────────── */
 

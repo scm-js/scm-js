@@ -2079,7 +2079,10 @@ api.ui.dialog({
 
 **Panels** block nothing: the user keeps editing while one is open. A floating panel can
 be dragged and, with `resizable: true`, resized. `dock: "right"` puts it in the dock
-under the built-in panels, which suits anything kept open while working.
+under the built-in panels, which suits anything kept open while working. `dock: "bottom"`
+puts it in a strip under the map, as wide as the map, for things read across its width
+such as a timeline. The user drags the strip's top edge to make it taller or shorter;
+`height` sets where it starts.
 
 ```ts
 // A unit count that follows the map, docked under the built-in panels.
@@ -2092,6 +2095,21 @@ api.ui.panel({
     const sub = api.events.on("units", show);
     return () => sub.dispose();
   },
+});
+```
+
+**File types** let a plugin open a kind of file the editor doesn't. Once you claim an
+extension, a file with it that is dropped on the editor or picked in File ▸ Open comes to
+you instead of being read as a map. Several dropped together arrive in one call. The
+editor's own `.scm`, `.scx` and `.chk` can't be claimed, and the first plugin to claim an
+extension keeps it.
+
+```ts
+// Replays dropped on the editor, or picked in File ▸ Open, come here.
+api.ui.fileType({
+  name: "StarCraft replay",
+  extensions: [".rep"],
+  open: (files) => api.log(`${files.length} replays: ${files.map((f) => f.name).join(", ")}`),
 });
 ```
 

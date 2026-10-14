@@ -11,7 +11,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
-import { PanelRightClose, X } from "lucide-react";
+import { PanelBottomClose, PanelRightClose, X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { Button, Tip } from "../ui";
@@ -50,6 +50,56 @@ export function DockedPluginPanels() {
     <>
       {panels.map((p) => <DockedPanel key={p.key} entry={p} />)}
     </>
+  );
+}
+
+/**
+ * The panels opened with `dock: "bottom"`: a strip under the map, as wide as the map, one
+ * panel above another. Each has the docked head and a top edge the user drags to make it
+ * taller or shorter; the height is kept per plugin and title for the session.
+ */
+export function BottomDockedPluginPanels() {
+  const panels = useAtomValue(pluginPanelsAtom).filter((p) => p.spec.dock === "bottom");
+  if (panels.length === 0) return null;
+  return (
+    <div className="bottom-dock">
+      {panels.map((p) => <BottomPanel key={p.key} entry={p} />)}
+    </div>
+  );
+}
+
+const BOTTOM_DEFAULT = 160;
+const BOTTOM_MIN = 72;
+const bottomHeights = new Map<string, number>();
+
+function BottomPanel({ entry }: { entry: PluginPanelEntry }) {
+  const { spec, handle, plugin } = entry;
+  const title = usePanelTitle(entry.title);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  usePanelMount(host, entry);
+  const memoryKey = `${plugin.id}:${spec.title}`;
+  const [height, setHeight] = useState(() => bottomHeights.get(memoryKey) ?? spec.height ?? BOTTOM_DEFAULT);
+  const drag = useRef<{ y: number; h: number } | null>(null);
+  // Never taller than most of the window: the map keeps at least a strip of its own.
+  const clamp = (h: number) => Math.round(Math.max(BOTTOM_MIN, Math.min(h, window.innerHeight * 0.7)));
+  return (
+    <div className="panel plugin-docked bottom" data-plugin={plugin.id} aria-label={title} style={{ height: clamp(height) }}>
+      <div
+        className="bottom-dock-resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t("Resize {title}", { title })}
+        onPointerDown={(e) => { if (e.button !== 0) return; e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { y: e.clientY, h: clamp(height) }; }}
+        onPointerMove={(e) => { const d = drag.current; if (!d) return; const next = clamp(d.h + d.y - e.clientY); bottomHeights.set(memoryKey, next); setHeight(next); }}
+        onPointerUp={(e) => { drag.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
+      />
+      <div className="panel-head">
+        <span className="icon-lead"><PluginIconView icon={plugin.icon} size={12} /></span>
+        <span className="title">{title}</span>
+        <Tip label={t("Hide {title}", { title })}><Button icon onClick={() => handle.close()}><PanelBottomClose size={13} /></Button></Tip>
+      </div>
+      <div ref={setHost} className="panel-body plugin-panel-body" />
+    </div>
   );
 }
 

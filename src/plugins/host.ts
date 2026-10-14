@@ -26,12 +26,13 @@ import { claimBadge, locateClaims } from "./claims";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginPanelsAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
+import { MAP_EXTENSIONS, normalExtension } from "./fileTypes";
 import { activationOrder, installFor, requiredInstalls, requirementsOf, type ManifestLookup } from "./requires";
 import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
@@ -2280,6 +2281,17 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const sweep = bag.add(() => handle.close());
         const unsub = store.sub(pluginPanelsAtom, () => { if (closed) { unsub(); sweep.dispose(); } });
         return handle;
+      },
+      fileType: (spec) => {
+        const key = nextContributionKey();
+        const taken = new Set(store.get(pluginFileTypesAtom).flatMap((t) => t.extensions));
+        const extensions = [...new Set(spec.extensions.map(normalExtension))].filter((ext) => {
+          if (MAP_EXTENSIONS.includes(ext)) { logWarn(info.name, `ui.fileType: ${ext} is the editor's own and stays with it`); return false; }
+          if (taken.has(ext)) { logWarn(info.name, `ui.fileType: ${ext} is already claimed by another plugin`); return false; }
+          return true;
+        });
+        if (extensions.length > 0) store.set(pluginFileTypesAtom, [...store.get(pluginFileTypesAtom), { key, plugin: info, spec, extensions }]);
+        return bag.add(() => store.set(pluginFileTypesAtom, store.get(pluginFileTypesAtom).filter((e) => e.key !== key)));
       },
       statusItem: (spec) => addStatusItem(store, bag, info, spec),
       mapButton: (spec) => addMapButton(store, bag, info, spec),

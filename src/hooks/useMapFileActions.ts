@@ -23,6 +23,7 @@ import { openMapFile, saveBytes, type BeforeOverwrite, type MapFileHandle, type 
 import { keepPrevious, type KeptPrevious } from "../services/previousVersions";
 import { defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
+import { handFilesToPlugins } from "../plugins/fileTypes";
 import { hostTerms } from "../editor/platform";
 import { t, translate } from "../i18n";
 
@@ -560,6 +561,8 @@ export function useMapFileActions() {
    * map has unsaved changes and Preferences say to ask. True when the dialog took over.
    */
   const guard = useCallback((p: PendingAction): boolean => {
+    // A file a plugin claimed (a replay) is that plugin's to open: File ▸ Open, Open Recent, a drop, the desktop's open-with.
+    if (p.action === "open" && handFilesToPlugins(store, [p.file]).length === 0) return false;
     if (!needsCloseConfirm(store, p)) { void runPending(p); return false; }
     openDialog("confirmClose", { pending: p });
     return true;

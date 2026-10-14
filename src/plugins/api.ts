@@ -2765,7 +2765,11 @@ export interface PanelSpec {
   title: string;
   /** In CSS pixels; 260 by default. The panel is as tall as its content, up to the map's height. Ignored when docked. */
   width?: number;
-  /** Floating only: a height in CSS pixels instead of the content's own; the body then scrolls, or fills, as its content asks. */
+  /**
+   * Floating: a height in CSS pixels instead of the content's own; the body then scrolls, or
+   * fills, as its content asks. Bottom dock: the strip's starting height (160 by default),
+   * which the user can then drag.
+   */
   height?: number;
   /**
    * Floating only: a grip at the bottom-right corner lets the user resize the panel, and
@@ -2780,9 +2784,11 @@ export interface PanelSpec {
    * and Properties, with the same head and hide button the built-in panels have — the
    * choice for anything the user keeps open while working, such as an assistant or a
    * readout. A docked panel shows the dock even when the user has hidden every built-in
-   * panel in it.
+   * panel in it. `"bottom"` puts it in a strip under the map, as wide as the map, which
+   * the user makes taller or shorter by dragging its top edge — the place for a timeline,
+   * a console or anything read along the width of the map. Several bottom panels stack.
    */
-  dock?: "float" | "right";
+  dock?: "float" | "right" | "bottom";
   /** A docked panel that takes the dock's spare height (a transcript, a long list); off by default. */
   grow?: boolean;
   /** Floating only: the body runs edge to edge, without the panel's padding — for content that draws its own frame. */
@@ -2791,6 +2797,19 @@ export interface PanelSpec {
   mount(body: HTMLElement, panel: PanelHandle): void | (() => void);
   /** The panel closed, whichever way. */
   onClose?: () => void;
+}
+
+/**
+ * A kind of file a plugin opens (`ui.fileType`): replays, a mod's own data. A file whose
+ * name ends in one of `extensions`, dropped on the editor or picked in File ▸ Open, goes
+ * to `open` instead of being read as a map. Several dropped at once arrive together.
+ */
+export interface FileTypeSpec {
+  /** What the files are, for File ▸ Open's list of types ("StarCraft replay"). */
+  name: string;
+  /** With the dot, any case: `[".rep"]`. */
+  extensions: string[];
+  open(files: File[]): void | Promise<void>;
 }
 
 export interface PanelHandle {
@@ -3163,10 +3182,20 @@ export interface UiApi {
   saveFile(data: Blob | Uint8Array, fileName: string): Promise<{ route: "picker" | "download"; fileName: string } | null>;
   dialog(spec: DialogSpec): DialogHandle;
   /**
-   * Open a panel: floating over the map, or docked at the right with the built-in panels
-   * (`spec.dock`). As many as you like; each closes with the plugin.
+   * Open a panel: floating over the map, docked at the right with the built-in panels, or
+   * in the strip under the map (`spec.dock`). As many as you like; each closes with the plugin.
    */
   panel(spec: PanelSpec): PanelHandle;
+  /**
+   * Claim a kind of file: dropped on the editor or picked in File ▸ Open, a file with one of
+   * `spec.extensions` is handed to `spec.open` instead of being opened as a map. A plugin
+   * that claims what another already has is not given it (the first stays); none can claim
+   * the editor's own `.scm`, `.scx` or `.chk`. Ends with the plugin, or with `dispose`.
+   *
+   * @example
+   * api.ui.fileType({ name: "StarCraft replay", extensions: [".rep"], open: (files) => loadReplays(files) });
+   */
+  fileType(spec: FileTypeSpec): Disposable;
   /**
    * A cell of your own in the status bar. One line of text beside the plugin's icon, a
    * spinner while `busy`, a click. Keep the handle and `set` it as things move; it

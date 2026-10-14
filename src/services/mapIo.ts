@@ -85,8 +85,12 @@ const MAP_TYPES = [{ description: msg("StarCraft scenario"), accept: { "applicat
 /** Lets the browser remember the directory between the open and save pickers. */
 const PICKER_ID = "scmjs-maps";
 
-/** Show a file picker, falling back to a hidden input where the API is unavailable. */
-export async function pickMapFile(): Promise<PickedMapFile | null> {
+/**
+ * Show a file picker, falling back to a hidden input where the API is unavailable. `extra`
+ * are the kinds of file plugins open (`plugins/fileTypes.ts`): with any, the picker's first
+ * choice is everything the editor opens, maps and those together.
+ */
+export async function pickMapFile(extra: readonly { description: string; extensions: string[] }[] = []): Promise<PickedMapFile | null> {
   // The desktop build opens through its own dialog, which gives the path Save needs for its `.bak`.
   const bridge = desktopBridge();
   if (bridge) {
@@ -96,7 +100,12 @@ export async function pickMapFile(): Promise<PickedMapFile | null> {
   const picker = (window as unknown as { showOpenFilePicker?: ShowOpenFilePicker }).showOpenFilePicker;
   if (picker) {
     try {
-      const [handle] = await picker({ types: MAP_TYPES, multiple: false, id: PICKER_ID });
+      const types = extra.length === 0 ? MAP_TYPES : [
+        { description: t("Everything the editor opens"), accept: { "application/octet-stream": [...MAP_TYPES[0].accept["application/octet-stream"], ...extra.flatMap((e) => e.extensions)] } },
+        ...MAP_TYPES,
+        ...extra.map((e) => ({ description: e.description, accept: { "application/octet-stream": e.extensions } })),
+      ];
+      const [handle] = await picker({ types, multiple: false, id: PICKER_ID });
       return { file: await handle.getFile(), handle };
     } catch (err) {
       if (isAbort(err)) return null;
@@ -107,7 +116,7 @@ export async function pickMapFile(): Promise<PickedMapFile | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = MAP_FILE_ACCEPT;
+    input.accept = [MAP_FILE_ACCEPT, ...extra.flatMap((e) => e.extensions)].join(",");
     input.addEventListener("change", () => { const file = input.files?.[0]; resolve(file ? { file, handle: null } : null); }, { once: true });
     input.addEventListener("cancel", () => resolve(null), { once: true });
     input.click();

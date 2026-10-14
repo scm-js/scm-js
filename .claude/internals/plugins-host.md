@@ -377,3 +377,24 @@ the UI gates and the commit-atom backstop). It throws rather than returning a no
 caller asked for a write that cannot happen; `replaceFile` with `asOpened` is the one write let
 through. Built for Aftermath's replay tabs.
 
+**Bottom dock and file types** (2026-10-14, for Aftermath's replay layout). `PanelSpec.dock:
+"bottom"` renders through `BottomDockedPluginPanels` (PluginPanels.tsx) in `.map-column`, the
+column App now wraps around `MapViewport` — panels stack, each with a top-edge drag kept per
+plugin+title for the session (`bottomHeights`), clamped to 72 px … 70% of the window.
+`ui.fileType({ name, extensions, open })` registers in `pluginFileTypesAtom`; extensions are
+normalised (`.rep`), the map's own three and anything already claimed are refused with a
+warning (first claim wins). `plugins/fileTypes.ts` `handFilesToPlugins` is the one router:
+App's two drop handlers (all claimed files of a drop together, then the first unclaimed one
+opens as before), `useMapFileActions.guard` (Open Recent, desktop open-with) and the Open
+dialog's `accept` (which reads maps itself, so it needed the check too); the picker lists
+the claimed types after a combined "Everything the editor opens" filter. The desktop's
+native Open dialog still filters to maps — replays reach it by drop. Before this, a dropped
+`.rep` was read as a bare CHK and became an empty 64×64 map.
+
+Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
+hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on
+`reservedReason` applying only to the editor's command table, not to `hotkeys.add`. The plugin
+binds them only while a replay's tab is in front; a reorder of `useHotkeys` that puts the
+built-in keys first would break it. A focused `<select>` counts as typing, so a plugin that
+wants its keys back after a menu choice blurs the menu.
+

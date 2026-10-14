@@ -13,6 +13,7 @@
   "scripts": {
     "predev": "node scripts/vendor-plugins.mjs && node scripts/extract-assets.mjs --check --warn",
     "dev": "vite",
+    "dev:site": "node scripts/dev-site.mjs",
     "prebuild": "node scripts/vendor-plugins.mjs && node scripts/extract-assets.mjs --check --warn",
     "build": "tsc -b && vite build",
     "build:desktop": "node scripts/build-desktop.mjs",

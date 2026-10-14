@@ -79,6 +79,19 @@ describe("chk container", () => {
     expect(combine(parseChk(bytes), "UNIT", "append")!.length).toBe(108);
   });
 
+  it("passes over a copy shorter than the section's minimum", () => {
+    // A protected map's decoy: a 1-byte STR after the real table. Remastered reads the real
+    // one; a 2-byte table (no strings) is taken.
+    const bytes = concat(sampleChk(), section("STR ", [0xa1]));
+    const scn = parseScenario(bytes);
+    expect(scenarioName(scn)).toBe("Test Map");
+    expect(combine(parseChk(bytes), "STR ", "last", undefined, 2)).toEqual(parseChk(sampleChk()).sections.find((s) => s.name === "STR ")!.data);
+    expect(combine(parseChk(concat(sampleChk(), section("STR ", u16(0)))), "STR ", "last", undefined, 2)).toEqual(u16(0));
+    expect(combine(parseChk(section("STR ", [0xa1])), "STR ", "last", undefined, 2)).toBeNull();
+    // Saved untouched, both copies stay as they were.
+    expect(serializeScenario(scn)).toEqual(bytes);
+  });
+
   it("survives a declared size that runs past the end of the file", () => {
     const truncated = concat(sampleChk(), section("TRIG", new Uint8Array(100)).subarray(0, 40));
     const file = parseChk(truncated);

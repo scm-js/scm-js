@@ -55,20 +55,19 @@ export function RightDock() {
           <Guarded surface="minimap"><MinimapPanel /></Guarded>
         </div>
       )}
-      {panels.layers && (
+      {/* View-only: every layer and overlay switch is in the View menu too, and the locks mean nothing. */}
+      {panels.layers && !viewOnly && (
         <div className="panel">
           <PanelHead title={t("Layers")} right={<Tip label={t("Hide layers")}><Button icon onClick={() => setPanels({ ...panels, layers: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <Guarded surface="layers panel"><LayersPanel /></Guarded>
         </div>
       )}
-      {panels.properties && (
+      {/* A view-only map's fields take no input; the column is left to the panels that read it (a replay's). */}
+      {panels.properties && !viewOnly && (
         <div className="panel grow">
           <PanelHead title={t("Properties")} right={<Tip label={t("Hide properties")}><Button icon onClick={() => setPanels({ ...panels, properties: false })}><PanelRightClose size={13} /></Button></Tip>} />
           <div className="panel-body">
-            {/* On a view-only map the fields show what is selected and take no input. */}
-            <fieldset className="view-only-fields" disabled={viewOnly}>
-              <Guarded surface="properties panel"><PropertiesPanel /></Guarded>
-            </fieldset>
+            <Guarded surface="properties panel"><PropertiesPanel /></Guarded>
           </div>
         </div>
       )}

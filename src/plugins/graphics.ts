@@ -19,7 +19,7 @@ import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
-import { getImageFrame, getUnitSprite, subunitOf } from "../formats/units/sprites";
+import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../formats/units/sprites";
 import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 import { SpriteFlag } from "../formats/chk/sections/objects";
@@ -133,7 +133,7 @@ function renderClip(clip: Clip, loaded: LoadedTileset, assets: UnitAssets | null
     const team = teamOf(owner);
     if (!drawFrame(getUnitSprite(assets, unitId, team, palette, key), cx, cy)) return false;
     const sub = subunitOf(assets, unitId);
-    if (sub !== NO_UNIT) drawFrame(getUnitSprite(assets, sub, team, palette, key), cx, cy);
+    if (sub !== NO_UNIT) { const at = turretOffset(assets, unitId); drawFrame(getUnitSprite(assets, sub, team, palette, key), cx + at.x, cy + at.y); }
     return true;
   };
   const drawSprite = (spriteId: number, flags: number, owner: number, cx: number, cy: number) => {

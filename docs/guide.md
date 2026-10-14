@@ -88,10 +88,10 @@ this off, and then Open and New replace the open map as StarEdit does.
 
 Some maps open to look at only. A plugin can open one this way, as the replay viewer does
 with a replay's map. Its tab has an eye where the dot would be, and the status bar says
-*View only*. You can scroll, zoom, switch layers and select things to read their
-properties. Nothing can be changed or saved: the palette is hidden, the tools don't act,
-and every menu item, button and dialog that would change the map is switched off. Save a
-Copy still works. To change such a map, use File ▸ Edit a Copy: it opens an ordinary copy
+*View only*. You can scroll, zoom, switch layers and select things. Nothing can be
+changed or saved: the palette, Layers and Properties panels are hidden (the View menu has
+the layer switches), the tools don't act, and every menu item, button and dialog that
+would change the map is switched off. Save a Copy still works. To change such a map, use File ▸ Edit a Copy: it opens an ordinary copy
 in a new tab, which asks where to save the first time you save it.
 
 Scroll with the mouse wheel (Shift for sideways), the arrow keys (Shift for half a
@@ -137,7 +137,7 @@ uses any of these tiles, how many, and where the first one is.
 ![Big Game Hunters' shore drawn with the Remastered graphics](images/remastered-water.webp)
 
 With **View ▸ Animate Water** on, water ripples and lava shimmers as they do in
-Remastered. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
+Remastered; Desert's tar stays still, as it does in the game. **Preferences ▸ View ▸ Graphics ▸ Water and lava** changes how strongly and
 how fast, and the tick above it sets whether the editor starts with the Remastered
 graphics on. A few things differ from the game: units are drawn without its lighting, the
 minimap keeps the classic colours, and an exported map image has still water.
@@ -707,8 +707,19 @@ Edge the map goes into a folder you pick once, and other browsers download it.
 In the editor at scmjs.dev there is a second way that needs no installed game running:
 **Tools ▸ Test Map in Browser** opens the map on the site's play page, scmjs.dev/play,
 which runs the game itself in a browser tab from your own copy of StarCraft. The map goes
-straight from the editor's tab to that one, with its own forces, units and triggers, and
-testing again sends the new version to the same tab. The first time, the play page asks
+straight from the editor's tab to that one, and testing again sends the new version to
+the same tab. How it is played is set under **Edit ▸ Preferences ▸ Plugins ▸ scm-sim**:
+
+- **Game type.** *From the map* (the default) plays with the map's own settings when it
+  has computer players or units placed beyond the start locations, and as a melee game
+  otherwise. *Use Map Settings* and *Melee* always play that way. *Choose on the play
+  page* opens the map on the play page's setup screen, which lists the map's forces and
+  slots as the game's own lobby does, and nothing starts until you press Start Game.
+- **Your race**, **your slot** for Use Map Settings (the first open one, or a player you
+  name), and for melee the number of **computers** and their race. Where the map fixes a
+  slot's race or has fewer places, the map's settings win.
+
+The first time, the play page asks
 for the folder StarCraft is installed in. The item comes with the scm-sim plugin and is
 not shown in the desktop app or an editor hosted elsewhere.
 

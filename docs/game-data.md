@@ -385,7 +385,8 @@ whatever glows red and leaves dark rock alone. A table per tileset says which me
 take the effect, and a mask picture for each says where on it, so a shoreline tile moves
 on its water side only. The editor does the same with View ▸ Animate Water on, as one
 pass over the finished terrain. Ashworld's is the lava; the other tilesets' is water;
-Space Platform and Installation have neither.
+Space Platform and Installation have neither. Desert's tar has a table too, but the game
+leaves it still, and so does the editor.
 
 How far the picture bends and how the ripples drift are the game's own figures. How large
 the ripples lie on the map and how fast they change are not in its files, so those were

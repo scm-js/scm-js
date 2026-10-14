@@ -313,6 +313,11 @@ export function requestAnim(imageId: number): Anim | null | undefined {
   return from === null ? null : anims.get(animPath(from));
 }
 
+/** The image whose 2x sprite file `requestAnim` answers with: the image's own, or the GRP-mate's it is drawn from. */
+export function animImage(imageId: number): number {
+  return hdImages?.has(imageId) ? imageId : sharedAnims.get(imageId) ?? imageId;
+}
+
 /**
  * After the game data source changes (Help ▸ Game Data… installed a copy): forget every
  * part that failed so it is fetched again, and tell the canvases. The tables retry on

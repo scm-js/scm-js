@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { handFilesToPlugins, pickerFileTypes } from "../../plugins/fileTypes";
 import { FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
 import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, archiveStoredAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
@@ -178,6 +179,8 @@ export function OpenMapDialog({ entry }: DialogProps) {
   const accept = useCallback(async (picked: PickedMapFile | null) => {
     if (!picked) return;
     const { file, handle } = picked;
+    // A kind of file a plugin opens (a replay) goes to it, and this dialog's work is done.
+    if (handFilesToPlugins(store, [file]).length === 0) { close(entry.key); return; }
     // Unsaved changes the open would lose: hand the file to the Close Scenario dialog and let it decide.
     if (needsCloseConfirm(store, { action: "open", file, handle })) {
       close(entry.key);
@@ -214,7 +217,7 @@ export function OpenMapDialog({ entry }: DialogProps) {
       footer={
         <>
           {sel !== null && recents[sel]?.handleKey && <Button variant="primary" disabled={busy} onClick={() => { void reopen(sel); }}>{t("Open {name}", { name: recents[sel].name })}</Button>}
-          <Button variant={sel !== null && recents[sel]?.handleKey ? undefined : "primary"} disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>
+          <Button variant={sel !== null && recents[sel]?.handleKey ? undefined : "primary"} disabled={busy} onClick={() => { void pickMapFile(pickerFileTypes(store)).then(accept); }}>
             {busy ? <><Loader2 size={13} className="spin" /> {t("Opening…")}</> : t("Browse…")}
           </Button>
           <Button onClick={() => close(entry.key)}>{t("Cancel")}</Button>
@@ -237,7 +240,7 @@ export function OpenMapDialog({ entry }: DialogProps) {
         <Upload size={22} />
         <div><strong>{t("Drop a map file here")}</strong></div>
         <div className="hint">or</div>
-        <Button disabled={busy} onClick={() => { void pickMapFile().then(accept); }}>{t("Browse…")}</Button>
+        <Button disabled={busy} onClick={() => { void pickMapFile(pickerFileTypes(store)).then(accept); }}>{t("Browse…")}</Button>
       </div>
       {error && <p className="error-text">{error}</p>}
       <Group title={t("Recent")} flush>

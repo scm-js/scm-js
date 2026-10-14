@@ -304,7 +304,7 @@ read in the first effect pass is still null.
   move and create; terrain/fog strokes and paste-at return before starting), `openDialogAtom`
   refuses `EDITING_DIALOGS` (covers double-click, menus, context menu, `ui.open`), the menu bar /
   toolbar / context menu disable their editing rows, `App` hides the left dock, the Properties
-  panel sits in a `<fieldset disabled>`, the delete/convert/nudge atoms and the clipboard hook call
+  and Layers panels are hidden (Properties was a `<fieldset disabled>` until Aftermath's replay layout needed the column; View has every layer switch), the delete/convert/nudge atoms and the clipboard hook call
   `canEdit`, `save()` and `saveDocument` refuse anything but a copy. The **backstop** is in the
   commit atoms: `commitEditAtom` / `commitTerrainAtom` roll the already-applied entry back
   (`rollbackEntryAtom`), the table commits take the diff and `applyTables(…, "undo")` it, resize /

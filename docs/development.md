@@ -76,6 +76,22 @@ In development, React 19's "Components" performance track is switched off, becau
 serialises every render's props and turned mounting the chrome into seconds of blocked
 main thread. Set `VITE_REACT_TRACKS=1` to have it back when profiling renders.
 
+### With the game engine beside it
+
+Test Map in Browser and the replay analysis that other plugins use come from the scm-sim
+plugin. It holds no engine of its own: it opens the play page, which must be on the
+editor's own origin at `/play/`, as on scmjs.dev. To work on the editor and a local
+scm-sim together, run both dev servers and put one origin in front of them:
+
+```sh
+SCMJS_BASE=/editor/ npm run dev -- --port 5173   # this repository
+npm run dev:web                                   # in scm-sim, port 5174
+npm run dev:site                                  # then open http://localhost:5180/editor/
+```
+
+Both dev servers keep their own hot reload. `DEV_SITE_PORT`, `DEV_SITE_EDITOR` and
+`DEV_SITE_SIM` change the three ports.
+
 ## Repository layout
 
 The repository is laid out like this:

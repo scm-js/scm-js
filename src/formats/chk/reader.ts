@@ -103,9 +103,9 @@ export type CombineMode =
   | "overlay"
   /** Every occurrence's records are kept, in file order. */
   | "append"
-  /** Only the last occurrence is used. */
+  /** Only the last occurrence is used — of those at least the section's minimum length. */
   | "last"
-  /** Only the first occurrence is used. */
+  /** Only the first occurrence is used — of those at least the section's minimum length. */
   | "first";
 
 /**
@@ -114,9 +114,13 @@ export type CombineMode =
  *
  * For "overlay", `size` gives the game's fixed buffer width; omitted, the buffer grows
  * to the longest occurrence.
+ *
+ * For "last" and "first", a copy shorter than `minimum` is passed over: the game does not
+ * take it, so it neither counts nor replaces an earlier one. Null when no copy is long enough.
  */
-export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number): Uint8Array | null {
-  const parts = sectionsNamed(file, name);
+export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number, minimum = 0): Uint8Array | null {
+  let parts = sectionsNamed(file, name);
+  if (mode === "last" || mode === "first") parts = parts.filter((p) => p.data.length >= minimum);
   if (parts.length === 0) return null;
 
   switch (mode) {

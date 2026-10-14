@@ -5,6 +5,16 @@
 - `reader.ts` parses the CHK container into `ChkFile` — **every** section in file order, repeats kept.
   `sections/registry.ts` declares each section's `CombineMode` (`last` / `overlay` / `append`) and fixed
   size; this mirrors how the game itself resolves duplicated sections (protected maps depend on it).
+  A `last`/`first` spec can carry a `minimum`: `combine` passes over shorter copies (they neither
+  count nor replace an earlier one), and `SectionKnowledge.minimum` hands it to plugins (Repair's
+  collapse uses it). **STR's is 2, measured 2026-10-14 in Remastered** on La Mancha 1.1 (KeSPA,
+  protected): real 2470-byte `STR ` first, a 1-byte `STR ` near the end. Taking the last copy lost
+  every string, and Repair's on-open collapse then deleted the real table, so the saved map no
+  longer loaded ("intended for use with a StarCraft expansion set", in Brood War mode too). Probe
+  copies settled the rule: two full tables → the second's name shows (last wins); real + a 2-byte
+  count-0 table → loads with `<Missing>` name and description (2 bytes counts). STRx is **not**
+  measured and has no minimum; nor does any other section — if another decoy turns up, probe it
+  the same way (Maps/Download copies, user reads the lobby) before adding one.
   `serializeChk` writes each header's **declared** size, not `data.length`: the two differ only for a
   section the reader could not take whole (a length past the end of the file, or a negative one — a
   protection trick the game acts on), and a plain Save must leave such a header as it found it. So

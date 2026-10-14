@@ -78,13 +78,6 @@
   background: var(--bg-4);
   color: var(--text);
 }
-/* The Properties panel's wrapper: a fieldset only so a view-only map can disable every field at once. */
-.view-only-fields {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
 .panel-body {
   flex: 1;
   min-height: 0;
@@ -858,4 +851,38 @@
 }
 .panel.plugin-docked.grow .panel-body {
   flex: 1;
+}
+
+/* Plugin panels docked under the map (`dock: "bottom"`): a strip as wide as the map, one panel above another. */
+.bottom-dock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border-top: 1px solid var(--bg-0);
+  box-shadow: 0 -1px 0 var(--line-hi);
+}
+.panel.plugin-docked.bottom {
+  position: relative;
+  min-height: 0;
+  border-radius: 0;
+}
+.panel.plugin-docked.bottom + .panel.plugin-docked.bottom {
+  border-top: 1px solid var(--bg-0);
+}
+.panel.plugin-docked.bottom .panel-body {
+  flex: 1;
+  padding: 6px 10px;
+}
+.bottom-dock-resizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -3px;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 5;
+}
+.bottom-dock-resizer:hover {
+  background: rgba(79, 209, 197, 0.25);
 }

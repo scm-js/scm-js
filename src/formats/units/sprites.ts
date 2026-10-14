@@ -2,7 +2,8 @@ import type { Anim } from "../dat/anim";
 import { DrawFunction, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
 import { drawGrpFrame, facingFrame } from "../dat/grp";
 import { decodeDxtRect, parseDds, type DdsImage } from "../dds";
-import { hdSprites, imageGrpPath, requestAnim, requestGrp, requestRemap, unitImageId, type UnitAssets } from "./load";
+import { animImage, hdSprites, imageGrpPath, imageLoPath, requestAnim, requestGrp, requestLo, requestRemap, unitImageId, type UnitAssets } from "./load";
+import { loOffset } from "../dat/lo";
 import { teamColorKey, teamColorLut, teamColorPalette, tunitRamp, type TeamColorSpec } from "./teamColor";
 import { LruCache } from "../../lib/lru";
 
@@ -161,20 +162,45 @@ function teamRgb(assets: UnitAssets, palette: Uint8Array, spec: TeamColorSpec): 
   return [palette[at], palette[at + 1], palette[at + 2]];
 }
 
+/** The orders a picture's red, green and blue can be read in; the first is as they are. */
+const COLOUR_ORDERS: readonly (readonly [number, number, number])[] = [[0, 1, 2], [2, 1, 0], [1, 0, 2], [0, 2, 1], [1, 2, 0], [2, 0, 1]];
+
 /**
- * One frame of a 2x sprite as a canvas the size of the image's box, as `getImageFrame`
+ * The order a glow's colours are read in when the image is drawn from another image's sheet.
+ * A sheet is a finished picture, and the fire on a protoss building is the picture a terran
+ * building's is: images.dat sends the one through the tileset's blue table and the other
+ * through its orange, which is all that tells them apart. How the game colours the blue one
+ * is in no file read here, so the sheet's colours are turned round to the order that brings
+ * the one table's colour nearest the other's (orange to blue: red and blue change places).
+ * `undefined` while a table is on its way.
+ */
+function glowOrder(palette: Uint8Array, paletteKey: string, have: number, want: number): readonly [number, number, number] | undefined {
+  if (have === want || !have || !want) return COLOUR_ORDERS[0];
+  const from = requestRemap(paletteKey, have), to = requestRemap(paletteKey, want);
+  if (from === undefined || to === undefined) return undefined;
+  // A table's colour: its entry for a strong glow.
+  const a = remapPalette(palette, paletteKey, have, from), b = remapPalette(palette, paletteKey, want, to), at = 40 * 4;
+  let best = Infinity, order = COLOUR_ORDERS[0];
+  for (const o of COLOUR_ORDERS) {
+    const d = Math.abs(a[at + o[0]] - b[at]) + Math.abs(a[at + o[1]] - b[at + 1]) + Math.abs(a[at + o[2]] - b[at + 2]);
+    if (d < best) { best = d; order = o; }
+  }
+  return order;
+}
+
+/**
+ * One frame of a 2x sprite as a canvas centred where the image's box is, as `getImageFrame`
  * makes one from a GRP. Only the frame's own rectangle of the sheet is decoded.
  */
-function drawAnimFrame(anim: Anim, index: number, flip: boolean, team: readonly [number, number, number] | null, shadow: boolean, additive: boolean): ImageFrame | null {
+function drawAnimFrame(anim: Anim, index: number, flip: boolean, team: readonly [number, number, number] | null, shadow: boolean, additive: boolean, order: readonly [number, number, number] = COLOUR_ORDERS[0]): ImageFrame | null {
   const pictures = picturesOf(anim);
   if (!pictures || anim.frames.length === 0 || typeof document === "undefined") return null;
   // A few files give no box (the start location's is one), and without it there is nothing
   // to centre the frame in: those images are drawn from their GRP.
   if (anim.width <= 0 || anim.height <= 0) return null;
   const f = anim.frames[Math.min(index, anim.frames.length - 1)];
-  const width = Math.max(1, Math.ceil(anim.width)), height = Math.max(1, Math.ceil(anim.height));
-  const fw = Math.min(f.width, width), fh = Math.min(f.height, height);
-  const pixels = new ImageData(width, height);
+  const boxWidth = Math.max(1, Math.ceil(anim.width)), boxHeight = Math.max(1, Math.ceil(anim.height));
+  const fw = f.width, fh = f.height;
   if (fw > 0 && fh > 0) {
     const rgba = new Uint8ClampedArray(fw * fh * 4);
     decodeDxtRect(anim.bytes, pictures.diffuse, f.x, f.y, fw, fh, rgba);
@@ -201,9 +227,20 @@ function drawAnimFrame(anim: Anim, index: number, flip: boolean, team: readonly 
       }
     }
 
-    // Into the box at the frame's offset; mirrored, the offset is measured from the other side.
-    const dx = Math.max(0, Math.min(width - fw, Math.round(flip ? anim.width - f.offsetX - f.width : f.offsetX)));
-    const dy = Math.max(0, Math.min(height - fh, Math.round(f.offsetY)));
+    if (order !== COLOUR_ORDERS[0]) {
+      for (let i = 0; i < rgba.length; i += 4) { const r = rgba[i + order[0]], g = rgba[i + order[1]], b = rgba[i + order[2]]; rgba[i] = r; rgba[i + 1] = g; rgba[i + 2] = b; }
+    }
+
+    // At the frame's offset from the box's corner; mirrored, the offset is measured from the
+    // other side. A frame may reach past the box (an Overlord flying north does, by a tenth of
+    // its height; a Pylon's shadow does): the box is what the picture is centred by, not what
+    // holds it. The canvas grows by the same amount on both sides, so its middle stays the
+    // box's and callers go on centring it by its size.
+    const ox = Math.round(flip ? anim.width - f.offsetX - f.width : f.offsetX), oy = Math.round(f.offsetY);
+    const padX = Math.max(0, -ox, ox + fw - boxWidth), padY = Math.max(0, -oy, oy + fh - boxHeight);
+    const width = boxWidth + padX * 2, height = boxHeight + padY * 2;
+    const dx = ox + padX, dy = oy + padY;
+    const pixels = new ImageData(width, height);
     for (let y = 0; y < fh; y++) {
       const from = y * fw * 4, to = ((dy + y) * width + dx) * 4;
       if (!flip) {
@@ -222,9 +259,9 @@ function drawAnimFrame(anim: Anim, index: number, flip: boolean, team: readonly 
     return { image, width: width / HD_SCALE, height: height / HD_SCALE, scale: HD_SCALE, additive, opaque: { x: dx, y: dy, width: fw, height: fh } };
   }
   const image = document.createElement("canvas");
-  image.width = width;
-  image.height = height;
-  return { image, width: width / HD_SCALE, height: height / HD_SCALE, scale: HD_SCALE, additive };
+  image.width = boxWidth;
+  image.height = boxHeight;
+  return { image, width: boxWidth / HD_SCALE, height: boxHeight / HD_SCALE, scale: HD_SCALE, additive };
 }
 
 /** Canvas pixels per map pixel in a 2x sprite. */
@@ -259,8 +296,10 @@ export function getImageFrame(assets: UnitAssets, imageId: number, frame: number
     if (hdHit) return hdHit;
     const anim = requestAnim(imageId);
     if (anim) {
-      // A remapped effect is already in its own colours here, with its glow in the alpha.
-      const made = drawAnimFrame(anim, frame, flip, teamColored ? teamRgb(assets, palette, team) : null, shadow, remapping > 0);
+      // A remapped effect is already in its own colours here, with its glow in the alpha —
+      // the colours of the image the file is, which another image of its GRP may not share.
+      const order = remapping ? glowOrder(palette, paletteKey, assets.images.remapping[animImage(imageId)], remapping) : COLOUR_ORDERS[0];
+      const made = order && drawAnimFrame(anim, frame, flip, teamColored ? teamRgb(assets, palette, team) : null, shadow, remapping > 0, order);
       if (made) {
         cache.set(hdKey, made);
         return made;
@@ -311,6 +350,23 @@ export function getUnitSprite(assets: UnitAssets, unitId: number, team: TeamColo
   const { frame, flip } = editorFrame(assets, unitId, imageId);
   return getImageFrame(assets, imageId, frame, flip, team, palette, paletteKey, hd);
 }
+
+/**
+ * Where a unit's turret stands from the unit's own position, in map pixels: slot 0 of the
+ * body's special overlay file at the frame of its editor pose, as the game places it.
+ * Nothing while the file is on its way (`onGrpLoaded` fires when it is here) or for a body
+ * with no such file.
+ */
+export function turretOffset(assets: UnitAssets, unitId: number): { x: number; y: number } {
+  const imageId = unitImageId(assets, unitId);
+  const path = imageLoPath(assets, imageId, "special");
+  const lo = path ? requestLo(path) : null;
+  if (!lo) return NO_OFFSET;
+  const { frame, flip } = editorFrame(assets, unitId, imageId);
+  const at = loOffset(lo, frame, 0);
+  return at ? { x: flip ? -at.x : at.x, y: at.y } : NO_OFFSET;
+}
+const NO_OFFSET = { x: 0, y: 0 };
 
 /** The turret (or other subunit) drawn on top of a unit, or NO_UNIT. */
 export function subunitOf(assets: UnitAssets, unitId: number): number {

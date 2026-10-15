@@ -55,7 +55,7 @@ import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
 import { useUnitTools } from "../../hooks/useUnitTools";
@@ -567,16 +567,24 @@ export default function MapViewport() {
   drawRef.current = draw;
   const drawPending = useRef(false);
   const drawRaf = useRef(0);
+  /**
+   * A plugin's view is shown in the map's place (`ui.mapView`): nothing of the map is seen, so
+   * nothing is painted — a request waits in `drawPending` for the map to be shown again.
+   */
+  const covered = useAtomValue(shownMapViewAtom) !== null;
+  const coveredRef = useRef(covered);
+  coveredRef.current = covered;
   const scheduleDraw = useCallback(() => {
     drawPending.current = true;
     if (drawRaf.current) return;
     drawRaf.current = requestAnimationFrame(() => {
       drawRaf.current = 0;
-      if (!drawPending.current) return;
+      if (!drawPending.current || coveredRef.current) return;
       drawPending.current = false;
       drawRef.current();
     });
   }, []);
+  useEffect(() => { if (!covered) scheduleDraw(); }, [covered, scheduleDraw]);
   // The ref has to be cleared as well as the frame cancelled: React's development
   // double-mount runs this cleanup on a component that goes on living, and a stale
   // frame id here would make every later request think one was already booked.
@@ -666,6 +674,7 @@ export default function MapViewport() {
     let lastFrame = Math.floor((performance.now() * unitSpeed) / GAME_FRAME_MS);
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      if (coveredRef.current) return;
       const now = performance.now();
       let repaint = false;
       // Palette rotations follow the wall clock, so the phase survives re-mounts and

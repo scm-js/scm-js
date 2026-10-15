@@ -409,6 +409,35 @@ map's shown state, so a tab switch fires it too. Headless check 2026-10-15 with 
 plugin: switch absent until offered, Map/Game, other tab plain, back shows the view, iframe
 loaded once. `tests/plugins.test.ts` ("offers and shows a map view…").
 
+**A map view's minimap and the switch keeping the place** (2026-10-15, after the user found
+Aftermath's minimap sluggish and showing the map file's units over a replay). Before, the
+minimap knew nothing of views: it drew `scenario.units` + start circles and the hidden map's
+box, and Aftermath copied the game's camera into the hidden `api.view` so the box followed —
+a minimap drag went minimap → hidden view → "view" event → plugin → iframe → game → camera
+report → plugin re-centred the hidden view a frame or two behind the pointer, and a 120 ms
+echo window then dropped the next moves; the hidden map repainted under the iframe each time.
+Now: `MapViewSpec.minimap { draw(ctx, MinimapView), press(x, y) }` (map pixels; `MinimapView`
+has `scale` = minimap px per map px, `x()`, `y()`, `size`), `handle.setCamera(MapViewCamera)`
+(middle + size, map pixels, kept in `mapViewCamerasAtom` by entry key) and
+`handle.redrawMinimap()` (rAF-coalesced bump of `mapViewMinimapRevisionAtom`).
+`shownMapViewAtom` (pluginAtoms, derived: front doc's shown entry) drives `MinimapPanel`:
+with `spec.minimap` it draws the ground then `draw` and returns (no locations/units/starts/
+fog), its box from the view's camera, presses to `press` (none → nothing moves); a view
+without `minimap` leaves the minimap as before. `MapViewport` paints nothing while covered
+(`coveredRef` in `scheduleDraw`'s frame and in the animation tick; a pending draw waits and
+one is booked on uncover) — so `api.view.visible()` / `viewportRectAtom` stay at the last
+paint while a view is shown, which is exactly the map's place for the switch. The switch:
+`watchMapViewSwitches` (host.ts, once per store, installed by the first `addMapView`) sees
+`mapViewSwitch(before, after)` on the same doc only (a tab switch is not a switch). To a
+view: `spec.onShow(look)` with the previous view's camera or `cameraOfMap(viewportRectAtom)`.
+To the map: when the view had a camera, `mapLookAt` → `zoomAtom` (the tighter of width/height
+ratios, clamped to `ZOOM_RANGE`) + `centerViewOnAtom` in the same tick (the zoom anchor is a
+layout effect, the centre effect runs after it with the new `tilePxRef`, as `reveal` does).
+Headless check with Aftermath + scm-sim 0.6.0 on replay 1556: game opened at the map's
+3480,321 / 641 px tall, a 20-step minimap drag tracked the pointer in a straight line, Map at
+the game's place and 100%, a 75% map opened the replay 855 px tall and came back at 75%.
+Tests: "keeps the place across the switch…", "works out the map's view…".
+
 Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
 hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on
 `reservedReason` applying only to the editor's command table, not to `hotkeys.add`. The plugin

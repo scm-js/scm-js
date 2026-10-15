@@ -8,11 +8,12 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewCamera, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
 import { browserStorage } from "./storage";
+import { activeDocumentIdAtom } from "./documentAtoms";
 
 /* ── Installed (persisted) ──────────────────────────────── */
 
@@ -449,6 +450,18 @@ export interface MapViewState {
 }
 
 export const mapViewStateAtom = atom<MapViewState>({ offered: new Map(), shown: new Map() });
+
+/** The view the map in front shows in its place, or null when it shows the map itself. */
+export const shownMapViewAtom = atom<PluginMapViewEntry | null>((get) => {
+  const key = get(mapViewStateAtom).shown.get(get(activeDocumentIdAtom) ?? -1);
+  return key === undefined ? null : get(pluginMapViewsAtom).find((e) => e.key === key) ?? null;
+});
+
+/** Where each view looks, by entry key, as its `setCamera` last said (map pixels). */
+export const mapViewCamerasAtom = atom<ReadonlyMap<number, MapViewCamera>>(new Map());
+
+/** Bumped by a view's `redrawMinimap` (once a frame at most): the minimap makes its picture again. */
+export const mapViewMinimapRevisionAtom = atom(0);
 
 /* ── Build steps ────────────────────────────────────────── */
 

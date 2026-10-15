@@ -2139,6 +2139,32 @@ game.onChange((shown) => api.log(shown ? "the game is shown" : "the map is shown
 if (await api.document.open(bytes, "replay.scx", { viewOnly: { label: "Replay" } })) game.show(true);
 ```
 
+A view that can be moved around the map should feel like the map itself. Three things make
+that happen. Say where the view is looking with `setCamera`, in map pixels (its middle and how
+much of the map it shows). The editor's minimap then draws its box there, and switching back
+to *Map* opens the map on the same place at the same scale. `onShow` hears where the map was
+looking when the user switches to your view, so you can open there. And `minimap` replaces
+what the minimap shows while your view is in front. The minimap draws the map's ground, then
+your `draw` in place of the map's units, start locations and fog, and a press or a drag on it
+goes to your `press` instead of moving the hidden map.
+
+```ts
+let units: { x: number; y: number; colour: string }[] = [];
+const replay = api.ui.mapView({
+  title: "Replay",
+  mount: (el) => el.append(frame),
+  onShow: (look) => viewer.lookAt(look.x, look.y, look.height),
+  minimap: {
+    draw(ctx, m) {
+      for (const u of units) { ctx.fillStyle = u.colour; ctx.fillRect(m.x(u.x) - 1, m.y(u.y) - 1, 2, 2); }
+    },
+    press: (x, y) => viewer.lookAt(x, y),
+  },
+});
+viewer.onMove((c) => replay.setCamera({ x: c.x, y: c.y, width: c.width, height: c.height }));
+viewer.onUnits((list) => { units = list; replay.redrawMinimap(); });
+```
+
 **Status items and map buttons** are for things that should stay visible without a panel,
 like a background job or an unread count. Keep the handle and call `set(...)` as things
 change. Use map buttons sparingly; the row is small.

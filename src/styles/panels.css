@@ -20,19 +20,28 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 8px;
+  touch-action: none;
   cursor: col-resize;
   z-index: 5;
 }
 .dock.left .dock-resizer {
-  right: -3px;
+  right: -4px;
 }
 .dock.right .dock-resizer {
-  left: -3px;
+  left: -4px;
 }
 .dock-resizer:hover,
 .dock-resizer.dragging {
   background: rgba(79, 209, 197, 0.25);
+}
+/* While a dock is dragged: the cursor stays the handle's everywhere, and nothing selects. */
+body.dock-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.dock-resizing iframe {
+  pointer-events: none;
 }
 
 .panel {

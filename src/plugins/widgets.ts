@@ -10,7 +10,7 @@
  *
  * Nothing here touches the store or React: it is a DOM helper library, tested as one.
  */
-import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SelectOption, SelectOptions, SkeletonOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi, FoldElement, FoldOptions, StepHandle, StepsElement, StepsOptions } from "./api";
+import type { BusyHandle, BusyOptions, ButtonElement, CheckboxOptions, ListItem, ListOptions, NumberFieldOptions, ProgressBarElement, ProgressBarOptions, SegmentedElement, SelectOption, SelectOptions, SkeletonOptions, TabItem, TabsElement, TabsOptions, SpinnerOptions, StatusLineElement, StatusLineOptions, TextFieldOptions, WidgetsApi, FoldElement, FoldOptions, StepHandle, StepsElement, StepsOptions } from "./api";
 import { t } from "../i18n";
 
 /** Attributes `el` maps onto the element rather than setting as a property. */
@@ -120,6 +120,89 @@ export function createWidgets(): WidgetsApi {
       if (options.value !== undefined) select.value = String(options.value);
       if (options.onChange) select.addEventListener("change", () => options.onChange!(select.value));
       return select;
+    },
+
+    segmented: (items: SelectOption[], options: SelectOptions = {}) => {
+      const group = el("span", { className: classes("seg", options.className), role: "radiogroup", title: options.title }) as SegmentedElement;
+      let value = String(options.value ?? items.find((i) => !i.disabled)?.value ?? "");
+      const buttons = items.map((item) => {
+        const b = el("button", { type: "button", className: "btn sm", role: "radio", disabled: (options.disabled ?? false) || (item.disabled ?? false) }, item.label);
+        b.dataset.value = String(item.value);
+        b.addEventListener("click", () => {
+          if (value === String(item.value)) return;
+          group.set(item.value);
+          options.onChange?.(value);
+        });
+        return b;
+      });
+      group.get = () => value;
+      group.set = (v) => {
+        value = String(v);
+        for (const b of buttons) {
+          const on = b.dataset.value === value;
+          b.classList.toggle("is-active", on);
+          b.setAttribute("aria-checked", String(on));
+        }
+      };
+      group.append(...buttons);
+      group.set(value);
+      return group;
+    },
+
+    tabs: (items: TabItem[], options: TabsOptions = {}) => {
+      const root = el("div", { className: classes("tabs", options.compact && "compact", options.className) }) as unknown as TabsElement;
+      const list = el("div", { className: "tabs-list", role: "tablist" });
+      const panels = new Map<string, HTMLElement>();
+      let current = "";
+      const buttons = items.map((item) => {
+        const b = el("button", { type: "button", className: "tab", role: "tab", disabled: item.disabled ?? false }, item.label);
+        b.dataset.value = item.value;
+        b.addEventListener("click", () => {
+          if (current === item.value) return;
+          root.set(item.value);
+          options.onChange?.(current);
+        });
+        return b;
+      });
+      list.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const open = buttons.filter((b) => !b.disabled);
+        const at = open.findIndex((b) => b.dataset.value === current);
+        const next = open[(at + (e.key === "ArrowRight" ? 1 : open.length - 1)) % open.length];
+        if (!next) return;
+        e.preventDefault();
+        next.click();
+        next.focus();
+      });
+      list.append(...buttons);
+      root.append(list);
+      root.get = () => current;
+      root.panel = (value) => panels.get(value) ?? null;
+      root.set = (value) => {
+        const item = items.find((i) => i.value === value);
+        if (!item) return;
+        current = value;
+        let panel = panels.get(value);
+        if (!panel) {
+          panel = el("div", { className: "tab-panel", role: "tabpanel" });
+          panels.set(value, panel);
+          root.append(panel);
+          try {
+            item.mount(panel);
+          } catch (err) {
+            console.error("A tab failed to open", err);
+          }
+        }
+        for (const [v, p] of panels) p.hidden = v !== value;
+        for (const b of buttons) {
+          const on = b.dataset.value === value;
+          b.dataset.state = on ? "active" : "inactive";
+          b.setAttribute("aria-selected", String(on));
+          b.tabIndex = on ? 0 : -1;
+        }
+      };
+      root.set(options.value ?? items.find((i) => !i.disabled)?.value ?? "");
+      return root;
     },
 
     form: (rows) => {

@@ -11,7 +11,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
-import { PanelBottomClose, PanelRightClose, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelBottomClose, PanelRightClose, X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { Button, Tip } from "../ui";
@@ -114,6 +114,19 @@ function usePanelTitle(titleBox: PluginPanelEntry["title"]) {
   return title;
 }
 
+/** Whether a floating panel fills the map's area, following its handle. */
+function useMaximized(entry: PluginPanelEntry) {
+  const box = entry.maximized;
+  const [on, setOn] = useState(box.value);
+  useEffect(() => {
+    const listen = () => setOn(box.value);
+    box.listeners.add(listen);
+    listen();
+    return () => { box.listeners.delete(listen); };
+  }, [box]);
+  return on;
+}
+
 function usePanelMount(host: HTMLDivElement | null, entry: PluginPanelEntry) {
   const { spec, handle, plugin } = entry;
   useEffect(() => {
@@ -149,6 +162,7 @@ function DockedPanel({ entry }: { entry: PluginPanelEntry }) {
 function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number }) {
   const { spec, handle, plugin, title: titleBox } = entry;
   const memoryKey = `${plugin.id}:${spec.title}`;
+  const maximized = useMaximized(entry);
   const [size, setSize] = useState(() => sizes.get(memoryKey) ?? { w: spec.width ?? DEFAULT_WIDTH, h: spec.height ?? 0 });
   const width = size.w;
   const [pos, setPos] = useState(() => positions.get(memoryKey) ?? { x: 0, y: 0 });
@@ -169,7 +183,7 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
   }, [memoryKey, width, index]);
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    if (e.button !== 0 || maximized || (e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
@@ -216,14 +230,20 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
   };
 
   return (
-    <div ref={frame} className={`plugin-panel${spec.resizable ? " resizable" : ""}${spec.flush ? " flush" : ""}`} style={{ left: pos.x, top: pos.y, width, ...(size.h ? { height: size.h } : {}) }} role="dialog" aria-label={title}>
-      <div className="dlg-title plugin-panel-title" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+    <div ref={frame} className={`plugin-panel${spec.resizable ? " resizable" : ""}${spec.flush ? " flush" : ""}${maximized ? " maximized" : ""}`} style={maximized ? undefined : { left: pos.x, top: pos.y, width, ...(size.h ? { height: size.h } : {}) }} role="dialog" aria-label={title}>
+      <div className="dlg-title plugin-panel-title" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onDoubleClick={(e) => { if (spec.maximizable && !(e.target as HTMLElement).closest("button")) handle.maximize(); }}>
         <span className="icon-lead"><PluginIconView icon={plugin.icon} size={14} /></span>
         <h2>{title}</h2>
+        {spec.maximizable && (
+          <button className="dlg-close" aria-label={maximized ? t("Restore") : t("Maximize")} title={maximized ? t("Restore") : t("Maximize")} onClick={() => handle.maximize()}>
+            {maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        )}
         <button className="dlg-close" aria-label={t("Close")} onClick={() => handle.close()}><X size={14} /></button>
       </div>
       <div ref={setHost} className="plugin-panel-body" />
-      {spec.resizable && <div className="plugin-panel-grip" aria-label={t("Resize")} onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} />}
+      {spec.resizable && !maximized && <div className="plugin-panel-grip" aria-label={t("Resize")} onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} />}
     </div>
   );
 }

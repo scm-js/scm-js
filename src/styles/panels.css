@@ -821,6 +821,15 @@
 .plugin-panel.flush .plugin-panel-body {
   padding: 0;
 }
+/* `PanelSpec.maximizable`, maximized: the whole of the map's area, above the other panels. */
+.plugin-panel.maximized {
+  inset: 6px;
+  max-height: none;
+  z-index: 7;
+}
+.plugin-panel.maximized .plugin-panel-title {
+  cursor: default;
+}
 .plugin-panel-grip {
   position: absolute;
   right: 0;

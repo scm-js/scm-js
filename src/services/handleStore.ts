@@ -10,9 +10,11 @@
  * when there is no IndexedDB (tests, a browser with site data blocked).
  */
 
+import { SHARED_NIGHTLY } from "../site";
 import { revivedHandle, storableHandle } from "./diskFiles";
 
-const DB_NAME = "scmjs";
+/** (The hosted nightly shares its origin with the stable editor, and keeps a database of its own: `site.ts`.) */
+const DB_NAME = SHARED_NIGHTLY ? "scmjs-nightly" : "scmjs";
 const STORE = "handles";
 /** The recovery copies of modified maps (`services/recovery.ts`), in the same database. */
 export const RECOVERY_STORE = "recovery";

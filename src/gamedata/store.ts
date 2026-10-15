@@ -13,6 +13,7 @@
  * Where there is no OPFS (a browser that blocks site data, tests) the files stay in
  * memory for the session (`keepInMemory`); `storedCopy()` reports which.
  */
+import { SHARED_NIGHTLY } from "../site";
 import type { PlayStamp } from "./play";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "./profiles";
 
@@ -58,12 +59,16 @@ interface MemoryCopy {
 
 const memory = new Map<string, MemoryCopy>();
 
-/** The OPFS root, or null where the API is missing or refused. */
+/**
+ * The OPFS root, or null where the API is missing or refused. The hosted nightly, sharing
+ * its origin with the stable editor, keeps its game data in a folder of its own (`site.ts`).
+ */
 async function opfsRoot(): Promise<FileSystemDirectoryHandle | null> {
   try {
     const storage = (globalThis as { navigator?: { storage?: StorageManager } }).navigator?.storage;
     if (!storage?.getDirectory) return null;
-    return await storage.getDirectory();
+    const root = await storage.getDirectory();
+    return SHARED_NIGHTLY ? await root.getDirectoryHandle("nightly", { create: true }) : root;
   } catch {
     return null;
   }

@@ -17,11 +17,18 @@
  * and neither is anything kept outside `localStorage`.
  */
 import { browserStorage, STORAGE_PREFIX, storagePersists } from "./atoms/storage";
+import { SHARED_NIGHTLY } from "./site";
 
 /** The site, the only origin that asks. */
 export const SITE_ORIGIN = "https://scmjs.dev";
-/** The origin the editor had, and its hand-off page. */
-export const OLD_ORIGIN = "https://editor.scmjs.dev";
+/**
+ * The origin the editor had, and its hand-off page. The hosted nightly moved too, from
+ * `nightly.editor.scmjs.dev` to `scmjs.dev/nightly/`, and asks its own old address: that
+ * Pages site keeps a static `moved.html` at its root (the nightly-site job writes it — the
+ * old nightly address is not behind the front-door worker). What it brings is written under
+ * the nightly's own keys (`atoms/storage.ts`), and so is the note that it has asked.
+ */
+export const OLD_ORIGIN = SHARED_NIGHTLY ? "https://nightly.editor.scmjs.dev" : "https://editor.scmjs.dev";
 const HANDOFF_URL = `${OLD_ORIGIN}/moved.html`;
 
 /**

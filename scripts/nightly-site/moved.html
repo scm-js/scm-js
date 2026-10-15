@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  The old nightly address's hand-off page. The nightly at its new address (src/moveIn.ts)
+  loads this in a hidden frame once, and it posts back what this browser stored for the old
+  address — the editor's `scmjs.` keys: preferences, the plugin list, the sign-in — so a
+  nightly user starts where they were. Only to the site (postMessage's target origin is the
+  one place it can arrive). The front-door worker's /moved.html does the same for the stable
+  editor's old address; this one is static because the old nightly address is not behind the
+  worker. The nightly-site job writes it, with __HOME__ and __BASE__ filled in.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex" />
+    <title>The scmJS nightly has moved</title>
+  </head>
+  <body>
+    <p>The scmJS nightly editor is now at <a href="__HOME____BASE__">__HOME____BASE__</a>.</p>
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var entries = null;
+        try {
+          entries = {};
+          for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.indexOf("scmjs.") === 0) entries[key] = localStorage.getItem(key);
+          }
+        } catch (e) {
+          entries = null;
+        }
+        window.parent.postMessage({ scmjsMove: 1, entries: entries }, "__HOME__");
+      })();
+    </script>
+  </body>
+</html>

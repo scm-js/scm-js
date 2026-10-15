@@ -78,9 +78,9 @@ web address to load the files from; that route was removed once Blizzard's own p
 became installable in one click, because a chain that runs out and asks is easier to
 understand than a silent fetch.
 
-The browser's private storage is per address, so [scmjs.dev/editor](https://scmjs.dev/editor/)
-and [nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) each keep their own copy
-and each ask once. The editor used to be at `editor.scmjs.dev`; a copy installed there
+[scmjs.dev/editor](https://scmjs.dev/editor/) and the nightly at
+[scmjs.dev/nightly](https://scmjs.dev/nightly/) each keep their own copy and each ask once:
+the nightly keeps its game data, like its settings, apart from the stable editor's. The editor used to be at `editor.scmjs.dev`; a copy installed there
 stays there, and the editor at its new address asks for the files again. Preferences,
 plugins and a sign-in are carried over the first time the new address is opened.
 

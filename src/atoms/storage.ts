@@ -5,6 +5,10 @@
  * (`scmjs.prefs`, `scmjs.grid`, `scmjs.plugins`, `scmjs.plugin-manifests`, and
  * `scmjs.plugin.<id>.…` for whatever a plugin keeps through `api.storage`).
  *
+ * The hosted nightly shares its origin with the stable editor (`site.ts`), so it reads and
+ * writes the same keys under `scmjs-nightly.` instead (`namespaced`): the rest of the editor
+ * still says `scmjs.prefs` and never knows.
+ *
  * `localStorage` can be unavailable — a sandboxed frame, tests, a browser set to block site
  * data, where even *reading* the property throws — so `browserStorage()` falls back to a
  * module-level memory `Storage`. Everything here works either way; `storagePersists()` says
@@ -12,6 +16,7 @@
  */
 
 import { createJSONStorage } from "jotai/utils";
+import { SHARED_NIGHTLY } from "../site";
 
 /** Every key the editor writes begins with this. */
 export const STORAGE_PREFIX = "scmjs.";
@@ -55,7 +60,7 @@ const memoryStorage: Storage = {
 };
 
 /** `localStorage` when it works, else a memory stand-in that lives as long as the tab. */
-export function browserStorage(): Storage {
+function baseStorage(): Storage {
   try {
     if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
   } catch {
@@ -64,9 +69,50 @@ export function browserStorage(): Storage {
   return memoryStorage;
 }
 
+/**
+ * A storage that keeps the editor's keys under a space of their own: `scmjs.prefs` is
+ * `scmjs-<space>.prefs` underneath, `scmjs-moved` is `scmjs-<space>-moved`. Its listing shows
+ * its own keys by the editor's names, any key that is not the editor's as it is, and never
+ * the other build's — so a clear or an export touches this build's alone.
+ */
+export function namespaced(store: Storage, space: string): Storage {
+  const own = /^scmjs(?=[.-])/;
+  const mine = new RegExp(`^scmjs-${space}(?=[.-])`);
+  const inner = (key: string) => (own.test(key) ? key.replace(own, `scmjs-${space}`) : key);
+  const outer = (key: string) => (mine.test(key) ? key.replace(mine, "scmjs") : own.test(key) ? null : key);
+  const keys = () => {
+    const out: string[] = [];
+    for (let i = 0; i < store.length; i++) { const k = store.key(i); const o = k === null ? null : outer(k); if (o !== null) out.push(o); }
+    return out;
+  };
+  return {
+    get length() { return keys().length; },
+    key: (i) => keys()[i] ?? null,
+    getItem: (k) => store.getItem(inner(k)),
+    setItem: (k, v) => store.setItem(inner(k), v),
+    removeItem: (k) => store.removeItem(inner(k)),
+    // (Only this build's own keys: a clear here must not take another's, or a key that is not the editor's.)
+    clear: () => {
+      const gone: string[] = [];
+      for (let i = 0; i < store.length; i++) { const k = store.key(i); if (k !== null && mine.test(k)) gone.push(k); }
+      for (const k of gone) store.removeItem(k);
+    },
+  };
+}
+
+let spaced: { base: Storage; view: Storage } | null = null;
+
+/** The editor's storage: `localStorage` (or the stand-in), in the hosted nightly under its own keys. */
+export function browserStorage(): Storage {
+  const base = baseStorage();
+  if (!SHARED_NIGHTLY) return base;
+  if (spaced?.base !== base) spaced = { base, view: namespaced(base, "nightly") };
+  return spaced.view;
+}
+
 /** False when the fallback is in use, i.e. nothing written survives a reload. */
 export function storagePersists(): boolean {
-  return browserStorage() !== memoryStorage;
+  return baseStorage() !== memoryStorage;
 }
 
 /** The editor's keys, sorted — anything else in the origin's storage is left alone. */

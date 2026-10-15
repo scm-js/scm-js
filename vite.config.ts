@@ -81,5 +81,7 @@ export default defineConfig(() => ({
   },
   define: {
     __APP_VERSION__: JSON.stringify(version),
+    // "nightly" for the hosted nightly only, which shares scmjs.dev with the stable editor (`src/site.ts`).
+    __SCMJS_SITE__: JSON.stringify(process.env.SCMJS_SITE ?? ''),
   },
 }))

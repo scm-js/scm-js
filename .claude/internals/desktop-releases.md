@@ -74,9 +74,23 @@ policy now carries a `v*` **tag** rule beside `main` (Settings ▸ Environments,
 `gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='v*'
 -f type=tag`), and a fork serving its own editor has to add one too. Nothing in the repository can
 say this, which is why it is here. The
-`nightly-site` job unpacks the nightly's own web zip — never a second build — onto
-`nightly.editor.scmjs.dev` as one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch,
-carrying the `CNAME` a branch-served Pages site keeps its domain in. Both Pages sites answer an
+`nightly-site` job, with the repository variable `NIGHTLY_BASE=/nightly/` (and `NIGHTLY_HOME`,
+default `https://scmjs.dev`), puts **a second build of the same commit** — `SCMJS_BASE=/nightly/`,
+`SCMJS_SITE=nightly` — into the `nightly/` folder of one force-pushed orphan commit on
+`scm-js/nightly`'s `gh-pages` branch, carrying the `CNAME` (still `nightly.editor.scmjs.dev`, the Pages
+origin). The front-door worker answers `scmjs.dev/nightly/*` from that folder (and falls back to its
+`index.html` for paths with no file, as Pages does at the root). The branch's root holds
+`scripts/nightly-site/redirect.html` as `index.html` and `404.html` — the old address is grey (see
+below), so a page is the only way to send its visitors on — and `moved.html`, the static hand-off
+page `src/moveIn.ts` frames from the nightly (`OLD_ORIGIN` is the old nightly address in that build).
+Why a path of the site: `/play/` (the engine, served from R2 by the worker) exists only on
+`scmjs.dev`, and scm-sim's `simAddress` looks for it on the editor's own origin — the nightly at its
+own domain had no engine, so no Aftermath analysis, Game view or Test Map. On the shared origin the
+nightly keeps its storage apart (`src/site.ts`): `browserStorage()` is `namespaced(localStorage,
+"nightly")` (`scmjs.x` ↔ `scmjs-nightly.x`, `scmjs-moved` ↔ `scmjs-nightly-moved`; its listing hides
+the stable keys), the handle/recovery database is `scmjs-nightly`, and game data lives under OPFS
+`nightly/`. Plugins' own IndexedDB databases (Aftermath's kept casts) are shared. Without
+`NIGHTLY_BASE` the job falls back to the old layout: the nightly web zip at the domain's root. Both Pages sites answer an
 unknown path with the bundle's `404.html`, which the `scmjs-404` step in `vite.config.ts` copies
 from `index.html` — that is how a shared map's `/share/<invite>` link opens the editor (status 404,
 but the page runs). The job also writes `<meta name="robots" content="noindex">` into both pages,
@@ -104,9 +118,9 @@ only when `NIGHTLY_DOMAIN` *and* `NIGHTLY_PAT` are both set (`SITE:` in the `rel
 that pair collapsed to the domain-or-empty; the secret is tested in the expression rather than put
 in the environment), which is exactly the condition `nightly-site` deploys under — a fork whose
 nightly site was skipped must not be offered a link to a site nobody pushed. Rolling the site back is
-dispatching build.yml on an older tag. They are separate origins deliberately: OPFS and every
-`scmjs.` key are per origin, so the nightly asks for the game data again and keeps its own
-preferences, plugins and recents rather than writing a stored shape the stable build reads back.
+dispatching build.yml on an older tag. The nightly used to be a separate origin for the same reason it now namespaces its storage:
+it keeps its own preferences, plugins, recents and game data rather than writing a stored shape
+the stable build reads back.
 Repository variables `PAGES_BASE` (`/` for a custom domain; when it is not `/` the `web` job builds
 a second time for Pages) and `NIGHTLY_DOMAIN`, secret `NIGHTLY_PAT` (Contents: write on
 `<owner>/nightly`, the `PLUGIN_API_PAT` shape); the nightly deploy skips with a notice without them.

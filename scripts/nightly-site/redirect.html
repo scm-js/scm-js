@@ -1,0 +1,22 @@
+<!doctype html>
+<!--
+  The old nightly address's index and 404 page: the hosted nightly is now a path of the site
+  (__HOME____BASE__), and this sends anybody who comes here on to the same path there. It is
+  a page rather than a redirect because the old address is a GitHub Pages site off the
+  front-door worker (its two-level name cannot be proxied), and Pages cannot redirect. The
+  nightly-site job writes it, with __HOME__ and __BASE__ filled in.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex" />
+    <title>The scmJS nightly has moved</title>
+    <script>
+      location.replace("__HOME__" + "__BASE__".replace(/\/$/, "") + location.pathname + location.search + location.hash);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=__HOME____BASE__" /></noscript>
+  </head>
+  <body>
+    <p>The scmJS nightly editor is now at <a href="__HOME____BASE__">__HOME____BASE__</a>.</p>
+  </body>
+</html>

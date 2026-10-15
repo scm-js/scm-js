@@ -1144,6 +1144,24 @@ input[type="range"] {
 .fold > .fold-head::-webkit-details-marker {
   display: none;
 }
+/* The chevron that says it opens: pointing right while folded, down while open. */
+.fold > .fold-head::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 3px 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease;
+}
+.fold[open] > .fold-head::before {
+  transform: translateY(-2px) rotate(45deg);
+}
+.fold > .fold-head:hover {
+  color: var(--text);
+}
 .fold > .fold-head > .fold-mark {
   flex: none;
   width: 14px;
@@ -1177,6 +1195,9 @@ input[type="range"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .fold > .fold-head::before {
+    transition: none;
+  }
   .spinner {
     animation-duration: 2.4s;
     animation-timing-function: steps(8, end);

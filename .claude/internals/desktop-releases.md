@@ -88,8 +88,13 @@ Why a path of the site: `/play/` (the engine, served from R2 by the worker) exis
 own domain had no engine, so no Aftermath analysis, Game view or Test Map. On the shared origin the
 nightly keeps its storage apart (`src/site.ts`): `browserStorage()` is `namespaced(localStorage,
 "nightly")` (`scmjs.x` ↔ `scmjs-nightly.x`, `scmjs-moved` ↔ `scmjs-nightly-moved`; its listing hides
-the stable keys), the handle/recovery database is `scmjs-nightly`, and game data lives under OPFS
-`nightly/`. Plugins' own IndexedDB databases (Aftermath's kept casts) are shared. Without
+the stable keys), and the handle/recovery database is `scmjs-nightly`. Game data is shared: the nightly installs
+at the OPFS root like the stable editor, because `/play/` (Test Map, Aftermath's analysis) reads
+copies only from there — under `nightly/`, as it was for the first day, Test Map asked for the
+game again. A nightly that finds a stamped copy left under `nightly/` copies it up when the root
+has none of that data set (file by file, stamp last — headless Chromium has no
+`FileSystemHandle.move`; where the copy fails the data is installed again) and removes the folder. The cost: a nightly that changes the copy's layout or stamp changes it for
+the stable editor too, so such a change has to stay readable by the last release. Plugins' own IndexedDB databases (Aftermath's kept casts) are shared. Without
 `NIGHTLY_BASE` the job falls back to the old layout: the nightly web zip at the domain's root. Both Pages sites answer an
 unknown path with the bundle's `404.html`, which the `scmjs-404` step in `vite.config.ts` copies
 from `index.html` — that is how a shared map's `/share/<invite>` link opens the editor (status 404,

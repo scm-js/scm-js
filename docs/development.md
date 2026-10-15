@@ -635,10 +635,13 @@ web zip unpacked, never a second build, which is why the nightly's notes can poi
 the page and the installers on that release are the same version. To put `scmjs.dev/editor` back on an older
 version, dispatch Build on that tag; the deploy is the only thing a re-run rewrites.
 
-The two editors are separate origins on purpose. The extracted game data lives in the
-browser's private file storage and every setting in `localStorage`, both per origin, so
-the nightly asks for the game data again and keeps its own preferences, recents and
-plugins rather than writing a stored shape the stable build then reads back.
+The two editors share the `scmjs.dev` origin, and with it the browser's storage, because
+the nightly needs the game's page at `/play/` beside it. The nightly keeps its own
+preferences, recents and plugins under names of its own, rather than writing a stored shape
+the stable build then reads back. The extracted game data is the exception: the game's page
+reads the one copy in the origin's private file storage, so the nightly installs it there
+too, and one install serves both editors and Test Map. A nightly that changes how that copy
+is stored has to keep it readable by the last release.
 
 ### Variables and secrets
 

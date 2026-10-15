@@ -2034,6 +2034,9 @@ a status bar cell (4) and a map button (5). The icon beside each is the plugin's
 There is no framework here. A dialog or panel gives you an empty element, and you fill
 it with plain DOM. `api.ui.widgets` builds buttons, fields, forms and lists in the
 editor's own style, and `api.ui.el(tag, props, ...children)` makes any other element.
+`widgets.tabs` gives a row of tabs over a panel each, filled the first time it is shown
+and kept after, and `widgets.segmented` a few buttons of which one is on, for a short
+choice that should stay in view.
 
 **Questions** resolve with the answer, or `null` / `false` when the user cancels:
 
@@ -2099,7 +2102,9 @@ api.ui.dialog({
 ![The Place marines dialog: a Player drop-down, a How many field, a hint, and Cancel and Place buttons](images/plugin-dialog.webp)
 
 **Panels** block nothing: the user keeps editing while one is open. A floating panel can
-be dragged and, with `resizable: true`, resized. `dock: "right"` puts it in the dock
+be dragged and, with `resizable: true`, resized. With `maximizable: true` a button in its
+title strip, or a double-click on the strip, makes it fill the map's area and puts it back,
+for a window of charts or tables read at length (`handle.maximize()` does it too). `dock: "right"` puts it in the dock
 under the built-in panels, which suits anything kept open while working. `dock: "bottom"`
 puts it in a strip under the map, as wide as the map, for things read across its width
 such as a timeline. The user drags the strip's top edge to make it taller or shorter;

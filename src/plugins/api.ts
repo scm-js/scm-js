@@ -2822,6 +2822,12 @@ export interface PanelSpec {
   grow?: boolean;
   /** Floating only: the body runs edge to edge, without the panel's padding — for content that draws its own frame. */
   flush?: boolean;
+  /**
+   * Floating only: a button in the title strip (and a double-click on it) makes the panel
+   * fill the map's area, and puts it back. For a window of charts or tables read at length
+   * beside a map that is still there underneath. `PanelHandle.maximize` does the same.
+   */
+  maximizable?: boolean;
   /** Fill `body` (an empty `<div>` inside the panel); return a cleanup if you need one. */
   mount(body: HTMLElement, panel: PanelHandle): void | (() => void);
   /** The panel closed, whichever way. */
@@ -2955,6 +2961,10 @@ export interface PanelHandle {
   close(): void;
   isOpen(): boolean;
   setTitle(title: string): void;
+  /** A `maximizable` panel: fill the map's area (`true`), go back (`false`), or toggle. Nothing for another panel. */
+  maximize(on?: boolean): void;
+  /** Whether it fills the map's area now. */
+  isMaximized(): boolean;
 }
 
 /**
@@ -3621,6 +3631,39 @@ export interface SelectOption {
   disabled?: boolean;
 }
 
+/** `widgets.segmented`: the value picked, and a way to pick another. */
+export type SegmentedElement = HTMLElement & {
+  get(): string;
+  /** Pick `value` without calling `onChange`. */
+  set(value: string | number): void;
+};
+
+export interface TabItem {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  /** Fill the tab's panel, the first time it is shown. What it starts ends with the panel or dialog the tabs are in. */
+  mount(body: HTMLElement): void;
+}
+
+export interface TabsOptions {
+  /** The tab shown first; the first that is not disabled otherwise. */
+  value?: string;
+  onChange?: (value: string) => void;
+  /** Smaller tabs, for a narrow panel. */
+  compact?: boolean;
+  className?: string;
+}
+
+/** `widgets.tabs`: the tab shown, and a way to show another. */
+export type TabsElement = HTMLElement & {
+  get(): string;
+  /** Show the tab `value` (mounting it the first time) without calling `onChange`. */
+  set(value: string): void;
+  /** The panel of a tab that has been shown, or null. */
+  panel(value: string): HTMLElement | null;
+};
+
 export interface SelectOptions extends WidgetOptions {
   value?: string | number;
   onChange?: (value: string) => void;
@@ -3830,6 +3873,25 @@ export interface WidgetsApi {
   text(options?: TextFieldOptions): HTMLInputElement;
   number(options?: NumberFieldOptions): HTMLInputElement;
   select(items: SelectOption[], options?: SelectOptions): HTMLSelectElement;
+  /**
+   * Buttons side by side of which one is on: a choice of a few short options seen at once
+   * ("Both", "Minerals", "Gas"), where a `select` would hide them. `onChange` hears the
+   * value picked; `set` moves the choice without it.
+   */
+  segmented(items: SelectOption[], options?: SelectOptions): SegmentedElement;
+  /**
+   * Tabs in the editor's style: a row of tabs over a panel a tab. A tab's `mount` runs the
+   * first time it is shown and its panel is kept after, so what the user did there stays
+   * when they come back. Arrow keys move between the tabs.
+   *
+   * @example
+   * const tabs = api.ui.widgets.tabs([
+   *   { value: "economy", label: "Economy", mount: (body) => body.append(economyView()) },
+   *   { value: "army", label: "Army", mount: (body) => body.append(armyView()) },
+   * ], { value: saved.tab, onChange: (tab) => { saved.tab = tab; } });
+   * body.append(tabs);
+   */
+  tabs(items: TabItem[], options?: TabsOptions): TabsElement;
   /** A two-column grid of labelled fields. */
   form(rows: (FormRow | null | undefined | false)[]): HTMLElement;
   /** A titled box (a `fieldset` with a legend, as the dialogs use). */

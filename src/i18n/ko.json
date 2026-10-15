@@ -1587,6 +1587,7 @@
   "Resize {title}": "{title} 크기 조절",
   "Hide {title}": "{title} 숨기기",
   "The plugin's panel failed to open: {error}": "플러그인 패널을 열지 못했습니다: {error}",
+  "Maximize": "최대화",
   "terrain": "지형",
   "doodads": "장식물",
   "units": "유닛",

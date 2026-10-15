@@ -105,7 +105,14 @@ goes through `setOverlayVisibleAtom` so `onToggle` fires once per change and
 `components/panels/PluginPanels.tsx` rendered inside the viewport: draggable title strip,
 positions kept per plugin + title for the session, opens top-right; `PanelSpec.height` and
 `resizable` — a corner grip, sizes kept like positions, the body a flex column so the plugin's root
-can fill it — exist for a plugin that keeps an editor beside the map, TrigScript being the case; `flush` on
+can fill it — exist for a plugin that keeps an editor beside the map, TrigScript being the case;
+`maximizable` (2026-10-15, for Aftermath's Analysis window) adds a head button + title double-click that
+toggles `.plugin-panel.maximized` (`inset: 6px` in the viewport, z 7, no drag, no grip); the state is a
+`MaximizedBox` on the entry, which `PanelHandle.maximize` / `isMaximized` drive and the frame listens to;
+position and size are left as they were, so restoring lands where the panel was. The same pass added
+`widgets.tabs` (the chrome's Radix `.tabs`/`.tab[data-state]` classes rebuilt in DOM, panels mounted lazily and
+kept, arrow keys; no per-tab cleanup — watching for the root leaving the page would mean a page-wide
+MutationObserver) and `widgets.segmented` (the palette's `.seg` of `.btn.sm`, `is-active` on the one picked); `flush` on
 both specs drops the body's padding and `DialogSpec.buttons: []` drops the footer (`footer={null}`, so
 `setBusy`'s label and a `slot` have nowhere to show), which is what TrigScript 3.1's VS Code-style
 workspace mounts into. Note for anything else that draws its own key handling inside a dialog:

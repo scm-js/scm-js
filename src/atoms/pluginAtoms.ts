@@ -382,12 +382,19 @@ export interface BusyBox {
 }
 
 /** One `api.ui.panel`, rendered by `PluginPanels` over the map. */
+/** Whether a `maximizable` floating panel fills the map's area: the handle sets it, the frame listens. */
+export interface MaximizedBox {
+  value: boolean;
+  listeners: Set<() => void>;
+}
+
 export interface PluginPanelEntry {
   key: number;
   plugin: PluginInfo;
   spec: PanelSpec;
   handle: PanelHandle;
   title: TitleBox;
+  maximized: MaximizedBox;
 }
 
 export const pluginPanelsAtom = atom<PluginPanelEntry[]>([]);

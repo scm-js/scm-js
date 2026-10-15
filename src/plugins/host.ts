@@ -29,7 +29,7 @@ import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
   pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewMinimapRevisionAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
-  type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
+  type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox, type MaximizedBox,
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
@@ -2407,8 +2407,17 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           },
           isOpen: () => !closed,
           setTitle: (t) => { title.value = t; for (const l of title.listeners) l(); },
+          maximize: (on) => {
+            if (!spec.maximizable || (spec.dock ?? "float") !== "float") return;
+            const next = on ?? !maximized.value;
+            if (next === maximized.value) return;
+            maximized.value = next;
+            for (const l of maximized.listeners) l();
+          },
+          isMaximized: () => maximized.value,
         };
-        store.set(pluginPanelsAtom, [...store.get(pluginPanelsAtom), { key, plugin: info, spec, handle, title }]);
+        const maximized: MaximizedBox = { value: false, listeners: new Set<() => void>() };
+        store.set(pluginPanelsAtom, [...store.get(pluginPanelsAtom), { key, plugin: info, spec, handle, title, maximized }]);
         const sweep = bag.add(() => handle.close());
         const unsub = store.sub(pluginPanelsAtom, () => { if (closed) { unsub(); sweep.dispose(); } });
         return handle;

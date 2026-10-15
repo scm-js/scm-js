@@ -35,7 +35,7 @@ import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
-  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, viewFlashesAtom,
+  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, shownMapViewAtom, viewFlashesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -60,6 +60,7 @@ import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from ".
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
 import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
+import { cameraOfMap, mapLookAt, mapViewSwitch } from "../src/plugins/mapViews";
 
 /* ── Specs and manifests ────────────────────────────────── */
 
@@ -2579,6 +2580,49 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     expect(store.get(mapViewStateAtom).offered.size).toBe(0);
     game.show(true);
     expect(game.isShown()).toBe(false);
+  });
+
+  it("keeps the place across the switch between the map and a view, and hands the minimap to the view", () => {
+    const { store } = blankStore();
+    store.set(documentsAtom, [{ id: 1, parked: null }]);
+    // The map's view as the viewport last painted it: 40 × 20 tiles from (10, 30), at zoom 1.
+    store.set(viewportRectAtom, { x: 10, y: 30, w: 40, h: 20 });
+    store.set(zoomAtom, 1);
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const looks: unknown[] = [];
+    const replay = api.ui.mapView({ title: "Replay", mount: () => {}, onShow: (look) => looks.push(look), minimap: { press: () => {} } });
+    const key = store.get(pluginMapViewsAtom)[0].key;
+    // Map → view: told where the map was looking, in map pixels.
+    replay.show(true);
+    expect(looks).toEqual([{ x: 30 * 32, y: 40 * 32, width: 40 * 32, height: 20 * 32 }]);
+    expect(store.get(shownMapViewAtom)?.key).toBe(key);
+    // The view moves (twice the map's scale, elsewhere); the minimap's box is its, kept by key.
+    replay.setCamera({ x: 1600, y: 800, width: 640, height: 320 });
+    replay.setCamera({ x: Number.NaN, y: 0, width: 1, height: 1 });
+    expect(store.get(mapViewCamerasAtom).get(key)).toEqual({ x: 1600, y: 800, width: 640, height: 320 });
+    // View → map: the map opens there, at the scale that shows the same amount of it.
+    replay.show(false);
+    expect(store.get(zoomAtom)).toBe(2);
+    expect(store.get(centerViewOnAtom)).toMatchObject({ x: 50, y: 25 });
+    expect(store.get(shownMapViewAtom)).toBeNull();
+    // Another map coming to the front is not a switch: nobody is told.
+    store.set(documentsAtom, [{ id: 2, parked: null }, { id: 1, parked: {} as ParkedDocument }]);
+    store.set(documentsAtom, [{ id: 1, parked: null }, { id: 2, parked: {} as ParkedDocument }]);
+    expect(looks).toHaveLength(1);
+    bag.dispose();
+    expect(store.get(mapViewCamerasAtom).size).toBe(0);
+  });
+
+  it("works out the map's view that looks where a view does", () => {
+    // A view showing 320 map pixels of height in a viewport 640 screen pixels high wants zoom 2, within the range.
+    expect(mapLookAt({ x: 320, y: 64, width: 640, height: 320 }, { w: 40, h: 20 }, 1, [0.05, 8])).toEqual({ zoom: 2, x: 10, y: 2 });
+    // The tighter side decides, so all of what the view shows is on screen.
+    expect(mapLookAt({ x: 0, y: 0, width: 2560, height: 320 }, { w: 40, h: 20 }, 1, [0.05, 8]).zoom).toBe(0.5);
+    expect(mapLookAt({ x: 0, y: 0, width: 1, height: 1 }, { w: 40, h: 20 }, 1, [0.05, 8]).zoom).toBe(8);
+    expect(cameraOfMap({ x: 0, y: 0, w: 2, h: 1 })).toEqual({ x: 32, y: 16, width: 64, height: 32 });
+    expect(mapViewSwitch({ doc: 1, shown: null }, { doc: 1, shown: 4 })).toEqual({ from: null, to: 4 });
+    expect(mapViewSwitch({ doc: 1, shown: 4 }, { doc: 2, shown: null })).toBeNull();
   });
 
   it("registers a dialog slot per dialog id and takes it back on dispose", () => {

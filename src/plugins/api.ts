@@ -2827,6 +2827,73 @@ export interface MapViewSpec {
    * to be called when the view goes (the plugin stops, or `dispose`).
    */
   mount(element: HTMLElement): void | (() => void);
+  /**
+   * The view is shown in the map's place, where the map was looking: `look` is the map's view
+   * at that moment, or the other view's (`setCamera`) when the switch came from one. Turn to
+   * look at the same place, as near the same scale as you can, so the switch keeps the person
+   * where they were. Not called when another map, already showing the view, comes to the front.
+   */
+  onShow?(look: MapViewCamera): void;
+  /**
+   * What the minimap shows while the view is shown. Without it the minimap shows the map, and
+   * its box and presses are the map's own view's (hidden behind this one).
+   */
+  minimap?: MapViewMinimapSpec;
+}
+
+/**
+ * Where a view looks, in map pixels (32 to a tile): the point in the middle of what it shows,
+ * and how much of the map that is.
+ */
+export interface MapViewCamera {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * A map view's own minimap (`MapViewSpec.minimap`): the minimap draws the map's ground, then
+ * `draw` over it in place of the map's units, start locations and fog, and its box where the
+ * view looks (`MapViewHandle.setCamera`).
+ *
+ * @example
+ * // A replay's units as dots, and the minimap moving the game's camera.
+ * const view = api.ui.mapView({
+ *   title: "Replay",
+ *   mount: (el) => el.append(frame),
+ *   minimap: {
+ *     draw(ctx, m) {
+ *       for (const u of units) {
+ *         ctx.fillStyle = u.colour;
+ *         ctx.fillRect(m.x(u.x) - 1, m.y(u.y) - 1, Math.max(2, u.width * m.scale), Math.max(2, u.height * m.scale));
+ *       }
+ *     },
+ *     press: (x, y) => game.lookAt(x, y),
+ *   },
+ * });
+ * game.onUnits(() => view.redrawMinimap());
+ * game.onCamera((c) => view.setCamera(c));
+ */
+export interface MapViewMinimapSpec {
+  /** Draw over the map's ground, each time the minimap's picture is made while the view is shown. */
+  draw?(ctx: CanvasRenderingContext2D, minimap: MinimapView): void;
+  /**
+   * A press on the minimap, and each move of a drag from it, at a map pixel: look there. Without
+   * it the minimap does not move anything while the view is shown.
+   */
+  press?(x: number, y: number): void;
+}
+
+/** Map pixels to minimap canvas pixels, for `MapViewMinimapSpec.draw`. */
+export interface MinimapView {
+  /** Minimap canvas pixels per map pixel. */
+  scale: number;
+  /** A map pixel's x on the minimap's canvas. */
+  x(px: number): number;
+  y(py: number): number;
+  /** The canvas's size in pixels, each side (the map is centred in it, letterboxed). */
+  size: number;
 }
 
 export interface MapViewHandle extends Disposable {
@@ -2845,6 +2912,14 @@ export interface MapViewHandle extends Disposable {
    * `show` was called, or another map came to the front.
    */
   onChange(listener: (shown: boolean) => void): Disposable;
+  /**
+   * Where the view looks now, in map pixels; call it whenever that changes. The minimap draws
+   * its box there while the view is shown, and the map, shown again, opens on the same place at
+   * the same scale.
+   */
+  setCamera(camera: MapViewCamera): void;
+  /** Make the minimap's picture again (`minimap.draw`), at most once a frame. Cheap: call it as the view's contents move. */
+  redrawMinimap(): void;
 }
 
 export interface PanelHandle {

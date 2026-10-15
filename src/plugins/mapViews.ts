@@ -5,6 +5,7 @@
  * shown, a closed map forgotten) live in one place.
  */
 import type { MapViewState } from "../atoms/pluginAtoms";
+import type { MapViewCamera } from "./api";
 
 /** `state` with view `key` offered, or no longer offered, on map `doc` (and shown there no longer when it is not offered). */
 export function offerMapView(state: MapViewState, doc: number, key: number, on: boolean): MapViewState {
@@ -42,4 +43,32 @@ export function pruneMapViews(state: MapViewState, live: ReadonlySet<number>, ke
     if (live.has(doc) && keys.has(key)) shown.set(doc, key); else changed = true;
   }
   return changed ? { offered, shown } : state;
+}
+
+/** A map view's camera (map pixels, its middle and size) as the map's own view stands: `rect` in tiles. */
+export function cameraOfMap(rect: { x: number; y: number; w: number; h: number }): MapViewCamera {
+  return { x: (rect.x + rect.w / 2) * 32, y: (rect.y + rect.h / 2) * 32, width: rect.w * 32, height: rect.h * 32 };
+}
+
+/**
+ * The map's view that looks where `camera` does: the zoom that shows the same amount of the map
+ * in the viewport (`rect` and `zoom` as the viewport stands, so its size on screen is known),
+ * within `range`, and the tile to centre.
+ */
+export function mapLookAt(camera: MapViewCamera, rect: { w: number; h: number }, zoom: number, range: readonly [number, number]): { zoom: number; x: number; y: number } {
+  // Screen pixels per map pixel is the zoom (32 screen pixels to a tile at 1).
+  const screenW = rect.w * 32 * zoom, screenH = rect.h * 32 * zoom;
+  const fit = Math.min(camera.width > 0 ? screenW / camera.width : Infinity, camera.height > 0 ? screenH / camera.height : Infinity);
+  const next = Number.isFinite(fit) && fit > 0 ? Math.max(range[0], Math.min(range[1], fit)) : zoom;
+  return { zoom: next, x: camera.x / 32, y: camera.y / 32 };
+}
+
+/**
+ * What a change of `mapViewStateAtom` or of the map in front means for the switch: on the same
+ * map, the view shown went from `from` to `to` (null: the map itself); null when the map in front
+ * changed (each keeps its own place) or nothing did.
+ */
+export function mapViewSwitch(before: { doc: number; shown: number | null }, after: { doc: number; shown: number | null }): { from: number | null; to: number | null } | null {
+  if (before.doc !== after.doc || before.shown === after.shown) return null;
+  return { from: before.shown, to: after.shown };
 }

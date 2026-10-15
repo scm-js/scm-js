@@ -23,11 +23,11 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { claimBadge, locateClaims } from "./claims";
-import { offerMapView, pruneMapViews, showMapView } from "./mapViews";
+import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView } from "./mapViews";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewMinimapRevisionAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -114,7 +114,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewHandle, type MapViewSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewCamera, type MapViewHandle, type MapViewSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1405,6 +1405,39 @@ export function addMapButton(store: Store, bag: Contributions, info: PluginInfo,
 const mapViewDocument = (store: Store): number => store.get(activeDocumentIdAtom) ?? -1;
 
 /**
+ * The switch keeps the person where they were: a view shown in the map's place is told where the
+ * map (or the view before it) was looking (`onShow`), and the map shown again opens where the view
+ * last looked (`setCamera`), at the same scale. Watched once per store, for every view.
+ */
+const switchesWatched = new WeakSet<Store>();
+function watchMapViewSwitches(store: Store): void {
+  if (switchesWatched.has(store)) return;
+  switchesWatched.add(store);
+  const now = () => { const doc = mapViewDocument(store); return { doc, shown: store.get(mapViewStateAtom).shown.get(doc) ?? null }; };
+  let last = now();
+  const check = () => {
+    const next = now(), change = mapViewSwitch(last, next);
+    last = next;
+    if (!change) return;
+    const cameras = store.get(mapViewCamerasAtom);
+    const viewed = change.from === null ? undefined : cameras.get(change.from);
+    if (change.to === null) {
+      if (!viewed) return;
+      const look = mapLookAt(viewed, store.get(viewportRectAtom), store.get(zoomAtom), ZOOM_RANGE);
+      store.set(zoomAtom, look.zoom);
+      store.set(centerViewOnAtom, { x: look.x, y: look.y });
+      return;
+    }
+    const entry = store.get(pluginMapViewsAtom).find((e) => e.key === change.to);
+    if (!entry?.spec.onShow) return;
+    try { entry.spec.onShow(viewed ?? cameraOfMap(store.get(viewportRectAtom))); }
+    catch (err) { logError(entry.plugin.name, "A map view's onShow failed", err); }
+  };
+  store.sub(mapViewStateAtom, check);
+  store.sub(activeDocumentIdAtom, check);
+}
+
+/**
  * `ui.mapView`: one element for the view's life, made here and handed to `spec.mount`; the
  * state of which map offers and shows it is `mapViewStateAtom`'s, pruned as maps close.
  */
@@ -1418,8 +1451,10 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
     try { const r = spec.mount(element); if (typeof r === "function") unmount = r; }
     catch (err) { logError(info.name, "A map view's mount failed", err); }
   }
+  watchMapViewSwitches(store);
   store.set(pluginMapViewsAtom, [...store.get(pluginMapViewsAtom), { key, plugin: info, spec: { ...spec }, element }]);
   let live = true;
+  let minimapRaf = 0;
   const listeners = new Set<(shown: boolean) => void>();
   const isShown = () => live && store.get(mapViewStateAtom).shown.get(mapViewDocument(store)) === key;
   let was = false;
@@ -1461,9 +1496,28 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
       listeners.add(listener);
       return { dispose: () => { listeners.delete(listener); } };
     },
+    setCamera: (camera: MapViewCamera) => {
+      if (!live || !camera) return;
+      const { x, y, width, height } = camera;
+      if (![x, y, width, height].every((n) => typeof n === "number" && Number.isFinite(n)) || width <= 0 || height <= 0) {
+        logWarn(info.name, "ui.mapView: setCamera needs a finite x and y and a width and height over 0");
+        return;
+      }
+      const was = store.get(mapViewCamerasAtom).get(key);
+      if (was && was.x === x && was.y === y && was.width === width && was.height === height) return;
+      store.set(mapViewCamerasAtom, new Map(store.get(mapViewCamerasAtom)).set(key, { x, y, width, height }));
+    },
+    redrawMinimap: () => {
+      if (!live || minimapRaf) return;
+      const bump = () => { minimapRaf = 0; if (live) store.set(mapViewMinimapRevisionAtom, (n) => n + 1); };
+      if (typeof requestAnimationFrame === "undefined") { bump(); return; }
+      minimapRaf = requestAnimationFrame(bump);
+    },
     dispose: () => {
       if (!live) return;
       live = false;
+      if (minimapRaf) cancelAnimationFrame(minimapRaf);
+      if (store.get(mapViewCamerasAtom).has(key)) { const cameras = new Map(store.get(mapViewCamerasAtom)); cameras.delete(key); store.set(mapViewCamerasAtom, cameras); }
       for (const u of unsubs) u();
       store.set(pluginMapViewsAtom, store.get(pluginMapViewsAtom).filter((e) => e.key !== key));
       prune();

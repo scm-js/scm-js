@@ -16,6 +16,7 @@ import { useTileset } from "../../hooks/useTileset";
 import { megatileForTile } from "../../formats/tileset/decode";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import { t } from "../../i18n";
+import { mapViewCamerasAtom, mapViewMinimapRevisionAtom, shownMapViewAtom } from "../../atoms/pluginAtoms";
 
 /** The minimap's backing size in pixels, each side. */
 const SIZE = 256;
@@ -88,6 +89,11 @@ export default function MinimapPanel() {
   const locations = mapLocations;
   const selectedLocations = useAtomValue(selectedLocationsAtom);
   const startLocations = useMemo(() => (scenario ? mapStarts : []), [scenario, mapStarts]);
+  // A plugin's view shown in the map's place (`ui.mapView`) may bring its own picture, box and presses.
+  const mapView = useAtomValue(shownMapViewAtom);
+  const own = mapView?.spec.minimap ?? null;
+  const viewCamera = useAtomValue(mapViewCamerasAtom).get(mapView?.key ?? -1) ?? null;
+  const ownRevision = useAtomValue(mapViewMinimapRevisionAtom);
 
   // The picture: terrain, locations, units, start locations and fog, into a canvas of its own.
   useEffect(() => {
@@ -115,6 +121,16 @@ export default function MinimapPanel() {
     }
     ctx.putImageData(terrain.img, ox, oy);
 
+    // The view's own picture over the ground, in place of what the map file holds.
+    if (own) {
+      if (own.draw) {
+        ctx.save();
+        try { own.draw(ctx, { scale: scale / 32, x: (px) => ox + (px / 32) * scale, y: (py) => oy + (py / 32) * scale, size }); }
+        catch (err) { console.error("[plugins] map view minimap draw failed", err); }
+        ctx.restore();
+      }
+      return;
+    }
     if (flags.locations) {
       ctx.lineWidth = 1;
       for (const l of locations) {
@@ -153,7 +169,7 @@ export default function MinimapPanel() {
       ctx.globalCompositeOperation = "source-over";
       ctx.imageSmoothingEnabled = true;
     }
-  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer]);
+  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer, own, ownRevision]);
 
   // What is on screen: the picture, and the view rectangle over it. This is all a scroll costs.
   useEffect(() => {
@@ -170,11 +186,15 @@ export default function MinimapPanel() {
     const scale = size / Math.max(w, h);
     const ox = (size - w * scale) / 2;
     const oy = (size - h * scale) / 2;
+    // The box is where the view in the map's place looks, when it has a minimap of its own and says; the map's own view otherwise.
+    const box = own && viewCamera
+      ? { x: (viewCamera.x - viewCamera.width / 2) / 32, y: (viewCamera.y - viewCamera.height / 2) / 32, w: viewCamera.width / 32, h: viewCamera.height / 32 }
+      : rect;
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1;
-    ctx.strokeRect(ox + rect.x * scale + 0.5, oy + rect.y * scale + 0.5, Math.max(2, rect.w * scale), Math.max(2, rect.h * scale));
+    ctx.strokeRect(ox + box.x * scale + 0.5, oy + box.y * scale + 0.5, Math.max(2, box.w * scale), Math.max(2, box.h * scale));
   // The picture's own deps as well: this effect has to run after every repaint of it.
-  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer, rect]);
+  }, [w, h, tileset, flags, scenario, tilesetAssets, tilesetLoading, terrainRevision, unitsRevision, unitAssets, locations, selectedLocations, startLocations, fogViewPlayer, own, ownRevision, rect, viewCamera]);
 
   /* ── click / drag to drive the main viewport ─────────── */
   // Same placement maths as the draw pass above, run in reverse.
@@ -195,18 +215,25 @@ export default function MinimapPanel() {
     };
   };
 
+  /** A press goes to the view in the map's place when it has a minimap of its own, else it moves the map. */
+  const lookAt = (at: { x: number; y: number }) => {
+    if (!own) { centerView(at); return; }
+    try { own.press?.(at.x * 32, at.y * 32); }
+    catch (err) { console.error("[plugins] map view minimap press failed", err); }
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
     const t = tileAt(e);
     if (!t) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    centerView(t);
+    lookAt(t);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     const t = tileAt(e);
-    if (t) centerView(t);
+    if (t) lookAt(t);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {

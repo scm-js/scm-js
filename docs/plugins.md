@@ -2006,7 +2006,8 @@ Everything a plugin shows. The main pieces:
 | `status`, `toast` | The status bar, and a notice over the map that goes away by itself. |
 | `confirm`, `alert`, `prompt` | Simple questions in the editor's style. |
 | `dialog(spec)` | A modal dialog. |
-| `panel(spec)` | A panel that floats over the map, or sits in the right-hand dock. |
+| `panel(spec)` | A panel that floats over the map, sits in the right-hand dock, or sits in a strip under the map. |
+| `mapView(spec)` | Another way to look at a map, shown in the map's place, with a switch between it and the map. |
 | `statusItem(spec)` | A cell of your own in the status bar. |
 | `mapButton(spec)` | A button in the row at the map's bottom-right corner. |
 | `dialogSlot(id, spec)` | A button or row added to a built-in dialog's footer. |
@@ -2111,6 +2112,31 @@ api.ui.fileType({
   extensions: [".rep"],
   open: (files) => api.log(`${files.length} replays: ${files.map((f) => f.name).join(", ")}`),
 });
+```
+
+**Map views** show something else where the map is drawn: a replay's game played out, a
+picture of the map made another way. You choose which maps offer the view. A map that
+offers one has a small switch in the top-left corner of its area, *Map* first and then
+your view by its title, and each map stays on whichever the user left it on. You can also
+switch it yourself with `show`. The editor gives the view one element for its whole life
+and never moves it, so an iframe inside isn't loaded again when the user switches back
+and forth or goes to another tab and back.
+
+```ts
+// A view of its own for the maps this plugin opens.
+const game = api.ui.mapView({
+  title: "Game",
+  mount(el) {
+    const frame = document.createElement("iframe");
+    frame.src = "https://example.com/viewer/";
+    frame.style.cssText = "border: 0; width: 100%; height: 100%";
+    el.append(frame);
+  },
+});
+game.onChange((shown) => api.log(shown ? "the game is shown" : "the map is shown"));
+
+// A map just opened is the one in front: offer the view there and show it.
+if (await api.document.open(bytes, "replay.scx", { viewOnly: { label: "Replay" } })) game.show(true);
 ```
 
 **Status items and map buttons** are for things that should stay visible without a panel,

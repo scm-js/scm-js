@@ -12,7 +12,7 @@ import { primeTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../src/formats/tileset/doodads";
 import type { Tileset } from "../src/formats/tileset/decode";
 import { hasIsom } from "../src/editor/isom";
-import { closeDocumentAtom, isomRevisionAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtoms";
+import { closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, scenarioAtom, redoAtom, undoAtom, undoStackAtom, type ParkedDocument } from "../src/atoms/documentAtoms";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
 import { parseChk, serializeChk } from "../src/formats/chk/reader";
 import { scenarioName } from "../src/formats/chk/scenario";
@@ -35,7 +35,7 @@ import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
   pluginCommandsAtom, pluginContextItemsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginPanelsAtom, pluginRuntimesAtom,
-  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, pluginMapButtonsAtom, viewFlashesAtom,
+  pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginStatusItemsAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, viewFlashesAtom,
 } from "../src/atoms/pluginAtoms";
 import { looksLikeImageUrl, transferOf } from "../src/plugins/images";
 import {
@@ -2524,6 +2524,61 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     bag.dispose();
     expect(other.isShown()).toBe(false);
     expect(store.get(pluginMapButtonsAtom)).toEqual([]);
+  });
+
+  it("offers and shows a map view per open map, follows the map in front, and forgets closed maps", () => {
+    const { store } = blankStore();
+    const parked = {} as ParkedDocument;
+    const front = (id: number, ...others: number[]) => store.set(documentsAtom, [{ id, parked: null }, ...others.map((o) => ({ id: o, parked }))]);
+    front(1, 2);
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    expect(() => api.ui.mapView({ title: "No mount" } as never)).toThrow(/title and mount/);
+    const game = api.ui.mapView({ title: "Game", mount: () => {} });
+    const [entry] = store.get(pluginMapViewsAtom);
+    expect([entry.plugin.id, entry.spec.title]).toEqual(["t", "Game"]);
+    const heard: boolean[] = [];
+    game.onChange((on) => heard.push(on));
+    // Nothing is offered until asked; showing offers it too, on the map in front.
+    expect(store.get(mapViewStateAtom).offered.size).toBe(0);
+    game.show(true);
+    expect(store.get(mapViewStateAtom).offered.get(1)).toEqual([entry.key]);
+    expect(game.isShown()).toBe(true);
+    // Another map in front shows its own map; back again, the view it was left on.
+    front(2, 1);
+    expect(game.isShown()).toBe(false);
+    front(1, 2);
+    expect(heard).toEqual([true, false, true]);
+    // A second plugin's view takes the map's place; the first is no longer shown there.
+    const other = api.ui.mapView({ title: "3D", mount: () => {} });
+    const otherKey = store.get(pluginMapViewsAtom)[1].key;
+    other.show(true, 1);
+    expect(store.get(mapViewStateAtom).shown.get(1)).toBe(otherKey);
+    expect(store.get(mapViewStateAtom).offered.get(1)).toEqual([entry.key, otherKey]);
+    expect(game.isShown()).toBe(false);
+    // Hiding a view that is not the one shown changes nothing; hiding the shown one shows the map.
+    game.show(false, 1);
+    expect(store.get(mapViewStateAtom).shown.get(1)).toBe(otherKey);
+    other.show(false, 1);
+    expect(store.get(mapViewStateAtom).shown.has(1)).toBe(false);
+    // No longer offered: no longer shown either.
+    game.show(true, 1);
+    game.offer(false, 1);
+    expect(store.get(mapViewStateAtom).offered.get(1)).toEqual([otherKey]);
+    expect(store.get(mapViewStateAtom).shown.has(1)).toBe(false);
+    // A map that is not open is not taken; a closed one is forgotten.
+    game.show(true, 99);
+    expect(store.get(mapViewStateAtom).shown.has(99)).toBe(false);
+    game.show(true, 2);
+    store.set(documentsAtom, [{ id: 1, parked: null }]);
+    expect([...store.get(mapViewStateAtom).offered.keys()]).toEqual([1]);
+    expect(store.get(mapViewStateAtom).shown.has(2)).toBe(false);
+    // With the plugin, the views and everything they were offered on go.
+    bag.dispose();
+    expect(store.get(pluginMapViewsAtom)).toEqual([]);
+    expect(store.get(mapViewStateAtom).offered.size).toBe(0);
+    game.show(true);
+    expect(game.isShown()).toBe(false);
   });
 
   it("registers a dialog slot per dialog id and takes it back on dispose", () => {

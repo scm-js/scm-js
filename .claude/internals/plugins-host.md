@@ -391,6 +391,24 @@ the claimed types after a combined "Everything the editor opens" filter. The des
 native Open dialog still filters to maps — replays reach it by drop. Before this, a dropped
 `.rep` was read as a bare CHK and became an empty 64×64 map.
 
+**Map views** (2026-10-15, for Aftermath's Game view). `ui.mapView({ title, mount })` →
+`addMapView` (host.ts): one `div.plugin-map-view-body` made at registration and handed to
+`mount` (none in node, so `mount` is not called in tests), an entry on `pluginMapViewsAtom`,
+and per-map state in `mapViewStateAtom` (`offered` doc → keys in offer order, `shown` doc →
+key; -1 stands for a map with no slot). The rules are the pure steps in
+`plugins/mapViews.ts` (`offerMapView`, `showMapView`, `pruneMapViews`), shared by the handle
+and the switch; one shown per map by construction, un-offering a shown view shows the map,
+`show(false)` only where that view is the shown one. Pruned on `documentsAtom` changes and
+on dispose. `PluginMapViews` (in App's new `.map-stack` around `MapViewport`) appends each
+element to its `.plugin-map-view` slot the first time it is shown and only toggles `hidden`
+afterwards: **never reparent the element** — an iframe moved in the DOM reloads, which for
+the play page means a gigabyte of engine started again. The views cover the whole stack
+(rulers included); the switch is at 26 px / 26 px over it. `MapViewport` stays mounted
+underneath, so its keys still act (Aftermath binds its own). `onChange` fires on the front
+map's shown state, so a tab switch fires it too. Headless check 2026-10-15 with a scratch
+plugin: switch absent until offered, Map/Game, other tab plain, back shows the view, iframe
+loaded once. `tests/plugins.test.ts` ("offers and shows a map view…").
+
 Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
 hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on
 `reservedReason` applying only to the editor's command table, not to `hotkeys.add`. The plugin

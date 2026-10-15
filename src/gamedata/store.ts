@@ -61,16 +61,78 @@ const memory = new Map<string, MemoryCopy>();
 
 /**
  * The OPFS root, or null where the API is missing or refused. The hosted nightly, sharing
- * its origin with the stable editor, keeps its game data in a folder of its own (`site.ts`).
+ * its origin with the stable editor, keeps its copies here too (`site.ts`): the game's page
+ * at `/play/` reads them from the root, so one install serves both editors and the game.
  */
 async function opfsRoot(): Promise<FileSystemDirectoryHandle | null> {
   try {
     const storage = (globalThis as { navigator?: { storage?: StorageManager } }).navigator?.storage;
     if (!storage?.getDirectory) return null;
     const root = await storage.getDirectory();
-    return SHARED_NIGHTLY ? await root.getDirectoryHandle("nightly", { create: true }) : root;
+    if (SHARED_NIGHTLY) await (leftover ??= leaveNightlyFolder(root));
+    return root;
   } catch {
     return null;
+  }
+}
+
+let leftover: Promise<void> | null = null;
+
+/**
+ * For its first day on the shared origin the nightly kept its copies under `nightly/`, where
+ * the game's page never looked. A copy left there is copied up to the root where the root has
+ * none of that data set (its stamp last, so a copy cut short counts as nothing), and the folder
+ * goes. Where that fails the data is installed again.
+ */
+async function leaveNightlyFolder(root: FileSystemDirectoryHandle): Promise<void> {
+  const old = await root.getDirectoryHandle("nightly").catch(() => null);
+  if (!old) return;
+  const copyUp = async (from: FileSystemDirectoryHandle, name: string, to: FileSystemDirectoryHandle) => {
+    const dir = await from.getDirectoryHandle(name).catch(() => null);
+    if (!dir || !(await readStamp(dir))) return;
+    const there = await to.getDirectoryHandle(name).catch(() => null);
+    if (there && (await readStamp(there))) return;
+    if (there) await to.removeEntry(name, { recursive: true });
+    try {
+      await copyInto(dir, await to.getDirectoryHandle(name, { create: true }), true);
+    } catch {
+      await to.removeEntry(name, { recursive: true }).catch(() => {});
+    }
+  };
+  try {
+    await copyUp(old, DIR, root);
+    const profiles = await old.getDirectoryHandle(PROFILES_DIR).catch(() => null);
+    if (profiles) {
+      const ids = (await entriesOf(profiles)).filter(([, h]) => h.kind === "directory").map(([id]) => id);
+      const to = await root.getDirectoryHandle(PROFILES_DIR, { create: true });
+      for (const id of ids) await copyUp(profiles, id, to);
+    }
+  } catch {
+    // Storage refused: the nightly installs again.
+  } finally {
+    await root.removeEntry("nightly", { recursive: true }).catch(() => {});
+  }
+}
+
+async function entriesOf(dir: FileSystemDirectoryHandle): Promise<[string, FileSystemHandle][]> {
+  const out: [string, FileSystemHandle][] = [];
+  const it = (dir as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries();
+  for await (const entry of it) out.push(entry);
+  return out;
+}
+
+/** Every file of `from` into `to`; with `stampLast`, the copy's stamp after all the rest. */
+async function copyInto(from: FileSystemDirectoryHandle, to: FileSystemDirectoryHandle, stampLast = false): Promise<void> {
+  const entries = await entriesOf(from);
+  const order = stampLast ? [...entries.filter(([n]) => n !== STAMP), ...entries.filter(([n]) => n === STAMP)] : entries;
+  for (const [name, handle] of order) {
+    if (handle.kind === "directory") {
+      await copyInto(handle as FileSystemDirectoryHandle, await to.getDirectoryHandle(name, { create: true }));
+    } else {
+      const file = await (handle as FileSystemFileHandle).getFile();
+      const writable = await (await to.getFileHandle(name, { create: true })).createWritable();
+      await file.stream().pipeTo(writable);
+    }
   }
 }
 

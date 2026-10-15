@@ -14,7 +14,8 @@ others to edit with you, or a question for the AI, all described in the user gui
 
 [scmjs.dev/nightly](https://scmjs.dev/nightly/) is rebuilt every night from the latest
 changes, for trying what is in development. It keeps its own settings, plugins and sign-in,
-apart from the stable editor's, and asks for the graphics once. It used to be at
+apart from the stable editor's, but shares the game's graphics with the stable editor and
+the game's page, so you add them once for all three. It used to be at
 `nightly.editor.scmjs.dev`, which now sends you on, and its settings come with you the first
 time.
 

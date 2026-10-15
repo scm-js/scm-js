@@ -676,6 +676,15 @@ input[type="range"] {
   height: 16px;
   line-height: 14px;
 }
+/* A plugin's tooltip (api.ui.tooltip): beside the pointer, holding whatever the plugin built. */
+.plugin-tooltip {
+  position: fixed;
+  display: block;
+  pointer-events: none;
+  padding: 6px 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 
 @keyframes fade-in {
   from {

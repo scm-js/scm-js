@@ -1695,10 +1695,15 @@ while running has to come from `api`.
 
 The images the map view draws, for your own lists and previews: `unitImage`,
 `spriteImage`, `tileImage`, `doodadImage`, `renderRect` (part of the map as a PNG) and
-`renderClip` (a `Clip` as the paste preview draws it).
+`renderClip` (a `Clip` as the paste preview draws it). `icon(kind, id)` is the game's own
+button picture for a unit type, an upgrade or a technology, the one its command card
+shows, in yellow, or grey or white with `{ look: "disabled" }` or `{ look: "selected" }`.
+It suits a list or a tooltip better than a unit's picture from the map. A copy of the game
+data installed by an older version of the editor has no icons until it is installed again;
+show the name instead.
 
-Unit and sprite images load lazily, so the first request often returns null. Call
-`requestUnit` / `requestSprite`, and redraw in `onImageLoaded`. An image is the editor's
+Unit and sprite images and the icons load lazily, so the first request often returns
+null. Call `requestUnit` / `requestSprite` / `requestIcons`, and redraw in `onImageLoaded`. An image is the editor's
 own cached canvas: draw from it onto a canvas of yours instead of moving it into your
 page.
 
@@ -2016,6 +2021,7 @@ Everything a plugin shows. The main pieces:
 | `overlay(spec)` | A drawing over the map the user can switch on and off. |
 | `pickArea`, `pickTile`, `pickObject`, `pickFiles` | Ask the user to choose something. |
 | `widgets`, `el` | Build dialog and panel content in the editor's style. |
+| `tooltip(element, content)` | A tooltip in the editor's style over an element of yours, in place of the browser's. |
 | `progress` | A progress panel over the map for long work. |
 | `saveFile`, `loadImage`, `readClipboardImage` | Files and pictures. |
 | `open`, `ask`, `openDialogs` | Built-in dialogs. |
@@ -2037,6 +2043,20 @@ if (name) {
   api.document.update("Rename", (tx) => tx.properties({ name }));
   api.ui.toast({ kind: "ok", title: "Renamed", detail: name });
 }
+```
+
+**Tooltips.** `api.ui.tooltip(element, content)` puts the editor's own tooltip on an
+element of yours. The content is a line of text, or a function that builds what to show
+where the pointer is: rows, bars, pictures. A function is called again as the pointer
+moves, so a chart can say what is under it. Return null to show nothing at that spot.
+The editor keeps the tooltip beside the pointer and on screen, and removes it when the
+pointer leaves. Leave out the element's `title`, or the browser's tooltip shows as well.
+
+```ts
+api.ui.tooltip(canvas, (at) => {
+  const i = Math.floor((at.offsetX / canvas.clientWidth) * minerals.length);
+  return minerals[i] === undefined ? null : api.ui.el("div", {}, api.ui.el("b", {}, String(minerals[i])), " minerals");
+});
 ```
 
 **Dialogs** are modal and cover the map. `mount(body, handle)` fills an empty element;

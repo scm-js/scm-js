@@ -14,6 +14,7 @@ import { fetchAsset } from "../../gamedata/source";
 import { installNames } from "../../data/units";
 import { namesFromAssets } from "../../data/gameNames";
 import { buildStockSounds, type StockSounds } from "../../editor/stockSounds";
+import { decodePalette } from "../tileset/decode";
 
 /**
  * The unit data tables, fetched once from `arr/` + `game/` (mirroring the MPQ tree; see
@@ -194,6 +195,11 @@ export function onGrpLoaded(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
+/** Tell the canvases that something they draw from arrived outside the lazy parts (the tables an icon is named by). */
+export function announceArrival(): void {
+  for (const l of listeners) l();
+}
+
 /**
  * One cache of decoded files by path: `get` returns the value once it has arrived, `null`
  * once the fetch failed, and `undefined` while it is on its way — the first call starts it.
@@ -327,6 +333,7 @@ export function retryFailedParts(): void {
   grps.forgetFailed();
   los.forgetFailed();
   remaps.forgetFailed();
+  palettes.forgetFailed();
   anims.forgetFailed();
   // A data set found to have no 2x sprites may have them now.
   if (hdImages === null) hdImages = undefined;
@@ -352,6 +359,7 @@ export function resetUnitAssets(): void {
   grps.clear();
   los.clear();
   remaps.clear();
+  palettes.clear();
   anims.clear();
   hdImages = undefined;
   sharedAnims.clear();
@@ -414,6 +422,40 @@ export function awaitAnims(imageIds: readonly number[]): Promise<void> {
 /** The decoded `.lo` file for a path under `public/unit/`. */
 export function requestLo(path: string): LoFile | null | undefined {
   return los.get(`unit/${path}`);
+}
+
+/* ── The game's button pictures ─────────────────────────── */
+
+/** The command card's icons: one frame a unit type (frame = units.dat id), the rest named by upgrades.dat / techdata.dat. */
+export const ICON_SHEET = "unit/cmdbtns/cmdicons.grp";
+/** Their colours: 96 palette indices, six looks of 16 (normal, disabled, selected, …), an icon pixel picking one of a look's 16. */
+export const ICON_COLOURS = "unit/cmdbtns/ticon.pcx";
+/**
+ * The palette the icons are painted through. Every tileset's palette agrees on the colours
+ * `ticon.pcx` names (checked over all eight), so one is fetched rather than following the
+ * open map's tileset, and an icon looks the same on any map, or with none open.
+ */
+const ICON_PALETTE = "tileset/badlands.wpe";
+const palettes = new LazyFiles<Uint8Array>(decodePalette, (d) => d.length === 1024);
+
+export interface IconSheet {
+  grp: Grp;
+  colours: Uint8Array;
+  palette: Uint8Array;
+}
+
+/**
+ * The icon sheet with its colours and palette, per the `LazyFiles` contract: all three once
+ * they have arrived, null when any is missing (a copy made before 2026-10-15 has no icons),
+ * undefined while one is on its way. The first call starts the fetches.
+ */
+export function requestIconSheet(): IconSheet | null | undefined {
+  const grp = grps.get(ICON_SHEET);
+  const colours = remaps.get(ICON_COLOURS);
+  const palette = palettes.get(ICON_PALETTE);
+  if (grp === null || colours === null || palette === null) return null;
+  if (grp === undefined || colours === undefined || palette === undefined) return undefined;
+  return { grp, colours, palette };
 }
 
 /**

@@ -39,6 +39,7 @@ Out of the archives come about 930 files, 30 MB in all:
 | `game/tunit.pcx` | the team colour rows |
 | `scripts/iscript.bin` | the animation scripts |
 | `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |
+| `unit/cmdbtns/cmdicons.grp`, `ticon.pcx` | the command card's button pictures and their colours, which plugins show for units, upgrades and technologies |
 
 The eight tilesets, in the order the map file numbers them, are Badlands, Space
 Platform, Installation, Ashworld, Jungle, Desert, Ice and Twilight.

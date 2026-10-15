@@ -112,7 +112,9 @@ toggles `.plugin-panel.maximized` (`inset: 6px` in the viewport, z 7, no drag, n
 position and size are left as they were, so restoring lands where the panel was. The same pass added
 `widgets.tabs` (the chrome's Radix `.tabs`/`.tab[data-state]` classes rebuilt in DOM, panels mounted lazily and
 kept, arrow keys; no per-tab cleanup — watching for the root leaving the page would mean a page-wide
-MutationObserver) and `widgets.segmented` (the palette's `.seg` of `.btn.sm`, `is-active` on the one picked); `flush` on
+MutationObserver) and `widgets.segmented` (the palette's `.seg` of `.btn.sm`, `is-active` on the one picked). `widgets.fold`'s head
+draws a CSS chevron (`.fold-head::before`, rotated by `[open]`) so a fold reads as something that opens — style
+only, so every plugin's folds got it without an update; `flush` on
 both specs drops the body's padding and `DialogSpec.buttons: []` drops the footer (`footer={null}`, so
 `setBusy`'s label and a `slot` have nowhere to show), which is what TrigScript 3.1's VS Code-style
 workspace mounts into. Note for anything else that draws its own key handling inside a dialog:

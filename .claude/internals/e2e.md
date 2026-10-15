@@ -73,6 +73,13 @@ type-checks the specs with the app's options, since those type imports pull `src
 `ColorTextField` (Map Properties' name) is a `role="textbox"` div until clicked and an
 `<input>` after: assert the text on the div, click, then fill the input.
 
+**Scrollbars are hidden by default.** Playwright launches headless Chromium with
+`--hide-scrollbars`, so a scroller's `clientWidth` equals its box and anything that depends on
+the scrollbar's width cannot fail. `rulers.spec.ts` (the rulers once stretched past the map view
+by the scrollbar's 10px) drops that argument with a file-level
+`test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } })` — a worker option,
+so it cannot go in a `describe`. Checked against the unfixed code: across/down came back 10.
+
 Timings on an M-series laptop: 100 tests, ~18 s, 4 skipped (the two payload dialogs × two
 languages). `@playwright/test` is a devDependency; its `playwright` dependency is also what
 `scripts/guide-screenshots.mjs` imports (`sharp` is still `--no-save`).

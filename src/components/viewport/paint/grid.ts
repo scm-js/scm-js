@@ -62,9 +62,16 @@ export function drawRuler(v: PaintView, c: HTMLCanvasElement | null, horizontal:
   keys[side] = key;
   const labelEvery = [1, 2, 4, 8, 16, 32].find((n) => n * tilePx >= 40) ?? 32;
   const tick = tilePx >= 8 ? 1 : labelEvery / 2;
-  // Setting a canvas's size reallocates it, even to the size it has.
+  // Setting a canvas's size reallocates it, even to the size it has. The length is the map's
+  // view, which stops at the scroller's scrollbar while the ruler's strip runs past it, so the
+  // canvas is shown at that length: stretched to the strip, a tile's mark drifted from the tile
+  // by up to a scrollbar's width towards the far end.
   const cw = Math.floor((horizontal ? len : 20) * dpr), ch = Math.floor((horizontal ? 20 : len) * dpr);
-  if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+  if (c.width !== cw || c.height !== ch) {
+    c.width = cw;
+    c.height = ch;
+    if (horizontal) c.style.width = `${len}px`; else c.style.height = `${len}px`;
+  }
   const rc = c.getContext("2d")!;
   rc.setTransform(dpr, 0, 0, dpr, 0, 0);
   rc.fillStyle = "#191d25";

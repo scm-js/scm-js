@@ -130,6 +130,12 @@ export const EXTRA_TABLES = ["arr\\orders.dat"];
  * made before 2026-10-12 lacks it.
  */
 export const SOUND_TABLES = ["arr\\sfxdata.dat", "arr\\sfxdata.tbl"];
+/**
+ * The command card's icons and their colours, copied when the archives have them: the
+ * pictures `api.graphics.icon` hands plugins for a unit type, an upgrade or a technology.
+ * A copy made before 2026-10-15 lacks them, and plugins then show names.
+ */
+export const ICON_FILES = ["unit\\cmdbtns\\cmdicons.grp", "unit\\cmdbtns\\ticon.pcx"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 
@@ -244,7 +250,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   const files = new Map<string, Uint8Array>();
   const missing: string[] = [];
   for (const [member, data] of tables) files.set(assetPath(member), data);
-  for (const member of [...EXTRA_TABLES, ...SOUND_TABLES]) {
+  for (const member of [...EXTRA_TABLES, ...SOUND_TABLES, ...ICON_FILES]) {
     const data = read(member);
     if (data) files.set(assetPath(member), data);
   }

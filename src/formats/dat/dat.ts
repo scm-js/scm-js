@@ -366,6 +366,8 @@ export interface UpgradesDat {
   broodWar: Uint8Array;
   /** The upgrade's name: a 1-based `stat_txt.tbl` index, 0 for none. */
   label: Uint16Array;
+  /** Its button picture: a frame of `unit\cmdbtns\cmdicons.grp`. */
+  icon: Uint16Array;
 }
 
 /** Struct of arrays: six u16 columns of cost, then requirements / icon / label u16s, then race, max repeats and the Brood War flag. */
@@ -379,12 +381,13 @@ export function decodeUpgradesDat(data: Uint8Array): UpgradesDat {
   const vespeneFactor = f.u16(n);
   const timeCost = f.u16(n);
   const timeFactor = f.u16(n);
-  f.skip(n * 2 * 2); // requirements, icon
+  f.skip(n * 2); // requirements
+  const icon = f.u16(n);
   const label = f.u16(n);
   f.skip(n); // race
   const maxRepeats = f.u8(n);
   const broodWar = f.u8(n);
-  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar, label };
+  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar, label, icon };
 }
 
 /** The columns Technology Settings shows as defaults. */
@@ -398,6 +401,8 @@ export interface TechdataDat {
   broodWar: Uint8Array;
   /** The technology's name: a 1-based `stat_txt.tbl` index, 0 for none. */
   label: Uint16Array;
+  /** Its button picture: a frame of `unit\cmdbtns\cmdicons.grp`. */
+  icon: Uint16Array;
 }
 
 /** Struct of arrays: four u16 cost columns, then research / use requirements, icon and label u16s, race, an unused byte and the Brood War flag. */
@@ -409,9 +414,10 @@ export function decodeTechdataDat(data: Uint8Array): TechdataDat {
   const vespeneCost = f.u16(n);
   const researchTime = f.u16(n);
   const energyCost = f.u16(n);
-  f.skip(n * 2 * 3); // research requirements, use requirements, icon
+  f.skip(n * 2 * 2); // research requirements, use requirements
+  const icon = f.u16(n);
   const label = f.u16(n);
   f.skip(n * 2); // race, unused
   const broodWar = f.u8(n);
-  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar, label };
+  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar, label, icon };
 }

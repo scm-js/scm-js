@@ -256,6 +256,28 @@ paste-ghost pass reproduced over the clip's own era's `peekTileset`, null when t
 in memory — the open map's are — so a plugin never gets another tileset's tiles drawn as this one's).
 `StorageApi.set` now returns a boolean (false on a quota refusal) — additive for a caller that ignored
 `void`. `tests/plugins.test.ts` "tx.paste stamps a clip…" pins all four.
+The Aftermath tooltip pass (2026-10-15) added `graphics.icon(kind, id, { look })` / `requestIcons()`
+and `ui.tooltip(target, content, options)`. **Icons** are the command card's (`unit\cmdbtns\cmdicons.grp`,
+386 frames in a 36 × 34 box): a unit type's frame is its id (0–227), an upgrade's or technology's is the
+`icon` column `dat.ts` used to skip. The sheet's pixels are 0–15 and `ticon.pcx` (96 × 1) is six looks
+of 16 palette indices — normal yellow, disabled grey, selected white, then a second yellow, a blue and a
+grey nothing here offers. The colours are painted through `tileset/badlands.wpe`, fetched on its own:
+all eight palettes agree on every index the first three looks name (checked), so an icon does not follow
+the open map's tileset and needs none. Unused places hold a picture of the word BLANK, always 30 × 14 at
+(0, 0), which `icons.ts#isBlank` recognises; an unused upgrade or technology names frame 0 (the Marine),
+treated as none. Canvases go in `graphics.ts#composed` under `icon|look|frame` (by frame, since an
+upgrade and a technology often share one), cleared with the data set. `requestIcons` also fetches the
+unit tables when they are not in, and `load.ts#announceArrival` fires `onImageLoaded` when they land,
+because an upgrade's frame is unknown without them. A copy extracted before this has no
+`cmdicons.grp` and every icon is null for good — plugins fall back to names. **Tooltips**
+(`plugins/tooltip.ts`) are plain DOM, not the chrome's Radix ones (a plugin's element is not in that
+tree): one `div.tooltip.plugin-tooltip` on `document.body`, `position: fixed`, placed 14/18 px from the
+pointer and flipped/clamped to the window. Text content waits 500 ms like the chrome's and closes on a
+press; function content is asked on every pointer move with `offsetX/Y` and `pressed`, waits 0 ms and
+stays through a drag (a chart's read-out while seeking). Removing the target sends no `pointerleave`,
+so a 250 ms interval runs only while a tip shows and hides it once `target.isConnected` is false. The
+handle is in the plugin's bag. There is no unit test (vitest has no DOM here); Aftermath's timeline
+was the check, in headless Chromium.
 The Timelapse pass (2026-09-23) added the `"commit"` event and `tileset.load(id)`. `"commit"` is
 `commitNoticeAtom` (`documentAtoms.ts`), a fresh `CommitNotice` object per commit so `store.sub` always
 fires, written last in every committing path: `commitEditAtom` (reason `"edit"`, which covers strokes,

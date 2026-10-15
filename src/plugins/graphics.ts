@@ -18,7 +18,8 @@ import { logError } from "../editor/log";
 import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
-import { getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
+import { announceArrival, getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, requestIconSheet, unitImageId, type UnitAssets } from "../formats/units/load";
+import { iconFrame, paintIcon } from "../formats/units/icons";
 import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../formats/units/sprites";
 import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
@@ -281,6 +282,31 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
         if (!path || !requestGrp(path)) ready = false;
       }
       return ready;
+    },
+
+    icon: (kind, id, options = {}) => {
+      const sheet = requestIconSheet();
+      const assets = peekUnitAssets();
+      if (!sheet || typeof document === "undefined") return null;
+      const look = options.look ?? "normal";
+      const frame = iconFrame(sheet.grp, kind, id, { upgrades: assets?.upgrades ?? null, techs: assets?.techs ?? null });
+      if (frame < 0) return null;
+      // By frame, not by kind and id: an upgrade and a technology often share a picture.
+      const key = `icon|${look}|${frame}`;
+      if (!composed.has(key)) {
+        const painted = paintIcon(sheet.grp, frame, sheet.colours, sheet.palette, look);
+        const made = canvasOf(painted.width, painted.height);
+        if (!made) return null;
+        made.ctx.putImageData(new ImageData(painted.pixels, painted.width, painted.height), 0, 0);
+        composed.set(key, { image: made.canvas, width: painted.width, height: painted.height });
+      }
+      return composed.get(key) ?? null;
+    },
+
+    requestIcons: () => {
+      // The upgrade and technology frames come from their dat files, so those are wanted too.
+      if (!peekUnitAssets()) void getUnitAssets().then(announceArrival, () => {});
+      return Boolean(requestIconSheet()) && peekUnitAssets() !== null;
     },
 
     requestSprite: (kind: SpriteKind, id) => {

@@ -48,6 +48,12 @@ describe.skipIf(!haveArchives)("extraction against the real archives", () => {
     for (const grp of manifest.grps.slice(0, 20)) expect(files.has(`unit/${grp.replaceAll("\\", "/")}`)).toBe(true);
   });
 
+  it("carries the command card's icons and their colours", () => {
+    const { files } = extractUnits(read);
+    expect(files.get("unit/cmdbtns/cmdicons.grp")?.length).toBeGreaterThan(100_000);
+    expect(files.get("unit/cmdbtns/ticon.pcx")?.[0]).toBe(0x0a);
+  });
+
   it("produces the same files byte for byte as public/, when that was extracted", () => {
     if (!existsSync(join(PUBLIC, "unit", "manifest.json"))) return;
     const { files } = extractGameData(read);

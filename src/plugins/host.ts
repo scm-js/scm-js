@@ -99,6 +99,7 @@ import { applyChanges, stampTerrain, stampTile, Stroke, type Rect, type TileChan
 import { createGraphicsApi } from "./graphics";
 import { alertDialog, confirmDialog, progressPanel, promptDialog } from "./prompts";
 import { createWidgets, el } from "./widgets";
+import { attachTooltip } from "./tooltip";
 import {
   applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
@@ -2458,6 +2459,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       alert: (message, options) => alertDialog(api.ui.dialog, message, options),
       prompt: (message, options) => promptDialog(api.ui.dialog, message, options),
       progress: (label, options) => progressPanel(api.ui.panel, label, options),
+      tooltip: (target, content, options) => {
+        if (!(target instanceof HTMLElement) || (typeof content !== "string" && typeof content !== "function")) throw new Error("ui.tooltip needs an element and its content.");
+        const tip = attachTooltip(target, content, options);
+        const sweep = bag.add(() => tip.dispose());
+        return { refresh: tip.refresh, hide: tip.hide, dispose: () => sweep.dispose() };
+      },
       el,
       widgets,
       open: (dialog, payload) => { store.set(openDialogAtom, dialog, payload); },

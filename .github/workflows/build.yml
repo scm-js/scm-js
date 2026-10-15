@@ -18,9 +18,9 @@
 #             `nightly` is force-moved to the commit it was built from and whose assets
 #             are replaced in place. It is never deleted and never recreated, so the
 #             download counts survive and nobody watching releases is re-notified. The
-#             cron exits early when main has not moved since the last one. That same web
-#             zip is unpacked onto nightly.editor.scmjs.dev, so the hosted nightly and the
-#             nightly installers are one build carrying one version string — and the
+#             cron exits early when main has not moved since the last one. The same commit
+#             is hosted at scmjs.dev/nightly/ (built for that path, `nightly-site` below),
+#             so the hosted nightly and the nightly installers carry one version string — and the
 #             prerelease's notes link that site, so someone who opens the release can try
 #             the build before deciding to download it.
 #   vX.Y.Z    a tag — a permanent release with the same assets, the container image on
@@ -67,15 +67,22 @@
 #                             (PAGES_BASE); a Cloudflare Worker in front answers
 #                             scmjs.dev/editor/* with those files and sends the old
 #                             address on (scm-js/cloudflare-link-previews).
-#   nightly.editor.scmjs.dev  main as of the last nightly, deployed by the `nightly-site`
-#                             job into scm-js/nightly's gh-pages branch (one force-pushed
-#                             orphan commit, so that repository never grows).
+#   scmjs.dev/nightly/        main as of the last nightly, built for /nightly/ with
+#                             SCMJS_SITE=nightly and deployed by the `nightly-site` job into
+#                             the `nightly/` folder of scm-js/nightly's gh-pages branch (one
+#                             force-pushed orphan commit, so that repository never grows),
+#                             which Pages serves at nightly.editor.scmjs.dev and the front-door
+#                             worker answers scmjs.dev/nightly/* from. The old address's root
+#                             sends every path on to the new one and keeps `moved.html`, which
+#                             hands its settings over (`src/moveIn.ts`).
 #
-# They are separate origins on purpose and it costs something: the extracted game data
-# lives in OPFS and every `scmjs.` setting in localStorage, both scoped to the origin, so
-# trying the nightly means installing the game data again and it keeps its own
-# preferences, recents and installed plugins. That is the price of a nightly that cannot
-# write a stored shape the stable build then reads.
+# The nightly is on the site's origin because the game's page (`/play/`, which Aftermath and
+# Test Map need) is served there and nowhere else. A browser keeps what a site stores per
+# origin, and a nightly must never write a stored shape the stable build reads back, so the
+# hosted nightly keeps its own under that origin (`src/site.ts`): its settings, plugins and
+# sign-in under `scmjs-nightly.` keys, its game data in an OPFS folder of its own, its recent
+# files in a database of its own. It asks for the game data once, and keeps its own
+# preferences, recents and installed plugins.
 #
 # To put the hosted editor back on an older version, dispatch this workflow on that tag —
 # the deploy is the only thing a re-run rewrites (`gh release create` would refuse the
@@ -84,7 +91,9 @@
 #
 # Repository variables (Settings ▸ Variables): PAGES_BASE is the hosted build's base path
 # ("/editor/" for scmjs.dev/editor/, "/" for a custom domain's root; the default is the
-# repository name), and NIGHTLY_DOMAIN is the
+# repository name); NIGHTLY_BASE is the hosted nightly's path on the site ("/nightly/") and
+# NIGHTLY_HOME the site (https://scmjs.dev, the default) — unset NIGHTLY_BASE and the nightly
+# site is the web zip at its own domain's root, as it was; and NIGHTLY_DOMAIN is the
 # custom domain written into the nightly site's CNAME — unset, and the nightly deploy is
 # skipped, as it is without the NIGHTLY_PAT secret — a fine-grained token whose only
 # permission is Contents: write on <owner>/nightly, kept as a *repository* secret since
@@ -288,6 +297,23 @@ jobs:
         with:
           name: web-zip
           path: scmJS-web.zip
+      # The hosted nightly as a path of the site (NIGHTLY_BASE, `/nightly/` for
+      # scmjs.dev/nightly/), beside the game's page at `/play/` that only the site has: the
+      # same commit built again for that path, with SCMJS_SITE=nightly so what it stores
+      # stays apart from the stable editor's on the shared origin (`src/site.ts`). Without
+      # NIGHTLY_BASE the nightly site is the web zip at a domain's root, as it was.
+      - name: Build (nightly site)
+        if: needs.channel.outputs.channel == 'nightly' && vars.NIGHTLY_BASE != ''
+        run: npm run build && cd dist && zip -qr ../scmJS-nightly-site.zip .
+        env:
+          SCMJS_BASE: ${{ vars.NIGHTLY_BASE }}
+          SCMJS_SITE: nightly
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: needs.channel.outputs.channel == 'nightly' && vars.NIGHTLY_BASE != ''
+        with:
+          name: nightly-site-zip
+          path: scmJS-nightly-site.zip
           if-no-files-found: error
       # The same bundle again under the path GitHub Pages serves this repository from —
       # only when that is not the root, which is to say only for a fork with no custom
@@ -394,7 +420,7 @@ jobs:
     needs: [channel, web]
     # editor.scmjs.dev is the newest tag, not main's HEAD: what the hosted editor is
     # running has a version number, release notes and an installer that matches it. Main
-    # goes to nightly.editor.scmjs.dev below, once a night. `release.yml` dispatches this
+    # goes to scmjs.dev/nightly/ below, once a night. `release.yml` dispatches this
     # workflow on the tag it writes, because a tag pushed with GITHUB_TOKEN starts no run.
     if: needs.channel.outputs.channel == 'stable'
     runs-on: ubuntu-latest
@@ -411,13 +437,39 @@ jobs:
     if: needs.channel.outputs.channel == 'nightly'
     runs-on: ubuntu-latest
     steps:
-      # The zip the nightly release carries, unzipped — never rebuilt, so the hosted
-      # nightly cannot differ from the one people download, exactly as the image job
-      # takes the stable zip rather than building its own.
+      # Two layouts. With NIGHTLY_BASE (`/nightly/`) the nightly is a path of the site
+      # (NIGHTLY_HOME, https://scmjs.dev), which the front-door worker serves out of this
+      # Pages site's `nightly/` folder: the editor built for that path goes there, and the
+      # root keeps two pages of its own for the old address — every path sends on to the
+      # same path at the new one, and `moved.html` hands the settings stored under the old
+      # address to the new (`src/moveIn.ts`). Without it, the nightly release's own web zip
+      # at the domain's root, never rebuilt, as before.
+      - uses: actions/checkout@v4
+        if: vars.NIGHTLY_BASE != ''
+        with:
+          sparse-checkout: scripts/nightly-site
       - uses: actions/download-artifact@v4
         with:
-          name: web-zip
-      - run: unzip -q scmJS-web.zip -d site
+          name: ${{ vars.NIGHTLY_BASE != '' && 'nightly-site-zip' || 'web-zip' }}
+      - name: Lay the site out
+        env:
+          BASE: ${{ vars.NIGHTLY_BASE }}
+          HOME_URL: ${{ vars.NIGHTLY_HOME || 'https://scmjs.dev' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ]; then
+            unzip -q scmJS-web.zip -d site
+            exit 0
+          fi
+          folder="${BASE#/}"; folder="${folder%/}"
+          mkdir -p "site/$folder"
+          unzip -q scmJS-nightly-site.zip -d "site/$folder"
+          for page in redirect moved; do
+            sed -e "s|__HOME__|$HOME_URL|g" -e "s|__BASE__|$BASE|g" "scripts/nightly-site/$page.html" > "site/$page.html"
+          done
+          # The old address's every path — its root and anything Pages does not find — goes on to the new.
+          mv site/redirect.html site/index.html
+          cp site/index.html site/404.html
       - name: Push to the nightly site repository
         env:
           # A fine-grained token with Contents: write on that repository and nothing else.
@@ -426,6 +478,8 @@ jobs:
           NIGHTLY_PAT: ${{ secrets.NIGHTLY_PAT }}
           DOMAIN: ${{ vars.NIGHTLY_DOMAIN }}
           VERSION: ${{ needs.channel.outputs.version }}
+          BASE: ${{ vars.NIGHTLY_BASE }}
+          HOME_URL: ${{ vars.NIGHTLY_HOME || 'https://scmjs.dev' }}
         run: |
           set -euo pipefail
           if [ -z "${NIGHTLY_PAT:-}" ] || [ -z "${DOMAIN:-}" ]; then
@@ -440,8 +494,10 @@ jobs:
           printf '%s\n' "$DOMAIN" > CNAME
           touch .nojekyll
           # Kept out of search results: the nightly is main as of last night, and the
-          # stable editor at editor.scmjs.dev is the one a search should find.
-          for page in index.html 404.html; do
+          # stable editor is the one a search should find.
+          editor="."
+          if [ -n "${BASE:-}" ]; then editor="${BASE#/}"; editor="${editor%/}"; fi
+          for page in "$editor/index.html" "$editor/404.html"; do
             if [ -f "$page" ]; then
               sed -i 's|<head>|<head><meta name="robots" content="noindex" />|' "$page"
             fi
@@ -456,7 +512,11 @@ jobs:
           git commit -qm "scmJS $VERSION (${GITHUB_SHA:0:7})"
           git push -qf "https://x-access-token:$NIGHTLY_PAT@github.com/${GITHUB_REPOSITORY_OWNER}/nightly" gh-pages
           echo "### Nightly site" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://$DOMAIN — scmJS $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${BASE:-}" ]; then
+            echo "$HOME_URL$BASE — scmJS $VERSION (served from https://$DOMAIN/$editor/ by the front-door worker)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "https://$DOMAIN — scmJS $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # docs.scmjs.dev: the repository's own guides (README.md, docs/*.md) rendered as pages,
   # and the plugin API reference generated from `plugin-api/index.d.ts` — the same bundled
@@ -641,6 +701,8 @@ jobs:
           # cannot offer a link to a site this repository never pushed. The secret is
           # tested here rather than passed, so it stays out of the environment.
           SITE: ${{ secrets.NIGHTLY_PAT != '' && vars.NIGHTLY_DOMAIN || '' }}
+          # Where people open it: the site's path when the nightly is one (NIGHTLY_BASE), else its own domain.
+          SITE_URL: ${{ vars.NIGHTLY_BASE != '' && format('{0}{1}', vars.NIGHTLY_HOME || 'https://scmjs.dev', vars.NIGHTLY_BASE) || '' }}
         run: |
           set -euo pipefail
           if [[ "$CHANNEL" == "stable" ]]; then
@@ -674,11 +736,11 @@ jobs:
           # reach the notes and make GitHub render the later paragraphs as code blocks.
           paragraphs=("Built from main at ${GITHUB_SHA:0:7} on $(date -u +%Y-%m-%d).")
           if [[ -n "${SITE:-}" ]]; then
-            # The same build, running: the `nightly-site` job puts this run's web zip up
-            # unchanged, so nobody has to install anything to see what changed. It is a
-            # separate origin from the stable editor, which is worth saying — the game
-            # data, preferences and plugins over there are its own.
-            paragraphs+=("Running at https://$SITE — the web build from this same run, nothing to install. It is a separate site from the stable editor, so it asks for the game data again and keeps its own preferences and plugins.")
+            # The same build, running, so nobody has to install anything to see what
+            # changed. It keeps its own game data, preferences and plugins, which is worth
+            # saying: on the site's path it shares the origin but not what is stored.
+            url="${SITE_URL:-https://$SITE}"
+            paragraphs+=("Running at $url — the web build from this same run, nothing to install. It keeps its own game data, preferences and plugins, apart from the stable editor's.")
           fi
           paragraphs+=("Replaced by the next nightly. For a version that stays put, take a numbered release.")
           notes=$(printf '%s\n\n' "${paragraphs[@]}")

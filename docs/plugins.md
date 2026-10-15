@@ -803,9 +803,10 @@ sees no service.
 
 You call `fetch` yourself. Two things only show up in the desktop app:
 
-- **The desktop app's origin is `app://scmjs`.** The web builds' origins are
-  `https://scmjs.dev` and `https://nightly.editor.scmjs.dev`. Your server's CORS
-  settings need to allow all three, or desktop requests fail as if the server were down.
+- **The desktop app's origin is `app://scmjs`.** The web builds' origin is
+  `https://scmjs.dev`, the stable editor and the nightly alike (the nightly used to be at
+  `https://nightly.editor.scmjs.dev`). Your server's CORS settings need to allow both, or
+  desktop requests fail as if the server were down.
 - **Open a sign-in popup blank, then point it.** A link opens in the user's real browser,
   which cannot post a session back. Open an empty named window
   (`window.open("", "my-plugin-signin", "width=540,height=720")`) and set its

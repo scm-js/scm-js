@@ -530,13 +530,13 @@ version is cut:
 | channel | trigger | what lands |
 | --- | --- | --- |
 | `ci` | every push to `main`, and every pull request against it | lint, the tests (vitest and the browser tests) and the web bundle, built and thrown away. Nothing is deployed and nothing is released. A pull request's run is read-only and does not publish the plugin typings. |
-| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus that zip unpacked onto `nightly.editor.scmjs.dev`. |
+| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus the same commit built for `/nightly/` and served at `scmjs.dev/nightly`. |
 | `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `scmjs.dev/editor`, and the docs site. |
 
 The cron exits early when `main` has not moved since the last nightly. The nightly is
 updated in place: its `nightly` tag is force-moved and its assets replaced, never deleted
 and recreated, so there is one prerelease in the list however many nights run. Its notes
-link `nightly.editor.scmjs.dev`, which is that same build running, so the release page is
+link `scmjs.dev/nightly`, which is that same commit running, so the release page is
 somewhere to try it from as well as somewhere to download it from.
 
 ### Download links
@@ -626,7 +626,7 @@ prerelease identifiers as strings.
 | | deployed by | from |
 | --- | --- | --- |
 | `scmjs.dev/editor` | the `pages` job, on a tag | GitHub Pages on this repository, built for the `/editor/` path (the `PAGES_BASE` repository variable) and served there by a Cloudflare Worker in front of it |
-| `nightly.editor.scmjs.dev` | the `nightly-site` job, each nightly | one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch, carrying `CNAME` |
+| `scmjs.dev/nightly` | the `nightly-site` job, each nightly | the same commit built for the `/nightly/` path (the `NIGHTLY_BASE` repository variable) with `SCMJS_SITE=nightly`, in the `nightly/` folder of one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch, served there by the Cloudflare Worker; the branch's root keeps the old `nightly.editor.scmjs.dev` address sending people on, and its `moved.html` hands their settings over |
 | `docs.scmjs.dev` | the `docs` job, on a tag | the same shape, on `scm-js/docs` |
 
 The hosted editor is a release like every other way of running the editor: the site, the

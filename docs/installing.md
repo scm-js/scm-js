@@ -12,9 +12,11 @@ nothing to install. Your maps stay on your own disk, and nothing is sent anywher
 you use a network feature: a copy kept on your scmjs.dev account, a map you share for
 others to edit with you, or a question for the AI, all described in the user guide.
 
-[nightly.editor.scmjs.dev](https://nightly.editor.scmjs.dev) is rebuilt every night from
-the latest changes, for trying what is in development. Being a separate site, it keeps
-its own settings and asks for the graphics again.
+[scmjs.dev/nightly](https://scmjs.dev/nightly/) is rebuilt every night from the latest
+changes, for trying what is in development. It keeps its own settings, plugins and sign-in,
+apart from the stable editor's, and asks for the graphics once. It used to be at
+`nightly.editor.scmjs.dev`, which now sends you on, and its settings come with you the first
+time.
 
 The hosted editor, the nightly and the documentation site count visits with Cloudflare
 Web Analytics (no cookies, and nothing about your maps). The desktop app and a copy you

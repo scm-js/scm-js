@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -421,6 +421,34 @@ export interface PluginMapButtonEntry {
 
 /** `ui.mapButton`: the buttons in the map's bottom-right row, in the order added. */
 export const pluginMapButtonsAtom = atom<PluginMapButtonEntry[]>([]);
+
+/* ── Map views ──────────────────────────────────────────── */
+
+/**
+ * One `ui.mapView`: another way to look at a map, in the map's place. `element` is made once
+ * and given to the plugin's `mount`; `PluginMapViews` puts it in the page the first time the
+ * view is shown and never moves it again (an iframe moved in the page loads again).
+ */
+export interface PluginMapViewEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: MapViewSpec;
+  element: HTMLElement | null;
+}
+
+export const pluginMapViewsAtom = atom<PluginMapViewEntry[]>([]);
+
+/**
+ * Per open map (`DocumentSlot.id`, or -1 when there is a map and no slot): the views it
+ * offers, by entry key in the order offered, and the one it shows (absent: the map itself).
+ * One shown at a time by construction. Pruned when a map closes or a view goes.
+ */
+export interface MapViewState {
+  offered: ReadonlyMap<number, readonly number[]>;
+  shown: ReadonlyMap<number, number>;
+}
+
+export const mapViewStateAtom = atom<MapViewState>({ offered: new Map(), shown: new Map() });
 
 /* ── Build steps ────────────────────────────────────────── */
 

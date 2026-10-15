@@ -17,16 +17,17 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom, objectEditRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentsAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom, objectEditRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, viewOnlyAtom, viewOnlyMessage, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { claimBadge, locateClaims } from "./claims";
+import { offerMapView, pruneMapViews, showMapView } from "./mapViews";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox,
 } from "../atoms/pluginAtoms";
@@ -113,7 +114,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewHandle, type MapViewSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1400,6 +1401,81 @@ export function addMapButton(store: Store, bag: Contributions, info: PluginInfo,
   return handle;
 }
 
+/** The map a map view's state is kept under: the one in front, or -1 when there is a map and no slot. */
+const mapViewDocument = (store: Store): number => store.get(activeDocumentIdAtom) ?? -1;
+
+/**
+ * `ui.mapView`: one element for the view's life, made here and handed to `spec.mount`; the
+ * state of which map offers and shows it is `mapViewStateAtom`'s, pruned as maps close.
+ */
+export function addMapView(store: Store, bag: Contributions, info: PluginInfo, spec: MapViewSpec): MapViewHandle {
+  if (!spec || typeof spec.title !== "string" || typeof spec.mount !== "function") throw new Error("ui.mapView needs a title and mount().");
+  const key = nextContributionKey();
+  const element = typeof document === "undefined" ? null : document.createElement("div");
+  if (element) element.className = "plugin-map-view-body";
+  let unmount: (() => void) | null = null;
+  if (element) {
+    try { const r = spec.mount(element); if (typeof r === "function") unmount = r; }
+    catch (err) { logError(info.name, "A map view's mount failed", err); }
+  }
+  store.set(pluginMapViewsAtom, [...store.get(pluginMapViewsAtom), { key, plugin: info, spec: { ...spec }, element }]);
+  let live = true;
+  const listeners = new Set<(shown: boolean) => void>();
+  const isShown = () => live && store.get(mapViewStateAtom).shown.get(mapViewDocument(store)) === key;
+  let was = false;
+  const tell = () => {
+    const now = isShown();
+    if (now === was) return;
+    was = now;
+    for (const l of listeners) { try { l(now); } catch (err) { logError(info.name, "A map view's onChange listener failed", err); } }
+  };
+  const docOf = (documentId?: number): number | null => {
+    if (documentId === undefined) return mapViewDocument(store);
+    if (store.get(documentsAtom).some((d) => d.id === documentId)) return documentId;
+    logWarn(info.name, `ui.mapView: no open map has the id ${documentId}`);
+    return null;
+  };
+  const prune = () => {
+    const ids = new Set(store.get(documentsAtom).map((d) => d.id));
+    if (store.get(activeDocumentIdAtom) === null) ids.add(-1);
+    const keys = new Set(store.get(pluginMapViewsAtom).map((e) => e.key));
+    const state = store.get(mapViewStateAtom), next = pruneMapViews(state, ids, keys);
+    if (next !== state) store.set(mapViewStateAtom, next);
+  };
+  const unsubs = [store.sub(mapViewStateAtom, tell), store.sub(activeDocumentIdAtom, tell), store.sub(documentsAtom, prune)];
+  const handle: MapViewHandle = {
+    offer: (on, documentId) => {
+      const doc = live ? docOf(documentId) : null;
+      if (doc !== null) store.set(mapViewStateAtom, offerMapView(store.get(mapViewStateAtom), doc, key, on));
+    },
+    show: (on, documentId) => {
+      const doc = live ? docOf(documentId) : null;
+      if (doc === null) return;
+      const state = store.get(mapViewStateAtom);
+      // Hiding the view shows the map, but only where this view was the one shown.
+      if (!on && state.shown.get(doc) !== key) return;
+      store.set(mapViewStateAtom, showMapView(state, doc, on ? key : null));
+    },
+    isShown,
+    onChange: (listener) => {
+      listeners.add(listener);
+      return { dispose: () => { listeners.delete(listener); } };
+    },
+    dispose: () => {
+      if (!live) return;
+      live = false;
+      for (const u of unsubs) u();
+      store.set(pluginMapViewsAtom, store.get(pluginMapViewsAtom).filter((e) => e.key !== key));
+      prune();
+      listeners.clear();
+      try { unmount?.(); } catch (err) { logError(info.name, "A map view's unmount failed", err); }
+      element?.remove();
+    },
+  };
+  bag.add(() => handle.dispose());
+  return handle;
+}
+
 /** `api.document.buildSteps.add`: kept on `pluginBuildStepsAtom`, in activation order, until disposed or the plugin goes. */
 export function addBuildStep(store: Store, bag: Contributions, info: PluginInfo, spec: BuildStepSpec): Disposable {
   if (!spec || typeof spec.id !== "string" || !spec.id || typeof spec.applies !== "function" || typeof spec.run !== "function") throw new Error("buildSteps.add needs an id, applies() and run().");
@@ -2295,6 +2371,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       statusItem: (spec) => addStatusItem(store, bag, info, spec),
       mapButton: (spec) => addMapButton(store, bag, info, spec),
+      mapView: (spec) => addMapView(store, bag, info, spec),
       dialogSlot: (dialog, spec) => {
         const key = nextContributionKey();
         store.set(pluginDialogSlotsAtom, [...store.get(pluginDialogSlotsAtom), { key, plugin: info, dialog, spec }]);

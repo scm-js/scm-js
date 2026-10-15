@@ -33,6 +33,7 @@ import Toasts from "./components/chrome/Toasts";
 import { LeftDock, RightDock } from "./components/panels/Docks";
 import { BottomDockedPluginPanels } from "./components/panels/PluginPanels";
 import MapViewport from "./components/viewport/MapViewport";
+import PluginMapViews from "./components/viewport/PluginMapViews";
 import DialogHost from "./components/dialogs/DialogHost";
 import SplashScreen from "./components/splash/SplashScreen";
 import { removeBootSplash } from "./components/splash/bootSplash";
@@ -174,7 +175,11 @@ export default function App() {
               {panels.palette && !viewOnly && <LeftDock />}
               {/* The map, and under it the strip plugins dock along its width (`dock: "bottom"`). */}
               <div className="map-column">
-                <Guarded surface="map view"><MapViewport /></Guarded>
+                {/* The map, and laid over it the plugins' other views of it (`ui.mapView`) with the switch between them. */}
+                <div className="map-stack">
+                  <Guarded surface="map view"><MapViewport /></Guarded>
+                  <Guarded surface="plugin map views"><PluginMapViews /></Guarded>
+                </div>
                 <Guarded surface="plugin panels"><BottomDockedPluginPanels /></Guarded>
               </div>
               {rightVisible && <RightDock />}

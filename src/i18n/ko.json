@@ -1816,6 +1816,7 @@
   "Units are drawn as player-coloured markers until the editor has the game's unit files.": "에디터에 게임의 유닛 파일이 있을 때까지 유닛은 플레이어 색 표시자로 그려집니다.",
   "No tileset graphics.": "타일셋 그래픽이 없습니다.",
   "Terrain is drawn as flat colour until the editor has the game's tileset files.": "에디터에 게임의 타일셋 파일이 있을 때까지 지형은 단색으로 그려집니다.",
+  "Ways to look at this map": "이 맵을 보는 방법",
   "loading tileset…": "타일셋 불러오는 중…",
   "drag a rectangle": "사각형을 드래그하세요",
   "click a tile": "타일을 클릭하세요",

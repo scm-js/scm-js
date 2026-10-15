@@ -263,9 +263,57 @@
   display: flex;
   flex-direction: column;
 }
-.map-column > .viewport {
+.map-column > .viewport,
+.map-stack > .viewport {
   min-height: 0;
 }
+/* The map's area: the map, with a plugin's other view of it (`ui.mapView`) laid over it whole. */
+.map-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.plugin-map-view {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: var(--bg-0);
+  overflow: hidden;
+}
+.plugin-map-view[hidden] { display: none; }
+.plugin-map-view-body {
+  position: absolute;
+  inset: 0;
+}
+/* Map | a plugin's view: over the top-left of the area, past the rulers, in the HUD chips' look. */
+.map-view-switch {
+  position: absolute;
+  top: 26px;
+  left: 26px;
+  z-index: 5;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(10, 12, 16, 0.8);
+  backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-pop);
+}
+.map-view-switch button {
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.map-view-switch button + button { border-left: 1px solid var(--border); }
+.map-view-switch button:hover { background: var(--bg-4); color: var(--text); }
+.map-view-switch button.active { background: var(--sel); color: var(--text); }
+.map-view-switch button:focus-visible { outline: none; box-shadow: var(--focus); }
 
 /* ── Status bar ─────────────────────────────────────────── */
 

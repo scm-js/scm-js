@@ -2812,6 +2812,41 @@ export interface FileTypeSpec {
   open(files: File[]): void | Promise<void>;
 }
 
+/**
+ * Another way to look at a map, shown where the map is drawn (`ui.mapView`): a replay's
+ * game played out, a 3D view, a picture of something else entirely. The editor gives the
+ * view one element for its whole life and never moves it — an iframe in it is not loaded
+ * again when the view is hidden and shown — and lays it over the map, rulers and all.
+ */
+export interface MapViewSpec {
+  /** What the switch over the map calls it ("Game"). The map itself is "Map". */
+  title: string;
+  /**
+   * Called once, with the element the view lives in. Fill it as you like; it is as large as
+   * the map's area and in the page from the first time the view is shown. Return a function
+   * to be called when the view goes (the plugin stops, or `dispose`).
+   */
+  mount(element: HTMLElement): void | (() => void);
+}
+
+export interface MapViewHandle extends Disposable {
+  /**
+   * Offer the view on a map (by `OpenDocumentInfo.id`; the one in front when left out), or
+   * stop offering it there. A map that offers views has a switch over it, the map's own
+   * view first. Nothing is offered until you say so.
+   */
+  offer(on: boolean, documentId?: number): void;
+  /** Show the view in that map's place (offering it there if it was not), or the map again. */
+  show(on: boolean, documentId?: number): void;
+  /** Whether the view is what the map in front shows now. */
+  isShown(): boolean;
+  /**
+   * Whether the view is shown changed for the map in front: the person used the switch,
+   * `show` was called, or another map came to the front.
+   */
+  onChange(listener: (shown: boolean) => void): Disposable;
+}
+
 export interface PanelHandle {
   close(): void;
   isOpen(): boolean;
@@ -3196,6 +3231,17 @@ export interface UiApi {
    * api.ui.fileType({ name: "StarCraft replay", extensions: [".rep"], open: (files) => loadReplays(files) });
    */
   fileType(spec: FileTypeSpec): Disposable;
+  /**
+   * Another way to look at the maps you choose, in the map's place, with a switch over the
+   * map between it and the map itself (see `MapViewSpec`). A map shows one view at a time;
+   * each map keeps the one it was left on. Ends with the plugin, or with `dispose`.
+   *
+   * @example
+   * const game = api.ui.mapView({ title: "Game", mount: (el) => { el.append(frame); } });
+   * // A map just opened is the one in front.
+   * if (await api.document.open(map, "replay.scx", { viewOnly: { label: "Replay" } })) game.show(true);
+   */
+  mapView(spec: MapViewSpec): MapViewHandle;
   /**
    * A cell of your own in the status bar. One line of text beside the plugin's icon, a
    * spinner while `busy`, a click. Keep the handle and `set` it as things move; it

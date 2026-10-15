@@ -244,10 +244,10 @@ const SPELLING = { Addon: "Add-on" };
 const words = (key) => SPELLING[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])(?=[a-z])/g, (_, c) => ` ${c.toLowerCase()}`);
 
 const MODES = {
-  last: "Only the last copy counts.",
-  overlay: "Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries.",
-  append: "Every copy counts: the records of all of them, in file order.",
-  first: "Only the first copy counts.",
+  last: "The last copy replaces the others.",
+  overlay: "Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries.",
+  append: "The copies are joined into one list: the records of all of them, in file order.",
+  first: "The first copy is used and the others are ignored.",
 };
 
 function layoutTable(rows) {

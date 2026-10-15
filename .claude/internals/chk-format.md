@@ -134,3 +134,14 @@ checklist) and hex examples for THG2, DD2, MRGN, FORC, PUNI and UNIx (`recordDum
 game-behaviour claims on the Protected maps page are the ones the reader, the registry's
 combine modes and the Repair plugin's findings already make; nothing new about the game was
 asserted, so the probe-map pass (melee/UMS reads, bad values, VCOD) is still owed.
+
+2026-09-28, seven more pictures from the same module: `chk-repeats.svg` (the three combine
+modes; its section lists come from `SECTION_SPECS`, so `chkDiagrams` now takes `defs`),
+`chk-doodad-layers.svg`, `chk-tile-lookup.svg` (schematic — no tileset pixels, which would be
+Blizzard art in the repository), and byte rulers for UNIT, THG2 and MRGN drawn from `LAYOUTS`
+(`recordRulerSvg`; each field needs a short label in `RULER_LABELS` or it throws) plus the
+trigger record from `CONDITION_FIELDS`/`ACTION_FIELDS`, which `docs/triggers.md` shows too.
+`chk-diagrams.mjs` and `chk-reference.mjs` import each other; that is safe only while neither
+uses the other's exports at module scope. Rendered to PNG for checking with Playwright's
+headless shell (`page.setContent(svg)` + element screenshot); labels that do not fit their box
+go under it with a leader, staggered.

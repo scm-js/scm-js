@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 432" width="760" height="432" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">What the game does with a second copy of a section</title>
+<desc id="d">Three ways the game combines repeated sections. For most, the last copy replaces the others. For the terrain, fog and location sections, each copy is written over the start of the same space, so a half-length second MTXM rewrites the top half of the map. For units, sprites, doodads, triggers and briefings, the copies are joined into one list.</desc>
+<rect width="760" height="432" rx="10" fill="#12151b"/>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa3b2"/></marker></defs>
+<text x="24" y="28" font-size="12" fill="#9aa3b2" text-anchor="start">In the file</text>
+<text x="400" y="28" font-size="12" fill="#9aa3b2" text-anchor="start">What the game has</text>
+<text x="24" y="58" font-size="14" fill="#e6e8ee" text-anchor="start" font-weight="600">The last copy replaces the others</text>
+<g opacity="0.45"><rect x="24" y="70" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="24" y="70" width="150" height="16" rx="5" fill="#2b313e"/><text x="32" y="82" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">DIM  (first copy)</text><text x="99" y="104" font-size="13" fill="#e6e8ee" text-anchor="middle">64 × 64</text></g>
+<g><rect x="194" y="70" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="194" y="70" width="150" height="16" rx="5" fill="#2b313e"/><text x="202" y="82" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">DIM  (second copy)</text><text x="269" y="104" font-size="13" fill="#e7c160" text-anchor="middle">128 × 96</text></g>
+<line x1="354" y1="93" x2="388" y2="93" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<rect x="400" y="70" width="150" height="46" rx="5" fill="#191d25" stroke="#e7c160" stroke-width="1.5"/>
+<text x="475" y="98" font-size="13" fill="#e7c160" text-anchor="middle" font-weight="600">128 × 96</text>
+<text x="566" y="90" font-size="12" fill="#e6e8ee" text-anchor="start">The first copy</text>
+<text x="566" y="106" font-size="12" fill="#e6e8ee" text-anchor="start">is ignored.</text>
+<text x="24" y="140" font-size="11" fill="#9aa3b2" text-anchor="start">Most sections: TYPE, VER, IVER, IVE2, VCOD, IOWN, OWNR, ERA and the rest.</text>
+<text x="24" y="182" font-size="14" fill="#e6e8ee" text-anchor="start" font-weight="600">Each copy is written over the start of the same space</text>
+<g><rect x="24" y="194" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="24" y="194" width="150" height="16" rx="5" fill="#2b313e"/><text x="32" y="206" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">MTXM  (whole map)</text><rect x="51" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="63" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="75" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="87" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="99" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="111" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="123" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="135" y="214" width="11" height="6" fill="#4f7fbf"/><rect x="51" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="63" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="75" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="87" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="99" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="111" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="123" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="135" y="221" width="11" height="6" fill="#4f7fbf"/><rect x="51" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="63" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="75" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="87" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="99" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="111" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="123" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="135" y="228" width="11" height="6" fill="#4f7fbf"/><rect x="51" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="63" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="75" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="87" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="99" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="111" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="123" y="235" width="11" height="6" fill="#4f7fbf"/><rect x="135" y="235" width="11" height="6" fill="#4f7fbf"/></g>
+<g><rect x="194" y="194" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="194" y="194" width="150" height="16" rx="5" fill="#2b313e"/><text x="202" y="206" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">MTXM  (half as long)</text><rect x="221" y="214" width="11" height="6" fill="#c9963c"/><rect x="233" y="214" width="11" height="6" fill="#c9963c"/><rect x="245" y="214" width="11" height="6" fill="#c9963c"/><rect x="257" y="214" width="11" height="6" fill="#c9963c"/><rect x="269" y="214" width="11" height="6" fill="#c9963c"/><rect x="281" y="214" width="11" height="6" fill="#c9963c"/><rect x="293" y="214" width="11" height="6" fill="#c9963c"/><rect x="305" y="214" width="11" height="6" fill="#c9963c"/><rect x="221" y="221" width="11" height="6" fill="#c9963c"/><rect x="233" y="221" width="11" height="6" fill="#c9963c"/><rect x="245" y="221" width="11" height="6" fill="#c9963c"/><rect x="257" y="221" width="11" height="6" fill="#c9963c"/><rect x="269" y="221" width="11" height="6" fill="#c9963c"/><rect x="281" y="221" width="11" height="6" fill="#c9963c"/><rect x="293" y="221" width="11" height="6" fill="#c9963c"/><rect x="305" y="221" width="11" height="6" fill="#c9963c"/></g>
+<line x1="354" y1="238" x2="388" y2="238" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<rect x="400" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="418" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="436" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="454" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="472" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="490" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="508" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="526" y="198" width="16" height="16" fill="#c9963c"/>
+<rect x="400" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="418" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="436" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="454" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="472" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="490" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="508" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="526" y="216" width="16" height="16" fill="#c9963c"/>
+<rect x="400" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="418" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="436" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="454" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="472" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="490" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="508" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="526" y="234" width="16" height="16" fill="#4f7fbf"/>
+<rect x="400" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="418" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="436" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="454" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="472" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="490" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="508" y="252" width="16" height="16" fill="#4f7fbf"/>
+<rect x="526" y="252" width="16" height="16" fill="#4f7fbf"/>
+<text x="560" y="214" font-size="12" fill="#e6e8ee" text-anchor="start">The second copy rewrites</text>
+<text x="560" y="230" font-size="12" fill="#e6e8ee" text-anchor="start">only the tiles it has bytes</text>
+<text x="560" y="246" font-size="12" fill="#e6e8ee" text-anchor="start">for: the top half. The rest</text>
+<text x="560" y="262" font-size="12" fill="#e6e8ee" text-anchor="start">is what the first copy left.</text>
+<text x="24" y="296" font-size="11" fill="#9aa3b2" text-anchor="start">Sections: MTXM, ISOM, TILE, MASK, MRGN.</text>
+<text x="24" y="334" font-size="14" fill="#e6e8ee" text-anchor="start" font-weight="600">The copies are joined into one list</text>
+<g><rect x="24" y="346" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="24" y="346" width="150" height="16" rx="5" fill="#2b313e"/><text x="32" y="358" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">TRIG</text><rect x="36" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="51" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#1</text><rect x="72" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="87" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#2</text><rect x="108" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="123" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#3</text></g>
+<g><rect x="194" y="346" width="150" height="46" rx="5" fill="#191d25" stroke="#4b5363"/><rect x="194" y="346" width="150" height="16" rx="5" fill="#2b313e"/><text x="202" y="358" font-size="11" fill="#e6e8ee" text-anchor="start" font-weight="600">TRIG</text><rect x="206" y="366" width="30" height="20" rx="3" fill="#c9963c"/><text x="221" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#4</text><rect x="242" y="366" width="30" height="20" rx="3" fill="#c9963c"/><text x="257" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#5</text></g>
+<line x1="354" y1="376" x2="388" y2="376" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<rect x="400" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="415" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#1</text>
+<rect x="436" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="451" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#2</text>
+<rect x="472" y="366" width="30" height="20" rx="3" fill="#4f7fbf"/><text x="487" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#3</text>
+<rect x="508" y="366" width="30" height="20" rx="3" fill="#c9963c"/><text x="523" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#4</text>
+<rect x="544" y="366" width="30" height="20" rx="3" fill="#c9963c"/><text x="559" y="380" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">#5</text>
+<text x="590" y="374" font-size="12" fill="#e6e8ee" text-anchor="start">One list of five triggers,</text>
+<text x="590" y="390" font-size="12" fill="#e6e8ee" text-anchor="start">in file order.</text>
+<text x="24" y="416" font-size="11" fill="#9aa3b2" text-anchor="start">Sections: UNIT, DD2, THG2, TRIG, MBRF.</text>
+</svg>

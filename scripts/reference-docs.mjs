@@ -68,7 +68,7 @@ for (const doc of DOCUMENTS) {
 
 // The files beside the CHK reference: written whole, compared whole.
 const defs = await chkDefs();
-const files = new Map([...chkDiagrams(), ["docs/chk.ksy", chkKaitai({ ...defs, ...(await load("data/triggerDefs.ts")) })]]);
+const files = new Map([...chkDiagrams(defs), ["docs/chk.ksy", chkKaitai({ ...defs, ...(await load("data/triggerDefs.ts")) })]]);
 for (const [file, content] of files) {
   const path = join(root, file);
   let before = null;

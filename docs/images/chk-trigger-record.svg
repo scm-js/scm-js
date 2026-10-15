@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 548" width="760" height="548" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">The trigger record, byte by byte</title>
+<desc id="d">A trigger is 2400 bytes: 16 conditions of 20 bytes, 64 actions of 32 bytes, 4 bytes of flags, 27 bytes saying which players and groups it runs for, and one byte the game uses while it runs. Below, where each field of a condition and an action is.</desc>
+<rect width="760" height="548" rx="10" fill="#12151b"/>
+<text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">A trigger, 2400 bytes</text>
+<rect x="24" y="58" width="93.43" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="53" font-size="10" fill="#9aa3b2" text-anchor="start">0</text>
+<text x="71.47" y="79" font-size="11.5" fill="#e6e8ee" text-anchor="middle">16 conditions</text>
+<rect x="118.93" y="58" width="606.07" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="120.93" y="53" font-size="10" fill="#9aa3b2" text-anchor="start">320</text>
+<text x="422.72" y="79" font-size="11.5" fill="#e6e8ee" text-anchor="middle">64 actions × 32 bytes</text>
+<rect x="726.51" y="58" width="7.99" height="34" fill="#e7c160" stroke="#4b5363"/>
+<text x="728.51" y="53" font-size="10" fill="#9aa3b2" text-anchor="start">2368</text>
+<path d="M726.51,92 L24,118 M736,92 L736,118" stroke="#9aa3b2" stroke-width="0.8" fill="none" stroke-dasharray="3 3"/>
+<rect x="24" y="134" width="87.5" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="129" font-size="10" fill="#9aa3b2" text-anchor="start">2368</text>
+<text x="68.5" y="155" font-size="11" fill="#e6e8ee" text-anchor="middle">flags</text>
+<rect x="113" y="134" width="599.25" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="115" y="129" font-size="10" fill="#9aa3b2" text-anchor="start">2372</text>
+<text x="413.38" y="155" font-size="11" fill="#e6e8ee" text-anchor="middle">players and groups, one byte each</text>
+<rect x="713.75" y="134" width="20.75" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="715.75" y="129" font-size="10" fill="#9aa3b2" text-anchor="start">2399</text>
+<line x1="724.88" y1="168" x2="724.88" y2="174" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="724.88" y="184" font-size="10.5" fill="#e6e8ee" text-anchor="middle">running</text>
+<text x="24" y="231" font-size="13" fill="#e6e8ee" text-anchor="start" font-weight="600">One condition, 20 bytes</text>
+<rect x="24" y="257" width="140.9" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">0</text>
+<text x="95.2" y="278" font-size="11" fill="#e6e8ee" text-anchor="middle">location</text>
+<rect x="166.4" y="257" width="140.9" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="168.4" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">4</text>
+<text x="237.6" y="278" font-size="11" fill="#e6e8ee" text-anchor="middle">player</text>
+<rect x="308.8" y="257" width="140.9" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="310.8" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">8</text>
+<text x="380" y="278" font-size="11" fill="#e6e8ee" text-anchor="middle">amount</text>
+<rect x="451.2" y="257" width="69.7" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="453.2" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">12</text>
+<text x="486.8" y="278" font-size="11" fill="#e6e8ee" text-anchor="middle">unit type</text>
+<rect x="522.4" y="257" width="34.1" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="524.4" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">14</text>
+<rect x="558" y="257" width="34.1" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="560" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">15</text>
+<rect x="593.6" y="257" width="34.1" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="595.6" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">16</text>
+<rect x="629.2" y="257" width="34.1" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="631.2" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">17</text>
+<rect x="664.8" y="257" width="69.7" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="666.8" y="252" font-size="10" fill="#9aa3b2" text-anchor="start">18</text>
+<text x="700.4" y="278" font-size="11" fill="#e6e8ee" text-anchor="middle">mask</text>
+<line x1="540.2" y1="291" x2="540.2" y2="297" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="540.2" y="307" font-size="10.5" fill="#e6e8ee" text-anchor="middle">comparison</text>
+<line x1="575.8" y1="291" x2="575.8" y2="312" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="575.8" y="322" font-size="10.5" fill="#e6e8ee" text-anchor="middle">condition</text>
+<line x1="611.4" y1="291" x2="611.4" y2="327" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="611.4" y="337" font-size="10.5" fill="#e6e8ee" text-anchor="middle">resource / switch</text>
+<line x1="647" y1="291" x2="647" y2="297" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="647" y="307" font-size="10.5" fill="#e6e8ee" text-anchor="middle">flags</text>
+<text x="24" y="372" font-size="13" fill="#e6e8ee" text-anchor="start" font-weight="600">One action, 32 bytes</text>
+<rect x="24" y="398" width="176.5" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="393" font-size="10" fill="#9aa3b2" text-anchor="start">0</text>
+<text x="113" y="419" font-size="11" fill="#e6e8ee" text-anchor="middle">location</text>
+<rect x="202" y="398" width="176.5" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="204" y="393" font-size="10" fill="#9aa3b2" text-anchor="start">4</text>
+<text x="291" y="419" font-size="11" fill="#e6e8ee" text-anchor="middle">text</text>
+<rect x="380" y="398" width="176.5" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="382" y="393" font-size="10" fill="#9aa3b2" text-anchor="start">8</text>
+<text x="469" y="419" font-size="11" fill="#e6e8ee" text-anchor="middle">sound</text>
+<rect x="558" y="398" width="176.5" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="560" y="393" font-size="10" fill="#9aa3b2" text-anchor="start">12</text>
+<text x="647" y="419" font-size="11" fill="#e6e8ee" text-anchor="middle">time</text>
+<rect x="24" y="454" width="176.5" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">16</text>
+<text x="113" y="475" font-size="11" fill="#e6e8ee" text-anchor="middle">player</text>
+<rect x="202" y="454" width="176.5" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="204" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">20</text>
+<text x="291" y="475" font-size="11" fill="#e6e8ee" text-anchor="middle">second player, amount, …</text>
+<rect x="380" y="454" width="87.5" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="382" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">24</text>
+<text x="424.5" y="475" font-size="11" fill="#e6e8ee" text-anchor="middle">unit type</text>
+<rect x="469" y="454" width="43" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="471" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">26</text>
+<rect x="513.5" y="454" width="43" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="515.5" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">27</text>
+<rect x="558" y="454" width="43" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="560" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">28</text>
+<text x="580.25" y="475" font-size="11" fill="#e6e8ee" text-anchor="middle">flags</text>
+<rect x="602.5" y="454" width="43" height="34" fill="#1b1e25" stroke="#4b5363"/>
+<text x="604.5" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">29</text>
+<rect x="647" y="454" width="87.5" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="649" y="449" font-size="10" fill="#9aa3b2" text-anchor="start">30</text>
+<text x="691.5" y="475" font-size="11" fill="#e6e8ee" text-anchor="middle">mask</text>
+<line x1="491.25" y1="488" x2="491.25" y2="494" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="491.25" y="504" font-size="10.5" fill="#e6e8ee" text-anchor="middle">action</text>
+<line x1="535.75" y1="488" x2="535.75" y2="509" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="535.75" y="519" font-size="10.5" fill="#e6e8ee" text-anchor="middle">count / modifier</text>
+<line x1="624.75" y1="488" x2="624.75" y2="494" stroke="#9aa3b2" stroke-width="0.8"/>
+<text x="624.75" y="504" font-size="10.5" fill="#e6e8ee" text-anchor="middle">unused</text>
+</svg>

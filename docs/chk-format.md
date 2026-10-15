@@ -46,19 +46,22 @@ text.
 ### Repeated sections
 
 The game reads the sections one after another into fixed places in memory, so a section
-that appears twice is not simply replaced by its second copy. Each section's page says
-which of these applies to it:
+that appears twice is not always replaced by its second copy. It is handled in one of
+three ways, depending on the section, and each section's page says which:
 
-- **Only the last copy counts.** Most sections. For the string table, a copy too short
-  to hold its string count (under 2 bytes) is passed over: it does not count and does not
-  replace the copy before it.
-- **Every copy is written over the start of the same fixed-size space**, in file order, so
-  a later copy replaces only as many bytes as it carries. A second `MTXM` half the size of
-  the map rewrites the top half of the terrain and leaves the bottom as the first copy had
-  it. The terrain sections, the fog and the locations work this way.
-- **Every copy counts.** The records of all of them are one list, in file order: two
-  `TRIG` sections are one longer trigger list. Units, sprites, doodads, triggers and
-  briefings work this way.
+- **The last copy replaces the others.** Most sections: with two `DIM` sections the map
+  has the size the second one gives. For the string table, a copy too short to hold its
+  string count (under 2 bytes) is passed over: it does not replace the copy before it.
+- **Each copy is written over the start of the same space.** The terrain sections, the fog
+  and the locations: the space has a fixed size and the copies go into it in file order,
+  so a later copy replaces only as many bytes as it carries. A second `MTXM` half the size
+  of the map rewrites the top half of the terrain and leaves the bottom as the first copy
+  had it.
+- **The copies are joined into one list.** Units, sprites, doodads, triggers and
+  briefings: the records of all the copies, in file order, so two `TRIG` sections are one
+  longer trigger list.
+
+![The three ways the game combines a repeated section](images/chk-repeats.svg)
 
 ### Odd lengths
 
@@ -82,7 +85,7 @@ missing file list or a renamed scenario; those are in
 
 | What the file does | What the game does | What a reader has to do |
 | --- | --- | --- |
-| Repeats a section | Combines the copies by the section's rule: only the last counts, every copy's records count, or each copy is written over the start of one fixed space ([Repeated sections](#repeated-sections)) | Keep every copy in file order and combine them by the same rule. A reader that takes the first copy, or the last, sees a decoy wherever the rule is a different one. |
+| Repeats a section | Combines the copies by the section's rule: the last replaces the others, each is written over the start of one fixed space, or the copies are joined into one list ([Repeated sections](#repeated-sections)) | Keep every copy in file order and combine them by the same rule. A reader that takes the first copy, or the last, sees a decoy wherever the rule is a different one. |
 | Gives a terrain, fog or location section a copy shorter than the section's size | Writes it over the start of the space, leaving the rest as it was: zeros, or what an earlier copy wrote | Start from a zeroed space of the full size and write every copy over it in turn. |
 | Gives a section more bytes than the game reads | Reads what it needs and ignores the rest | Read only the size the section's page gives. |
 | Ends a record section in part of a record | Reads the whole records | Drop the remainder. |
@@ -100,7 +103,7 @@ missing file list or a renamed scenario; those are in
 | [`IVER`](#iver), [`IVE2`](#ive2), [`IOWN`](#iown), [`UPUS`](#upus), [`SWNM`](#swnm), [`WAV`](#wav) | Leaves them out | Only editors read these either. The switch names and the list of sounds are gone; the sounds themselves stay in the archive, and the trigger actions that play them still name them. |
 | [`STR`](#str) | Adds a 1-byte copy after the real string table | The game passes over a copy too short to hold its string count and reads the real table. A reader that takes the last copy finds no text, and a file saved with only that copy no longer loads: Remastered says the scenario is intended for an expansion set. |
 | [`MTXM`](#mtxm), [`MASK`](#mask), [`MRGN`](#mrgn) | Splits them into several copies, some of them short or full of junk | Only the combined result counts: each copy written over the one before, in file order. A copy of junk followed by a full copy of the real terrain draws the real terrain. |
-| [`UNIT`](#unit), [`THG2`](#thg2), [`TRIG`](#trig), [`MBRF`](#mbrf) | Splits the records across several copies | Every copy's records count, in file order. A reader that keeps only one copy loses units or triggers. |
+| [`UNIT`](#unit), [`THG2`](#thg2), [`TRIG`](#trig), [`MBRF`](#mbrf) | Splits the records across several copies | The copies are joined into one list, in file order. A reader that keeps only one copy loses units or triggers. |
 | [`STR`](#str) | Makes strings overlap, share bytes, or start inside the offset table | A string is whatever lies between its offset and the next 0 byte. Read each one from its own offset and assume nothing about where it sits. An editor that writes the table back has to lay the strings out afresh. |
 | [`ERA`](#era) | Sets bits above the low three | Only the low three bits pick the tileset. |
 | Any fixed-size section | Makes it longer than its size | The game reads the size it needs; the rest can hold anything. |
@@ -240,7 +243,7 @@ Which game the file is for. It goes with [`VER`](#ver): see [Revisions](#revisio
 | Size | 4 bytes. |
 | Read by | The game. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -261,7 +264,7 @@ The file's revision, which decides which sections the game reads. The values are
 | Size | 2 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -282,7 +285,7 @@ of the maps it writes now, and so does a new map made in the editor.
 | Size | 2 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -302,7 +305,7 @@ StarEdit's version stamp. The game does not read it.
 | Size | 2 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -324,7 +327,7 @@ map made in the editor gets them too.
 | Size | 1040 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -359,7 +362,7 @@ editor writes both the same, and Check Map warns when a file's two disagree.
 | Size | 12 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -380,7 +383,7 @@ neutral one, or nobody. Players 9 to 12 are normally Neutral or Inactive.
 | Size | 12 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -413,7 +416,7 @@ The tileset. Only the low three bits count; the rest are ignored.
 | Size | 2 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -446,7 +449,7 @@ tiles.
 | Size | 4 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -472,7 +475,7 @@ StarCraft: Remastered.)
 | Size | 12 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -505,7 +508,7 @@ group, 0 to 15.
 | Size | 2 bytes per tile: width × height × 2. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -529,6 +532,8 @@ A megatile is a 32 × 32 picture made of sixteen 8 × 8 minitiles, and leads to 
 as [Game data](game-data.md#how-terrain-is-drawn) describes. Walkability and height are
 kept per minitile, in the VF4 file.
 
+![From a tile number through the CV5, VX4, VR4 and WPE files to pixels](images/chk-tile-lookup.svg)
+
 A doodad's group keeps other things where terrain groups keep their links: the sprite or
 unit drawn over it at offset 4, its name in `stat_txt.tbl` at 8, its number in the
 tileset's doodad list (the number a [`DD2`](#dd2) record stores) at 12, and its width and
@@ -547,7 +552,7 @@ answer per unit type.
 | Size | 5700 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -595,7 +600,7 @@ instead.
 | Size | 1748 bytes. |
 | Read by | The game. |
 | Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -620,7 +625,7 @@ Whether each player may research each ability, and whether they start with it, f
 | Size | 912 bytes. |
 | Read by | The game. |
 | Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -646,13 +651,15 @@ the hit points alone.
 The units of a human player slot nobody takes are removed when the game starts; Neutral
 units stay. (Found playing StarCraft: Remastered.)
 
+![The unit record, byte by byte](images/chk-unit-record.svg)
+
 <!-- generated: section UNIT -->
 | Name | `UNIT` (55 4E 49 54) |
 | --- | --- |
 | Size | 36 bytes per unit. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy counts: the records of all of them, in file order. |
+| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each unit:
@@ -750,7 +757,7 @@ in those terms, and each claim about real files was checked against Blizzard's o
 | Size | (width ÷ 2 + 1) × (height + 1) × 8 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each rect:
@@ -1065,7 +1072,7 @@ to put the ground back when a doodad is removed.
 | Size | 2 bytes per tile: width × height × 2. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1081,7 +1088,7 @@ read it: the game sees a doodad as its tiles in [`MTXM`](#mtxm) and its sprite i
 | Size | 8 bytes per doodad. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Every copy counts: the records of all of them, in file order. |
+| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each doodad:
@@ -1107,6 +1114,8 @@ Each doodad:
 ```
 <!-- /generated -->
 
+![One doodad as TILE, MTXM, DD2 and THG2 hold it](images/chk-doodad-layers.svg)
+
 This record is all an editor has to say a doodad is there. What the game shows comes from
 elsewhere: the doodad's tiles are written into [`MTXM`](#mtxm), where the game draws them,
 while [`TILE`](#tile) keeps the ground they cover so an editor can put it back when the
@@ -1123,13 +1132,15 @@ a tree top, a glow, a doodad's overlay. Without that flag the record is a unit s
 the game creates a unit of that type when the map loads; that is how StarEdit places the
 Installation's doors and traps. Flag 0x8000 starts such a unit disabled.
 
+![The sprite record, byte by byte](images/chk-sprite-record.svg)
+
 <!-- generated: section THG2 -->
 | Name | `THG2` (54 48 47 32) |
 | --- | --- |
 | Size | 10 bytes per sprite. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy counts: the records of all of them, in file order. |
+| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each sprite:
@@ -1190,7 +1201,7 @@ plays fully fogged.
 | Size | 1 byte per tile: width × height. |
 | Read by | The game. |
 | Required | No. |
-| More than one copy | Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1223,7 +1234,7 @@ is in [Opening and saving maps](file-formats.md#what-the-editor-does-with-it).
 | Size | Whatever the text needs. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. A copy shorter than 2 bytes does not count and does not replace an earlier one. |
+| More than one copy | The last copy replaces the others. A copy shorter than 2 bytes does not count and does not replace an earlier one. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1317,7 +1328,7 @@ does not need `STR`.
 | Size | Whatever the text needs. |
 | Read by | The game. |
 | Required | In place of `STR ` on a Remastered map that uses it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1342,7 +1353,7 @@ applied when its bit is set, so a slot can set the hit points alone.
 | Size | 1280 bytes: 64 slots of 20. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each slot:
@@ -1392,7 +1403,7 @@ Which of the 64 [`UPRP`](#uprp) slots StarEdit considers in use. The game does n
 | Size | 64 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1412,13 +1423,15 @@ The elevation word works the other way round from how StarEdit shows it: a set b
 such as [Bring](triggers.md#bring) only count units on the elevations the location
 covers.
 
+![The location record, byte by byte](images/chk-location-record.svg)
+
 <!-- generated: section MRGN -->
 | Name | `MRGN` (4D 52 47 4E) |
 | --- | --- |
 | Size | 20 bytes per location. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each location:
@@ -1467,13 +1480,15 @@ The triggers, 2400 bytes each, in the order they run. The record is laid out in 
 [trigger reference](triggers.md#the-trigger-record), which also has a page for every
 condition and action.
 
+![The trigger record, byte by byte](images/chk-trigger-record.svg)
+
 <!-- generated: section TRIG -->
 | Name | `TRIG` (54 52 49 47) |
 | --- | --- |
 | Size | 2400 bytes per trigger. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy counts: the records of all of them, in file order. |
+| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each trigger:
@@ -1494,7 +1509,7 @@ The mission briefings, in the same 2400-byte record as a trigger, with their own
 | Size | 2400 bytes per briefing. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Every copy counts: the records of all of them, in file order. |
+| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each briefing:
@@ -1514,7 +1529,7 @@ The scenario's name and description, as string numbers.
 | Size | 4 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1536,7 +1551,7 @@ settings. Players 9 to 12 are in no force.
 | Size | 20 bytes. |
 | Read by | The game. |
 | Required | Yes. The game does not load a map without it. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1595,7 +1610,7 @@ string number of its sound itself, not a place in this list.
 | Size | 2048 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1617,7 +1632,7 @@ reads [`UNIx`](#unix) instead.
 | Size | 4048 bytes. |
 | Read by | The game. |
 | Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1648,7 +1663,7 @@ a cost for its first level and an amount added for each level after. Brood War r
 | Size | 598 bytes. |
 | Read by | The game. |
 | Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1675,7 +1690,7 @@ Brood War reads [`TECx`](#tecx) instead.
 | Size | 216 bytes. |
 | Read by | The game. |
 | Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1700,7 +1715,7 @@ the switches' numbers.
 | Size | 1024 bytes. |
 | Read by | Editors only. The game skips it. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1721,7 +1736,7 @@ The colour of each of Players 1 to 8. StarCraft: Remastered can override it with
 | Size | 8 bytes. |
 | Read by | The game. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1766,7 +1781,7 @@ Layout:
 | Size | 2318 bytes. |
 | Read by | The game. |
 | Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1790,7 +1805,7 @@ Layout:
 | Size | 1672 bytes. |
 | Read by | The game. |
 | Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1814,7 +1829,7 @@ Layout:
 | Size | 4168 bytes. |
 | Read by | The game. |
 | Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1868,7 +1883,7 @@ the first.
 | Size | 794 bytes. |
 | Read by | The game. |
 | Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1895,7 +1910,7 @@ Layout:
 | Size | 396 bytes. |
 | Read by | The game. |
 | Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1922,7 +1937,7 @@ reads.
 | Size | 32 bytes. |
 | Read by | The game. |
 | Required | No. |
-| More than one copy | Only the last copy counts. |
+| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:

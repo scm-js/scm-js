@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 122" width="760" height="122" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">A location, byte by byte</title>
+<desc id="d">The 20-byte MRGN record drawn to scale: four 32-bit edges, then the name and the elevations.</desc>
+<rect width="760" height="122" rx="10" fill="#12151b"/>
+<text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">A location, 20 bytes</text>
+<rect x="24" y="62" width="140.9" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="26" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">0</text>
+<text x="95.2" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">left</text>
+<rect x="166.4" y="62" width="140.9" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="168.4" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">4</text>
+<text x="237.6" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">top</text>
+<rect x="308.8" y="62" width="140.9" height="34" fill="#26402f" stroke="#4b5363"/>
+<text x="310.8" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">8</text>
+<text x="380" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">right</text>
+<rect x="451.2" y="62" width="140.9" height="34" fill="#44331f" stroke="#4b5363"/>
+<text x="453.2" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">12</text>
+<text x="522.4" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">bottom</text>
+<rect x="593.6" y="62" width="69.7" height="34" fill="#23324a" stroke="#4b5363"/>
+<text x="595.6" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">16</text>
+<text x="629.2" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">name</text>
+<rect x="664.8" y="62" width="69.7" height="34" fill="#35294a" stroke="#4b5363"/>
+<text x="666.8" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">18</text>
+<text x="700.4" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">elevations</text>
+</svg>

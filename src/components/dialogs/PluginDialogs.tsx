@@ -5,7 +5,7 @@ import DialogFrame from "../ui/DialogFrame";
 import { Button, Check, Tabs, TextInput } from "../ui";
 import type { DialogProps } from "./DialogHost";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
-import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, pluginUpdatesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime, type PluginUpdateAnswer } from "../../atoms/pluginAtoms";
+import { installedPluginsAtom, pluginCodeAtom, pluginRuntimesAtom, pluginUpdatesAtom, registryCacheAtom, registryStateAtom, userRegistriesAtom, type PluginRuntime } from "../../atoms/pluginAtoms";
 import { checkForUpdate, deactivatePlugin, describePlugin, effectiveInstalls, enableWithRequirements, inspectPlugin, installPlugin, isPluginActive, manifestLookup, reloadPlugin, setInstalled, type RequirementPreview } from "../../plugins/host";
 import { neededBy, requirementsOf } from "../../plugins/requires";
 import { defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../../plugins/defaults";
@@ -14,7 +14,7 @@ import {
   type InstalledPlugin, type InstallState, type Registry, type RegistryEntry,
 } from "../../plugins/registry";
 import { addressesOf, canonicalSpec, isPinned, parseSpec, PluginLoadError, unpin, type PluginPreview } from "../../plugins/loader";
-import { compareVersions } from "../../plugins/updates";
+import { answerFor, checkAllForUpdates, compareVersions, updateAllPlugins } from "../../plugins/updates";
 import { specLabel } from "../../plugins/failures";
 
 import { transferOf } from "../../plugins/images";
@@ -967,25 +967,22 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   // a different commit, show it on the same confirmation screen as a first install.
   //
   // The button is on every pinned row whether or not anything is newer, so *most* presses
-  // can only answer "nothing is". That answer used to be one dim line at the top of the
-  // pane, which for a button near the bottom of a scrolling list read as the press doing
-  // nothing at all. It lands three ways now: on the row that asked (`checked`), as a toast
-  // — the channel the rest of the editor answers in — and, when there *is* a newer commit,
-  // by the button itself becoming the offer, so cancelling the confirmation does not lose
-  // what the check found.
+  // can only answer "nothing is". The answer goes on the row that asked — *Up to date* or
+  // *Could not check* under its buttons, the press's own place — and, when there *is* a
+  // newer release, the button itself becomes the offer, so cancelling the confirmation
+  // does not lose what the check found. It used to be a toast as well, which for *Check
+  // all* meant one "No update" in the corner per plugin.
   //
   // The answers live in `pluginUpdatesAtom` rather than here: the startup check
   // (`plugins/updates.ts`) writes the rows it found newer versions for, so the notice's
   // button opens this pane with *Update to v…* already on them, and closing the dialog
   // does not throw a check away.
   const [checking, setChecking] = useState<string | null>(null);
-  const [checked, setCheckedAll] = useAtom(pluginUpdatesAtom);
-  const setChecked = (fn: (c: Record<string, PluginUpdateAnswer>) => Record<string, PluginUpdateAnswer>) => setCheckedAll(fn);
-  const answer = (s: string, a: PluginUpdateAnswer) => {
-    setChecked((c) => ({ ...c, [s]: a }));
-    if (a.kind === "current") store.set(pushToastAtom, { kind: "info", title: t("No update"), detail: a.text });
-    else if (a.kind === "problem") store.set(pushToastAtom, { kind: "warn", title: t("Could not check for an update"), detail: a.text });
-  };
+  const [checked, setChecked] = useAtom(pluginUpdatesAtom);
+  // What *Check all* or *Update all* is doing, and the one line it leaves beside them
+  // when done — the whole list's answer, in place of a toast per row.
+  const [bulk, setBulk] = useState<"check" | "update" | null>(null);
+  const [bulkNote, setBulkNote] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
   const offer = (s: string, preview: PluginPreview) => {
     store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, replaces: s, preview });
   };
@@ -996,33 +993,45 @@ function InstalledPane({ focus }: { focus?: string | null }) {
     setChecking(s);
     setChecked((c) => { const next = { ...c }; delete next[s]; return next; });
     try {
-      const { preview, newer, tag } = await checkForUpdate(address, undefined, { version });
-      if (!preview.manifest) {
-        answer(s, { kind: "problem", text: `${NOT_FOUND} ${preview.problem ?? ""}`.trim() });
-      } else if (newer && preview.pin) {
-        setChecked((c) => ({ ...c, [s]: { kind: "newer", version: preview.manifest?.version ?? tag, preview } }));
-        offer(s, preview);
-      } else if (preview.pin) {
-        // Naming the version is the whole answer: "the newest commit" said nothing about
-        // whether the plugin had been released since, which is what was actually asked.
-        const at = tag ?? (preview.manifest.version ? `v${preview.manifest.version}` : preview.pin.short);
-        answer(s, { kind: "current", text: t("{name} {at} is the newest version there is.", { name: preview.manifest.name, at }) });
-      } else {
-        answer(s, { kind: "problem", text: preview.pinProblem ?? t("Could not ask for a newer version.") });
-      }
+      const a = answerFor(await checkForUpdate(address, undefined, { version }));
+      setChecked((c) => ({ ...c, [s]: a }));
+      if (a.kind === "newer" && a.preview) offer(s, a.preview);
     } catch (err) {
-      answer(s, { kind: "problem", text: err instanceof Error ? err.message : String(err) });
+      setChecked((c) => ({ ...c, [s]: { kind: "problem", text: err instanceof Error ? err.message : String(err) } }));
     } finally {
       setChecking(null);
     }
   };
 
-  // The rows a check can be made for, in list order; `checkAll` runs them one after
-  // another rather than at once, since every check is a GitHub request or two from the
-  // same address.
-  const checkable = list.flatMap((p) => { const a = updateAddress(p.spec); return a ? [{ spec: p.spec, address: a, version: runtimes[p.spec]?.manifest?.version }] : []; });
+  const checkable = list.some((p) => updateAddress(p.spec) !== null);
+  const offers = list.filter((p) => checked[p.spec]?.kind === "newer" && updateAddress(p.spec) !== null);
   const checkAll = async () => {
-    for (const c of checkable) await update(c.spec, c.address, c.version);
+    setBulk("check");
+    setBulkNote(null);
+    try {
+      const r = await checkAllForUpdates(store);
+      const parts: string[] = [];
+      if (r.problem > 0) parts.push(t("{n, plural, one {# plugin} other {# plugins}} could not be checked", { n: r.problem }));
+      if (r.newer > 0) parts.push(t("{n, plural, one {# update} other {# updates}} available", { n: r.newer }));
+      else if (r.current > 0) parts.push(r.problem > 0 ? t("The rest are up to date") : t("All up to date"));
+      setBulkNote({ kind: r.problem > 0 ? "warn" : "ok", text: `${parts.join(". ")}.` });
+    } finally {
+      setBulk(null);
+    }
+  };
+  const updateAll = async () => {
+    setBulk("update");
+    setBulkNote(null);
+    try {
+      const { installed: done, skipped, failed } = await updateAllPlugins(store);
+      const parts: string[] = [];
+      if (done.length > 0) parts.push(t("Updated {list}.", { list: done.map((u) => `${u.name} ${u.to}`).join(", ") }));
+      for (const f of failed) parts.push(t("Could not update {name}: {error}", { name: f.update.name, error: f.error }));
+      for (const k of skipped) parts.push(t("{name} was left as it is: {reason}.", { name: k.update.name, reason: k.reason }));
+      setBulkNote({ kind: failed.length > 0 ? "warn" : "ok", text: parts.join(" ") });
+    } finally {
+      setBulk(null);
+    }
   };
 
   return (
@@ -1068,17 +1077,35 @@ function InstalledPane({ focus }: { focus?: string | null }) {
       </div>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <span className="pane-label">{t("Installed")}</span>
-        {checkable.length > 0 && (
-          <Button
-            size="sm"
-            title={t("Ask every plugin's repository for its newest release, one after another. Nothing is downloaded by the check.")}
-            disabled={checking !== null}
-            onClick={() => { void checkAll(); }}
-          >
-            {checking !== null ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Check all for updates")}
-          </Button>
+        {checkable && (
+          <div className="row" style={{ gap: 4 }}>
+            {offers.length > 1 && (
+              <Button
+                size="sm"
+                variant="primary"
+                title={t("Install every update offered below, one after another. Each plugin keeps its own settings.")}
+                disabled={checking !== null || bulk !== null}
+                onClick={() => { void updateAll(); }}
+              >
+                {bulk === "update" ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Update all ({n})", { n: offers.length })}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              title={t("Look up every plugin's newest release in the plugin lists, and ask the repository of any plugin they don't list. Nothing is downloaded by the check.")}
+              disabled={checking !== null || bulk !== null}
+              onClick={() => { void checkAll(); }}
+            >
+              {bulk === "check" ? <LoaderCircle size={11} className="spin" /> : <RefreshCw size={11} />} {" "}{t("Check all for updates")}
+            </Button>
+          </div>
         )}
       </div>
+      {bulkNote && (
+        <span className={`plugin-here plugin-bulk-note ${bulkNote.kind === "warn" ? "bad" : "on"}`} role="status">
+          {bulkNote.kind === "warn" ? <TriangleAlert size={11} /> : <CircleCheck size={11} />} {" "}{bulkNote.text}
+        </span>
+      )}
       <div className="listbox plugin-list" role="list" ref={listRef}>
         {byName.map((p) => {
           const rt = runtimes[p.spec];
@@ -1129,14 +1156,14 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                         size="sm"
                         variant="primary"
                         title={t("Show what is in the newer version before switching to it")}
-                        disabled={checking === p.spec}
+                        disabled={checking === p.spec || bulk !== null}
                         onClick={() => { if (answered.preview) offer(p.spec, answered.preview); else void update(p.spec, address, rt?.manifest?.version); }}
                       >
                         {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Update to")}{" "}{answered.preview ? offeredVersion(answered.preview) : `v${answered.version ?? "?"}`}
                       </Button>
                     )
                     : (
-                      <Button size="sm" title={t("Ask {addressLabel} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.", { addressLabel: addressLabel(address) })} disabled={checking === p.spec} onClick={() => { void update(p.spec, address, rt?.manifest?.version); }}>
+                      <Button size="sm" title={t("Ask {addressLabel} whether it has moved on, and show what it holds before switching to it. Nothing is downloaded until you press this.", { addressLabel: addressLabel(address) })} disabled={checking === p.spec || bulk !== null} onClick={() => { void update(p.spec, address, rt?.manifest?.version); }}>
                         {checking === p.spec ? <LoaderCircle size={11} className="spin" /> : <ArrowUp size={11} />} {" "}{t("Check for update")}
                       </Button>
                     ))}

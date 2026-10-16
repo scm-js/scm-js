@@ -992,12 +992,19 @@
 }
 /* An update check that could not be made — GitHub refusing, an address that moved. It is
    an answer to a press rather than a fault in the map, so it stays a line on the row and
-   the whole of what went wrong is on the toast beside it. */
+   the whole of what went wrong is in its tooltip. */
 .plugin-here.bad {
   color: #ffb3b0;
 }
 .plugin-here > svg {
   flex: none;
+}
+/* What Check all / Update all came to, under their buttons: the whole list's answer in
+   one line, where a toast per row used to be. */
+.plugin-bulk-note {
+  white-space: normal;
+  align-self: flex-end;
+  text-align: right;
 }
 /* A listed plugin's facts — who wrote it, what it is filed under, when it last moved.
    They used to be one faint sentence directly under the description and in the same

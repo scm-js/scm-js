@@ -156,3 +156,37 @@ Decisions worth keeping:
   Kills / Opponents / Elapsed Time are not references (game state nobody's trigger writes).
 - `view.goTo({ kind: "trigger", index, briefing? })` opens the Trigger Editor (or Mission Briefing) on the row —
   the dialogs already took `payload.index` (Find's trigger results used it); this just puts it on the plugin API.
+
+### What the game does (2026-10-16): the trigger reference from 1.16.1
+
+`docs/triggers.md`'s game facts were rewritten from StarCraft 1.16.1's own trigger engine:
+read statically (private ledger `~/github/scm-sim-reader/trig-ledger/`: LOOP, CONDITIONS,
+ACTIONS, DIFF, PROBES) and checked by running 28 probe maps plus variants through the
+lifted game (`trig-run/`, RESULTS.md; harness taps the condition/action jump tables and
+logs every call per frame). All predictions held; nothing on the page rests on reading
+alone except what says so. Of 128 claims the old page made, 8 were wrong (hyper triggers
+"every frame", flag 0x02 "ignore defeat", Create Unit count 0 = all, Draw ends the game,
+Kill Unit adds deaths, Wait in game time, Debug Mode does nothing, the melee maps' victory
+trigger) and 30 partly so. The page describes behaviour only — no addresses or code.
+
+The facts that shape the page: a pass every 31 frames (first on frame 2), brought to the
+next frame by a wait running out or the countdown reaching 0, so hyper triggers give one
+every 2 frames; players 1→8, lists top to bottom, conditions stop at the first false; one
+wait slot per player (Wait, a person's Transmission, single-player Center View); Wait ms
+are game-speed ms (`⌈ms / msPerFrame⌉` frames, at least 1, plus one); Command counts are a
+per-pass snapshot (dropped only by Kill/Remove ± At, Move Unit, Move Location or a Bring);
+At most counts every unit that exists, At least/Exactly finished ones (Bring adds cargo,
+hangar, carried powerups for those); only real deaths count, class Deaths read the
+lost-counters; Victory/Draw defeat everyone else without a result in that pass; EUD is
+read-only (Set Deaths refuses player ≥ 8 and unit > 232).
+
+Pictures: `trig-cycle.svg`, `trig-wait.svg`, `trig-bring.svg`, drawn in
+`scripts/lib/chk-diagrams.mjs` beside the trigger record. Check Map's hyper-trigger
+messages were corrected in the same change: the cycle numbers, and a preserved Wait is
+reported only when it shares a player with hyper triggers, as "above" (holds them up) or
+"below" (starved) them.
+
+Found on the way, not fixed here: scm-sim's multiplayer engine never sets the game's
+multiplayer byte (0x57F0B4), so its two-person games run trigger code on the single-player
+branches (Pause Game works, Transmission and Center View hold until a portrait/scroll
+timer that never comes, results keep trigger lists).

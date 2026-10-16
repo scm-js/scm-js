@@ -290,14 +290,22 @@ export function umsIssues(scn: Scenario): Issue[] {
   if (noObjectives.length > 0) issues.push({ level: "info", text: t("No Set Mission Objectives for {list}; the objectives box will show the melee text.", { list: list(noObjectives) }), where: msg("Triggers"), target: { kind: "dialog", id: "triggerEditor" } });
   const hypers = live.map((trig, i) => ({ trig, i })).filter(({ trig }) => isHyperTrigger(trig));
   if (hypers.length > 0) {
-    issues.push({ level: "info", text: t("Hyper triggers present ({length, plural, one {# trigger} other {# triggers}}): every other trigger fires about twelve times a second instead of once every two.", { length: hypers.length }), where: msg("Triggers"), target: { kind: "trigger", index: scn.triggers.indexOf(hypers[0].trig) } });
+    issues.push({ level: "info", text: t("Hyper triggers present ({length, plural, one {# trigger} other {# triggers}}): the game goes through the triggers every 2 frames instead of every 31, about twelve times a second at Fastest.", { length: hypers.length }), where: msg("Triggers"), target: { kind: "trigger", index: scn.triggers.indexOf(hypers[0].trig) } });
+    // A player has one wait slot (docs/triggers.md#waits): a preserved Wait of a player who also
+    // runs hyper triggers fights them for it — above them it holds them up, below them it starves.
     live.forEach((trig) => {
       if (isHyperTrigger(trig)) return;
       const acts = actionsOf(trig);
-      if (acts.some((a) => a.type === ActionType.Wait) && acts.some((a) => a.type === ActionType.PreserveTrigger)) {
-        const index = scn.triggers.indexOf(trig);
-        issues.push({ level: "warn", text: t("Trigger {v} has a Wait and Preserve Trigger: with hyper triggers on, a Wait stalls that player's whole trigger queue (the hyper triggers included). Use a death counter as the timer instead.", { v: index + 1 }), where: msg("Triggers"), target: { kind: "trigger", index } });
-      }
+      if (!acts.some((a) => a.type === ActionType.Wait) || !acts.some((a) => a.type === ActionType.PreserveTrigger)) return;
+      const players = triggerRunsFor(trig, scn);
+      const sharing = hypers.filter(({ trig: h }) => [...triggerRunsFor(h, scn)].some((p) => players.has(p)));
+      if (sharing.length === 0) return;
+      const index = scn.triggers.indexOf(trig);
+      const above = sharing.every(({ trig: h }) => scn.triggers.indexOf(h) > index);
+      const text = above
+        ? t("Trigger {v} has a Wait and Preserve Trigger above the hyper triggers: while its Wait runs it holds the player's one wait slot, so the hyper triggers stop and the triggers run every 31 frames instead of every 2. Use a death counter as the timer instead.", { v: index + 1 })
+        : t("Trigger {v} has a Wait and Preserve Trigger below the hyper triggers: they keep the player's one wait slot busy, so its Wait can start only in the one slow pass between their runs. Use a death counter as the timer instead.", { v: index + 1 });
+      issues.push({ level: "warn", text, where: msg("Triggers"), target: { kind: "trigger", index } });
     });
   }
   return issues;

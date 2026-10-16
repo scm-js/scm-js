@@ -193,8 +193,17 @@ describe("scenario (UMS) checks", () => {
     scn.triggers.push(hyper);
     scn.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Wait, { time: 2000 }), action(ActionType.PreserveTrigger)]));
     const out = texts(scn);
-    expect(out).toContain("info: Hyper triggers present (1 trigger): every other trigger fires about twelve times a second instead of once every two.");
-    expect(out.some((t) => t.startsWith("warn: Trigger 3 has a Wait and Preserve Trigger"))).toBe(true);
+    expect(out).toContain("info: Hyper triggers present (1 trigger): the game goes through the triggers every 2 frames instead of every 31, about twelve times a second at Fastest.");
+    expect(out.some((t) => t.startsWith("warn: Trigger 3 has a Wait and Preserve Trigger below the hyper triggers"))).toBe(true);
+    // Above them, it holds them up instead; a player who runs no hyper triggers is not affected.
+    const above = fresh();
+    above.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Wait, { time: 2000 }), action(ActionType.PreserveTrigger)]));
+    above.triggers.push(hyper);
+    expect(texts(above).some((t) => t.startsWith("warn: Trigger 1 has a Wait and Preserve Trigger above the hyper triggers"))).toBe(true);
+    const apart = fresh();
+    apart.triggers.push({ ...hyper, players: hyper.players.map((v, i) => (i === PlayerGroup.AllPlayers ? 0 : i === PlayerGroup.Player2 ? 1 : v)) });
+    apart.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Wait, { time: 2000 }), action(ActionType.PreserveTrigger)]));
+    expect(texts(apart).some((t) => t.includes("has a Wait and Preserve Trigger"))).toBe(false);
     const issues = validateScenario(scn);
     expect(issues.find((i) => i.text.startsWith("Hyper triggers"))?.target).toEqual({ kind: "trigger", index: 1 });
     // Without hyper triggers a preserved Wait is an ordinary timer.

@@ -157,6 +157,15 @@ export const COPY_RULES = {
   compose: "Each copy rearranges the colours as the copy before left them, so two copies that swap the same two colours put them back.",
 };
 
+/**
+ * Where StarCraft: Remastered was found to need a section 1.16.1 does not, by playing probe
+ * maps in it (the twelve in `Maps/CHK/Remastered`, 2026-10-15). The other eleven behaved
+ * as in 1.16.1. Shown on the section's Required row and in the index.
+ */
+export const REMASTERED_NEEDS = {
+  "TRIG": "In StarCraft: Remastered every map needs it, whatever the game type: without it the map list shows the map as *Invalid Scenario*. (Found playing Remastered.)",
+};
+
 /** The messages a player sees, by where the game gives up. */
 export const GAME_MESSAGES = {
   invalid: "Invalid Scenario",

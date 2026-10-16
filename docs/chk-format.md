@@ -11,11 +11,12 @@ is in [Opening and saving maps](file-formats.md).
 The page holds two kinds of fact. The byte layouts and the value and flag tables come from
 the code the editor reads and writes maps with, and its tests hold them to Blizzard's own
 maps, which it re-encodes byte for byte. What the game does with a section (whether it
-reads it, whether it needs it, which lengths it accepts, what a second copy does) was found
-by studying how StarCraft: Brood War 1.16.1 loads a map, and confirmed by loading more than
-80 test maps through the game's own code, each built to settle one question. StarCraft: Remastered grew out of
-1.16.1 and reads maps much the same way, but it is a different program: where it is known
-to differ, the page says so. See [Which game](#which-game).
+reads it, whether it needs it, which lengths it accepts, what a second copy does) was
+found by studying how StarCraft: Brood War 1.16.1 loads a map, and confirmed by loading
+more than 80 test maps through the game's own code, each built to settle one question.
+StarCraft: Remastered grew out of 1.16.1 and reads maps much the same way, but it is a
+different program: where it is known to differ, the page says so. See [Which
+game](#which-game).
 
 The community's older reference is
 [wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk). Where
@@ -27,8 +28,8 @@ The same layouts are also published as a [Kaitai Struct](https://kaitai.io) desc
 it into a parser for C++, C#, Go, Java, JavaScript, Python and several other languages,
 and the [Kaitai Web IDE](https://ide.kaitai.io) opens a `scenario.chk` with it and shows
 every section field by field. It reads a file as it is laid out, one section after
-another, and leaves the rules for [lengths](#lengths) and
-[repeated sections](#repeated-sections) to the program using it.
+another, and leaves the rules for [lengths](#lengths) and [repeated
+sections](#repeated-sections) to the program using it.
 
 ## The container
 
@@ -47,9 +48,9 @@ its own. StarEdit's order, the order of this reference, is only a convention.
 
 All numbers in every section are little-endian. Unsigned unless a layout says `i32`.
 Positions are in pixels, and a tile is 32 pixels square. Player slots are numbered from 0
-for Player 1 to 11 for Player 12. Text is never stored in a section itself: a section holds
-a *string number*, the position of the text in the [string table](#str), and 0 means no
-text.
+for Player 1 to 11 for Player 12. Text is never stored in a section itself: a section
+holds a *string number*, the position of the text in the [string table](#str), and 0 means
+no text.
 
 ### Odd lengths
 
@@ -68,14 +69,14 @@ jump goes forward.
   kept, cut short, and refuses the map if the game reads that section, because every read
   checks that a section's bytes are really there. On a section the game never reads, such
   as [`ISOM`](#isom), it does no harm.
-- **Bytes after the last section**: fewer than 8 are ignored. Eight or more are read as one
-  more header.
+- **Bytes after the last section**: fewer than 8 are ignored. Eight or more are read as
+  one more header.
 
 ### Lengths
 
 Every section the game reads has a length it insists on, and a section of any other length
-refuses the map. A fixed-size section one byte too long makes the map invalid, and a record
-section must hold whole records.
+refuses the map. A fixed-size section one byte too long makes the map invalid, and a
+record section must hold whole records.
 
 <!-- generated: game sizes -->
 | The game wants | Sections | A different length |
@@ -86,11 +87,10 @@ section must hold whole records.
 | Any length | `MASK`, `STR␠` | Taken |
 <!-- /generated -->
 
-Three sections may be shorter than the map needs. A short [`MTXM`](#mtxm) leaves the
-rest of the map's tiles as the game found them, tile 0 in our tests. A short
-[`FORC`](#forc) is filled out with zeros. [`MASK`](#mask) takes any length, and the tiles it
-does not reach start unexplored. Each section's page gives its rule in the row *The game
-accepts*.
+Three sections may be shorter than the map needs. A short [`MTXM`](#mtxm) leaves the rest
+of the map's tiles as the game found them, tile 0 in our tests. A short [`FORC`](#forc) is
+filled out with zeros. [`MASK`](#mask) takes any length, and the tiles it does not reach
+start unexplored. Each section's page gives its rule in the row *The game accepts*.
 
 ### Repeated sections
 
@@ -125,10 +125,9 @@ A few sections have rules of their own:
 
 ## How the game loads a map
 
-StarCraft reads a map up to three times, and each time it reads only the sections it
-needs then: a short read for the map list, a longer one when a game starts, and one more
-for the briefing. Before each read it checks [`VER`](#ver), which
-must be 59, 63 or 205.
+StarCraft reads a map up to three times, and each time it reads only the sections it needs
+then: a short read for the map list, a longer one when a game starts, and one more for the
+briefing. Before each read it checks [`VER`](#ver), which must be 59, 63 or 205.
 
 ![How StarCraft opens a map: the map list, the start of a game, the briefing](images/chk-load.svg)
 
@@ -199,14 +198,14 @@ last version before Remastered. Remastered is known to differ in these ways:
 
 - Its map list needs [`TRIG`](#trig). A map with no `TRIG` section is *Invalid Scenario*
   in Remastered whatever the game type, where 1.16.1 lists it and plays it as melee.
-- It reads `VER` 206, [`STRx`](#strx) and [`CRGB`](#crgb). 1.16.1 refuses `VER` 206 and never
-  reads the other two.
+- It reads `VER` 206, [`STRx`](#strx) and [`CRGB`](#crgb). 1.16.1 refuses `VER` 206 and
+  never reads the other two.
 - It passes over a [`STR`](#str) copy shorter than 2 bytes, where 1.16.1 takes it.
 - It reads text as UTF-8 when the bytes are valid UTF-8 (see [`STR`](#str)).
 - In a string, a colour carries on to the next line.
 
-Twelve of the page's claims were also played in Remastered with probe maps, and in all
-but the `TRIG` one Remastered did what 1.16.1 does:
+Twelve of the page's claims were also played in Remastered with probe maps, and in all but
+the `TRIG` one Remastered did what 1.16.1 does:
 
 - a section one byte too long, and a `UNIT` section that ends in part of a record, refuse
   the map, with the same messages;
@@ -227,12 +226,12 @@ safe target.
 ## Protected maps
 
 StarCraft reads a map differently from how a simple editor does, and a map can be
-"protected" by building it so that the game reads it correctly while an editor
-misreads it or gives up. None of it is encryption. Each trick relies on a rule on this page
-that the game follows and a simple reader does not, so a reader that follows the rules reads
-the map as the game does. The archive around the scenario has tricks of its own, such as a
-missing file list or a renamed scenario; those are in
-[Opening and saving maps](file-formats.md#protected-and-damaged-maps).
+"protected" by building it so that the game reads it correctly while an editor misreads it
+or gives up. None of it is encryption. Each trick relies on a rule on this page that the
+game follows and a simple reader does not, so a reader that follows the rules reads the
+map as the game does. The archive around the scenario has tricks of its own, such as a
+missing file list or a renamed scenario; those are in [Opening and saving
+maps](file-formats.md#protected-and-damaged-maps).
 
 The table says what 1.16.1 does. Protectors write for Remastered, which is known to differ
 on short `STR` copies, so a trick that works there may refuse the map in 1.16.1.
@@ -286,9 +285,9 @@ gives an ordinary file that holds the same map.
 
 ## Sections
 
-The sections are listed here in the order StarEdit writes them. *Read by editors* means the game skips the section and
-a map plays the same without it. *By revision* means the section is required in some
-[revisions](#revisions) of the file and not others.
+The sections are listed here in the order StarEdit writes them. *Read by editors* means
+the game skips the section and a map plays the same without it. *By revision* means the
+section is required in some [revisions](#revisions) of the file and not others.
 
 <!-- generated: index -->
 | Section | Holds | Map list | Melee start | Use Map Settings start |
@@ -354,21 +353,21 @@ reads. [`TYPE`](#type) goes with it.
 205 too when Brood War is not on.
 
 Brood War added units, upgrades and technologies, so it has wider versions of the five
-settings tables, under new names: [`UNIS`](#unis) and [`UNIx`](#unix),
-[`UPGS`](#upgs) and [`UPGx`](#upgx), [`UPGR`](#upgr) and [`PUPx`](#pupx),
-[`TECS`](#tecs) and [`TECx`](#tecx), [`PTEC`](#ptec) and [`PTEx`](#ptex). Only Use Map
-Settings reads any of them, and the revision decides which:
+settings tables, under new names: [`UNIS`](#unis) and [`UNIx`](#unix), [`UPGS`](#upgs) and
+[`UPGx`](#upgx), [`UPGR`](#upgr) and [`PUPx`](#pupx), [`TECS`](#tecs) and [`TECx`](#tecx),
+[`PTEC`](#ptec) and [`PTEx`](#ptex). Only Use Map Settings reads any of them, and the
+revision decides which:
 
 - **`VER` 205**, a Brood War file: the `x` five, and the map needs them. The original five
   are never read. Blizzard's own Brood War maps carry only the `x` tables.
-- **`VER` 59 and 63**: the original five, which the map needs, and then the `x` five on top
-  when the file has them. Each `x` table changes only what it sets, as a
-  [second copy](#repeated-sections) of the table would. This happens whether or not Brood
-  War is on.
+- **`VER` 59 and 63**: the original five, which the map needs, and then the `x` five on
+  top when the file has them. Each `x` table changes only what it sets, as a [second
+  copy](#repeated-sections) of the table would. This happens whether or not Brood War is
+  on.
 
 So a hybrid file (63) does not need the `x` tables, though StarEdit writes them, and the
-one thing that sets 63 apart from 59 in the game is the number of locations: 64 in a
-`VER` 59 file, 255 from 63 up ([`MRGN`](#mrgn)).
+one thing that sets 63 apart from 59 in the game is the number of locations: 64 in a `VER`
+59 file, 255 from 63 up ([`MRGN`](#mrgn)).
 
 A file can hold both of a pair whatever its `VER` says, and the two need not agree: some
 editors write the `x` tables into an original StarCraft map and later change only the
@@ -399,8 +398,8 @@ sections decide the size or the meaning of others.
 | A [`DD2`](#dd2) record | A doodad of the tileset `ERA` names. The doodad's tiles are in `MTXM` and its sprite, if it has one, in [`THG2`](#thg2). |
 
 [`DIM`](#dim) sets the size of four sections: [`MTXM`](#mtxm) and [`TILE`](#tile) hold two
-bytes per tile, [`MASK`](#mask) one, and [`ISOM`](#isom) (width ÷ 2 + 1) × (height + 1) × 8
-bytes. [`VER`](#ver) decides which of the settings tables the game reads; see
+bytes per tile, [`MASK`](#mask) one, and [`ISOM`](#isom) (width ÷ 2 + 1) × (height + 1) ×
+8 bytes. [`VER`](#ver) decides which of the settings tables the game reads; see
 [Revisions](#revisions).
 
 ## TYPE
@@ -521,8 +520,8 @@ When the game reads a map for the map list, it builds 432 bytes from the player 
 twelve records of 36 bytes, one per slot. Each record is zero except byte 8, the player's
 type from [`OWNR`](#ownr), and byte 9, the race from [`SIDE`](#side), for all twelve
 players as the file has them. It hashes those bytes twice, once with the map's `VCOD` and
-once with the table built into the game, and refuses the map as *Invalid Scenario* when the
-two answers differ.
+once with the table built into the game, and refuses the map as *Invalid Scenario* when
+the two answers differ.
 
 Nothing else in the map goes in: not the terrain, the units, the strings or the triggers.
 `VCOD` is not a checksum of the map, and a change to anything but `OWNR` and `SIDE` never
@@ -568,8 +567,8 @@ every combination of players.
 
 ## IOWN
 
-StarEdit's own copy of [`OWNR`](#ownr). The game reads `OWNR`; StarEdit shows this one. The
-editor writes both the same, and Check Map warns when a file's two disagree.
+StarEdit's own copy of [`OWNR`](#ownr). The game reads `OWNR`; StarEdit shows this one.
+The editor writes both the same, and Check Map warns when a file's two disagree.
 
 <!-- generated: section IOWN -->
 | Name | `IOWN` (49 4F 57 4E) |
@@ -695,8 +694,8 @@ Each player's race.
 
 In a Use Map Settings game, a player whose race is User Selectable gets the melee starting
 units of the race they pick, and the units the map places for them are left out, all but
-the neutral kinds: mineral fields, geysers, critters and power-ups. A map that places units
-for a player should give that player a race. (This was found playing StarCraft:
+the neutral kinds: mineral fields, geysers, critters and power-ups. A map that places
+units for a player should give that player a race. (This was found playing StarCraft:
 Remastered, and 1.16.1 does the same.)
 
 The game does not check the values. In the lobby it turns User Selectable into Random.
@@ -733,8 +732,8 @@ Layout:
 ## MTXM
 
 The terrain the game draws: one 16-bit tile number per tile, including the tiles of placed
-doodads. A tile number is a tile group of the tileset times 16 plus the tile's place in the
-group, 0 to 15.
+doodads. A tile number is a tile group of the tileset times 16 plus the tile's place in
+the group, 0 to 15.
 
 <!-- generated: section MTXM -->
 | Name | `MTXM` (4D 54 58 4D) |
@@ -750,9 +749,9 @@ group, 0 to 15.
 Tile (x, y), counting from 0 at the top left, is at byte (y × width + x) × 2.
 
 The game copies the section into a space the size of a 256 × 256 map, which it does not
-clear first, and uses the first width × height tiles of it. A section shorter than the
-map leaves the rest of the tiles as they were: tile 0 in our tests, which is nothing to
-rely on. Melee and Use Map Settings both read it.
+clear first, and uses the first width × height tiles of it. A section shorter than the map
+leaves the rest of the tiles as they were: tile 0 in our tests, which is nothing to rely
+on. Melee and Use Map Settings both read it.
 
 ### What a tile number points at
 
@@ -784,7 +783,8 @@ whose first group is g is group g + r, and column c is variation c.
 
 Which unit types each player may build. For every player and unit type there is an answer
 of its own and a flag saying whether to use the default answer instead, and one default
-answer per unit type. Only Use Map Settings reads it; melee lets everyone build everything.
+answer per unit type. Only Use Map Settings reads it; melee lets everyone build
+everything.
 
 <!-- generated: section PUNI -->
 | Name | `PUNI` (50 55 4E 49) |
@@ -808,10 +808,10 @@ Layout:
 ### Example
 
 The answer for a player and a unit type is the player's own byte, unless the player's
-*uses the default* byte is anything but 0, in which case it is the unit type's default. The byte for
-Player p and unit type u is at p × 228 + u in each of the two per-player tables. The same
-three tables, in the same order, make up [`UPGR`](#upgr), [`PTEC`](#ptec),
-[`PUPx`](#pupx) and [`PTEx`](#ptex).
+*uses the default* byte is anything but 0, in which case it is the unit type's default.
+The byte for Player p and unit type u is at p × 228 + u in each of the two per-player
+tables. The same three tables, in the same order, make up [`UPGR`](#upgr),
+[`PTEC`](#ptec), [`PUPx`](#pupx) and [`PTEx`](#ptex).
 
 Here Carriers (unit type 72) are allowed by default, every player takes the default except
 Player 3, and Player 3's own byte says no:
@@ -826,13 +826,14 @@ Player 3, and Player 3's own byte says no:
 ```
 <!-- /generated -->
 
-Player 1's own byte also says no, but it is never read, because Player 1 takes the default.
+Player 1's own byte also says no, but it is never read, because Player 1 takes the
+default.
 
 ## UPGR
 
 How far each player may research each upgrade, and the level they start at, for the 46
-upgrades of the original game. Laid out as [`PUNI`](#puni) is: each player's own values, the
-defaults, and whether each player uses the defaults. A Brood War file has
+upgrades of the original game. Laid out as [`PUNI`](#puni) is: each player's own values,
+the defaults, and whether each player uses the defaults. A Brood War file has
 [`PUPx`](#pupx) in its place; in an older file the game reads this table and then `PUPx`
 on top, if the file has one. Only Use Map Settings reads either.
 
@@ -859,10 +860,10 @@ Layout:
 
 ## PTEC
 
-Whether each player may research each ability, and whether they start with it, for the
-24 abilities of the original game. A Brood War file has [`PTEx`](#ptex) in its place; in
-an older file the game reads this table and then `PTEx` on top, if the file has one. Only
-Use Map Settings reads either.
+Whether each player may research each ability, and whether they start with it, for the 24
+abilities of the original game. A Brood War file has [`PTEx`](#ptex) in its place; in an
+older file the game reads this table and then `PTEx` on top, if the file has one. Only Use
+Map Settings reads either.
 
 <!-- generated: section PTEC -->
 | Name | `PTEC` (50 54 45 43) |
@@ -897,16 +898,16 @@ the hit points alone.
 The units of a human player slot nobody takes are removed when the game starts; Neutral
 units stay. (Found playing StarCraft: Remastered, and 1.16.1 does the same.)
 
-When a game starts, each record goes through these checks, in this order, before a unit
-is made:
+When a game starts, each record goes through these checks, in this order, before a unit is
+made:
 
 ![What the game does with a placed unit](images/chk-unit-path.svg)
 
 Some of what the game does with the fields is not what the layout suggests:
 
 - The relations word at offset 10 is never read. An add-on is attached to its building,
-  and a nydus canal paired with its exit, by the linked serial number alone, and only
-  with a unit in the same `UNIT` section.
+  and a nydus canal paired with its exit, by the linked serial number alone, and only with
+  a unit in the same `UNIT` section.
 - The owner bit of the fields-set word, and bit 0x40, are never read: the owner byte
   always counts.
 - Hit points, shields and energy are per cent of the unit's maximum, and capped at it. Hit
@@ -1046,9 +1047,9 @@ Each rect:
 
 The isometric brush does not paint tiles. It paints *diamonds*, 128 pixels wide and 64
 tall: four tiles across and two down. Their centres sit on a lattice of points 64 pixels
-apart across and 32 apart down, at every other point of it, the ones whose coordinates
-add up to an even number. Diamond (x, y) is centred on pixel (64 × x, 32 × y), so the
-diamonds along the top and left edges of the map are half off it.
+apart across and 32 apart down, at every other point of it, the ones whose coordinates add
+up to an even number. Diamond (x, y) is centred on pixel (64 × x, 32 × y), so the diamonds
+along the top and left edges of the map are half off it.
 
 The section does not store diamonds one by one. It stores *rects*: 64 by 32 pixels, two
 tiles side by side, with rect (x, y) having its top-left corner on lattice point (x, y).
@@ -1119,9 +1120,9 @@ A value is one of two things:
   diamond, and a diamond's value is the set's first value plus its shape, 0 to 13.
 
 Of the two terrains a set joins, one is laid as a patch on the other: high dirt on dirt,
-dirt on water, jungle on dirt. Here the terrain underneath is called the *outside*
-terrain and the patch the *inside* one, since the border runs around the inside. North is
-up the map.
+dirt on water, jungle on dirt. Here the terrain underneath is called the *outside* terrain
+and the patch the *inside* one, since the border runs around the inside. North is up the
+map.
 
 <!-- generated: isom shapes -->
 | Shape | The diamond is |
@@ -1162,8 +1163,8 @@ it with the cliff between the two, values 17 to 30. The four diamonds that share
 with the centre become the four straight edges, 17 to 20, and the four beyond them, which
 only touch it at a point, become the corners where the high ground ends, 21 to 24. On the
 map this is a small raised plateau with a cliff all the way round, and no flat High Dirt
-tile at all: the centre diamond's four quarters all lie in rects that also hold part of the
-cliff.
+tile at all: the centre diamond's four quarters all lie in rects that also hold part of
+the cliff.
 
 Here are two rects from the middle, as the section holds them. The map is 16 tiles wide,
 so a row holds 9 rects and rect (x, y) starts at byte (9 × y + x) × 8:
@@ -1181,10 +1182,10 @@ so a row holds 9 rects and rect (x, y) starts at byte (9 × y + x) × 8:
 ```
 <!-- /generated -->
 
-Rect (3,3) is even, so its left and top words belong to diamond (3,3), the north-west edge,
-and its right and bottom words to diamond (4,4), the flat High Dirt in the centre. Rect
-(4,3) is odd: its left and bottom words belong to the centre and its top and right words
-to diamond (5,3), the north-east edge.
+Rect (3,3) is even, so its left and top words belong to diamond (3,3), the north-west
+edge, and its right and bottom words to diamond (4,4), the flat High Dirt in the centre.
+Rect (4,3) is odd: its left and bottom words belong to the centre and its top and right
+words to diamond (5,3), the north-east edge.
 
 ### From diamonds to tiles
 
@@ -1194,13 +1195,12 @@ it changed, and writes them to [`MTXM`](#mtxm) and [`TILE`](#tile):
 1. Each of the rect's four words names a quarter of a diamond. From the diamond's value
    and the quarter, the brush gets a *link number* for that side of the rect.
 2. It looks for the tile group in the tileset whose own four links match. Every group of
-   the tileset's CV5 file carries a link for each side (see
-   [what a tile number points at](#what-a-tile-number-points-at)). The rect's left tile
-   comes from that group, which is always an even number, and its right tile from the
-   next one.
+   the tileset's CV5 file carries a link for each side (see [what a tile number points
+   at](#what-a-tile-number-points-at)). The rect's left tile comes from that group, which
+   is always an even number, and its right tile from the next one.
 3. It picks one of the group's variations at random, the same one for both tiles.
-4. A cliff face is taller than one rect, so the rows below the top of a cliff are chosen to
-   continue it, by the groups' stack links.
+4. A cliff face is taller than one rect, so the rows below the top of a cliff are chosen
+   to continue it, by the groups' stack links.
 
 Link numbers up to 48 are shared by any two pieces that can meet; higher ones only join
 pieces of the same edge set. A flat terrain carries the same link on all four sides. The
@@ -1335,8 +1335,8 @@ Jungle World, Desert, Ice and Twilight, which share one numbering:
 
 ## TILE
 
-The terrain with the doodads left out: what is under each doodad. Only editors read it,
-to put the ground back when a doodad is removed.
+The terrain with the doodads left out: what is under each doodad. Only editors read it, to
+put the ground back when a doodad is removed.
 
 <!-- generated: section TILE -->
 | Name | `TILE` (54 49 4C 45) |
@@ -1389,24 +1389,24 @@ Each doodad:
 This record is all an editor has to say a doodad is there. What the game shows comes from
 elsewhere: the doodad's tiles are written into [`MTXM`](#mtxm), where the game draws them,
 while [`TILE`](#tile) keeps the ground they cover so an editor can put it back when the
-doodad is removed. A doodad with a sprite, such as a tree top, also has a
-[`THG2`](#thg2) record, and so does one that is a unit, such as a door. The tileset's CV5
-says how big the doodad is and which tiles it uses (see
-[what a tile number points at](#what-a-tile-number-points-at)). Deleting the `DD2` record
-alone leaves the doodad on the map for the game, just no longer selectable in an editor.
+doodad is removed. A doodad with a sprite, such as a tree top, also has a [`THG2`](#thg2)
+record, and so does one that is a unit, such as a door. The tileset's CV5 says how big the
+doodad is and which tiles it uses (see [what a tile number points
+at](#what-a-tile-number-points-at)). Deleting the `DD2` record alone leaves the doodad on
+the map for the game, just no longer selectable in an editor.
 
 ## THG2
 
-Sprites placed on the map. A *pure* sprite (flag 0x1000) is a picture drawn where it stands:
-a tree top, a glow, a doodad's overlay. Without that flag the record is a unit sprite, and
-the game creates a unit of that type when the map loads; that is how StarEdit places the
-Installation's doors and traps. Flag 0x8000 starts such a unit disabled.
+Sprites placed on the map. A *pure* sprite (flag 0x1000) is a picture drawn where it
+stands: a tree top, a glow, a doodad's overlay. Without that flag the record is a unit
+sprite, and the game creates a unit of that type when the map loads; that is how StarEdit
+places the Installation's doors and traps. Flag 0x8000 starts such a unit disabled.
 
 Pure sprites are drawn in every game type. A unit sprite is made only in a Use Map
 Settings game or when Player 12 owns it, and the game always gives the four Installation
-doors (unit types 205 to 208) to Player 12, whatever the record says. Unlike a placed unit,
-a unit sprite is made even for a player who is not in the game. The game reads no flag but
-0x1000 and 0x8000: 0x4000, which editors call flipped, has no effect in play.
+doors (unit types 205 to 208) to Player 12, whatever the record says. Unlike a placed
+unit, a unit sprite is made even for a player who is not in the game. The game reads no
+flag but 0x1000 and 0x8000: 0x4000, which editors call flipped, has no effect in play.
 
 ![The sprite record, byte by byte](images/chk-sprite-record.svg)
 
@@ -1469,9 +1469,10 @@ closed.
 ## MASK
 
 Fog of war at the start: which players begin with each tile unexplored. A new map made in
-StarEdit or the editor starts every tile unexplored for every player. Only Use Map Settings
-reads it, and it needs it: a Use Map Settings game of a map without `MASK` stops with
-*Error loading scenario file.* Melee never reads it, and starts every tile unexplored.
+StarEdit or the editor starts every tile unexplored for every player. Only Use Map
+Settings reads it, and it needs it: a Use Map Settings game of a map without `MASK` stops
+with *Error loading scenario file.* Melee never reads it, and starts every tile
+unexplored.
 
 <!-- generated: section MASK -->
 | Name | `MASK` (4D 41 53 4B) |
@@ -1487,20 +1488,19 @@ reads it, and it needs it: a Use Map Settings game of a map without `MASK` stops
 Only Players 1 to 8 have a bit. A byte of 0x05, bits 0 and 2, means Players 1 and 3 start
 with that tile unexplored and the other six start with it explored. The game starts every
 tile unexplored and writes the section over that, one byte per tile, so tiles past the end
-of a short `MASK` stay unexplored. Every Blizzard melee
-map checked has 0xFF in every byte; some of the campaign and scenario maps, where the
-maker set the fog, do not.
+of a short `MASK` stay unexplored. Every Blizzard melee map checked has 0xFF in every
+byte; some of the campaign and scenario maps, where the maker set the fog, do not.
 
 ## STR
 
-The string table. Every piece of text in the map is here, and other sections refer to it by
-number: the scenario name and description, force names, location names, custom unit names,
-switch names, sound file names, and the text and sounds of trigger actions.
+The string table. Every piece of text in the map is here, and other sections refer to it
+by number: the scenario name and description, force names, location names, custom unit
+names, switch names, sound file names, and the text and sounds of trigger actions.
 
-The section starts with the number of strings, then one offset per string, counted from the
-start of the section, and then the text. Each string ends with a 0 byte. String numbers
-count from 1: the first offset is string 1. Several strings may share the same offset.
-Because the offsets are 16-bit, the whole table must fit in 64 KB.
+The section starts with the number of strings, then one offset per string, counted from
+the start of the section, and then the text. Each string ends with a 0 byte. String
+numbers count from 1: the first offset is string 1. Several strings may share the same
+offset. Because the offsets are 16-bit, the whole table must fit in 64 KB.
 
 Every read of the map reads `STR` again, and a map without one is shown in the map list as
 *Invalid Scenario*, not under its file name. The map list shows the first 31 bytes of the
@@ -1533,9 +1533,9 @@ Layout:
 | 2 | u16 × that many | Where each string starts, counted from the start of the section |
 | after the offsets | text | The strings, each ending in a 0 byte |
 
-A string runs from its offset to the next 0 byte, and nothing else marks where it ends.
-So two strings can share their bytes, one string can be the end of another, and an offset
-can point anywhere in the section, the offset table included. The game checks neither the
+A string runs from its offset to the next 0 byte, and nothing else marks where it ends. So
+two strings can share their bytes, one string can be the end of another, and an offset can
+point anywhere in the section, the offset table included. The game checks neither the
 count nor the offsets against the section's length: an offset at or past the end reads
 whatever lies after the table in memory, so an editor has to read it as no string. A
 string number past the count is an empty string.
@@ -1565,9 +1565,9 @@ first one's bytes, and the lone 0 after the offsets is where an unused string wo
 
 Bytes 0x01 to 0x1F in a string are not characters. Most set the colour of the text after
 them, and a few align it, hide it or cut it short. Editors write them as `<XX>`, the byte
-in hexadecimal, and the game draws the text from the byte where the code stands. In
-1.16.1 each new line of a string starts in the default colour again; in Remastered a
-colour carries on to the next line of the same string.
+in hexadecimal, and the game draws the text from the byte where the code stands. In 1.16.1
+each new line of a string starts in the default colour again; in Remastered a colour
+carries on to the next line of the same string.
 
 <!-- generated: text codes -->
 | Byte | Written | What it does |
@@ -1608,8 +1608,8 @@ colour carries on to the next line of the same string.
 ## STRx
 
 The string table of StarCraft: Remastered: the same as [`STR`](#str) with 32-bit numbers,
-so the table has no 64 KB limit. Only Remastered reads it, and it is always UTF-8. A map with `STRx`
-does not need `STR`.
+so the table has no 64 KB limit. Only Remastered reads it, and it is always UTF-8. A map
+with `STRx` does not need `STR`.
 
 <!-- generated: section STRx -->
 | Name | `STRx` (53 54 52 78) |
@@ -1630,10 +1630,10 @@ Layout:
 
 ## UPRP
 
-The 64 unit properties slots used by the
-[Create Unit with Properties](triggers.md#create-unit-with-properties) action. A slot is
-laid out as a [`UNIT`](#unit) record's properties are, and each field or state is only
-applied when its bit is set, so a slot can set the hit points alone.
+The 64 unit properties slots used by the [Create Unit with
+Properties](triggers.md#create-unit-with-properties) action. A slot is laid out as a
+[`UNIT`](#unit) record's properties are, and each field or state is only applied when its
+bit is set, so a slot can set the hit points alone.
 
 <!-- generated: section UPRP -->
 | Name | `UPRP` (55 50 52 50) |
@@ -1684,7 +1684,8 @@ Fields set:
 
 ## UPUS
 
-Which of the 64 [`UPRP`](#uprp) slots StarEdit considers in use. The game does not read it.
+Which of the 64 [`UPRP`](#uprp) slots StarEdit considers in use. The game does not read
+it.
 
 <!-- generated: section UPUS -->
 | Name | `UPUS` (55 50 55 53) |
@@ -1710,8 +1711,7 @@ name and no size. Melee never reads the locations.
 
 The elevation word works the other way round from how StarEdit shows it: a set bit
 **leaves out** that elevation, so 0 means the location covers every elevation. Conditions
-such as [Bring](triggers.md#bring) only count units on the elevations the location
-covers.
+such as [Bring](triggers.md#bring) only count units on the elevations the location covers.
 
 ![The location record, byte by byte](images/chk-location-record.svg)
 
@@ -1775,9 +1775,9 @@ Only Use Map Settings reads the map's triggers. Melee and the other game types r
 triggers of their own, built into the game, and never read this section. Remastered still
 wants it there: its map list refuses a map with no `TRIG` section, even for melee.
 
-When the game loads the triggers, it gives each player in the game a copy of every
-trigger that runs for them: one set for that player alone, for All Players, or for a force
-the player is in. Triggers set to run for Players 9 to 12, Current Player, Foes, Allies,
+When the game loads the triggers, it gives each player in the game a copy of every trigger
+that runs for them: one set for that player alone, for All Players, or for a force the
+player is in. Triggers set to run for Players 9 to 12, Current Player, Foes, Allies,
 Neutral Players or Non-Allied Victory Players are dropped then, and never run. A player
 not in the game gets no triggers.
 
@@ -1969,10 +1969,10 @@ Layout:
 
 ## UPGS
 
-Upgrade costs and research times for the 46 upgrades of the original game. Each upgrade has
-a cost for its first level and an amount added for each level after. A Brood War file has
-[`UPGx`](#upgx) in its place; in an older file the game reads this table and then `UPGx`
-on top, if the file has one. Only Use Map Settings reads either.
+Upgrade costs and research times for the 46 upgrades of the original game. Each upgrade
+has a cost for its first level and an amount added for each level after. A Brood War file
+has [`UPGx`](#upgx) in its place; in an older file the game reads this table and then
+`UPGx` on top, if the file has one. Only Use Map Settings reads either.
 
 <!-- generated: section UPGS -->
 | Name | `UPGS` (55 50 47 53) |

@@ -10,10 +10,10 @@ This page has five parts, and ends with a list of [plugins to read](#plugins-to-
   plugin is allowed to do, and how to update or remove one.
 - **[Your first plugin](#your-first-plugin)**: a small plugin built step by step, from a
   few lines in the playground to a published repository.
-- **[Writing a plugin](#writing-a-plugin)**: each piece in detail: the playground, the
-  two files, typings, bundling, debugging, testing, publishing.
-- **[Recipes](#recipes)**: complete snippets for common jobs, such as a problems panel,
-  a brush of your own, or triggers generated from a table.
+- **[Writing a plugin](#writing-a-plugin)**: each piece in detail: the playground, the two
+  files, typings, bundling, debugging, testing, publishing.
+- **[Recipes](#recipes)**: complete snippets for common jobs, such as a problems panel, a
+  brush of your own, or triggers generated from a table.
 - **[The API, group by group](#the-api-group-by-group)**: what each part of the API is
   for, the rules a signature does not show, and an example for each. Every call has its
   own entry in the [API reference](https://docs.scmjs.dev/api/), generated from the
@@ -24,14 +24,14 @@ How the editor loads plugins internally is in
 
 ## Using plugins
 
-This part is for map makers: which plugins there are, how to install and update them,
-and what you are trusting when you do.
+This part is for map makers: which plugins there are, how to install and update them, and
+what you are trusting when you do.
 
 ### What is available
 
 Ten plugins are installed and on from the start, and one more is installed but off. The
-rest are in Plugins ▸ **Browse Plugins…**. The [user guide](guide.md#plugins)
-describes each in more detail, and each repository has its own README.
+rest are in Plugins ▸ **Browse Plugins…**. The [user guide](guide.md#plugins) describes
+each in more detail, and each repository has its own README.
 
 | Plugin | Starts | Where it appears | What it does |
 | --- | --- | --- | --- |
@@ -101,8 +101,8 @@ look at the repository. The screen has three options:
 | Pin to this version | on | Store the exact commit the address points at today, so the plugin never changes under you. |
 | Load from a copy saved here | off | Keep a copy of the plugin's files in this browser and load from that until you press Reload. |
 
-A plugin that needs another one (see [Requiring another plugin](#requiring-another-plugin))
-lists it under *Also installs*.
+A plugin that needs another one (see [Requiring another
+plugin](#requiring-another-plugin)) lists it under *Also installs*.
 
 ### Keeping a plugin up to date
 
@@ -114,8 +114,8 @@ it installed. To move forward:
   and asks before changing anything. The answer is on the row: *Up to date*, *Could not
   check*, or the *Update to …* button.
 - **Check all for updates** answers every row at once. It reads the plugin lists first and
-  asks a repository only for a plugin no list carries, so it costs a request or two however
-  many plugins you have. A line under the button sums up what it found.
+  asks a repository only for a plugin no list carries, so it costs a request or two
+  however many plugins you have. A line under the button sums up what it found.
 - **Update all** appears when two or more rows offer an update. It installs them one after
   another, without the confirmation screen, and each plugin keeps its settings (on or off,
   loaded from a saved copy or not). A version that needs a newer editor is left, and the
@@ -161,10 +161,11 @@ shows the error.
 
 ### Sources
 
-Browse Plugins reads *registries*: JSON files listing plugins and the address each installs
-from. The project's own is [`scm-js/registry`](https://github.com/scm-js/registry), and the
-**Sources** button adds others. A registry only decides what is *offered*; installing from
-it goes through the same Add screen and pinning as a pasted address.
+Browse Plugins reads *registries*: JSON files listing plugins and the address each
+installs from. The project's own is
+[`scm-js/registry`](https://github.com/scm-js/registry), and the **Sources** button adds
+others. A registry only decides what is *offered*; installing from it goes through the
+same Add screen and pinning as a pasted address.
 
 Plugins you have that no registry lists (one you added by address, or one a list dropped)
 are shown under *Already installed*, marked *not listed*.
@@ -174,11 +175,11 @@ are shown under *Already installed*, marked *not listed*.
 This part builds one small plugin from nothing to a published repository. The plugin is
 **Base Check**: it counts the mineral fields and geysers near each start location, lists
 them in a panel, and can set every short mineral field back to the full amount. It is
-about sixty lines, and it uses the parts of the API most plugins use: reading the map,
-a panel, an edit with undo, events, storage, a menu item and a hotkey.
+about sixty lines, and it uses the parts of the API most plugins use: reading the map, a
+panel, an edit with undo, events, storage, a menu item and a hotkey.
 
-You need nothing installed. The first three steps run in the editor's API Playground;
-the files come in step 4.
+You need nothing installed. The first three steps run in the editor's API Playground; the
+files come in step 4.
 
 ### Before you start
 
@@ -188,17 +189,17 @@ the files come in step 4.
    Plugins ▸ Browse Plugins…, and open Tools ▸ API Playground.
 
 The playground is a code editor in which `api` is already defined. Ctrl+Enter runs what
-you wrote against the open map. On the documentation site each step below has a **Try
-it** link that opens the editor with the code already in the playground.
-[Trying the API first](#trying-the-api-first) describes the playground in full.
+you wrote against the open map. On the documentation site each step below has a **Try it**
+link that opens the editor with the code already in the playground. [Trying the API
+first](#trying-the-api-first) describes the playground in full.
 
 ![The API Playground beside the map: the "Place units in a ring" example has run, and the marines it placed are on the map](images/api-playground.webp)
 
 ### Step 1: read the map
 
 Reading needs no setup. `api.document.scenario()` is the open map, `api.query` answers
-questions about it, and `api.consts` has the numbers the map file uses, so the code
-does not hard-code that a vespene geyser is unit 188.
+questions about it, and `api.consts` has the numbers the map file uses, so the code does
+not hard-code that a vespene geyser is unit 188.
 
 ```ts
 const { tile, unit } = api.consts;
@@ -233,8 +234,8 @@ notice:
 
 A panel floats over the map without blocking it. Its `mount` function receives an empty
 element to fill, and `api.ui.widgets` builds lists, buttons and fields that look like the
-editor's own. The list is rebuilt whenever the units change, and clicking a row takes
-the view to that start location.
+editor's own. The list is rebuilt whenever the units change, and clicking a row takes the
+view to that start location.
 
 ```ts
 const { tile, unit } = api.consts;
@@ -283,8 +284,8 @@ the two listeners. The `"document"` event covers opening another map or switchin
 
 Every change to terrain or objects goes through `api.document.edit`. It takes the label
 Edit ▸ Undo will show and a function, and everything the function does becomes one undo
-entry. Here the edit sets every mineral field holding less than the standard 1500 back
-to 1500, and flashes the ones it changed.
+entry. Here the edit sets every mineral field holding less than the standard 1500 back to
+1500, and flashes the ones it changed.
 
 ```ts
 const { unit } = api.consts;
@@ -300,12 +301,12 @@ if (result.changed) api.view.flash({ units: short });
 api.ui.status(`${result.units} mineral fields topped up`);
 ```
 
-Press Ctrl+Z in the editor and the amounts go back. You did not mark anything as
-modified, repaint the map or write the undo record: the transaction does all three.
+Press Ctrl+Z in the editor and the amounts go back. You did not mark anything as modified,
+repaint the map or write the undo record: the transaction does all three.
 
 The function you pass must not be `async`. Fetch, load and ask the user before the call,
-then write in one go. [Asynchronous calls](#asynchronous-calls-and-the-one-synchronous-builder)
-has the reason.
+then write in one go. [Asynchronous
+calls](#asynchronous-calls-and-the-one-synchronous-builder) has the reason.
 
 ### Step 4: make it a plugin
 
@@ -328,8 +329,8 @@ build setup already in place. Or make the folder by hand:
 }
 ```
 
-`plugin.ts` is the three snippets above put together, with the setting for the radius
-kept in `api.storage`, a menu item and a hotkey:
+`plugin.ts` is the three snippets above put together, with the setting for the radius kept
+in `api.storage`, a menu item and a hotkey:
 
 ```ts
 import type { PluginApi } from "@scm-js/plugin-api";
@@ -411,8 +412,8 @@ export default function activate(api: PluginApi) {
 
 What changed from the snippets:
 
-- **`activate(api)` wraps everything.** The editor calls it once when the plugin is
-  turned on. The `import type` line is only for your code editor and the type-check; it is
+- **`activate(api)` wraps everything.** The editor calls it once when the plugin is turned
+  on. The `import type` line is only for your code editor and the type-check; it is
   removed before the file runs.
 - **Nothing is cleaned up by hand.** The menu item, hotkey, command and panel are removed
   when the user turns the plugin off. Only the two listeners inside `mount` are disposed
@@ -446,8 +447,8 @@ npm i -D @scm-js/plugin-api
 
 If the plugin fails to load, the editor raises a notice and the plugin's row in Manage
 Plugins shows the error. View ▸ Debug Console has every `api.log` line, the edits the
-plugin made and any listener that threw. [When something goes wrong](#when-something-goes-wrong)
-lists the usual mistakes.
+plugin made and any listener that threw. [When something goes
+wrong](#when-something-goes-wrong) lists the usual mistakes.
 
 ### Step 6: publish it
 
@@ -464,8 +465,8 @@ To have it appear in Browse Plugins as well, see [Getting listed](#getting-liste
   the icon, bundling npm dependencies, testing, CI, and what your users see when they
   install.
 - [Recipes](#recipes) has complete snippets for common jobs.
-- [The API, group by group](#the-api-group-by-group) has an example for every part of
-  the API.
+- [The API, group by group](#the-api-group-by-group) has an example for every part of the
+  API.
 - [Plugins to read](#plugins-to-read) lists the project's own plugins by what each one is
   a good example of. [Hello World](https://github.com/scm-js/plugin-hello-world) is the
   smallest, with the build and CI already set up.
@@ -481,40 +482,40 @@ reference for each piece.
 
 ### Trying the API first
 
-The [API Playground](https://github.com/scm-js/plugin-api-playground) plugin lets you
-call the API before setting anything up. Install it from Plugins ▸ Browse Plugins… and
-open Tools ▸ API Playground. Its panel has a code editor where `api` is already defined.
-Write a few lines, press Ctrl+Enter, and they run against the open map.
+The [API Playground](https://github.com/scm-js/plugin-api-playground) plugin lets you call
+the API before setting anything up. Install it from Plugins ▸ Browse Plugins… and open
+Tools ▸ API Playground. Its panel has a code editor where `api` is already defined. Write
+a few lines, press Ctrl+Enter, and they run against the open map.
 
-- **Stop** removes everything the run added: menu items, listeners, panels, overlays,
-  map tools and timers. Running again stops the previous run first.
+- **Stop** removes everything the run added: menu items, listeners, panels, overlays, map
+  tools and timers. Running again stops the previous run first.
 - **Undo Run** undoes the run's edits to the map.
 - The list at the top has worked examples, one idea each.
 - **Export as Plugin…** saves the snippet as a zip holding `plugin.json`, a `plugin.ts`
   with the snippet as the body of `activate`, and the typings and build setup described
   below.
-- A whole `plugin.ts` pasted in runs too: its `activate` is called, and what it returns
-  is called on **Stop**.
+- A whole `plugin.ts` pasted in runs too: its `activate` is called, and what it returns is
+  called on **Stop**.
 
-Type `api.` for completion. Hovering over a name shows its documentation, the same text
-as the [API reference](https://docs.scmjs.dev/api/).
+Type `api.` for completion. Hovering over a name shows its documentation, the same text as
+the [API reference](https://docs.scmjs.dev/api/).
 
 ![Hovering over api.document.edit in the playground shows its documentation](images/api-playground-hover.webp)
 
-On the documentation site, an example that runs as it is written has a **Try it** link.
-It opens the editor with the example in the playground, and offers to install the
-playground if you do not have it. Nothing runs until you press Run. **Copy Link**, at the
-foot of the panel, makes the same kind of link for your own snippet.
+On the documentation site, an example that runs as it is written has a **Try it** link. It
+opens the editor with the example in the playground, and offers to install the playground
+if you do not have it. Nothing runs until you press Run. **Copy Link**, at the foot of the
+panel, makes the same kind of link for your own snippet.
 
-Examples without a link are fragments: they need something only your plugin has, such as
-a server to talk to.
+Examples without a link are fragments: they need something only your plugin has, such as a
+server to talk to.
 
 ### Starting a plugin
 
 Start from [Hello World](https://github.com/scm-js/plugin-hello-world), or from a snippet
 exported from the playground. Hello World's `plugin.ts` is about sixty lines, mostly
-comments, and the typings, type-check, build and CI described below are already set up
-in it.
+comments, and the typings, type-check, build and CI described below are already set up in
+it.
 
 ### The two files
 
@@ -558,8 +559,8 @@ export default function activate(api: PluginApi) {
 
 Everything `add` and `on` return is a `Disposable`. Keep the ones you want to remove early
 and ignore the rest: turning the plugin off disposes all of them. A function returned from
-`activate` also runs when the plugin is turned off, for things the API does not know about,
-such as timers or sockets:
+`activate` also runs when the plugin is turned off, for things the API does not know
+about, such as timers or sockets:
 
 ```ts
 import type { PluginApi } from "@scm-js/plugin-api";
@@ -603,9 +604,9 @@ version is kept for a change that would.
   is recorded. The right file sections are saved, the map repaints, and doodads or units
   your terrain change left stranded are handled in the same entry. If your function
   throws, the edit is rolled back.
-- **What you add is removed for you.** Menu items, hotkeys, dialogs, panels, overlays,
-  map tools and listeners are all tracked, and turning the plugin off, reloading or
-  removing it takes them away whether or not you cleaned up.
+- **What you add is removed for you.** Menu items, hotkeys, dialogs, panels, overlays, map
+  tools and listeners are all tracked, and turning the plugin off, reloading or removing
+  it takes them away whether or not you cleaned up.
 - **The map you read cannot be written by accident.** `document.scenario()` and a
   transaction's `scenario` are typed read-only all the way down, so a change has to go
   through `edit`, `update` or `sections`, where it is recorded.
@@ -652,10 +653,10 @@ A plugin can ship a bundle and name it in the manifest:
 "build": "dist/plugin.js"
 ```
 
-The editor then imports that one file instead of compiling your source file by file. It
-is faster for anything bigger than one file, and the only way to use an npm dependency.
-Keep `entry` in the manifest too: it is what people read, and what loads when no bundle
-is published.
+The editor then imports that one file instead of compiling your source file by file. It is
+faster for anything bigger than one file, and the only way to use an npm dependency. Keep
+`entry` in the manifest too: it is what people read, and what loads when no bundle is
+published.
 
 The project's plugins all build with one esbuild command:
 
@@ -690,8 +691,8 @@ Ship the bundle unminified. Users judge a plugin by reading its repository.
 ### When something goes wrong
 
 - **The plugin does not load.** The editor raises a notice, and the plugin's row in
-  Plugins ▸ Manage Plugins… shows the error: a manifest it could not read, a file it
-  could not fetch, an import it refused, or what `activate` threw.
+  Plugins ▸ Manage Plugins… shows the error: a manifest it could not read, a file it could
+  not fetch, an import it refused, or what `activate` threw.
 - **It loads and misbehaves.** View ▸ Debug Console lists when each plugin started, every
   `api.log` line, each edit a plugin made, and every listener that threw. Turn on
   **Verbose** to add a line for every call your plugin makes into the editor. It is noisy,
@@ -774,9 +775,9 @@ export function repairs(strings: readonly (string | null)[], text: TextHelpers) 
 }
 ```
 
-The whole plugin is tested by running it: load it from your machine, or paste it into
-the playground. The shared CI workflow in [Building](#building) runs the type-check and
-the tests on every push.
+The whole plugin is tested by running it: load it from your machine, or paste it into the
+playground. The shared CI workflow in [Building](#building) runs the type-check and the
+tests on every push.
 
 ### What your users see
 
@@ -789,8 +790,8 @@ the tests on every push.
 
 ### Requiring another plugin
 
-A plugin can depend on another, such as a trigger editor that needs a compiler. Name it
-in the manifest with the same address you would paste into Manage Plugins:
+A plugin can depend on another, such as a trigger editor that needs a compiler. Name it in
+the manifest with the same address you would paste into Manage Plugins:
 
 ```json
 { "name": "Magenta", "requires": ["github:scm-js/plugin-eudplib"] }
@@ -800,7 +801,8 @@ The editor then treats the two as a pair:
 
 - Adding yours adds the required one first, with the same options.
 - Turning yours on turns it on, and at startup it starts before yours.
-- While yours is on, it cannot be turned off or removed; its row says which plugin needs it.
+- While yours is on, it cannot be turned off or removed; its row says which plugin needs
+  it.
 
 The manifest does not say which version is enough. The two meet through `api.services`:
 the required plugin provides a service with a version, and yours checks it and explains in
@@ -826,26 +828,25 @@ You call `fetch` yourself. Two things only show up in the desktop app:
 organisation: every repository named `plugin-…`, or with both the `scmjs` and `plugin`
 topics, is listed with the `plugin.json` at its newest version tag. It refreshes hourly.
 
-For a plugin anywhere else, fill in the
-[submission form](https://github.com/scm-js/registry/issues/new?template=submit-plugin.yml)
-with your repository's address and the search words you want. The listing reads the rest
-from your `plugin.json`. A bot checks the repository right away and replies with what it
-found, and then someone reads the code and decides whether to list it.
+For a plugin anywhere else, fill in the [submission
+form](https://github.com/scm-js/registry/issues/new?template=submit-plugin.yml) with your
+repository's address and the search words you want. The listing reads the rest from your
+`plugin.json`. A bot checks the repository right away and replies with what it found, and
+then someone reads the code and decides whether to list it.
 
 Any URL serving a file in the same format is a registry, and users can add one under
 Sources.
 
 ## Recipes
 
-Complete snippets for common jobs, each using several parts of the API together. Every
-one runs in the playground as written; in a plugin, the same lines go inside
-`activate(api)`. [The API, group by group](#the-api-group-by-group) explains each call
-they use.
+Complete snippets for common jobs, each using several parts of the API together. Every one
+runs in the playground as written; in a plugin, the same lines go inside `activate(api)`.
+[The API, group by group](#the-api-group-by-group) explains each call they use.
 
 ### A problems panel that follows the map
 
-Check Map's findings in a docked panel, refreshed after every change. Clicking a row
-goes to the unit, location or trigger, or opens the settings dialog the problem is in.
+Check Map's findings in a docked panel, refreshed after every change. Clicking a row goes
+to the unit, location or trigger, or opens the settings dialog the problem is in.
 
 ```ts
 const w = api.ui.widgets;
@@ -879,8 +880,8 @@ api.ui.panel({
 ### A heat map of where the units are
 
 An overlay drawn from the map's own data: units counted in blocks of four tiles, and each
-block tinted by how many it holds. The count is redone when the units change, not on
-every repaint, because `draw` runs each time the view moves.
+block tinted by how many it holds. The count is redone when the units change, not on every
+repaint, because `draw` runs each time the view moves.
 
 ```ts
 const BLOCK = 4; // tiles
@@ -919,9 +920,9 @@ for (const event of ["units", "document"] as const) {
 
 ### A brush of your own
 
-A map tool that paints the Terrain palette's current terrain while the button is held,
-and commits the whole drag as one undo entry when it is released. Collecting during the
-drag and writing once on release is what makes one stroke one Ctrl+Z.
+A map tool that paints the Terrain palette's current terrain while the button is held, and
+commits the whole drag as one undo entry when it is released. Collecting during the drag
+and writing once on release is what makes one stroke one Ctrl+Z.
 
 ```ts
 await api.tileset.load();
@@ -1019,8 +1020,8 @@ Trigger Editor shows them as generated and the user does not edit them by hand.
 
 ### Notes kept inside the map
 
-A text box whose contents are stored as a file in the map archive, so they travel with
-the map and are written on the next Save. The write is delayed until typing pauses.
+A text box whose contents are stored as a file in the map archive, so they travel with the
+map and are written on the next Save. The write is delayed until typing pauses.
 
 ```ts
 const FILE = "my-plugin\\notes.txt";
@@ -1066,8 +1067,8 @@ if (scn) {
 }
 ```
 
-And place units from one, as a single undo entry. A row with anything that is not a
-number where a number belongs is skipped:
+And place units from one, as a single undo entry. A row with anything that is not a number
+where a number belongs is skipped:
 
 ```ts
 const [file] = await api.ui.pickFiles({ accept: ".csv" });
@@ -1218,9 +1219,9 @@ The open map as a whole.
   the way Save writes it, ready to upload) and `renderImage` (a PNG).
 - **Whole-map changes:** `resize` and `changeTileset`. Both clear the undo history, as the
   editor's own dialogs do.
-- **Several open maps:** `id()` is the map in front, `list()` every open map, `activate(id)`
-  brings one to the front. Every other call works on the map in front. Key anything you
-  keep per map on `id()`. Only switch maps when the user asked for it.
+- **Several open maps:** `id()` is the map in front, `list()` every open map,
+  `activate(id)` brings one to the front. Every other call works on the map in front. Key
+  anything you keep per map on `id()`. Only switch maps when the user asked for it.
 - **Files inside the archive:** `extras` lists, reads and writes files stored next to the
   scenario (`list`, `get`, `set`, `remove`). Keep yours in a folder of your own
   (`my-plugin\notes.json`); they are written on the next Save.
@@ -1229,8 +1230,8 @@ The open map as a whole.
   preview of one from a website. It can be panned, zoomed and selected in, but the editing
   tools, menus and dialogs are switched off. Every write throws with the reason: `edit`,
   `update`, the clipboard, `extras`, `save` (as anything but a copy) and the rest.
-  `info().viewOnly` and `list()` say which maps are like this. File ▸ Edit a Copy gives the
-  person an ordinary copy to change.
+  `info().viewOnly` and `list()` say which maps are like this. File ▸ Edit a Copy gives
+  the person an ordinary copy to change.
 
 Reading, and a file of the plugin's own that travels with the map:
 
@@ -1265,15 +1266,16 @@ edits already included. Section Explorer is built on it, and Repair uses its hel
 - **Reading:** `list()` gives each section's name, offset, size and what the editor knows
   about it. `bytes(index)` is one section's payload, `combined(name)` what the game uses
   when a name is repeated, and `file()` the whole file.
-- **Writing:** `write`, `rename`, `insert`, `remove`, `move` and `replaceFile`. After each,
-  the file is parsed again from scratch and becomes the open map, so the change reaches
-  every part of the editor even for sections it does not understand. The undo history and
-  selections are cleared, and the `"document"` event fires with reason `"replace"`. Each
-  returns the parser's `warnings`. Indices shift after an insert or remove, so call
-  `list()` again. Every write marks the map modified, except `replaceFile(bytes, {
-  asOpened: true })`, which takes the bytes as the file that was opened: for a repair
-  made right after `"open"`, before the user changed anything, so the map does not ask
-  to be saved when nothing the user did changed it. Save still writes the bytes.
+- **Writing:** `write`, `rename`, `insert`, `remove`, `move` and `replaceFile`. After
+  each, the file is parsed again from scratch and becomes the open map, so the change
+  reaches every part of the editor even for sections it does not understand. The undo
+  history and selections are cleared, and the `"document"` event fires with reason
+  `"replace"`. Each returns the parser's `warnings`. Indices shift after an insert or
+  remove, so call `list()` again. Every write marks the map modified, except
+  `replaceFile(bytes, { asOpened: true })`, which takes the bytes as the file that was
+  opened: for a repair made right after `"open"`, before the user changed anything, so the
+  map does not ask to be saved when nothing the user did changed it. Save still writes the
+  bytes.
 - **Helpers for repairs:** `required()` (the sections this map's revision must have),
   `defaults(name)` (what File ▸ New would write), `trailing()` (bytes after the last
   readable section), `chkOf(file)` (the scenario inside an `.scx` / `.scm`) and
@@ -1315,8 +1317,8 @@ api.document.buildSteps.add({
   plugins run one after another, in activation order. `purpose` is `"save"`, `"test"` or
   `"export"`.
 - The editor keeps the unbuilt scenario inside the file and shows that one when the map is
-  opened again, so generated triggers never appear in the trigger list. See
-  [Opening and saving maps](file-formats.md#built-maps).
+  opened again, so generated triggers never appear in the trigger list. See [Opening and
+  saving maps](file-formats.md#built-maps).
 - **A step cannot cost the user a save.** If `run` throws, the map is saved unbuilt and a
   notice shows your error message, so write it for the user. A *Save without it* button
   aborts the `signal` that `run` is also given. Test Map stops on an error instead.
@@ -1339,10 +1341,10 @@ Units palette's *Remove stranded units* is on), commits and repaints.
   (`stampTerrain`, `paintIsom`, `fillArea`, `placeBlend`, `replaceTerrain`, `fillFlat`),
   and the ISOM lattice (`rebuildIsom`, `tilesFromIsom`). Most brushes need the tileset
   graphics.
-- **Objects:** units (`placeUnit`, `canPlaceUnit`, `addUnits`, `moveUnits`,
-  `updateUnits`, `placeStartLocations`, …), sprites, doodads (`placeDoodad`,
-  `convertDoodads`), locations (`addLocation`, `editLocation`; slot 63, Anywhere, is
-  protected), fog (`setFog`, `floodFog`, …) and `paste` for a whole `Clip`.
+- **Objects:** units (`placeUnit`, `canPlaceUnit`, `addUnits`, `moveUnits`, `updateUnits`,
+  `placeStartLocations`, …), sprites, doodads (`placeDoodad`, `convertDoodads`), locations
+  (`addLocation`, `editLocation`; slot 63, Anywhere, is protected), fog (`setFog`,
+  `floodFog`, …) and `paste` for a whole `Clip`.
 - **Symmetry:** `mirror` and `mirrorPoint` give the positions Tools ▸ Symmetry would also
   paint, so your edit can follow the user's setting.
 - `note(text)` adds a line to the status bar message.
@@ -1431,16 +1433,16 @@ api.document.update("Add a countdown", (tx) => {
 });
 ```
 
-The update is one undo entry under its label, like a dialog's OK: `api.document.undo()`
-or Ctrl+Z takes back everything it wrote.
+The update is one undo entry under its label, like a dialog's OK: `api.document.undo()` or
+Ctrl+Z takes back everything it wrote.
 
 ### `api.settings`
 
 [Reference](https://docs.scmjs.dev/api/settings/)
 
 The same views as the `UpdateTransaction` parts, for reading without a transaction:
-players, forces, unit types, upgrades, techs, sounds, unit property slots, and
-`version()` (revision and text encoding). Write through `document.update`.
+players, forces, unit types, upgrades, techs, sounds, unit property slots, and `version()`
+(revision and text encoding). Write through `document.update`.
 
 ```ts
 for (const p of api.settings.players().slice(0, 8)) {
@@ -1464,13 +1466,13 @@ Reading triggers and everything needed to show one. Writing is `document.update`
 - `newTrigger`, `newCondition` and `newAction` make blank records.
 - `usage()` lists every death counter and switch the triggers use, for a plugin that needs
   counters of its own. `epd` and `addressOf` do EUD address arithmetic.
-- `references()` says what each trigger reads, writes and names: switches, death
-  counters, memory addresses, locations, the countdown timer, ore and gas, scores, units,
-  strings, sounds, AI scripts and Victory / Defeat / Draw. A condition reads; an action
-  writes, or *uses* something without changing it (the location units are created at, the
-  text a message shows). Player groups come resolved to slots, with `approximate` set for
-  groups the game settles only while it runs, such as *Foes*. `resolvePlayers(group)` does
-  that resolution on its own.
+- `references()` says what each trigger reads, writes and names: switches, death counters,
+  memory addresses, locations, the countdown timer, ore and gas, scores, units, strings,
+  sounds, AI scripts and Victory / Defeat / Draw. A condition reads; an action writes, or
+  *uses* something without changing it (the location units are created at, the text a
+  message shows). Player groups come resolved to slots, with `approximate` set for groups
+  the game settles only while it runs, such as *Foes*. `resolvePlayers(group)` does that
+  resolution on its own.
 
 Every trigger as the trigger list shows it:
 
@@ -1512,9 +1514,9 @@ try {
 ```
 
 A location or unit the text names has to exist in the map, or the parse fails with the
-line number. The [trigger reference](triggers.md) lists every condition and action in
-this form. Use `newTrigger` / `newCondition` / `newAction` to change one field of an
-existing record.
+line number. The [trigger reference](triggers.md) lists every condition and action in this
+form. Use `newTrigger` / `newCondition` / `newAction` to change one field of an existing
+record.
 
 **Claiming generated triggers.** `claim(spec)` marks a run of the trigger list as made by
 your plugin. The Trigger Editor badges and locks those rows and shows your description
@@ -1563,8 +1565,8 @@ The *As text* button at the bottom left of the picture is a [dialog slot](#apiui
 
 Read-only questions about the open map.
 
-- **What is where:** `unitAt`, `spriteAt`, `doodadAt`, `locationAt`, `unitsIn`,
-  `unitsOf`, `startLocations`, `fogAt`.
+- **What is where:** `unitAt`, `spriteAt`, `doodadAt`, `locationAt`, `unitsIn`, `unitsOf`,
+  `startLocations`, `fogAt`.
 - **Placement:** `placement(unitId, x, y)` gives the Units palette's verdict with a reason
   in words; `doodadPlacement` checks a doodad's ground.
 - **The editor's own tools:** `validate()` (Check Map's issues), `statistics()`,
@@ -1652,8 +1654,8 @@ covered. A plugin written only for the game's own data can check `profile().id`
 `read(path)` hands over one of the extracted files as bytes, for a plugin that reads the
 game's formats itself: `arr/units.dat`, `tileset/jungle.cv5`, `unit/zerg/drone.grp`. Paths
 are the archive's, in lower case with forward slashes, and `tileset/manifest.json` and
-`unit/manifest.json` list what was extracted. It answers null for a file the copy does
-not have.
+`unit/manifest.json` list what was extracted. It answers null for a file the copy does not
+have.
 
 ```ts
 const source = api.gameData.source();
@@ -1683,8 +1685,8 @@ api.document.edit("Invincible", (tx) => tx.updateUnits(selected, (u) => ({
 })));
 ```
 
-For an argument that takes one of a fixed set of values, `api.triggers.defs.choices`
-gives the values with their labels:
+For an argument that takes one of a fixed set of values, `api.triggers.defs.choices` gives
+the values with their labels:
 
 ```ts
 // What each argument of a Set Switch action can be.
@@ -1711,10 +1713,10 @@ It suits a list or a tooltip better than a unit's picture from the map. A copy o
 data installed by an older version of the editor has no icons until it is installed again;
 show the name instead.
 
-Unit and sprite images and the icons load lazily, so the first request often returns
-null. Call `requestUnit` / `requestSprite` / `requestIcons`, and redraw in `onImageLoaded`. An image is the editor's
-own cached canvas: draw from it onto a canvas of yours instead of moving it into your
-page.
+Unit and sprite images and the icons load lazily, so the first request often returns null.
+Call `requestUnit` / `requestSprite` / `requestIcons`, and redraw in `onImageLoaded`. An
+image is the editor's own cached canvas: draw from it onto a canvas of yours instead of
+moving it into your page.
 
 ```ts
 await api.graphics.load();
@@ -1828,9 +1830,9 @@ an edit to a unit someone else deleted is dropped.
 
 Read-only help with the current tileset: the terrains that can be painted (`types`,
 `isomTypes`), what a tile is (`tileInfo`, `terrainAt`, `color`, `heightOf`), the ISOM
-lattice (`diamondAt`, `diamondsIn`), `floodRegion` and `blendCandidates`. Also the
-Terrain palette's current brush (`active` / `setActive`) and Tools ▸ Symmetry
-(`symmetry` / `setSymmetry`, `mirror`).
+lattice (`diamondAt`, `diamondsIn`), `floodRegion` and `blendCandidates`. Also the Terrain
+palette's current brush (`active` / `setActive`) and Tools ▸ Symmetry (`symmetry` /
+`setSymmetry`, `mirror`).
 
 ```ts
 await api.tileset.load();
@@ -1857,8 +1859,8 @@ if (report?.stale && (await api.ui.confirm("The isometric data is out of step wi
 [Reference](https://docs.scmjs.dev/api/tileset/)
 
 The open map's tileset: `id()`, `name()`, `isLoaded()`, `load()` and `raw()` for the
-decoded data. `load()` resolves `false` when the graphics were never installed, which is
-a normal state. `load("jungle")` fetches another tileset without changing the map, which
+decoded data. `load()` resolves `false` when the graphics were never installed, which is a
+normal state. `load("jungle")` fetches another tileset without changing the map, which
 `graphics.renderClip` needs to draw a clip from a map on that tileset.
 
 ```ts
@@ -1890,8 +1892,8 @@ if (area) {
 
 [Reference](https://docs.scmjs.dev/api/clipboard/)
 
-The Cut / Copy / Paste layer, sharing the user's clipboard: `copy`, `cut`, `paste`,
-`clip` / `setClip`, and the parts and paste mode. A `Clip` can be pasted into another map.
+The Cut / Copy / Paste layer, sharing the user's clipboard: `copy`, `cut`, `paste`, `clip`
+/ `setClip`, and the parts and paste mode. A `Clip` can be pasted into another map.
 `capture()` returns what `copy` would take without touching the user's clipboard, for a
 plugin that keeps its own clips, like Stamp Library.
 
@@ -1912,9 +1914,8 @@ if (clip) {
 
 [Reference](https://docs.scmjs.dev/api/exchange/)
 
-The formats behind File ▸ Import / Export: SCMDraft's `.trg` trigger files
-(`encodeTrg` / `decodeTrg`) and the tab-separated strings file (`formatStrings` /
-`parseStrings`).
+The formats behind File ▸ Import / Export: SCMDraft's `.trg` trigger files (`encodeTrg` /
+`decodeTrg`) and the tab-separated strings file (`formatStrings` / `parseStrings`).
 
 ```ts
 // The triggers as a .trg file SCMDraft opens.
@@ -1927,10 +1928,10 @@ await api.ui.saveFile(trg, "triggers.trg");
 [Reference](https://docs.scmjs.dev/api/palette/)
 
 What the Units, Sprites, Doodads and Fog palettes have picked and what they list, so a
-plugin can use "whatever the user chose" without a picker of its own. Paint does this.
-It also holds the placement rules (collision, terrain, snap to grid, remove stranded
-units) that `placeUnit`, `canPlaceUnit` and `query.placement` follow. The Terrain
-palette's pick is `terrain.active()`.
+plugin can use "whatever the user chose" without a picker of its own. Paint does this. It
+also holds the placement rules (collision, terrain, snap to grid, remove stranded units)
+that `placeUnit`, `canPlaceUnit` and `query.placement` follow. The Terrain palette's pick
+is `terrain.active()`.
 
 ```ts
 // Place whatever the Units palette has picked, for the player it has picked.
@@ -2037,12 +2038,12 @@ Everything a plugin shows. The main pieces:
 
 ![The editor with plugin UI in five places, numbered](images/plugin-surfaces.webp)
 
-Where the main pieces appear: a menu item (1), a floating panel (2), a docked panel (3),
-a status bar cell (4) and a map button (5). The icon beside each is the plugin's own.
+Where the main pieces appear: a menu item (1), a floating panel (2), a docked panel (3), a
+status bar cell (4) and a map button (5). The icon beside each is the plugin's own.
 
-There is no framework here. A dialog or panel gives you an empty element, and you fill
-it with plain DOM. `api.ui.widgets` builds buttons, fields, forms and lists in the
-editor's own style, and `api.ui.el(tag, props, ...children)` makes any other element.
+There is no framework here. A dialog or panel gives you an empty element, and you fill it
+with plain DOM. `api.ui.widgets` builds buttons, fields, forms and lists in the editor's
+own style, and `api.ui.el(tag, props, ...children)` makes any other element.
 `widgets.tabs` gives a row of tabs over a panel each, filled the first time it is shown
 and kept after, and `widgets.segmented` a few buttons of which one is on, for a short
 choice that should stay in view.
@@ -2060,9 +2061,9 @@ if (name) {
 **Tooltips.** `api.ui.tooltip(element, content)` puts the editor's own tooltip on an
 element of yours. The content is a line of text, or a function that builds what to show
 where the pointer is: rows, bars, pictures. A function is called again as the pointer
-moves, so a chart can say what is under it. Return null to show nothing at that spot.
-The editor keeps the tooltip beside the pointer and on screen, and removes it when the
-pointer leaves. Leave out the element's `title`, or the browser's tooltip shows as well.
+moves, so a chart can say what is under it. Return null to show nothing at that spot. The
+editor keeps the tooltip beside the pointer and on screen, and removes it when the pointer
+leaves. Leave out the element's `title`, or the browser's tooltip shows as well.
 
 ```ts
 api.ui.tooltip(canvas, (at) => {
@@ -2112,12 +2113,12 @@ api.ui.dialog({
 
 **Panels** block nothing: the user keeps editing while one is open. A floating panel can
 be dragged and, with `resizable: true`, resized. With `maximizable: true` a button in its
-title strip, or a double-click on the strip, makes it fill the map's area and puts it back,
-for a window of charts or tables read at length (`handle.maximize()` does it too). `dock: "right"` puts it in the dock
-under the built-in panels, which suits anything kept open while working. `dock: "bottom"`
-puts it in a strip under the map, as wide as the map, for things read across its width
-such as a timeline. The user drags the strip's top edge to make it taller or shorter;
-`height` sets where it starts.
+title strip, or a double-click on the strip, makes it fill the map's area and puts it
+back, for a window of charts or tables read at length (`handle.maximize()` does it too).
+`dock: "right"` puts it in the dock under the built-in panels, which suits anything kept
+open while working. `dock: "bottom"` puts it in a strip under the map, as wide as the map,
+for things read across its width such as a timeline. The user drags the strip's top edge
+to make it taller or shorter; `height` sets where it starts.
 
 ```ts
 // A unit count that follows the map, docked under the built-in panels.
@@ -2153,8 +2154,8 @@ picture of the map made another way. You choose which maps offer the view. A map
 offers one has a small switch in the top-left corner of its area, *Map* first and then
 your view by its title, and each map stays on whichever the user left it on. You can also
 switch it yourself with `show`. The editor gives the view one element for its whole life
-and never moves it, so an iframe inside isn't loaded again when the user switches back
-and forth or goes to another tab and back.
+and never moves it, so an iframe inside isn't loaded again when the user switches back and
+forth or goes to another tab and back.
 
 ```ts
 // A view of its own for the maps this plugin opens.
@@ -2174,33 +2175,33 @@ if (await api.document.open(bytes, "replay.scx", { viewOnly: { label: "Replay" }
 ```
 
 A view that can be moved around the map should feel like the map itself. Four things make
-that happen. Say where the view is looking with `setCamera`, in map pixels (its middle and how
-much of the map it shows). The editor's minimap then draws its box there, and switching back
-to *Map* opens the map on the same place at the same scale. `onShow` hears where the map was
-looking when the user switches to your view, so you can open there. `onZoom` takes the
-editor's zoom while your view is in front: View ▸ Zoom In and Zoom Out, the zoom levels, Zoom
-to Fit, the toolbar's magnifiers and their keys ask your view to look at a new scale instead
-of zooming the hidden map, and the toolbar and the status bar show your view's zoom, worked
-out from what `setCamera` last said. If your view gets the mouse wheel itself, as an iframe
-does, pass it to `wheel` and the editor zooms by the same rule as over the map: Ctrl and the
-wheel, or the wheel alone when the user's preferences say so, toward the pointer when they
-say that. And `minimap` replaces what the minimap shows while your view is in front. The
-minimap draws the map's ground, then your `draw` in place of the map's units, start
-locations and fog, and a press or a drag on it goes to your `press` instead of moving the
-hidden map.
+that happen. Say where the view is looking with `setCamera`, in map pixels (its middle and
+how much of the map it shows). The editor's minimap then draws its box there, and
+switching back to *Map* opens the map on the same place at the same scale. `onShow` hears
+where the map was looking when the user switches to your view, so you can open there.
+`onZoom` takes the editor's zoom while your view is in front: View ▸ Zoom In and Zoom Out,
+the zoom levels, Zoom to Fit, the toolbar's magnifiers and their keys ask your view to
+look at a new scale instead of zooming the hidden map, and the toolbar and the status bar
+show your view's zoom, worked out from what `setCamera` last said. If your view gets the
+mouse wheel itself, as an iframe does, pass it to `wheel` and the editor zooms by the same
+rule as over the map: Ctrl and the wheel, or the wheel alone when the user's preferences
+say so, toward the pointer when they say that. And `minimap` replaces what the minimap
+shows while your view is in front. The minimap draws the map's ground, then your `draw` in
+place of the map's units, start locations and fog, and a press or a drag on it goes to
+your `press` instead of moving the hidden map.
 
 Three more carry the rest of the editor's view over. `paintOver(ctx, view)` draws what the
-editor draws over a map, the grid and the locations as the View menu has them and the other
-plugins' visible overlays, onto a canvas of yours over the view, mapped by the same kind of
-`MapView` an overlay's `draw` gets. Call it from your own drawing, above your view's picture and
-below your own marks; `onRepaint` says when it would draw something else (a toggle, the grid's
-settings, a location, another overlay). With `onRepaint` the Grid, Locations and Location Names
-toggles stay on offer while your view is in front; without it they are greyed. `onFog` takes
-View ▸ Fog of War and its button: the toggle then shows your view's own fog as `setFog` last
-said (null greys it while there is none to show). And `setPointer` gives the status bar's tile
-and position, since an iframe hears the pointer and the editor does not. Everything else that
-is the hidden map's (its layers, selection, clipboard, Find and toggles like Units) is off
-while your view is in front.
+editor draws over a map, the grid and the locations as the View menu has them and the
+other plugins' visible overlays, onto a canvas of yours over the view, mapped by the same
+kind of `MapView` an overlay's `draw` gets. Call it from your own drawing, above your
+view's picture and below your own marks; `onRepaint` says when it would draw something
+else (a toggle, the grid's settings, a location, another overlay). With `onRepaint` the
+Grid, Locations and Location Names toggles stay on offer while your view is in front;
+without it they are greyed. `onFog` takes View ▸ Fog of War and its button: the toggle
+then shows your view's own fog as `setFog` last said (null greys it while there is none to
+show). And `setPointer` gives the status bar's tile and position, since an iframe hears
+the pointer and the editor does not. Everything else that is the hidden map's (its layers,
+selection, clipboard, Find and toggles like Units) is off while your view is in front.
 
 ```ts
 let units: { x: number; y: number; colour: string }[] = [];
@@ -2273,10 +2274,10 @@ api.ui.preferencesPage({
 api.ui.open("preferences", { page: `plugin:${api.plugin.id}` });
 ```
 
-**Dialog slots** add a button or row to a built-in dialog's footer, or to another
-plugin's dialog that offers one. Your `mount` receives the dialog's fields: the form as
-the user sees it, not yet applied to the map. The slot can read a field and fill it in,
-and the user still presses OK.
+**Dialog slots** add a button or row to a built-in dialog's footer, or to another plugin's
+dialog that offers one. Your `mount` receives the dialog's fields: the form as the user
+sees it, not yet applied to the map. The slot can read a field and fill it in, and the
+user still presses OK.
 
 | Dialog id | Fields it lends |
 | --- | --- |
@@ -2417,22 +2418,22 @@ that runs while the user carries on editing the map.
 
 ### `api.menu` / `api.contextMenu` / `api.hotkeys`
 
-References: [menu](https://docs.scmjs.dev/api/menu/),
-[context menu](https://docs.scmjs.dev/api/context-menu/),
+References: [menu](https://docs.scmjs.dev/api/menu/), [context
+menu](https://docs.scmjs.dev/api/context-menu/),
 [hotkeys](https://docs.scmjs.dev/api/hotkeys/)
 
 - **`menu.add(path, item)`.** `path` is a menu (`"Tools"`) or a submenu (`"File/Import"`),
   always in English, and so is the item's `label`: labels are how items find each other,
   whatever language the menu shows. The editor translates built-in labels itself, and
-  yours through the catalogues you register with `api.i18n`. Items go at the end
-  of the menu unless `after` names an item to follow. A path that names no existing
-  submenu creates one for your plugin (`"Tools/AI"`), and one that names no menu creates
-  a top-level menu before Help (`"Account"`). `icon: "plugin"` marks an item with your
+  yours through the catalogues you register with `api.i18n`. Items go at the end of the
+  menu unless `after` names an item to follow. A path that names no existing submenu
+  creates one for your plugin (`"Tools/AI"`), and one that names no menu creates a
+  top-level menu before Help (`"Account"`). `icon: "plugin"` marks an item with your
   plugin's icon.
 - **`contextMenu.add(surface, item)`.** Surfaces are `"viewport"` (the map) and
   `"terrainPalette"`. The item's functions receive what was under the pointer. A fixed
-  `label` is English and translated like a menu label; a function label is called when
-  the menu opens, so translate it there with `api.i18n.t`.
+  `label` is English and translated like a menu label; a function label is called when the
+  menu opens, so translate it there with `api.i18n.t`.
 - **`hotkeys.add("Ctrl+Shift+I", run)`.** Plugin hotkeys are checked before the built-in
   ones, and never while typing or while a dialog is open.
 
@@ -2460,8 +2461,8 @@ api.hotkeys.add("Ctrl+Alt+G", () => api.view.setFlags({ grid: !api.view.flags().
 
 [Reference](https://docs.scmjs.dev/api/i18n/)
 
-Translating your plugin the way the editor translates itself: the English text is the
-key, and a missing translation shows the English.
+Translating your plugin the way the editor translates itself: the English text is the key,
+and a missing translation shows the English.
 
 ```ts
 api.i18n.register({ ko: {
@@ -2477,13 +2478,13 @@ api.menu.add("Tools", {
 - `t(text, params)` translates; `tc(context, text, params)` does the same for identical
   English meant two ways.
 - Placeholders are a subset of ICU MessageFormat: `{name}`, `plural` and `select`. For
-  Korean, `{name|을}` picks the particle that agrees with the value (을/를, 이/가, 은/는,
-  과/와, 으로/로).
+  Korean, `{name|을}` picks the particle that agrees with the value (을/를, 이/가, 은/는, 과/와,
+  으로/로).
 - Menu labels, fixed context-menu labels, overlay names and a trigger claim's `label`,
-  `badge` and `openLabel` are the exception: give them in English and
-  the editor translates them with your catalogues when it draws them. Your manifest's
-  `name` is shown the same way once the plugin is running, so a descriptive name
-  ("Stamp Library") can have an entry; a product name needs none.
+  `badge` and `openLabel` are the exception: give them in English and the editor
+  translates them with your catalogues when it draws them. Your manifest's `name` is shown
+  the same way once the plugin is running, so a descriptive name ("Stamp Library") can
+  have an entry; a product name needs none.
 - `language` is the current language (`"en"`, `"ko"`). The `"language"` event fires when
   it changes, so you can relabel what is showing.
 
@@ -2548,9 +2549,9 @@ api.events.on("document", (e) => {
 
 `get(key, fallback)`, `set(key, value)` and `remove(key)` keep JSON in the browser under
 your plugin's id. `set` returns `false` when the browser refuses (the quota is a few
-megabytes for the whole editor), so a plugin storing the user's work can say so. Users
-can see and clear your keys in Preferences ▸ Storage, so never keep the only copy of
-something there.
+megabytes for the whole editor), so a plugin storing the user's work can say so. Users can
+see and clear your keys in Preferences ▸ Storage, so never keep the only copy of something
+there.
 
 ```ts
 const runs = api.storage.get("runs", 0) + 1;

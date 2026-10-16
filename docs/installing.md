@@ -2,8 +2,8 @@
 
 scmJS runs in a web browser, as a desktop app for Windows, macOS and Linux, or from a
 container on your own server. Whichever you choose, the editor asks once for StarCraft's
-graphics, which are not shipped with it. This page covers each way of running it and
-that first question. The [user guide](guide.md) starts once the editor is open.
+graphics, which are not shipped with it. This page covers each way of running it and that
+first question. The [user guide](guide.md) starts once the editor is open.
 
 ## In the browser
 
@@ -13,23 +13,23 @@ you use a network feature: a copy kept on your scmjs.dev account, a map you shar
 others to edit with you, or a question for the AI, all described in the user guide.
 
 [scmjs.dev/nightly](https://scmjs.dev/nightly/) is rebuilt every night from the latest
-changes, for trying what is in development. It keeps its own settings, plugins and sign-in,
-apart from the stable editor's, but shares the game's graphics with the stable editor and
-the game's page, so you add them once for all three. It used to be at
-`nightly.editor.scmjs.dev`, which now sends you on, and its settings come with you the first
-time.
+changes, for trying what is in development. It keeps its own settings, plugins and
+sign-in, apart from the stable editor's, but shares the game's graphics with the stable
+editor and the game's page, so you add them once for all three. It used to be at
+`nightly.editor.scmjs.dev`, which now sends you on, and its settings come with you the
+first time.
 
-The hosted editor, the nightly and the documentation site count visits with Cloudflare
-Web Analytics (no cookies, and nothing about your maps). The desktop app and a copy you
-host yourself do not.
+The hosted editor, the nightly and the documentation site count visits with Cloudflare Web
+Analytics (no cookies, and nothing about your maps). The desktop app and a copy you host
+yourself do not.
 
 Chrome and Edge save a map back to the file you opened. In Firefox and Safari every save
 is a download, and File ▸ Open Recent asks for the file again.
 
 ## The desktop app
 
-The [releases](https://github.com/scm-js/scm-js/releases) page has the installers. These links always point at
-the newest numbered release:
+The [releases](https://github.com/scm-js/scm-js/releases) page has the installers. These
+links always point at the newest numbered release:
 
 | System | Download |
 | --- | --- |
@@ -75,8 +75,8 @@ sudo apt install ./scmJS-linux-amd64.deb
 
 ### Updates
 
-The app checks for a new version when it starts (a preference, on by default) and when
-you choose Help ▸ Check for Updates…. A new version shows up as a notice with a Download
+The app checks for a new version when it starts (a preference, on by default) and when you
+choose Help ▸ Check for Updates…. A new version shows up as a notice with a Download
 button; nothing downloads or installs until you ask, and installing asks about unsaved
 maps first, as closing the window does. Windows, the AppImage and the `.deb` install the
 update themselves. On macOS the app cannot replace itself until it is code-signed, so it
@@ -107,8 +107,8 @@ locally:
 docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest
 ```
 
-then open `http://localhost:8080`. The image is the same editor as the numbered release
-it is tagged with, and carries no game data, so it asks for the graphics like the hosted
+then open `http://localhost:8080`. The image is the same editor as the numbered release it
+is tagged with, and carries no game data, so it asks for the graphics like the hosted
 editor. To serve graphics you have already extracted instead, see
 [game-data.md](game-data.md#the-container-image).
 
@@ -132,13 +132,12 @@ use it asks where to get them:
   installed in: it has no such archives, and the editor reads the same files out of the
   installation instead, along with the tiles Remastered added to most tilesets.
 
-The extraction runs in the browser and the result is kept for next time; the desktop
-app looks for an installation on its own first. If the editor was opened from a link (a
-shared map to join, or a copy of a map), that comes first, and the question about the
-graphics follows once you have answered it. **Help ▸ Game Data…** brings the dialog
-back later, to remove the copy or to install a second *data set* beside it: a mod's
-files, or a StarCraft: Remastered installation's (see
-[game-data.md](game-data.md#data-sets)).
+The extraction runs in the browser and the result is kept for next time; the desktop app
+looks for an installation on its own first. If the editor was opened from a link (a shared
+map to join, or a copy of a map), that comes first, and the question about the graphics
+follows once you have answered it. **Help ▸ Game Data…** brings the dialog back later, to
+remove the copy or to install a second *data set* beside it: a mod's files, or a
+StarCraft: Remastered installation's (see [game-data.md](game-data.md#data-sets)).
 
 ### Remastered graphics
 
@@ -148,24 +147,23 @@ the classic ones, and you can switch between the two whenever you like.
 - **With no graphics yet:** in the dialog above, choose **Choose the StarCraft folder…**
   and pick the folder Remastered is installed in (on Windows, usually
   `C:\Program Files (x86)\StarCraft`).
-- **With graphics already installed:** open **Help ▸ Game Data…** and choose
-  **Add StarCraft: Remastered…** under *Data sets*. It is installed beside the copy you
-  have, and the list switches between them.
+- **With graphics already installed:** open **Help ▸ Game Data…** and choose **Add
+  StarCraft: Remastered…** under *Data sets*. It is installed beside the copy you have,
+  and the list switches between them.
 
 ![The Game Data dialog after adding a Remastered installation, with both data sets listed](images/game-data-remastered.webp)
 
 The browser asks whether to upload the folder's files. Nothing is uploaded anywhere: the
-editor reads what it needs from the files where they are. It takes about half a minute
-and keeps about 375 MB. The desktop app looks for a Remastered installation itself and
-needs none of this when it finds one.
+editor reads what it needs from the files where they are. It takes about half a minute and
+keeps about 375 MB. The desktop app looks for a Remastered installation itself and needs
+none of this when it finds one.
 
-Remastered's files also add doodads the 1.16 ones do not have; a map that uses them
-needs these files to be drawn (see the guide section linked below).
+Remastered's files also add doodads the 1.16 ones do not have; a map that uses them needs
+these files to be drawn (see the guide section linked below).
 
 When the install finishes, **View ▸ Remastered Graphics** is on. Untick it for the classic
-look and tick it again to go back; the guide's
-[Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows the
-difference.
+look and tick it again to go back; the guide's [Classic or Remastered
+graphics](guide.md#classic-or-remastered-graphics) shows the difference.
 
 Without any graphics the editor still runs: terrain is drawn in flat colours and units as
 coloured markers, and everything else works.

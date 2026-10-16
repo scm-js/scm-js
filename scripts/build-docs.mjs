@@ -212,7 +212,7 @@ function main(argv) {
     description: "Guides and the plugin API reference for scmJS, a StarCraft: Brood War map editor that runs in a browser tab.",
     url: `${base}/`,
     section: "Home",
-    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "what-it-does")?.body ?? "",
+    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "current-features")?.body ?? "",
       (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt, code: codeOpts })),
   });
 
@@ -394,9 +394,10 @@ function homeHtml(guides, api, base, features, render) {
     ? `<h2 id="what-it-does">What it does</h2>\n${render(features.replace(/^!\[.*$/gm, "").trim())}\n`
     : "";
   return `<h1>scmJS documentation</h1>
-<p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files.</p>
+<p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files and reads <code>.rep</code> files.</p>
 <p class="home-shot"><img src="${base}/images/editor-plain.webp" width="1400" height="900" alt="The editor with Big Game Hunters open on the Terrain layer"></p>
-<p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}/" target="_blank" rel="noopener noreferrer">${EDITOR_URL.replace("https://", "")}</a>.</p>
+<p style="font-weight: bold;">The latest version of the editor is always available at <a href="${EDITOR_URL}/" target="_blank" rel="noopener noreferrer">${EDITOR_URL.replace("https://", "")}</a>.</p>
+<p>See the <a href="${base}/guide/getting-started/">getting started page</a> for more information.</p>
 ${featuresHtml}<h2 id="documents">The documents</h2>
 <ul class="cards">
 ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.blurb)}</span></a></li>`).join("\n")}

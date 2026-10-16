@@ -29,6 +29,8 @@ import { highlight } from "../scripts/lib/docs/render.mjs";
 import { codeBlocksOf, playgroundUrl, runnableSnippets } from "../scripts/lib/docs/tryit.mjs";
 // @ts-expect-error - as above.
 import { firstLine, plainTextOf, sitemapXml, summaryOf } from "../scripts/build-docs.mjs";
+// @ts-expect-error - as above.
+import { docFiles, wrap, WIDTH } from "../scripts/wrap-docs.mjs";
 
 const root = join(import.meta.dirname, "..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
@@ -102,7 +104,7 @@ describe("links", () => {
   });
 
   it("keeps the README section the home page renders as its feature list", () => {
-    expect(read("README.md")).toContain("\n## What it does\n");
+    expect(read("README.md")).toContain("\n## Current Features\n");
   });
 
   it("leaves no README link into the guide pointing at a heading it does not have", () => {
@@ -364,5 +366,17 @@ describe("Try it links", () => {
     const fragment = "api.document.edit(\"Fill\", (tx) => tx.fillFlat(rect, terrain));";
     const unrelated = "const x = 1;";
     expect([...runnableSnippets([good, plugin, fragment, unrelated, good], dts)]).toEqual([good, plugin]);
+  });
+});
+
+describe("the guides' prose", () => {
+  it(`is wrapped at ${WIDTH} columns (node scripts/wrap-docs.mjs rewraps it)`, () => {
+    for (const file of docFiles(root)) expect(wrap(read(file)) === read(file), file).toBe(true);
+  });
+
+  it("renders the same after wrapping", () => {
+    const loose = read("docs/guide.md").split("\n\n").slice(0, 40).map((p: string) => p.replace(/\n(?!\s*([-*|#>`]|\d+\.))/g, " ")).join("\n\n");
+    const flat = (html: string) => html.replace(/\s+/g, " ");
+    expect(flat(renderMarkdown(wrap(loose)))).toBe(flat(renderMarkdown(loose)));
   });
 });

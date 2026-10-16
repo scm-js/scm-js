@@ -558,6 +558,23 @@ and every compile failed — the worker now reports that as fatal and the bundle
 reads *Saved without its programs* and a good one *edited since* once the script changes. The shared plugin CI gained
 an `artifacts` input so `dist/compiler.js` is compared with its source at a tag as `dist/plugin.js` is.
 
+**3.12.0 (2026-10-16): the game's schedule in Simulate and tests.** The trigger interpreter (`compiler/simulate.ts`)
+had walked the list every frame with Wait taking no time — right only for a script with a program (built with eudplib's
+eudTurbo, which writes 0 to the pass countdown 0x6509A0 at the end of every pass, so the game has a pass every frame).
+It now keeps the game's own rules as `docs/triggers.md` gives them (read and measured through the lifted 1.16.1):
+`tick()` is one frame — the wait slots counted down at `msPerFrame` (42, Fastest), then the countdown (starts at 1, a pass
+on the frame it is found at 0, the pass resets it to 30), so passes on 2, 33, 64…; a Wait that runs out sets it to 1.
+`everyFrame` sets it to 0 after a pass. A copy of a trigger carries `executing` / `at` / `preserved` / the started Waits,
+so a held trigger resumes at its action without its conditions; one wait slot per player; Transmission holds like a
+Wait for its modified time (nothing for a computer, `computers` option, or with no location); Elapsed Time is
+`frame / 16`. `step()` is still one pass (`service.simulate(triggers, cycles)` counts passes). `TestSim.frames` and the
+editor's Simulate tick frames and run the programs only in passes, so **a program first runs on frame 2** (it had run on
+frame 1): tests in `tests/testing.test.ts` and the README's barracks example moved by a frame. Events and faults carry
+`frame` (the game's, shown as is; `cycle` is the pass or the program run). `tests/schedule.test.ts` pins the cycle,
+Wait timing, the shared slot, hyper triggers at every 2 frames, Elapsed Time, Transmission and the program case; all
+seven fail on 3.11.0. Also fixed: `hyperTriggers()`'s hover ("every frame" → every 2 frames instead of every 31) and the
+`wait()` wording (it holds its own trigger and the player's one wait slot, not "every trigger of that player").
+
 **scm-sim** (`github.com/scm-js/plugin-scm-sim`, a default that starts on since 2026-10-13) is the way from the
 editor to scm-sim, the game engine served beside it at `/play/` — a library plugin in eudplib's shape, but with no
 runtime of its own: the engine is another program on the same origin (private, never vendored), and the plugin only

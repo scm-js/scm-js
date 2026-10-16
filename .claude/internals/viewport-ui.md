@@ -26,6 +26,12 @@ read in the first effect pass is still null.
 ### UI
 
 - All state is Jotai; there is no context/provider layering beyond the default store.
+- **Dock edges** (`useDockResize`, 2026-10-15) capture the pointer on the handle rather than
+  listening on `window`: a plugin's map view can be an iframe (a replay's game), which swallowed the
+  moves and the release, so the dock froze mid-drag and then followed the pointer after it came back.
+  The width is set once a frame (each change lays the map out again and writes `scmjs.docks`); the
+  right dock may take 45% of the window (a replay's side panel wants room), the left keeps 480.
+  `e2e/docks.spec.ts` drags across an iframe.
 - The kit is `src/components/ui/index.tsx`. `Select` is a native `<select>` and stays the default;
   `IconSelect` is radix's Select dressed as one, for the single case a native control cannot do —
   a row with a drawing in it (the language picker's flags, `FlagIcon.tsx`). It renders through a

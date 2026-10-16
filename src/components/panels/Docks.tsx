@@ -22,11 +22,14 @@ function PanelHead({ title, right }: { title: React.ReactNode; right?: React.Rea
   );
 }
 
+/** The right dock may take up to this share of the window: a plugin's panel there (a replay's) wants room. */
+const rightDockMax = () => Math.max(420, Math.round(window.innerWidth * 0.45));
+
 export function LeftDock() {
   const [width, setWidth] = useAtom(leftDockWidthAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
   const layer = useAtomValue(activeLayerAtom);
-  const { dragging, onPointerDown } = useDockResize("left", width, setWidth, 220, 480);
+  const { dragging, ...resize } = useDockResize("left", width, setWidth, 220, 480);
   return (
     <aside className="dock left" style={{ width }}>
       <div className="panel grow">
@@ -36,7 +39,7 @@ export function LeftDock() {
         />
         <Guarded surface="palette"><PalettePanel /></Guarded>
       </div>
-      <div className={`dock-resizer ${dragging ? "dragging" : ""}`} onPointerDown={onPointerDown} />
+      <div className={`dock-resizer ${dragging ? "dragging" : ""}`} {...resize} />
     </aside>
   );
 }
@@ -44,11 +47,11 @@ export function LeftDock() {
 export function RightDock() {
   const [width, setWidth] = useAtom(rightDockWidthAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
-  const { dragging, onPointerDown } = useDockResize("right", width, setWidth, 200, 420);
+  const { dragging, ...resize } = useDockResize("right", width, setWidth, 200, rightDockMax);
   const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   return (
     <aside className="dock right" style={{ width }}>
-      <div className={`dock-resizer ${dragging ? "dragging" : ""}`} onPointerDown={onPointerDown} />
+      <div className={`dock-resizer ${dragging ? "dragging" : ""}`} {...resize} />
       {panels.minimap && (
         <div className="panel">
           <PanelHead title={t("Minimap")} right={<Tip label={t("Hide minimap")}><Button icon onClick={() => setPanels({ ...panels, minimap: false })}><PanelRightClose size={13} /></Button></Tip>} />

@@ -26,7 +26,7 @@ import { Elevation, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid } f
 import { DEATHS_TABLE_ADDRESS } from "../src/data/triggerDefs";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, MINERAL_FIELD_IDS, TILE_PX, VESPENE_GEYSER } from "../src/editor/units";
 import {
-  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom, viewportRectAtom, zoomAtom,
+  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom, viewportRectAtom, zoomAtom, ZOOM_STEPS,
 } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import type { PendingAction } from "../src/hooks/useMapFileActions";
@@ -59,8 +59,9 @@ import {
 import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
-import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type PluginApi } from "../src/plugins/api";
-import { cameraOfMap, mapLookAt, mapViewSwitch } from "../src/plugins/mapViews";
+import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type MapViewCamera, type PluginApi } from "../src/plugins/api";
+import { cameraOfMap, fitLook, lookAtZoom, mapLookAt, mapViewSwitch, stepZoom, wheelStep, zoomOfView } from "../src/plugins/mapViews";
+import { shownZoomAtom, zoomToAtom } from "../src/atoms/zoomAtoms";
 
 /* ── Specs and manifests ────────────────────────────────── */
 
@@ -2612,6 +2613,74 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     expect(looks).toHaveLength(1);
     bag.dispose();
     expect(store.get(mapViewCamerasAtom).size).toBe(0);
+  });
+
+  it("hands the editor's zoom and the wheel to a view shown in the map's place", () => {
+    const { store } = blankStore();
+    store.set(documentsAtom, [{ id: 1, parked: null }]);
+    // No element in node: the view is the map viewport's size, 40 × 20 tiles at zoom 1 = 1280 × 640.
+    store.set(viewportRectAtom, { x: 10, y: 30, w: 40, h: 20 });
+    store.set(zoomAtom, 1);
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, bag);
+    const looks: MapViewCamera[] = [];
+    const replay = api.ui.mapView({ title: "Replay", mount: () => {}, onZoom: (look) => looks.push(look) });
+    // Not shown: the zoom is the map's, and the wheel is not taken.
+    store.set(zoomToAtom, "in");
+    expect(store.get(zoomAtom)).toBe(1.5);
+    expect(replay.wheel({ deltaY: -100, ctrlKey: true, x: 0, y: 0 })).toBe(false);
+    store.set(zoomAtom, 1);
+    replay.show(true);
+    // Shown but silent about where it looks: still the map's.
+    expect(store.get(shownZoomAtom)).toBe(1);
+    replay.setCamera({ x: 1600, y: 800, width: 2560, height: 1280 });
+    expect(store.get(shownZoomAtom)).toBe(0.5);
+    // A step in asks the view, not the map; a second before the view says goes on from the first.
+    store.set(zoomToAtom, "in");
+    store.set(zoomToAtom, "in");
+    expect(store.get(zoomAtom)).toBe(1);
+    expect(looks).toEqual([{ x: 1600, y: 800, width: 1280 / 0.75, height: 640 / 0.75 }, { x: 1600, y: 800, width: 1280, height: 640 }]);
+    replay.setCamera({ x: 1600, y: 800, width: 1280, height: 640 });
+    // A level, and the whole map (128 × 128 tiles fit at none of the levels: the least).
+    store.set(zoomToAtom, 2);
+    store.set(zoomToAtom, "fit");
+    expect(looks.slice(2)).toEqual([{ x: 1600, y: 800, width: 640, height: 320 }, { x: 2048, y: 2048, width: 5120, height: 2560 }]);
+    replay.setCamera({ x: 2048, y: 2048, width: 5120, height: 2560 });
+    replay.setCamera({ x: 1600, y: 800, width: 1280, height: 640 });
+    // The wheel by the map's rule: alone it scrolls (the default), with Ctrl a step of 40 zooms, toward the pointer.
+    looks.length = 0;
+    expect(replay.wheel({ deltaY: 100, x: 0, y: 0 })).toBe(false);
+    expect(replay.wheel({ deltaY: 30, ctrlKey: true, x: 2240, y: 800 })).toBe(true);
+    expect(looks).toEqual([]);
+    expect(replay.wheel({ deltaY: 30, ctrlKey: true, x: 2240, y: 800 })).toBe(true);
+    // Out to 0.75 from 1 with the point 640 to the right of the middle kept there: 480 map pixels at the new scale.
+    expect(looks).toEqual([{ x: 2240 - 640 * (1 / 0.75), y: 800, width: 1280 / 0.75, height: 640 / 0.75 }]);
+    // A view that does not zoom leaves the editor's zoom to the map.
+    const plain = api.ui.mapView({ title: "3D", mount: () => {} });
+    plain.show(true);
+    plain.setCamera({ x: 0, y: 0, width: 100, height: 100 });
+    expect(store.get(shownZoomAtom)).toBe(1);
+    store.set(zoomToAtom, "out");
+    expect(store.get(zoomAtom)).toBe(0.75);
+    expect(plain.wheel({ deltaY: -100, ctrlKey: true, x: 0, y: 0 })).toBe(false);
+    bag.dispose();
+  });
+
+  it("works out a view's zoom, its steps and the wheel's rule", () => {
+    expect(zoomOfView({ x: 0, y: 0, width: 2560, height: 1280 }, { width: 1280, height: 640 })).toBe(0.5);
+    // A view between the levels steps to the next one either way; at the ends it stays.
+    expect(stepZoom(0.83, -1, ZOOM_STEPS)).toBe(0.75);
+    expect(stepZoom(0.83, 1, ZOOM_STEPS)).toBe(1);
+    expect(stepZoom(0.7499, 1, ZOOM_STEPS)).toBe(1);
+    expect(stepZoom(4, 1, ZOOM_STEPS)).toBe(4);
+    expect(lookAtZoom({ x: 100, y: 100, width: 200, height: 100 }, { width: 200, height: 100 }, 2)).toEqual({ x: 100, y: 100, width: 100, height: 50 });
+    // Zooming in on a corner of the view keeps that corner where it is.
+    expect(lookAtZoom({ x: 100, y: 100, width: 200, height: 100 }, { width: 200, height: 100 }, 2, { x: 0, y: 50 })).toEqual({ x: 50, y: 75, width: 100, height: 50 });
+    expect(fitLook({ width: 2048, height: 2048 }, { width: 1280, height: 640 }, ZOOM_STEPS)).toEqual({ x: 1024, y: 1024, width: 5120, height: 2560 });
+    expect(wheelStep(0, { deltaY: 100, shiftKey: false }, "zoom")).toEqual({ zooms: true, acc: 0, dir: -1 });
+    expect(wheelStep(0, { deltaY: 100, shiftKey: true }, "zoom")).toEqual({ zooms: false, acc: 0, dir: 0 });
+    expect(wheelStep(0, { deltaY: -1, deltaMode: 1, metaKey: true }, "scroll")).toEqual({ zooms: true, acc: 0, dir: 1 });
+    expect(wheelStep(10, { deltaY: 10, ctrlKey: true }, "scroll")).toEqual({ zooms: true, acc: 20, dir: 0 });
   });
 
   it("works out the map's view that looks where a view does", () => {

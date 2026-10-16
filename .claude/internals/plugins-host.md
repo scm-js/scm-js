@@ -469,6 +469,32 @@ Headless check with Aftermath + scm-sim 0.6.0 on replay 1556: game opened at the
 the game's place and 100%, a 75% map opened the replay 855 px tall and came back at 75%.
 Tests: "keeps the place across the switch…", "works out the map's view…".
 
+**A map view's zoom** (2026-10-16, user: the Replay view ignored View ▸ Zoom In/Out and
+zoomed-out maps did not carry over). Before, every zoom command set `zoomAtom` — the hidden
+map's — and the play page clamped any scale to 240–960 rows (≈85%–330% in an 800 px frame),
+so a 25–50% map opened the Replay view at ~85%. Now `MapViewSpec.onZoom(look)` +
+`MapViewHandle.wheel(MapViewWheel)`. All zoom commands go through `zoomToAtom`
+(`atoms/zoomAtoms.ts`: "in" | "out" | "fit" | a level, optional anchor) — ToolBar, MenuBar
+(incl. the levels radio), useHotkeys (zoomIn/Out/Actual/Fit); the readouts read
+`shownZoomAtom`. While `shownMapViewAtom` has `onZoom` **and** a `setCamera` camera, the zoom is
+the view's: `zoomOfView` = the tighter of element size / camera size (element `clientWidth/
+Height`; in node, or before layout, the hidden viewport's screen size), stepped with `stepZoom`
+(tolerant: a view's zoom is seldom a level), `lookAtZoom` keeps the anchor's screen place, `fitLook`
+mirrors `zoomToFitAtom`. A view without `onZoom` (or that never said a camera) leaves zoom to the
+map, as before. **Pending looks:** Aftermath throttles `setCamera` to 66 ms, so quick wheel steps
+would all start from the old scale; `asked` (WeakMap by entry) keeps the last look and the
+camera object it was asked from, and a step within 300 ms with that same camera object goes on
+from the look. Time-limited on purpose: a view that clamps never reports a new camera, and
+without the limit the base would run off to 25% while nothing moved. `handle.wheel` uses
+`wheelStep` — the same rule as `MapViewport`'s wheel (Ctrl/⌘, or alone when `view.wheel ===
+"zoom"` and no Shift; 40 px a step, a line = 40), now shared — with `zoomToCursor` → anchor.
+The toolbar's buttons grey only at the editor's own 25%/400%; a view's narrower limits show as a
+step that does nothing. Tests: "hands the editor's zoom and the wheel…", "works out a view's
+zoom…". The other halves: scm-sim's viewer takes 240–1920 rows (Remastered drawn 1:1 past 960
+rows, smoothed: 2:1 backing would be 4× the pixels) and posts `scmjs.view.wheel`, keeping Ctrl
++ the wheel and Ctrl+=/−/0 from the browser's tab zoom; plugin-scm-sim 0.9.0 `onWheel`;
+Aftermath's `onZoom` sends `camera(x, y, height)` and remakes Spectate's track at once.
+
 Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
 hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on
 `reservedReason` applying only to the editor's command table, not to `hotkeys.add`. The plugin

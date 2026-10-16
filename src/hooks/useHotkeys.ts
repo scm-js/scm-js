@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewOnlyAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
+  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewOnlyAtom, viewportRectAtom,
 } from "../atoms/editorAtoms";
 import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
@@ -11,7 +11,7 @@ import { hotkeysAtom } from "../atoms/preferencesAtoms";
 import { commandById, comboOf, firesWhileTyping, isModifierKey, takesText, type TextTarget } from "../editor/commands";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
-import { ZOOM_LEVELS } from "../components/chrome/MenuBar";
+import { zoomToAtom } from "../atoms/zoomAtoms";
 import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
@@ -27,7 +27,7 @@ export function useHotkeys() {
   const open = useSetAtom(openDialogAtom);
   const setLayer = useSetAtom(activeLayerAtom);
   const setFlags = useSetAtom(viewFlagsAtom);
-  const setZoom = useSetAtom(zoomAtom);
+  const zoomTo = useSetAtom(zoomToAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const setBrush = useSetAtom(brushSizeAtom);
   const undo = useSetAtom(undoAtom);
@@ -53,13 +53,10 @@ export function useHotkeys() {
   const cancelPick = useSetAtom(cancelMapPickAtom);
   const cancelTool = useSetAtom(cancelMapToolAtom);
   const selectAll = useSetAtom(selectAllAtom);
-  const zoomToFit = useSetAtom(zoomToFitAtom);
 
   const hotkeys = useAtomValue(hotkeysAtom);
 
   useEffect(() => {
-    const zoomIn = () => setZoom((z) => ZOOM_LEVELS.find((v) => v > z) ?? z);
-    const zoomOut = () => setZoom((z) => [...ZOOM_LEVELS].reverse().find((v) => v < z) ?? z);
     const redoOne = () => { const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); };
     // What each command in `editor/commands.ts` does; the keys come from the resolved table.
     const run: Record<string, () => void> = {
@@ -87,10 +84,10 @@ export function useHotkeys() {
       },
       "edit.find": () => open("find"),
       "view.grid": () => setFlags((f) => ({ ...f, grid: !f.grid })),
-      "view.zoomIn": zoomIn,
-      "view.zoomOut": zoomOut,
-      "view.zoomActual": () => setZoom(1),
-      "view.zoomFit": () => { zoomToFit(); },
+      "view.zoomIn": () => zoomTo("in"),
+      "view.zoomOut": () => zoomTo("out"),
+      "view.zoomActual": () => zoomTo(1),
+      "view.zoomFit": () => zoomTo("fit"),
       "layer.terrain": () => setLayer("terrain"),
       "layer.doodads": () => setLayer("doodads"),
       "layer.units": () => setLayer("units"),
@@ -214,5 +211,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, open, setLayer, setFlags, setZoom, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, zoomToFit, hotkeys]);
+  }, [store, open, setLayer, setFlags, zoomTo, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, hotkeys]);
 }

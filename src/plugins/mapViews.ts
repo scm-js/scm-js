@@ -72,3 +72,54 @@ export function mapViewSwitch(before: { doc: number; shown: number | null }, aft
   if (before.doc !== after.doc || before.shown === after.shown) return null;
   return { from: before.shown, to: after.shown };
 }
+
+/** How large a view is on the screen, in CSS pixels. */
+export interface ViewSize { width: number; height: number }
+
+/** A view's zoom — screen pixels to a map pixel, as the map's own — from where it looks and its size: the tighter side's. */
+export function zoomOfView(camera: MapViewCamera, size: ViewSize): number {
+  return Math.min(size.width / camera.width, size.height / camera.height);
+}
+
+/**
+ * The next of `steps` from `zoom`, `dir` 1 in and -1 out; a zoom between two steps goes to the
+ * nearer one that way (a view's zoom is seldom one of them), the last either way stays.
+ */
+export function stepZoom(zoom: number, dir: 1 | -1, steps: readonly number[]): number {
+  // (A hair of room: 0.75 worked out from a camera may be 0.7499.)
+  const next = dir > 0 ? steps.find((z) => z > zoom * 1.001) : [...steps].reverse().find((z) => z < zoom / 1.001);
+  return next ?? zoom;
+}
+
+/**
+ * Where a view looks at `zoom`: as much of the map as its size shows at that scale, and the map
+ * pixel at `anchor` where it is on the screen now (the middle when left out), as the map's own
+ * zoom toward the pointer keeps it.
+ */
+export function lookAtZoom(camera: MapViewCamera, size: ViewSize, zoom: number, anchor?: { x: number; y: number }): MapViewCamera {
+  const width = size.width / zoom, height = size.height / zoom;
+  if (!anchor) return { x: camera.x, y: camera.y, width, height };
+  const k = zoomOfView(camera, size) / zoom;
+  return { x: anchor.x - (anchor.x - camera.x) * k, y: anchor.y - (anchor.y - camera.y) * k, width, height };
+}
+
+/** Where a view looks to show the whole map (`map` in map pixels): its middle, at the largest of `steps` it fits at, as Zoom to Fit does for the map. */
+export function fitLook(map: { width: number; height: number }, size: ViewSize, steps: readonly number[]): MapViewCamera {
+  const need = Math.min(size.width / map.width, size.height / map.height);
+  const zoom = [...steps].reverse().find((z) => z <= need) ?? steps[0];
+  return { x: map.width / 2, y: map.height / 2, width: size.width / zoom, height: size.height / zoom };
+}
+
+/**
+ * The wheel's zoom rule, the map's and a view's (`MapViewHandle.wheel`): whether this wheel
+ * zooms — with Ctrl or ⌘, or alone (not with Shift, which scrolls sideways) where the
+ * preference says the wheel zooms — and, adding it to `acc`, the step it makes: 1 in, -1 out,
+ * 0 none yet (a step is 40 pixels of wheel; a line is 40). `acc` is what is left for the next.
+ */
+export function wheelStep(acc: number, e: { deltaY: number; deltaMode?: number; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }, wheel: "scroll" | "zoom"): { zooms: boolean; acc: number; dir: 1 | -1 | 0 } {
+  if (!(e.ctrlKey || e.metaKey || (wheel === "zoom" && !e.shiftKey))) return { zooms: false, acc: 0, dir: 0 };
+  // (WheelEvent.DOM_DELTA_PIXEL is 0, and a plain object said nothing.)
+  const next = acc + (!e.deltaMode ? e.deltaY : e.deltaY * 40);
+  if (Math.abs(next) < 40) return { zooms: true, acc: next, dir: 0 };
+  return { zooms: true, acc: 0, dir: next < 0 ? 1 : -1 };
+}

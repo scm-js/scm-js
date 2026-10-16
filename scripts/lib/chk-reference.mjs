@@ -15,7 +15,7 @@
 import { createHash } from "node:crypto";
 import { fillBlocks } from "./generated-blocks.mjs";
 import { ISOM_EXAMPLE, ISOM_SHAPES, isomExampleValues } from "./chk-diagrams.mjs";
-import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_ONLY, gameUse } from "./chk-game.mjs";
+import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_NEEDS, REMASTERED_ONLY, gameUse } from "./chk-game.mjs";
 
 const P = 12; // player slots
 const U = 228; // unit types
@@ -364,7 +364,7 @@ function sectionBlock(spec, defs) {
     "| --- | --- |",
     `| Size | ${sizeText(name, spec, layout)} |`,
     `| Read by | ${gameReadText(name)} |`,
-    `| Required | ${gameRequiredText(name)} |`,
+    `| Required | ${gameRequiredText(name)}${REMASTERED_NEEDS[name] ? ` ${REMASTERED_NEEDS[name]}` : ""} |`,
     ...(gameSizeText(name, layout) ? [`| The game accepts | ${gameSizeText(name, layout)} |`] : []),
     ...(GAME_COPIES[name] ? [`| More than one copy | ${COPY_RULES[GAME_COPIES[name]]} |`] : []),
     `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : "Kept as it is and written back unchanged."} |`,
@@ -401,7 +401,8 @@ function indexTable(defs, summaries) {
     const u = readsOf(name);
     const first = name === "VER "; // looked for before every read
     const ums = first ? "needed" : u.ums.length || u.umsOptional.length ? indexCell(u.ums, u.umsOptional) : u.briefing ? "briefing only" : "";
-    lines.push(`| [${code(name)}](#${trimName(name).toLowerCase()}) | ${summaries.get(trimName(name)) ?? ""} | ${u.list ? "needed" : ""} | ${first ? "needed" : indexCell(u.melee)} | ${ums} |`);
+    const list = u.list ? "needed" : REMASTERED_NEEDS[name] ? "needed in Remastered" : "";
+    lines.push(`| [${code(name)}](#${trimName(name).toLowerCase()}) | ${summaries.get(trimName(name)) ?? ""} | ${list} | ${first ? "needed" : indexCell(u.melee)} | ${ums} |`);
   }
   return lines.join("\n");
 }

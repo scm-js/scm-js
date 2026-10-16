@@ -39,10 +39,11 @@ describe("validateScenario", () => {
     expect(missing(bw)).toEqual([`warn: Missing MASK, UNIx ${UMS}`]);
     bw.triggers.push(newTrigger());
     expect(missing(bw)).toEqual([`error: Missing MASK, UNIx ${UMS}`]);
-    // And COLR, which every game of a Brood War file reads.
+    // And COLR, which every game of a Brood War file reads, and TRIG, which Remastered's map list needs.
     const colr = fresh();
     colr.dirty.delete("COLR");
-    expect(missing(colr)).toEqual(["error: Missing COLR — the game will not load this map."]);
+    colr.dirty.delete("TRIG");
+    expect(missing(colr)).toEqual(["error: Missing TRIG, COLR — the game will not load this map."]);
     // A hybrid or original map needs the original layouts; the `x` ones are read on top when present.
     const ORIGINAL = ["UNIS", "UPGS", "TECS", "UPGR", "PTEC"];
     const hybrid = fresh();

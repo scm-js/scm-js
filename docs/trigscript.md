@@ -267,9 +267,10 @@ import is needed, and also as the module `"trigscript"` for anyone who prefers
 `import { trigger, bring } from "trigscript"`.
 
 `hyperTriggers(P8)` anywhere in the script emits the classic three preserved triggers of
-sixty-two waits, so the whole trigger list runs every frame instead of every two seconds.
-Give them to a player whose other triggers never wait — a computer slot, usually — since
-a Wait stalls every trigger of that player. A map with a program does not need them: its
+sixty-two waits, so the game goes through the whole trigger list every 2 frames instead of
+every 31 ([Hyper triggers](triggers.md#hyper-triggers)). Give them to a player whose other
+triggers never wait, a computer slot usually: a player has one wait slot, and the hyper
+triggers keep it busy ([Waits](triggers.md#waits)). A map with a program does not need them: its
 build already makes the list run every frame.
 
 ## Programs
@@ -687,7 +688,7 @@ trigger(AllPlayers, [always()], [
 ]);
 ```
 
-**Hyper triggers.** One line, and the whole trigger list runs every frame. Player 8 is
+**Hyper triggers.** One line, and the whole trigger list runs every 2 frames. Player 8 is
 the computer slot here, and nothing else in the script makes that player wait. For a map
 of plain triggers; a map with a program runs every frame already.
 
@@ -892,7 +893,7 @@ The trigger form and its options:
 | `preserve()` | The same as `{ preserve: true }`, as an action. |
 | `not(condition)` | The opposite, where one condition can say it: a comparison flips, a switch test flips, `always()` becomes `never()`. "Exactly n" has no opposite and is an error. |
 | `disabled(item)` | The condition or action kept in the trigger but switched off, as the Trigger Editor's disable does. |
-| `hyperTriggers(owner?)` | The three preserved triggers of sixty-two waits that make the list run every frame. |
+| `hyperTriggers(owner?)` | The three preserved triggers of sixty-two waits that make the list run every 2 frames. |
 | `condition(type, …)`, `action(type, …)` | A record by raw type number and fields, for anything the tables do not know. |
 | `memory(address, comparison, value)`, `setMemory(address, modifier, value)` | EUD: the value at a memory address, through the deaths table. |
 

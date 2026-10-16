@@ -694,8 +694,9 @@ own health — missing sections, player types where StarEdit's copy disagrees wi
 game's, the isometric record. A map with triggers is a scenario, and gets the scenario
 checks too: a human player no trigger ever gives Victory or Defeat (in a scenario nobody
 wins or loses unless a trigger says so), a missing Set Mission Objectives, and — when
-hyper triggers are present — a Wait in another preserved trigger, which stalls that
-player's whole trigger queue. Double-click an issue to go to it. The same check runs
+hyper triggers are present — a Wait in another preserved trigger of the same player, which
+fights them for the player's one wait slot (see
+[Waits](triggers.md#waits) in the trigger reference). Double-click an issue to go to it. The same check runs
 inside the Save dialog.
 
 ### Test Map

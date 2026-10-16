@@ -1091,6 +1091,159 @@ function unitPathSvg() {
   return svg(760, foot + 56, "What the game does with a placed unit", "The checks a UNIT record passes when a game starts: start locations are noted, not made; units of empty player slots are dropped; melee keeps only Player 12 minerals, geysers and critters; in Use Map Settings a User Selectable player keeps only neutral kinds of unit; Brood War units are not made in the original game; a unit with no room is removed with a warning. Then the unit is made and its fields applied.", parts.join("\n"));
 }
 
+/* ── Pictures of the trigger reference: when triggers run (measured in 1.16.1) ── */
+
+/** A frame ruler from frame 0 to `frames`, with a mark on each frame in `passes`. */
+function frameRow(parts, { x0, y, frames, scale, passes, color = GOLD, label, sub }) {
+  parts.push(text(x0, y - 22, label, { size: 13, anchor: "start", weight: 600 }));
+  if (sub) parts.push(text(x0 + 10 + label.length * 8, y - 22, sub, { size: 11.5, anchor: "start", fill: MUTED }));
+  parts.push(`<line x1="${x0}" y1="${y + 14}" x2="${r(x0 + frames * scale)}" y2="${y + 14}" stroke="${RECT_LINE}" stroke-width="1"/>`);
+  for (let f = 0; f <= frames; f++) {
+    const x = x0 + f * scale;
+    const big = f % 10 === 0;
+    parts.push(`<line x1="${r(x)}" y1="${y + (big ? 8 : 11)}" x2="${r(x)}" y2="${y + 17}" stroke="${big ? MUTED : TILE_LINE}" stroke-width="1"/>`);
+    if (big) parts.push(text(x, y + 30, String(f), { size: 10, fill: MUTED }));
+  }
+  for (const f of passes) {
+    const x = x0 + f * scale;
+    parts.push(`<rect x="${r(x - 2.5)}" y="${y - 6}" width="5" height="20" rx="1.5" fill="${color}"/>`);
+  }
+}
+
+function triggerCycleSvg() {
+  const parts = [HEAD];
+  const x0 = 28, scale = 9.6, frames = 72;
+  parts.push(text(x0 - 4, 30, "When the game goes through the triggers", { size: 15, anchor: "start", weight: 600 }));
+  parts.push(`<rect x="${x0 + 420}" y="${20}" width="5" height="14" rx="1.5" fill="${GOLD}"/>`);
+  parts.push(text(x0 + 432, 31, "a pass: every player's triggers", { size: 11.5, anchor: "start", fill: MUTED }));
+
+  let y = 82;
+  frameRow(parts, { x0, y, frames, scale, passes: [2, 33, 64], label: "Ordinary triggers", sub: "a pass every 31 frames, the first on frame 2" });
+  y += 78;
+  frameRow(parts, { x0, y, frames, scale, passes: Array.from({ length: 36 }, (_, i) => 2 + 2 * i).filter((f) => f < frames), label: "Hyper triggers", sub: "a pass every 2 frames, never every frame" });
+  y += 78;
+  frameRow(parts, { x0, y, frames, scale, passes: [2, 27, 58], label: "A Wait(1000) at Fastest", sub: "started on frame 2" });
+  const wx = x0 + 2 * scale, we = x0 + 26 * scale;
+  parts.push(`<rect x="${r(wx)}" y="${y - 2}" width="${r(we - wx)}" height="10" rx="3" fill="${INSIDE}" opacity="0.55"/>`);
+  parts.push(text((wx + we) / 2, y + 6, "the Wait: 24 frames of 42 ms", { size: 10, fill: INK }));
+  parts.push(text(x0 + 27 * scale + 6, y - 2, "runs out on 26, so the next pass is 27", { size: 10.5, anchor: "start", fill: MUTED }));
+  parts.push(text(x0 + 58 * scale + 6, y - 2, "then 31 frames again", { size: 10.5, anchor: "start", fill: MUTED }));
+
+  // One pass, inside.
+  y += 70;
+  parts.push(text(x0 - 4, y, "Inside one pass", { size: 13.5, anchor: "start", weight: 600 }));
+  const py = y + 16, pw = 70, gap = 12;
+  for (let p = 0; p < 8; p++) {
+    const px = x0 + p * (pw + gap);
+    parts.push(pill(px, py, pw, 28, `Player ${p + 1}`, { fill: p === 0 ? NEED_FILL : "#191d25", stroke: p === 0 ? "#3c5a86" : RECT_LINE, size: 11.5 }));
+    if (p < 7) parts.push(arrow(px + pw + 1, py + 14, px + pw + gap - 1, py + 14));
+  }
+  const ty = py + 44;
+  const rows = [
+    ["Trigger 1", "conditions asked in order; the first false one stops them"],
+    ["Trigger 2", "all true: the actions run in order, until one has to wait"],
+    ["Trigger 3", "part way through its actions: carries on, conditions not asked"],
+  ];
+  rows.forEach(([name, what], i) => {
+    const yy = ty + i * 30;
+    parts.push(pill(x0 + 10, yy, 82, 24, name, { size: 11 }));
+    parts.push(text(x0 + 104, yy + 16, what, { size: 11.5, anchor: "start" }));
+  });
+  parts.push(`<path d="M${x0 + 35},${py + 30} L${x0 + 35},${ty - 2}" stroke="${MUTED}" stroke-width="1.3" marker-end="url(#head)"/>`);
+  const foot = ty + rows.length * 30 + 22;
+  parts.push(lines(x0 - 4, foot, [
+    "Players in the game, 1 to 8 in order; each player's triggers top to bottom, as the list has them. A pass comes",
+    "after the frame's units have moved and fought. A Wait running out, or the countdown reaching 0, brings the next",
+    "pass forward to the following frame for every player. Game speed changes how long a Wait lasts, nothing else.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 58, "When the game goes through the triggers", "Three frame rulers from StarCraft 1.16.1. Ordinary triggers are gone through on frames 2, 33 and 64, every 31 frames. With hyper triggers, every 2 frames. A Wait of 1000 milliseconds started on frame 2 at Fastest runs out on frame 26, so the next pass is on frame 27, and the 31-frame cycle goes on from there. Inside a pass, Players 1 to 8 in order, each player's triggers top to bottom.", parts.join("\n"));
+}
+
+function waitSlotSvg() {
+  const parts = [HEAD];
+  const x0 = 28;
+  parts.push(text(x0 - 4, 30, "One wait slot per player", { size: 15, anchor: "start", weight: 600 }));
+  const ly = 56, lw = 330, lh = 46;
+  const list = [
+    ["Trigger 1", "Wait(1000) holds the slot", "Its actions after the Wait run when the time is up.", INSIDE],
+    ["Trigger 2", "no Wait", "Runs every pass, as if nothing were waiting.", OK],
+    ["Trigger 3", "reaches a Wait", "Stops there, starts no time, and tries again each pass.", FAIL],
+  ];
+  parts.push(text(x0, ly - 6, "Player 1's triggers", { size: 12, anchor: "start", fill: MUTED }));
+  list.forEach(([name, what, note, color], i) => {
+    const y = ly + i * (lh + 12);
+    parts.push(`<rect x="${x0}" y="${y}" width="${lw}" height="${lh}" rx="6" fill="#191d25" stroke="${RECT_LINE}"/>`);
+    parts.push(`<rect x="${x0}" y="${y}" width="5" height="${lh}" rx="2" fill="${color}"/>`);
+    parts.push(text(x0 + 16, y + 19, name, { size: 12.5, anchor: "start", weight: 600 }));
+    parts.push(text(x0 + 96, y + 19, what, { size: 12, anchor: "start" }));
+    parts.push(text(x0 + 16, y + 36, note, { size: 11, anchor: "start", fill: MUTED }));
+  });
+  // The slot.
+  const sx = x0 + lw + 70, sy = ly + 30, sw = 240;
+  parts.push(`<rect x="${sx}" y="${sy}" width="${sw}" height="74" rx="8" fill="#2b313e" stroke="${GOLD}" stroke-width="1.5"/>`);
+  parts.push(text(sx + sw / 2, sy + 24, "Player 1's wait slot", { size: 13, weight: 600 }));
+  parts.push(text(sx + sw / 2, sy + 44, "taken by Trigger 1", { size: 12, fill: "#e8c486" }));
+  parts.push(text(sx + sw / 2, sy + 61, "free again when its time is up", { size: 11, fill: MUTED }));
+  parts.push(arrow(x0 + lw + 4, ly + lh / 2, sx - 4, sy + 26));
+  parts.push(`<path d="M${x0 + lw + 4},${ly + 2 * (lh + 12) + lh / 2} C${sx - 30},${ly + 2 * (lh + 12) + lh / 2} ${sx - 30},${sy + 60} ${sx - 4},${sy + 56}" fill="none" stroke="${FAIL}" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#head)"/>`);
+  parts.push(text(sx - 40, sy + 92, "busy: wait", { size: 10.5, anchor: "end", fill: "#f2b8b4" }));
+  parts.push(pill(sx, sy + 98, sw, 30, "Player 2's slot: separate", { weight: 400, size: 11.5 }));
+  const foot = ly + 3 * (lh + 12) + 26;
+  parts.push(lines(x0 - 4, foot, [
+    "A Transmission for a person, and Center View in a single-player game, use the same slot. Hyper triggers keep the",
+    "slot busy: a Wait below them in the list can start only in the one slow pass; a Wait above them takes the slot",
+    "first, and the passes fall back to every 31 frames until it runs out.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 58, "One wait slot per player", "Each player has one wait slot. Trigger 1's Wait holds it; Trigger 2, with no Wait, runs every pass; Trigger 3 reaches a Wait, finds the slot busy, and stops there to try again next pass. Another player's slot is separate.", parts.join("\n"));
+}
+
+function bringCountSvg() {
+  const parts = [];
+  const x0 = 28;
+  parts.push(text(x0 - 4, 30, "What Bring counts in a location", { size: 15, anchor: "start", weight: 600 }));
+  // The location.
+  const lx = x0 + 40, ly = 60, lw = 330, lh = 190;
+  parts.push(`<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" fill="#1a2433" stroke="${OUTSIDE}" stroke-width="2" stroke-dasharray="6 4"/>`);
+  parts.push(text(lx + 8, ly + 18, "location", { size: 11, anchor: "start", fill: "#9cbbe6" }));
+  const unit = (cx, cy, label, { fill = "#2e3a2e", stroke = OK, dash = false, faded = false, w = 34 } = {}) => {
+    parts.push(`<g${faded ? ` opacity="0.5"` : ""}><rect x="${cx - w / 2}" y="${cy - 14}" width="${w}" height="28" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="1.4"${dash ? ` stroke-dasharray="4 3"` : ""}/>` +
+      text(cx, cy + 4, label, { size: 11, weight: 600 }) + `</g>`);
+  };
+  unit(lx + 60, ly + 60, "M");
+  parts.push(text(lx + 60, ly + 92, "marine", { size: 10.5, fill: MUTED }));
+  unit(lx + 140, ly + lh, "M");
+  parts.push(text(lx + 140, ly + lh + 30, "box over the edge: in", { size: 10.5, fill: MUTED }));
+  // Dropship with two marines.
+  parts.push(`<rect x="${lx + 150}" y="${ly + 40}" width="70" height="40" rx="8" fill="#2a2e3a" stroke="${MUTED}" stroke-width="1.4"/>`);
+  unit(lx + 168, ly + 60, "M", { w: 24 });
+  unit(lx + 202, ly + 60, "M", { w: 24 });
+  parts.push(text(lx + 185, ly + 96, "dropship, 2 marines aboard", { size: 10.5, fill: MUTED }));
+  unit(lx + 80, ly + 150, "M", { fill: "#2a2440", stroke: "#8a6bb8", dash: true });
+  parts.push(text(lx + 80, ly + 182, "hallucination", { size: 10.5, fill: MUTED }));
+  parts.push(`<rect x="${lx + 210}" y="${ly + 110}" width="90" height="46" rx="4" fill="#3a2a20" stroke="${INSIDE}" stroke-width="1.4" stroke-dasharray="5 3"/>`);
+  parts.push(text(lx + 255, ly + 137, "Barracks", { size: 11, weight: 600 }));
+  parts.push(text(lx + 255, ly + 172, "still being built", { size: 10.5, fill: MUTED }));
+
+  // The two answers.
+  const tx = lx + lw + 30, ty = ly + 10, tw = 760 - tx - 24;
+  const box = (y, title, rows, stroke) => {
+    parts.push(`<rect x="${tx}" y="${y}" width="${tw}" height="${30 + rows.length * 18}" rx="6" fill="#191d25" stroke="${stroke}"/>`);
+    parts.push(text(tx + 12, y + 20, title, { size: 12, anchor: "start", weight: 600 }));
+    rows.forEach((row, i) => parts.push(text(tx + 12, y + 40 + i * 18, row, { size: 11.5, anchor: "start" })));
+  };
+  box(ty, "At least, Exactly", ["Marines: 4 (aboard counts)", "Buildings: 0 (unfinished)"], OK);
+  box(ty + 82, "At most", ["Marines: 2 (aboard does not)", "Buildings: 1 (unfinished counts)"], INSIDE);
+
+  const foot = ly + lh + 66;
+  parts.push(lines(x0 - 4, foot, [
+    "A unit is in the location when its box touches it, on the levels the location covers. A hallucination never counts.",
+    "At least and Exactly count finished units, with the units loaded in a transport, the interceptors or scarabs in a",
+    "carrier or reaver, and a carried power-up. At most counts every unit there, finished or not, but nothing aboard.",
+    "Command counts over the whole map: finished units, or for At most every unit, so an unfinished building counts.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 74, "What Bring counts in a location", "A location holding a marine, a marine whose box crosses the edge, a dropship with two marines aboard, a hallucinated marine and a Barracks still being built. Asked with At least or Exactly, Bring counts 4 marines and 0 buildings; asked with At most, 2 marines and 1 building.", parts.join("\n"));
+}
+
 /** Every picture this module draws, by its path under the repository. `defs` are the editor's tables. */
 export function chkDiagrams(defs) {
   return new Map([
@@ -1119,5 +1272,8 @@ export function chkDiagrams(defs) {
       desc: "The 20-byte MRGN record drawn to scale: four 32-bit edges, then the name and the elevations.",
     })],
     ["docs/images/chk-trigger-record.svg", triggerRulerSvg()],
+    ["docs/images/trig-cycle.svg", triggerCycleSvg()],
+    ["docs/images/trig-wait.svg", waitSlotSvg()],
+    ["docs/images/trig-bring.svg", bringCountSvg()],
   ]);
 }

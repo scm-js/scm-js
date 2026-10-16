@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 390" width="760" height="390" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">What Bring counts in a location</title>
+<desc id="d">A location holding a marine, a marine whose box crosses the edge, a dropship with two marines aboard, a hallucinated marine and a Barracks still being built. Asked with At least or Exactly, Bring counts 4 marines and 0 buildings; asked with At most, 2 marines and 1 building.</desc>
+<rect width="760" height="390" rx="10" fill="#12151b"/>
+<text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">What Bring counts in a location</text>
+<rect x="68" y="60" width="330" height="190" fill="#1a2433" stroke="#3f6aa6" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="76" y="78" font-size="11" fill="#9cbbe6" text-anchor="start">location</text>
+<g><rect x="111" y="106" width="34" height="28" rx="5" fill="#2e3a2e" stroke="#6fbf73" stroke-width="1.4"/><text x="128" y="124" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">M</text></g>
+<text x="128" y="152" font-size="10.5" fill="#9aa3b2" text-anchor="middle">marine</text>
+<g><rect x="191" y="236" width="34" height="28" rx="5" fill="#2e3a2e" stroke="#6fbf73" stroke-width="1.4"/><text x="208" y="254" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">M</text></g>
+<text x="208" y="280" font-size="10.5" fill="#9aa3b2" text-anchor="middle">box over the edge: in</text>
+<rect x="218" y="100" width="70" height="40" rx="8" fill="#2a2e3a" stroke="#9aa3b2" stroke-width="1.4"/>
+<g><rect x="224" y="106" width="24" height="28" rx="5" fill="#2e3a2e" stroke="#6fbf73" stroke-width="1.4"/><text x="236" y="124" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">M</text></g>
+<g><rect x="258" y="106" width="24" height="28" rx="5" fill="#2e3a2e" stroke="#6fbf73" stroke-width="1.4"/><text x="270" y="124" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">M</text></g>
+<text x="253" y="156" font-size="10.5" fill="#9aa3b2" text-anchor="middle">dropship, 2 marines aboard</text>
+<g><rect x="131" y="196" width="34" height="28" rx="5" fill="#2a2440" stroke="#8a6bb8" stroke-width="1.4" stroke-dasharray="4 3"/><text x="148" y="214" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">M</text></g>
+<text x="148" y="242" font-size="10.5" fill="#9aa3b2" text-anchor="middle">hallucination</text>
+<rect x="278" y="170" width="90" height="46" rx="4" fill="#3a2a20" stroke="#c9963c" stroke-width="1.4" stroke-dasharray="5 3"/>
+<text x="323" y="197" font-size="11" fill="#e6e8ee" text-anchor="middle" font-weight="600">Barracks</text>
+<text x="323" y="232" font-size="10.5" fill="#9aa3b2" text-anchor="middle">still being built</text>
+<rect x="428" y="70" width="308" height="66" rx="6" fill="#191d25" stroke="#6fbf73"/>
+<text x="440" y="90" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">At least, Exactly</text>
+<text x="440" y="110" font-size="11.5" fill="#e6e8ee" text-anchor="start">Marines: 4 (aboard counts)</text>
+<text x="440" y="128" font-size="11.5" fill="#e6e8ee" text-anchor="start">Buildings: 0 (unfinished)</text>
+<rect x="428" y="152" width="308" height="66" rx="6" fill="#191d25" stroke="#c9963c"/>
+<text x="440" y="172" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">At most</text>
+<text x="440" y="192" font-size="11.5" fill="#e6e8ee" text-anchor="start">Marines: 2 (aboard does not)</text>
+<text x="440" y="210" font-size="11.5" fill="#e6e8ee" text-anchor="start">Buildings: 1 (unfinished counts)</text>
+<text x="24" y="316" font-size="11.5" fill="#9aa3b2" text-anchor="start">A unit is in the location when its box touches it, on the levels the location covers. A hallucination never counts.</text><text x="24" y="332" font-size="11.5" fill="#9aa3b2" text-anchor="start">At least and Exactly count finished units, with the units loaded in a transport, the interceptors or scarabs in a</text><text x="24" y="348" font-size="11.5" fill="#9aa3b2" text-anchor="start">carrier or reaver, and a carried power-up. At most counts every unit there, finished or not, but nothing aboard.</text><text x="24" y="364" font-size="11.5" fill="#9aa3b2" text-anchor="start">Command counts over the whole map: finished units, or for At most every unit, so an unfinished building counts.</text>
+</svg>

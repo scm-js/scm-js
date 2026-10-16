@@ -8,14 +8,62 @@ The number, the text form and the table on each page come from the same tables t
 editor reads and writes maps with, so they match what it puts in a file byte for byte.
 Those tables have been checked against the triggers and briefings on Blizzard's own maps,
 and the text form is SCMDraft 2's TrigEdit syntax, so a line copied from one of these pages
-pastes into SCMDraft or into the editor's Text Trigger Editor. The descriptions say what
-the game does. Where a detail is not settled, the page leaves it out rather than guess.
+pastes into SCMDraft or into the editor's Text Trigger Editor.
+
+The descriptions say what the game does. They were found by studying how StarCraft: Brood
+War 1.16.1 runs triggers, and checked by running test maps through the game's own code,
+frame by frame; the timings on this page are measured frames, not estimates. StarCraft:
+Remastered grew out of 1.16.1, but it has not been checked here for triggers, and its EUD
+support is its own. Where a fact was found playing Remastered, the page says so. Where a
+detail is not settled, the page leaves it out rather than guess.
 
 ## How triggers run
 
 A trigger is a list of up to 16 conditions and up to 64 actions, and the players it
 runs for. When every condition holds, the game carries out the actions in order. A
-trigger that should run straight away has [Always](#always) as its condition.
+trigger that should run straight away has [Always](#always) as its condition; a trigger
+with no conditions at all runs straight away too.
+
+![When the game goes through the triggers: every 31 frames, every 2 with hyper triggers](images/trig-cycle.svg)
+
+### The trigger cycle
+
+The game does not check triggers continuously. It goes through them in *passes*, one
+every 31 game frames: 1.3 seconds at Fastest, 2.1 seconds at Normal. The first pass is on
+the game's second frame, so an Always trigger runs at once. A pass comes after that
+frame's units have moved, fought and died, so a unit killed in a frame already counts in
+that frame's pass.
+
+In a pass the game takes the players in the game in order, Player 1 to Player 8, and for
+each goes through that player's triggers top to bottom, in the order of the list. It asks
+a trigger's conditions in order and stops at the first false one, so the conditions after
+it are not even asked. If they all hold, it carries out the actions in order. What one
+trigger does is seen by every trigger after it in the same pass, with one exception for
+counts of units (see [Command](#command)).
+
+Two things bring the next pass forward to the very next frame, for every player: a
+[Wait](#wait) running out, and the [countdown timer](#countdown-timer) reaching 0.
+
+Game speed does not change the 31-frame cycle or game time: a game second is 16 frames at
+every speed, for [Elapsed Time](#elapsed-time) and the countdown alike. It changes only
+how long a Wait lasts ([Waits](#waits)).
+
+### Hyper triggers
+
+A Wait of 0 runs out on the frame after it starts, and the pass it brings forward comes
+the frame after that. So the fastest the game goes through the triggers is once every
+**2 frames**. It never manages every frame.
+
+A preserved trigger made of nothing but Wait(0) actions moves on by one Wait each pass,
+so it keeps the passes coming every 2 frames until it reaches its end. Then it starts
+over, no Wait starts in that pass, and the next pass is 31 frames later. With *x* waits in
+each of *n* such triggers, the game makes (*x* + 1)<sup>*n*</sup> quick passes between two
+slow ones. That is why hyper triggers come as two or three triggers of 62 or 63 Waits:
+the slow passes then never come in practice.
+
+The cycle is shared, so one player's hyper triggers speed up every player's triggers. A
+computer player can carry them. The waits must be one frame long or less: 42 milliseconds
+at Fastest.
 
 ### Who a trigger runs for
 
@@ -25,35 +73,142 @@ player in it, as if each had a copy of their own. Its conditions are checked and
 actions carried out once per player, and inside it **Current Player** means whichever
 player that copy is running for.
 
-The copies are handed out when the game loads the map, and only to players in the game.
-A trigger owned by Players 9 to 12, Current Player, Foes, Allies, Neutral Players or
-Non-Allied Victory Players is dropped then and never runs: those owners can be ticked in
-an editor, but the game gives them no copies. Only Use Map Settings games read a map's
-triggers at all; melee and the other game types run triggers built into the game. (See
-[`TRIG`](chk-format.md#trig) in the CHK reference.)
+The copies are handed out when the game loads the map, and only to players in the game:
+human and computer players, and rescuable and neutral slots, which run their triggers
+like anyone else. A trigger owned by Players 9 to 12, Current Player, Foes, Allies,
+Neutral Players, Non-Allied Victory Players, None or the Unused groups is dropped then and
+never runs: those owners can be ticked in an editor, but the game gives them no copies.
+Only Use Map Settings games read a map's triggers at all; melee and the other game types
+run triggers built into the game. (See [`TRIG`](chk-format.md#trig) in the CHK
+reference.)
 
-### The trigger cycle
+Each owner gets its own copies, so a player reached twice, as with both "Player 1" and
+"Force 1" ticked, has two copies of the trigger and runs it twice in every pass.
 
-The game does not check triggers continuously. On a map of ordinary triggers it goes
-through them about every two seconds of game time: each player's triggers, top to bottom
-in the order of the list. A map with *hyper triggers* — preserved triggers made of many
-[Wait](#wait) actions of 0 milliseconds — makes the game go through the list every frame
-instead, which is how maps react quickly. The editor's Check Map recognises them.
+A player who is defeated, or leaves, stops running triggers. In a single-player game a
+player who has won keeps running them until the victory screen stops the game.
 
 ### Once, or every time
 
 A trigger runs once for each player it runs for and is then finished, unless it carries
-[Preserve Trigger](#preserve-trigger), in which case it runs every cycle its conditions
-hold. A preserved trigger whose conditions stay true keeps firing: one that adds a mineral
-adds one each cycle.
+[Preserve Trigger](#preserve-trigger). Then, once its actions are done, the game asks its
+conditions again on the next pass. A preserved trigger whose conditions stay true keeps
+firing: one that adds a mineral adds one each pass. Preserve Trigger works wherever it
+stands in the list, even after a Wait: the game looks for it when the actions end.
+
+While a trigger is part way through its actions, held at a Wait, the game does not ask
+its conditions again. On each pass it carries on from the action it stopped at.
 
 ### Waits
 
-A [Wait](#wait) or a [Transmission](#transmission) holds the rest of its trigger's actions
-until its time has passed. A player's waits do not run side by side: while one of that
-player's triggers is waiting, a wait in another of their triggers is held up behind it. On
-a map with hyper triggers this means a Wait in any other preserved trigger stalls that
-player's whole trigger list, which Check Map points out.
+Each player has one *wait slot*. A [Wait](#wait) takes it and holds the rest of its
+trigger until its time has passed. While the slot is taken, another trigger of that
+player that reaches a Wait stops there without starting its time, and tries again on each
+pass until it finds the slot free. The player's triggers with no Wait in their way keep
+running every pass, and every player's slot is their own. A
+[Transmission](#transmission) for a person, and [Center View](#center-view) in a
+single-player game, take the same slot.
+
+![One wait slot per player](images/trig-wait.svg)
+
+A Wait's time is in milliseconds of the game's speed, close to real time, not game time.
+Each frame takes a fixed number of milliseconds at each speed, the Wait lasts its time
+in frames, rounded up and at least one, and the trigger goes on in the pass on the frame
+after:
+
+| Speed | Milliseconds a frame | Wait(0) goes on after | Wait(1000) goes on after |
+| --- | --- | --- | --- |
+| Fastest | 42 | 2 frames | 25 frames |
+| Faster | 48 | 2 frames | 22 frames |
+| Fast | 56 | 2 frames | 19 frames |
+| Normal | 67 | 2 frames | 16 frames |
+| Slow | 83 | 2 frames | 14 frames |
+| Slower | 111 | 2 frames | 11 frames |
+| Slowest | 167 | 2 frames | 7 frames |
+
+A Wait of 4,294,967,295 never runs out, and takes that player's wait slot for the rest of
+the game.
+
+On a map with hyper triggers, a Wait in another trigger below them in the list hardly ever
+gets the slot: it can start only in the one slow pass. A Wait above them takes the slot
+first, and while it runs no hyper Wait can start, so the passes fall back to every 31
+frames until it runs out. Check Map points this out.
+
+### Single player and multiplayer
+
+The game runs every player's triggers on every machine, and only what reaches the screen
+is limited to the player the trigger runs for: text, sounds, portraits, pings and the
+view. A few actions behave differently in a single-player game:
+
+| Action | In a single-player game | In a multiplayer game |
+| --- | --- | --- |
+| [Transmission](#transmission), for a person | holds the trigger until the portrait has finished talking | holds the trigger for its duration, in milliseconds of game speed |
+| [Center View](#center-view), for a person | scrolls the screen and holds the trigger until it gets there | jumps the screen at once and does not hold |
+| [Pause Game](#pause-game) and [Unpause Game](#unpause-game) | pause and unpause, for a person's trigger | nothing |
+| The Esc key | skips the person's running triggers through their Waits, transmissions, text and sounds, unless [Disable Debug Mode](#disable-debug-mode) protects them | nothing |
+| A player who gets a result | keeps their triggers | loses their whole trigger list at once, winners and losers alike |
+
+For a computer, rescuable or neutral player, Transmission, Center View, Pause Game and the
+other actions that touch the screen do nothing at all, and do not hold the trigger.
+
+### Winning and losing
+
+[Victory](#victory), [Defeat](#defeat) and [Draw](#draw) give the player the trigger runs
+for a result, and the game settles the results at the end of each pass:
+
+- When any player won or drew in the pass, every other player still in the game with no
+  result of their own is **defeated**.
+- When every player in the game won or drew in the same pass, they all get a draw.
+- The first result a player gets stays. A Defeat or Draw that comes after a Victory for the
+  same player in the same pass waits, and by the next pass the player has already won.
+
+So in a single-player game, a Victory for the person ends the game for the computers too,
+and a Draw is a draw only when everyone draws.
+
+### Counting units
+
+[Command](#command) and [Bring](#bring), and the Most and Least conditions built on them,
+count units in ways that are easy to trip over:
+
+![What Bring counts in a location](images/trig-bring.svg)
+
+- **At most counts differently from At least and Exactly.** At least and Exactly count
+  finished units. At most counts every unit that exists, finished or not: a building going
+  up, an egg or cocoon (as Men), a unit whose training has begun. So the standard melee
+  defeat rule, Command(Current Player, Buildings, At most, 0), does not defeat a player
+  whose only building is still being built.
+- **Units aboard** a transport or bunker count for Bring only with At least and Exactly, at
+  the place of what carries them, and so do the interceptors or scarabs in a carrier or
+  reaver and a power-up a worker carries. With At most, Bring does not count them.
+- **A unit is in a location** when its box touches it, on the levels the location covers.
+  Ground units count by the ground under them; air units by the air bits of the location's
+  elevation settings.
+- **Hallucinations never count**, in Command or Bring, and neither do turrets.
+- **The counts are taken once per pass.** The first Command of a pass takes a snapshot of
+  every player's unit counts, and every later Command in that pass, for any player, reads
+  the same snapshot. A unit made by [Create Unit](#create-unit) or handed over by
+  [Give Units to Player](#give-units-to-player) after that is invisible to Command until the
+  next pass, unless something takes a new snapshot first:
+  [Kill Unit](#kill-unit), [Remove Unit](#remove-unit), either of their At Location forms,
+  [Move Unit](#move-unit), [Move Location](#move-location) or a [Bring](#bring). Bring keeps
+  a count of its own for one location, with the same blind spot: it is taken again when
+  another location is asked, and by the same actions.
+
+### Deaths and kills
+
+A unit's death counts only when it dies in the game: shot, killed by a spell, or consumed.
+Then its owner's [death count](#deaths) for its type goes up by one, and the killer's
+[kills](#kill) and score, if the killer is another player still in the game. Killing
+your own units counts nothing as a kill; killing an ally's counts.
+
+[Kill Unit](#kill-unit), [Remove Unit](#remove-unit) and their At Location forms count
+nothing at all: no death, no kill, no score. Neither does a hallucination dying.
+
+The unit classes are counted apart. Deaths of Men, Buildings and Factories read the game's
+own counts of men, buildings and factories lost, which go up with each real death; Deaths
+of Any unit reads men and buildings lost together. They are not the sum of the per-type
+counts: [Set Deaths](#set-deaths) on a Marine does not change Deaths of Men, while Set
+Deaths of Men changes the lost count itself.
 
 ### Disabled conditions and actions
 
@@ -103,12 +258,23 @@ Players 1 to 8 are the seats a person or a computer plays in. Players 9 to 12 ar
 Player 12 is the neutral player, which owns the resources and critters a map places as
 Neutral. **Current Player** is the player the trigger is running for (see
 [Who a trigger runs for](#who-a-trigger-runs-for)). **Foes** and **Allies** are counted
-from that player's point of view. **None** is no player. The four **Unused** groups have no
-players behind them.
+from that player's point of view: **Allies** are the players allied *for victory* with it,
+and players who are plain allies count as **Neutral Players**. A rescuable or neutral slot
+is in the game like anyone else, so it is counted in All Players, in its force and in
+every Most and Least comparison. The four **Unused** groups have no players behind them.
 
-A Deaths condition or Set Deaths action with a player value past this table reaches memory
-outside the table of death counts; that is what an EUD map does. The editor's player pick
-has an EPD box that turns a memory address into that value.
+**None** is no player as an owner, but a condition does not check it: as a condition's
+player it reads the cell after Player 12's, which is Player 1's count of the *next* unit
+type. Deaths(None, unit 7) is Player 1's deaths of unit 8, and Accumulate(None, ore) is
+Player 1's gas.
+
+A condition with a player value past this table reads memory outside its table, and that
+is what an EUD map does: Deaths reads the 4 bytes at 0x58A364 + 4 × player + 48 × unit, for
+any player and unit number. In 1.16.1 this works for reading only. [Set Deaths](#set-deaths),
+[Set Resources](#set-resources) and [Set Score](#set-score) write nothing for a player
+above Player 8, and Set Deaths nothing for a unit number above 232, so 1.16.1 has no EUD
+writes. The editor's player pick has an EPD box that turns a memory address into that
+value.
 
 ## Argument values
 
@@ -339,9 +505,16 @@ The trigger's flags:
 | Bit | Meaning |
 | --- | --- |
 | 0x04 | Preserved: the same as a [Preserve Trigger](#preserve-trigger) action |
-| 0x08 | Disabled: the trigger never runs |
-| 0x02 | Ignore Defeat and Draw for this trigger |
-| 0x01, 0x10, 0x20, 0x40 | used by the game while it runs; 0 in a saved map |
+| 0x08 | Disabled, or finished: the trigger never runs. Editors set it to disable a trigger, and the game sets it on a trigger that has run and is not preserved |
+| 0x02 | Each time the trigger's actions run, the player counts as having won without winning: every other player still in the game with no result is defeated, and the player's game goes on. A Defeat or Draw in the same trigger never takes effect. Some editors call it "ignore Defeat and Draw", which is not what it does |
+| 0x01 | The trigger is part way through its actions; byte 2399 says which is next |
+| 0x10 | Esc is skipping the trigger's Waits, transmissions and text |
+| 0x20 | The trigger paused the game, and unpauses it when it finishes |
+| 0x40 | Esc may not skip the trigger ([Disable Debug Mode](#disable-debug-mode)) |
+
+The game sets 0x01, 0x10, 0x20 and 0x40 itself while the trigger runs, and StarEdit saves
+them as 0. A file that sets them is still obeyed: with 0x01 set, the first pass skips the
+conditions and starts at the action byte 2399 names.
 
 The list of conditions ends at the first slot whose type is 0, and so does the list of
 actions.
@@ -387,7 +560,8 @@ All numbers are little-endian. An unused action slot is all zeros.
 
 ## Conditions
 
-A condition is a test a trigger makes on every cycle. These are all of them:
+A condition is a test a trigger makes on every pass, unless the trigger is part way through
+its actions. These are all of them:
 
 | Condition | True when |
 | --- | --- |
@@ -441,7 +615,8 @@ Accumulate("Current Player", At least, 500, ore);
 ## Always
 
 Always true. A trigger that should run as soon as the game starts, or on every cycle with
-[Preserve Trigger](#preserve-trigger), has this as its condition.
+[Preserve Trigger](#preserve-trigger), has this as its condition. A trigger with no
+conditions at all behaves the same.
 
 <!-- generated: condition 22 -->
 **Condition 22** · `Always();`
@@ -458,6 +633,11 @@ Always();
 True when the player has at least, at most or exactly the number of units of the type
 inside the location. A location's elevation settings (which of low, middle and high ground
 and air it covers) decide which units it counts.
+
+A unit counts when its box touches the location. With At least or Exactly, Bring counts
+finished units and the units aboard a transport in the location; with At most, it counts
+every unit there, finished or not, but nothing aboard. See
+[Counting units](#counting-units).
 
 <!-- generated: condition 3 -->
 **Condition 3** · `Bring(Player, Unit, Location, Comparison, Amount);`
@@ -478,8 +658,13 @@ Bring("Current Player", "Terran Marine", "Beacon", At least, 1);
 ## Command
 
 True when the player has at least, at most or exactly the number of units of the type
-anywhere on the map. Blizzard's melee maps carry the standard defeat trigger, a player
-who commands no buildings loses:
+anywhere on the map. With At least or Exactly it counts finished units; with At most, every
+unit, including buildings still going up and eggs. The counts are taken once in each pass,
+so a unit created later in the pass is not seen until the next one. See
+[Counting units](#counting-units).
+
+Every melee game runs the standard defeat trigger, a player who commands no buildings
+loses:
 
 <!-- generated: condition 2 -->
 **Condition 2** · `Command(Player, Unit, Comparison, Amount);`
@@ -499,7 +684,10 @@ Command("Current Player", "Buildings", At most, 0);
 ## Command the Least
 
 True when the player the trigger runs for has fewer units of the type than any other
-player.
+player. It counts finished units.
+
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
 
 <!-- generated: condition 16 -->
 **Condition 16** · `Command the Least(Unit);`
@@ -533,7 +721,10 @@ Command the Least At("Men", "Arena");
 ## Command the Most
 
 True when the player the trigger runs for has more units of the type than any other
-player.
+player. It counts finished units.
+
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
 
 <!-- generated: condition 6 -->
 **Condition 6** · `Command the Most(Unit);`
@@ -586,7 +777,10 @@ Countdown Timer(At most, 0);
 ## Deaths
 
 True when the number of units of the type the player has lost is at least, at most or
-exactly the amount.
+exactly the amount. Only units that die in the game count: [Kill Unit](#kill-unit) and
+[Remove Unit](#remove-unit) add nothing. For Men, Buildings, Factories and Any unit it
+reads the game's own counts of units lost, not the sum of the types (see
+[Deaths and kills](#deaths-and-kills)).
 
 Every player has a death count for every unit type, whether or not that unit is ever on
 the map, and [Set Deaths](#set-deaths) can change it. That makes the death counts of unit
@@ -611,7 +805,8 @@ Deaths("Current Player", "Cave (Unused)", Exactly, 3);
 ## Elapsed Time
 
 True when at least, at most or exactly the number of game seconds have passed since the
-game started.
+game started. A game second is 16 frames at every game speed, and the clock stops while the
+game is paused, by a menu or by [Pause Game](#pause-game).
 
 <!-- generated: condition 12 -->
 **Condition 12** · `Elapsed Time(Comparison, Amount);`
@@ -630,6 +825,9 @@ Elapsed Time(At least, 600);
 
 True when the player the trigger runs for has the highest score of the [kind](#scores).
 
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
+
 <!-- generated: condition 9 -->
 **Condition 9** · `Highest Score(Score);`
 
@@ -645,7 +843,8 @@ Highest Score(Kills);
 ## Kill
 
 True when the player has killed at least, at most or exactly the number of units of the
-type.
+type. A player's own units never count as kills; an ally's do. Units killed by triggers
+are nobody's kills.
 
 <!-- generated: condition 5 -->
 **Condition 5** · `Kill(Player, Unit, Comparison, Amount);`
@@ -667,6 +866,9 @@ Kill("Current Player", "Zerg Zergling", At least, 20);
 True when the player the trigger runs for has killed fewer units of the type than any
 other player.
 
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
+
 <!-- generated: condition 18 -->
 **Condition 18** · `Least Kills(Unit);`
 
@@ -682,6 +884,9 @@ Least Kills("Men");
 ## Least Resources
 
 True when the player the trigger runs for has less of the resource than any other player.
+
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
 
 <!-- generated: condition 20 -->
 **Condition 20** · `Least Resources(Resource);`
@@ -699,6 +904,9 @@ Least Resources(ore);
 
 True when the player the trigger runs for has the lowest score of the [kind](#scores).
 
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
+
 <!-- generated: condition 19 -->
 **Condition 19** · `Lowest Score(Score);`
 
@@ -713,8 +921,8 @@ Lowest Score(Total);
 
 ## Mission Briefing
 
-The condition of every trigger in a mission briefing. It has no use in a map's own
-triggers. See [Mission briefing actions](#mission-briefing-actions).
+The condition of every trigger in a mission briefing. In a map's own triggers it is the
+same as [Never](#never). See [Mission briefing actions](#mission-briefing-actions).
 
 <!-- generated: condition 13 -->
 **Condition 13** · `Mission Briefing();`
@@ -726,6 +934,9 @@ It takes no arguments.
 
 True when the player the trigger runs for has killed more units of the type than any other
 player.
+
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
 
 <!-- generated: condition 8 -->
 **Condition 8** · `Most Kills(Unit);`
@@ -742,6 +953,9 @@ Most Kills("Men");
 ## Most Resources
 
 True when the player the trigger runs for has more of the resource than any other player.
+
+A tie counts: when every player has 0, the condition is true for all of them. The game
+compares the player with every player in the game, rescuable and neutral slots included.
 
 <!-- generated: condition 10 -->
 **Condition 10** · `Most Resources(Resource);`
@@ -773,8 +987,14 @@ Never();
 ## Opponents
 
 True when the player has at least, at most or exactly the number of opponents still in
-the game. Blizzard's melee maps carry the standard victory trigger, a player with no
-opponents left wins:
+the game. The player's *side* is the player and every player allied for victory with it
+both ways; an opponent is a player in the game who is not allied for victory, both ways,
+with everyone on that side. Rescuable and neutral slots are nobody's opponents, and a
+defeated player is no longer one.
+
+The game's own melee rules use it: a player with no opponents left wins. Blizzard's melee
+maps carry the same rule in another form, Command(Non Allied Victory Players, Buildings,
+At most, 0), which runs only when such a map is played as Use Map Settings:
 
 <!-- generated: condition 14 -->
 **Condition 14** · `Opponents(Player, Comparison, Amount);`
@@ -839,7 +1059,7 @@ An action is what a trigger does once its conditions hold. These are all of them
 | [Create Unit with Properties](#create-unit-with-properties) | creates units with hit points, energy and other properties set |
 | [Defeat](#defeat) | the player loses |
 | [Display Text Message](#display-text-message) | shows text on the player's screen |
-| [Draw](#draw) | ends the game in a draw |
+| [Draw](#draw) | the player draws |
 | [Give Units to Player](#give-units-to-player) | hands units at a location to another player |
 | [Kill Unit](#kill-unit) | kills every unit of a type a player owns |
 | [Kill Unit At Location](#kill-unit-at-location) | kills units in a location |
@@ -897,7 +1117,10 @@ act on "the player" — showing text, moving the screen, winning — act on that
 
 ## Center View
 
-Moves the player's screen so the location is in the middle of it.
+Moves the player's screen so the location is in the middle of it. In a single-player game
+the screen scrolls there and the trigger is held, like a [Wait](#wait), until it arrives;
+in a multiplayer game it jumps at once. It does nothing for a computer player, while the
+game is paused, or with no location.
 
 <!-- generated: action 10 -->
 **Action 10** · `Center View(Location);`
@@ -931,7 +1154,10 @@ Comment("Wave 3 spawns");
 ## Create Unit
 
 Creates the number of units of the type for the player, at the middle of the location. A
-unit that does not fit there is placed at the nearest spot it fits.
+unit that does not fit there is placed at the nearest spot it fits, up to 128 pixels away;
+a unit with no room that close is not created. A building is not moved: it is not created
+on ground it cannot stand on, or where something is in the way. Mineral fields and
+geysers are always created for Player 12. A count of 0 creates one unit.
 
 <!-- generated: action 44 -->
 **Action 44** · `Create Unit(Player, Unit, Count, Location);`
@@ -954,7 +1180,8 @@ As [Create Unit](#create-unit), and the new units take the properties of one of 
 64 *unit properties slots*: hit points, shields and energy as percentages, resources,
 hangar count, and states such as cloaked, burrowed, lifted or hallucinated. The slots are
 stored in the map's `UPRP` section; the editor's Triggers ▸ Unit Properties Slots edits
-them.
+them. A unit is created cloaked or burrowed only if its owner has the technology that lets
+it, and resources are kept to 16 bits.
 
 <!-- generated: action 11 -->
 **Action 11** · `Create Unit with Properties(Player, Unit, Count, Location, Properties);`
@@ -974,7 +1201,10 @@ Create Unit with Properties("Player 8", "Zerg Hydralisk", 4, "Spawn", 1);
 
 ## Defeat
 
-The player loses and leaves the game.
+The player loses. Nobody else is affected. In a Use Map Settings game the player's units
+stay on the map, idle, and the player stops running triggers and drops out of every group.
+A Defeat that comes after a [Victory](#victory) for the same player in the same pass waits,
+and so never takes effect. See [Winning and losing](#winning-and-losing).
 
 <!-- generated: action 2 -->
 **Action 2** · `Defeat();`
@@ -990,7 +1220,9 @@ Defeat();
 
 Shows the text on the player's screen. *Always Display* shows it even to a player who has
 turned subtitles off; *Don't Always Display* follows that setting. The text can carry the
-game's colour codes.
+game's colour codes. Only the player the trigger runs for sees it: a computer player's
+Display Text shows on nobody's screen. The text stays for 4 seconds, or 50 milliseconds
+for each character of a longer text, in real time.
 
 <!-- generated: action 9 -->
 **Action 9** · `Display Text Message(Display, Text);`
@@ -1007,7 +1239,9 @@ Display Text Message(Always Display, "Defend the base until help arrives.");
 
 ## Draw
 
-Ends the game in a draw.
+Gives the player a draw. It is a draw for everyone only when every player in the game
+draws or wins in the same pass; otherwise every other player still in the game with no
+result is defeated. See [Winning and losing](#winning-and-losing).
 
 <!-- generated: action 56 -->
 **Action 56** · `Draw();`
@@ -1021,7 +1255,9 @@ Draw();
 
 ## Give Units to Player
 
-Hands the number of units of the type in the location from one player to another.
+Hands the number of units of the type in the location from one player to another. With a
+group as the player, the count is for the whole group. A transport takes its cargo along
+to the new owner; a unit inside a transport is not given on its own.
 
 <!-- generated: action 48 -->
 **Action 48** · `Give Units to Player(From, To, Unit, Count, Location);`
@@ -1041,8 +1277,11 @@ Give Units to Player("Player 12", "Current Player", "Any unit", All, "Rescue");
 
 ## Kill Unit
 
-Kills every unit of the type the player owns, anywhere on the map. They die as they would
-in a fight, with their death animation, and add to the player's [death count](#deaths).
+Kills every unit of the type the player owns, anywhere on the map, with their death
+animation. A unit killed this way adds nothing to anyone's [death count](#deaths), kills or
+score: only a unit that dies in the game, shot or killed by a spell, does. A death counter
+meant to see a unit die therefore never sees Kill Unit. *Any unit* means every unit the
+player owns, mineral fields included.
 
 <!-- generated: action 22 -->
 **Action 22** · `Kill Unit(Player, Unit);`
@@ -1059,7 +1298,9 @@ Kill Unit("Player 8", "Zerg Larva");
 
 ## Kill Unit At Location
 
-As [Kill Unit](#kill-unit), for the number of units of the type in the location.
+As [Kill Unit](#kill-unit), for the number of units of the type in the location, units
+loaded in transports there included. With a group as the player, the count is for each
+player in it.
 
 <!-- generated: action 23 -->
 **Action 23** · `Kill Unit At Location(Player, Unit, Count, Location);`
@@ -1079,7 +1320,8 @@ Kill Unit At Location("All Players", "Men", All, "Lava");
 ## Leader Board Control
 
 Shows a leaderboard of how many units of the type each player owns. A map shows one
-leaderboard at a time: showing another replaces it.
+leaderboard at a time: showing another replaces it. It is one leaderboard for everyone,
+whichever player's trigger shows it, and the last one shown wins.
 
 <!-- generated: action 17 -->
 **Action 17** · `Leader Board Control(Label, Unit);`
@@ -1290,7 +1532,8 @@ Leaderboard Goal Resources("Mine 1000", 1000, ore);
 
 ## Minimap Ping
 
-Pings the location on the player's minimap.
+Pings the middle of the location on the player's minimap. Only the player the trigger runs
+for sees it.
 
 <!-- generated: action 28 -->
 **Action 28** · `Minimap Ping(Location);`
@@ -1307,7 +1550,8 @@ Minimap Ping("Enemy base");
 ## Modify Unit Energy
 
 Sets the energy of the number of units of the type in the location to the percentage of
-their maximum.
+their maximum. Only units that use energy are changed, and the count passes over the
+others. Units inside a transport are not reached.
 
 <!-- generated: action 50 -->
 **Action 50** · `Modify Unit Energy(Player, Unit, Percent, Count, Location);`
@@ -1328,7 +1572,8 @@ Modify Unit Energy("Current Player", "Terran Ghost", 100, All, "Anywhere");
 ## Modify Unit Hanger Count
 
 Adds the amount of interceptors to carriers, or scarabs to reavers, for the number of
-units of the type in the location, up to the most each can hold.
+units of the type in the location, up to the most each can hold. A unit that has no room
+for more does not use up the count.
 
 <!-- generated: action 53 -->
 **Action 53** · `Modify Unit Hanger Count(Player, Unit, Amount, Count, Location);`
@@ -1349,7 +1594,8 @@ Modify Unit Hanger Count("Current Player", "Protoss Carrier", 8, All, "Anywhere"
 ## Modify Unit Hit Points
 
 Sets the hit points of the number of units of the type in the location to the percentage
-of their maximum.
+of their maximum. A unit is never left below 1/256 of a hit point, so 0% does not kill it.
+Units inside a transport are not reached.
 
 <!-- generated: action 49 -->
 **Action 49** · `Modify Unit Hit Points(Player, Unit, Percent, Count, Location);`
@@ -1370,7 +1616,8 @@ Modify Unit Hit Points("Player 8", "Men", 50, All, "Anywhere");
 ## Modify Unit Resource Amount
 
 Sets how much ore or gas the mineral fields and geysers of the player in the location hold.
-There is no unit argument: it applies to every resource the player owns there.
+There is no unit argument: it applies to every resource the player owns there. The amount
+is kept to 16 bits, so 100,000 becomes 34,464.
 
 <!-- generated: action 52 -->
 **Action 52** · `Modify Unit Resource Amount(Player, Amount, Count, Location);`
@@ -1412,7 +1659,8 @@ Modify Unit Shield Points("Current Player", "Protoss Zealot", 100, All, "Anywher
 
 Centres the second location (*Move*) on a unit of the type owned by the player inside the
 first (*Unit at*). Following a unit with a location, so that other triggers can act around
-it, is done with this.
+it, is done with this. With no such unit, the second location is centred on the first. The
+moved location keeps its size and is kept inside the map. Anywhere can be moved too.
 
 <!-- generated: action 38 -->
 **Action 38** · `Move Location(Player, Unit, Unit at, Move);`
@@ -1432,7 +1680,8 @@ Move Location("Current Player", "Terran Marine", "Anywhere", "Hero");
 ## Move Unit
 
 Moves the number of units of the type from one location to the middle of another, at
-once.
+once. With a group as the player, the count is for the whole group. A unit that does not
+fit there goes to the nearest spot it fits.
 
 <!-- generated: action 39 -->
 **Action 39** · `Move Unit(Player, Unit, Count, From, To);`
@@ -1468,7 +1717,7 @@ Mute Unit Speech();
 ## Order
 
 Orders the player's units of the type in one location to move, patrol or attack towards
-another.
+the middle of another. It orders all of them; there is no count.
 
 <!-- generated: action 46 -->
 **Action 46** · `Order(Player, Unit, From, To, Order);`
@@ -1488,7 +1737,10 @@ Order("Player 8", "Men", "Spawn", "Base", attack);
 
 ## Pause Game
 
-Pauses the game. It works in single player only; in a multiplayer game it does nothing.
+Pauses the game. It works in single player only, and only for a person's trigger; in a
+multiplayer game it does nothing. The triggers keep running while the game is paused:
+waits count down and passes go on, but the game clock and the countdown stop. The game is
+unpaused when the trigger that paused it finishes.
 
 <!-- generated: action 5 -->
 **Action 5** · `Pause Game();`
@@ -1520,7 +1772,9 @@ Plays a sound for the player. The file is one stored in the map archive, which t
 editor's Sound Editor adds, or one of the game's own sounds by its path, such as
 `sound\Terran\Marine\TMaYes00.wav`. A sound of the game's needs no file in the map; the
 Trigger Editor's **Browse…** lists them. Duration is the sound's length in milliseconds,
-which editors fill in from the file.
+which editors fill in from the file. The game does not use it: Play WAV never holds the
+trigger, so the next action runs while the sound plays. Only the player the trigger runs
+for hears it.
 
 <!-- generated: action 8 -->
 **Action 8** · `Play WAV(WAV, Duration);`
@@ -1554,7 +1808,7 @@ Preserve Trigger();
 ## Remove Unit
 
 Removes every unit of the type the player owns, anywhere on the map, without a death
-animation.
+animation. Like [Kill Unit](#kill-unit), it adds nothing to death counts, kills or score.
 
 <!-- generated: action 24 -->
 **Action 24** · `Remove Unit(Player, Unit);`
@@ -1592,7 +1846,9 @@ Remove Unit At Location("All Players", "Men", All, "Void");
 
 Starts an [AI script](#ai-scripts) for the player, which is normally a computer player:
 the custom-level scripts that make it play a normal game, or one of the small scripts
-that change its behaviour.
+that change its behaviour. For a person's or a rescuable player's trigger the game runs
+only the scripts that make sense for them: the bunker, transport and web scripts (EnBk,
+EnTr, ExTr, DWHe, PB3F) and the shared-vision ones (+Vi and −Vi); it ignores any other.
 
 <!-- generated: action 15 -->
 **Action 15** · `Run AI Script(Script);`
@@ -1627,7 +1883,11 @@ Run AI Script At Location("Value This Area Higher", "Expansion");
 ## Set Alliance Status
 
 Sets how the player the trigger runs for stands towards the Player argument: enemy, ally,
-or ally for victory.
+or ally for victory. Any status value other than ally and allied victory makes them
+enemies.
+
+Making a player an ally, or an ally for victory, also changes every other player the
+trigger's player was already allied with to the same kind of alliance.
 
 <!-- generated: action 57 -->
 **Action 57** · `Set Alliance Status(Player, Status);`
@@ -1645,7 +1905,8 @@ Set Alliance Status("Force 1", Allied Victory);
 ## Set Countdown Timer
 
 Sets the countdown timer shown at the top of the screen, adds to it or takes from it, in
-seconds. [Countdown Timer](#countdown-timer) tests it.
+seconds. [Countdown Timer](#countdown-timer) tests it. The timer stays between 0 and
+359,999 seconds. When it reaches 0 the game goes through the triggers on the next frame.
 
 <!-- generated: action 14 -->
 **Action 14** · `Set Countdown Timer(Modifier, Seconds);`
@@ -1663,10 +1924,12 @@ Set Countdown Timer(Set To, 300);
 ## Set Deaths
 
 Changes the player's [death count](#deaths) for the unit type. It is how maps keep
-numbers: nothing but Set Deaths and units dying changes a death count, so the counts of
-unit types a map never uses can hold anything.
+numbers: nothing but Set Deaths and units dying in the game changes a death count, so the
+counts of unit types a map never uses can hold anything.
 
-Add past 4,294,967,295 wraps around to 0, and Subtract stops at 0.
+Add past 4,294,967,295 wraps around to 0, and Subtract stops at 0. It writes nothing for a
+player above Player 8 or a unit number above 232, so in 1.16.1 it cannot reach memory
+outside the table (see [Players and groups](#players-and-groups)).
 
 <!-- generated: action 45 -->
 **Action 45** · `Set Deaths(Player, Unit, Modifier, Amount);`
@@ -1686,7 +1949,8 @@ Set Deaths("Current Player", "Cave (Unused)", Add, 1);
 ## Set Doodad State
 
 Turns doodad units in the location on or off: the doors and traps of the Installation and
-other tilesets, which the map places as units.
+other tilesets, which the map places as units. It changes only the first such unit it
+finds in the location, not all of them.
 
 <!-- generated: action 42 -->
 **Action 42** · `Set Doodad State(Player, Unit, Location, State);`
@@ -1705,7 +1969,9 @@ Set Doodad State("All Players", "Right Upper Level Door", "Door", disable);
 
 ## Set Invincibility
 
-Makes the player's units of the type in the location invincible, or takes it away.
+Makes the player's units of the type in the location invincible, or takes it away. Units
+aboard the player's transports there are changed too. A unit type that is invincible in
+the game's own data stays invincible.
 
 <!-- generated: action 43 -->
 **Action 43** · `Set Invincibility(Player, Unit, Location, State);`
@@ -1757,8 +2023,10 @@ Set Next Scenario("Episode 2");
 
 ## Set Resources
 
-Sets the player's ore, gas, or both, adds to it or takes from it. Blizzard's melee maps
-give every player their starting minerals with it.
+Sets the player's ore, gas, or both, adds to it or takes from it. With *ore and gas*, each
+gets the whole amount. Add past 4,294,967,295 wraps around to 0, and Subtract stops at 0.
+Blizzard's melee maps give every player their starting minerals with it, when they are
+played as Use Map Settings.
 
 <!-- generated: action 26 -->
 **Action 26** · `Set Resources(Player, Modifier, Amount, Resource);`
@@ -1779,6 +2047,9 @@ Set Resources("Current Player", Set To, 50, ore);
 
 Sets the player's score of the [kind](#scores), adds to it or takes from it. Custom is the
 score maps keep for themselves, often shown with [Leader Board Points](#leader-board-points).
+A kind that is a sum of others is shared out between them: Total adds or takes a quarter
+of the amount, rounded up, to each of units, buildings, kills and razings (Custom is left
+alone), and the two kinds that are pairs half to each.
 
 <!-- generated: action 27 -->
 **Action 27** · `Set Score(Player, Modifier, Amount, Score);`
@@ -1798,7 +2069,7 @@ Set Score("Current Player", Add, 10, Custom);
 ## Set Switch
 
 Sets, clears, toggles or randomizes the [switch](#switches). Randomize sets or clears it
-at random.
+at random, with one draw of the game's random numbers, the same on every machine.
 
 <!-- generated: action 13 -->
 **Action 13** · `Set Switch(Switch, Action);`
@@ -1815,7 +2086,8 @@ Set Switch("Switch 1", set);
 
 ## Talking Portrait
 
-Shows the unit type's portrait talking in the player's portrait box for the time.
+Shows the unit type's portrait talking in the player's portrait box for the time. It does
+not hold the trigger. Only the player the trigger runs for sees it.
 
 <!-- generated: action 29 -->
 **Action 29** · `Talking Portrait(Unit, Duration);`
@@ -1832,11 +2104,16 @@ Talking Portrait("Jim Raynor (Marine)", 3000);
 
 ## Transmission
 
-A message from a unit: the unit type's portrait talks, the text is shown, the sound plays
-and the location is pinged on the minimap. Like a [Wait](#wait), it holds the rest of the
-trigger until it is over. How long that is starts from the sound's length (*WAV duration*)
-and is changed by the modifier and *Duration*: Set To replaces it, Add and Subtract change
-it.
+A message from a unit: the unit type's portrait talks, the text is shown and the sound
+plays. The first unit of the type in the location, whoever owns it, blinks and is pinged
+on the minimap; with none there, nothing is pinged. Like a [Wait](#wait), it holds the rest
+of the trigger until it is over, in the player's wait slot. How long that is starts from
+the sound's length (*WAV duration*) and is changed by the modifier and *Duration*: Set To
+replaces it, Add and Subtract change it.
+
+In a single-player game it holds until the portrait has finished talking; in a
+multiplayer game for that time, in milliseconds of game speed. For a computer player it
+shows nothing and holds nothing, and without a location it does nothing at all.
 
 <!-- generated: action 7 -->
 **Action 7** · `Transmission(Display, Text, Unit, Location, Modifier, Duration, WAV, WAV duration);`
@@ -1901,7 +2178,9 @@ Unpause Timer();
 
 ## Victory
 
-The player wins and leaves the game.
+The player wins. Every other player still in the game who has no result in the same pass
+is defeated, and if every player wins in the same pass it is a draw for all. See
+[Winning and losing](#winning-and-losing).
 
 <!-- generated: action 1 -->
 **Action 1** · `Victory();`
@@ -1915,9 +2194,10 @@ Victory();
 
 ## Wait
 
-Holds the rest of the trigger's actions for the time, in milliseconds of game time. See
-[Waits](#waits) for how a player's waits hold each other up, and for the Wait 0 of hyper
-triggers.
+Holds the rest of the trigger's actions for the time, in milliseconds at the game's speed:
+Wait(1000) is 25 frames at Fastest and 16 at Normal. See [Waits](#waits) for the frames at
+every speed and how a player's waits hold each other up, and
+[Hyper triggers](#hyper-triggers) for Wait(0).
 
 <!-- generated: action 4 -->
 **Action 4** · `Wait(Milliseconds);`
@@ -1933,8 +2213,10 @@ Wait(1000);
 
 ## Disable Debug Mode
 
-In the game's list of actions, but StarEdit does not offer it and it is not known to do
-anything in released versions of the game.
+In the game's list of actions, but StarEdit does not offer it. It stops the Esc key from
+skipping this trigger: in a single-player game Esc normally skips the person's running
+triggers through their Waits, transmissions, text and sounds, as for a cinematic.
+[Enable Debug Mode](#enable-debug-mode) allows it again.
 
 <!-- generated: action 58 -->
 **Action 58** · `Disable Debug Mode();`
@@ -1944,8 +2226,8 @@ It takes no arguments.
 
 ## Enable Debug Mode
 
-As [Disable Debug Mode](#disable-debug-mode): not offered by StarEdit and not known to do
-anything.
+Lets the Esc key skip this trigger again after [Disable Debug Mode](#disable-debug-mode).
+Not offered by StarEdit.
 
 <!-- generated: action 59 -->
 **Action 59** · `Enable Debug Mode();`

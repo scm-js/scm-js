@@ -174,7 +174,12 @@ switched on from View, the Layers panel, `Ctrl+Shift+W` or the panel), blits one
 mode in its `draw`, reads the cell under the pointer in `onHover`, picks an area through `pickTile`,
 and re-runs on the terrain/units/doodads/settings/document events while the overlay shows or the panel
 is open, so the picture follows the units being placed on it. The settings panel holds the readout and
-the problems; a *Details…* panel lists the rest. It never writes.
+the problems; a *Details…* panel lists the rest. It never writes. Since 1.3.0 its panel also has the game
+walk the map through scm-sim's `pathing()` (`api.services.watch("scm-sim.engine")`, no `requires`: the
+section is absent without the engine): `game.ts` matches the game's walks with the estimate's pairs
+(stopped / stuck / time ran out / no ground / ≥ 30 % and ≥ 10 tiles longer / units the game could not
+place), overlay mode `game` draws the regions grid and each unit's route, and an edit only marks the
+walks out of date (a run is 10–40 s); `vendor/scm-sim.d.ts` is the contract's copy.
 
 **Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, not a default — installed from Browse Plugins) places symmetric
 start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile

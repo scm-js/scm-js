@@ -289,7 +289,9 @@ Two overlays on the View menu show what the ground means to the game:
 
 View ▸ Walkability (Ctrl+Shift+W) goes further and draws the ground as a unit walks it:
 islands, the areas the map divides into, the chokes between them with their widths, and
-the distances between start locations. File ▸ Import ▸ Terrain from Image… turns a
+the distances between start locations. In the editor at scmjs.dev its panel can also have
+the game itself walk the map: the regions the game plans routes over, and real units
+walked between the start locations, with any that stop short or get stuck. File ▸ Import ▸ Terrain from Image… turns a
 picture into terrain with the isometric brush, over the whole map or a rectangle. Both are
 plugins, on from the start; see [Plugins](#plugins).
 
@@ -1331,7 +1333,7 @@ and the addresses it will fetch from.
 
 | Plugin | Where | What it does |
 | --- | --- | --- |
-| [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them with their widths, height seams with no ramp, and the distances between start locations. Reads only. |
+| [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them with their widths, height seams with no ramp, and the distances between start locations; at scmjs.dev, also the game's own regions and units walked by the game between the start locations. Reads only. |
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
 | [Repair](https://github.com/scm-js/plugin-repair) | on open, status bar, Tools ▸ Repair Map… | Reads a map the way the game does and repairs what is missing, damaged, repeated or the wrong size as it opens, including a stripped isometric record. The judgement calls wait in the status bar, each with what the game does without the repair. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |

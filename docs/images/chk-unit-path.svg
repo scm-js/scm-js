@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 542" width="760" height="542" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">What the game does with a placed unit</title>
+<desc id="d">The checks a UNIT record passes when a game starts: start locations are noted, not made; units of empty player slots are dropped; melee keeps only Player 12 minerals, geysers and critters; in Use Map Settings a User Selectable player keeps only neutral kinds of unit; Brood War units are not made in the original game; a unit with no room is removed with a warning. Then the unit is made and its fields applied.</desc>
+<rect width="760" height="542" rx="10" fill="#12151b"/>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa3b2"/></marker></defs>
+<text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">What the game does with a placed unit</text>
+<rect x="24" y="52" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="77" font-size="12" fill="#e6e8ee" text-anchor="start">Is it a start location?</text>
+<line x1="326" y1="72" x2="376" y2="72" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="67" font-size="10.5" fill="#9aa3b2" text-anchor="middle">yes</text>
+<rect x="380" y="52" width="356" height="40" rx="6" fill="#23324a" stroke="#3c5a86"/>
+<text x="390" y="69" font-size="11.5" fill="#e6e8ee" text-anchor="start">No unit is made: its place becomes the owner's start</text>
+<text x="390" y="84" font-size="11.5" fill="#e6e8ee" text-anchor="start">location.</text>
+<line x1="64" y1="94" x2="64" y2="108" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="105" font-size="10.5" fill="#9aa3b2" text-anchor="start">no</text>
+<rect x="24" y="110" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="127" font-size="12" fill="#e6e8ee" text-anchor="start">Is the owner Player 1 to 8, and is</text>
+<text x="36" y="142" font-size="12" fill="#e6e8ee" text-anchor="start">that slot empty in this game?</text>
+<line x1="326" y1="130" x2="376" y2="130" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="125" font-size="10.5" fill="#9aa3b2" text-anchor="middle">yes</text>
+<rect x="380" y="110" width="356" height="40" rx="6" fill="#3a2024" stroke="#6a3a3a"/>
+<text x="390" y="135" font-size="11.5" fill="#e6e8ee" text-anchor="start">Dropped.</text>
+<line x1="64" y1="152" x2="64" y2="166" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="163" font-size="10.5" fill="#9aa3b2" text-anchor="start">no</text>
+<rect x="24" y="168" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="185" font-size="12" fill="#e6e8ee" text-anchor="start">Is this melee, or any type but</text>
+<text x="36" y="200" font-size="12" fill="#e6e8ee" text-anchor="start">Use Map Settings?</text>
+<line x1="326" y1="188" x2="376" y2="188" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="183" font-size="10.5" fill="#9aa3b2" text-anchor="middle">yes</text>
+<rect x="380" y="168" width="356" height="40" rx="6" fill="#3a2024" stroke="#6a3a3a"/>
+<text x="390" y="185" font-size="11.5" fill="#e6e8ee" text-anchor="start">Kept only if it is a Player 12 mineral field, geyser</text>
+<text x="390" y="200" font-size="11.5" fill="#e6e8ee" text-anchor="start">or critter.</text>
+<line x1="64" y1="210" x2="64" y2="224" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="221" font-size="10.5" fill="#9aa3b2" text-anchor="start">no</text>
+<rect x="24" y="226" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="243" font-size="12" fill="#e6e8ee" text-anchor="start">Use Map Settings, with the owner's race</text>
+<text x="36" y="258" font-size="12" fill="#e6e8ee" text-anchor="start">set to User Selectable?</text>
+<line x1="326" y1="246" x2="376" y2="246" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="241" font-size="10.5" fill="#9aa3b2" text-anchor="middle">yes</text>
+<rect x="380" y="226" width="356" height="40" rx="6" fill="#3a2024" stroke="#6a3a3a"/>
+<text x="390" y="243" font-size="11.5" fill="#e6e8ee" text-anchor="start">Kept only if it is a neutral kind: minerals,</text>
+<text x="390" y="258" font-size="11.5" fill="#e6e8ee" text-anchor="start">geysers, critters, power-ups.</text>
+<line x1="64" y1="268" x2="64" y2="282" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="279" font-size="10.5" fill="#9aa3b2" text-anchor="start">no</text>
+<rect x="24" y="284" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="301" font-size="12" fill="#e6e8ee" text-anchor="start">A Brood War unit, in a game of</text>
+<text x="36" y="316" font-size="12" fill="#e6e8ee" text-anchor="start">the original StarCraft?</text>
+<line x1="326" y1="304" x2="376" y2="304" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="299" font-size="10.5" fill="#9aa3b2" text-anchor="middle">yes</text>
+<rect x="380" y="284" width="356" height="40" rx="6" fill="#3a2024" stroke="#6a3a3a"/>
+<text x="390" y="309" font-size="11.5" fill="#e6e8ee" text-anchor="start">Not made.</text>
+<line x1="64" y1="326" x2="64" y2="340" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="337" font-size="10.5" fill="#9aa3b2" text-anchor="start">no</text>
+<rect x="24" y="342" width="300" height="40" rx="6" fill="#2b313e" stroke="#4b5363"/>
+<text x="36" y="367" font-size="12" fill="#e6e8ee" text-anchor="start">Is there room to place it?</text>
+<line x1="326" y1="362" x2="376" y2="362" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="352" y="357" font-size="10.5" fill="#9aa3b2" text-anchor="middle">no</text>
+<rect x="380" y="342" width="356" height="40" rx="6" fill="#3a2024" stroke="#6a3a3a"/>
+<text x="390" y="367" font-size="11.5" fill="#e6e8ee" text-anchor="start">Removed, with WARNING: Unit unplaceable! on screen.</text>
+<line x1="64" y1="384" x2="64" y2="398" stroke="#9aa3b2" stroke-width="1.4" marker-end="url(#head)"/>
+<text x="74" y="395" font-size="10.5" fill="#9aa3b2" text-anchor="start">yes</text>
+<rect x="24" y="400" width="712" height="58" rx="6" fill="#1d2a20" stroke="#6fbf73"/>
+<text x="36" y="422" font-size="12" fill="#e6e8ee" text-anchor="start">The unit is made, then the record's fields are applied, each only when its bit is set:</text>
+<text x="36" y="442" font-size="11.5" fill="#9aa3b2" text-anchor="start">hit points, shields, energy, resources, hangar, and the states: cloaked, burrowed, in transit, hallucinated, invincible.</text>
+<text x="24" y="486" font-size="11.5" fill="#9aa3b2" text-anchor="start">Only the last UNIT section's start locations count. Hit points of 0% leave the unit at 1/256 of a hit point. Resources</text><text x="24" y="502" font-size="11.5" fill="#9aa3b2" text-anchor="start">are kept to 16 bits, so 70,000 becomes 4,464. Only Carriers, Reavers and their heroes take a hangar count. A Ghost placed</text><text x="24" y="518" font-size="11.5" fill="#9aa3b2" text-anchor="start">cloaked starts cloaked only if its owner has Personal Cloaking. Add-ons and nydus canals link within one UNIT section.</text>
+</svg>

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 721" width="760" height="721" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">Which sections each read needs</title>
+<desc id="d">A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present.</desc>
+<rect width="760" height="721" rx="10" fill="#12151b"/>
+<text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">Which sections each read needs</text>
+<circle cx="30" cy="50" r="6" fill="#e7c160"/>
+<text x="42" y="54" font-size="12" fill="#e6e8ee" text-anchor="start">needed: the read fails without it</text>
+<circle cx="300" cy="50" r="5.5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<text x="312" y="54" font-size="12" fill="#e6e8ee" text-anchor="start">read when present</text>
+<text x="146" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Map list</text>
+<text x="250" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Melee</text>
+<text x="250" y="88" font-size="10.5" fill="#9aa3b2" text-anchor="middle">VER 59, 63</text>
+<text x="354" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Melee</text>
+<text x="354" y="88" font-size="10.5" fill="#9aa3b2" text-anchor="middle">VER 205</text>
+<text x="458" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Use Map</text>
+<text x="458" y="88" font-size="10.5" fill="#9aa3b2" text-anchor="middle">Settings 59, 63</text>
+<text x="562" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Use Map</text>
+<text x="562" y="88" font-size="10.5" fill="#9aa3b2" text-anchor="middle">Settings 205</text>
+<text x="666" y="74" font-size="12" fill="#e6e8ee" text-anchor="middle" font-weight="600">Briefing</text>
+<rect x="18" y="98" width="700" height="19" fill="#161a21"/>
+<text x="24" y="112" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">VER</text>
+<circle cx="146" cy="107.5" r="5.5" fill="#e7c160"/>
+<circle cx="250" cy="107.5" r="5.5" fill="#e7c160"/>
+<circle cx="354" cy="107.5" r="5.5" fill="#e7c160"/>
+<circle cx="458" cy="107.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="107.5" r="5.5" fill="#e7c160"/>
+<circle cx="666" cy="107.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="131" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">VCOD</text>
+<circle cx="146" cy="126.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="136" width="700" height="19" fill="#161a21"/>
+<text x="24" y="150" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">OWNR</text>
+<circle cx="146" cy="145.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="169" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">ERA</text>
+<circle cx="146" cy="164.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="174" width="700" height="19" fill="#161a21"/>
+<text x="24" y="188" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">DIM</text>
+<circle cx="146" cy="183.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="207" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">SIDE</text>
+<circle cx="146" cy="202.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="212" width="700" height="19" fill="#161a21"/>
+<text x="24" y="226" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">MTXM</text>
+<circle cx="250" cy="221.5" r="5.5" fill="#e7c160"/>
+<circle cx="354" cy="221.5" r="5.5" fill="#e7c160"/>
+<circle cx="458" cy="221.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="221.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="245" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">PUNI</text>
+<circle cx="458" cy="240.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="240.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="250" width="700" height="19" fill="#161a21"/>
+<text x="24" y="264" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UPGR</text>
+<circle cx="458" cy="259.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="283" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">PTEC</text>
+<circle cx="458" cy="278.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="288" width="700" height="19" fill="#161a21"/>
+<text x="24" y="302" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UNIT</text>
+<circle cx="250" cy="297.5" r="5.5" fill="#e7c160"/>
+<circle cx="354" cy="297.5" r="5.5" fill="#e7c160"/>
+<circle cx="458" cy="297.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="297.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="321" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">THG2</text>
+<circle cx="250" cy="316.5" r="5.5" fill="#e7c160"/>
+<circle cx="354" cy="316.5" r="5.5" fill="#e7c160"/>
+<circle cx="458" cy="316.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="316.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="326" width="700" height="19" fill="#161a21"/>
+<text x="24" y="340" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">MASK</text>
+<circle cx="458" cy="335.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="335.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="359" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">STR</text>
+<circle cx="146" cy="354.5" r="5.5" fill="#e7c160"/>
+<circle cx="250" cy="354.5" r="5.5" fill="#e7c160"/>
+<circle cx="354" cy="354.5" r="5.5" fill="#e7c160"/>
+<circle cx="458" cy="354.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="354.5" r="5.5" fill="#e7c160"/>
+<circle cx="666" cy="354.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="364" width="700" height="19" fill="#161a21"/>
+<text x="24" y="378" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UPRP</text>
+<circle cx="458" cy="373.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="373.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="397" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">MRGN</text>
+<circle cx="458" cy="392.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="392.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="402" width="700" height="19" fill="#161a21"/>
+<text x="24" y="416" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">TRIG</text>
+<circle cx="458" cy="411.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="411.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="435" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">MBRF</text>
+<circle cx="666" cy="430.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="440" width="700" height="19" fill="#161a21"/>
+<text x="24" y="454" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">SPRP</text>
+<circle cx="146" cy="449.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="473" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">FORC</text>
+<circle cx="146" cy="468.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="478" width="700" height="19" fill="#161a21"/>
+<text x="24" y="492" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UNIS</text>
+<circle cx="458" cy="487.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="511" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UPGS</text>
+<circle cx="458" cy="506.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="516" width="700" height="19" fill="#161a21"/>
+<text x="24" y="530" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">TECS</text>
+<circle cx="458" cy="525.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="549" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">COLR</text>
+<circle cx="354" cy="544.5" r="5.5" fill="#e7c160"/>
+<circle cx="562" cy="544.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="554" width="700" height="19" fill="#161a21"/>
+<text x="24" y="568" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">PUPx</text>
+<circle cx="458" cy="563.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<circle cx="562" cy="563.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="587" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">PTEx</text>
+<circle cx="458" cy="582.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<circle cx="562" cy="582.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="592" width="700" height="19" fill="#161a21"/>
+<text x="24" y="606" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UNIx</text>
+<circle cx="458" cy="601.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<circle cx="562" cy="601.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="625" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">UPGx</text>
+<circle cx="458" cy="620.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<circle cx="562" cy="620.5" r="5.5" fill="#e7c160"/>
+<rect x="18" y="630" width="700" height="19" fill="#161a21"/>
+<text x="24" y="644" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">TECx</text>
+<circle cx="458" cy="639.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
+<circle cx="562" cy="639.5" r="5.5" fill="#e7c160"/>
+<text x="24" y="675" font-size="11.5" fill="#9aa3b2" text-anchor="start">Never read by the game: IVER, IVE2, IOWN, ISOM, TILE, DD2, UPUS, WAV, SWNM.</text><text x="24" y="691" font-size="11.5" fill="#9aa3b2" text-anchor="start">TYPE is looked for but not read. VER is checked before every read.</text><text x="24" y="707" font-size="11.5" fill="#9aa3b2" text-anchor="start">Read only by StarCraft: Remastered: STRx and CRGB.</text>
+</svg>

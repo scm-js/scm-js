@@ -25,6 +25,13 @@ player in it, as if each had a copy of their own. Its conditions are checked and
 actions carried out once per player, and inside it **Current Player** means whichever
 player that copy is running for.
 
+The copies are handed out when the game loads the map, and only to players in the game.
+A trigger owned by Players 9 to 12, Current Player, Foes, Allies, Neutral Players or
+Non-Allied Victory Players is dropped then and never runs: those owners can be ticked in
+an editor, but the game gives them no copies. Only Use Map Settings games read a map's
+triggers at all; melee and the other game types run triggers built into the game. (See
+[`TRIG`](chk-format.md#trig) in the CHK reference.)
+
 ### The trigger cycle
 
 The game does not check triggers continuously. On a map of ordinary triggers it goes

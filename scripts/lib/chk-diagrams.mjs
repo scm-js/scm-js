@@ -11,6 +11,7 @@
 
 import { LAYOUTS, laidOut, layoutSize } from "./chk-reference.mjs";
 import { ACTION_FIELDS, CONDITION_FIELDS } from "./trigger-reference.mjs";
+import { GAME_COPIES, GAME_NEVER, GAME_READS, REMASTERED_ONLY, gameUse } from "./chk-game.mjs";
 
 /* ── Colours: one dark card, readable on a light page and on the documentation site ── */
 
@@ -414,10 +415,14 @@ function referencesSvg() {
 
 /* ── Picture 5: what the game does with a second copy ───── */
 
-/** Section names by how the game combines repeats, from the section registry. */
+/** Section names by what the game does with a second copy (`chk-game.mjs`), in StarEdit's order. */
 function sectionsByMode(defs) {
-  const out = { last: [], overlay: [], append: [] };
-  for (const spec of defs.SECTION_SPECS.values()) out[spec.mode]?.push(spec.name.trimEnd());
+  const groups = { last: ["last", "anyLast", "padded", "whole"], overlay: ["overlay", "fog"], append: ["append", "units"], entries: ["entries"] };
+  const out = { last: [], overlay: [], append: [], entries: [] };
+  for (const name of defs.APPEND_ORDER) {
+    const rule = GAME_COPIES[name];
+    for (const [mode, rules] of Object.entries(groups)) if (rules.includes(rule)) out[mode].push(name.trimEnd());
+  }
   return out;
 }
 
@@ -449,7 +454,7 @@ function repeatsSvg(defs) {
   parts.push(text(rx + 75, y + 54, "128 × 96", { size: 13, fill: GOLD, weight: 600 }));
   parts.push(text(rx + 166, y + 46, "The first copy", { size: 12, anchor: "start" }));
   parts.push(text(rx + 166, y + 62, "is ignored.", { size: 12, anchor: "start" }));
-  parts.push(text(lx, y + 96, `Most sections: ${modes.last.slice(0, 8).join(", ")} and the rest.`, { size: 11, anchor: "start", fill: MUTED }));
+  parts.push(text(lx, y + 96, `${modes.last.join(", ")}.`, { size: 11, anchor: "start", fill: MUTED }));
 
   // Row 2: each copy is written over the start of the same space.
   y += 124;
@@ -484,9 +489,22 @@ function repeatsSvg(defs) {
   [1, 2, 3, 4, 5].forEach((n, i) => parts.push(chip(rx + i * 36, y + 46, `#${n}`, n <= 3 ? COPY1 : COPY2)));
   parts.push(text(rx + 190, y + 54, "One list of five triggers,", { size: 12, anchor: "start" }));
   parts.push(text(rx + 190, y + 70, "in file order.", { size: 12, anchor: "start" }));
-  parts.push(text(lx, y + 96, `Sections: ${modes.append.join(", ")}.`, { size: 11, anchor: "start", fill: MUTED }));
+  parts.push(text(lx, y + 96, `Sections: ${modes.append.join(", ")}. Start locations come from the last UNIT copy alone.`, { size: 11, anchor: "start", fill: MUTED }));
 
-  return svg(760, y + 112, "What the game does with a second copy of a section", "Three ways the game combines repeated sections. For most, the last copy replaces the others. For the terrain, fog and location sections, each copy is written over the start of the same space, so a half-length second MTXM rewrites the top half of the map. For units, sprites, doodads, triggers and briefings, the copies are joined into one list.", parts.join("\n"));
+  // Row 4: the settings tables, entry by entry.
+  y += 124;
+  parts.push(text(lx, y + 14, "The settings tables are combined entry by entry", { size: 14, anchor: "start", weight: 600 }));
+  const entry = (x0, y0, label, fill, dim = false) =>
+    `<g${dim ? ` opacity="0.5"` : ""}><rect x="${x0}" y="${y0}" width="68" height="20" rx="3" fill="${fill}"${dim ? ` stroke="${RECT_LINE}"` : ""}/>` + text(x0 + 34, y0 + 14, label, { size: 10.5, weight: 600 }) + `</g>`;
+  parts.push(fileSection(lx, y + 26, 150, "UNIx", entry(lx + 5, y + 46, "Marine 200", COPY1) + entry(lx + 77, y + 46, "Firebat –", "#191d25", true)));
+  parts.push(fileSection(lx + 170, y + 26, 150, "UNIx", entry(lx + 175, y + 46, "Marine –", "#191d25", true) + entry(lx + 247, y + 46, "Firebat 80", COPY2)));
+  parts.push(arrow(lx + fileW, y + 56, rx - 12, y + 56));
+  parts.push(entry(rx, y + 46, "Marine 200", COPY1) + entry(rx + 74, y + 46, "Firebat 80", COPY2));
+  parts.push(text(rx + 156, y + 54, "A copy changes only the entries", { size: 12, anchor: "start" }));
+  parts.push(text(rx + 156, y + 70, "it sets; a dash keeps the default.", { size: 12, anchor: "start" }));
+  parts.push(text(lx, y + 96, `Sections: ${modes.entries.join(", ")}.`, { size: 11, anchor: "start", fill: MUTED }));
+
+  return svg(760, y + 112, "What the game does with a second copy of a section", "Four ways StarCraft combines repeated sections. For most, the last copy replaces the others. For the terrain and the fog, each copy is written over the start of the same space, so a half-length second MTXM rewrites the top half of the map. For units, sprites, triggers and briefings, the copies are joined into one list. The unit, upgrade and ability settings tables are combined entry by entry.", parts.join("\n"));
 }
 
 /* ── Picture 6: one doodad in four sections ─────────────── */
@@ -734,6 +752,344 @@ function triggerRulerSvg() {
   return svg(760, a.bottom + 4, "The trigger record, byte by byte", "A trigger is 2400 bytes: 16 conditions of 20 bytes, 64 actions of 32 bytes, 4 bytes of flags, 27 bytes saying which players and groups it runs for, and one byte the game uses while it runs. Below, where each field of a condition and an action is.", parts.join("\n"));
 }
 
+/* ── Pictures from the game: how StarCraft 1.16.1 reads a map (`chk-game.mjs`) ── */
+
+const NEED_FILL = "#23324a";
+const FAIL = "#d0605a";
+const FAIL_FILL = "#3a2024";
+const OK = "#6fbf73";
+
+const HEAD = `<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${MUTED}"/></marker></defs>`;
+
+/** A rounded label: a section name, or a short statement in a box. */
+function pill(x, y, w, h, label, { fill = "#191d25", stroke = RECT_LINE, dash = false, size = 11.5, color = INK, weight = 600 } = {}) {
+  return `<rect x="${r(x)}" y="${r(y)}" width="${r(w)}" height="${h}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash ? ` stroke-dasharray="4 3"` : ""}/>` +
+    text(x + w / 2, y + h / 2 + size * 0.36, label, { size, fill: color, weight });
+}
+
+/** Lines of text from (x, y) down, 16 px apart. */
+const lines = (x, y, list, opts = {}) => list.map((s, i) => text(x, y + i * (opts.gap ?? 16), s, { size: 12, anchor: "start", ...opts })).join("");
+
+const sectionLabel = (name) => name.trimEnd();
+
+/** A row of section chips; a required one filled, an optional one dashed. Returns the right edge. */
+function chips(x, y, list, { w = 44, gap = 4 } = {}) {
+  const out = [];
+  let at = x;
+  for (const s of list) {
+    const width = s.w ?? w;
+    out.push(pill(at, y, width, 24, s.label ?? sectionLabel(s.name), { fill: s.required === false ? "#191d25" : NEED_FILL, stroke: s.required === false ? MUTED : "#3c5a86", dash: s.required === false }));
+    at += width + gap;
+  }
+  return { svg: out.join(""), right: at - gap };
+}
+
+/** Picture: the three reads, what each takes, and what the player sees when one fails. */
+function loadSvg() {
+  const parts = [HEAD];
+  const ox = 24, failX = 592, failW = 144;
+  parts.push(text(ox, 30, "How StarCraft opens a map", { size: 15, anchor: "start", weight: 600 }));
+
+  // The file to the list of sections.
+  const top = 50;
+  parts.push(pill(ox, top, 150, 34, "the map's .scm / .scx", { weight: 400, size: 12 }));
+  parts.push(arrow(ox + 152, top + 17, ox + 190, top + 17));
+  parts.push(pill(ox + 192, top, 168, 34, "staredit\\scenario.chk", { weight: 400, size: 12 }));
+  parts.push(arrow(ox + 362, top + 17, ox + 400, top + 17));
+  parts.push(pill(ox + 402, top, 310, 34, "a list of every section, in file order", { weight: 400, size: 12 }));
+  parts.push(text(ox, top + 56, "Before each read the game checks VER: it must be 59, 63 or 205, and 205 needs Brood War.", { size: 12, anchor: "start", fill: MUTED }));
+
+  const lane = (y, number, title, note) => {
+    parts.push(`<rect x="${ox - 8}" y="${y}" width="${failX - ox - 4}" height="${note.h}" rx="8" fill="#161a21" stroke="#232834"/>`);
+    parts.push(text(ox + 4, y + 22, `${number}  ${title}`, { size: 13.5, anchor: "start", weight: 600 }));
+    parts.push(text(ox + 4, y + 40, note.when, { size: 11.5, anchor: "start", fill: MUTED }));
+  };
+  const failBox = (y, h, titles, sub, { soft = false } = {}) => {
+    parts.push(`<rect x="${failX}" y="${y}" width="${failW}" height="${h}" rx="6" fill="${soft ? "#191d25" : FAIL_FILL}" stroke="${soft ? RECT_LINE : FAIL}" stroke-width="1.3"/>`);
+    titles.forEach((t, i) => parts.push(text(failX + failW / 2, y + 20 + i * 15, t, { size: 12, fill: soft ? INK : "#f2b8b4", weight: 600 })));
+    sub.forEach((s, i) => parts.push(text(failX + failW / 2, y + 22 + titles.length * 15 + i * 14, s, { size: 10.5, fill: MUTED })));
+    parts.push(arrow(failX - 12, y + h / 2, failX - 2, y + h / 2));
+  };
+
+  const reads = Object.fromEntries(GAME_READS.map((rd) => [rd.id, rd]));
+
+  // 1 · the map list.
+  let y = top + 76;
+  lane(y, "1", "The map list", { h: 88, when: "Whenever the list shows the map, when a game is made with it, and again at the start." });
+  parts.push(chips(ox + 4, y + 52, reads.list.sections[205]).svg);
+  failBox(y + 10, 68, ["Invalid Scenario"], ["the map is listed but", "cannot be chosen"]);
+
+  // 2 · the start of a game.
+  y += 104;
+  lane(y, "2", "The start of a game", { h: 160, when: "The game type decides the list: Use Map Settings reads far more than melee does." });
+  parts.push(text(ox + 4, y + 64, "Melee, and every other type but Use Map Settings", { size: 11.5, anchor: "start" }));
+  const melee = reads.melee.sections[205].map((s) => (s.name === "COLR" ? { ...s, label: "COLR*", w: 52 } : s));
+  parts.push(chips(ox + 4, y + 72, melee, { w: 38 }).svg);
+  parts.push(text(ox + 4, y + 118, "Use Map Settings", { size: 11.5, anchor: "start" }));
+  const settings = ["UNIx", "UPGx", "TECx", "PUPx", "PTEx"];
+  const ums = [];
+  for (const s of reads.ums.sections[205]) {
+    if (settings.includes(s.name)) { if (s.name === "UNIx") ums.push({ label: "5 settings tables", w: 116 }); continue; }
+    ums.push(s.name === "COLR" ? { ...s, label: "COLR*", w: 52 } : s);
+  }
+  parts.push(chips(ox + 4, y + 126, ums, { w: 38 }).svg);
+  failBox(y + 36, 88, ["Error loading", "scenario file."], ["the game stops", "before it begins"]);
+
+  // 3 · the briefing.
+  y += 176;
+  lane(y, "3", "The briefing", { h: 88, when: "Use Map Settings only, when the briefing room opens." });
+  parts.push(chips(ox + 4, y + 52, reads.briefing.sections[205]).svg);
+  failBox(y + 10, 68, ["No briefing"], ["the game goes on", "as if it had none"], { soft: true });
+
+  // Arrows down the lanes.
+  parts.push(arrow(ox + 300, top + 166, ox + 300, top + 178));
+  parts.push(arrow(ox + 300, top + 342, ox + 300, top + 354));
+
+  const foot = y + 112;
+  parts.push(lines(ox, foot, [
+    "Each read needs every section it shows. * COLR only in a Brood War file (VER 205). The settings tables are UNIx, UPGx,",
+    "TECx, PUPx and PTEx in a Brood War file; an older file has UNIS, UPGS, TECS, UPGR and PTEC, with the Brood War ones",
+    "read on top when present. A read fails at the first missing section or the first copy of a section it does not accept.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 56, "How StarCraft opens a map", "StarCraft lists the sections of scenario.chk, then reads the map up to three times. The map list read needs VER, DIM, ERA, OWNR, SIDE, STR, SPRP, FORC and VCOD, and shows Invalid Scenario if one fails. The start of a game needs STR, MTXM, THG2 and UNIT (and COLR in a Brood War file), and Use Map Settings also needs MASK, the settings tables, PUNI, UPRP, MRGN and TRIG; a failure stops the game with Error loading scenario file. The briefing reads STR and MBRF, and a failure only means no briefing.", parts.join("\n"));
+}
+
+/** Picture: which read takes which section, as a grid. */
+function readsSvg(defs) {
+  const parts = [];
+  const ox = 24, nameW = 70, colW = 104, rowH = 19, top = 92;
+  const columns = [
+    { label: ["Map list", ""], id: "list", v: 205 },
+    { label: ["Melee", "VER 59, 63"], id: "melee", v: 59 },
+    { label: ["Melee", "VER 205"], id: "melee", v: 205 },
+    { label: ["Use Map", "Settings 59, 63"], id: "ums", v: 59 },
+    { label: ["Use Map", "Settings 205"], id: "ums", v: 205 },
+    { label: ["Briefing", ""], id: "briefing", v: 205 },
+  ];
+  const names = defs.APPEND_ORDER.filter((n) => !GAME_NEVER.includes(n) && !REMASTERED_ONLY.includes(n) && n !== "TYPE");
+  parts.push(text(ox, 30, "Which sections each read needs", { size: 15, anchor: "start", weight: 600 }));
+  parts.push(`<circle cx="${ox + 6}" cy="${50}" r="6" fill="${GOLD}"/>`);
+  parts.push(text(ox + 18, 54, "needed: the read fails without it", { size: 12, anchor: "start" }));
+  parts.push(`<circle cx="${ox + 276}" cy="${50}" r="5.5" fill="none" stroke="${GOLD}" stroke-width="1.6"/>`);
+  parts.push(text(ox + 288, 54, "read when present", { size: 12, anchor: "start" }));
+  columns.forEach((c, i) => {
+    const cx = ox + nameW + i * colW + colW / 2;
+    parts.push(text(cx, top - 18, c.label[0], { size: 12, weight: 600 }));
+    if (c.label[1]) parts.push(text(cx, top - 4, c.label[1], { size: 10.5, fill: MUTED }));
+  });
+  names.forEach((name, row) => {
+    const y = top + 6 + row * rowH;
+    if (row % 2 === 0) parts.push(`<rect x="${ox - 6}" y="${y}" width="${nameW + columns.length * colW + 6}" height="${rowH}" fill="#161a21"/>`);
+    parts.push(text(ox, y + 14, sectionLabel(name), { size: 12, anchor: "start", weight: 600 }));
+    const use = gameUse(name);
+    columns.forEach((c, i) => {
+      const kind = name === "VER " ? "need" : use[c.id][c.v]; // VER is checked before every read
+      const cx = ox + nameW + i * colW + colW / 2, cy = y + rowH / 2;
+      if (kind === "need") parts.push(`<circle cx="${cx}" cy="${cy}" r="5.5" fill="${GOLD}"/>`);
+      else if (kind === "read") parts.push(`<circle cx="${cx}" cy="${cy}" r="5" fill="none" stroke="${GOLD}" stroke-width="1.6"/>`);
+    });
+  });
+  const foot = top + 6 + names.length * rowH + 26;
+  parts.push(lines(ox, foot, [
+    `Never read by the game: ${GAME_NEVER.map(sectionLabel).join(", ")}.`,
+    `TYPE is looked for but not read. VER is checked before every read.`,
+    `Read only by StarCraft: Remastered: ${REMASTERED_ONLY.join(" and ")}.`,
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 46, "Which sections each read needs", "A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present.", parts.join("\n"));
+}
+
+/** Picture: how the game walks from one section to the next, and three odd lengths. */
+function walkSvg() {
+  const parts = [HEAD];
+  const ox = 24, byte = 7.2, barH = 30;
+  parts.push(text(ox, 30, "How the game finds the sections", { size: 15, anchor: "start", weight: 600 }));
+
+  /** One section drawn as an 8-byte header and its data; returns the right edge. */
+  const section = (x, y, name, length, dataBytes, { tint = "#191d25", nameFill = INK, faded = false } = {}) => {
+    const hw = 8 * byte, dw = dataBytes * byte;
+    const o = faded ? ` opacity="0.5"` : "";
+    parts.push(`<g${o}><rect x="${r(x)}" y="${y}" width="${r(hw)}" height="${barH}" fill="#2b313e" stroke="${RECT_LINE}"/>` +
+      text(x + hw / 2, y + 13, name, { size: 11, weight: 600, fill: nameFill }) + text(x + hw / 2, y + 25, String(length), { size: 10, fill: MUTED }) +
+      (dw > 0 ? `<rect x="${r(x + hw)}" y="${y}" width="${r(dw)}" height="${barH}" fill="${tint}" stroke="${RECT_LINE}"/>` : "") + `</g>`);
+    return x + hw + dw;
+  };
+  const hop = (x1, x2, y, label) => {
+    const mid = (x1 + x2) / 2;
+    parts.push(`<path d="M${r(x1)},${y} C${r(x1)},${y - 26} ${r(x2)},${y - 26} ${r(x2)},${y - 2}" fill="none" stroke="${MUTED}" stroke-width="1.3" marker-end="url(#head)"/>`);
+    if (label) parts.push(text(mid, y - 24, label, { size: 10.5, fill: MUTED }));
+  };
+
+  // Row 1: the walk.
+  let y = 110;
+  parts.push(text(ox, y - 52, "Each header gives the length of what follows, and the next header comes straight after it", { size: 12.5, anchor: "start" }));
+  let x = ox;
+  const a = x, b = section(x, y, "VER", 2, 2, { tint: NEED_FILL });
+  const c = section(b, y, "DIM", 4, 4, { tint: NEED_FILL });
+  const d = section(c, y, "§%!x", 6, 6, { nameFill: MUTED });
+  const e = section(d, y, "ERA", 2, 2, { tint: NEED_FILL });
+  const f = section(e, y, "OWNR", 12, 12, { tint: NEED_FILL });
+  section(f, y, "SIDE", 12, 12, { tint: NEED_FILL });
+  hop(a + 4, b, y, "8 + 2"); hop(b + 4, c, y, "8 + 4"); hop(c + 4, d, y, "8 + 6"); hop(d + 4, e, y, "8 + 2"); hop(e + 4, f, y, "8 + 12");
+  parts.push(text(c + 4 * byte + 3 * byte, y + barH + 16, "a name it does not know: passed over", { size: 11, fill: MUTED }));
+
+  // Row 2: a negative length.
+  y += 108;
+  parts.push(text(ox, y - 34, "A negative length jumps back, and the game reads old bytes as new headers", { size: 12.5, anchor: "start" }));
+  x = ox;
+  const g1 = section(x, y, "SPRP", 4, 4, { tint: NEED_FILL });
+  const g2 = section(g1, y, "STR", 40, 40, { tint: NEED_FILL });
+  const g3 = section(g2, y, "XXXX", -38, 0);
+  const hidden = g1 + 18 * byte; // 10 bytes into STR's text: offset 30 of the file
+  parts.push(`<rect x="${r(hidden)}" y="${y + 3}" width="${r(8 * byte)}" height="${barH - 6}" fill="none" stroke="${GOLD}" stroke-width="1.5"/>`);
+  parts.push(text(hidden + 4 * byte, y + 19, "SPRP", { size: 10, fill: GOLD, weight: 600 }));
+  parts.push(`<path d="M${r(g3 - 30)},${y + barH} C${r(g3 - 30)},${y + barH + 34} ${r(hidden + 4 * byte)},${y + barH + 34} ${r(hidden + 4 * byte)},${y + barH + 2}" fill="none" stroke="${GOLD}" stroke-width="1.4" marker-end="url(#head)"/>`);
+  parts.push(text(g3 + 10, y + 14, "length −38: the next header is", { size: 11, anchor: "start", fill: MUTED }));
+  parts.push(text(g3 + 10, y + 28, "30 bytes back, hidden in STR's text", { size: 11, anchor: "start", fill: MUTED }));
+
+  // Row 3: a length past the end.
+  y += 110;
+  parts.push(text(ox, y - 34, "A length past the end of the file stops the walk", { size: 12.5, anchor: "start" }));
+  x = ox;
+  const h1 = section(x, y, "UNIT", 36, 36, { tint: NEED_FILL });
+  const h2 = section(h1, y, "THG2", 40, 10, { tint: "#3a2a20" });
+  parts.push(`<rect x="${r(h2)}" y="${y}" width="${r(30 * byte)}" height="${barH}" fill="none" stroke="${FAIL}" stroke-width="1.2" stroke-dasharray="4 3"/>`);
+  parts.push(text(h2 + 15 * byte, y + 19, "the 30 bytes THG2 claims", { size: 10.5, fill: "#f2b8b4" }));
+  parts.push(`<line x1="${r(h2)}" y1="${y - 8}" x2="${r(h2)}" y2="${y + barH + 8}" stroke="${INK}" stroke-width="1.5"/>`);
+  parts.push(text(h2, y + barH + 22, "end of file", { size: 10.5, fill: MUTED }));
+
+  const foot = y + barH + 56;
+  parts.push(lines(ox, foot, [
+    "A section that runs past the end is still kept, and the walk stops after it. It refuses the map only if a read takes that",
+    "section, as every read checks a section's bytes are really there. Fewer than 8 bytes after the last section are ignored.",
+    "A protector hides a second SPRP this way, and the map list shows the name it points at. A length of −8 lands on the",
+    "same header again, for ever: the game hangs.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 56, "How the game finds the sections", "Each section is an 8-byte header, a name and a length, followed by its data, and the next header comes straight after. A name the game does not know is passed over. A negative length jumps backwards, so the game reads bytes again as new headers. A length past the end of the file stops the walk; the section is kept and refuses the map only if a read needs it.", parts.join("\n"));
+}
+
+/** Picture: the VCOD check, from the player slots to the verdict. */
+function vcodSvg() {
+  const parts = [HEAD];
+  const ox = 24;
+  parts.push(text(ox, 30, "What VCOD checks", { size: 15, anchor: "start", weight: 600 }));
+
+  // OWNR and SIDE into 12 records.
+  const y0 = 56;
+  parts.push(pill(ox, y0, 64, 26, "OWNR", { fill: NEED_FILL }));
+  parts.push(pill(ox, y0 + 34, 64, 26, "SIDE", { fill: NEED_FILL }));
+  parts.push(text(ox + 32, y0 + 78, "12 bytes each", { size: 10.5, fill: MUTED }));
+  const gx = ox + 110, cw = 3.4, rh = 10;
+  parts.push(text(gx, y0 - 6, "12 player records of 36 bytes, 432 in all, all zero but each player's type and race", { size: 11.5, anchor: "start", fill: MUTED }));
+  for (let p = 0; p < 12; p++) {
+    const yy = y0 + p * (rh + 1);
+    for (let i = 0; i < 36; i++) {
+      const fill = i === 8 ? OUTSIDE : i === 9 ? INSIDE : "#1f242e";
+      parts.push(`<rect x="${r(gx + i * (cw + 0.6))}" y="${yy}" width="${cw}" height="${rh}" fill="${fill}"/>`);
+    }
+  }
+  const gRight = gx + 36 * (cw + 0.6);
+  parts.push(arrow(ox + 66, y0 + 13, gx + 8 * (cw + 0.6) - 2, y0 + 3));
+  parts.push(arrow(ox + 66, y0 + 47, gx + 9 * (cw + 0.6) + 2, y0 + 3));
+  parts.push(text(gRight + 12, y0 + 30, "byte 8: the player's type, from OWNR", { size: 11, anchor: "start", fill: "#9cbbe6" }));
+  parts.push(text(gRight + 12, y0 + 46, "byte 9: the race, from SIDE", { size: 11, anchor: "start", fill: "#e8c486" }));
+  parts.push(text(gRight + 12, y0 + 72, "Nothing else in the map is hashed:", { size: 11, anchor: "start", fill: MUTED }));
+  parts.push(text(gRight + 12, y0 + 88, "not the terrain, units or triggers.", { size: 11, anchor: "start", fill: MUTED }));
+
+  // Two hashes and the comparison.
+  const hy = y0 + 150;
+  const hashW = 230;
+  parts.push(pill(ox + 40, hy, hashW, 40, "hash with the map's VCOD", { weight: 400, size: 12.5 }));
+  parts.push(pill(ox + 360, hy, hashW, 40, "hash with the game's own VCOD", { weight: 400, size: 12.5 }));
+  parts.push(arrow(gx + 60, y0 + 138, ox + 40 + hashW / 2, hy - 2));
+  parts.push(arrow(gx + 90, y0 + 138, ox + 360 + hashW / 2, hy - 2));
+  const cy = hy + 76;
+  parts.push(pill(ox + 255, cy, 120, 32, "the same?", { fill: "#2b313e", stroke: GOLD }));
+  parts.push(arrow(ox + 40 + hashW / 2, hy + 42, ox + 262, cy + 10));
+  parts.push(arrow(ox + 360 + hashW / 2, hy + 42, ox + 368, cy + 10));
+  parts.push(pill(ox + 70, cy + 56, 170, 30, "yes: the map is listed", { stroke: OK, weight: 400, size: 12 }));
+  parts.push(pill(ox + 390, cy + 56, 190, 30, "no: Invalid Scenario", { fill: FAIL_FILL, stroke: FAIL, weight: 400, size: 12, color: "#f2b8b4" }));
+  parts.push(arrow(ox + 270, cy + 30, ox + 200, cy + 54));
+  parts.push(arrow(ox + 362, cy + 30, ox + 440, cy + 54));
+
+  // The operations.
+  const oy = cy + 120;
+  parts.push(text(ox, oy, "The hash", { size: 13.5, anchor: "start", weight: 600 }));
+  parts.push(lines(ox, oy + 22, [
+    "A VCOD is 256 numbers of 32 bits, the seeds, then 16 operation bytes. The hash starts at 0. For each 4 bytes",
+    "of the 432, read as one number w, it runs the 16 operations in order:",
+  ]));
+  const ops = [
+    ["0", "hash = hash XOR w"],
+    ["1", "hash = hash + w"],
+    ["2", "hash = hash − w"],
+    ["3, 4, 5", "hash = hash XOR the seeds picked by each of w's four bytes"],
+    ["6", "rotate hash left by each of w's four bytes in turn (each taken mod 32)"],
+    ["7", "rotate hash right the same way"],
+    ["8 and up", "nothing"],
+  ];
+  ops.forEach(([k, v], i) => {
+    const yy = oy + 62 + i * 18;
+    parts.push(text(ox + 70, yy, k, { size: 12, anchor: "end", fill: GOLD, weight: 600 }));
+    parts.push(text(ox + 84, yy, v, { size: 12, anchor: "start" }));
+  });
+  const foot = oy + 62 + ops.length * 18 + 14;
+  parts.push(lines(ox, foot, [
+    "Any table passes that gives the same answer as the game's own for these 432 bytes. Every copy of VCOD is checked.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 22, "What VCOD checks", "The game builds 432 bytes from the map's player slots: twelve 36-byte records, all zero except each player's type from OWNR and race from SIDE. It hashes them once with the map's VCOD table and once with the table built into the game, and refuses the map as Invalid Scenario when the two differ. The hash runs sixteen operations over every four bytes: XOR, add, subtract, XOR with seeds picked by the bytes, and rotations.", parts.join("\n"));
+}
+
+/** Picture: what happens to one record of UNIT when a game starts. */
+function unitPathSvg() {
+  const parts = [HEAD];
+  const ox = 24, qx = ox, qw = 300, ax = 380, aw = 356, bh = 40, step = 58;
+  parts.push(text(ox, 30, "What the game does with a placed unit", { size: 15, anchor: "start", weight: 600 }));
+  const steps = [
+    ["Is it a start location?", "No unit is made: its place becomes the owner's start location.", "keep"],
+    ["Is the owner Player 1 to 8, and is", "that slot empty in this game?", "Dropped.", "drop"],
+    ["Is this melee, or any type but", "Use Map Settings?", "Kept only if it is a Player 12 mineral field, geyser or critter.", "drop"],
+    ["Use Map Settings, with the owner's race", "set to User Selectable?", "Kept only if it is a neutral kind: minerals, geysers, critters, power-ups.", "drop"],
+    ["A Brood War unit, in a game of", "the original StarCraft?", "Not made.", "drop"],
+    ["Is there room to place it?", "Removed, with WARNING: Unit unplaceable! on screen.", "drop"],
+  ];
+  let y = 52;
+  for (const st of steps) {
+    const kind = st.at(-1);
+    const question = st.length === 4 ? [st[0], st[1]] : [st[0]];
+    const answer = st.length === 4 ? st[2] : st[1];
+    parts.push(`<rect x="${qx}" y="${y}" width="${qw}" height="${bh}" rx="6" fill="#2b313e" stroke="${RECT_LINE}"/>`);
+    question.forEach((q, i) => parts.push(text(qx + 12, y + (question.length === 1 ? 25 : 17 + i * 15), q, { size: 12, anchor: "start" })));
+    parts.push(arrow(qx + qw + 2, y + bh / 2, ax - 4, y + bh / 2));
+    parts.push(text(qx + qw + 28, y + bh / 2 - 5, st === steps[5] ? "no" : "yes", { size: 10.5, fill: MUTED }));
+    const words = answer.split(" ");
+    const linesOut = [];
+    let cur = "";
+    for (const w of words) { if ((cur + " " + w).trim().length > 52) { linesOut.push(cur.trim()); cur = w; } else cur += " " + w; }
+    linesOut.push(cur.trim());
+    const color = kind === "keep" ? NEED_FILL : FAIL_FILL;
+    parts.push(`<rect x="${ax}" y="${y}" width="${aw}" height="${bh}" rx="6" fill="${color}" stroke="${kind === "keep" ? "#3c5a86" : "#6a3a3a"}"/>`);
+    linesOut.slice(0, 2).forEach((l, i) => parts.push(text(ax + 10, y + (linesOut.length === 1 ? 25 : 17 + i * 15), l, { size: 11.5, anchor: "start" })));
+    if (st !== steps.at(-1)) {
+      parts.push(arrow(qx + 40, y + bh + 2, qx + 40, y + step - 2));
+      parts.push(text(qx + 50, y + bh + 13, "no", { size: 10.5, fill: MUTED, anchor: "start" }));
+    }
+    y += step;
+  }
+  // Created.
+  parts.push(arrow(qx + 40, y - step + bh + 2, qx + 40, y - 2));
+  parts.push(text(qx + 50, y - step + bh + 13, "yes", { size: 10.5, fill: MUTED, anchor: "start" }));
+  parts.push(`<rect x="${qx}" y="${y}" width="${ax + aw - qx}" height="58" rx="6" fill="#1d2a20" stroke="${OK}"/>`);
+  parts.push(text(qx + 12, y + 22, "The unit is made, then the record's fields are applied, each only when its bit is set:", { size: 12, anchor: "start" }));
+  parts.push(text(qx + 12, y + 42, "hit points, shields, energy, resources, hangar, and the states: cloaked, burrowed, in transit, hallucinated, invincible.", { size: 11.5, anchor: "start", fill: MUTED }));
+  const foot = y + 86;
+  parts.push(lines(ox, foot, [
+    "Only the last UNIT section's start locations count. Hit points of 0% leave the unit at 1/256 of a hit point. Resources",
+    "are kept to 16 bits, so 70,000 becomes 4,464. Only Carriers, Reavers and their heroes take a hangar count. A Ghost placed",
+    "cloaked starts cloaked only if its owner has Personal Cloaking. Add-ons and nydus canals link within one UNIT section.",
+  ], { size: 11.5, fill: MUTED }));
+  return svg(760, foot + 56, "What the game does with a placed unit", "The checks a UNIT record passes when a game starts: start locations are noted, not made; units of empty player slots are dropped; melee keeps only Player 12 minerals, geysers and critters; in Use Map Settings a User Selectable player keeps only neutral kinds of unit; Brood War units are not made in the original game; a unit with no room is removed with a warning. Then the unit is made and its fields applied.", parts.join("\n"));
+}
+
 /** Every picture this module draws, by its path under the repository. `defs` are the editor's tables. */
 export function chkDiagrams(defs) {
   return new Map([
@@ -742,6 +1098,11 @@ export function chkDiagrams(defs) {
     ["docs/images/isom-example.svg", exampleSvg()],
     ["docs/images/chk-references.svg", referencesSvg()],
     ["docs/images/chk-repeats.svg", repeatsSvg(defs)],
+    ["docs/images/chk-load.svg", loadSvg()],
+    ["docs/images/chk-reads.svg", readsSvg(defs)],
+    ["docs/images/chk-walk.svg", walkSvg()],
+    ["docs/images/chk-vcod.svg", vcodSvg()],
+    ["docs/images/chk-unit-path.svg", unitPathSvg()],
     ["docs/images/chk-doodad-layers.svg", doodadLayersSvg()],
     ["docs/images/chk-tile-lookup.svg", tileLookupSvg()],
     ["docs/images/chk-unit-record.svg", recordRulerSvg("UNIT", LAYOUTS, {

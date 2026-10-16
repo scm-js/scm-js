@@ -3,9 +3,10 @@
  *
  * As with the trigger reference (`trigger-reference.mjs`), the document is prose written
  * by hand with blocks between `<!-- generated: KEY -->` and `<!-- /generated -->` that this
- * module writes. What a block says about a section — its size, what the game does with a
- * second copy, whether it is required, whether the game reads it at all, the value and
- * flag tables — comes from the editor's own code, passed in as `defs`. The byte layouts
+ * module writes. What a block says about a section's format — its size, the value and
+ * flag tables — comes from the editor's own code, passed in as `defs`; what it says about
+ * the game — whether the game reads it, needs it, the lengths it accepts, what a second
+ * copy does — from `chk-game.mjs`, which records StarCraft 1.16.1. The byte layouts
  * are written down here, once, and `tests/chkReference.test.ts` holds them to the codecs:
  * every layout must add up to the size the editor reads, and the record layouts must put
  * each field where the encoder writes it.
@@ -14,6 +15,7 @@
 import { createHash } from "node:crypto";
 import { fillBlocks } from "./generated-blocks.mjs";
 import { ISOM_EXAMPLE, ISOM_SHAPES, isomExampleValues } from "./chk-diagrams.mjs";
+import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_ONLY, gameUse } from "./chk-game.mjs";
 
 const P = 12; // player slots
 const U = 228; // unit types
@@ -243,13 +245,6 @@ const hexOf = (name) => [...name].map((c) => c.charCodeAt(0).toString(16).toUppe
 const SPELLING = { Addon: "Add-on" };
 const words = (key) => SPELLING[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])(?=[a-z])/g, (_, c) => ` ${c.toLowerCase()}`);
 
-const MODES = {
-  last: "The last copy replaces the others.",
-  overlay: "Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries.",
-  append: "The copies are joined into one list: the records of all of them, in file order.",
-  first: "The first copy is used and the others are ignored.",
-};
-
 function layoutTable(rows) {
   const lines = ["| Offset | Type | Holds |", "| --- | --- | --- |"];
   for (const r of laidOut(rows)) {
@@ -277,12 +272,78 @@ function valueTable(kind, defs) {
   }
 }
 
-function requirement(name, defs) {
-  if (defs.REQUIRED_SECTIONS.includes(name)) return "Yes. The game does not load a map without it.";
-  if (defs.REQUIRED_ORIGINAL_SECTIONS.includes(name)) return "In a StarCraft 1.00 or hybrid file (`VER` below 205).";
-  if (defs.REQUIRED_EXPANSION_SECTIONS.includes(name)) return "In a hybrid or Brood War file (`VER` 63 and up).";
+/** Which revisions a read needs or takes a section in, from `GAME_READS`. */
+function readsOf(name) {
+  const use = gameUse(name);
+  const where = (id, kind) => GAME_VERSIONS.filter((v) => use[id][v] === kind);
+  return {
+    list: where("list", "need").length > 0,
+    melee: where("melee", "need"),
+    ums: where("ums", "need"),
+    umsOptional: where("ums", "read"),
+    briefing: where("briefing", "need").length > 0,
+  };
+}
+
+const ALL = GAME_VERSIONS.length;
+const STOPS = "stops at the start with *Error loading scenario file.*";
+
+/** Where the game reads a section, in a reader's words. */
+function gameReadText(name) {
+  if (GAME_NEVER.includes(name)) return "Editors only. The game never reads it.";
+  if (REMASTERED_ONLY.includes(name)) return "StarCraft: Remastered only. 1.16.1 does not know it.";
+  if (name === "TYPE") return "No one. The game looks for it before every read but never reads what it holds.";
+  if (name === "VER ") return "The game, first, before every read of the map: the revision decides which sections it reads next.";
+  const u = readsOf(name);
+  if (u.list && u.melee.length === ALL) return "The game, every time it reads the map: for the map list, at the start of every game, and for the briefing.";
+  if (u.list) return "The game, for the map list. It reads it again when a game is created and when it starts.";
+  if (u.melee.length === ALL) return "The game, at the start of every game, whatever its type.";
+  if (u.melee.length) return "The game, at the start of every game, in a Brood War file (`VER` 205). In an older file the game never reads it.";
+  if (u.ums.length === ALL) return "The game, at the start of a Use Map Settings game. Melee and the other game types never read it.";
+  if (u.ums.length && u.umsOptional.length) return "The game, at the start of a Use Map Settings game, in a file of any revision.";
+  if (u.ums.length) return "The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read.";
+  if (u.briefing) return "The game, for the briefing of a Use Map Settings game.";
+  throw new Error(`No reading rule for "${name}"`);
+}
+
+/** Whether the game needs a section, and what the player sees without it. */
+function gameRequiredText(name) {
   if (name === "STRx") return "In place of `STR ` on a Remastered map that uses it.";
-  return "No.";
+  if (GAME_NEVER.includes(name) || REMASTERED_ONLY.includes(name) || name === "TYPE") return "No.";
+  const u = readsOf(name);
+  if (u.list) return "Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played.";
+  if (u.melee.length === ALL) return `Yes. Without it the map is listed, but every game on it ${STOPS}`;
+  if (u.melee.length) return `In a Brood War file (\`VER\` 205). Without it every game on the map ${STOPS}`;
+  if (u.ums.length === ALL) return `For Use Map Settings. Without it a Use Map Settings game ${STOPS} Melee and the other game types play without it.`;
+  if (u.ums.length && u.umsOptional.length) return "For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present.";
+  if (u.ums.length) return "For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63).";
+  if (u.briefing) return "No. Without it there is no briefing, and nothing else changes.";
+  throw new Error(`No requirement rule for "${name}"`);
+}
+
+/** The lengths the game accepts. */
+function gameSizeText(name, layout) {
+  const rule = GAME_SIZES[name];
+  if (!rule) return null;
+  if (rule.any) return "Any length.";
+  if (rule.multiple && name === "MBRF") return `Whole ${layout.record}s only. With any other length the map plays without a briefing.`;
+  if (rule.multiple) return `Whole ${layout.record}s only. A length that is not a multiple of ${rule.multiple} refuses the map.`;
+  if (rule.atMost && name === "FORC") return `Up to ${rule.atMost} bytes. A shorter section is filled out with zeros; a longer one refuses the map.`;
+  if (rule.atMost) return `Up to ${rule.atMost} bytes, the most a 256 × 256 map needs. A longer section refuses the map; a shorter one is taken.`;
+  if (typeof rule.exactly === "object") {
+    return `Exactly ${rule.exactly[59]} bytes (64 locations) in a \`VER\` 59 file, and ${rule.exactly[205]} (255 locations) in \`VER\` 63 and 205. Any other length refuses the map.`;
+  }
+  return `Exactly ${rule.exactly} bytes. Any other length refuses the map.`;
+}
+
+/** One cell of the index: whether a read needs the section, by revision. */
+function indexCell(versions, optional = []) {
+  const vs = (list) => list.join(", ");
+  if (versions.length === ALL) return "needed";
+  const parts = [];
+  if (versions.length) parts.push(`needed (${vs(versions)})`);
+  if (optional.length) parts.push(`read (${vs(optional)})`);
+  return parts.join(", ");
 }
 
 function sizeText(name, spec, layout) {
@@ -302,9 +363,10 @@ function sectionBlock(spec, defs) {
     `| Name | ${code(name)} (${hexOf(name)}) |`,
     "| --- | --- |",
     `| Size | ${sizeText(name, spec, layout)} |`,
-    `| Read by | ${spec.editorOnly ? "Editors only. The game skips it." : "The game."} |`,
-    `| Required | ${requirement(name, defs)} |`,
-    `| More than one copy | ${MODES[spec.mode]}${spec.minimum ? ` A copy shorter than ${spec.minimum} bytes does not count and does not replace an earlier one.` : ""} |`,
+    `| Read by | ${gameReadText(name)} |`,
+    `| Required | ${gameRequiredText(name)} |`,
+    ...(gameSizeText(name, layout) ? [`| The game accepts | ${gameSizeText(name, layout)} |`] : []),
+    ...(GAME_COPIES[name] ? [`| More than one copy | ${COPY_RULES[GAME_COPIES[name]]} |`] : []),
     `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : "Kept as it is and written back unchanged."} |`,
   ];
   if (layout.rows) {
@@ -333,14 +395,51 @@ function pageSummaries(markdown) {
 }
 
 function indexTable(defs, summaries) {
-  const lines = ["| Section | Holds | Read by | Required |", "| --- | --- | --- | --- |"];
+  const lines = ["| Section | Holds | Map list | Melee start | Use Map Settings start |", "| --- | --- | --- | --- | --- |"];
   for (const name of defs.APPEND_ORDER) {
-    const spec = defs.SECTION_SPECS.get(name);
-    if (!spec) continue;
-    const required = defs.REQUIRED_SECTIONS.includes(name) ? "yes" : defs.REQUIRED_ORIGINAL_SECTIONS.includes(name) || defs.REQUIRED_EXPANSION_SECTIONS.includes(name) ? "by revision" : "";
-    lines.push(`| [${code(name)}](#${trimName(name).toLowerCase()}) | ${summaries.get(trimName(name)) ?? ""} | ${spec.editorOnly ? "editors" : "the game"} | ${required} |`);
+    if (!defs.SECTION_SPECS.get(name)) continue;
+    const u = readsOf(name);
+    const first = name === "VER "; // looked for before every read
+    const ums = first ? "needed" : u.ums.length || u.umsOptional.length ? indexCell(u.ums, u.umsOptional) : u.briefing ? "briefing only" : "";
+    lines.push(`| [${code(name)}](#${trimName(name).toLowerCase()}) | ${summaries.get(trimName(name)) ?? ""} | ${u.list ? "needed" : ""} | ${first ? "needed" : indexCell(u.melee)} | ${ums} |`);
   }
   return lines.join("\n");
+}
+
+/** The game's reads, each with the sections it handles, in its order. */
+function readsTable() {
+  const lines = ["| Read | When | Sections, in the order the game handles them | Fails with |", "| --- | --- | --- | --- |"];
+  const names = (list) => list.map((s) => (s.required ? code(s.name) : `${code(s.name)} (if present)`)).join(", ");
+  for (const r of GAME_READS) {
+    const by = GAME_VERSIONS.map((v) => names(r.sections[v]));
+    const sections = by.every((s) => s === by[0]) ? by[0]
+      : by[0] === by[1] ? `\`VER\` 59 and 63: ${by[0]}<br>\`VER\` 205: ${by[2]}`
+      : GAME_VERSIONS.map((v, i) => `\`VER\` ${v}: ${by[i]}`).join("<br>");
+    const fails = r.failure ? `*${r.failure}*` : "Nothing: the game carries on with no briefing";
+    lines.push(`| ${r.title} | ${r.when.charAt(0).toUpperCase()}${r.when.slice(1)} | ${sections} | ${fails} |`);
+  }
+  return lines.join("\n");
+}
+
+/** The length rules, grouped. */
+function sizesTable() {
+  const groups = { exactly: [], multiple: [], atMost: [], any: [] };
+  for (const [name, rule] of Object.entries(GAME_SIZES)) {
+    if (name === "TYPE") continue;
+    if (rule.any) groups.any.push(code(name));
+    else if (rule.multiple) groups.multiple.push(`${code(name)} ${rule.multiple}`);
+    else if (rule.atMost) groups.atMost.push(`${code(name)} ${rule.atMost}`);
+    else if (typeof rule.exactly === "object") groups.exactly.push(`${code(name)} ${rule.exactly[59]} (\`VER\` 59) or ${rule.exactly[205]}`);
+    else groups.exactly.push(`${code(name)} ${rule.exactly}`);
+  }
+  return [
+    "| The game wants | Sections | A different length |",
+    "| --- | --- | --- |",
+    `| Exactly this many bytes | ${groups.exactly.join(", ")} | Refuses the map |`,
+    `| Whole records of this size | ${groups.multiple.join(", ")} | Refuses the map |`,
+    `| At most this many bytes | ${groups.atMost.join(", ")} | Longer refuses the map; shorter is taken |`,
+    `| Any length | ${groups.any.join(", ")} | Taken |`,
+  ].join("\n");
 }
 
 function revisionTable(defs) {
@@ -683,6 +782,8 @@ export function referenceBlocks(defs, markdown = "") {
   const blocks = new Map();
   blocks.set("index", indexTable(defs, pageSummaries(markdown)));
   blocks.set("revisions", revisionTable(defs));
+  blocks.set("game reads", readsTable());
+  blocks.set("game sizes", sizesTable());
   for (const spec of defs.SECTION_SPECS.values()) blocks.set(`section ${trimName(spec.name)}`, sectionBlock(spec, defs));
   blocks.set("isom flags", isomFlagTable());
   blocks.set("isom values", isomValueTables(defs));

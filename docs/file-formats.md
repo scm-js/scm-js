@@ -151,12 +151,15 @@ unstripped copy of any map you are still working on.
 
 ### Sections a map may not have
 
-`ISOM`, `MASK`, `WAV `, `CRGB`, `SWNM`, the CUWP slots and every settings table are
-optional, and the editor writes none of them into a file that had none: a map without a
-`MASK` section stays without one, rather than gaining an all-clear fog table it never
-had. A map with no `MASK` plays as fully fogged for every player, which is also how the
-editor shows it. A map with no `ISOM` cannot use the isometric brush until the record is
-rebuilt.
+`ISOM`, `MASK`, `WAV `, `CRGB`, `SWNM`, the CUWP slots and every settings table may be
+missing from a map, and the editor writes none of them into a file that had none: a map
+without a `MASK` section stays without one, rather than gaining an all-clear fog table it
+never had. The game is stricter than the editor here. A melee game never reads `MASK`,
+the CUWP slots or the settings tables, but a Use Map Settings game needs all of them and
+stops at the start without them (see
+[What a map needs](chk-format.md#what-a-map-needs)). The editor shows a map with no
+`MASK` fully fogged, which is how a melee game starts. A map with no `ISOM` cannot use
+the isometric brush until the record is rebuilt.
 
 ## Revisions
 

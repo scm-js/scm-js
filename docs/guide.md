@@ -425,9 +425,9 @@ back.
 ## Fog of war
 
 The fog of war decides which tiles a player starts the game unable to see. Every player
-has their own, and a
-map that carries no fog data at all starts fully fogged — which is what a new map does,
-and what the editor draws until the first stroke.
+has their own. A new map starts every tile fogged for every player, and that is what the
+editor draws until the first stroke. Only Use Map Settings games read the fog a map sets:
+a melee game starts every player fully fogged whatever the map says.
 
 ![The Fog of War layer at 50% zoom, clearing an area for Player 1](images/fog.webp)
 

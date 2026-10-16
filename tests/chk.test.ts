@@ -3,10 +3,11 @@ import { Writer } from "../src/formats/chk/binary";
 import { combine, parseChk, serializeChk } from "../src/formats/chk/reader";
 import {
   markDirty, parseScenario, scenarioDescription, scenarioName,
-  serializeScenario, setScenarioName, tilesetIndex,
+  serializeScenario, setMapVersion, setScenarioName, tilesetIndex,
 } from "../src/formats/chk/scenario";
 import { createScenario } from "../src/formats/chk/create";
-import { ANYWHERE_INDEX, isLocationUsed } from "../src/formats/chk/sections/objects";
+import { ANYWHERE_INDEX, isLocationUsed, locationSlots } from "../src/formats/chk/sections/objects";
+import { specFor } from "../src/formats/chk/sections/registry";
 import { decodeStrings, encodeStrings, getString } from "../src/formats/chk/sections/strings";
 
 function section(name: string, data: Uint8Array | number[]): Uint8Array {
@@ -62,6 +63,22 @@ describe("chk container", () => {
     const bytes = concat(sampleChk(), section("MTXM", u16(9, 9)));
     const file = parseChk(bytes);
     expect(file.sections.filter((s) => s.name === "MTXM")).toHaveLength(2);
+  });
+
+  it("combines repeated settings tables entry by entry, the tail from the last copy that customises", () => {
+    // Two upgrade-cost tables: the first customises upgrade 0, the second upgrade 1.
+    const spec = specFor("UPGS")!;
+    const table = (custom: number, cost: number) => {
+      const w = new Writer(598);
+      for (let i = 0; i < 46; i++) w.u8(i === custom ? 0 : 1);
+      for (let col = 0; col < 6; col++) for (let i = 0; i < 46; i++) w.u16(i === custom ? cost : 1);
+      return w.finish();
+    };
+    const merged = combine(parseChk(concat(section("UPGS", table(0, 100)), section("UPGS", table(1, 200)))), "UPGS", spec.mode, spec.size as number, 0, spec.entries)!;
+    const view = new DataView(merged.buffer, merged.byteOffset);
+    expect([merged[0], merged[1], merged[2]]).toEqual([0, 0, 1]);
+    expect(view.getUint16(46, true)).toBe(100);
+    expect(view.getUint16(48, true)).toBe(200);
   });
 
   it("overlays repeated sections over the front of the buffer", () => {
@@ -235,6 +252,41 @@ describe("scenario", () => {
     expect(scn.chk.sections.map((s) => s.name)).not.toContain("TYPE");
     markDirty(scn, "TYPE");
     expect(parseChk(serializeScenario(scn)).sections[0].name).toBe("TYPE");
+  });
+});
+
+describe("locations by revision", () => {
+  it("writes exactly 64 slots in a StarCraft 1.00 file and 255 from a hybrid one up", () => {
+    const sizeFor = (ver: number) => {
+      const scn = createScenario({ width: 64, height: 64, era: 0, name: "x" });
+      scn.fileVersion = ver;
+      markDirty(scn, "MRGN");
+      return parseChk(serializeScenario(scn)).sections.find((s) => s.name === "MRGN")!.data.length;
+    };
+    expect(sizeFor(59)).toBe(1280);
+    expect(sizeFor(63)).toBe(5100);
+    expect(sizeFor(205)).toBe(5100);
+    expect([locationSlots(59), locationSlots(63), locationSlots(206)]).toEqual([64, 255, 255]);
+  });
+
+  it("keeps Anywhere, slot 64, in a StarCraft 1.00 file", () => {
+    const scn = createScenario({ width: 64, height: 64, era: 0, name: "x" });
+    scn.fileVersion = 59;
+    markDirty(scn, "MRGN");
+    const again = parseScenario(serializeScenario(scn));
+    expect(again.locations).toHaveLength(64);
+    expect(again.locations[ANYWHERE_INDEX]).toEqual(scn.locations[ANYWHERE_INDEX]);
+  });
+
+  it("rewrites the locations when the revision changes their number", () => {
+    const scn = parseScenario(serializeScenario(createScenario({ width: 64, height: 64, era: 0, name: "x" })));
+    setMapVersion(scn, "original");
+    expect(scn.dirty.has("MRGN")).toBe(true);
+    const down = parseScenario(serializeScenario(scn));
+    expect(down.locations).toHaveLength(64);
+    setMapVersion(down, "hybrid");
+    expect(down.locations).toHaveLength(255);
+    expect(parseScenario(serializeScenario(down)).locations).toHaveLength(255);
   });
 });
 

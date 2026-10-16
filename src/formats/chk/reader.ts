@@ -106,7 +106,53 @@ export type CombineMode =
   /** Only the last occurrence is used — of those at least the section's minimum length. */
   | "last"
   /** Only the first occurrence is used — of those at least the section's minimum length. */
-  | "first";
+  | "first"
+  /**
+   * A settings table: each occurrence changes only the entries it marks as not using the
+   * game's own values (`EntryLayout`), the rest keep what an earlier one gave them.
+   */
+  | "entries";
+
+/**
+ * How a settings table is laid out, for the "entries" mode: a use-default byte per entry,
+ * `pad` unused bytes, one column per entry of each width in `columns`, and then a tail —
+ * the weapon columns of UNIS / UNIx — that belongs to no single entry.
+ */
+export interface EntryLayout {
+  count: number;
+  pad?: number;
+  columns: readonly number[];
+}
+
+/**
+ * Lay the later copies of a settings table over the first, entry by entry, as StarCraft
+ * applies them. Copies not of the first's length are passed over (the game refuses the map
+ * for them). The game sets a weapon's damage while it sets up a customised unit type that
+ * fires it; which unit fires which weapon is in units.dat, not the map, so the tail is
+ * taken whole from the last copy that customises any entry.
+ */
+function layEntries(parts: ChkSection[], layout: EntryLayout): Uint8Array {
+  const out = parts[0].data.slice();
+  const { count, pad = 0, columns } = layout;
+  const tail = count + pad + columns.reduce((n, w) => n + w * count, 0);
+  for (const part of parts.slice(1)) {
+    const d = part.data;
+    if (d.length !== out.length) continue;
+    let any = false;
+    for (let i = 0; i < count; i++) {
+      if (d[i] !== 0) continue;
+      any = true;
+      out[i] = 0;
+      let at = count + pad;
+      for (const width of columns) {
+        out.set(d.subarray(at + i * width, at + (i + 1) * width), at + i * width);
+        at += width * count;
+      }
+    }
+    if (any) out.set(d.subarray(tail), tail);
+  }
+  return out;
+}
 
 /**
  * Collapse repeated occurrences of a section into the bytes the game would act on.
@@ -118,7 +164,7 @@ export type CombineMode =
  * For "last" and "first", a copy shorter than `minimum` is passed over: the game does not
  * take it, so it neither counts nor replaces an earlier one. Null when no copy is long enough.
  */
-export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number, minimum = 0): Uint8Array | null {
+export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number, minimum = 0, entries?: EntryLayout): Uint8Array | null {
   let parts = sectionsNamed(file, name);
   if (mode === "last" || mode === "first") parts = parts.filter((p) => p.data.length >= minimum);
   if (parts.length === 0) return null;
@@ -128,6 +174,8 @@ export function combine(file: ChkFile, name: string, mode: CombineMode, size?: n
       return parts[0].data;
     case "last":
       return parts[parts.length - 1].data;
+    case "entries":
+      return parts.length === 1 || !entries ? parts[parts.length - 1].data : layEntries(parts, entries);
     case "append": {
       if (parts.length === 1) return parts[0].data;
       const total = parts.reduce((n, p) => n + p.data.length, 0);

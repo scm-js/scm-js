@@ -83,6 +83,26 @@ export function encodeUnitSettings(s: UnitSettings, weapons: number): Uint8Array
   return w.finish();
 }
 
+/**
+ * Lay `top`'s customised entries over `base`, as the game applies a later table: every unit
+ * type `top` does not leave on the game's own values takes `top`'s values, and every other
+ * keeps `base`'s. Weapons go with the unit types that fire them, which only units.dat
+ * says, so they come whole from `top` when it customises any type (`reader.ts#layEntries`).
+ */
+export function layUnitSettings(base: UnitSettings, top: UnitSettings): UnitSettings {
+  let any = false;
+  for (let u = 0; u < UNIT_TYPES; u++) {
+    if (top.useDefault[u] !== 0) continue;
+    any = true;
+    base.useDefault[u] = 0;
+    for (const col of UNIT_COLUMNS) base[col][u] = top[col][u];
+  }
+  if (any) { base.weaponDamage.set(top.weaponDamage); base.weaponBonus.set(top.weaponBonus); }
+  return base;
+}
+
+const UNIT_COLUMNS = ["hitPoints", "shields", "armor", "buildTime", "mineralCost", "gasCost", "nameIndex"] as const;
+
 /** Every type on its dat defaults — what a map has before anyone opens Unit Settings. */
 export function defaultUnitSettings(): UnitSettings {
   const n = UNIT_TYPES;
@@ -233,6 +253,16 @@ export function encodeUpgradeSettings(s: UpgradeSettings, count: number): Uint8A
   return w.finish();
 }
 
+/** Lay `top`'s customised upgrades over `base` (`layUnitSettings`). */
+export function layUpgradeSettings(base: UpgradeSettings, top: UpgradeSettings): UpgradeSettings {
+  for (let i = 0; i < UPGRADES_BW; i++) {
+    if (top.useDefault[i] !== 0) continue;
+    base.useDefault[i] = 0;
+    for (const col of UPGRADE_COLUMNS) base[col][i] = top[col][i];
+  }
+  return base;
+}
+
 /** Every upgrade on its upgrades.dat costs. */
 export function defaultUpgradeSettings(): UpgradeSettings {
   const n = UPGRADES_BW;
@@ -369,6 +399,16 @@ export function encodeTechSettings(s: TechSettings, count: number): Uint8Array {
   for (let i = 0; i < count; i++) w.u8(s.useDefault[i] ?? 1);
   for (const col of TECH_COLUMNS) for (let i = 0; i < count; i++) w.u16(s[col][i] ?? 0);
   return w.finish();
+}
+
+/** Lay `top`'s customised abilities over `base` (`layUnitSettings`). */
+export function layTechSettings(base: TechSettings, top: TechSettings): TechSettings {
+  for (let i = 0; i < TECHS_BW; i++) {
+    if (top.useDefault[i] !== 0) continue;
+    base.useDefault[i] = 0;
+    for (const col of TECH_COLUMNS) base[col][i] = top[col][i];
+  }
+  return base;
 }
 
 export function defaultTechSettings(): TechSettings {

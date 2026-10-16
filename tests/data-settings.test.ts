@@ -140,7 +140,13 @@ describe("a new scenario", () => {
     for (const name of REQUIRED_ORIGINAL_SECTIONS) expect(have, name).not.toContain(name);
     expect(requiredSections(59)).toEqual(expect.arrayContaining(REQUIRED_ORIGINAL_SECTIONS));
     expect(requiredSections(59)).not.toEqual(expect.arrayContaining(REQUIRED_EXPANSION_SECTIONS));
-    expect(requiredSections(63)).toEqual(expect.arrayContaining([...REQUIRED_ORIGINAL_SECTIONS, ...REQUIRED_EXPANSION_SECTIONS]));
+    // A hybrid file is read like an original one: the `x` tables are optional, read on top when present.
+    expect(requiredSections(63)).toEqual(expect.arrayContaining(REQUIRED_ORIGINAL_SECTIONS));
+    expect(requiredSections(63)).not.toEqual(expect.arrayContaining(REQUIRED_EXPANSION_SECTIONS));
+    // Melee reads none of the settings, the fog, the locations or the triggers; a Brood War file needs COLR either way.
+    expect(requiredSections(205, "melee")).toContain("COLR");
+    expect(requiredSections(59, "melee")).not.toContain("COLR");
+    for (const name of ["MASK", "MRGN", "TRIG", "UPRP", "PUNI", ...REQUIRED_EXPANSION_SECTIONS]) expect(requiredSections(205, "melee")).not.toContain(name);
     expect(have).toContain("IVE2");
     expect(sectionData(out, "VCOD")!.length).toBe(VCOD_SIZE);
     expect(defaultVcod().length).toBe(VCOD_SIZE);
@@ -276,19 +282,8 @@ describe("a file that carries both of a pair, disagreeing", () => {
     return bytes;
   }
 
-  it("reads an original file's settings from the original section, keeping what only the other holds", () => {
-    const scn = parseScenario(disagreeing(59));
-    const r = scn.upgradeRestrictions!;
-    // What the game reads for this file.
-    expect(upgradeLevels(r, 2, 5)).toEqual({ start: 0, max: 2 });
-    expect(r.playerUsesDefault[upgradeIndex(2, 5)]).toBe(0);
-    // An upgrade the original section has no column for.
-    expect(r.playerMax[upgradeIndex(4, 50)]).toBe(3);
-    expect(r.playerUsesDefault[upgradeIndex(4, 50)]).toBe(0);
-  });
-
-  it("reads a Brood War file's settings from the Brood War section", () => {
-    for (const ver of [63, 205]) {
+  it("reads the restrictions from the Brood War section whatever the revision, as the game applies it last", () => {
+    for (const ver of [59, 63, 205]) {
       const r = parseScenario(disagreeing(ver)).upgradeRestrictions!;
       expect(r.playerUsesDefault[upgradeIndex(2, 5)], `VER ${ver}`).toBe(1);
       expect(upgradeLevels(r, 2, 5).max, `VER ${ver}`).toBe(DEFAULT_UPGRADE_MAX[5]);
@@ -296,18 +291,16 @@ describe("a file that carries both of a pair, disagreeing", () => {
     }
   });
 
-  it("writes the original section back as it was, and the other in step with it", () => {
+  it("writes the Brood War section back as it was, and the original in step with what the game uses", () => {
     const bytes = disagreeing(59);
-    const before = Array.from(sectionData(bytes, "UPGR")!);
+    const before = Array.from(sectionData(bytes, "PUPx")!);
     const scn = parseScenario(bytes);
     markDirty(scn, "UPGR", "PUPx");
     const out = serializeScenario(scn);
-    expect(Array.from(sectionData(out, "UPGR")!)).toEqual(before);
-    const other = decodeUpgradeRestrictions(sectionData(out, "PUPx")!);
-    expect(other.playerMax[upgradeIndex(2, 5)]).toBe(2);
-    expect(other.playerUsesDefault[upgradeIndex(2, 5)]).toBe(0);
-    expect(other.playerMax[upgradeIndex(4, 50)]).toBe(3);
-    expect(other.playerUsesDefault[upgradeIndex(4, 50)]).toBe(0);
+    expect(Array.from(sectionData(out, "PUPx")!)).toEqual(before);
+    const other = decodeUpgradeRestrictions(sectionData(out, "UPGR")!);
+    expect(other.playerUsesDefault[upgradeIndex(2, 5)]).toBe(1);
+    expect(upgradeLevels(other, 2, 5).max).toBe(DEFAULT_UPGRADE_MAX[5]);
     // Untouched, neither is rewritten at all.
     const untouched = serializeScenario(parseScenario(bytes));
     expect(Array.from(sectionData(untouched, "PUPx")!)).toEqual(Array.from(sectionData(bytes, "PUPx")!));
@@ -328,11 +321,13 @@ describe.skipIf(fixtures.length === 0)("fixture maps", () => {
       markDirty(scn, ...(present as Parameters<typeof markDirty>[1][]));
       const bytes = serializeScenario(scn);
       const out = parseChk(bytes).sections;
-      // Of a pair the file has both of, the game reads one by the file's revision, and that
-      // one is what must come back as it was. The other is written in step with it, which
-      // is byte for byte too unless the file's own two disagreed (a map an editor gave the
-      // Brood War sections and then left) — and then it is the same settings read again.
-      const secondary = new Set(PAIRS.filter(([o, x]) => has(o) && has(x)).map(([o, x]) => (scn.fileVersion >= 63 ? o : x)));
+      // Of a restrictions pair the file has both of, the game applies the Brood War one last,
+      // and that is what must come back as it was; so must the Brood War costs table of a
+      // Brood War file. The other is written in step, which is byte for byte too unless the
+      // file's own two disagreed (Ashworld Hunters' do, for Players 9 to 12) — and then it
+      // is the same settings read again.
+      const restrictions = new Set(["UPGR", "PTEC"]);
+      const secondary = new Set(PAIRS.filter(([o, x]) => has(o) && has(x) && (scn.fileVersion >= 205 || restrictions.has(o))).map(([o]) => o));
       for (const name of present) {
         if (secondary.has(name)) continue;
         const a = original.find((s) => s.name === name)!.data;

@@ -38,9 +38,12 @@ describe("slots", () => {
     expect(locationCapacity(og)).toBe(ORIGINAL_LOCATION_SLOTS);
     ensureLocationSlots(og);
     expect(og.locations).toHaveLength(64);
-    // A longer table than expected is left alone.
+    // A longer table than the revision holds: Save writes only the first 64, and no new
+    // location goes past them.
     og.locations.push(blankLocation());
-    expect(locationCapacity(og)).toBe(65);
+    expect(locationCapacity(og)).toBe(ORIGINAL_LOCATION_SLOTS);
+    for (let i = 0; i < 64; i++) if (i !== 63) og.locations[i] = { ...blankLocation(), right: 32, bottom: 32 };
+    expect(firstFreeSlot(og)).toBe(-1);
   });
 
   it("fills the lowest free slot and never Anywhere", () => {

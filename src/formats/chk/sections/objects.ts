@@ -190,9 +190,21 @@ export function decodeLocations(data: Uint8Array): LocationRecord[] {
   return out;
 }
 
-export function encodeLocations(locations: LocationRecord[]): Uint8Array {
-  const w = new Writer(locations.length * LOCATION_STRIDE || 16);
-  for (const l of locations) w.i32(l.left).i32(l.top).i32(l.right).i32(l.bottom).u16(l.nameIndex).u16(l.elevationFlags);
+/**
+ * How many location slots a file of this revision has. The game takes `MRGN` only at
+ * exactly this size: 64 slots in a StarCraft 1.00 file (`VER` below 63), 255 from 63 up.
+ */
+export function locationSlots(fileVersion: number): number {
+  return fileVersion < 63 ? 64 : 255;
+}
+
+/** Exactly `slots` records: a shorter model is padded with blank slots, a longer one cut. */
+export function encodeLocations(locations: LocationRecord[], slots = locations.length): Uint8Array {
+  const w = new Writer(slots * LOCATION_STRIDE || 16);
+  for (let i = 0; i < slots; i++) {
+    const l = locations[i] ?? { left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 };
+    w.i32(l.left).i32(l.top).i32(l.right).i32(l.bottom).u16(l.nameIndex).u16(l.elevationFlags);
+  }
   return w.finish();
 }
 

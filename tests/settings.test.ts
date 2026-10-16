@@ -154,14 +154,35 @@ describe("unit settings", () => {
     expect(unitSettingsSections(both).sort()).toEqual(["UNIS", "UNIx"]);
   });
 
-  it("reads UNIx over UNIS when a file has both", () => {
+  it("lays each copy's customised unit types over the copies before it, as the game does", () => {
     const a = defaultUnitSettings();
-    a.armor[1] = 5;
+    a.useDefault[1] = 0; a.armor[1] = 5;
+    a.useDefault[2] = 0; a.armor[2] = 7;
     const b = defaultUnitSettings();
-    b.armor[1] = 9;
+    b.useDefault[1] = 0; b.armor[1] = 9;
+    b.armor[2] = 3; // left on the game's values, so not applied
     const base = serializeScenario(createScenario({ width: 64, height: 64, era: 0, name: "x" }));
-    const file = new Uint8Array([...base, ...section("UNIS", encodeUnitSettings(a, WEAPONS_ORIGINAL)), ...section("UNIx", encodeUnitSettings(b, WEAPONS_BW))]);
-    expect(parseScenario(file).unitSettings!.armor[1]).toBe(9);
+    const file = new Uint8Array([...base, ...section("UNIx", encodeUnitSettings(a, WEAPONS_BW)), ...section("UNIx", encodeUnitSettings(b, WEAPONS_BW))]);
+    const s = parseScenario(file).unitSettings!;
+    expect(s.armor[1]).toBe(9);
+    expect(s.armor[2]).toBe(7);
+    expect(s.useDefault[2]).toBe(0);
+  });
+
+  it("reads a 59 or 63 file's UNIS and then its UNIx on top, entry by entry", () => {
+    const original = defaultUnitSettings();
+    original.useDefault[0] = 0; original.hitPoints[0] = 20 * 256;
+    original.useDefault[1] = 0; original.hitPoints[1] = 30 * 256;
+    const expansion = defaultUnitSettings();
+    expansion.useDefault[0] = 0; expansion.hitPoints[0] = 150 * 256;
+    for (const ver of [59, 63]) {
+      const scn = createScenario({ width: 64, height: 64, era: 0, name: "x" });
+      scn.fileVersion = ver;
+      const file = new Uint8Array([...serializeScenario(scn), ...section("UNIS", encodeUnitSettings(original, WEAPONS_ORIGINAL)), ...section("UNIx", encodeUnitSettings(expansion, WEAPONS_BW))]);
+      const s = parseScenario(file).unitSettings!;
+      expect(s.hitPoints[0] / 256, `VER ${ver}`).toBe(150);
+      expect(s.hitPoints[1] / 256, `VER ${ver}`).toBe(30);
+    }
   });
 });
 

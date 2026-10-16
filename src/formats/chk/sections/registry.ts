@@ -3,7 +3,7 @@
  * https://wiki.staredit.net/wiki/Scenario.chk
  * Full provenance: ../../../../ATTRIBUTION.md
  */
-import type { CombineMode } from "../reader";
+import type { CombineMode, EntryLayout } from "../reader";
 import { msg } from "../../../i18n";
 
 export interface Dim {
@@ -25,6 +25,8 @@ export interface SectionSpec {
    * such a decoy after the real section.
    */
   minimum?: number;
+  /** The layout of a settings table, for the "entries" mode. */
+  entries?: EntryLayout;
   what: string;
   /**
    * Read by StarEdit and other editors only — the game skips it. Leaving one out of a
@@ -32,6 +34,11 @@ export interface SectionSpec {
    */
   editorOnly?: true;
 }
+
+/** Per-entry column widths of the settings tables: hit points, shields, armour, time, minerals, gas, name. */
+const UNIT_ENTRIES: EntryLayout = { count: 228, columns: [4, 2, 1, 2, 2, 2, 2] };
+const UPGRADE_WIDTHS = [2, 2, 2, 2, 2, 2];
+const TECH_WIDTHS = [2, 2, 2, 2];
 
 const SPECS: SectionSpec[] = [
   { name: "TYPE", mode: "last", size: 4, what: msg("Map type (RAWS/RAWB/RAWU)") },
@@ -55,26 +62,28 @@ const SPECS: SectionSpec[] = [
   { name: "THG2", mode: "append", stride: 10, what: msg("Sprites") },
   { name: "MASK", mode: "overlay", size: (d) => d.width * d.height, what: msg("Fog of war") },
   // Measured in Remastered: a 1-byte copy after the real table is passed over, a 2-byte one
-  // (no strings) is taken and leaves every string missing.
+  // (no strings) is taken and leaves every string missing. 1.16.1 takes any copy; the
+  // editor follows Remastered here, the game most maps are played in.
   { name: "STR ", mode: "last", minimum: 2, what: msg("String table") },
   { name: "UPRP", mode: "last", size: 1280, what: msg("CUWP slots") },
   { name: "UPUS", mode: "last", size: 64, what: msg("CUWP slots used"), editorOnly: true },
-  { name: "MRGN", mode: "overlay", stride: 20, what: msg("Locations") },
+  // Every copy must be the revision's full size (64 or 255 locations), so the last one wins.
+  { name: "MRGN", mode: "last", stride: 20, what: msg("Locations") },
   { name: "TRIG", mode: "append", stride: 2400, what: msg("Triggers") },
   { name: "MBRF", mode: "append", stride: 2400, what: msg("Mission briefing") },
   { name: "SPRP", mode: "last", size: 4, what: msg("Scenario name and description") },
   { name: "FORC", mode: "last", size: 20, what: msg("Forces") },
   { name: "WAV ", mode: "last", size: 2048, what: msg("WAV string indices"), editorOnly: true },
-  { name: "UNIS", mode: "last", size: 4048, what: msg("Unit settings (original)") },
-  { name: "UPGS", mode: "last", size: 598, what: msg("Upgrade settings (original)") },
-  { name: "TECS", mode: "last", size: 216, what: msg("Tech settings (original)") },
+  { name: "UNIS", mode: "entries", size: 4048, entries: UNIT_ENTRIES, what: msg("Unit settings (original)") },
+  { name: "UPGS", mode: "entries", size: 598, entries: { count: 46, columns: UPGRADE_WIDTHS }, what: msg("Upgrade settings (original)") },
+  { name: "TECS", mode: "entries", size: 216, entries: { count: 24, columns: TECH_WIDTHS }, what: msg("Tech settings (original)") },
   { name: "SWNM", mode: "last", size: 1024, what: msg("Switch names"), editorOnly: true },
   { name: "COLR", mode: "last", size: 8, what: msg("Player colours") },
   { name: "PUPx", mode: "last", size: 2318, what: msg("Upgrade restrictions (BW)") },
   { name: "PTEx", mode: "last", size: 1672, what: msg("Tech restrictions (BW)") },
-  { name: "UNIx", mode: "last", size: 4168, what: msg("Unit settings (BW)") },
-  { name: "UPGx", mode: "last", size: 794, what: msg("Upgrade settings (BW)") },
-  { name: "TECx", mode: "last", size: 396, what: msg("Tech settings (BW)") },
+  { name: "UNIx", mode: "entries", size: 4168, entries: UNIT_ENTRIES, what: msg("Unit settings (BW)") },
+  { name: "UPGx", mode: "entries", size: 794, entries: { count: 61, pad: 1, columns: UPGRADE_WIDTHS }, what: msg("Upgrade settings (BW)") },
+  { name: "TECx", mode: "entries", size: 396, entries: { count: 44, columns: TECH_WIDTHS }, what: msg("Tech settings (BW)") },
   { name: "STRx", mode: "last", what: msg("String table (Remastered, 32-bit offsets)") },
   { name: "CRGB", mode: "last", size: 32, what: msg("Player colours (Remastered RGB)") },
 ];

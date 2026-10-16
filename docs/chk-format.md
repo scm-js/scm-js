@@ -355,10 +355,10 @@ one thing that sets 63 apart from 59 in the game is the number of locations: 64 
 A file can hold both of a pair whatever its `VER` says, and the two need not agree: some
 editors write the `x` tables into an original StarCraft map and later change only the
 original ones, so the `x` tables keep what they held before. In a `VER` 59 or 63 file the
-game applies those stale `x` values over the new ones. The editor reads the settings from
-one set, chosen by `VER`: below 63 the original five, from 63 up the `x` five. When it
-saves a change it writes both, the other one in step, and keeps the columns only the `x`
-tables have (the Brood War upgrades, technologies and weapons) from the file.
+game applies those stale `x` values over the new ones, and the editor reads the file the
+same way, so it shows the settings the game will use. When it saves a change it writes
+both tables, the other one in step, and keeps the columns only the `x` tables have (the
+Brood War upgrades, technologies and weapons) from the file.
 
 
 ## How the sections fit together

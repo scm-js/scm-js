@@ -46,15 +46,18 @@ describe("the play set", () => {
     expect(playSoundMembers(new Uint8Array(10), tbl)).toEqual([]);
   });
 
-  it("copies what a full installation has and says so", async () => {
-    const { dat, tbl } = sfx(["A.wav", "B.wav"], [[1, 1], [2, 2]]);
+  // Twenty sounds, as the game's table names them: A.wav to T.wav.
+  const twenty = () => sfx(Array.from({ length: 20 }, (_, i) => `${String.fromCharCode(65 + i)}.wav`), Array.from({ length: 20 }, (_, i) => [i + 1, i + 1] as [number, number]));
+
+  it("copies what a full installation has and says so, a sound short as Remastered is", async () => {
+    const { dat, tbl } = twenty();
     const written = new Map<string, number>();
     const play = await copyPlaySet(
       async (member) => (member === "sound\\b.wav" || member === "cursor\\time.grp" ? null : new Uint8Array(member.length)),
       async (path, data) => { written.set(path, data.length); },
       { sfxDat: dat, sfxTbl: tbl },
     );
-    expect(play).toEqual({ version: PLAY_VERSION, files: PLAY_MEMBERS.length - 1, sounds: 1, bytes: [...written.values()].reduce((a, b) => a + b, 0) });
+    expect(play).toEqual({ version: PLAY_VERSION, files: PLAY_MEMBERS.length - 1, sounds: 19, bytes: [...written.values()].reduce((a, b) => a + b, 0) });
     expect(written.has("sound/a.wav")).toBe(true);
     expect(written.has("tileset/ice/dark.pcx")).toBe(true);
     expect(written.has("cursor/time.grp")).toBe(false);
@@ -105,5 +108,12 @@ describe("the play set", () => {
     expect(await copyPlaySet(async (m) => (m.startsWith("sound\\") ? null : new Uint8Array(1)), none, { sfxDat: dat, sfxTbl: tbl })).toBeNull();
     expect(await copyPlaySet(async (m) => (m === "scripts\\aiscript.bin" ? null : new Uint8Array(1)), none, { sfxDat: dat, sfxTbl: tbl })).toBeNull();
     expect(await copyPlaySet(async () => new Uint8Array(1), none, { sfxDat: undefined, sfxTbl: undefined })).toBeNull();
+  });
+
+  it("says nothing of a source that could read only a few of the sounds", async () => {
+    // What mopaq before 1.6 made of an installation's archives: three sounds of eleven hundred, the rest undecodable.
+    const { dat, tbl } = twenty();
+    const few = new Set(["sound\\a.wav", "sound\\b.wav", "sound\\c.wav"]);
+    expect(await copyPlaySet(async (m) => (m.startsWith("sound\\") && !few.has(m) ? null : new Uint8Array(1)), async () => {}, { sfxDat: dat, sfxTbl: tbl })).toBeNull();
   });
 });

@@ -22,6 +22,8 @@ import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError
 export type InstallProgress = (fraction: number, label: string) => void;
 
 export const ARCHIVE_NAMES = ["StarDat.mpq", "BrooDat.mpq"] as const;
+/** The patch an installation lays over those two, and Blizzard's download carries beside them. */
+const PATCH_NAME = "patch_rt.mpq";
 
 /**
  * Blizzard's own standalone StarEdit package, which carries both archives and is offered
@@ -34,9 +36,12 @@ export const ARCHIVE_NAMES = ["StarDat.mpq", "BrooDat.mpq"] as const;
  * process and an IPC channel to carry it — for a route the disk search already covers.
  *
  * The archives inside are the trimmed StarEdit distribution, not the game's own, which
- * matters only in that they are enough: they extract to the same files a 1.16 install does,
- * byte for byte. The `patch_rt.mpq` that also rides in the zip is deliberately left alone —
- * folding it in would change seven tables and diverge from every other install route.
+ * matters only in that they are enough. The `patch_rt.mpq` that rides beside them is laid
+ * over them as an installation's is: StarDat and BrooDat alone hold the tables from before
+ * the game's last balance patch (`units.dat`, `weapons.dat`, `flingy.dat`, `techdata.dat`,
+ * `upgrades.dat`, `stat_txt.tbl`, `aiscript.bin`), and with it every file the game reads is
+ * a 1.16.1 installation's, byte for byte — the sounds included. (Measured 2026-10-15; only
+ * the fonts differ, which nothing here reads.)
  */
 export const BLIZZARD_ZIP_URL = "https://gamedata.scmjs.dev/StarEdit.zip";
 
@@ -161,7 +166,7 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
 /**
  * Install from a zip that carries the two archives, without downloading the rest of it:
  * the zip's directory says where each member's bytes are, so only those are fetched and
- * inflated (82 MB of Blizzard's 101 MB package). The server has to answer range requests,
+ * inflated (83 MB of Blizzard's 101 MB package). The server has to answer range requests,
  * which is the forwarder's whole job.
  */
 export async function installFromZipUrl(url: string, progress?: InstallProgress): Promise<StoredCopy> {
@@ -175,7 +180,8 @@ export async function installFromZipUrl(url: string, progress?: InstallProgress)
 
   // The download is the first half of the bar and the extraction the second, as an install
   // from loose archives has it; within the download, each member is weighted by its size.
-  const wanted = ARCHIVE_NAMES.map((name) => ({ name, entry: found.get(name)! }));
+  const patch = findMembers(entries, [PATCH_NAME]).found.get(PATCH_NAME);
+  const wanted = [...ARCHIVE_NAMES.map((name) => ({ name, entry: found.get(name)! })), ...(patch ? [{ name: PATCH_NAME, entry: patch }] : [])];
   const total = wanted.reduce((n, w) => n + w.entry.compressedSize, 0);
   let doneBytes = 0;
 

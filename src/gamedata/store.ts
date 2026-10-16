@@ -39,10 +39,15 @@ export interface StoredStamp {
   profile?: GameDataProfile;
   /**
    * The copy also holds the files the game itself runs on (`play.ts`), which the site's play
-   * page reads. Absent on a copy made from Blizzard's free package, or by an editor before
-   * there were any.
+   * page reads. Absent on a copy made by an editor before there were any, or from a source
+   * whose game files were not all there.
    */
   play?: PlayStamp;
+  /**
+   * Made from Blizzard's free StarEdit download (`archives.ts#isStarEditDownload`): the play
+   * page shows replays from it and starts no game.
+   */
+  staredit?: true;
 }
 
 export interface StoredCopy extends StoredStamp {

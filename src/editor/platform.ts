@@ -12,6 +12,7 @@
  */
 
 import { desktopBridge } from "../gamedata/desktop";
+import { msg, translate } from "../i18n";
 
 /** Whether this is the desktop build (the Electron bridge is there). */
 export function isDesktop(): boolean {
@@ -35,23 +36,24 @@ export interface HostTerms {
 
 const BROWSER: HostTerms = {
   desktop: false,
-  noun: "browser",
-  Noun: "Browser",
-  here: "this browser",
-  Here: "This browser",
-  downloads: "the browser's downloads folder",
+  noun: msg("browser"),
+  Noun: msg("Browser"),
+  here: msg("this browser"),
+  Here: msg("This browser"),
+  downloads: msg("the browser's downloads folder"),
 };
 
 const DESKTOP: HostTerms = {
   desktop: true,
-  noun: "app",
-  Noun: "Application",
-  here: "this app",
-  Here: "This app",
-  downloads: "the downloads folder",
+  noun: msg("app"),
+  Noun: msg("Application"),
+  here: msg("this app"),
+  Here: msg("This app"),
+  downloads: msg("the downloads folder"),
 };
 
 /** The words for the shell this is running in. Cheap enough to call in a render. */
 export function hostTerms(): HostTerms {
-  return isDesktop() ? DESKTOP : BROWSER;
+  const terms = isDesktop() ? DESKTOP : BROWSER;
+  return { desktop: terms.desktop, noun: translate(terms.noun), Noun: translate(terms.Noun), here: translate(terms.here), Here: translate(terms.Here), downloads: translate(terms.downloads) };
 }

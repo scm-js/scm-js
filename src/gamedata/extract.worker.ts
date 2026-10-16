@@ -13,7 +13,7 @@
  * source that is not a full installation has none and the copy is the editor's alone; so is
  * a copy that could only be kept in memory.
  */
-import { memberKey, openArchives, readerFor } from "./archives";
+import { isStarEditDownload, memberKey, openArchives, readerFor } from "./archives";
 import { describeExtraction, ExtractError, extractGameData, type GameDataExtraction } from "./extract";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
@@ -49,6 +49,8 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     let result: GameDataExtraction;
     let problems: string[];
     let from = req.from;
+    /** Made from Blizzard's StarEdit download (the zip, or its archives picked by hand). */
+    let staredit = false;
     /** A file of the source by the game's name for it, for the play set. */
     let member: (name: string) => Promise<Uint8Array | null>;
     if (req.remastered) {
@@ -65,6 +67,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       member = async (name) => (storage.fileInfo(memberKey(name))?.installed ? storage.readFile(memberKey(name)) : null);
     } else {
       post({ kind: "progress", fraction: 0, label: "Opening the archives" });
+      staredit = isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
       const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
       problems = opened.problems;
       if (opened.archives.length === 0) throw new ExtractError(problems[0] ?? "No archive could be opened.");
@@ -84,6 +87,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       bytes: result.bytes,
       summary: describeExtraction(result),
       ...(req.profile ? { profile: req.profile } : {}),
+      ...(staredit ? { staredit: true } : {}),
     };
 
     try {

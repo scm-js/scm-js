@@ -289,7 +289,9 @@ Two overlays on the View menu show what the ground means to the game:
 
 View ▸ Walkability (Ctrl+Shift+W) goes further and draws the ground as a unit walks it:
 islands, the areas the map divides into, the chokes between them with their widths, and
-the distances between start locations. File ▸ Import ▸ Terrain from Image… turns a
+the distances between start locations. In the editor at scmjs.dev its panel can also have
+the game itself walk the map: the regions the game plans routes over, and real units
+walked between the start locations, with any that stop short or get stuck. File ▸ Import ▸ Terrain from Image… turns a
 picture into terrain with the isometric brush, over the whole map or a rectangle. Both are
 plugins, on from the start; see [Plugins](#plugins).
 
@@ -1331,7 +1333,7 @@ and the addresses it will fetch from.
 
 | Plugin | Where | What it does |
 | --- | --- | --- |
-| [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them with their widths, height seams with no ramp, and the distances between start locations. Reads only. |
+| [Walkability](https://github.com/scm-js/plugin-walkability) | View ▸ Walkability (Ctrl+Shift+W) | Draws the ground as a unit walks it: islands, the areas the map divides into and the chokes between them with their widths, height seams with no ramp, and the distances between start locations; at scmjs.dev, also the game's own regions and units walked by the game between the start locations. Reads only. |
 | [Paint](https://github.com/scm-js/plugin-paint) | Tools ▸ Paint… (Ctrl+Shift+P) | Freehand, lines, shapes, spray and text, laying down whatever the active layer's palette has picked — so it paints units, doodads, sprites, terrain or fog depending on the layer. |
 | [Repair](https://github.com/scm-js/plugin-repair) | on open, status bar, Tools ▸ Repair Map… | Reads a map the way the game does and repairs what is missing, damaged, repeated or the wrong size as it opens, including a stripped isometric record. The judgement calls wait in the status bar, each with what the game does without the repair. |
 | [Terrain from Image](https://github.com/scm-js/plugin-image-to-terrain) | File ▸ Import ▸ Terrain from Image… | Turns a picture into terrain, over the whole map or a rectangle you drag, painted with the isometric brush so cliffs and shorelines are laid at every boundary. |
@@ -1342,7 +1344,7 @@ and the addresses it will fetch from.
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file as the game reads it: every section, a hex editor over the bytes, and what the byte under the cursor means. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | View ▸ Timelapse…, the status-bar cell while it records | Records the map as you build it, one frame per change, and plays the recording back with a box around each change. Export it as a GIF or a WebM video. Recordings stay in the browser, and opening the same file again carries on the same recording. |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | Triggers ▸ Trigger Map…, Show in Trigger Map in the Trigger Editor, right-click a location | The triggers as a graph. Pick a trigger to see what it waits for and which triggers set that, and what it changes and which triggers read it; pick a switch, a death counter, a location or Victory to see who writes it and who reads it. A Findings list names switches nothing sets, counters nothing reads, locations that are not there and triggers that never run. |
-| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | Tools ▸ Test Map in Browser | The way to the game engine behind the site's play page, scmjs.dev/play: it plays the open map there in a browser tab, and lets other plugins have a replay played to its end to learn what happened in it. Only in the editor at scmjs.dev. |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | Tools ▸ Test Map in Browser | The way to the game engine behind the site's play page, scmjs.dev/play: it plays the open map there in a browser tab, and lets other plugins have a replay played to its end to learn what happened in it, or have a map's ground walked by the game itself. Only in the editor at scmjs.dev. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Account menu, File ▸ Open from / Save to scmjs.dev…, Tools ▸ AI | Your [scmjs.dev](https://scmjs.dev) account: maps kept on it, links that give anyone a copy of one, a map shared for others to edit with you, and the AI — see [Your scmjs.dev account](#your-scmjsdev-account), [Editing a map together](#editing-a-map-together) and [The AI](#the-ai) above. One tick in its Account dialog turns the AI off and keeps the account. |
 
 ![The Walkability overlay on Big Game Hunters](images/walkability.webp)

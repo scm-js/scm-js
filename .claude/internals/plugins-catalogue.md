@@ -174,7 +174,12 @@ switched on from View, the Layers panel, `Ctrl+Shift+W` or the panel), blits one
 mode in its `draw`, reads the cell under the pointer in `onHover`, picks an area through `pickTile`,
 and re-runs on the terrain/units/doodads/settings/document events while the overlay shows or the panel
 is open, so the picture follows the units being placed on it. The settings panel holds the readout and
-the problems; a *Details…* panel lists the rest. It never writes.
+the problems; a *Details…* panel lists the rest. It never writes. Since 1.3.0 its panel also has the game
+walk the map through scm-sim's `pathing()` (`api.services.watch("scm-sim.engine")`, no `requires`: the
+section is absent without the engine): `game.ts` matches the game's walks with the estimate's pairs
+(stopped / stuck / time ran out / no ground / ≥ 30 % and ≥ 10 tiles longer / units the game could not
+place), overlay mode `game` draws the regions grid and each unit's route, and an edit only marks the
+walks out of date (a run is 10–40 s); `vendor/scm-sim.d.ts` is the contract's copy.
 
 **Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, not a default — installed from Browse Plugins) places symmetric
 start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile
@@ -555,7 +560,7 @@ runtime of its own: the engine is another program on the same origin (private, n
 talks to its pages by message. One service, `scm-sim.engine` version 1 (`contract.d.ts`): `present` (is there a play
 page beside this editor — `src/address.ts`, scmjs.dev or a localhost stand-in under `/editor/`), `status()`,
 `analyse(replay, { onProgress, signal })` → a `ReplayTimeline` (units born / done / morph / given / died, each
-player's numbers every 48 frames, research, positions), and `play(map?)`. `src/bridge.ts` frames `/play/analyse.html`
+player's numbers every 48 frames, research, positions), `play(map?)`, and since 0.7.0 `pathing(scenario?, options)` → a `PathingResult` (the game's region partition as a minitile grid, and test units walked by the game between the start locations, each with its outcome, frames and route; left out, the scenario is the open map's `export({ format: "chk", built: false })`; `status().pathing` is null on a play page from before it, where the call rejects in words). It is what Walkability's true routes are to be drawn from; a StarEdit copy of the game is enough for it, nobody playing. `src/bridge.ts` frames `/play/analyse.html`
 out of sight (`scmjs.sim.ready / analyse / progress / result / error / cancel`; the frame sits behind a `FrameHost` so
 the conversation is tested without a DOM); `src/play.ts` is the `scmjs.play` hand-off that used to be the scmjs.dev
 plugin's `play.ts`, and with it Tools ▸ Test Map in Browser moved here (scmjs.dev 1.36.0 dropped it; the two pins

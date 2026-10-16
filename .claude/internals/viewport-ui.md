@@ -309,7 +309,8 @@ read in the first effect pass is still null.
   layer so select/marquee still work and drag/place are no-ops; the location adapter loses handles,
   move and create; terrain/fog strokes and paste-at return before starting), `openDialogAtom`
   refuses `EDITING_DIALOGS` (covers double-click, menus, context menu, `ui.open`), the menu bar /
-  toolbar / context menu disable their editing rows, `App` hides the left dock, the Properties
+  context menu disable their editing rows and the toolbar leaves them out (Edit a Copy in Save's
+  place; the rule is `atoms/viewModeAtoms.ts`, see plugins-host.md "What else carries over"), `App` hides the left dock, the Properties
   and Layers panels are hidden (Properties was a `<fieldset disabled>` until Aftermath's replay layout needed the column; View has every layer switch), the delete/convert/nudge atoms and the clipboard hook call
   `canEdit`, `save()` and `saveDocument` refuse anything but a copy. The **backstop** is in the
   commit atoms: `commitEditAtom` / `commitTerrainAtom` roll the already-applied entry back

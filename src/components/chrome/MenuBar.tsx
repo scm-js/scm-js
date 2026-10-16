@@ -19,6 +19,7 @@ import {
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
+import { chromeModeAtom, flagOffered, flagShown, mapInFront, overlayOffered, toggleFlagAtom } from "../../atoms/viewModeAtoms";
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { desktopBridge } from "../../gamedata/desktop";
 import {
@@ -53,8 +54,8 @@ const DOCS_URL = "https://docs.scmjs.dev";
  */
 type Item =
   | { kind: "item"; label: string; pluginId?: string; shortcut?: string; disabled?: boolean; icon?: PluginIcon; onSelect?: () => void; dialog?: DialogId; payload?: Record<string, unknown> }
-  | { kind: "check"; label: string; pluginId?: string; shortcut?: string; checked: boolean; onChange: (v: boolean) => void }
-  | { kind: "radio-group"; value: string; onChange: (v: string) => void; items: { value: string; label: string; shortcut?: string }[] }
+  | { kind: "check"; label: string; pluginId?: string; shortcut?: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }
+  | { kind: "radio-group"; value: string; disabled?: boolean; onChange: (v: string) => void; items: { value: string; label: string; shortcut?: string }[] }
   | { kind: "sub"; label: string; pluginId?: string; items: Item[] }
   | { kind: "sep" }
   | { kind: "label"; label: string };
@@ -224,13 +225,18 @@ function useMenus(): Menu[] {
   // A map open to look at only: everything that would change it is off, and Edit a Copy is the way to.
   const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   const canEdit = hasMap && !viewOnly;
+  // A plugin's view in the map's place (a replay's game): the map's own layers, selection, clipboard
+  // and find are greyed, and the View toggles are the ones the view shows (`viewModeAtoms`).
+  const mode = useAtomValue(chromeModeAtom);
+  const onMap = hasMap && mapInFront(mode);
+  const toggleFlag = useSetAtom(toggleFlagAtom);
   const { fillMap } = useTerrainTools();
   const recent = useAtomValue(recentFilesAtom);
   const deleteUnits = useSetAtom(deleteSelectedUnitsAtom);
   const deleteDoodads = useSetAtom(deleteSelectedDoodadsAtom);
   const deleteSprites = useSetAtom(deleteSelectedSpritesAtom);
   const deleteLocations = useSetAtom(deleteSelectedLocationsAtom);
-  const [flags, setFlags] = useAtom(viewFlagsAtom);
+  const flags = useAtomValue(viewFlagsAtom);
   const [panels, setPanels] = useAtom(panelsAtom);
   const [consoleOpen, setConsoleOpen] = useAtom(debugConsoleAtom);
   const diagnostics = useAtomValue(diagnosticsTextAtom);
@@ -250,8 +256,9 @@ function useMenus(): Menu[] {
     kind: "check",
     label,
     shortcut,
-    checked: flags[k],
-    onChange: (v) => setFlags({ ...flags, [k]: v }),
+    checked: flagShown(mode, flags, k),
+    disabled: !flagOffered(mode, k),
+    onChange: (v) => toggleFlag(k, v),
   });
   const panel = (k: keyof PanelVisibility, label: string): Item => ({
     kind: "check",
@@ -355,15 +362,15 @@ function useMenus(): Menu[] {
         { kind: "item", label: undoLabel ? t("Undo {what}", { what: undoLabel }) : msg("Undo"), shortcut: key("edit.undo"), disabled: !undoLabel, onSelect: () => { const l = undo(); if (l) setStatus(t("Undid: {what}", { what: l })); } },
         { kind: "item", label: redoLabel ? t("Redo {what}", { what: redoLabel }) : msg("Redo"), shortcut: key("edit.redo"), disabled: !redoLabel, onSelect: () => { const l = redo(); if (l) setStatus(t("Redid: {what}", { what: l })); } },
         sep,
-        { kind: "item", label: msg("Cut"), shortcut: key("edit.cut"), disabled: !canEdit, onSelect: () => { clipTools.cut(); } },
-        { kind: "item", label: msg("Copy"), shortcut: key("edit.copy"), disabled: !hasMap, onSelect: () => { clipTools.copy(); } },
-        { kind: "item", label: msg("Paste"), shortcut: key("edit.paste"), disabled: !canEdit || !hasClip, onSelect: () => { clipTools.paste(); } },
-        { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !canEdit, onSelect: deleteSelection },
+        { kind: "item", label: msg("Cut"), shortcut: key("edit.cut"), disabled: !canEdit || !onMap, onSelect: () => { clipTools.cut(); } },
+        { kind: "item", label: msg("Copy"), shortcut: key("edit.copy"), disabled: !onMap, onSelect: () => { clipTools.copy(); } },
+        { kind: "item", label: msg("Paste"), shortcut: key("edit.paste"), disabled: !canEdit || !onMap || !hasClip, onSelect: () => { clipTools.paste(); } },
+        { kind: "item", label: msg("Delete"), shortcut: "Del", disabled: !canEdit || !onMap, onSelect: deleteSelection },
         sep,
-        { kind: "item", label: msg("Select All"), shortcut: key("edit.selectAll"), disabled: !hasMap, onSelect: selectAll },
-        { kind: "item", label: msg("Deselect"), shortcut: "Esc", disabled: !hasMap, onSelect: deselect },
+        { kind: "item", label: msg("Select All"), shortcut: key("edit.selectAll"), disabled: !onMap, onSelect: selectAll },
+        { kind: "item", label: msg("Deselect"), shortcut: "Esc", disabled: !onMap, onSelect: deselect },
         sep,
-        dlg(msg("Find…"), "find", key("edit.find")),
+        dlg(msg("Find…"), "find", key("edit.find"), hasMap && !onMap),
         sep,
         dlg(msg("Preferences…"), "preferences", key("tools.preferences")),
       ],
@@ -397,7 +404,7 @@ function useMenus(): Menu[] {
         flag("elevation", msg("Elevation Overlay")),
         flag("buildability", msg("Buildability Overlay")),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
-        ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, onChange: (v) => { setOverlayVisible(o.key, v); } })),
+        ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, disabled: !overlayOffered(mode, o), onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
         { kind: "sub", label: msg("Panels"), items: [panel("palette", msg("Palette")), panel("minimap", msg("Minimap")), panel("layers", msg("Layers")), panel("properties", msg("Properties")), sep, panel("toolbar", msg("Toolbar")), panel("statusbar", msg("Status Bar"))] },
         // Not in Panels: it is not one of the map's panels, and it is off unless something is wrong.
@@ -409,7 +416,7 @@ function useMenus(): Menu[] {
     {
       label: msg("Layer"),
       items: [
-        { kind: "radio-group", value: layer, onChange: (v) => setLayer(v as EditorLayer), items: LAYERS.map((l) => ({ value: l.id, label: l.label, shortcut: key(`layer.${l.id}`) })) },
+        { kind: "radio-group", value: layer, disabled: hasMap && !onMap, onChange: (v) => setLayer(v as EditorLayer), items: LAYERS.map((l) => ({ value: l.id, label: l.label, shortcut: key(`layer.${l.id}`) })) },
       ],
     },
     {
@@ -451,8 +458,8 @@ function useMenus(): Menu[] {
     {
       label: msg("Tools"),
       items: [
-        dlg(msg("Symmetry…"), "symmetry"),
-        { kind: "sub", label: msg("Brush Size"), items: [{ kind: "radio-group", value: String(brush), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
+        dlg(msg("Symmetry…"), "symmetry", undefined, viewOnly || (hasMap && !onMap)),
+        { kind: "sub", label: msg("Brush Size"), items: [{ kind: "radio-group", value: String(brush), disabled: viewOnly || (hasMap && !onMap), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,
         { kind: "item", label: msg("Fill Terrain"), disabled: !canEdit, onSelect: fillMap },
         edits(msg("Replace Terrain…"), "replaceTerrain"),
@@ -534,7 +541,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         );
       case "check":
         return (
-          <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} onCheckedChange={it.onChange}>
+          <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} disabled={it.disabled} onCheckedChange={it.onChange}>
             <Menubar.ItemIndicator className="indicator"><Check size={12} /></Menubar.ItemIndicator>
             {labelOf(it)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
@@ -544,7 +551,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return (
           <Menubar.RadioGroup key={i} value={it.value} onValueChange={it.onChange}>
             {it.items.map((r) => (
-              <Menubar.RadioItem key={r.value} value={r.value} className="menu-item">
+              <Menubar.RadioItem key={r.value} value={r.value} className="menu-item" disabled={it.disabled}>
                 <Menubar.ItemIndicator className="indicator"><Dot size={18} strokeWidth={4} /></Menubar.ItemIndicator>
                 {translate(r.label)}
                 {r.shortcut && <span className="shortcut">{r.shortcut}</span>}

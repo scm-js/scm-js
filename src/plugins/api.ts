@@ -2883,6 +2883,25 @@ export interface MapViewSpec {
    * its box and presses are the map's own view's (hidden behind this one).
    */
   minimap?: MapViewMinimapSpec;
+  /**
+   * View ▸ Fog of War, the toolbar's button and its key, while the view is shown: turn the view's
+   * own fog on or off. The toggle then shows the view's fog, as you last said it
+   * (`MapViewHandle.setFog`), not the map's. Without `onFog` the toggle is off while the view is shown.
+   */
+  onFog?(on: boolean): void;
+  /**
+   * What `MapViewHandle.paintOver` draws changed — View ▸ Grid or Locations turned on or off, the
+   * grid's settings, the map's locations, another plugin's overlay: draw over the view again. With
+   * it the editor's Grid, Locations and Location Names toggles, and the other plugins' overlays,
+   * stay on offer while the view is shown; without it they are off, as the view cannot show them.
+   */
+  onRepaint?(): void;
+}
+
+/** Where the pointer is over a map view (`MapViewHandle.setPointer`), in map pixels. */
+export interface MapViewPointer {
+  x: number;
+  y: number;
 }
 
 /**
@@ -2990,6 +3009,31 @@ export interface MapViewHandle extends Disposable {
   wheel(wheel: MapViewWheel): boolean;
   /** Make the minimap's picture again (`minimap.draw`), at most once a frame. Cheap: call it as the view's contents move. */
   redrawMinimap(): void;
+  /**
+   * Whether the view shows its fog now, for View ▸ Fog of War and the toolbar's button while it
+   * is shown (`onFog`); null when it has none to show at the moment, which greys the toggle. Say
+   * it whenever it changes, by the person's hand or yours.
+   */
+  setFog(on: boolean | null): void;
+  /**
+   * Where the pointer is over the view, in map pixels, for the status bar's tile and position;
+   * null once it leaves. A view in an iframe hears the pointer and the editor does not.
+   */
+  setPointer(at: MapViewPointer | null): void;
+  /**
+   * Draw what the editor draws over a map onto your canvas over the view, mapped by `view` as a
+   * map tool's or an overlay's `draw` is: the grid and the locations as View ▸ Grid, Locations and
+   * Location Names have them, then the other plugins' visible overlays (yours are your own to draw).
+   * Call it from your own drawing, above the view's picture and below your marks, each time you
+   * draw; `onRepaint` says when it would draw something else. Nothing while the view is not shown.
+   *
+   * @example
+   * function drawOver(ctx: CanvasRenderingContext2D, v: MapView) {
+   *   handle.paintOver(ctx, v);
+   *   drawMyMarks(ctx, v);
+   * }
+   */
+  paintOver(ctx: CanvasRenderingContext2D, view: MapView): void;
 }
 
 export interface PanelHandle {

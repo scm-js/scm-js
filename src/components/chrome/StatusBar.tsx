@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom } from "../../atoms/editorAtoms";
 import { shownZoomAtom } from "../../atoms/zoomAtoms";
+import { chromeModeAtom, mapInFront } from "../../atoms/viewModeAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
@@ -33,20 +34,26 @@ export default function StatusBar() {
   const pluginItems = useAtomValue(pluginStatusItemsAtom);
   const show = useAtomValue(statusBarCellsAtom);
   useAtomValue(terrainRevisionAtom);
-  const tileId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
+  // A plugin's view in the map's place says where the pointer is over it (`setPointer`); until it does,
+  // or once the pointer leaves it, there is no tile under the pointer to show. The layer and the
+  // symmetry are the hidden map's brushes', and a map open to look at only has none.
+  const mode = useAtomValue(chromeModeAtom);
+  const onMap = mapInFront(mode);
+  const pointed = onMap || mode.viewPointer;
+  const tileId = pointed && scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
   return (
     <footer className="statusbar">
       {show.tile && (
         <span className="status-cell" title={t("Cursor tile")}>
           <span className="k">{t("Tile")}</span>
-          <span className="v">{cursor.x}, {cursor.y}</span>
+          <span className="v">{pointed ? `${cursor.x}, ${cursor.y}` : "—"}</span>
         </span>
       )}
       {show.pixel && (
         <span className="status-cell" title={t("Cursor position in map pixels")}>
           <span className="k">{t("Px")}</span>
-          <span className="v">{pixel.x}, {pixel.y}</span>
+          <span className="v">{pointed ? `${pixel.x}, ${pixel.y}` : "—"}</span>
         </span>
       )}
       {show.tileId && (
@@ -67,7 +74,7 @@ export default function StatusBar() {
           <span>{translate(tileset.name)}</span>
         </span>
       )}
-      {show.layer && (
+      {show.layer && onMap && (
         <span className="status-cell" title={t("Active layer")}>
           <span className="k">{t("Layer")}</span>
           <span>{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span>
@@ -78,7 +85,7 @@ export default function StatusBar() {
           <span className="v">{Math.round(zoom * 100)}%</span>
         </span>
       )}
-      {symmetry !== "none" && (
+      {symmetry !== "none" && onMap && !mode.viewOnly && (
         <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? t("Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)") : t("This symmetry mode needs a square map — brushes paint normally")}>
           <span className="k">{t("Sym")}</span>
           <span className={`badge ${symmetryAvailable(symmetry, w, h) ? "teal" : "warn"}`}>{symmetryLabel(symmetry)}</span>

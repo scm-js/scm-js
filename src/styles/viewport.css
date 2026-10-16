@@ -121,6 +121,8 @@
   justify-items: start;
   pointer-events: none;
 }
+/* Under the Map | view switch (`.map-view-switch`, 26px from the corner and about 24px tall). */
+.viewport-notices.below-switch { top: 58px; }
 .viewport-notice {
   display: grid;
   gap: 8px;

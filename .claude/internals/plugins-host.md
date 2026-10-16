@@ -495,6 +495,37 @@ rows, smoothed: 2:1 backing would be 4× the pixels) and posts `scmjs.view.wheel
 + the wheel and Ctrl+=/−/0 from the browser's tab zoom; plugin-scm-sim 0.9.0 `onWheel`;
 Aftermath's `onZoom` sends `camera(x, y, height)` and remakes Spectate's track at once.
 
+**What else carries over to a map view** (2026-10-16, user: the toolbars had "a bunch of things
+in replay mode that don't do anything", then asked for API additions so "as much carry over
+between the modes that make sense — UX and polish is important"). `atoms/viewModeAtoms.ts` is
+the one rule for the toolbar, MenuBar, useHotkeys and StatusBar: `chromeModeAtom` {viewOnly,
+view, viewFog, viewPointer}; `flagOffered` (a view shown: grid/locations/locationNames only
+with `onRepaint`, fog only with `onFog` and `setFog` ≠ null, hdGraphics always — Aftermath reads
+it — the rest never); `flagShown` (fog is the view's own, NOT `viewFlagsAtom.fog`: toggling the
+game's fog must not hide FOGM on the user's maps); `toggleFlagAtom` (fog → `spec.onFog`, else the
+flag; a refused toggle puts `notOnView` on the status bar); `overlayOffered` (others' overlays
+only with `onRepaint`, the view's own plugin's always); `mapInFront`. Toolbar **hides** (groups
+drop their separator when empty), menus **grey**, keys **say why**: `MAP_COMMANDS` + `layer.*`
++ Delete/Escape/arrows wait while a view is shown (Escape still cancels a pick/tool). View-only
+hides Save/Undo/Redo/Cut/Paste/brush/Symmetry/Players/Triggers and shows Edit a Copy; Test stays
+(it works on the replay's map). API: `MapViewSpec.onFog`/`onRepaint`, `MapViewHandle.setFog`/
+`setPointer`/`paintOver`. `paintOver` = `paint/overView.ts`: a `PaintView` rebuilt from the
+plugin's `MapView` (sx = −view.x(0), size from `ctx.canvas` / the transform's `a`), grid →
+"terrain" overlays → locations (no selection/hover) → "objects" → "everything"; the calling
+plugin's overlays are left out (it draws its own, Aftermath's "Aftermath" overlay is the map's).
+Why a call and not a host canvas over the view: the plugin's overlay already redraws on the
+viewer's own camera messages (no 66 ms `setCamera` lag) and only the plugin can put the grid
+under its tooltip/marks. `onRepaint` is rAF-coalesced on viewFlags, grid size/look, locations
+revision, overlays (+revision), the switch and the map in front. `setPointer` writes
+`cursorPixelAtom`/`cursorTileAtom` only while shown; StatusBar shows "—" until the view says.
+Test: "carries the grid, locations, other plugins' overlays, the fog and the pointer…". MapViewport's
+own notices (no tileset/unit graphics, terrain loading) are not rendered while `covered`, and sit
+below the Map | view switch (`.below-switch`) while the map offers a view — they were drawn over
+the game and under the switch. Checked end to end 2026-10-16 in a built /editor/ with local
+Aftermath + plugin-scm-sim builds (scm-sim dev server, `/play/**` routed to its root): opening at
+133% = 480 rows, grid over the game, fog ⇄ Vision both ways, Tile/Px follow the pointer, Ctrl+F says
+why. A player's eyes at frame 0 show black until the game runs — the viewer's, not this change.
+
 Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
 hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on
 `reservedReason` applying only to the editor's command table, not to `hotkeys.add`. The plugin

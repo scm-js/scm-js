@@ -26,11 +26,12 @@ import { Elevation, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid } f
 import { DEATHS_TABLE_ADDRESS } from "../src/data/triggerDefs";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, MINERAL_FIELD_IDS, TILE_PX, VESPENE_GEYSER } from "../src/editor/units";
 import {
-  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom, viewportRectAtom, zoomAtom, ZOOM_STEPS,
+  activeUnitAtom, centerViewOnAtom, clipSelectionAtom, cursorPixelAtom, cursorTileAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, zoomAtom, ZOOM_STEPS,
 } from "../src/atoms/editorAtoms";
+import { chromeModeAtom, flagOffered, flagShown, overlayOffered, toggleFlagAtom } from "../src/atoms/viewModeAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import type { PendingAction } from "../src/hooks/useMapFileActions";
-import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
+import { closeDialogAtom, dialogStackAtom, statusMessageAtom } from "../src/atoms/uiAtoms";
 import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,
   pluginOverlayRevisionAtom, pluginOverlaysAtom, setOverlayVisibleAtom,
@@ -59,7 +60,7 @@ import {
 import { pluginTriggerClaimsAtom, registryCacheAtom, registryStateAtom } from "../src/atoms/pluginAtoms";
 import { claimAt, claimBadge, claimDescription, locateClaims } from "../src/plugins/claims";
 import { withPluginItems, type Menu } from "../src/components/chrome/MenuBar";
-import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type MapViewCamera, type PluginApi } from "../src/plugins/api";
+import { pluginIdOf, type CommitEvent, type EditTransaction, type MapToolStopReason, type MapView, type MapViewCamera, type PluginApi } from "../src/plugins/api";
 import { cameraOfMap, fitLook, lookAtZoom, mapLookAt, mapViewSwitch, stepZoom, wheelStep, zoomOfView } from "../src/plugins/mapViews";
 import { shownZoomAtom, zoomToAtom } from "../src/atoms/zoomAtoms";
 
@@ -2664,6 +2665,79 @@ describe("docked panels, status items, dialog slots and flashes", () => {
     expect(store.get(zoomAtom)).toBe(0.75);
     expect(plain.wheel({ deltaY: -100, ctrlKey: true, x: 0, y: 0 })).toBe(false);
     bag.dispose();
+  });
+
+  it("carries the grid, locations, other plugins' overlays, the fog and the pointer over to a view in the map's place", () => {
+    const { store } = blankStore(16, 16);
+    store.set(documentsAtom, [{ id: 1, parked: null }]);
+    const bag = new Contributions();
+    const api = createPluginApi(store, { id: "replays", name: "Replays", source: "s" }, bag);
+    const other = createPluginApi(store, { id: "paths", name: "Paths", source: "s" }, bag);
+    api.document.edit("Add a location", (tx) => { tx.addLocation({ left: 64, top: 64, right: 192, bottom: 128 }, "Beacon"); });
+    const theirs: MapView[] = [], mine: MapView[] = [];
+    other.ui.overlay({ name: "Chokes", visible: true, draw: (_ctx, v) => { theirs.push(v); } });
+    api.ui.overlay({ name: "Armies", visible: true, draw: (_ctx, v) => { mine.push(v); } });
+    let repaints = 0;
+    const fogs: boolean[] = [];
+    const replay = api.ui.mapView({ title: "Replay", mount: () => {}, onRepaint: () => { repaints++; }, onFog: (on) => fogs.push(on) });
+    const plain = api.ui.mapView({ title: "3D", mount: () => {} });
+    // A context that keeps what is drawn: the lines' ends and the words.
+    const calls: string[] = [];
+    const ctx = new Proxy({ canvas: { width: 640, height: 480 }, getTransform: () => ({ a: 1 }), measureText: () => ({ width: 30 }) } as Record<string, unknown>, {
+      get: (target, k: string) => k in target ? target[k] : (...args: unknown[]) => { calls.push(`${k}${k === "fillText" ? `:${String(args[0])}` : ""}`); },
+      set: () => true,
+    }) as unknown as CanvasRenderingContext2D;
+    const view: MapView = { zoom: 1, tilePx: 32, x: (px) => px, y: (py) => py, visible: { x0: 0, y0: 0, x1: 20, y1: 15 } };
+    // Not shown: nothing is drawn, nothing is asked again.
+    replay.paintOver(ctx, view);
+    store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), grid: true });
+    expect([calls.length, repaints, theirs.length]).toEqual([0, 0, 0]);
+    replay.show(true);
+    replay.paintOver(ctx, view);
+    // The grid's lines, the location with its name, and the other plugin's overlay — the view's plugin draws its own.
+    expect(calls.filter((c) => c === "moveTo").length).toBeGreaterThan(10);
+    expect(calls).toContain("fillText:Beacon");
+    expect(theirs).toEqual([view]);
+    expect(mine).toEqual([]);
+    // A toggle asks the view to draw again; the toggles it shows are on offer, the hidden map's are not.
+    repaints = 0;
+    store.set(toggleFlagAtom, "grid");
+    expect(store.get(viewFlagsAtom).grid).toBe(false);
+    expect(repaints).toBe(1);
+    let mode = store.get(chromeModeAtom);
+    expect(["grid", "locations", "locationNames", "fog", "hdGraphics", "units", "elevation"].map((k) => flagOffered(mode, k as never))).toEqual([true, true, true, true, true, false, false]);
+    store.set(toggleFlagAtom, "units");
+    expect(store.get(viewFlagsAtom).units).toBe(true);
+    expect(store.get(statusMessageAtom)).toMatch(/Replay view/);
+    // The fog is the view's: the toggle shows what it says, and a press asks it.
+    expect(flagShown(mode, store.get(viewFlagsAtom), "fog")).toBe(false);
+    store.set(toggleFlagAtom, "fog");
+    expect(fogs).toEqual([true]);
+    expect(store.get(viewFlagsAtom).fog).toBe(false);
+    replay.setFog(true);
+    mode = store.get(chromeModeAtom);
+    expect(flagShown(mode, store.get(viewFlagsAtom), "fog")).toBe(true);
+    store.set(toggleFlagAtom, "fog");
+    expect(fogs).toEqual([true, false]);
+    replay.setFog(null);
+    expect(flagOffered(store.get(chromeModeAtom), "fog")).toBe(false);
+    // The pointer over the view is the status bar's tile and position; off it, none.
+    expect(store.get(chromeModeAtom).viewPointer).toBe(false);
+    replay.setPointer({ x: 100.6, y: 70.2 });
+    expect([store.get(cursorPixelAtom), store.get(cursorTileAtom), store.get(chromeModeAtom).viewPointer]).toEqual([{ x: 100, y: 70 }, { x: 3, y: 2 }, true]);
+    replay.setPointer(null);
+    expect(store.get(chromeModeAtom).viewPointer).toBe(false);
+    // A view that shows none of it: the toggles and the other plugins' overlays are off while it is shown.
+    plain.show(true);
+    mode = store.get(chromeModeAtom);
+    expect(["grid", "locations", "fog", "hdGraphics"].map((k) => flagOffered(mode, k as never))).toEqual([false, false, false, true]);
+    expect(store.get(pluginOverlaysAtom).map((o) => overlayOffered(mode, o))).toEqual([false, true]);
+    plain.show(false);
+    mode = store.get(chromeModeAtom);
+    expect(mode.view).toBeNull();
+    expect(flagOffered(mode, "units")).toBe(true);
+    bag.dispose();
+    expect(store.get(chromeModeAtom).viewFog).toBeUndefined();
   });
 
   it("works out a view's zoom, its steps and the wheel's rule", () => {

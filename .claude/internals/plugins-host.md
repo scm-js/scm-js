@@ -518,7 +518,13 @@ viewer's own camera messages (no 66 ms `setCamera` lag) and only the plugin can 
 under its tooltip/marks. `onRepaint` is rAF-coalesced on viewFlags, grid size/look, locations
 revision, overlays (+revision), the switch and the map in front. `setPointer` writes
 `cursorPixelAtom`/`cursorTileAtom` only while shown; StatusBar shows "—" until the view says.
-Test: "carries the grid, locations, other plugins' overlays, the fog and the pointer…".
+Test: "carries the grid, locations, other plugins' overlays, the fog and the pointer…". MapViewport's
+own notices (no tileset/unit graphics, terrain loading) are not rendered while `covered`, and sit
+below the Map | view switch (`.below-switch`) while the map offers a view — they were drawn over
+the game and under the switch. Checked end to end 2026-10-16 in a built /editor/ with local
+Aftermath + plugin-scm-sim builds (scm-sim dev server, `/play/**` routed to its root): opening at
+133% = 480 rows, grid over the game, fog ⇄ Vision both ways, Tile/Px follow the pointer, Ctrl+F says
+why. A player's eyes at frame 0 show black until the game runs — the viewer's, not this change.
 
 Aftermath's playback keys (Space, the arrows, Home/End) rely on `useHotkeys` trying plugin
 hotkeys before the editor's own arrow scrolling and Delete/Escape handling — and on

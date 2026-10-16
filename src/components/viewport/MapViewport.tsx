@@ -52,10 +52,10 @@ import {
 } from "../../atoms/editorAtoms";
 import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom, remasteredEffectsAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
+import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
-import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
+import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapViewStateAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
 import { wheelStep } from "../../plugins/mapViews";
 import PluginPanels from "../panels/PluginPanels";
@@ -573,6 +573,10 @@ export default function MapViewport() {
    * nothing is painted — a request waits in `drawPending` for the map to be shown again.
    */
   const covered = useAtomValue(shownMapViewAtom) !== null;
+  /** The map offers other views: the switch between them sits in the area's top-left corner, over where the notices go. */
+  const viewState = useAtomValue(mapViewStateAtom);
+  const docId = useAtomValue(activeDocumentIdAtom) ?? -1;
+  const switchShown = (viewState.offered.get(docId)?.length ?? 0) > 0;
   const coveredRef = useRef(covered);
   coveredRef.current = covered;
   const scheduleDraw = useCallback(() => {
@@ -1259,13 +1263,14 @@ export default function MapViewport() {
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>
-      {scenario && tilesetLoading && (
+      {/* The map's own notices: not over another view shown in its place, and below the switch to it. */}
+      {scenario && tilesetLoading && !covered && (
         <div className="viewport-loading" role="status" aria-live="polite">
           <Loader2 size={16} className="spin" aria-hidden />
           <span>{t("Loading {name} terrain…", { name: translate(tileset.name) })}</span>
         </div>
       )}
-      <div className="viewport-notices">
+      {!covered && <div className={`viewport-notices${switchShown ? " below-switch" : ""}`}>
       {unitError && (layer === "units" || layer === "sprites") && scenario && (
         <div className="viewport-notice" role="status">
           <span><strong>{t("No unit graphics.")}</strong> {" "}{t("Units are drawn as player-coloured markers until the editor has the game's unit files.")}</span>
@@ -1278,7 +1283,7 @@ export default function MapViewport() {
           <button type="button" className="btn sm" onClick={() => open("gameData")}>{t("Set up game data…")}</button>
         </div>
       )}
-      </div>
+      </div>}
       <PluginPanels />
       <ViewportHud
         tilesetName={translate(tileset.name)}

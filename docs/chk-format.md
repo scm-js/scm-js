@@ -1,26 +1,34 @@
 # CHK format reference
 
 This reference gives the byte layout of every section of a StarCraft and Brood War
-scenario file (`scenario.chk`), with what each section is for, what the game does when a file repeats
-it, whether a map can do without it, and the values its fields take.
+scenario file (`scenario.chk`), with what each section is for, what the game does with it
+when it loads a map, and the values its fields take.
 
 This page describes the format, not any one editor. What scmJS does with a file as a whole
 (the archive around the scenario, protected maps, what Save keeps and what it can strip)
-is in [Opening and saving maps](file-formats.md). The facts in the table at the top of
-each page (size, repeats, required, read by) and the value and flag tables come from the
-code the editor reads and writes maps with. The byte layouts are checked by its tests
-against the same code, which re-encodes Blizzard's own maps byte for byte. The community's
-older reference is
-[wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk), which
-this one agrees with except where a page says otherwise.
+is in [Opening and saving maps](file-formats.md).
+
+The page holds two kinds of fact. The byte layouts and the value and flag tables come from
+the code the editor reads and writes maps with, and its tests hold them to Blizzard's own
+maps, which it re-encodes byte for byte. What the game does with a section (whether it
+reads it, whether it needs it, which lengths it accepts, what a second copy does) was found
+by studying how StarCraft: Brood War 1.16.1 loads a map, and confirmed by loading more than
+80 test maps through the game's own code, each built to settle one question. StarCraft: Remastered grew out of
+1.16.1 and reads maps much the same way, but it is a different program: where it is known
+to differ, the page says so. See [Which game](#which-game).
+
+The community's older reference is
+[wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk). Where
+the two disagree about what the game does, this page is the one that was checked against
+the game.
 
 The same layouts are also published as a [Kaitai Struct](https://kaitai.io) description,
 [chk.ksy](chk.ksy), generated from the same tables as this page. The Kaitai compiler turns
 it into a parser for C++, C#, Go, Java, JavaScript, Python and several other languages,
 and the [Kaitai Web IDE](https://ide.kaitai.io) opens a `scenario.chk` with it and shows
 every section field by field. It reads a file as it is laid out, one section after
-another, and leaves the rules for [repeated sections](#repeated-sections) and
-[odd lengths](#odd-lengths) to the program using it.
+another, and leaves the rules for [lengths](#lengths) and
+[repeated sections](#repeated-sections) to the program using it.
 
 ## The container
 
@@ -33,9 +41,9 @@ four-character name, a 32-bit length, and that many bytes of data:
 | 4 | i32 | The length of the data, in bytes |
 | 8 | the length | The data |
 
-The next section starts straight after the data. Sections may come in any order, and the
-game does not need them in the order StarEdit writes them (the order of this reference).
-A name the game does not know is skipped.
+The next section starts straight after the data. The order of the sections in the file
+does not matter: the game first lists every section, and then handles them in an order of
+its own. StarEdit's order, the order of this reference, is only a convention.
 
 All numbers in every section are little-endian. Unsigned unless a layout says `i32`.
 Positions are in pixels, and a tile is 32 pixels square. Player slots are numbered from 0
@@ -43,57 +51,187 @@ for Player 1 to 11 for Player 12. Text is never stored in a section itself: a se
 a *string number*, the position of the text in the [string table](#str), and 0 means no
 text.
 
-### Repeated sections
-
-The game reads the sections one after another into fixed places in memory, so a section
-that appears twice is not always replaced by its second copy. It is handled in one of
-three ways, depending on the section, and each section's page says which:
-
-- **The last copy replaces the others.** Most sections: with two `DIM` sections the map
-  has the size the second one gives. For the string table, a copy too short to hold its
-  string count (under 2 bytes) is passed over: it does not replace the copy before it.
-- **Each copy is written over the start of the same space.** The terrain sections, the fog
-  and the locations: the space has a fixed size and the copies go into it in file order,
-  so a later copy replaces only as many bytes as it carries. A second `MTXM` half the size
-  of the map rewrites the top half of the terrain and leaves the bottom as the first copy
-  had it.
-- **The copies are joined into one list.** Units, sprites, doodads, triggers and
-  briefings: the records of all the copies, in file order, so two `TRIG` sections are one
-  longer trigger list.
-
-![The three ways the game combines a repeated section](images/chk-repeats.svg)
-
 ### Odd lengths
 
-A length can be shorter or longer than the section needs, or run past the end of the
-file, or be negative, which makes the game read backwards from where it is. Map protectors
-use all of these, since each is something the game reads one way and a careless editor
-another. [Protected maps](#protected-maps) goes through them and how to read such a file,
-and [Opening and saving maps](file-formats.md#protected-and-damaged-maps) says what scmJS
-does with one.
+The game finds the sections by reading a header, jumping over the length it gives, and
+reading the next header there. It does not check the names, and it does not check that a
+jump goes forward.
+
+![How the game walks from one section to the next](images/chk-walk.svg)
+
+- **A name the game does not know** is passed over. It need not be text: any four bytes
+  will do.
+- **A negative length** jumps backwards. The game then reads bytes it has already read as
+  new headers, which lets a file hide a section inside another one's data. A length of −8
+  lands on the same header again and again, and the game hangs.
+- **A length that runs past the end of the file** ends the walk. The section is still
+  kept, cut short, and refuses the map if the game reads that section, because every read
+  checks that a section's bytes are really there. On a section the game never reads, such
+  as [`ISOM`](#isom), it does no harm.
+- **Bytes after the last section**: fewer than 8 are ignored. Eight or more are read as one
+  more header.
+
+### Lengths
+
+Every section the game reads has a length it insists on, and a section of any other length
+refuses the map. A fixed-size section one byte too long makes the map invalid, and a record
+section must hold whole records.
+
+<!-- generated: game sizes -->
+| The game wants | Sections | A different length |
+| --- | --- | --- |
+| Exactly this many bytes | `VER␠` 2, `VCOD` 1040, `OWNR` 12, `ERA␠` 2, `DIM␠` 4, `SIDE` 12, `PUNI` 5700, `UPGR` 1748, `PTEC` 912, `UPRP` 1280, `MRGN` 1280 (`VER` 59) or 5100, `SPRP` 4, `UNIS` 4048, `UPGS` 598, `TECS` 216, `COLR` 8, `PUPx` 2318, `PTEx` 1672, `UNIx` 4168, `UPGx` 794, `TECx` 396 | Refuses the map |
+| Whole records of this size | `UNIT` 36, `THG2` 10, `TRIG` 2400, `MBRF` 2400 | Refuses the map |
+| At most this many bytes | `MTXM` 131072, `FORC` 20 | Longer refuses the map; shorter is taken |
+| Any length | `MASK`, `STR␠` | Taken |
+<!-- /generated -->
+
+Three sections may be shorter than the map needs. A short [`MTXM`](#mtxm) leaves the
+rest of the map's tiles as the game found them, tile 0 in our tests. A short
+[`FORC`](#forc) is filled out with zeros. [`MASK`](#mask) takes any length, and the tiles it
+does not reach start unexplored. Each section's page gives its rule in the row *The game
+accepts*.
+
+### Repeated sections
+
+A section can appear more than once. The game hands every copy, in file order, to the part
+of its code that reads that section, and what happens then depends on the section. Each
+section's page says which in its *More than one copy* row; there are four main ways:
+
+- **The last copy replaces the others.** Most sections: with two `DIM` sections the map
+  has the size the second one gives. Every copy is still checked, so a decoy copy of the
+  wrong length refuses the map rather than being passed over.
+- **Each copy is written over the start of the same space.** The terrain and the fog: the
+  copies go into one space of a fixed size in file order, so a later copy replaces only as
+  many bytes as it carries. A second `MTXM` half the size of the map rewrites the top half
+  of the terrain and leaves the bottom as the first copy had it.
+- **The copies are joined into one list.** Units, sprites, triggers and briefings: the
+  records of all the copies, in file order, so two `TRIG` sections are one longer trigger
+  list.
+- **The settings tables are combined entry by entry.** A copy of [`UNIx`](#unix) changes
+  only the unit types it marks as not using the game's own values. A unit type it leaves
+  on the defaults keeps what an earlier copy gave it.
+
+![The four ways the game combines a repeated section](images/chk-repeats.svg)
+
+A few sections have rules of their own:
+
+- [`VCOD`](#vcod): every copy is checked, and one bad copy refuses the map.
+- [`STR`](#str): the last copy wins whatever its length, even 1 byte.
+- [`MRGN`](#mrgn): every copy must be the full size.
+- [`COLR`](#colr): each copy rearranges the colours the copy before left.
+- [`UNIT`](#unit): the start locations come from the last copy alone, and an add-on or
+  nydus canal is linked only to a unit in its own copy.
+
+## How the game loads a map
+
+StarCraft reads a map up to three times, and each time it reads only the sections it
+needs then: a short read for the map list, a longer one when a game starts, and one more
+for the briefing. Before each read it checks [`VER`](#ver), which
+must be 59, 63 or 205.
+
+![How StarCraft opens a map: the map list, the start of a game, the briefing](images/chk-load.svg)
+
+<!-- generated: game reads -->
+| Read | When | Sections, in the order the game handles them | Fails with |
+| --- | --- | --- | --- |
+| Map list | When the map list shows the map, when a game is created, and again when it starts | `VER␠`, `DIM␠`, `ERA␠`, `OWNR`, `SIDE`, `STR␠`, `SPRP`, `FORC`, `VCOD` | *Invalid Scenario* |
+| Melee start | When a game of any type but Use Map Settings starts | `VER` 59 and 63: `STR␠`, `MTXM`, `THG2`, `UNIT`<br>`VER` 205: `STR␠`, `MTXM`, `THG2`, `UNIT`, `COLR` | *Error loading scenario file.* |
+| Use Map Settings start | When a Use Map Settings game starts | `VER` 59 and 63: `STR␠`, `MTXM`, `THG2`, `MASK`, `UNIS`, `UPGS`, `TECS`, `PUNI`, `UPGR`, `PTEC`, `UNIx` (if present), `UPGx` (if present), `TECx` (if present), `PUPx` (if present), `PTEx` (if present), `UNIT`, `UPRP`, `MRGN`, `TRIG`<br>`VER` 205: `STR␠`, `MTXM`, `THG2`, `MASK`, `UNIx`, `UPGx`, `TECx`, `PUNI`, `PUPx`, `PTEx`, `UNIT`, `UPRP`, `MRGN`, `TRIG`, `COLR` | *Error loading scenario file.* |
+| Briefing | When the briefing room of a Use Map Settings game opens | `STR␠`, `MBRF` | Nothing: the game carries on with no briefing |
+<!-- /generated -->
+
+A read fails at the first section it needs that is missing, or at the first copy of a
+section that it does not accept. What is read before the failure stays read, but the map
+goes no further.
+
+The map list read runs every time the list shows the map, again when a game is made with
+it, and again at the start. So the nine sections it needs are needed by every map, and a
+map that lacks one is shown in the list but cannot be chosen.
+
+### Melee and Use Map Settings
+
+The game type decides what the second read takes. Melee, and every type except Use Map
+Settings (Free for All, One on One, Capture the Flag, Greed, Slaughter, Sudden Death, Top
+vs Bottom and the team types), reads four sections: the strings, the terrain, the sprites
+and the units, plus the colours in a Brood War file. It never reads the map's triggers,
+locations, fog, unit settings, upgrades, technologies or availability.
+
+Of the placed units, a melee game keeps only the start locations and the mineral fields,
+geysers and critters of Player 12. Of the unit sprites in [`THG2`](#thg2), it keeps only
+Player 12's. Every other unit is left out.
+
+Use Map Settings reads everything else that matters to play.
+
+![Which sections each read needs](images/chk-reads.svg)
+
+### What a map needs
+
+The smallest file each kind of game will load:
+
+| A map for | Needs |
+| --- | --- |
+| Melee and the other game types | `VER`, `DIM`, `ERA`, `OWNR`, `SIDE`, `STR`, `SPRP`, `FORC`, `VCOD`, `MTXM`, `THG2` and `UNIT`, and `COLR` in a Brood War file (`VER` 205) |
+| Use Map Settings | All of those, and `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and five settings tables: `UNIx`, `UPGx`, `TECx`, `PUPx` and `PTEx` in a Brood War file; `UNIS`, `UPGS`, `TECS`, `UPGR` and `PTEC` in an older one |
+
+`THG2` can be empty when the map has no sprites. Everything else is optional or for
+editors. `MBRF`, the briefing, is not needed: without it there is no briefing and nothing
+else changes. `TYPE` is looked for but never read.
+
+### When a map will not load
+
+What a player sees, and what causes it:
+
+| The player sees | When | Why |
+| --- | --- | --- |
+| *Invalid Scenario*, with "This scenario is unreadable because it is invalid or corrupted." | In the map list | The map list read failed, and the file's `VER` is 59 or lower, or could not be read at all. Any fault gives this message in a StarCraft 1.00 file. |
+| *Invalid Scenario*, with "This scenario is intended for use with a StarCraft Expansion Set." | In the map list | The map list read failed, and the file's `VER` is above 59. That covers a Brood War map in the original StarCraft, but **also every other fault**: a missing `DIM`, a `SIDE` of the wrong length, a failed [`VCOD`](#vcod) check, a `VER` the game does not know such as Remastered's 206. The game names the expansion set whatever the real fault. |
+| "This map can only be played with the 'Use Map Settings' game type." | Making a game | The tileset is Installation and the game type is not Use Map Settings. Installation maps can only be played as Use Map Settings. |
+| "Error loading scenario file." | Starting a game | A section this game type needs is missing, the wrong length, or runs past the end of the file. Melee needs `MTXM`, `THG2`, `UNIT` and, in a Brood War file, `COLR`; Use Map Settings also needs `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and the settings tables. The same map may still start as melee. |
+| "WARNING: Unit unplaceable! (name) (x,y)" | The first moments of a game | A placed unit had no room where it stands, and was removed. |
+| No briefing | The briefing room | `MBRF` is missing or not a whole number of records. |
+| The file name in place of the map's name | In the map list | The name in [`SPRP`](#sprp) is string 0, or an empty string. |
+
+### Which game
+
+Everything this page says about the game was checked in StarCraft: Brood War 1.16.1, the
+last version before Remastered. Remastered is known to differ in these ways:
+
+- It reads `VER` 206, [`STRx`](#strx) and [`CRGB`](#crgb). 1.16.1 refuses `VER` 206 and never
+  reads the other two.
+- It passes over a [`STR`](#str) copy shorter than 2 bytes, where 1.16.1 takes it.
+- It reads text as UTF-8 when the bytes are valid UTF-8 (see [`STR`](#str)).
+- In a string, a colour carries on to the next line.
+
+Where the page says a fact was found playing Remastered, it was. Other facts have not been
+checked in Remastered and may differ there; a map that 1.16.1 accepts is the safe target.
 
 ## Protected maps
 
-Starcraft itself reads maps different than how editors do, which allows one to 'protect' a map by modifying it in a special way. None of it
-is encryption. Each trick relies on one of the rules on this page that the game follows
-and a simple reader does not, which also means a reader that follows them reads the map
-as the game does. The archive around the scenario has tricks of its own, such as a
+StarCraft reads a map differently from how a simple editor does, and a map can be
+"protected" by building it so that the game reads it correctly while an editor
+misreads it or gives up. None of it is encryption. Each trick relies on a rule on this page
+that the game follows and a simple reader does not, so a reader that follows the rules reads
+the map as the game does. The archive around the scenario has tricks of its own, such as a
 missing file list or a renamed scenario; those are in
 [Opening and saving maps](file-formats.md#protected-and-damaged-maps).
+
+The table says what 1.16.1 does. Protectors write for Remastered, which is known to differ
+on short `STR` copies, so a trick that works there may refuse the map in 1.16.1.
 
 ### In the container
 
 | What the file does | What the game does | What a reader has to do |
 | --- | --- | --- |
-| Repeats a section | Combines the copies by the section's rule: the last replaces the others, each is written over the start of one fixed space, or the copies are joined into one list ([Repeated sections](#repeated-sections)) | Keep every copy in file order and combine them by the same rule. A reader that takes the first copy, or the last, sees a decoy wherever the rule is a different one. |
-| Gives a terrain, fog or location section a copy shorter than the section's size | Writes it over the start of the space, leaving the rest as it was: zeros, or what an earlier copy wrote | Start from a zeroed space of the full size and write every copy over it in turn. |
-| Gives a section more bytes than the game reads | Reads what it needs and ignores the rest | Read only the size the section's page gives. |
-| Ends a record section in part of a record | Reads the whole records | Drop the remainder. |
-| Declares a length that runs past the end of the file | Reads the bytes that are there | Take what is there rather than rejecting the file. |
-| Declares a negative length | Moves backwards by that much and reads on from there, so bytes are read a second time as different sections | Stop there, or follow the jump; nothing after it can be read as ordinary sections. |
-| Includes sections whose names mean nothing, or are not text at all | Skips them | Skip them rather than rejecting the file. |
-| Leaves bytes after the last section | Nothing | Keep them or drop them; they are not part of the map. |
-| Puts the sections in an unusual order | Reads them in any order | Do not depend on StarEdit's order. |
+| Repeats a section | Combines the copies by the section's rule ([Repeated sections](#repeated-sections)) | Keep every copy in file order and combine them by the same rule. A reader that takes the first copy, or the last, sees a decoy wherever the rule is a different one. |
+| Gives the terrain or the fog a copy shorter than the section's size | Writes it over the start of the space, leaving the rest as it was | Start from a space of the full size and write every copy over it in turn. |
+| Gives a section more bytes than it needs | Refuses the map, except for `MTXM` (up to 131,072 bytes), `MASK`, `STR`, and sections it never reads | Nothing: such a map does not load. |
+| Ends a record section in part of a record | Refuses the map | Nothing: such a map does not load. |
+| Declares a length that runs past the end of the file | Stops walking there. It refuses the map if it reads that section, and does not mind if it never does | Keep what is there, and stop. |
+| Declares a negative length | Moves backwards by that much and reads on from there, so bytes are read a second time as different sections | Follow the jump. A reader that stops there misses the sections found after it. |
+| Includes sections whose names mean nothing, or are not text at all | Passes over them | Pass over them rather than rejecting the file. |
+| Leaves bytes after the last section | Ignores fewer than 8; reads 8 or more as another header | Keep them or drop them; they are not part of the map. |
+| Puts the sections in an unusual order | Reads them in its own order whatever the file's | Do not depend on StarEdit's order. |
 
 ### In the sections
 
@@ -101,12 +239,12 @@ missing file list or a renamed scenario; those are in
 | --- | --- | --- |
 | [`ISOM`](#isom), [`TILE`](#tile), [`DD2`](#dd2) | Leaves them out, or fills them with zeros | The game never reads them, so the map plays the same. An editor loses the isometric brush, the ground under each doodad, and the doodads as objects it can select. `ISOM` can be rebuilt from the tiles (exactly where the terrain was painted isometrically), and a new `TILE` copied from `MTXM`, which gives back the ground but keeps the doodads' tiles in it. |
 | [`IVER`](#iver), [`IVE2`](#ive2), [`IOWN`](#iown), [`UPUS`](#upus), [`SWNM`](#swnm), [`WAV`](#wav) | Leaves them out | Only editors read these either. The switch names and the list of sounds are gone; the sounds themselves stay in the archive, and the trigger actions that play them still name them. |
-| [`STR`](#str) | Adds a 1-byte copy after the real string table | The game passes over a copy too short to hold its string count and reads the real table. A reader that takes the last copy finds no text, and a file saved with only that copy no longer loads: Remastered says the scenario is intended for an expansion set. |
-| [`MTXM`](#mtxm), [`MASK`](#mask), [`MRGN`](#mrgn) | Splits them into several copies, some of them short or full of junk | Only the combined result counts: each copy written over the one before, in file order. A copy of junk followed by a full copy of the real terrain draws the real terrain. |
-| [`UNIT`](#unit), [`THG2`](#thg2), [`TRIG`](#trig), [`MBRF`](#mbrf) | Splits the records across several copies | The copies are joined into one list, in file order. A reader that keeps only one copy loses units or triggers. |
+| [`STR`](#str) | Adds a 1-byte copy after the real string table | Remastered passes over a copy too short to hold its string count and reads the real table. 1.16.1 takes it, and the map loses its text. A reader that takes the last copy finds no text, and a file saved with only that copy no longer loads: Remastered says the scenario is intended for an expansion set. |
+| [`MTXM`](#mtxm), [`MASK`](#mask) | Splits them into several copies, some of them short or full of junk | Only the combined result counts: each copy written over the one before, in file order. A copy of junk followed by a full copy of the real terrain draws the real terrain. |
+| [`UNIT`](#unit), [`THG2`](#thg2), [`TRIG`](#trig), [`MBRF`](#mbrf) | Splits the records across several copies | The copies are joined into one list, in file order. A reader that keeps only one copy loses units or triggers. Start locations come from the last `UNIT` copy only. |
 | [`STR`](#str) | Makes strings overlap, share bytes, or start inside the offset table | A string is whatever lies between its offset and the next 0 byte. Read each one from its own offset and assume nothing about where it sits. An editor that writes the table back has to lay the strings out afresh. |
-| [`ERA`](#era) | Sets bits above the low three | Only the low three bits pick the tileset. |
-| Any fixed-size section | Makes it longer than its size | The game reads the size it needs; the rest can hold anything. |
+| [`ERA`](#era) | Sets bits above the low three | Brood War uses the low three bits. The original StarCraft refuses a value above 4. |
+| Any section the game never reads | Fills it with junk, makes it any length, or ends the file inside it | No effect on the game. |
 
 ### Reading a protected map
 
@@ -114,17 +252,19 @@ A reader that does these things reads a protected map as the game does:
 
 1. Read the headers one after another, and keep every section with its place in the file,
    repeats included.
-2. At a negative length, stop, unless you mean to follow the game back through the file.
-3. At a length past the end of the file, take the bytes that are there.
-4. Skip any name you do not know.
+2. At a negative length, follow the jump, as the game does. Guard against a jump that
+   returns to a header already read with the same bytes after it, which would loop for
+   ever.
+3. At a length past the end of the file, take the bytes that are there and stop.
+4. Pass over any name you do not know.
 5. Combine the copies of each section by its rule, the *More than one copy* row of its
-   page. For the sections whose copies are written over one space, start from zeros at
-   the size the page gives.
-6. In a record section, drop a partial record at the end.
-7. Read each string from its own offset.
+   page. For the terrain and the fog, start from the size the page gives.
+6. Read each string from its own offset.
 
-Writing the result back as one copy of each section, in StarEdit's order, gives an
-ordinary file that holds the same map.
+A map the game accepts has no partial records and no sections of the wrong length, so a
+reader that meets one is reading a map the game would refuse, or one the game never reads
+that part of. Writing the result back as one copy of each section, in StarEdit's order,
+gives an ordinary file that holds the same map.
 
 ## Sections
 
@@ -133,49 +273,49 @@ a map plays the same without it. *By revision* means the section is required in 
 [revisions](#revisions) of the file and not others.
 
 <!-- generated: index -->
-| Section | Holds | Read by | Required |
-| --- | --- | --- | --- |
-| [`TYPE`](#type) | Which game the file is for | the game |  |
-| [`VER␠`](#ver) | The file's revision, which decides which sections the game reads | the game | yes |
-| [`IVER`](#iver) | A version stamp older versions of StarEdit wrote | editors |  |
-| [`IVE2`](#ive2) | StarEdit's version stamp | editors |  |
-| [`VCOD`](#vcod) | A verification table the game checks the file against when it loads a map, and refuses the map when the check fails | the game | yes |
-| [`IOWN`](#iown) | StarEdit's own copy of `OWNR` | editors |  |
-| [`OWNR`](#ownr) | Who controls each of the 12 player slots: a human, a computer, a rescuable player, a neutral one, or nobody | the game | yes |
-| [`ERA␠`](#era) | The tileset | the game | yes |
-| [`DIM␠`](#dim) | The map's size in tiles | the game | yes |
-| [`SIDE`](#side) | Each player's race | the game | yes |
-| [`MTXM`](#mtxm) | The terrain the game draws: one 16-bit tile number per tile, including the tiles of placed doodads | the game | yes |
-| [`PUNI`](#puni) | Which unit types each player may build | the game | yes |
-| [`UPGR`](#upgr) | How far each player may research each upgrade, and the level they start at, for the 46 upgrades of the original game | the game | by revision |
-| [`PTEC`](#ptec) | Whether each player may research each ability, and whether they start with it, for the 24 abilities of the original game | the game | by revision |
-| [`UNIT`](#unit) | The units placed on the map, 36 bytes each | the game | yes |
-| [`ISOM`](#isom) | The isometric record, which an editor's isometric brush paints with: the lattice of terrain diamonds from which it works out the cliffs and edges between terrain types | editors |  |
-| [`TILE`](#tile) | The terrain with the doodads left out: what is under each doodad | editors |  |
-| [`DD2␠`](#dd2) | The doodads placed on the map, as objects an editor can select and remove | editors |  |
-| [`THG2`](#thg2) | Sprites placed on the map | the game | yes |
-| [`MASK`](#mask) | Fog of war at the start: which players begin with each tile unexplored | the game |  |
-| [`STR␠`](#str) | The string table | the game | yes |
-| [`STRx`](#strx) | The string table of StarCraft: Remastered: the same as `STR` with 32-bit numbers, so the table has no 64 KB limit | the game |  |
-| [`UPRP`](#uprp) | The 64 unit properties slots used by the Create Unit with Properties action | the game | yes |
-| [`UPUS`](#upus) | Which of the 64 `UPRP` slots StarEdit considers in use | editors |  |
-| [`MRGN`](#mrgn) | The locations | the game | yes |
-| [`TRIG`](#trig) | The triggers, 2400 bytes each, in the order they run | the game | yes |
-| [`MBRF`](#mbrf) | The mission briefings, in the same 2400-byte record as a trigger, with their own set of actions | the game | yes |
-| [`SPRP`](#sprp) | The scenario's name and description, as string numbers | the game | yes |
-| [`FORC`](#forc) | The four forces: which force each of Players 1 to 8 is in, each force's name, and its settings | the game | yes |
-| [`WAV␠`](#wav) | StarEdit's list of the sounds in the map: the name of each sound file in the archive, as a string number | editors |  |
-| [`UNIS`](#unis) | Unit settings for the original game | the game | by revision |
-| [`UPGS`](#upgs) | Upgrade costs and research times for the 46 upgrades of the original game | the game | by revision |
-| [`TECS`](#tecs) | Ability costs, research times and energy costs for the 24 abilities of the original game | the game | by revision |
-| [`SWNM`](#swnm) | The names of the 256 switches, as string numbers | editors |  |
-| [`COLR`](#colr) | The colour of each of Players 1 to 8 | the game |  |
-| [`PUPx`](#pupx) | `UPGR` for Brood War: the same tables, for 61 upgrades | the game | by revision |
-| [`PTEx`](#ptex) | `PTEC` for Brood War: the same tables, for 44 abilities | the game | by revision |
-| [`UNIx`](#unix) | `UNIS` for Brood War: the same tables, with 130 weapons | the game | by revision |
-| [`UPGx`](#upgx) | `UPGS` for Brood War: the same tables for 61 upgrades, with one unused byte after the first | the game | by revision |
-| [`TECx`](#tecx) | `TECS` for Brood War: the same tables, for 44 abilities | the game | by revision |
-| [`CRGB`](#crgb) | StarCraft: Remastered's player colours | the game |  |
+| Section | Holds | Map list | Melee start | Use Map Settings start |
+| --- | --- | --- | --- | --- |
+| [`TYPE`](#type) | Which game the file is for |  |  |  |
+| [`VER␠`](#ver) | The file's revision, which decides which sections the game reads | needed | needed | needed |
+| [`IVER`](#iver) | A version stamp older versions of StarEdit wrote |  |  |  |
+| [`IVE2`](#ive2) | StarEdit's version stamp |  |  |  |
+| [`VCOD`](#vcod) | A verification table the game checks the file against when it loads a map, and refuses the map when the check fails | needed |  |  |
+| [`IOWN`](#iown) | StarEdit's own copy of `OWNR` |  |  |  |
+| [`OWNR`](#ownr) | Who controls each of the 12 player slots: a human, a computer, a rescuable player, a neutral one, or nobody | needed |  |  |
+| [`ERA␠`](#era) | The tileset | needed |  |  |
+| [`DIM␠`](#dim) | The map's size in tiles | needed |  |  |
+| [`SIDE`](#side) | Each player's race | needed |  |  |
+| [`MTXM`](#mtxm) | The terrain the game draws: one 16-bit tile number per tile, including the tiles of placed doodads |  | needed | needed |
+| [`PUNI`](#puni) | Which unit types each player may build |  |  | needed |
+| [`UPGR`](#upgr) | How far each player may research each upgrade, and the level they start at, for the 46 upgrades of the original game |  |  | needed (59, 63) |
+| [`PTEC`](#ptec) | Whether each player may research each ability, and whether they start with it, for the 24 abilities of the original game |  |  | needed (59, 63) |
+| [`UNIT`](#unit) | The units placed on the map, 36 bytes each |  | needed | needed |
+| [`ISOM`](#isom) | The isometric record, which an editor's isometric brush paints with: the lattice of terrain diamonds from which it works out the cliffs and edges between terrain types |  |  |  |
+| [`TILE`](#tile) | The terrain with the doodads left out: what is under each doodad |  |  |  |
+| [`DD2␠`](#dd2) | The doodads placed on the map, as objects an editor can select and remove |  |  |  |
+| [`THG2`](#thg2) | Sprites placed on the map |  | needed | needed |
+| [`MASK`](#mask) | Fog of war at the start: which players begin with each tile unexplored |  |  | needed |
+| [`STR␠`](#str) | The string table | needed | needed | needed |
+| [`STRx`](#strx) | The string table of StarCraft: Remastered: the same as `STR` with 32-bit numbers, so the table has no 64 KB limit |  |  |  |
+| [`UPRP`](#uprp) | The 64 unit properties slots used by the Create Unit with Properties action |  |  | needed |
+| [`UPUS`](#upus) | Which of the 64 `UPRP` slots StarEdit considers in use |  |  |  |
+| [`MRGN`](#mrgn) | The locations |  |  | needed |
+| [`TRIG`](#trig) | The triggers, 2400 bytes each, in the order they run |  |  | needed |
+| [`MBRF`](#mbrf) | The mission briefings, in the same 2400-byte record as a trigger, with their own set of actions |  |  | briefing only |
+| [`SPRP`](#sprp) | The scenario's name and description, as string numbers | needed |  |  |
+| [`FORC`](#forc) | The four forces: which force each of Players 1 to 8 is in, each force's name, and its settings | needed |  |  |
+| [`WAV␠`](#wav) | StarEdit's list of the sounds in the map: the name of each sound file in the archive, as a string number |  |  |  |
+| [`UNIS`](#unis) | Unit settings for the original game |  |  | needed (59, 63) |
+| [`UPGS`](#upgs) | Upgrade costs and research times for the 46 upgrades of the original game |  |  | needed (59, 63) |
+| [`TECS`](#tecs) | Ability costs, research times and energy costs for the 24 abilities of the original game |  |  | needed (59, 63) |
+| [`SWNM`](#swnm) | The names of the 256 switches, as string numbers |  |  |  |
+| [`COLR`](#colr) | The colour of each of Players 1 to 8 |  | needed (205) | needed (205) |
+| [`PUPx`](#pupx) | `UPGR` for Brood War: the same tables, for 61 upgrades |  |  | needed (205), read (59, 63) |
+| [`PTEx`](#ptex) | `PTEC` for Brood War: the same tables, for 44 abilities |  |  | needed (205), read (59, 63) |
+| [`UNIx`](#unix) | `UNIS` for Brood War: the same tables, with 130 weapons |  |  | needed (205), read (59, 63) |
+| [`UPGx`](#upgx) | `UPGS` for Brood War: the same tables for 61 upgrades, with one unused byte after the first |  |  | needed (205), read (59, 63) |
+| [`TECx`](#tecx) | `TECS` for Brood War: the same tables, for 44 abilities |  |  | needed (205), read (59, 63) |
+| [`CRGB`](#crgb) | StarCraft: Remastered's player colours |  |  |  |
 <!-- /generated -->
 
 ## Revisions
@@ -192,21 +332,33 @@ reads. [`TYPE`](#type) goes with it.
 | Remastered 1.21+ | 206 | `RAWB` | `.scx` |
 <!-- /generated -->
 
+1.16.1 knows the first three values and refuses any other: Remastered's 206 always, and
+205 too when Brood War is not on.
+
 Brood War added units, upgrades and technologies, so it has wider versions of the five
 settings tables, under new names: [`UNIS`](#unis) and [`UNIx`](#unix),
 [`UPGS`](#upgs) and [`UPGx`](#upgx), [`UPGR`](#upgr) and [`PUPx`](#pupx),
-[`TECS`](#tecs) and [`TECx`](#tecx), [`PTEC`](#ptec) and [`PTEx`](#ptex). A StarCraft 1.00
-file needs the original five, a Brood War file the `x` five, and a hybrid file both, so the
-original game reads one set and Brood War the other. Blizzard's own Brood War maps carry
-only the `x` tables.
+[`TECS`](#tecs) and [`TECx`](#tecx), [`PTEC`](#ptec) and [`PTEx`](#ptex). Only Use Map
+Settings reads any of them, and the revision decides which:
+
+- **`VER` 205**, a Brood War file: the `x` five, and the map needs them. The original five
+  are never read. Blizzard's own Brood War maps carry only the `x` tables.
+- **`VER` 59 and 63**: the original five, which the map needs, and then the `x` five on top
+  when the file has them. Each `x` table changes only what it sets, as a
+  [second copy](#repeated-sections) of the table would. This happens whether or not Brood
+  War is on.
+
+So a hybrid file (63) does not need the `x` tables, though StarEdit writes them, and the
+one thing that sets 63 apart from 59 in the game is the number of locations: 64 in a
+`VER` 59 file, 255 from 63 up ([`MRGN`](#mrgn)).
 
 A file can hold both of a pair whatever its `VER` says, and the two need not agree: some
 editors write the `x` tables into an original StarCraft map and later change only the
-original ones, so the `x` tables keep what they held before. Which set counts is decided
-by `VER` alone: below 63 the original five, from 63 up the `x` five. The editor reads the
-settings from that set. When it saves a change it writes both, the other one in step,
-and keeps the columns only the `x` tables have (the Brood War upgrades, technologies and
-weapons) from the file.
+original ones, so the `x` tables keep what they held before. In a `VER` 59 or 63 file the
+game applies those stale `x` values over the new ones. The editor reads the settings from
+one set, chosen by `VER`: below 63 the original five, from 63 up the `x` five. When it
+saves a change it writes both, the other one in step, and keeps the columns only the `x`
+tables have (the Brood War upgrades, technologies and weapons) from the file.
 
 
 ## How the sections fit together
@@ -235,15 +387,18 @@ bytes. [`VER`](#ver) decides which of the settings tables the game reads; see
 
 ## TYPE
 
-Which game the file is for. It goes with [`VER`](#ver): see [Revisions](#revisions).
+Which game the file is for. It goes with [`VER`](#ver): see [Revisions](#revisions). The
+game looks for it before every read but never reads what it holds, and Blizzard's
+StarCraft 1.00 maps have none.
 
 <!-- generated: section TYPE -->
 | Name | `TYPE` (54 59 50 45) |
 | --- | --- |
 | Size | 4 bytes. |
-| Read by | The game. |
+| Read by | No one. The game looks for it before every read but never reads what it holds. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
+| The game accepts | Any length. |
+| More than one copy | The game never reads what it holds, so copies make no difference. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -256,15 +411,17 @@ Layout:
 ## VER
 
 The file's revision, which decides which sections the game reads. The values are in
-[Revisions](#revisions).
+[Revisions](#revisions). The game checks it before every read of the map. With two copies
+the last one's value counts, but both must be 2 bytes long.
 
 <!-- generated: section VER -->
 | Name | `VER␠` (56 45 52 20) |
 | --- | --- |
 | Size | 2 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, first, before every read of the map: the revision decides which sections it reads next. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 2 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -283,9 +440,8 @@ of the maps it writes now, and so does a new map made in the editor.
 | Name | `IVER` (49 56 45 52) |
 | --- | --- |
 | Size | 2 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -303,9 +459,8 @@ StarEdit's version stamp. The game does not read it.
 | Name | `IVE2` (49 56 45 32) |
 | --- | --- |
 | Size | 2 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -318,16 +473,18 @@ Layout:
 ## VCOD
 
 A verification table the game checks the file against when it loads a map, and refuses the
-map when the check fails. Every map StarEdit writes carries the same 1040 bytes, and a new
-map made in the editor gets them too.
+map when the check fails. What it checks is narrow: the players' types and races, and
+nothing else. Every map StarEdit writes carries the same 1040 bytes, the table built into
+the game, and a new map made in the editor gets them too.
 
 <!-- generated: section VCOD -->
 | Name | `VCOD` (56 43 4F 44) |
 | --- | --- |
 | Size | 1040 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 1040 bytes. Any other length refuses the map. |
+| More than one copy | Every copy is checked, and one copy that fails refuses the map. A good copy after a bad one does not help. |
 | In scmJS | Kept as it is and written back unchanged. |
 
 Layout:
@@ -338,7 +495,47 @@ Layout:
 | 1024 | u8 × 16 | Operations |
 <!-- /generated -->
 
-The table StarEdit writes, for a program that wants to check whether a map carries it:
+![What VCOD checks](images/chk-vcod.svg)
+
+### The check
+
+When the game reads a map for the map list, it builds 432 bytes from the player slots:
+twelve records of 36 bytes, one per slot. Each record is zero except byte 8, the player's
+type from [`OWNR`](#ownr), and byte 9, the race from [`SIDE`](#side), for all twelve
+players as the file has them. It hashes those bytes twice, once with the map's `VCOD` and
+once with the table built into the game, and refuses the map as *Invalid Scenario* when the
+two answers differ.
+
+Nothing else in the map goes in: not the terrain, the units, the strings or the triggers.
+`VCOD` is not a checksum of the map, and a change to anything but `OWNR` and `SIDE` never
+upsets it.
+
+The hash, for a table of 256 seeds followed by its 16 operation bytes:
+
+```text
+hash = 0
+for each 4 bytes of the 432, read as a little-endian 32-bit number w:
+    b0, b1, b2, b3 = the four bytes of w, low byte first
+    for each operation byte, in order:
+        0:        hash = hash XOR w
+        1:        hash = hash + w        (all arithmetic wraps at 32 bits)
+        2:        hash = hash - w
+        3, 4, 5:  hash = hash XOR seed[b0] XOR seed[b1] XOR seed[b2] XOR seed[b3]
+        6:        rotate hash left by b0 mod 32, then by b1, b2 and b3 the same way
+        7:        rotate hash right the same way
+        8 to 255: nothing
+```
+
+The map passes when the two hashes are equal. So the table the game carries passes
+whatever `OWNR` and `SIDE` hold, and a different table passes when it happens to give the
+same answer for this map's players: a change to a seed that none of the 432 bytes picks
+makes no difference, and operations 3, 4 and 5 can stand in for each other.
+
+The game checks every copy of `VCOD`, and refuses the map if any copy fails or is not
+exactly 1040 bytes long.
+
+The table StarEdit writes, which is the one built into the game, for a program that wants
+to check whether a map carries it:
 
 <!-- generated: vcod -->
 | Fact | Value |
@@ -348,8 +545,8 @@ The table StarEdit writes, for a program that wants to check whether a map carri
 | The 16 operation bytes | `01 04 05 06 02 01 05 02 00 03 07 07 05 04 06 03` |
 <!-- /generated -->
 
-This page does not describe how the game computes the check. A map with a different table
-is one the game may refuse, so an editor making a new map should copy StarEdit's.
+An editor making a new map should copy this table: it is the only one that passes for
+every combination of players.
 
 ## IOWN
 
@@ -360,9 +557,8 @@ editor writes both the same, and Check Map warns when a file's two disagree.
 | Name | `IOWN` (49 4F 57 4E) |
 | --- | --- |
 | Size | 12 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -377,13 +573,21 @@ Layout:
 Who controls each of the 12 player slots: a human, a computer, a rescuable player, a
 neutral one, or nobody. Players 9 to 12 are normally Neutral or Inactive.
 
+The game does not check the values. It reads all twelve for the [`VCOD`](#vcod) check, and
+then clears the type, race and force of Players 9 to 12 in the lobby, so for those four
+`OWNR` matters only to that check. When a game starts, the units the map places for
+Players 1 to 8 are made only for a slot that is in the game: a human or computer who
+joined, or a rescuable or neutral player. An open slot nobody took, or an Inactive one,
+loses its units (see [`UNIT`](#unit)).
+
 <!-- generated: section OWNR -->
 | Name | `OWNR` (4F 57 4E 52) |
 | --- | --- |
 | Size | 12 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 12 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -408,15 +612,20 @@ Layout:
 
 ## ERA
 
-The tileset. Only the low three bits count; the rest are ignored.
+The tileset. Brood War uses the low three bits and ignores the rest, so 0xFFFC is Jungle.
+The original StarCraft refuses any value above 4, the last of its five tilesets.
+
+An Installation map can only be played as Use Map Settings: the game will not make a game
+of any other type with it, and says so.
 
 <!-- generated: section ERA -->
 | Name | `ERA␠` (45 52 41 20) |
 | --- | --- |
 | Size | 2 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 2 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -441,15 +650,17 @@ Layout:
 
 The map's size in tiles. The sizes of [`MTXM`](#mtxm), [`TILE`](#tile), [`MASK`](#mask)
 and [`ISOM`](#isom) follow from it. StarEdit offers sides of 64, 96, 128, 192 and 256
-tiles.
+tiles. The game checks that the section is 4 bytes long, not the values in it; `MTXM`
+holds at most 65,536 tiles, a 256 × 256 map.
 
 <!-- generated: section DIM -->
 | Name | `DIM␠` (44 49 4D 20) |
 | --- | --- |
 | Size | 4 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 4 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -465,17 +676,22 @@ Layout:
 Each player's race.
 
 In a Use Map Settings game, a player whose race is User Selectable gets the melee starting
-units of the race they pick, and the units the map places for them are left out. A map that
-places units for a player should give that player a race. (This was found playing
-StarCraft: Remastered.)
+units of the race they pick, and the units the map places for them are left out, all but
+the neutral kinds: mineral fields, geysers, critters and power-ups. A map that places units
+for a player should give that player a race. (This was found playing StarCraft:
+Remastered, and 1.16.1 does the same.)
+
+The game does not check the values. In the lobby it turns User Selectable into Random.
+`SIDE` is one of the two sections the [`VCOD`](#vcod) check covers.
 
 <!-- generated: section SIDE -->
 | Name | `SIDE` (53 49 44 45) |
 | --- | --- |
 | Size | 12 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 12 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -506,13 +722,19 @@ group, 0 to 15.
 | Name | `MTXM` (4D 54 58 4D) |
 | --- | --- |
 | Size | 2 bytes per tile: width × height × 2. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| Read by | The game, at the start of every game, whatever its type. |
+| Required | Yes. Without it the map is listed, but every game on it stops at the start with *Error loading scenario file.* |
+| The game accepts | Up to 131072 bytes, the most a 256 × 256 map needs. A longer section refuses the map; a shorter one is taken. |
+| More than one copy | Each copy is written over the start of the same space, in file order, so a later copy replaces only as many tiles as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
 Tile (x, y), counting from 0 at the top left, is at byte (y × width + x) × 2.
+
+The game copies the section into a space the size of a 256 × 256 map, which it does not
+clear first, and uses the first width × height tiles of it. A section shorter than the
+map leaves the rest of the tiles as they were: tile 0 in our tests, which is nothing to
+rely on. Melee and Use Map Settings both read it.
 
 ### What a tile number points at
 
@@ -544,15 +766,16 @@ whose first group is g is group g + r, and column c is variation c.
 
 Which unit types each player may build. For every player and unit type there is an answer
 of its own and a flag saying whether to use the default answer instead, and one default
-answer per unit type.
+answer per unit type. Only Use Map Settings reads it; melee lets everyone build everything.
 
 <!-- generated: section PUNI -->
 | Name | `PUNI` (50 55 4E 49) |
 | --- | --- |
 | Size | 5700 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| The game accepts | Exactly 5700 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -567,7 +790,7 @@ Layout:
 ### Example
 
 The answer for a player and a unit type is the player's own byte, unless the player's
-*uses the default* byte is 1, in which case it is the unit type's default. The byte for
+*uses the default* byte is anything but 0, in which case it is the unit type's default. The byte for
 Player p and unit type u is at p × 228 + u in each of the two per-player tables. The same
 three tables, in the same order, make up [`UPGR`](#upgr), [`PTEC`](#ptec),
 [`PUPx`](#pupx) and [`PTEx`](#ptex).
@@ -591,16 +814,18 @@ Player 1's own byte also says no, but it is never read, because Player 1 takes t
 
 How far each player may research each upgrade, and the level they start at, for the 46
 upgrades of the original game. Laid out as [`PUNI`](#puni) is: each player's own values, the
-defaults, and whether each player uses the defaults. Brood War reads [`PUPx`](#pupx)
-instead.
+defaults, and whether each player uses the defaults. A Brood War file has
+[`PUPx`](#pupx) in its place; in an older file the game reads this table and then `PUPx`
+on top, if the file has one. Only Use Map Settings reads either.
 
 <!-- generated: section UPGR -->
 | Name | `UPGR` (55 50 47 52) |
 | --- | --- |
 | Size | 1748 bytes. |
-| Read by | The game. |
-| Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read. |
+| Required | For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63). |
+| The game accepts | Exactly 1748 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -617,15 +842,18 @@ Layout:
 ## PTEC
 
 Whether each player may research each ability, and whether they start with it, for the
-24 abilities of the original game. Brood War reads [`PTEx`](#ptex) instead.
+24 abilities of the original game. A Brood War file has [`PTEx`](#ptex) in its place; in
+an older file the game reads this table and then `PTEx` on top, if the file has one. Only
+Use Map Settings reads either.
 
 <!-- generated: section PTEC -->
 | Name | `PTEC` (50 54 45 43) |
 | --- | --- |
 | Size | 912 bytes. |
-| Read by | The game. |
-| Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read. |
+| Required | For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63). |
+| The game accepts | Exactly 912 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -649,7 +877,33 @@ when its bit is set in the record's fields-set or special-states word, so a reco
 the hit points alone.
 
 The units of a human player slot nobody takes are removed when the game starts; Neutral
-units stay. (Found playing StarCraft: Remastered.)
+units stay. (Found playing StarCraft: Remastered, and 1.16.1 does the same.)
+
+When a game starts, each record goes through these checks, in this order, before a unit
+is made:
+
+![What the game does with a placed unit](images/chk-unit-path.svg)
+
+Some of what the game does with the fields is not what the layout suggests:
+
+- The relations word at offset 10 is never read. An add-on is attached to its building,
+  and a nydus canal paired with its exit, by the linked serial number alone, and only
+  with a unit in the same `UNIT` section.
+- The owner bit of the fields-set word, and bit 0x40, are never read: the owner byte
+  always counts.
+- Hit points, shields and energy are per cent of the unit's maximum, and capped at it. Hit
+  points of 0% leave the unit with 1/256 of a hit point, the least the game can store.
+- Resources are kept in 16 bits, so 70,000 minerals become 4,464.
+- The hangar count is used only for Carriers, Reavers and their heroes, and only its low
+  byte.
+- A state is applied only when its bit is set in both the special-states-set word and the
+  states word. A Ghost placed cloaked starts cloaked only if its owner has Personal
+  Cloaking.
+- The screen starts at the local player's start location.
+- Start locations come from the last `UNIT` section alone. A map that splits its units
+  over two sections and puts the start locations in the first loses all of them: in a
+  melee game the starting buildings and workers have nowhere to go, and every player is
+  defeated at once.
 
 ![The unit record, byte by byte](images/chk-unit-record.svg)
 
@@ -657,9 +911,10 @@ units stay. (Found playing StarCraft: Remastered.)
 | Name | `UNIT` (55 4E 49 54) |
 | --- | --- |
 | Size | 36 bytes per unit. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
+| Read by | The game, at the start of every game, whatever its type. |
+| Required | Yes. Without it the map is listed, but every game on it stops at the start with *Error loading scenario file.* |
+| The game accepts | Whole units only. A length that is not a multiple of 36 refuses the map. |
+| More than one copy | The copies are joined into one list, with two exceptions: start locations come from the last copy alone, and an add-on or nydus canal is linked only to a unit in the same copy. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each unit:
@@ -755,9 +1010,8 @@ in those terms, and each claim about real files was checked against Blizzard's o
 | Name | `ISOM` (49 53 4F 4D) |
 | --- | --- |
 | Size | (width ÷ 2 + 1) × (height + 1) × 8 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each rect:
@@ -1070,9 +1324,8 @@ to put the ground back when a doodad is removed.
 | Name | `TILE` (54 49 4C 45) |
 | --- | --- |
 | Size | 2 bytes per tile: width × height × 2. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1086,9 +1339,8 @@ read it: the game sees a doodad as its tiles in [`MTXM`](#mtxm) and its sprite i
 | Name | `DD2␠` (44 44 32 20) |
 | --- | --- |
 | Size | 8 bytes per doodad. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each doodad:
@@ -1132,14 +1384,21 @@ a tree top, a glow, a doodad's overlay. Without that flag the record is a unit s
 the game creates a unit of that type when the map loads; that is how StarEdit places the
 Installation's doors and traps. Flag 0x8000 starts such a unit disabled.
 
+Pure sprites are drawn in every game type. A unit sprite is made only in a Use Map
+Settings game or when Player 12 owns it, and the game always gives the four Installation
+doors (unit types 205 to 208) to Player 12, whatever the record says. Unlike a placed unit,
+a unit sprite is made even for a player who is not in the game. The game reads no flag but
+0x1000 and 0x8000: 0x4000, which editors call flipped, has no effect in play.
+
 ![The sprite record, byte by byte](images/chk-sprite-record.svg)
 
 <!-- generated: section THG2 -->
 | Name | `THG2` (54 48 47 32) |
 | --- | --- |
 | Size | 10 bytes per sprite. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
+| Read by | The game, at the start of every game, whatever its type. |
+| Required | Yes. Without it the map is listed, but every game on it stops at the start with *Error loading scenario file.* |
+| The game accepts | Whole sprites only. A length that is not a multiple of 10 refuses the map. |
 | More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
@@ -1192,21 +1451,25 @@ closed.
 ## MASK
 
 Fog of war at the start: which players begin with each tile unexplored. A new map made in
-StarEdit or the editor starts every tile unexplored for every player. A map with no `MASK`
-plays fully fogged.
+StarEdit or the editor starts every tile unexplored for every player. Only Use Map Settings
+reads it, and it needs it: a Use Map Settings game of a map without `MASK` stops with
+*Error loading scenario file.* Melee never reads it, and starts every tile unexplored.
 
 <!-- generated: section MASK -->
 | Name | `MASK` (4D 41 53 4B) |
 | --- | --- |
 | Size | 1 byte per tile: width × height. |
-| Read by | The game. |
-| Required | No. |
-| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| The game accepts | Any length. |
+| More than one copy | Each copy is written over the start of the same space, in file order. The space starts with every tile unexplored, so tiles no copy reaches stay unexplored. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
 Only Players 1 to 8 have a bit. A byte of 0x05, bits 0 and 2, means Players 1 and 3 start
-with that tile unexplored and the other six start with it explored. Every Blizzard melee
+with that tile unexplored and the other six start with it explored. The game starts every
+tile unexplored and writes the section over that, one byte per tile, so tiles past the end
+of a short `MASK` stay unexplored. Every Blizzard melee
 map checked has 0xFF in every byte; some of the campaign and scenario maps, where the
 maker set the fog, do not.
 
@@ -1221,6 +1484,11 @@ start of the section, and then the text. Each string ends with a 0 byte. String 
 count from 1: the first offset is string 1. Several strings may share the same offset.
 Because the offsets are 16-bit, the whole table must fit in 64 KB.
 
+Every read of the map reads `STR` again, and a map without one is shown in the map list as
+*Invalid Scenario*, not under its file name. The map list shows the first 31 bytes of the
+scenario's name and the first 255 of its description, and a game shows the first 29 bytes
+of a force's name.
+
 The table does not say how its bytes spell characters. StarEdit wrote the code page of the
 Windows it ran on: EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
 Chinese, Windows-1251 for Russian, Windows-1252 for the rest. 1.16.1 reads a file in the
@@ -1232,9 +1500,10 @@ is in [Opening and saving maps](file-formats.md#what-the-editor-does-with-it).
 | Name | `STR␠` (53 54 52 20) |
 | --- | --- |
 | Size | Whatever the text needs. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. A copy shorter than 2 bytes does not count and does not replace an earlier one. |
+| Read by | The game, every time it reads the map: for the map list, at the start of every game, and for the briefing. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Any length. |
+| More than one copy | The last copy replaces the others, whatever its length: a copy of 1 byte replaces the real table, and the map loses its text. Remastered passes over a copy shorter than 2 bytes. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1248,8 +1517,10 @@ Layout:
 
 A string runs from its offset to the next 0 byte, and nothing else marks where it ends.
 So two strings can share their bytes, one string can be the end of another, and an offset
-can point anywhere in the section, the offset table included. An offset at or past the end
-of the section leads to no text, and an editor has to read it as no string.
+can point anywhere in the section, the offset table included. The game checks neither the
+count nor the offsets against the section's length: an offset at or past the end reads
+whatever lies after the table in memory, so an editor has to read it as no string. A
+string number past the count is an empty string.
 
 StarEdit writes a table of 1024 strings, and points every unused one at a single 0 byte
 straight after the offsets: an empty string. Every Blizzard map checked is laid out this
@@ -1326,9 +1597,8 @@ does not need `STR`.
 | Name | `STRx` (53 54 52 78) |
 | --- | --- |
 | Size | Whatever the text needs. |
-| Read by | The game. |
+| Read by | StarCraft: Remastered only. 1.16.1 does not know it. |
 | Required | In place of `STR ` on a Remastered map that uses it. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1351,9 +1621,10 @@ applied when its bit is set, so a slot can set the hit points alone.
 | Name | `UPRP` (55 50 52 50) |
 | --- | --- |
 | Size | 1280 bytes: 64 slots of 20. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| The game accepts | Exactly 1280 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each slot:
@@ -1401,9 +1672,8 @@ Which of the 64 [`UPRP`](#uprp) slots StarEdit considers in use. The game does n
 | Name | `UPUS` (55 50 55 53) |
 | --- | --- |
 | Size | 64 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1415,8 +1685,10 @@ Layout:
 
 ## MRGN
 
-The locations. A StarCraft 1.00 map has 64 slots and a Brood War map 255. Slot 64 is
-*Anywhere*, the whole map. An unused slot has no name and no size.
+The locations. A StarCraft 1.00 file (`VER` 59) has exactly 64 slots, and any later file
+exactly 255: a Use Map Settings game of a map whose `MRGN` is any other size stops with
+*Error loading scenario file.* Slot 64 is *Anywhere*, the whole map. An unused slot has no
+name and no size. Melee never reads the locations.
 
 The elevation word works the other way round from how StarEdit shows it: a set bit
 **leaves out** that elevation, so 0 means the location covers every elevation. Conditions
@@ -1429,9 +1701,10 @@ covers.
 | Name | `MRGN` (4D 52 47 4E) |
 | --- | --- |
 | Size | 20 bytes per location. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | Each copy is written over the start of the same fixed-size space, in file order, so a later copy replaces only as many bytes as it carries. |
+| Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| The game accepts | Exactly 1280 bytes (64 locations) in a `VER` 59 file, and 5100 (255 locations) in `VER` 63 and 205. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must be the full size, so a short copy refuses the map rather than overwriting part of the first. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Each location:
@@ -1480,14 +1753,24 @@ The triggers, 2400 bytes each, in the order they run. The record is laid out in 
 [trigger reference](triggers.md#the-trigger-record), which also has a page for every
 condition and action.
 
+Only Use Map Settings reads the map's triggers. Melee and the other game types run
+triggers of their own, built into the game, and never read this section.
+
+When the game loads the triggers, it gives each player in the game a copy of every
+trigger that runs for them: one set for that player alone, for All Players, or for a force
+the player is in. Triggers set to run for Players 9 to 12, Current Player, Foes, Allies,
+Neutral Players or Non-Allied Victory Players are dropped then, and never run. A player
+not in the game gets no triggers.
+
 ![The trigger record, byte by byte](images/chk-trigger-record.svg)
 
 <!-- generated: section TRIG -->
 | Name | `TRIG` (54 52 49 47) |
 | --- | --- |
 | Size | 2400 bytes per trigger. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
+| Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| The game accepts | Whole triggers only. A length that is not a multiple of 2400 refuses the map. |
 | More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
@@ -1503,12 +1786,18 @@ Each trigger:
 The mission briefings, in the same 2400-byte record as a trigger, with their own set of
 [actions](triggers.md#mission-briefing-actions).
 
+Only the briefing reads it, and the game does not need it: without it, or with one that is
+not a whole number of records, the briefing room shows nothing and the game starts as
+usual. Each player keeps only the briefings meant for them: their own, All Players', or
+their force's.
+
 <!-- generated: section MBRF -->
 | Name | `MBRF` (4D 42 52 46) |
 | --- | --- |
 | Size | 2400 bytes per briefing. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
+| Read by | The game, for the briefing of a Use Map Settings game. |
+| Required | No. Without it there is no briefing, and nothing else changes. |
+| The game accepts | Whole briefings only. With any other length the map plays without a briefing. |
 | More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 
@@ -1521,15 +1810,17 @@ Each briefing:
 
 ## SPRP
 
-The scenario's name and description, as string numbers.
+The scenario's name and description, as string numbers. When the name is string 0 or an
+empty string, the map list shows the file name in its place.
 
 <!-- generated: section SPRP -->
 | Name | `SPRP` (53 50 52 50) |
 | --- | --- |
 | Size | 4 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Exactly 4 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1545,13 +1836,18 @@ Layout:
 The four forces: which force each of Players 1 to 8 is in, each force's name, and its
 settings. Players 9 to 12 are in no force.
 
+A `FORC` shorter than 20 bytes is filled out with zeros, and a longer one refuses the map.
+A force whose name is string 0 is called Force 1 to Force 4. Only a human, computer,
+rescuable or neutral slot is put in a force; an Inactive or closed one is in none.
+
 <!-- generated: section FORC -->
 | Name | `FORC` (46 4F 52 43) |
 | --- | --- |
 | Size | 20 bytes. |
-| Read by | The game. |
-| Required | Yes. The game does not load a map without it. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, for the map list. It reads it again when a game is created and when it starts. |
+| Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
+| The game accepts | Up to 20 bytes. A shorter section is filled out with zeros; a longer one refuses the map. |
+| More than one copy | The last copy replaces the others. A copy shorter than 20 bytes is filled out with zeros. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1608,9 +1904,8 @@ string number of its sound itself, not a place in this list.
 | Name | `WAV␠` (57 41 56 20) |
 | --- | --- |
 | Size | 2048 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1623,16 +1918,18 @@ Layout:
 ## UNIS
 
 Unit settings for the original game. For each unit type that does not use the game's own
-values: hit points, shields, armour, build time, costs, name and weapon damage. Brood War
-reads [`UNIx`](#unix) instead.
+values: hit points, shields, armour, build time, costs, name and weapon damage. A Brood
+War file has [`UNIx`](#unix) in its place; in an older file the game reads this table and
+then `UNIx` on top, if the file has one. Only Use Map Settings reads either.
 
 <!-- generated: section UNIS -->
 | Name | `UNIS` (55 4E 49 53) |
 | --- | --- |
 | Size | 4048 bytes. |
-| Read by | The game. |
-| Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read. |
+| Required | For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63). |
+| The game accepts | Exactly 4048 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1654,16 +1951,18 @@ Layout:
 ## UPGS
 
 Upgrade costs and research times for the 46 upgrades of the original game. Each upgrade has
-a cost for its first level and an amount added for each level after. Brood War reads
-[`UPGx`](#upgx) instead.
+a cost for its first level and an amount added for each level after. A Brood War file has
+[`UPGx`](#upgx) in its place; in an older file the game reads this table and then `UPGx`
+on top, if the file has one. Only Use Map Settings reads either.
 
 <!-- generated: section UPGS -->
 | Name | `UPGS` (55 50 47 53) |
 | --- | --- |
 | Size | 598 bytes. |
-| Read by | The game. |
-| Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read. |
+| Required | For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63). |
+| The game accepts | Exactly 598 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1682,15 +1981,17 @@ Layout:
 ## TECS
 
 Ability costs, research times and energy costs for the 24 abilities of the original game.
-Brood War reads [`TECx`](#tecx) instead.
+A Brood War file has [`TECx`](#tecx) in its place; in an older file the game reads this
+table and then `TECx` on top, if the file has one. Only Use Map Settings reads either.
 
 <!-- generated: section TECS -->
 | Name | `TECS` (54 45 43 53) |
 | --- | --- |
 | Size | 216 bytes. |
-| Read by | The game. |
-| Required | In a StarCraft 1.00 or hybrid file (`VER` below 205). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read. |
+| Required | For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63). |
+| The game accepts | Exactly 216 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1713,9 +2014,8 @@ the switches' numbers.
 | Name | `SWNM` (53 57 4E 4D) |
 | --- | --- |
 | Size | 1024 bytes. |
-| Read by | Editors only. The game skips it. |
+| Read by | Editors only. The game never reads it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1730,13 +2030,23 @@ Layout:
 The colour of each of Players 1 to 8. StarCraft: Remastered can override it with
 [`CRGB`](#crgb).
 
+Only a Brood War file's `COLR` is read, at the start of every game, and a Brood War file
+needs it: without it the map is listed, but every game on it stops with *Error loading
+scenario file.* A `VER` 59 or 63 file's `COLR` is ignored, and its players get the usual
+colours.
+
+The game applies it by giving Player n the colour slot `COLR[n]` had before, so a value of
+n leaves the player's colour alone. 1.16.1 has twelve colours, 0 to 11; the values from 12
+up are Remastered's, and give a wrong colour in 1.16.1.
+
 <!-- generated: section COLR -->
 | Name | `COLR` (43 4F 4C 52) |
 | --- | --- |
 | Size | 8 bytes. |
-| Read by | The game. |
-| Required | No. |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of every game, in a Brood War file (`VER` 205). In an older file the game never reads it. |
+| Required | In a Brood War file (`VER` 205). Without it every game on the map stops at the start with *Error loading scenario file.* |
+| The game accepts | Exactly 8 bytes. Any other length refuses the map. |
+| More than one copy | Each copy rearranges the colours as the copy before left them, so two copies that swap the same two colours put them back. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1773,15 +2083,17 @@ Layout:
 
 ## PUPx
 
-[`UPGR`](#upgr) for Brood War: the same tables, for 61 upgrades.
+[`UPGR`](#upgr) for Brood War: the same tables, for 61 upgrades. The levels players start
+at in the 15 upgrades Brood War added are set only when Brood War is on.
 
 <!-- generated: section PUPx -->
 | Name | `PUPx` (50 55 50 78) |
 | --- | --- |
 | Size | 2318 bytes. |
-| Read by | The game. |
-| Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a file of any revision. |
+| Required | For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present. |
+| The game accepts | Exactly 2318 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1797,15 +2109,17 @@ Layout:
 
 ## PTEx
 
-[`PTEC`](#ptec) for Brood War: the same tables, for 44 abilities.
+[`PTEC`](#ptec) for Brood War: the same tables, for 44 abilities. Whether players start
+with the 20 abilities Brood War added is set only when Brood War is on.
 
 <!-- generated: section PTEx -->
 | Name | `PTEx` (50 54 45 78) |
 | --- | --- |
 | Size | 1672 bytes. |
-| Read by | The game. |
-| Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a file of any revision. |
+| Required | For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present. |
+| The game accepts | Exactly 1672 bytes. Any other length refuses the map. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1827,9 +2141,10 @@ Layout:
 | Name | `UNIx` (55 4E 49 78) |
 | --- | --- |
 | Size | 4168 bytes. |
-| Read by | The game. |
-| Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a file of any revision. |
+| Required | For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present. |
+| The game accepts | Exactly 4168 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1872,6 +2187,12 @@ for the unit type and ignores the other columns. [`UNIS`](#unis) is laid out the
 with 100 weapons instead of 130, so every column is at the same offset except the last,
 the damage each upgrade adds.
 
+The weapon columns are not read for their own sake. The game sets a weapon's damage only
+while it sets up a unit type that fires it and does not use the game's own values, so a
+new damage for a weapon whose units all keep their defaults is ignored. A unit with a
+turret, such as the Goliath or the Siege Tank, takes its weapons from the turret. So to
+change a weapon, also mark one of the unit types that fire it.
+
 ## UPGx
 
 [`UPGS`](#upgs) for Brood War: the same tables for 61 upgrades, with one unused byte after
@@ -1881,9 +2202,10 @@ the first.
 | Name | `UPGx` (55 50 47 78) |
 | --- | --- |
 | Size | 794 bytes. |
-| Read by | The game. |
-| Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a file of any revision. |
+| Required | For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present. |
+| The game accepts | Exactly 794 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1908,9 +2230,10 @@ Layout:
 | Name | `TECx` (54 45 43 78) |
 | --- | --- |
 | Size | 396 bytes. |
-| Read by | The game. |
-| Required | In a hybrid or Brood War file (`VER` 63 and up). |
-| More than one copy | The last copy replaces the others. |
+| Read by | The game, at the start of a Use Map Settings game, in a file of any revision. |
+| Required | For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present. |
+| The game accepts | Exactly 396 bytes. Any other length refuses the map. |
+| More than one copy | Combined entry by entry: a copy changes only the entries it marks as not using the game's own values, and every other entry keeps what an earlier copy gave it. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:
@@ -1935,9 +2258,8 @@ reads.
 | Name | `CRGB` (43 52 47 42) |
 | --- | --- |
 | Size | 32 bytes. |
-| Read by | The game. |
+| Read by | StarCraft: Remastered only. 1.16.1 does not know it. |
 | Required | No. |
-| More than one copy | The last copy replaces the others. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:

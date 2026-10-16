@@ -35,6 +35,8 @@ import { fillReference, ISOM_EDGE_SETS, isomWordFlags, LAYOUTS, laidOut, layoutS
 import { chkDiagrams, ISOM_EXAMPLE, ISOM_SHAPE_NEIGHBOURS, isomExampleValues } from "../scripts/lib/chk-diagrams.mjs";
 // @ts-expect-error — a plain .mjs module shared with scripts/reference-docs.mjs
 import { chkKaitai } from "../scripts/lib/chk-kaitai.mjs";
+// @ts-expect-error — a plain .mjs module shared with scripts/reference-docs.mjs
+import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_ONLY } from "../scripts/lib/chk-game.mjs";
 
 interface Row { type: string; count: number; field?: string; offset: number; bytes: number }
 interface Layout { rows?: Row[]; count?: number; grid?: string; isom?: boolean; strings?: string }
@@ -120,6 +122,41 @@ describe("the CHK format reference", () => {
     for (const [name, count] of [["TECS", settings.TECHS_ORIGINAL], ["TECx", settings.TECHS_BW]] as const) {
       const model = settings.defaultTechSettings();
       checkColumns(name, model as never, () => settings.encodeTechSettings(model, count));
+    }
+  });
+});
+
+describe("what the reference says the game does (chk-game.mjs)", () => {
+  const read = new Set<string>(GAME_READS.flatMap((r: { sections: Record<number, { name: string }[]> }) => GAME_VERSIONS.flatMap((v: number) => r.sections[v].map((s) => s.name))));
+
+  it("places every section the editor knows: read by the game, never read, or Remastered's", () => {
+    for (const name of registry.SECTION_SPECS.keys()) {
+      const places = [read.has(name), GAME_NEVER.includes(name), REMASTERED_ONLY.includes(name), name === "TYPE"].filter(Boolean);
+      expect(places, name).toHaveLength(1);
+    }
+  });
+
+  it("agrees with the registry on which sections only editors read", () => {
+    for (const spec of registry.SECTION_SPECS.values()) expect(GAME_NEVER.includes(spec.name), spec.name).toBe(Boolean(spec.editorOnly));
+  });
+
+  it("gives a length rule and a copies rule for every section the game reads", () => {
+    for (const name of read) {
+      expect(GAME_SIZES[name], name).toBeDefined();
+      expect(COPY_RULES[GAME_COPIES[name]], name).toBeDefined();
+    }
+  });
+
+  it("insists on the sizes the registry gives the fixed sections", () => {
+    for (const [name, rule] of Object.entries(GAME_SIZES) as [string, { exactly?: number | Record<number, number> }][]) {
+      if (rule.exactly === undefined) continue;
+      const spec = registry.specFor(name)!;
+      if (typeof rule.exactly === "object") {
+        expect(rule.exactly[205], name).toBe(255 * spec.stride!);
+        expect(rule.exactly[59], name).toBe(64 * spec.stride!);
+      } else {
+        expect(rule.exactly, name).toBe(spec.size);
+      }
     }
   });
 });

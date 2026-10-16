@@ -145,3 +145,39 @@ trigger record from `CONDITION_FIELDS`/`ACTION_FIELDS`, which `docs/triggers.md`
 uses the other's exports at module scope. Rendered to PNG for checking with Playwright's
 headless shell (`page.setContent(svg)` + element screenshot); labels that do not fit their box
 go under it with a leader, staggered.
+
+### What the game does (2026-10-15): `scripts/lib/chk-game.mjs`
+
+The reference's game facts (Read by, Required, The game accepts, More than one copy, the
+index's Map list / Melee / Use Map Settings columns, the "game reads" and "game sizes"
+blocks, and the pictures `chk-load`, `chk-reads`, `chk-walk`, `chk-repeats`, `chk-vcod`,
+`chk-unit-path`) come from `chk-game.mjs`, **not** from `SECTION_SPECS`. It records
+StarCraft 1.16.1: the loader was read from a decompile of the game and every claim that
+mattered was run through a copy of the game's own code on 55 probe maps plus 26 variants.
+That evidence is private and stays out of every repository (`~/github/scm-sim-reader/
+chk-ledger/` LEDGER/LOADER/VCOD/DIFF.md, `chk-run/RESULTS.md`); the docs describe behaviour
+in their own words, never code or addresses. `tests/chkReference.test.ts` holds the table
+to the registry (every section placed once, editor-only = never read, exact sizes =
+registry sizes). The VCOD pseudo-code on the page was run over the probe scenarios and
+gives the reader's hashes, including the two the game refused.
+
+The shape of it: the game walks the headers into a list, then runs fixed tables of
+(name, handler, required) per revision and pass; table order decides handling order,
+file order only orders copies. Passes: map list (9 sections, all required, also re-run at
+game creation and start) → "Invalid Scenario" + "unreadable" if VER ≤ 59 else
+"Expansion Set" whatever the fault; game start (melee: STR MTXM THG2 UNIT [+COLR at 205];
+UMS adds MASK, settings, PUNI, UPRP, MRGN, TRIG) → "Error loading scenario file."; briefing
+(STR MBRF) → result ignored. Sizes are exact except MTXM ≤ 131072, FORC ≤ 20 (zero-padded),
+STR/MASK any; records whole. VCOD hashes only OWNR+SIDE (12 × 36-byte lobby records).
+
+Where the editor still disagrees with the game (not fixed in the docs pass; each a
+separate change):
+- `REQUIRED_SECTIONS` (create.ts, used by Check Map / Repair) lists MBRF (never required)
+  and lacks MASK and the UMS-only nature of PUNI/UPRP/MRGN/TRIG/settings, and COLR at 205.
+- A `VER` 59 file is written with a 5100-byte MRGN; 1.16.1 refuses that at a UMS start
+  (needs 1280, 64 locations). `tests/maps/original.scm` is such a file.
+- The reader's combine modes: MRGN `overlay` (game: every copy whole, last wins), the
+  settings tables `last` (game: entry by entry, and the `x` tables applied over the
+  originals in a 59/63 file), STR `minimum: 2` (Remastered's rule; 1.16.1 takes any).
+- Remastered is known to differ on STR decoys; the rest is unchecked there. Twelve probes
+  for a Remastered pass are in the user's maps folder `CHK/Remastered/` with a checklist.

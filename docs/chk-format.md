@@ -171,7 +171,7 @@ The smallest file each kind of game will load:
 
 | A map for | Needs |
 | --- | --- |
-| Melee and the other game types | `VER`, `DIM`, `ERA`, `OWNR`, `SIDE`, `STR`, `SPRP`, `FORC`, `VCOD`, `MTXM`, `THG2` and `UNIT`, and `COLR` in a Brood War file (`VER` 205) |
+| Melee and the other game types | `VER`, `DIM`, `ERA`, `OWNR`, `SIDE`, `STR`, `SPRP`, `FORC`, `VCOD`, `MTXM`, `THG2` and `UNIT`, and `COLR` in a Brood War file (`VER` 205). Remastered also needs `TRIG`. |
 | Use Map Settings | All of those, and `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and five settings tables: `UNIx`, `UPGx`, `TECx`, `PUPx` and `PTEx` in a Brood War file; `UNIS`, `UPGS`, `TECS`, `UPGR` and `PTEC` in an older one |
 
 `THG2` can be empty when the map has no sprites. Everything else is optional or for
@@ -185,7 +185,7 @@ What a player sees, and what causes it:
 | The player sees | When | Why |
 | --- | --- | --- |
 | *Invalid Scenario*, with "This scenario is unreadable because it is invalid or corrupted." | In the map list | The map list read failed, and the file's `VER` is 59 or lower, or could not be read at all. Any fault gives this message in a StarCraft 1.00 file. |
-| *Invalid Scenario*, with "This scenario is intended for use with a StarCraft Expansion Set." | In the map list | The map list read failed, and the file's `VER` is above 59. That covers a Brood War map in the original StarCraft, but **also every other fault**: a missing `DIM`, a `SIDE` of the wrong length, a failed [`VCOD`](#vcod) check, a `VER` the game does not know such as Remastered's 206. The game names the expansion set whatever the real fault. |
+| *Invalid Scenario*, with "This scenario is intended for use with a StarCraft Expansion Set." | In the map list | The map list read failed, and the file's `VER` is above 59. That covers a Brood War map in the original StarCraft, but **also every other fault**: a missing `DIM`, a `SIDE` of the wrong length, a failed [`VCOD`](#vcod) check, a `VER` the game does not know such as Remastered's 206, and in Remastered a missing `TRIG`. The game names the expansion set whatever the real fault. Remastered gives the same message. |
 | "This map can only be played with the 'Use Map Settings' game type." | Making a game | The tileset is Installation and the game type is not Use Map Settings. Installation maps can only be played as Use Map Settings. |
 | "Error loading scenario file." | Starting a game | A section this game type needs is missing, the wrong length, or runs past the end of the file. Melee needs `MTXM`, `THG2`, `UNIT` and, in a Brood War file, `COLR`; Use Map Settings also needs `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and the settings tables. The same map may still start as melee. |
 | "WARNING: Unit unplaceable! (name) (x,y)" | The first moments of a game | A placed unit had no room where it stands, and was removed. |
@@ -197,14 +197,32 @@ What a player sees, and what causes it:
 Everything this page says about the game was checked in StarCraft: Brood War 1.16.1, the
 last version before Remastered. Remastered is known to differ in these ways:
 
+- Its map list needs [`TRIG`](#trig). A map with no `TRIG` section is *Invalid Scenario*
+  in Remastered whatever the game type, where 1.16.1 lists it and plays it as melee.
 - It reads `VER` 206, [`STRx`](#strx) and [`CRGB`](#crgb). 1.16.1 refuses `VER` 206 and never
   reads the other two.
 - It passes over a [`STR`](#str) copy shorter than 2 bytes, where 1.16.1 takes it.
 - It reads text as UTF-8 when the bytes are valid UTF-8 (see [`STR`](#str)).
 - In a string, a colour carries on to the next line.
 
-Where the page says a fact was found playing Remastered, it was. Other facts have not been
-checked in Remastered and may differ there; a map that 1.16.1 accepts is the safe target.
+Twelve of the page's claims were also played in Remastered with probe maps, and in all
+but the `TRIG` one Remastered did what 1.16.1 does:
+
+- a section one byte too long, and a `UNIT` section that ends in part of a record, refuse
+  the map, with the same messages;
+- a StarCraft 1.00 file with 255 locations, and a map with no `MASK`, start as melee and
+  stop as Use Map Settings;
+- a Brood War file with no `COLR` stops at the start of any game;
+- a map with no `MBRF` plays, with no briefing;
+- start locations come from the last `UNIT` section, so a melee game of a map that puts
+  them in the first of two is lost at once;
+- a Ghost placed cloaked starts cloaked only if its owner has Personal Cloaking;
+- a hybrid file's `UNIx` is applied over its `UNIS`;
+- a section the game never reads may run past the end of the file.
+
+Where the page says a fact was found playing Remastered, it was. The rest has not been
+checked in Remastered; a map that 1.16.1 accepts, and that has a `TRIG` section, is the
+safe target.
 
 ## Protected maps
 
@@ -300,7 +318,7 @@ a map plays the same without it. *By revision* means the section is required in 
 | [`UPRP`](#uprp) | The 64 unit properties slots used by the Create Unit with Properties action |  |  | needed |
 | [`UPUS`](#upus) | Which of the 64 `UPRP` slots StarEdit considers in use |  |  |  |
 | [`MRGN`](#mrgn) | The locations |  |  | needed |
-| [`TRIG`](#trig) | The triggers, 2400 bytes each, in the order they run |  |  | needed |
+| [`TRIG`](#trig) | The triggers, 2400 bytes each, in the order they run | needed in Remastered |  | needed |
 | [`MBRF`](#mbrf) | The mission briefings, in the same 2400-byte record as a trigger, with their own set of actions |  |  | briefing only |
 | [`SPRP`](#sprp) | The scenario's name and description, as string numbers | needed |  |  |
 | [`FORC`](#forc) | The four forces: which force each of Players 1 to 8 is in, each force's name, and its settings | needed |  |  |
@@ -1754,7 +1772,8 @@ The triggers, 2400 bytes each, in the order they run. The record is laid out in 
 condition and action.
 
 Only Use Map Settings reads the map's triggers. Melee and the other game types run
-triggers of their own, built into the game, and never read this section.
+triggers of their own, built into the game, and never read this section. Remastered still
+wants it there: its map list refuses a map with no `TRIG` section, even for melee.
 
 When the game loads the triggers, it gives each player in the game a copy of every
 trigger that runs for them: one set for that player alone, for All Players, or for a force
@@ -1769,7 +1788,7 @@ not in the game gets no triggers.
 | --- | --- |
 | Size | 2400 bytes per trigger. |
 | Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
-| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. In StarCraft: Remastered every map needs it, whatever the game type: without it the map list shows the map as *Invalid Scenario*. (Found playing Remastered.) |
 | The game accepts | Whole triggers only. A length that is not a multiple of 2400 refuses the map. |
 | More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |

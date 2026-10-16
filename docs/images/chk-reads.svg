@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 721" width="760" height="721" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 737" width="760" height="737" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
 <title id="t">Which sections each read needs</title>
-<desc id="d">A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present.</desc>
-<rect width="760" height="721" rx="10" fill="#12151b"/>
+<desc id="d">A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present. StarCraft: Remastered also needs TRIG in the map list.</desc>
+<rect width="760" height="737" rx="10" fill="#12151b"/>
 <text x="24" y="30" font-size="15" fill="#e6e8ee" text-anchor="start" font-weight="600">Which sections each read needs</text>
 <circle cx="30" cy="50" r="6" fill="#e7c160"/>
 <text x="42" y="54" font-size="12" fill="#e6e8ee" text-anchor="start">needed: the read fails without it</text>
@@ -120,5 +120,5 @@
 <text x="24" y="644" font-size="12" fill="#e6e8ee" text-anchor="start" font-weight="600">TECx</text>
 <circle cx="458" cy="639.5" r="5" fill="none" stroke="#e7c160" stroke-width="1.6"/>
 <circle cx="562" cy="639.5" r="5.5" fill="#e7c160"/>
-<text x="24" y="675" font-size="11.5" fill="#9aa3b2" text-anchor="start">Never read by the game: IVER, IVE2, IOWN, ISOM, TILE, DD2, UPUS, WAV, SWNM.</text><text x="24" y="691" font-size="11.5" fill="#9aa3b2" text-anchor="start">TYPE is looked for but not read. VER is checked before every read.</text><text x="24" y="707" font-size="11.5" fill="#9aa3b2" text-anchor="start">Read only by StarCraft: Remastered: STRx and CRGB.</text>
+<text x="24" y="675" font-size="11.5" fill="#9aa3b2" text-anchor="start">Never read by the game: IVER, IVE2, IOWN, ISOM, TILE, DD2, UPUS, WAV, SWNM.</text><text x="24" y="691" font-size="11.5" fill="#9aa3b2" text-anchor="start">TYPE is looked for but not read. VER is checked before every read. StarCraft: Remastered's</text><text x="24" y="707" font-size="11.5" fill="#9aa3b2" text-anchor="start">map list also needs TRIG, so it refuses a map without one whatever the game type.</text><text x="24" y="723" font-size="11.5" fill="#9aa3b2" text-anchor="start">Read only by StarCraft: Remastered: STRx and CRGB.</text>
 </svg>

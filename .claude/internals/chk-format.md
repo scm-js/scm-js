@@ -179,5 +179,8 @@ separate change):
 - The reader's combine modes: MRGN `overlay` (game: every copy whole, last wins), the
   settings tables `last` (game: entry by entry, and the `x` tables applied over the
   originals in a 59/63 file), STR `minimum: 2` (Remastered's rule; 1.16.1 takes any).
-- Remastered is known to differ on STR decoys; the rest is unchecked there. Twelve probes
-  for a Remastered pass are in the user's maps folder `CHK/Remastered/` with a checklist.
+- Remastered was played with twelve probes (the user's maps folder `CHK/Remastered/`,
+  CHECKLIST.txt filled in 2026-10-15). Eleven matched 1.16.1. The one difference: a map
+  with no TRIG is *Invalid Scenario* in Remastered's map list, melee included
+  (`REMASTERED_NEEDS` in chk-game.mjs; the page's "Which game" lists the eleven). STR
+  decoys were already known to differ.

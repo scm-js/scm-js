@@ -892,10 +892,11 @@ function readsSvg(defs) {
   const foot = top + 6 + names.length * rowH + 26;
   parts.push(lines(ox, foot, [
     `Never read by the game: ${GAME_NEVER.map(sectionLabel).join(", ")}.`,
-    `TYPE is looked for but not read. VER is checked before every read.`,
+    `TYPE is looked for but not read. VER is checked before every read. StarCraft: Remastered's`,
+    `map list also needs TRIG, so it refuses a map without one whatever the game type.`,
     `Read only by StarCraft: Remastered: ${REMASTERED_ONLY.join(" and ")}.`,
   ], { size: 11.5, fill: MUTED }));
-  return svg(760, foot + 46, "Which sections each read needs", "A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present.", parts.join("\n"));
+  return svg(760, foot + 62, "Which sections each read needs", "A grid of the sections StarCraft 1.16.1 reads against its reads: the map list, the start of a melee game, the start of a Use Map Settings game, each by file revision, and the briefing. A filled dot means the read fails without the section; a ring means the section is read when present. StarCraft: Remastered also needs TRIG in the map list.", parts.join("\n"));
 }
 
 /** Picture: how the game walks from one section to the next, and three odd lengths. */

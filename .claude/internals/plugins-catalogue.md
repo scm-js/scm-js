@@ -1,5 +1,12 @@
 # The plugins themselves
 
+Since 1.38.0 (2026-10-16, ai-server 0.25.0) the AI runs on **the person's own Anthropic key** unless
+their role pays for it (admins): Preferences ▸ scmjs.dev ▸ *Your Anthropic key*, checked by the
+server's free `POST /v1/key/check` before it is kept, sent with recipe calls only — never in the
+service's `headers()`, so Aftermath cannot cast on it. The server never serves `cast` or
+`/v1/speech` to an own key (the voices are its ElevenLabs account); `api.scmjs.dev` runs with
+`AI_SERVER_BYOK=1`.
+
 **scmjs.dev** (`github.com/scm-js/plugin-scmjs-dev`, a default, on since 2026-09-22 — off before that, while the AI was a paid trial) is the account and the
 AI in one plugin, and its server (`github.com/scm-js/ai-server`, Fastify + Caddy + Postgres, one image on
 GHCR) is a service the project runs at `api.scmjs.dev`. It used to be two plugins — scmjs.dev (account,
@@ -7,9 +14,8 @@ map storage, the `scmjs-dev.account` service) and AI (`github.com/scm-js/plugin-
 a notice), the AI following the other's sign-in through `api.services` — and was merged on 2026-09-05
 because the split only ever described the split: a shape-matched copy of the contract, a provider
 delegation, two Settings dialogs, two status cells and an activation-order dance for one relationship
-with one service. The rules that came with the merge: the plugin has **no field for a server, a token
-or a key** (the server keeps `access.byok` and `access.tokens` for an operator's own tools and forks,
-`byok` now off by default and its README says so); the one way to point a development build at a
+with one service. The rules that came with the merge: the plugin has **no field for a server or a
+token** (the server keeps `access.tokens` for an operator's own tools and forks); the one way to point a development build at a
 local server is the `?scmjs-server=` query on the editor's address (`account.ts#serverOverride`,
 stored, cleared by `?scmjs-server=` empty, shown in the Account dialog only while in use); with **no
 session stored the plugin makes no request at startup** (a session from last time is refreshed so the

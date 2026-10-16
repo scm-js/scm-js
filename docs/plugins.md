@@ -2181,6 +2181,19 @@ minimap draws the map's ground, then your `draw` in place of the map's units, st
 locations and fog, and a press or a drag on it goes to your `press` instead of moving the
 hidden map.
 
+Three more carry the rest of the editor's view over. `paintOver(ctx, view)` draws what the
+editor draws over a map, the grid and the locations as the View menu has them and the other
+plugins' visible overlays, onto a canvas of yours over the view, mapped by the same kind of
+`MapView` an overlay's `draw` gets. Call it from your own drawing, above your view's picture and
+below your own marks; `onRepaint` says when it would draw something else (a toggle, the grid's
+settings, a location, another overlay). With `onRepaint` the Grid, Locations and Location Names
+toggles stay on offer while your view is in front; without it they are greyed. `onFog` takes
+View ▸ Fog of War and its button: the toggle then shows your view's own fog as `setFog` last
+said (null greys it while there is none to show). And `setPointer` gives the status bar's tile
+and position, since an iframe hears the pointer and the editor does not. Everything else that
+is the hidden map's (its layers, selection, clipboard, Find and toggles like Units) is off
+while your view is in front.
+
 ```ts
 let units: { x: number; y: number; colour: string }[] = [];
 const replay = api.ui.mapView({
@@ -2198,6 +2211,24 @@ const replay = api.ui.mapView({
 viewer.onMove((c) => replay.setCamera({ x: c.x, y: c.y, width: c.width, height: c.height }));
 viewer.onWheel((w) => replay.wheel({ deltaY: w.deltaY, ctrlKey: w.ctrlKey, x: w.mapX, y: w.mapY }));
 viewer.onUnits((list) => { units = list; replay.redrawMinimap(); });
+```
+
+```ts
+// The grid, locations and other overlays over the game, its fog on the editor's toggle, the pointer in the status bar.
+const replay = api.ui.mapView({
+  title: "Replay",
+  mount: (el) => el.append(frame, canvas),
+  onRepaint: () => drawOver(),
+  onFog: (on) => viewer.fog(on),
+});
+function drawOver() {
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  replay.paintOver(ctx, viewer.mapView());
+  drawMyMarks(ctx);
+}
+viewer.onFogChange((on) => replay.setFog(on));
+viewer.onPointer((at) => replay.setPointer(at));
 ```
 
 **Status items and map buttons** are for things that should stay visible without a panel,

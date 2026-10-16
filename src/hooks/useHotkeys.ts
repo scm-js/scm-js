@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewFlagsAtom, viewOnlyAtom, viewportRectAtom,
+  spritePlacingAtom, unitPlacingAtom, viewOnlyAtom, viewportRectAtom,
 } from "../atoms/editorAtoms";
 import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
@@ -12,11 +12,16 @@ import { commandById, comboOf, firesWhileTyping, isModifierKey, takesText, type 
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { zoomToAtom } from "../atoms/zoomAtoms";
+import { chromeModeAtom, notOnView, toggleFlagAtom } from "../atoms/viewModeAtoms";
 import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
 
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+/** Commands on the map's own layers, selection, clipboard and brush: they wait while a plugin's view is in the map's place. */
+const MAP_COMMANDS = new Set(["edit.cut", "edit.copy", "edit.paste", "edit.selectAll", "edit.find", "brush.smaller", "brush.larger"]);
+const isMapCommand = (id: string) => MAP_COMMANDS.has(id) || id.startsWith("layer.");
 
 /**
  * Global editor hotkeys (UI only). The rebindable ones are `editor/commands.ts`, matched
@@ -26,7 +31,7 @@ export function useHotkeys() {
   const store = useStore();
   const open = useSetAtom(openDialogAtom);
   const setLayer = useSetAtom(activeLayerAtom);
-  const setFlags = useSetAtom(viewFlagsAtom);
+  const toggleFlag = useSetAtom(toggleFlagAtom);
   const zoomTo = useSetAtom(zoomToAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const setBrush = useSetAtom(brushSizeAtom);
@@ -83,7 +88,7 @@ export function useHotkeys() {
               : t("Selected {n, plural, one {# unit} other {# units}}", { n }));
       },
       "edit.find": () => open("find"),
-      "view.grid": () => setFlags((f) => ({ ...f, grid: !f.grid })),
+      "view.grid": () => toggleFlag("grid"),
       "view.zoomIn": () => zoomTo("in"),
       "view.zoomOut": () => zoomTo("out"),
       "view.zoomActual": () => zoomTo(1),
@@ -132,14 +137,22 @@ export function useHotkeys() {
         }
       }
 
+      // A plugin's view in the map's place (a replay's game): the map behind it is not the one to act on.
+      const view = store.get(chromeModeAtom).view;
       if (command) {
         // Inside a text field the browser keeps its own clipboard, selection, undo — and the text.
         if (typing && !firesWhileTyping(command, combo)) return;
         e.preventDefault();
+        if (view && isMapCommand(command.id)) { setStatus(notOnView(view)); return; }
         run[command.id]?.();
         return;
       }
       if (typing || mod || e.altKey) return;
+      // Delete, Escape and the arrows are the map's selection and scrolling, and the view's own to take.
+      if (view && (e.key === "Delete" || e.key === "Backspace" || e.key === "Escape" || ARROWS[e.key])) {
+        if (e.key === "Escape" && (cancelPick() || cancelTool())) e.preventDefault();
+        return;
+      }
 
       if (e.key === "Delete" || e.key === "Backspace") {
         if (activeLayer === "clipboard") {
@@ -211,5 +224,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, open, setLayer, setFlags, zoomTo, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, hotkeys]);
+  }, [store, open, setLayer, toggleFlag, zoomTo, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, hotkeys]);
 }

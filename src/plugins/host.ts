@@ -8,16 +8,16 @@
  * lifts stranded doodads and units, and repaints exactly like the built-in tools.
  */
 import { addPluginCatalogues, locale as currentLocale, makeTranslator, t } from "../i18n";
-import type { createStore } from "jotai";
+import type { createStore, PrimitiveAtom } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
-  centerViewOnAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorTileAtom, doodadPlacementAtom, fogModeAtom, fogPlayersAtom,
+  centerViewOnAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorPixelAtom, cursorTileAtom, doodadPlacementAtom, fogModeAtom, fogPlayersAtom,
   fogViewPlayerAtom, gridSizeAtom, locationSnapAtom, lockedLayersAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom,
-  mapNameAtom, mapOriginAtom, mapTilesetAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  mapHeightAtom, mapNameAtom, mapOriginAtom, mapTilesetAtom, mapWidthAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentsAtom, documentTabsAtom, doodadsRevisionAtom, locationsRevisionAtom, objectEditRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentsAtom, documentTabsAtom, doodadsRevisionAtom, locationsAtom, locationsRevisionAtom, objectEditRevisionAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, viewOnlyAtom, viewOnlyMessage, type HistoryEntry,
 } from "../atoms/documentAtoms";
@@ -25,10 +25,11 @@ import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, status
 import { claimBadge, locateClaims } from "./claims";
 import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
 import { zoomToAtom } from "../atoms/zoomAtoms";
+import { paintOverView } from "../components/viewport/paint/overView";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewMinimapRevisionAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox, type MaximizedBox,
 } from "../atoms/pluginAtoms";
@@ -116,7 +117,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewCamera, type MapViewHandle, type MapViewSpec, type MapViewWheel, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapView, type MapViewCamera, type MapViewHandle, type MapViewPointer, type MapViewSpec, type MapViewWheel, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1482,6 +1483,29 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
     if (next !== state) store.set(mapViewStateAtom, next);
   };
   const unsubs = [store.sub(mapViewStateAtom, tell), store.sub(activeDocumentIdAtom, tell), store.sub(documentsAtom, prune)];
+  // What `paintOver` draws changed: the view is asked to draw again, once a frame at most, while it is shown.
+  let repaintRaf = 0;
+  const repaint = () => {
+    if (!live || !spec.onRepaint || repaintRaf || !isShown()) return;
+    const run = () => {
+      repaintRaf = 0;
+      if (!live || !isShown()) return;
+      try { spec.onRepaint?.(); } catch (err) { logError(info.name, "A map view's onRepaint failed", err); }
+    };
+    if (typeof requestAnimationFrame === "undefined") { run(); return; }
+    repaintRaf = requestAnimationFrame(run);
+  };
+  if (spec.onRepaint) {
+    for (const a of [viewFlagsAtom, gridSizeAtom, gridLookAtom, locationsRevisionAtom, pluginOverlaysAtom, pluginOverlayRevisionAtom, mapViewStateAtom, activeDocumentIdAtom] as const) unsubs.push(store.sub(a, repaint));
+  }
+  /** A view's own map of something by entry key, with this one's entry set or (undefined) taken out. */
+  const setKeyed = <T,>(a: PrimitiveAtom<ReadonlyMap<number, T>>, value: T | undefined) => {
+    const was = store.get(a);
+    if (value === undefined ? !was.has(key) : was.has(key) && was.get(key) === value) return;
+    const next = new Map(was);
+    if (value === undefined) next.delete(key); else next.set(key, value);
+    store.set(a, next);
+  };
   const handle: MapViewHandle = {
     offer: (on, documentId) => {
       const doc = live ? docOf(documentId) : null;
@@ -1522,6 +1546,36 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
       }
       return step.zooms;
     },
+    setFog: (on: boolean | null) => {
+      if (!live) return;
+      if (on !== null && typeof on !== "boolean") { logWarn(info.name, "ui.mapView: setFog needs true, false or null"); return; }
+      setKeyed(mapViewFogAtom, on);
+    },
+    setPointer: (at: MapViewPointer | null) => {
+      if (!live) return;
+      if (at === null) { setKeyed(mapViewPointerAtom, null); return; }
+      if (!at || !Number.isFinite(at.x) || !Number.isFinite(at.y)) { logWarn(info.name, "ui.mapView: setPointer needs a finite x and y, or null"); return; }
+      const was = store.get(mapViewPointerAtom).get(key);
+      if (was && was.x === at.x && was.y === at.y) return;
+      setKeyed(mapViewPointerAtom, { x: at.x, y: at.y });
+      // The status bar's tile and position are the map's pointer's, and the map's own does not move under the view.
+      if (!isShown()) return;
+      const px = Math.floor(at.x), py = Math.floor(at.y);
+      store.set(cursorPixelAtom, { x: px, y: py });
+      store.set(cursorTileAtom, { x: Math.floor(px / 32), y: Math.floor(py / 32) });
+    },
+    paintOver: (ctx: CanvasRenderingContext2D, view: MapView) => {
+      if (!live || !isShown() || !ctx || !view || typeof view.x !== "function" || typeof view.y !== "function") return;
+      if (!store.get(scenarioAtom)) return;
+      const flags = store.get(viewFlagsAtom);
+      const overlays = store.get(pluginOverlaysAtom).filter((o) => o.visible && o.plugin.id !== info.id);
+      try {
+        paintOverView(ctx, view, {
+          flags, gridSize: store.get(gridSizeAtom), gridLook: store.get(gridLookAtom), locations: store.get(locationsAtom),
+          mapW: store.get(mapWidthAtom), mapH: store.get(mapHeightAtom), overlays,
+        });
+      } catch (err) { logError(info.name, "Drawing the map's grid and locations over a map view failed", err); }
+    },
     redrawMinimap: () => {
       if (!live || minimapRaf) return;
       const bump = () => { minimapRaf = 0; if (live) store.set(mapViewMinimapRevisionAtom, (n) => n + 1); };
@@ -1532,6 +1586,9 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
       if (!live) return;
       live = false;
       if (minimapRaf) cancelAnimationFrame(minimapRaf);
+      if (repaintRaf) cancelAnimationFrame(repaintRaf);
+      setKeyed(mapViewFogAtom, undefined);
+      setKeyed(mapViewPointerAtom, undefined);
       if (store.get(mapViewCamerasAtom).has(key)) { const cameras = new Map(store.get(mapViewCamerasAtom)); cameras.delete(key); store.set(mapViewCamerasAtom, cameras); }
       for (const u of unsubs) u();
       store.set(pluginMapViewsAtom, store.get(pluginMapViewsAtom).filter((e) => e.key !== key));

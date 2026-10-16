@@ -90,9 +90,21 @@ Some maps open to look at only. A plugin can open one this way, as the replay vi
 with a replay's map. Its tab has an eye where the dot would be, and the status bar says
 *View only*. You can scroll, zoom, switch layers and select things. Nothing can be
 changed or saved: the palette, Layers and Properties panels are hidden (the View menu has
-the layer switches), the tools don't act, and every menu item, button and dialog that
-would change the map is switched off. Save a Copy still works. To change such a map, use File ▸ Edit a Copy: it opens an ordinary copy
+the layer switches), the tools don't act, and every menu item and dialog that would change
+the map is greyed. The toolbar leaves those buttons out — Save, Undo and Redo, Cut and Paste,
+the brush, Symmetry, Players and Triggers — and has an *Edit a Copy* button in place of Save.
+Save a Copy still works. Edit a Copy (the button, or File ▸ Edit a Copy) opens an ordinary copy
 in a new tab, which asks where to save the first time you save it.
+
+A plugin can also show something else in the map's place, with a switch over the map between
+the two, as the replay viewer shows the game. While it is shown, the editor keeps what still
+makes sense there. Zoom works on it. The grid, the locations and other plugins' overlays are
+drawn over it, and View ▸ Grid, Locations and Location Names turn them on and off as over the
+map. Fog of War is that view's own fog where it has one (the game's, through a player's eyes).
+The status bar's tile and position follow the pointer over it. The minimap shows where it looks.
+What only applies to the map behind it — the layers, selecting, the clipboard, Find, the brush
+and the map's own toggles such as Units or Elevation — is left off the toolbar and greyed in
+the menus, and its keys say so in the status bar.
 
 Scroll with the mouse wheel (Shift for sideways), the arrow keys (Shift for half a
 screen), a middle-button drag, or the scrollbars, or click on the minimap. A drag that

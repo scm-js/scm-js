@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewCamera, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewCamera, MapViewPointer, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -469,6 +469,12 @@ export const mapViewCamerasAtom = atom<ReadonlyMap<number, MapViewCamera>>(new M
 
 /** Bumped by a view's `redrawMinimap` (once a frame at most): the minimap makes its picture again. */
 export const mapViewMinimapRevisionAtom = atom(0);
+
+/** Each view's fog as its `setFog` last said, by entry key: absent until it says, null when it has none to show. */
+export const mapViewFogAtom = atom<ReadonlyMap<number, boolean | null>>(new Map());
+
+/** Where the pointer is over each view, as its `setPointer` last said (null: off it), by entry key. */
+export const mapViewPointerAtom = atom<ReadonlyMap<number, MapViewPointer | null>>(new Map());
 
 /* ── Build steps ────────────────────────────────────────── */
 

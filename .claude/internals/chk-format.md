@@ -172,8 +172,9 @@ STR/MASK any; records whole. VCOD hashes only OWNR+SIDE (12 × 36-byte lobby rec
 
 Where the editor now follows the game (2026-10-15, the follow-up to the docs pass):
 - `requiredSections(ver, game = "ums")` in create.ts: `REQUIRED_SECTIONS` is what every game
-  needs (map list + melee start), plus COLR from 205; `"ums"` adds `REQUIRED_UMS_SECTIONS`
-  (MASK PUNI UPRP MRGN TRIG) and the original five below 205 or the `x` five from 205. A
+  needs (map list + melee start), plus COLR from 205, plus TRIG, which only Remastered's map
+  list needs (the editor follows Remastered there); `"ums"` adds `REQUIRED_UMS_SECTIONS`
+  (MASK PUNI UPRP MRGN) and the original five below 205 or the `x` five from 205. A
   hybrid no longer requires the `x` tables. Check Map: missing "melee" sections are an
   error; missing UMS-only ones a warning, an error when the map has triggers.
 - MRGN is written at exactly `locationSlots(fileVersion)` records (64 below 63, 255 from
@@ -189,5 +190,8 @@ Where the editor now follows the game (2026-10-15, the follow-up to the docs pas
 - Settings dialogs' "beyond the original layout" hint now keys on whether the file writes
   the `x` table, not on `VER`.
 - STR keeps `minimum: 2` (Remastered's rule) on purpose.
-- Remastered is known to differ on STR decoys; the rest is unchecked there. Twelve probes
-  for a Remastered pass are in the user's maps folder `CHK/Remastered/` with a checklist.
+- Remastered was played with twelve probes (the user's maps folder `CHK/Remastered/`,
+  CHECKLIST.txt filled in 2026-10-15). Eleven matched 1.16.1. The one difference: a map
+  with no TRIG is *Invalid Scenario* in Remastered's map list, melee included
+  (`REMASTERED_NEEDS` in chk-game.mjs; the page's "Which game" lists the eleven). STR
+  decoys were already known to differ.

@@ -144,14 +144,16 @@ export function createScenario(options: CreateScenarioOptions): Scenario {
  * The sections every game of a map needs, as StarCraft 1.16.1 reads it: the map list
  * refuses a file without one of the first nine, and the start of a game of any type stops
  * without the terrain, the sprites or the units. A Brood War file (`VER` 205 up) needs
- * `COLR` too. Used by Check Map to tell a map that will not load from one that merely
- * lacks optional data. `docs/chk-format.md` has the game's reads in full.
+ * `COLR` too. `TRIG` is here for Remastered, whose map list refuses a map without one
+ * whatever the game type (found playing it), where 1.16.1 needs it only for Use Map
+ * Settings. Used by Check Map to tell a map that will not load from one that merely lacks
+ * optional data. `docs/chk-format.md` has the game's reads in full.
  */
 export const REQUIRED_SECTIONS: readonly string[] = [
-  "VER ", "VCOD", "OWNR", "ERA ", "DIM ", "SIDE", "STR ", "SPRP", "FORC", "MTXM", "THG2", "UNIT",
+  "VER ", "VCOD", "OWNR", "ERA ", "DIM ", "SIDE", "STR ", "SPRP", "FORC", "MTXM", "THG2", "UNIT", "TRIG",
 ];
 /** What a Use Map Settings game needs on top. Melee and the other game types never read these. */
-export const REQUIRED_UMS_SECTIONS: readonly string[] = ["MASK", "PUNI", "UPRP", "MRGN", "TRIG"];
+export const REQUIRED_UMS_SECTIONS: readonly string[] = ["MASK", "PUNI", "UPRP", "MRGN"];
 /** The settings tables a Use Map Settings game of a `VER` 59 or 63 file needs (the `x` ones are read too when present). */
 export const REQUIRED_ORIGINAL_SECTIONS: readonly string[] = ["UNIS", "UPGS", "TECS", "UPGR", "PTEC"];
 /** The settings tables a Use Map Settings game of a Brood War file needs. */

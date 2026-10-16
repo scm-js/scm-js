@@ -146,7 +146,9 @@ describe("a new scenario", () => {
     // Melee reads none of the settings, the fog, the locations or the triggers; a Brood War file needs COLR either way.
     expect(requiredSections(205, "melee")).toContain("COLR");
     expect(requiredSections(59, "melee")).not.toContain("COLR");
-    for (const name of ["MASK", "MRGN", "TRIG", "UPRP", "PUNI", ...REQUIRED_EXPANSION_SECTIONS]) expect(requiredSections(205, "melee")).not.toContain(name);
+    for (const name of ["MASK", "MRGN", "UPRP", "PUNI", ...REQUIRED_EXPANSION_SECTIONS]) expect(requiredSections(205, "melee")).not.toContain(name);
+    // TRIG is needed by every game in Remastered, whose map list refuses a map without one.
+    expect(requiredSections(59, "melee")).toContain("TRIG");
     expect(have).toContain("IVE2");
     expect(sectionData(out, "VCOD")!.length).toBe(VCOD_SIZE);
     expect(defaultVcod().length).toBe(VCOD_SIZE);

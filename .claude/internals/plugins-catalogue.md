@@ -179,7 +179,11 @@ walk the map through scm-sim's `pathing()` (`api.services.watch("scm-sim.engine"
 section is absent without the engine): `game.ts` matches the game's walks with the estimate's pairs
 (stopped / stuck / time ran out / no ground / ≥ 30 % and ≥ 10 tiles longer / units the game could not
 place), overlay mode `game` draws the regions grid and each unit's route, and an edit only marks the
-walks out of date (a run is 10–40 s); `vendor/scm-sim.d.ts` is the contract's copy.
+walks out of date (a run is 10–40 s); `vendor/scm-sim.d.ts` is the contract's copy. Since 1.4.0, with
+scm-sim's `measure()`, it also times a group of twelve through every listed choke (`chokeEnds`: a straight
+open line through the choke from one of its areas to the other; judged by ten of twelve against one alone,
+stragglers counted — the last of twelve was decided by one straggler) and mines at every start location and
+any hall clicked at 8 / 16 / 24 workers, warning when one start mines ≥ 5 % less than another.
 
 **Melee Wizard** (`github.com/scm-js/plugin-melee-wizard`, not a default — installed from Browse Plugins) places symmetric
 start locations and bases: `layout.ts` there is the ring of footprint positions at the game's three-tile
@@ -560,7 +564,7 @@ runtime of its own: the engine is another program on the same origin (private, n
 talks to its pages by message. One service, `scm-sim.engine` version 1 (`contract.d.ts`): `present` (is there a play
 page beside this editor — `src/address.ts`, scmjs.dev or a localhost stand-in under `/editor/`), `status()`,
 `analyse(replay, { onProgress, signal })` → a `ReplayTimeline` (units born / done / morph / given / died, each
-player's numbers every 48 frames, research, positions), `play(map?)`, and since 0.7.0 `pathing(scenario?, options)` → a `PathingResult` (the game's region partition as a minitile grid, and test units walked by the game between the start locations, each with its outcome, frames and route; left out, the scenario is the open map's `export({ format: "chk", built: false })`; `status().pathing` is null on a play page from before it, where the call rejects in words). It is what Walkability's true routes are to be drawn from; a StarEdit copy of the game is enough for it, nobody playing. `src/bridge.ts` frames `/play/analyse.html`
+player's numbers every 48 frames, research, positions), `play(map?)`, and since 0.7.0 `pathing(scenario?, options)` → a `PathingResult` (the game's region partition as a minitile grid, and test units walked by the game between the start locations, each with its outcome, frames and route; left out, the scenario is the open map's `export({ format: "chk", built: false })`; `status().pathing` is null on a play page from before it, where the call rejects in words). It is what Walkability's true routes are to be drawn from; a StarEdit copy of the game is enough for it, nobody playing. Since 0.8.0 `measure(scenario?, options)` → a `MeasureResult`: groups (`count` ≤ 12 made at `from`, one alone then all, each unit's `times` as it gets two tiles past the middle of the way) and bases (`starts` / `bases`, minerals per game minute at each worker count, read from the base's own fields); `status().measure` likewise. The engine starts these games with a fixed seed, so the numbers repeat. `src/bridge.ts` frames `/play/analyse.html`
 out of sight (`scmjs.sim.ready / analyse / progress / result / error / cancel`; the frame sits behind a `FrameHost` so
 the conversation is tested without a DOM); `src/play.ts` is the `scmjs.play` hand-off that used to be the scmjs.dev
 plugin's `play.ts`, and with it Tools ▸ Test Map in Browser moved here (scmjs.dev 1.36.0 dropped it; the two pins

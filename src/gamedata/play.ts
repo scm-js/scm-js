@@ -15,8 +15,9 @@
  * selection circles — about a hundred more files, with their Remastered sprites where the
  * installation has them.
  *
- * Only a full installation has all of it: Blizzard's free StarEdit package has no sounds,
- * and a copy made from it carries no `play` in its stamp. What the classic game's own
+ * Blizzard's free StarEdit package has all of it too, with the `patch_rt.mpq` it carries
+ * laid over its archives; whether a copy made from it may be played from, rather than only
+ * watched from, is the play page's rule, which reads where the copy came from. What the classic game's own
  * interface needs beyond this (fonts, dialogs, console art) is not here: a Remastered
  * installation has not got it, and the play page brings its own.
  *
@@ -227,6 +228,8 @@ export async function copyPlaySet(
     if (++done % 25 === 0) progress?.(done / total, `Game sounds · ${heard} of ${sounds.length}`);
   }
   progress?.(1, "Game sounds");
-  // (`lit` only where a sprite did keep such a layer: a 1.16 installation has no such sprites to keep.)
-  return heard > 0 ? { version: PLAY_VERSION, files, sounds: heard, bytes, ...(lit ? { lit: true } : {}) } : null;
+  // Nearly all of the game's sounds, or the copy is not one to play from: a source whose sounds could not be read
+  // (mopaq before 1.6 decoded none of an installation's compressed ones) would otherwise make a silent game. Remastered
+  // lacks one of the eleven hundred. (`lit` only where a sprite did keep such a layer: a 1.16 installation has none.)
+  return sounds.length > 0 && heard >= sounds.length * 0.95 ? { version: PLAY_VERSION, files, sounds: heard, bytes, ...(lit ? { lit: true } : {}) } : null;
 }

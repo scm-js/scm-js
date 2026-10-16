@@ -100,10 +100,11 @@ record of where it came from, and nothing leaves the browser.
 **Download from Blizzard.** Blizzard offers the standalone StarCraft map editor as a
 free download, and the package carries both archives. They are the trimmed StarEdit
 distribution rather than the game's own, which matters only in that they are enough:
-they extract to the same files a 1.16 installation produces. The package is a 101 MB zip
-of which only the two archives are wanted, so the editor reads the zip's own directory
-and fetches just those members, 82 MB, using HTTP range requests, then inflates them in
-the browser. The package's `patch_rt.mpq` is left alone.
+with the package's `patch_rt.mpq` applied over them, as an installation applies its own,
+they produce the same files a 1.16.1 installation does, its sounds included. The package
+is a 101 MB zip of which only those three archives are wanted, so the editor reads the
+zip's own directory and fetches just those members, 83 MB, using HTTP range requests, then
+inflates them in the browser.
 
 The download goes through a small forwarder at `gamedata.scmjs.dev`
 ([scm-js/cloudflare-blizzard-forwarder](https://github.com/scm-js/cloudflare-blizzard-forwarder))
@@ -204,10 +205,12 @@ data set rather than replacing it. Either way the editor then opens with Remaste
 graphics on and that data set in use, as it does after installing from its own dialog;
 View ▸ Remastered Graphics and the Data sets list change it back.
 
-Blizzard's free download has no sounds and is not the game, so a copy made from it has no
-such files and cannot be played from. Neither can a copy made by a version of the editor
-from before these files were kept; the play page says so and asks for the game to be
-installed again, which replaces the copy.
+A copy made from Blizzard's free download has these files too, but it is the map editor's
+download, not the game: the play page will show replays from it and will not start a game
+or test a map. Playing needs StarCraft installed, and the play page asks for its folder.
+A copy made by a version of the editor from before these files were kept, or before it
+could read the sounds of a 1.16 installation, cannot be used for either; the play page
+says so and asks for the files to be installed again, which replaces the copy.
 
 ### The container image
 

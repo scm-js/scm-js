@@ -30,11 +30,13 @@ import { t } from "../../i18n";
  * is a *prompt*: the state line is replaced by a caution notice, because an editor that
  * draws flat colours and coloured markers looks broken rather than unconfigured, and the
  * one thing the user has to know is that something is missing and one click fixes it. The
- * two routes are then weighted rather than listed side by side — the Blizzard download is
- * a card carrying the one large button, since it is the only route that works for someone
- * who has never owned a copy of the 1.16 game, and the user's own archives are the quieter
- * alternative under it. The desktop's search of the disk sits with those, since a user who
- * has just installed StarCraft wants it re-run rather than a fresh download. The footer
+ * routes are then weighted rather than listed side by side. The user's own StarCraft folder
+ * (classic or Remastered; on the desktop, the search of the disk first) is the card with the
+ * large button, since only an installation gives everything — the editor's graphics, and the
+ * files the play page plays and shows replays from. Blizzard's free StarEdit download is the
+ * quieter alternative under it, for someone without the game: it is enough to edit and to
+ * watch replays, and the play page will not start a game from it (the user's rule,
+ * 2026-10-15). Picking StarDat.mpq and BrooDat.mpq by hand is the last, smallest way. The footer
  * says "Continue without graphics" while there are none, so leaving is a choice made
  * rather than a dialog dismissed.
  *
@@ -286,7 +288,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
             <div>
               <strong>{source === null ? t("Looking for StarCraft’s graphics…") : t("The editor has no StarCraft graphics")}</strong>
               <p>
-                {t("Terrain is drawn as flat colours and units as coloured markers, so a map cannot really be seen or edited by eye. The graphics come from StarCraft’s own archives, which cannot ship with the editor — install them once, below, and everything draws properly.")}
+                {t("Terrain is drawn as flat colours and units as coloured markers, so a map cannot really be seen or edited by eye. The graphics come from StarCraft’s own files, which cannot ship with the editor — install them once, below, and everything draws properly.")}
               </p>
             </div>
           </div>
@@ -351,42 +353,46 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
           <>
             <section className="gd-card">
               <div className="gd-card-head">
-                <Download size={16} />
-                <span className="gd-card-title grow">{t("Download from Blizzard")}</span>
+                <FolderOpen size={16} />
+                <span className="gd-card-title grow">{t("Use your StarCraft installation")}</span>
                 <span className="badge gold">{t("Recommended")}</span>
               </div>
               <p>
-                {t("Blizzard offers the StarCraft map editor as a free download, and it carries the two archives the graphics come from. You do not need StarCraft installed, or a copy of the game at all. The files are extracted here and kept in {here}, so this happens once.", { here: hostTerms().here })}
+                {t("The classic game (1.16) or StarCraft: Remastered. The graphics and the game's own files are read out of its folder and kept in {here}, so this happens once.", { here: hostTerms().here })}
               </p>
-              <Button className="gd-cta" variant="primary" disabled={!!busy} onClick={fromBlizzard}>
-                <Download size={14} /> {" "}{t("Download the graphics — 82 MB")}
-              </Button>
-            </section>
-
-            <section className="gd-alt">
-              <div className="gd-alt-head"><HardDrive size={13} /> {" "}{t("Already have StarCraft? Use your own files")}</div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                {desktop && <Button size="sm" disabled={!!busy} onClick={desktopSearch}><Search size={11} /> {" "}{t("Search this computer")}</Button>}
-                {desktop && <Button size="sm" disabled={!!busy} onClick={desktopFolder}><FolderOpen size={11} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
-                {!desktop && <Button size="sm" disabled={!!busy} onClick={() => fileInput.current?.click()}><FolderOpen size={11} /> {" "}{t("Choose StarDat.mpq and BrooDat.mpq…")}</Button>}
-                {!desktop && <Button size="sm" disabled={!!busy} onClick={chooseFolder}><FolderOpen size={11} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
+                {desktop && <Button className="gd-cta" variant="primary" disabled={!!busy} onClick={desktopSearch}><Search size={14} /> {" "}{t("Search this computer")}</Button>}
+                {desktop && <Button className="gd-cta" disabled={!!busy} onClick={desktopFolder}><FolderOpen size={14} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
+                {!desktop && <Button className="gd-cta" variant="primary" disabled={!!busy} onClick={chooseFolder}><FolderOpen size={14} /> {" "}{t("Choose the StarCraft folder…")}</Button>}
               </div>
-              <input ref={fileInput} type="file" accept=".mpq" multiple hidden onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromFiles(f); }} />
               <input ref={folderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromPickedFolder(f); }} />
-              <p className="hint" style={{ marginTop: 4 }}>
-                {t("A classic (1.16) installation keeps")}{" "}<span className="mono">StarDat.mpq</span> and <span className="mono">BrooDat.mpq</span> {" "}{t("in the game folder. A StarCraft: Remastered installation has neither: choose its folder and the files are read out of it.")}
-                {desktop ? t(" The search also looks next to the app, so the two files dropped beside it are found.") : ""}
-              </p>
+              {!desktop && (
+                <p>
+                  {t("Usually")}{" "}<span className="mono">C:\Program Files (x86)\StarCraft</span>{t(". The browser asks whether to upload the folder: nothing leaves your computer, the files are only read.")}
+                </p>
+              )}
               {!desktop && <Check label={t("Keep the files for real-time lighting on the play page (about 200 MB more)")} checked={lighting} disabled={!!busy} onChange={(e) => setLighting(e.target.checked)} />}
               {desktop && desktopCopy?.status === "ready" && (
-                <p className="hint" style={{ marginTop: 4 }}>{t("App copy: {files} files from {from}, {toLocaleDateString}", { files: desktopCopy.files, from: desktopCopy.from, toLocaleDateString: new Date(desktopCopy.at).toLocaleDateString() })}</p>
+                <p>{t("App copy: {files} files from {from}, {toLocaleDateString}", { files: desktopCopy.files, from: desktopCopy.from, toLocaleDateString: new Date(desktopCopy.at).toLocaleDateString() })}</p>
               )}
               {desktop && searchDirs.length > 0 && (
-                <details className="hint" style={{ marginTop: 4 }}>
+                <details className="hint">
                   <summary>{t("Where the search looks")}</summary>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{searchDirs.map((d) => <li key={d} className="mono">{d}</li>)}</ul>
                 </details>
               )}
+            </section>
+
+            <section className="gd-alt">
+              <div className="gd-alt-head"><Download size={13} /> {" "}{t("No StarCraft installed?")}</div>
+              <p className="hint">
+                {t("Blizzard's free StarCraft map editor download carries the graphics. It is enough to edit maps and watch replays; testing a map or playing needs StarCraft installed.")}
+              </p>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <Button size="sm" disabled={!!busy} onClick={fromBlizzard}><Download size={11} /> {" "}{t("Download from Blizzard — 83 MB")}</Button>
+                {!desktop && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => fileInput.current?.click()}>{t("Choose StarDat.mpq and BrooDat.mpq…")}</Button>}
+              </div>
+              <input ref={fileInput} type="file" accept=".mpq" multiple hidden onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromFiles(f); }} />
             </section>
 
             {source?.kind === "none" && source.tried.length > 0 && (

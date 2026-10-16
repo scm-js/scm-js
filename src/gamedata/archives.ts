@@ -26,6 +26,22 @@ export function sortArchives<T extends { name: string }>(list: T[]): T[] {
   return [...list].sort((a, b) => order(a.name) - order(b.name) || a.name.localeCompare(b.name));
 }
 
+/**
+ * The sizes of the StarDat.mpq and BrooDat.mpq in Blizzard's free StarEdit download (2019), which no installation's
+ * archives have (1.16.1's are 63,511,342 and 24,499,671 bytes). The download holds the whole game — with its
+ * `patch_rt.mpq` laid over, every file a 1.16.1 installation's — so nothing inside tells it apart; its sizes do,
+ * it being one fixed package. A copy made from it says so in its stamp (`staredit`), and the site's play page
+ * shows replays from such a copy but starts no game: the editor's download is for editing and watching, and
+ * playing needs StarCraft installed (the user's rule, 2026-10-15).
+ */
+const STAREDIT_SIZES: Record<string, number> = { "stardat.mpq": 66_927_148, "broodat.mpq": 21_786_162 };
+
+/** True when the archives are the StarEdit download's: both of its two, at their sizes. */
+export function isStarEditDownload(archives: readonly { name: string; size: number }[]): boolean {
+  const named = new Map(archives.map((a) => [(a.name.split(/[\\/]/).pop() ?? "").toLowerCase(), a.size]));
+  return Object.entries(STAREDIT_SIZES).every(([name, size]) => named.get(name) === size);
+}
+
 /** Open each archive that opens; the ones that do not are reported, not thrown. */
 export function openArchives(inputs: { name: string; bytes: Uint8Array }[]): { archives: OpenedArchive[]; problems: string[] } {
   const archives: OpenedArchive[] = [];

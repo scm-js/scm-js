@@ -84,13 +84,18 @@ because flat colours and coloured markers read as broken rather than unconfigure
 weighted rather than listed — the download is a card (`.gd-card`) carrying the one large button
 (`.gd-cta`), the user's own archives the quieter `.gd-alt` under it, and the footer says "Continue without
 graphics" so leaving is a choice rather than a dismissal. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads
-Blizzard's own free StarEdit package — which carries trimmed StarDat/BrooDat that extract to the same 931
-files a 1.16 install does, byte for byte, provided the `patch_rt.mpq` in the same zip is left alone (it
-changes seven tables). `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
+Blizzard's own free StarEdit package — trimmed StarDat/BrooDat plus a `patch_rt.mpq`, all three fetched and
+laid in the game's order. **The patch is not optional** (until 2026-10-15 it was skipped on the belief that it
+"changes seven tables" away from the other routes): those seven — `units/weapons/flingy/techdata/upgrades.dat`,
+`stat_txt.tbl`, `aiscript.bin` — are the 1.16.1 balance patch, which StarDat/BrooDat alone predate (22 bytes
+of `units.dat`), and the folder route and the Remastered route both have the patched ones. With it, the editor's
+938 files and the 1,301 of the play set (1,119 sounds) are byte for byte a 1.16.1 install's (measured
+2026-10-15 by running `extractGameData` + `copyPlaySet` over both). A `public/arr` extracted from StarDat/BrooDat
+without the patch is the old tables; re-extract. `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
 `onProgress` that streams so an 82 MB member does not freeze the bar), `readZipDirectory` (EOCD then the
 central directory, Zip64 reported rather than misread), `readZipMember` (the *local* header is measured
 rather than trusting the directory's copy of its extra field, then `DecompressionStream("deflate-raw")`)
-and `findMembers` (by base name, ignoring folder and case). Only 82 MB of the 101 MB zip is transferred and
+and `findMembers` (by base name, ignoring folder and case). Only 83 MB of the 101 MB zip is transferred and
 no zip library is needed; `tests/zip.test.ts` drives it all over a zip built in the test. It goes through
 `github.com/scm-js/cloudflare-blizzard-forwarder`, a Cloudflare Worker at `gamedata.scmjs.dev` that adds
 the CORS header and forwards ranges, because `download.blizzard.com` serves a `*.cloudfront.net`
@@ -132,7 +137,7 @@ tilesets gained megatiles and groups (Badlands 4844→6172 megatiles; Installati
 1.16 map draws the same from either, and a map using the added tiles draws *only* from these —
 which is why the dialog offers Remastered beside an existing copy and not just in its place. The
 `.dat` tables, `iscript.bin` and the GRPs are the patched ones (what StarEdit.zip's `patch_rt.mpq`
-would give, which the download route deliberately leaves alone): 934 files, 46 MB, 748 graphics —
+gives, which the download route lays over its archives): 934 files, 46 MB, 748 graphics —
 plus the eight 2x terrain files (`tileset/<name>.hd.vr4`, 104 MB together, `extractTilesets`'s
 `HD_TILES`; see `tileset.md`) and the 2x sprites of the reachable images that have one
 (`unit/hd/main_NNN.anim`, 780 files, 216 MB after `slimAnim`; see `units.md`) — 1722 files and
@@ -248,9 +253,13 @@ counts every test pins. Instead the worker copies it after the editor's files an
 stamp — `writeStoredCopy(…, more)` hands `copyPlaySet` its own writer, so one file is in memory at
 a time — reading straight from the source (`storage.readFile` or the archive reader). The stamp
 gains `play: { version, files, sounds, bytes }` (and its `files` / `bytes` / `summary` include
-them) only when every `PLAY_REQUIRED` member and at least one sound were there: Blizzard's
-StarEdit package has no sounds, so a download copy never has it, which is also how the play page
-tells a copy it may play from. A failure while copying is a `problems` line and a copy without
+them) only when every `PLAY_REQUIRED` member and 95% of the game's sounds were there (Remastered lacks one).
+The rule was "at least one sound" until 2026-10-15, and under mopaq 1.5 a 1.16 copy read 3 of 1,119 (the
+compressed WAVs need mopaq 1.6's Huffman + ADPCM) and still claimed `play`. The StarEdit download *does* have
+every sound — the old "it has none" was the same decoding failure — so a download copy gets `play` too, and
+**whether it may be played from is the play page's rule, not the copy's**: the user's decision (2026-10-15) is
+that a copy from the download unlocks replays and the cinematic viewer but never Test Map or a game. The play
+page tells it by the stamp's `from` (the download's URL). A failure while copying is a `problems` line and a copy without
 `play`, never a failed install. A memory-only copy (no OPFS) has none. The desktop's own
 extraction (`desktop/main.ts`) does not write it either: the desktop frames the hosted play page.
 

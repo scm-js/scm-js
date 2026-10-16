@@ -3,7 +3,7 @@
  * downloading it.
  *
  * Blizzard's StarEdit package is 101 MB and carries 152 members, of which the editor wants
- * two — `StarDat.mpq` and `BrooDat.mpq`, 82 MB between them. A zip's directory lives at its
+ * two — `StarDat.mpq` and `BrooDat.mpq`, 82 MB between them, and the 2 MB `patch_rt.mpq` laid over them. A zip's directory lives at its
  * *end* and every member records where its own bytes start, so a reader that can ask for
  * byte ranges can take those two and never see the rest. That is the whole of this module:
  * read the end-of-central-directory record, read the directory, then read and inflate one

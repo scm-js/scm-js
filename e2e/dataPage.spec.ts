@@ -12,7 +12,7 @@ test("the Game Data page says what the browser holds and offers to add it", asyn
   await expect(page.getByRole("heading", { level: 1, name: "Game data" })).toBeVisible();
   await expect(page).toHaveTitle("Game data — scmJS");
   await expect(page.getByText("Nothing yet.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Download the graphics/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Download from Blizzard/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Choose the StarCraft folder…" })).toBeVisible();
 
   // The editor is one link away, and is not here: no menu bar, no map.

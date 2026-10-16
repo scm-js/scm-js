@@ -62,7 +62,7 @@ const FENCE = /^\s*(```|~~~)/;
 const ITEM = /^(\s*)([-*+]|\d+[.)])( +)/;
 /** Lines that are never prose: they end a paragraph and are kept as written. */
 const RAW = (l) => /^\s*(#{1,6} |\||!\[|<|```|~~~|---\s*$|\*\*\*\s*$)/.test(l) || /^ {4,}\S/.test(l) && !ITEM.test(l);
-const HARD_BREAK = (l) => / {2,}$/.test(l) || /\\$/.test(l);
+const HARD_BREAK = (l) => / {2,}$/.test(l) || l.endsWith("\\");
 
 export function wrap(source) {
   const src = source.split("\n");
@@ -80,7 +80,7 @@ export function wrap(source) {
       continue;
     }
     // A generated block: copied through to its end marker.
-    if (/^<!-- generated: /.test(line) && !line.includes("<!-- /generated -->")) {
+    if (line.startsWith("<!-- generated: ") && !line.includes("<!-- /generated -->")) {
       while (i < src.length && !src[i].includes("<!-- /generated -->")) out.push(src[i++]);
       if (i < src.length) out.push(src[i++]);
       continue;
@@ -91,9 +91,9 @@ export function wrap(source) {
       continue;
     }
     // A block quote: its inner prose wrapped, the `> ` put back.
-    if (/^>/.test(line)) {
+    if (line.startsWith(">")) {
       const inner = [];
-      while (i < src.length && /^>/.test(src[i])) inner.push(src[i++].replace(/^> ?/, ""));
+      while (i < src.length && src[i].startsWith(">")) inner.push(src[i++].replace(/^> ?/, ""));
       for (const l of wrap(inner.join("\n")).split("\n")) out.push(l ? `> ${l}` : ">");
       continue;
     }
@@ -107,7 +107,7 @@ export function wrap(source) {
     let lead = first;
     while (i < src.length) {
       const next = src[i];
-      if (!next.trim() || RAW(next) || ITEM.test(next) || /^>/.test(next) || FENCE.test(next)) break;
+      if (!next.trim() || RAW(next) || ITEM.test(next) || next.startsWith(">") || FENCE.test(next)) break;
       if (item && /^\s*/.exec(next)[0].length < indent) break;
       if (HARD_BREAK(src[i - 1])) {
         // Keep the author's line break: what came before is wrapped on its own.

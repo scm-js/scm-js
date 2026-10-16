@@ -20,7 +20,7 @@ import { inflateRawSync } from "node:zlib";
 // @ts-expect-error - plain .mjs build scripts, imported for their pure parts.
 import { headingsIn, renderMarkdown, slug, splitPages } from "../scripts/lib/docs/markdown.mjs";
 // @ts-expect-error - as above.
-import { buildGuide, linkResolver, resolvePath, SOURCES } from "../scripts/lib/docs/site.mjs";
+import { buildGuide, linkResolver, MOVED, redirects, resolvePath, SOURCES } from "../scripts/lib/docs/site.mjs";
 // @ts-expect-error - as above.
 import { buildReference, docCommentFor, isGroupType, parseDeclarations, parseDoc, assignTypes } from "../scripts/lib/docs/api.mjs";
 // @ts-expect-error - as above.
@@ -378,5 +378,23 @@ describe("the guides' prose", () => {
     const loose = read("docs/guide.md").split("\n\n").slice(0, 40).map((p: string) => p.replace(/\n(?!\s*([-*|#>`]|\d+\.))/g, " ")).join("\n\n");
     const flat = (html: string) => html.replace(/\s+/g, " ");
     expect(flat(renderMarkdown(wrap(loose)))).toBe(flat(renderMarkdown(loose)));
+  });
+});
+
+describe("old addresses", () => {
+  const guides = SOURCES.map((s: { file: string }) => buildGuide(s, read(s.file)));
+  const pages = new Set(guides.flatMap((g: { url: string; pages: { url: string }[] }) => [g.url, ...g.pages.map((p) => p.url)]));
+  const sent = new Map(redirects(guides).map((r: { from: string; to: string }) => [r.from, r.to]));
+
+  it("sends a heading that used to be a page to its anchor", () => {
+    expect(sent.get("/triggers/set-deaths/")).toBe("/triggers/actions/#set-deaths");
+  });
+
+  it("forwards only to pages the site has, and never shadows one", () => {
+    for (const [from, to] of sent) {
+      expect(pages.has(from), from).toBe(false);
+      expect(pages.has(to.replace(/#.*$/, "")), `${from} → ${to}`).toBe(true);
+    }
+    for (const from of Object.keys(MOVED)) expect(sent.has(from) || pages.has(from), from).toBe(true);
   });
 });

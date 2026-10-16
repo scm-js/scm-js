@@ -8,20 +8,15 @@ This page describes the format, not any one editor. What scmJS does with a file 
 (the archive around the scenario, protected maps, what Save keeps and what it can strip)
 is in [Opening and saving maps](file-formats.md).
 
-The page holds two kinds of fact. The byte layouts and the value and flag tables come from
-the code the editor reads and writes maps with, and its tests hold them to Blizzard's own
-maps, which it re-encodes byte for byte. What the game does with a section (whether it
-reads it, whether it needs it, which lengths it accepts, what a second copy does) was
-found by studying how StarCraft: Brood War 1.16.1 loads a map, and confirmed by loading
-more than 80 test maps through the game's own code, each built to settle one question.
-StarCraft: Remastered grew out of 1.16.1 and reads maps much the same way, but it is a
-different program: where it is known to differ, the page says so. See [Which
-game](#which-game).
-
-The community's older reference is
-[wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk). Where
-the two disagree about what the game does, this page is the one that was checked against
-the game.
+**Sources.** The byte layouts and the value tables are generated from the code the editor
+reads and writes maps with, which re-encodes Blizzard's own maps byte for byte. What the
+game does with a section (whether it reads it, needs it, which lengths it accepts, what a
+second copy does) describes StarCraft: Brood War 1.16.1, confirmed by loading test maps in
+the game. StarCraft: Remastered reads maps much the same way; the differences known are
+listed under [Where Remastered differs](#where-remastered-differs). Where this page and
+the community's older reference,
+[wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk),
+disagree about the game, this page is the one checked against it.
 
 The same layouts are also published as a [Kaitai Struct](https://kaitai.io) description,
 [chk.ksy](chk.ksy), generated from the same tables as this page. The Kaitai compiler turns
@@ -88,9 +83,9 @@ record section must hold whole records.
 <!-- /generated -->
 
 Three sections may be shorter than the map needs. A short [`MTXM`](#mtxm) leaves the rest
-of the map's tiles as the game found them, tile 0 in our tests. A short [`FORC`](#forc) is
-filled out with zeros. [`MASK`](#mask) takes any length, and the tiles it does not reach
-start unexplored. Each section's page gives its rule in the row *The game accepts*.
+of the map's tiles as the game found them in memory. A short [`FORC`](#forc) is filled out
+with zeros. [`MASK`](#mask) takes any length, and the tiles it does not reach start
+unexplored. Each section's page gives its rule in the row *The game accepts*.
 
 ### Repeated sections
 
@@ -191,10 +186,10 @@ What a player sees, and what causes it:
 | No briefing | The briefing room | `MBRF` is missing or not a whole number of records. |
 | The file name in place of the map's name | In the map list | The name in [`SPRP`](#sprp) is string 0, or an empty string. |
 
-### Which game
+### Where Remastered differs
 
-Everything this page says about the game was checked in StarCraft: Brood War 1.16.1, the
-last version before Remastered. Remastered is known to differ in these ways:
+What this page says about the game describes StarCraft: Brood War 1.16.1, the last version
+before Remastered. Remastered is known to differ in these ways:
 
 - Its map list needs [`TRIG`](#trig). A map with no `TRIG` section is *Invalid Scenario*
   in Remastered whatever the game type, where 1.16.1 lists it and plays it as melee.
@@ -204,24 +199,23 @@ last version before Remastered. Remastered is known to differ in these ways:
 - It reads text as UTF-8 when the bytes are valid UTF-8 (see [`STR`](#str)).
 - In a string, a colour carries on to the next line.
 
-Twelve of the page's claims were also played in Remastered with probe maps, and in all but
-the `TRIG` one Remastered did what 1.16.1 does:
+These rules are confirmed to be the same in Remastered:
 
-- a section one byte too long, and a `UNIT` section that ends in part of a record, refuse
-  the map, with the same messages;
+- a section one byte too long, or a `UNIT` section that ends in part of a record, refuses
+  the map with the same message;
 - a StarCraft 1.00 file with 255 locations, and a map with no `MASK`, start as melee and
   stop as Use Map Settings;
 - a Brood War file with no `COLR` stops at the start of any game;
 - a map with no `MBRF` plays, with no briefing;
-- start locations come from the last `UNIT` section, so a melee game of a map that puts
-  them in the first of two is lost at once;
+- start locations come from the last `UNIT` section;
 - a Ghost placed cloaked starts cloaked only if its owner has Personal Cloaking;
 - a hybrid file's `UNIx` is applied over its `UNIS`;
-- a section the game never reads may run past the end of the file.
+- a section the game never reads may run past the end of the file;
+- the rules for User Selectable races in [`SIDE`](#side) and for empty player slots in
+  [`UNIT`](#unit).
 
-Where the page says a fact was found playing Remastered, it was. The rest has not been
-checked in Remastered; a map that 1.16.1 accepts, and that has a `TRIG` section, is the
-safe target.
+Anything else has not been checked in Remastered. A map that 1.16.1 accepts, and that has
+a `TRIG` section, is the safe target.
 
 ## Protected maps
 
@@ -285,9 +279,13 @@ gives an ordinary file that holds the same map.
 
 ## Sections
 
-The sections are listed here in the order StarEdit writes them. *Read by editors* means
-the game skips the section and a map plays the same without it. *By revision* means the
-section is required in some [revisions](#revisions) of the file and not others.
+The sections are listed here in the order StarEdit writes them, and each has a page below
+in the same order. The last three columns are the game's [three
+reads](#how-the-game-loads-a-map): *needed* means the read fails without the section,
+*read* that the read uses it when it is there, a number in brackets limits either to the
+[revisions](#revisions) with that `VER`, and a blank means the read does not use it. A
+section with no entry in any column is not read by 1.16.1: most are for editors, and a map
+plays the same without them. Its *Read by* row says who does read it.
 
 <!-- generated: index -->
 | Section | Holds | Map list | Melee start | Use Map Settings start |
@@ -335,6 +333,25 @@ section is required in some [revisions](#revisions) of the file and not others.
 | [`CRGB`](#crgb) | StarCraft: Remastered's player colours |  |  |  |
 <!-- /generated -->
 
+### How to read a section's page
+
+Each page starts with what the section is for, then a table of these rows, where they
+apply:
+
+| Row | Says |
+| --- | --- |
+| Name | The four characters, and their bytes in hex |
+| Size | How long the section is, or how its length follows from the map |
+| Read by | Which of the game's reads use it, or that only editors do |
+| Required | Whether a map loads without it, and what the player sees when it does not |
+| The game accepts | Which lengths the game takes; see [Lengths](#lengths) |
+| More than one copy | What a second copy does; see [Repeated sections](#repeated-sections) |
+| In scmJS | Whether this editor models the section or carries its bytes unchanged |
+
+The *Layout* table under it gives each field's offset from the start of the section's
+data, its type and what it holds, followed by tables of the values a field takes. Some
+pages end with an *Example*: real bytes, with what each one means.
+
 ## Revisions
 
 The [`VER`](#ver) value is the file's revision, and it decides which sections the game
@@ -376,7 +393,6 @@ game applies those stale `x` values over the new ones, and the editor reads the 
 same way, so it shows the settings the game will use. When it saves a change it writes
 both tables, the other one in step, and keeps the columns only the `x` tables have (the
 Brood War upgrades, technologies and weapons) from the file.
-
 
 ## How the sections fit together
 
@@ -428,8 +444,7 @@ Layout:
 ## VER
 
 The file's revision, which decides which sections the game reads. The values are in
-[Revisions](#revisions). The game checks it before every read of the map. With two copies
-the last one's value counts, but both must be 2 bytes long.
+[Revisions](#revisions).
 
 <!-- generated: section VER -->
 | Name | `VER␠` (56 45 52 20) |
@@ -547,9 +562,6 @@ The map passes when the two hashes are equal. So the table the game carries pass
 whatever `OWNR` and `SIDE` hold, and a different table passes when it happens to give the
 same answer for this map's players: a change to a seed that none of the 432 bytes picks
 makes no difference, and operations 3, 4 and 5 can stand in for each other.
-
-The game checks every copy of `VCOD`, and refuses the map if any copy fails or is not
-exactly 1040 bytes long.
 
 The table StarEdit writes, which is the one built into the game, for a program that wants
 to check whether a map carries it:
@@ -695,8 +707,7 @@ Each player's race.
 In a Use Map Settings game, a player whose race is User Selectable gets the melee starting
 units of the race they pick, and the units the map places for them are left out, all but
 the neutral kinds: mineral fields, geysers, critters and power-ups. A map that places
-units for a player should give that player a race. (This was found playing StarCraft:
-Remastered, and 1.16.1 does the same.)
+units for a player should give that player a race. 1.16.1 and Remastered both do this.
 
 The game does not check the values. In the lobby it turns User Selectable into Random.
 `SIDE` is one of the two sections the [`VCOD`](#vcod) check covers.
@@ -750,8 +761,8 @@ Tile (x, y), counting from 0 at the top left, is at byte (y × width + x) × 2.
 
 The game copies the section into a space the size of a 256 × 256 map, which it does not
 clear first, and uses the first width × height tiles of it. A section shorter than the map
-leaves the rest of the tiles as they were: tile 0 in our tests, which is nothing to rely
-on. Melee and Use Map Settings both read it.
+leaves the rest of the tiles as they were in memory, which is nothing to rely on. Melee
+and Use Map Settings both read it.
 
 ### What a tile number points at
 
@@ -895,11 +906,23 @@ percentages or amounts, and states such as cloaked or burrowed. Each of these is
 when its bit is set in the record's fields-set or special-states word, so a record can set
 the hit points alone.
 
-The units of a human player slot nobody takes are removed when the game starts; Neutral
-units stay. (Found playing StarCraft: Remastered, and 1.16.1 does the same.)
-
 When a game starts, each record goes through these checks, in this order, before a unit is
 made:
+
+1. **A start location** (type 214) makes no unit. Its place becomes the owner's start
+   location.
+2. **An owner among Players 1 to 8 whose slot is empty in this game**: the unit is
+   dropped. Neutral units stay. 1.16.1 and Remastered both do this.
+3. **Melee, or any game type but Use Map Settings**: the unit is kept only if it is a
+   Player 12 mineral field, geyser or critter.
+4. **Use Map Settings, and the owner's race is User Selectable** (see [`SIDE`](#side)):
+   the unit is kept only if it is a neutral kind: a mineral field, geyser, critter or
+   power-up.
+5. **A Brood War unit in a game of the original StarCraft** is not made.
+6. **No room to place it**: the unit is removed, with *WARNING: Unit unplaceable!* on
+   screen.
+
+Then the unit is made, and the record's fields are applied, each only when its bit is set.
 
 ![What the game does with a placed unit](images/chk-unit-path.svg)
 
@@ -1021,9 +1044,9 @@ terrain diamonds from which it works out the cliffs and edges between terrain ty
 editors read it. Without it the map plays the same, but an editor cannot paint it
 isometrically until the record is rebuilt, which the Repair plugin can do from the tiles.
 
-How StarEdit's brush uses this record was worked out by reverse-engineering StarEdit for
-[Chkdraft](https://github.com/TheNitesWhoSay/Chkdraft). What follows describes the record
-in those terms, and each claim about real files was checked against Blizzard's own maps.
+How the record works, from the lattice of diamonds to the tiles a stroke writes, is
+explained in [The isometric record explained](#the-isometric-record-explained) at the end
+of this page.
 
 <!-- generated: section ISOM -->
 | Name | `ISOM` (49 53 4F 4D) |
@@ -1041,296 +1064,6 @@ Each rect:
 | 2 | u16 | Its top side |
 | 4 | u16 | Its right side |
 | 6 | u16 | Its bottom side |
-<!-- /generated -->
-
-### Diamonds and rects
-
-The isometric brush does not paint tiles. It paints *diamonds*, 128 pixels wide and 64
-tall: four tiles across and two down. Their centres sit on a lattice of points 64 pixels
-apart across and 32 apart down, at every other point of it, the ones whose coordinates add
-up to an even number. Diamond (x, y) is centred on pixel (64 × x, 32 × y), so the diamonds
-along the top and left edges of the map are half off it.
-
-The section does not store diamonds one by one. It stores *rects*: 64 by 32 pixels, two
-tiles side by side, with rect (x, y) having its top-left corner on lattice point (x, y).
-Two corners of every rect are diamond centres, and the line between its other two corners
-cuts the rect into two triangles, each one quarter of one of those diamonds:
-
-- When x + y is even, the diamonds are centred on the top-left and bottom-right corners,
-  and the cut runs from the top-right corner to the bottom-left.
-- When x + y is odd, the diamonds are centred on the top-right and bottom-left corners,
-  and the cut runs the other way.
-
-![Diamonds over the corner of a map, and one rect split between two of them](images/isom-lattice.svg)
-
-The rects are stored row by row from the top left, width ÷ 2 + 1 of them across and
-height + 1 down. That is one column and one row more than the map covers, so that the
-diamonds centred on the right and bottom edges have all four quarters stored. Rect (x, y)
-starts at byte (y × (width ÷ 2 + 1) + x) × 8.
-
-### The four words of a rect
-
-A rect is four 16-bit words, one for each of its sides, in the order left, top, right,
-bottom. Each word belongs to the quarter of a diamond that lies along that side, and holds
-the diamond's value and which quarter it is:
-
-```text
-word = value × 16 + flags        value = word >> 4        flags = word & 0xF
-```
-
-So every diamond's value is stored eight times, twice in each of the four rects it covers.
-On every Blizzard map checked, all eight copies agree. The flag bits give the quarter
-(bits 2 and 3) and which of its two sides of the rect the word is on (bit 1):
-
-<!-- generated: isom flags -->
-| Low four bits | Quarter of its diamond | The diamond's centre is the rect's | Side of the rect |
-| --- | --- | --- | --- |
-| 0x0 | top-left | bottom-right corner | right |
-| 0x2 | top-left | bottom-right corner | bottom |
-| 0x4 | top-right | bottom-left corner | left |
-| 0x6 | top-right | bottom-left corner | bottom |
-| 0x8 | bottom-right | top-left corner | left |
-| 0xA | bottom-right | top-left corner | top |
-| 0xC | bottom-left | top-right corner | top |
-| 0xE | bottom-left | top-right corner | right |
-<!-- /generated -->
-
-Bits 0 and 15 are scratch space for StarEdit's brush while it paints. They are 0 in a
-saved file.
-
-StarEdit writes the flag bits when its brush sets a diamond. The ground a map was started
-with, where nobody has painted since, can hold the right value with the flag bits left at
-0. On the eight Blizzard maps checked, every word with wrong flags is of this kind: all of
-them hold one flat terrain per map, the one the map was started with. So a program reading
-the lattice should work out which diamond a word belongs to from where the word is in its
-rect, and treat the flags as a check at most.
-
-The words in the extra column and row that belong to diamonds past the edge of the lattice
-still hold values on Blizzard's maps. Nothing on the map depends on them.
-
-### What a value means
-
-A value is one of two things:
-
-- **A flat terrain.** The diamond is that terrain all over. Every terrain StarEdit's
-  palette offers has one value; on Jungle World, 1 is Dirt, 2 High Dirt and 3 Water.
-- **One shape of an edge set.** An edge set is the border between two terrains that can
-  touch: a cliff between low and high ground, a shore, the edge of jungle on dirt. A set
-  takes fourteen values in a row, one for each shape the border can take through a
-  diamond, and a diamond's value is the set's first value plus its shape, 0 to 13.
-
-Of the two terrains a set joins, one is laid as a patch on the other: high dirt on dirt,
-dirt on water, jungle on dirt. Here the terrain underneath is called the *outside* terrain
-and the patch the *inside* one, since the border runs around the inside. North is up the
-map.
-
-<!-- generated: isom shapes -->
-| Shape | The diamond is |
-| --- | --- |
-| +0 | Edge; the outside terrain to the north-west |
-| +1 | Edge; the outside terrain to the north-east |
-| +2 | Edge; the outside terrain to the south-east |
-| +3 | Edge; the outside terrain to the south-west |
-| +4 | Corner of the inside terrain, pointing north |
-| +5 | Corner of the inside terrain, pointing east |
-| +6 | Corner of the inside terrain, pointing south |
-| +7 | Corner of the inside terrain, pointing west |
-| +8 | Corner of the outside terrain, pointing east |
-| +9 | Corner of the outside terrain, pointing west |
-| +10 | Corner of the outside terrain, pointing south |
-| +11 | Corner of the outside terrain, pointing north |
-| +12 | Crossing: the inside terrain at the north and south corners, the outside at the east and west |
-| +13 | Crossing: the outside terrain at the north and south corners, the inside at the east and west |
-<!-- /generated -->
-
-![The fourteen shapes, each diamond split into its quarters](images/isom-shapes.svg)
-
-Each quarter of a diamond is the outside terrain, the inside terrain, or crossed by the
-border. The border runs through the centre of the diamond and meets the middle of a side,
-where the diamond beside it carries it on, so a run of edge diamonds draws one unbroken
-line. The values are not in any game file: StarEdit has them built in, for each tileset.
-[Values by tileset](#values-by-tileset) lists them all.
-
-### A worked example
-
-A Jungle World map covered in Dirt, value 1, with one diamond of High Dirt painted on it
-with StarEdit's smallest brush:
-
-![One diamond of High Dirt on Dirt, with the value of every diamond around it](images/isom-example.svg)
-
-The painted diamond takes High Dirt's value, 2. The brush then joins it to the Dirt around
-it with the cliff between the two, values 17 to 30. The four diamonds that share a side
-with the centre become the four straight edges, 17 to 20, and the four beyond them, which
-only touch it at a point, become the corners where the high ground ends, 21 to 24. On the
-map this is a small raised plateau with a cliff all the way round, and no flat High Dirt
-tile at all: the centre diamond's four quarters all lie in rects that also hold part of
-the cliff.
-
-Here are two rects from the middle, as the section holds them. The map is 16 tiles wide,
-so a row holds 9 rects and rect (x, y) starts at byte (9 × y + x) × 8:
-
-<!-- generated: example ISOM -->
-```text
- 240  18 01  rect (3,3) left   0x0118: diamond (3,3), value 17, bits 0x8
- 242  1A 01  rect (3,3) top    0x011A: diamond (3,3), value 17, bits 0xA
- 244  20 00  rect (3,3) right  0x0020: diamond (4,4), value 2, bits 0x0
- 246  22 00  rect (3,3) bottom 0x0022: diamond (4,4), value 2, bits 0x2
- 248  24 00  rect (4,3) left   0x0024: diamond (4,4), value 2, bits 0x4
- 250  2C 01  rect (4,3) top    0x012C: diamond (5,3), value 18, bits 0xC
- 252  2E 01  rect (4,3) right  0x012E: diamond (5,3), value 18, bits 0xE
- 254  26 00  rect (4,3) bottom 0x0026: diamond (4,4), value 2, bits 0x6
-```
-<!-- /generated -->
-
-Rect (3,3) is even, so its left and top words belong to diamond (3,3), the north-west
-edge, and its right and bottom words to diamond (4,4), the flat High Dirt in the centre.
-Rect (4,3) is odd: its left and bottom words belong to the centre and its top and right
-words to diamond (5,3), the north-east edge.
-
-### From diamonds to tiles
-
-The lattice holds no tiles. After each stroke the brush works out new tiles for every rect
-it changed, and writes them to [`MTXM`](#mtxm) and [`TILE`](#tile):
-
-1. Each of the rect's four words names a quarter of a diamond. From the diamond's value
-   and the quarter, the brush gets a *link number* for that side of the rect.
-2. It looks for the tile group in the tileset whose own four links match. Every group of
-   the tileset's CV5 file carries a link for each side (see [what a tile number points
-   at](#what-a-tile-number-points-at)). The rect's left tile comes from that group, which
-   is always an even number, and its right tile from the next one.
-3. It picks one of the group's variations at random, the same one for both tiles.
-4. A cliff face is taller than one rect, so the rows below the top of a cliff are chosen
-   to continue it, by the groups' stack links.
-
-Link numbers up to 48 are shared by any two pieces that can meet; higher ones only join
-pieces of the same edge set. A flat terrain carries the same link on all four sides. The
-table of links for each value is not stored anywhere either: an editor builds it from the
-tileset's CV5 and the values above.
-
-Since the game draws `MTXM` and never reads this section, the two can disagree without
-anyone noticing in a game. Tiles placed one by one, blends and doodads are all tiles no
-lattice produces. The next isometric stroke over them replaces them with what the lattice
-says.
-
-### Values by tileset
-
-The value of each flat terrain, and the first value of each edge set with its outside and
-inside terrains. Numbers between these (Badlands 10 to 12, for example) are not used.
-
-<!-- generated: isom values -->
-Badlands:
-
-| Value | Terrain, or outside / inside |
-| --- | --- |
-| 1 | Dirt |
-| 2 | High Dirt |
-| 3 | Water |
-| 4 | Grass |
-| 5 | Asphalt |
-| 6 | Rocky Ground |
-| 7 | High Grass |
-| 8 | Structure |
-| 9 | Mud |
-| 13–26 | Dirt / High Dirt |
-| 27–40 | Water / Dirt |
-| 41–54 | Dirt / Grass |
-| 55–68 | Dirt / Rocky Ground |
-| 69–82 | High Dirt / High Grass |
-| 83–96 | Dirt / Asphalt |
-| 97–110 | Asphalt / Structure |
-| 111–124 | Dirt / Mud |
-
-Space Platform:
-
-| Value | Terrain, or outside / inside |
-| --- | --- |
-| 1 | Space |
-| 2 | Platform |
-| 4 | High Platform |
-| 8 | Solar Array |
-| 9 | Low Platform |
-| 10 | Rusty Pit |
-| 11 | Plating |
-| 12 | High Plating |
-| 13 | Elevated Catwalk |
-| 14 | Dark Platform |
-| 24–37 | Space / Platform |
-| 38–51 | Platform / High Platform |
-| 52–65 | Platform / Solar Array |
-| 66–79 | Low Platform / Platform |
-| 80–93 | Rusty Pit / Platform |
-| 94–107 | Platform / Plating |
-| 108–121 | High Platform / High Plating |
-| 122–135 | Platform / Elevated Catwalk |
-| 136–149 | Platform / Dark Platform |
-
-Installation:
-
-| Value | Terrain, or outside / inside |
-| --- | --- |
-| 1 | Substructure |
-| 2 | Floor |
-| 3 | Roof |
-| 4 | Substructure Plating |
-| 5 | Plating |
-| 6 | Substructure Panels |
-| 7 | Bottomless Pit |
-| 22–35 | Substructure / Floor |
-| 36–49 | Floor / Roof |
-| 50–63 | Substructure / Substructure Plating |
-| 64–77 | Floor / Plating |
-| 78–91 | Substructure / Substructure Panels |
-| 92–105 | Bottomless Pit / Substructure |
-
-Ashworld:
-
-| Value | Terrain, or outside / inside |
-| --- | --- |
-| 1 | Magma |
-| 2 | Dirt |
-| 3 | Lava |
-| 4 | Shale |
-| 5 | High Dirt |
-| 6 | High Lava |
-| 7 | High Shale |
-| 8 | Broken Rock |
-| 27–40 | Magma / Dirt |
-| 41–54 | Dirt / High Dirt |
-| 55–68 | Dirt / Lava |
-| 69–82 | High Dirt / High Lava |
-| 83–96 | Dirt / Shale |
-| 97–110 | High Dirt / High Shale |
-| 111–124 | Dirt / Broken Rock |
-
-Jungle World, Desert, Ice and Twilight, which share one numbering:
-
-| Value | Jungle World | Desert | Ice | Twilight |
-| --- | --- | --- | --- | --- |
-| 1 | Dirt | Dirt | Snow | Dirt |
-| 2 | High Dirt | High Dirt | High Snow | High Dirt |
-| 3 | Water | Tar | Ice | Water |
-| 4 | Jungle | Sand Dunes | Dirt | Crushed Rock |
-| 5 | Raised Jungle | Sandy Sunken Pit | Water | Sunken Ground |
-| 6 | Rocky Ground | Rocky Ground | Rocky Snow | Crevices |
-| 7 | Ruins | Crags | Grass | Flagstones |
-| 8 | Temple | Compound | Outpost | Basilica |
-| 9 | High Jungle | High Sand Dunes | High Dirt | High Crushed Rock |
-| 10 | High Ruins | High Crags | High Grass | High Flagstones |
-| 11 | High Raised Jungle | High Sandy Sunken Pit | High Water | High Sunken Ground |
-| 12 | High Temple | High Compound | High Outpost | High Basilica |
-| 13 | Mud | Dried Mud | Moguls | Mud |
-| 17–30 | Dirt / High Dirt | Dirt / High Dirt | Snow / High Snow | Dirt / High Dirt |
-| 31–44 | Water / Dirt | Tar / Dirt | Ice / Snow | Water / Dirt |
-| 45–58 | Dirt / Jungle | Dirt / Sand Dunes | Snow / Dirt | Dirt / Crushed Rock |
-| 59–72 | Dirt / Rocky Ground | Dirt / Rocky Ground | Snow / Rocky Snow | Dirt / Crevices |
-| 73–86 | Jungle / Raised Jungle | Sand Dunes / Sandy Sunken Pit | Dirt / Water | Crushed Rock / Sunken Ground |
-| 87–100 | Jungle / Ruins | Sand Dunes / Crags | Dirt / Grass | Crushed Rock / Flagstones |
-| 101–114 | Jungle / Temple | Sand Dunes / Compound | Dirt / Outpost | Crushed Rock / Basilica |
-| 115–128 | High Dirt / High Jungle | High Dirt / High Sand Dunes | High Snow / High Dirt | High Dirt / High Crushed Rock |
-| 129–142 | High Jungle / High Ruins | High Sand Dunes / High Crags | High Dirt / High Grass | High Crushed Rock / High Flagstones |
-| 143–156 | High Jungle / High Raised Jungle | High Sand Dunes / High Sandy Sunken Pit | High Dirt / High Water | High Crushed Rock / High Sunken Ground |
-| 157–170 | High Jungle / High Temple | High Sand Dunes / High Compound | High Dirt / High Outpost | High Crushed Rock / High Basilica |
-| 171–184 | Dirt / Mud | Dirt / Dried Mud | Snow / Moguls | Dirt / Mud |
 <!-- /generated -->
 
 ## TILE
@@ -1488,8 +1221,8 @@ unexplored.
 Only Players 1 to 8 have a bit. A byte of 0x05, bits 0 and 2, means Players 1 and 3 start
 with that tile unexplored and the other six start with it explored. The game starts every
 tile unexplored and writes the section over that, one byte per tile, so tiles past the end
-of a short `MASK` stay unexplored. Every Blizzard melee map checked has 0xFF in every
-byte; some of the campaign and scenario maps, where the maker set the fog, do not.
+of a short `MASK` stay unexplored. Blizzard's melee maps have 0xFF in every byte; some of
+the campaign and scenario maps, where the maker set the fog, do not.
 
 ## STR
 
@@ -1511,8 +1244,15 @@ The table does not say how its bytes spell characters. StarEdit wrote the code p
 Windows it ran on: EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
 Chinese, Windows-1251 for Russian, Windows-1252 for the rest. 1.16.1 reads a file in the
 code page of the machine it runs on. Remastered reads `STR` as UTF-8 when the bytes are
-valid UTF-8, and in the local code page when they are not. How scmJS guesses the encoding
-is in [Opening and saving maps](file-formats.md#what-the-editor-does-with-it).
+valid UTF-8, and in the local code page when they are not.
+
+scmJS reads the table as UTF-8 when it is valid UTF-8. Otherwise it tries each legacy code
+page above, keeps those that decode the bytes without error, and scores each by how much
+of the non-ASCII text falls in that code page's own script. Korean and Chinese bytes are
+often valid in each other's code page, so a tie goes to Korean; when nothing scores, the
+guess is Windows-1252, which decodes anything. The guess is shown in Scenario ▸ Map
+Revision, where it can be corrected, and the table is written back in the encoding chosen,
+with `?` for a character it cannot hold.
 
 <!-- generated: section STR -->
 | Name | `STR␠` (53 54 52 20) |
@@ -1541,8 +1281,7 @@ whatever lies after the table in memory, so an editor has to read it as no strin
 string number past the count is an empty string.
 
 StarEdit writes a table of 1024 strings, and points every unused one at a single 0 byte
-straight after the offsets: an empty string. Every Blizzard map checked is laid out this
-way.
+straight after the offsets: an empty string. Blizzard's maps are laid out this way.
 
 ### Example
 
@@ -1608,8 +1347,8 @@ carries on to the next line of the same string.
 ## STRx
 
 The string table of StarCraft: Remastered: the same as [`STR`](#str) with 32-bit numbers,
-so the table has no 64 KB limit. Only Remastered reads it, and it is always UTF-8. A map
-with `STRx` does not need `STR`.
+so the table has no 64 KB limit. Only Remastered reads it, and it is always UTF-8. Whether
+Remastered loads a map that has `STRx` and no `STR` at all has not been checked.
 
 <!-- generated: section STRx -->
 | Name | `STRx` (53 54 52 78) |
@@ -1775,11 +1514,9 @@ Only Use Map Settings reads the map's triggers. Melee and the other game types r
 triggers of their own, built into the game, and never read this section. Remastered still
 wants it there: its map list refuses a map with no `TRIG` section, even for melee.
 
-When the game loads the triggers, it gives each player in the game a copy of every trigger
-that runs for them: one set for that player alone, for All Players, or for a force the
-player is in. Triggers set to run for Players 9 to 12, Current Player, Foes, Allies,
-Neutral Players or Non-Allied Victory Players are dropped then, and never run. A player
-not in the game gets no triggers.
+When the game loads the triggers, it hands each player in the game a copy of every trigger
+that runs for them, and drops the rest. Which owners that covers is in the trigger
+reference, under [Who a trigger runs for](triggers.md#who-a-trigger-runs-for).
 
 ![The trigger record, byte by byte](images/chk-trigger-record.svg)
 
@@ -2296,6 +2033,304 @@ Colour modes:
 | 1 | Player choice |
 | 2 | Custom |
 | 3 | Palette |
+<!-- /generated -->
+
+## The isometric record explained
+
+This part explains the [`ISOM`](#isom) record: how its words describe a lattice of terrain
+diamonds, what the values mean, and how an editor's isometric brush turns the lattice into
+tiles. It describes StarEdit's brush as worked out for
+[Chkdraft](https://github.com/TheNitesWhoSay/Chkdraft), and the facts about real files
+hold for Blizzard's own maps.
+
+### Diamonds and rects
+
+The isometric brush does not paint tiles. It paints *diamonds*, 128 pixels wide and 64
+tall: four tiles across and two down. Their centres sit on a lattice of points 64 pixels
+apart across and 32 apart down, at every other point of it, the ones whose coordinates add
+up to an even number. Diamond (x, y) is centred on pixel (64 × x, 32 × y), so the diamonds
+along the top and left edges of the map are half off it.
+
+The section does not store diamonds one by one. It stores *rects*: 64 by 32 pixels, two
+tiles side by side, with rect (x, y) having its top-left corner on lattice point (x, y).
+Two corners of every rect are diamond centres, and the line between its other two corners
+cuts the rect into two triangles, each one quarter of one of those diamonds:
+
+- When x + y is even, the diamonds are centred on the top-left and bottom-right corners,
+  and the cut runs from the top-right corner to the bottom-left.
+- When x + y is odd, the diamonds are centred on the top-right and bottom-left corners,
+  and the cut runs the other way.
+
+![Diamonds over the corner of a map, and one rect split between two of them](images/isom-lattice.svg)
+
+The rects are stored row by row from the top left, width ÷ 2 + 1 of them across and
+height + 1 down. That is one column and one row more than the map covers, so that the
+diamonds centred on the right and bottom edges have all four quarters stored. Rect (x, y)
+starts at byte (y × (width ÷ 2 + 1) + x) × 8.
+
+### The four words of a rect
+
+A rect is four 16-bit words, one for each of its sides, in the order left, top, right,
+bottom. Each word belongs to the quarter of a diamond that lies along that side, and holds
+the diamond's value and which quarter it is:
+
+```text
+word = value × 16 + flags        value = word >> 4        flags = word & 0xF
+```
+
+So every diamond's value is stored eight times, twice in each of the four rects it covers.
+In Blizzard's maps all eight copies agree. The flag bits give the quarter (bits 2 and 3)
+and which of its two sides of the rect the word is on (bit 1):
+
+<!-- generated: isom flags -->
+| Low four bits | Quarter of its diamond | The diamond's centre is the rect's | Side of the rect |
+| --- | --- | --- | --- |
+| 0x0 | top-left | bottom-right corner | right |
+| 0x2 | top-left | bottom-right corner | bottom |
+| 0x4 | top-right | bottom-left corner | left |
+| 0x6 | top-right | bottom-left corner | bottom |
+| 0x8 | bottom-right | top-left corner | left |
+| 0xA | bottom-right | top-left corner | top |
+| 0xC | bottom-left | top-right corner | top |
+| 0xE | bottom-left | top-right corner | right |
+<!-- /generated -->
+
+Bits 0 and 15 are scratch space for StarEdit's brush while it paints. They are 0 in a
+saved file.
+
+StarEdit writes the flag bits when its brush sets a diamond. The ground a map was started
+with, where nobody has painted since, can hold the right value with the flag bits left at
+0. In Blizzard's maps every word with wrong flags is of this kind: the one flat terrain
+the map was started with. So a program reading the lattice should work out which diamond a
+word belongs to from where the word is in its rect, and treat the flags as a check at
+most.
+
+The words in the extra column and row that belong to diamonds past the edge of the lattice
+still hold values on Blizzard's maps. Nothing on the map depends on them.
+
+### What a value means
+
+A value is one of two things:
+
+- **A flat terrain.** The diamond is that terrain all over. Every terrain StarEdit's
+  palette offers has one value; on Jungle World, 1 is Dirt, 2 High Dirt and 3 Water.
+- **One shape of an edge set.** An edge set is the border between two terrains that can
+  touch: a cliff between low and high ground, a shore, the edge of jungle on dirt. A set
+  takes fourteen values in a row, one for each shape the border can take through a
+  diamond, and a diamond's value is the set's first value plus its shape, 0 to 13.
+
+Of the two terrains a set joins, one is laid as a patch on the other: high dirt on dirt,
+dirt on water, jungle on dirt. Here the terrain underneath is called the *outside* terrain
+and the patch the *inside* one, since the border runs around the inside. North is up the
+map.
+
+<!-- generated: isom shapes -->
+| Shape | The diamond is |
+| --- | --- |
+| +0 | Edge; the outside terrain to the north-west |
+| +1 | Edge; the outside terrain to the north-east |
+| +2 | Edge; the outside terrain to the south-east |
+| +3 | Edge; the outside terrain to the south-west |
+| +4 | Corner of the inside terrain, pointing north |
+| +5 | Corner of the inside terrain, pointing east |
+| +6 | Corner of the inside terrain, pointing south |
+| +7 | Corner of the inside terrain, pointing west |
+| +8 | Corner of the outside terrain, pointing east |
+| +9 | Corner of the outside terrain, pointing west |
+| +10 | Corner of the outside terrain, pointing south |
+| +11 | Corner of the outside terrain, pointing north |
+| +12 | Crossing: the inside terrain at the north and south corners, the outside at the east and west |
+| +13 | Crossing: the outside terrain at the north and south corners, the inside at the east and west |
+<!-- /generated -->
+
+![The fourteen shapes, each diamond split into its quarters](images/isom-shapes.svg)
+
+Each quarter of a diamond is the outside terrain, the inside terrain, or crossed by the
+border. The border runs through the centre of the diamond and meets the middle of a side,
+where the diamond beside it carries it on, so a run of edge diamonds draws one unbroken
+line. The values are not in any game file: StarEdit has them built in, for each tileset.
+[Values by tileset](#values-by-tileset) lists them all.
+
+### A worked example
+
+A Jungle World map covered in Dirt, value 1, with one diamond of High Dirt painted on it
+with StarEdit's smallest brush:
+
+![One diamond of High Dirt on Dirt, with the value of every diamond around it](images/isom-example.svg)
+
+The painted diamond takes High Dirt's value, 2. The brush then joins it to the Dirt around
+it with the cliff between the two, values 17 to 30. The four diamonds that share a side
+with the centre become the four straight edges, 17 to 20, and the four beyond them, which
+only touch it at a point, become the corners where the high ground ends, 21 to 24. On the
+map this is a small raised plateau with a cliff all the way round, and no flat High Dirt
+tile at all: the centre diamond's four quarters all lie in rects that also hold part of
+the cliff.
+
+Here are two rects from the middle, as the section holds them. The map is 16 tiles wide,
+so a row holds 9 rects and rect (x, y) starts at byte (9 × y + x) × 8:
+
+<!-- generated: example ISOM -->
+```text
+ 240  18 01  rect (3,3) left   0x0118: diamond (3,3), value 17, bits 0x8
+ 242  1A 01  rect (3,3) top    0x011A: diamond (3,3), value 17, bits 0xA
+ 244  20 00  rect (3,3) right  0x0020: diamond (4,4), value 2, bits 0x0
+ 246  22 00  rect (3,3) bottom 0x0022: diamond (4,4), value 2, bits 0x2
+ 248  24 00  rect (4,3) left   0x0024: diamond (4,4), value 2, bits 0x4
+ 250  2C 01  rect (4,3) top    0x012C: diamond (5,3), value 18, bits 0xC
+ 252  2E 01  rect (4,3) right  0x012E: diamond (5,3), value 18, bits 0xE
+ 254  26 00  rect (4,3) bottom 0x0026: diamond (4,4), value 2, bits 0x6
+```
+<!-- /generated -->
+
+Rect (3,3) is even, so its left and top words belong to diamond (3,3), the north-west
+edge, and its right and bottom words to diamond (4,4), the flat High Dirt in the centre.
+Rect (4,3) is odd: its left and bottom words belong to the centre and its top and right
+words to diamond (5,3), the north-east edge.
+
+### From diamonds to tiles
+
+The lattice holds no tiles. After each stroke the brush works out new tiles for every rect
+it changed, and writes them to [`MTXM`](#mtxm) and [`TILE`](#tile):
+
+1. Each of the rect's four words names a quarter of a diamond. From the diamond's value
+   and the quarter, the brush gets a *link number* for that side of the rect.
+2. It looks for the tile group in the tileset whose own four links match. Every group of
+   the tileset's CV5 file carries a link for each side (see [what a tile number points
+   at](#what-a-tile-number-points-at)). The rect's left tile comes from that group, which
+   is always an even number, and its right tile from the next one.
+3. It picks one of the group's variations at random, the same one for both tiles.
+4. A cliff face is taller than one rect, so the rows below the top of a cliff are chosen
+   to continue it, by the groups' stack links.
+
+Link numbers up to 48 are shared by any two pieces that can meet; higher ones only join
+pieces of the same edge set. A flat terrain carries the same link on all four sides. The
+table of links for each value is not stored anywhere either: an editor builds it from the
+tileset's CV5 and the values above.
+
+Since the game draws `MTXM` and never reads this section, the two can disagree without
+anyone noticing in a game. Tiles placed one by one, blends and doodads are all tiles no
+lattice produces. The next isometric stroke over them replaces them with what the lattice
+says.
+
+### Values by tileset
+
+The value of each flat terrain, and the first value of each edge set with its outside and
+inside terrains. Numbers between these (Badlands 10 to 12, for example) are not used.
+
+<!-- generated: isom values -->
+Badlands:
+
+| Value | Terrain, or outside / inside |
+| --- | --- |
+| 1 | Dirt |
+| 2 | High Dirt |
+| 3 | Water |
+| 4 | Grass |
+| 5 | Asphalt |
+| 6 | Rocky Ground |
+| 7 | High Grass |
+| 8 | Structure |
+| 9 | Mud |
+| 13–26 | Dirt / High Dirt |
+| 27–40 | Water / Dirt |
+| 41–54 | Dirt / Grass |
+| 55–68 | Dirt / Rocky Ground |
+| 69–82 | High Dirt / High Grass |
+| 83–96 | Dirt / Asphalt |
+| 97–110 | Asphalt / Structure |
+| 111–124 | Dirt / Mud |
+
+Space Platform:
+
+| Value | Terrain, or outside / inside |
+| --- | --- |
+| 1 | Space |
+| 2 | Platform |
+| 4 | High Platform |
+| 8 | Solar Array |
+| 9 | Low Platform |
+| 10 | Rusty Pit |
+| 11 | Plating |
+| 12 | High Plating |
+| 13 | Elevated Catwalk |
+| 14 | Dark Platform |
+| 24–37 | Space / Platform |
+| 38–51 | Platform / High Platform |
+| 52–65 | Platform / Solar Array |
+| 66–79 | Low Platform / Platform |
+| 80–93 | Rusty Pit / Platform |
+| 94–107 | Platform / Plating |
+| 108–121 | High Platform / High Plating |
+| 122–135 | Platform / Elevated Catwalk |
+| 136–149 | Platform / Dark Platform |
+
+Installation:
+
+| Value | Terrain, or outside / inside |
+| --- | --- |
+| 1 | Substructure |
+| 2 | Floor |
+| 3 | Roof |
+| 4 | Substructure Plating |
+| 5 | Plating |
+| 6 | Substructure Panels |
+| 7 | Bottomless Pit |
+| 22–35 | Substructure / Floor |
+| 36–49 | Floor / Roof |
+| 50–63 | Substructure / Substructure Plating |
+| 64–77 | Floor / Plating |
+| 78–91 | Substructure / Substructure Panels |
+| 92–105 | Bottomless Pit / Substructure |
+
+Ashworld:
+
+| Value | Terrain, or outside / inside |
+| --- | --- |
+| 1 | Magma |
+| 2 | Dirt |
+| 3 | Lava |
+| 4 | Shale |
+| 5 | High Dirt |
+| 6 | High Lava |
+| 7 | High Shale |
+| 8 | Broken Rock |
+| 27–40 | Magma / Dirt |
+| 41–54 | Dirt / High Dirt |
+| 55–68 | Dirt / Lava |
+| 69–82 | High Dirt / High Lava |
+| 83–96 | Dirt / Shale |
+| 97–110 | High Dirt / High Shale |
+| 111–124 | Dirt / Broken Rock |
+
+Jungle World, Desert, Ice and Twilight, which share one numbering:
+
+| Value | Jungle World | Desert | Ice | Twilight |
+| --- | --- | --- | --- | --- |
+| 1 | Dirt | Dirt | Snow | Dirt |
+| 2 | High Dirt | High Dirt | High Snow | High Dirt |
+| 3 | Water | Tar | Ice | Water |
+| 4 | Jungle | Sand Dunes | Dirt | Crushed Rock |
+| 5 | Raised Jungle | Sandy Sunken Pit | Water | Sunken Ground |
+| 6 | Rocky Ground | Rocky Ground | Rocky Snow | Crevices |
+| 7 | Ruins | Crags | Grass | Flagstones |
+| 8 | Temple | Compound | Outpost | Basilica |
+| 9 | High Jungle | High Sand Dunes | High Dirt | High Crushed Rock |
+| 10 | High Ruins | High Crags | High Grass | High Flagstones |
+| 11 | High Raised Jungle | High Sandy Sunken Pit | High Water | High Sunken Ground |
+| 12 | High Temple | High Compound | High Outpost | High Basilica |
+| 13 | Mud | Dried Mud | Moguls | Mud |
+| 17–30 | Dirt / High Dirt | Dirt / High Dirt | Snow / High Snow | Dirt / High Dirt |
+| 31–44 | Water / Dirt | Tar / Dirt | Ice / Snow | Water / Dirt |
+| 45–58 | Dirt / Jungle | Dirt / Sand Dunes | Snow / Dirt | Dirt / Crushed Rock |
+| 59–72 | Dirt / Rocky Ground | Dirt / Rocky Ground | Snow / Rocky Snow | Dirt / Crevices |
+| 73–86 | Jungle / Raised Jungle | Sand Dunes / Sandy Sunken Pit | Dirt / Water | Crushed Rock / Sunken Ground |
+| 87–100 | Jungle / Ruins | Sand Dunes / Crags | Dirt / Grass | Crushed Rock / Flagstones |
+| 101–114 | Jungle / Temple | Sand Dunes / Compound | Dirt / Outpost | Crushed Rock / Basilica |
+| 115–128 | High Dirt / High Jungle | High Dirt / High Sand Dunes | High Snow / High Dirt | High Dirt / High Crushed Rock |
+| 129–142 | High Jungle / High Ruins | High Sand Dunes / High Crags | High Dirt / High Grass | High Crushed Rock / High Flagstones |
+| 143–156 | High Jungle / High Raised Jungle | High Sand Dunes / High Sandy Sunken Pit | High Dirt / High Water | High Crushed Rock / High Sunken Ground |
+| 157–170 | High Jungle / High Temple | High Sand Dunes / High Compound | High Dirt / High Outpost | High Crushed Rock / High Basilica |
+| 171–184 | Dirt / Mud | Dirt / Dried Mud | Snow / Moguls | Dirt / Mud |
 <!-- /generated -->
 
 ## In the source

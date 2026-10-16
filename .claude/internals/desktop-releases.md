@@ -33,11 +33,16 @@ of its own. Keep it that way — the bridge spawns the game, reads folders and i
 
 `electron-builder.yml`
 packages `dist/` + `desktop/dist/` only (never `node_modules`, never `dist/{tileset,arr,unit,game,scripts}`),
-unsigned, with `public/icon.png` as every platform's icon, `electronLanguages: [en-US]` (the 55
-Chromium locales were 50 MB unpacked and 12 MB of the zip; the editor has no translations) and
+unsigned, with `public/icon.png` as every platform's icon, `electronLanguages: [en-US, ko]` (the 55
+Chromium locales were 50 MB unpacked and 12 MB of the zip; they are only Chromium's own strings, the
+editor's Korean is in the bundle — but Chromium reports the OS language as `navigator.language`
+only when that locale's `.pak` is shipped. Measured 2026-10-16, Electron 44.1.1, `LANG=ko_KR.UTF-8`
+under WSLg: with `en-US.pak` alone `navigator.language` is `en-US` (`app.getSystemLocale()` still
+`ko-KR`), so *Same as the system* showed English on a Korean OS; with `ko.pak` (+126 KB) it is `ko`,
+and `de_DE` falls back to `en-US`. A new editor language needs its locale added here) and
 `spellcheck: false` in the window's `webPreferences`; Windows gets an NSIS installer and a **zip**,
 never electron-builder's `portable` target, whose SFX re-extracts the whole app into `%TEMP%` on every
-launch and can only cover the wait with a static `.bmp` painted over the desktop (`docs/development.md`) — that file, `public/favicon.svg` and
+launch and can only cover the wait with a static `.bmp` painted over the desktop. `public/icon.png`, `public/favicon.svg` and
 `components/ui/AppLogo.tsx` are one drawing: the splash's wireframe globe (`splash/starfield.ts`) projected
 once at a fixed angle and flattened to four paths grouped by depth, in violet rather than the splash's
 pink. `scripts/lib/docs/assets/logo.svg` and `scm-js/site`'s copy are the same paths without the

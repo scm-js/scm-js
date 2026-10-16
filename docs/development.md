@@ -1,54 +1,126 @@
 # Development
 
-This page covers how to run scmJS from source, how it is built and released, and what to
-know before changing it. This is for anyone running the editor locally, building the
-desktop app or the container, or contributing. The [user guide](guide.md) says what the
-editor does; [file-formats.md](file-formats.md) and [game-data.md](game-data.md) explain
-the map file and the game data; [plugins.md](plugins.md) is for plugin authors.
-Per-subsystem notes for someone working deep in one area are in [CLAUDE.md](../CLAUDE.md),
-which is written for an AI assistant but is the most detailed description of the code
-there is.
+How to run scmJS from source, how it is tested, built and released, and what to know
+before changing it. This is for contributors, and for anyone building the desktop app or
+the container image themselves.
+
+Each topic is written down in one place:
+
+| Topic | Where |
+| --- | --- |
+| What the editor does, for map makers | [guide.md](guide.md); the [README](../README.md) is the short version |
+| Installing the editor | [installing.md](installing.md) |
+| What happens to a map file on open and save | [file-formats.md](file-formats.md) |
+| The scenario format, section by section | [chk-format.md](chk-format.md) |
+| Triggers, conditions and actions | [triggers.md](triggers.md) |
+| TrigScript, the trigger scripting language | [trigscript.md](trigscript.md); the compiler is in the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s repository |
+| Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
+| Using and writing plugins, the plugin API | [plugins.md](plugins.md), and the reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
+| Each plugin's internals | its own repository's README |
+| Running, building, releasing, contributing | this file |
+| Per-area design notes for working on the code | `.claude/internals/*.md`, indexed by [CLAUDE.md](../CLAUDE.md) |
+| Provenance of adapted code and data | [ATTRIBUTION.md](../ATTRIBUTION.md) |
+| Release notes | [docs/releases/](releases/README.md) |
+
+The design notes under `.claude/internals/` are one file per area of the code (terrain,
+saving, the plugin host, sync, …). They record why the code is the way it is, and the
+traps that are not visible from the code. Read the note for an area before changing it.
 
 ## Getting started
 
-You need Node.js 22.18 or newer (the extraction scripts import TypeScript directly and
-rely on Node's built-in type stripping) and git. A StarCraft installation is optional: the
-editor runs without the game's graphics, and the first run offers to download them.
+You need Node.js 22.18 or newer (the extraction scripts import TypeScript directly through
+Node's type stripping) and git.
 
 ```sh
 git clone https://github.com/scm-js/scm-js
 cd scm-js
 npm install
-npm run extract        # optional: the game's graphics, from an installation you own
 npm run dev            # http://localhost:5173
 ```
 
 The first `npm run dev` or `npm run build` needs a network connection: a `predev` /
 `prebuild` hook fetches the default plugins at their pinned versions into the gitignored
 `plugins/` folder, where the build compiles them in (see [Defaults and
-vendoring](#defaults-and-vendoring)). After that it is offline. The same hook reports what
-game data is on disk and warns, rather than fails, when there is none.
+vendoring](#defaults-and-vendoring)). After that it works offline. The same hook reports
+what game data is on disk, and warns rather than fails when there is none.
 
-`npm run extract` looks for `StarDat.mpq` and `BrooDat.mpq` on its own or takes a path;
-the details and what comes out are in
-[game-data.md](game-data.md#extracting-for-a-source-build). Without it terrain is flat
-colours and units are markers, and everything else works.
+**Game data.** The editor draws with StarCraft's own graphics, which are never committed.
+Without them terrain is flat colours and units are markers, and everything else works.
+There are two ways to get them into a source build:
 
-### Everyday commands
+- **Help ▸ Game Data… in the running dev editor.** Point it at your StarCraft folder, the
+  classic game (1.16) or StarCraft: Remastered. This is the recommended way, and the only
+  one for Remastered: the copy goes into the browser's storage, as it does for any user.
+- **`npm run extract`** reads `StarDat.mpq` and `BrooDat.mpq` from a classic installation
+  (it finds them on its own, or takes `--from <folder>`) and writes the files into
+  `public/`. It does not read Remastered's files.
+
+[game-data.md](game-data.md#extracting-for-a-source-build) has the details. No build,
+container image or hosted site carries the data or an address to fetch it from;
+[ATTRIBUTION.md](../ATTRIBUTION.md) has the terms.
+
+### Dev deep links
+
+Query parameters jump straight to a UI state, which is the fastest way to work on a screen
+or take a screenshot:
+
+```
+/?nosplash                        skip the splash
+/?nosplash&layer=units            select a layer: terrain, doodads, units, sprites, locations, fog, clipboard
+/?nosplash&dialog=playerSettings  open a dialog by id; repeatable
+/?nosplash&dialog=preferences&page=editing   open a dialog at one of its pages
+/?nosplash&zoom=0.5&tileset=ice   zoom level and tileset
+/?nosplash&mode=tile              terrain palette mode: isom, rect, tile
+/?nosplash&layer=fog&fogPlayer=3  view and paint one player's fog
+```
+
+An unknown layer or dialog id is reported in the console with the list of valid ones.
+React's "Components" performance track is off in development because it slows mounting
+badly; set `VITE_REACT_TRACKS=1` to turn it on when profiling renders.
+
+### With the game engine beside it
+
+Tools ▸ Test Map in Browser, and the replay analysis other plugins use, come from the
+[scm-sim plugin](https://github.com/scm-js/plugin-scm-sim). The plugin holds no engine: it
+opens the play page, which has to be on the editor's own origin at `/play/`, as it is on
+scmjs.dev. The play page is built from the scm-sim engine repository, which is not public,
+so without it these features do not work in a local build. With a checkout of it, run both
+dev servers and put one origin in front of them:
 
 ```sh
-npm run dev            # Vite dev server
-npm run build          # tsc -b (the type-check) + vite build → dist/
-npm run preview        # serve dist/ locally
-npm run lint           # oxlint, with the React hook rules; does not type-check
-npm test               # vitest, a few seconds, no browser
+SCMJS_BASE=/editor/ npm run dev -- --port 5173   # this repository
+npm run dev:web                                   # in scm-sim, port 5174
+npm run dev:site                                  # this repository: http://localhost:5180/editor/
+```
+
+Both dev servers keep their own hot reload. `DEV_SITE_PORT`, `DEV_SITE_EDITOR` and
+`DEV_SITE_SIM` change the three ports.
+
+## Commands
+
+```sh
+npm run dev               # Vite dev server
+npm run dev:site          # one origin over the editor and scm-sim (above)
+npm run build             # tsc -b (the type-check) + vite build → dist/
+npm run preview           # serve dist/ locally
+npm run lint              # oxlint, with the React hook rules; does not type-check
+npm test                  # vitest, a few seconds, no browser
 npm run test:watch
-npm run test:maps      # write tests/maps again from the code that makes them
-npm run test:e2e       # the browser tests, against dist/ (build first)
+npm run test:maps         # write tests/maps again from the code that makes them
+npm run test:e2e          # the browser tests, against dist/ (build first)
 npx vitest run tests/chk.test.ts      # one file
 npx vitest run -t "flood fill"        # tests matching a name
-npm run check:assets   # what game data is on disk
-npm run docs:reference # rewrite the generated tables of the trigger and CHK references
+npm run extract           # game data from a classic installation → public/
+npm run check:assets      # what game data is on disk
+npm run i18n              # check the translations against the source (-- --write updates them)
+npm run docs:reference    # rewrite the generated tables of the trigger and CHK references
+npm run build:docs        # the documentation site → docs-site/
+npm run vendor:plugins    # bring plugins/ up to date (predev and prebuild run it)
+npm run bundle:runtimes   # copy the default plugins' runtimes into dist/ (desktop and image builds)
+npm run build:plugin-types    # the plugin typings → plugin-api/
+npm run desktop           # run the desktop app against dist/
+npm run build:desktop     # installers for this OS → release/
+npm run build:image       # the container image, tagged scmjs
 ```
 
 `npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
@@ -56,53 +128,18 @@ main process (`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`
 config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax` (so
 `import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
 parameter properties). Lint, the tests and the build run on every pull request and every
-push to `main`, so run them before one.
-
-### Dev deep-links
-
-Query parameters jump straight to a UI state, which is the fastest way to iterate on a
-screen or take a screenshot:
-
-```
-/?nosplash                        skip the splash
-/?nosplash&layer=units            select a layer: terrain, doodads, units, sprites, locations, fog, clipboard
-/?nosplash&dialog=playerSettings  open a dialog by id; repeatable
-/?nosplash&zoom=0.5&tileset=ice   zoom level and tileset
-/?nosplash&mode=tile              terrain palette mode: isom, rect, tile
-/?nosplash&layer=fog&fogPlayer=3  view and paint one player's fog
-```
-
-An unknown dialog id is reported in the console with the list of valid ones.
-
-In development, React 19's "Components" performance track is switched off, because it
-serialises every render's props and turned mounting the chrome into seconds of blocked
-main thread. Set `VITE_REACT_TRACKS=1` to have it back when profiling renders.
-
-### With the game engine beside it
-
-Test Map in Browser and the replay analysis that other plugins use come from the scm-sim
-plugin. It holds no engine of its own: it opens the play page, which must be on the
-editor's own origin at `/play/`, as on scmjs.dev. To work on the editor and a local
-scm-sim together, run both dev servers and put one origin in front of them:
-
-```sh
-SCMJS_BASE=/editor/ npm run dev -- --port 5173   # this repository
-npm run dev:web                                   # in scm-sim, port 5174
-npm run dev:site                                  # then open http://localhost:5180/editor/
-```
-
-Both dev servers keep their own hot reload. `DEV_SITE_PORT`, `DEV_SITE_EDITOR` and
-`DEV_SITE_SIM` change the three ports.
+push to `main`.
 
 ## Repository layout
 
-The repository is laid out like this:
-
 ```
+index.html      The editor's page, with the boot splash in plain markup
+data.html       The Game Data page, on its own
+install.html    The page another page of the site frames to install game data
 src/
-  atoms/        Jotai state: the document and its undo history, UI state, the dialog stack, preferences
+  atoms/        Jotai state: the open documents and their undo history, UI state, the dialog stack, preferences
   editor/       The edits: invertible change lists per layer, placement checks, settings transactions,
-                save planning, validation, find, statistics
+                save planning, validation, find, statistics, the log
   data/         Reference tables (tilesets, players, units, upgrades, techs, trigger definitions) and
                 the names read out of the loaded game data
   gamedata/     Where the game files come from: the resolver, the browser's stored copies, extraction,
@@ -110,257 +147,95 @@ src/
   formats/
     chk/        The scenario: container reader, section registry, typed section codecs, new maps
     mpq/        .scm/.scx open and save on top of mopaq
+    text/       Text encodings of the string table
     tileset/    Tileset decoding, the megatile atlas, the terrain catalogue, palette cycling
     dat/        units/flingy/sprites/images.dat, .tbl, GRP, PCX, .lo and iscript decoders
     units/      Unit tables, lazy sprite loading, the frame cache, team colours, the animator
     triggers/   The text trigger format (TrigEdit syntax)
+  i18n/         The translator and the language catalogues (ko.json)
+  lib/          Small general-purpose helpers
+  pages/        The entry points of data.html and install.html
   plugins/      The plugin API (the contract), host, loader, defaults, registry
   services/     File pickers and saving, image export, the startup preload, Test Map, data-set switching
   hooks/        The React side of the tools, file actions, hotkeys, plugins, updates
   components/
-    chrome/     Menu bar, toolbar, status bar, toasts
+    chrome/     Menu bar, toolbar, status bar, toasts, the debug console
     panels/     Left dock (layers and palettes), right dock (minimap, layers, properties), plugin panels
     viewport/   The map canvas: its draw passes, the drags, the context menu, the corner chips
     dialogs/    Every dialog, and the registry that lazy-loads them
     splash/     The splash screen
-    ui/         Primitives: buttons, inputs, lists, tabs, the dialog frame
+    ui/         Primitives: buttons, inputs, lists, tabs, the dialog frame, error boundaries
   styles/       Plain CSS, imported in order: tokens → base → ui → chrome → panels → viewport → dialogs → splash
 desktop/        The Electron shell: main process, preload bridge, updater
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
 tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
 e2e/            Browser tests: Playwright specs that drive the built editor
-docs/           These documents, the release notes, the guide's pictures
+docs/           These documents, the release notes, the pictures
 docker/         The container image
+.claude/        The per-area design notes (internals/)
 plugins/        Generated: the default plugins' source at their pinned versions (gitignored)
 public/         Generated: the extracted game data (gitignored except its README and the icons)
 fixtures/       Blizzard maps and archives used by tests (gitignored)
 plugin-api/     Generated: the bundled plugin typings (gitignored)
 ```
 
-## How the editor is put together
+## Conventions
 
-These are the conventions that everything else follows. Each is explained in more depth in
-[CLAUDE.md](../CLAUDE.md), and the source comments say why.
+These are the rules everything else follows. The design notes in `.claude/internals/` give
+the reasons, and the source comments say more.
 
-**State is Jotai, and there is one store.** No context providers, no Redux. Persisted
-settings are `atomWithStorage` atoms under keys starting with `scmjs.`, listed in
-Preferences ▸ Storage; every such key has to be registered in the reset table in
+**State is Jotai, in one store.** There are no context providers. Persisted settings are
+`atomWithStorage` atoms under keys starting with `scmjs.`, listed in Preferences ▸
+Storage; each key must be registered in the reset table in
 `src/atoms/preferencesAtoms.ts`, and a test fails when one is not.
 
-**The scenario is mutated in place.** `scenarioAtom` holds the parsed `Scenario` that is
-written to disk, and edits change it directly rather than replacing it. React therefore
-does not see an edit on its own: each area has a revision counter (`terrainRevisionAtom`
-and its siblings) that is bumped after every edit, undo and load, and the viewport and
-panels subscribe to those. A second set of atoms mirrors the fields the chrome displays
-(map name, size, tileset); change one side and you have to change the other.
+**The scenario is mutated in place.** The parsed scenario that is written to disk is
+changed directly, not replaced, so React does not see an edit on its own. Each area has a
+revision counter, bumped after every edit, undo and load, that the viewport and panels
+subscribe to. The chrome shows some fields (map name, size, tileset) from a second set of
+atoms; change one side and you must change the other.
 
-**Only changed sections are written.** `Scenario.dirty` is the set of section names to
-re-encode on save; everything else goes out byte for byte. Any code that mutates the
-scenario must mark every section it touched, or the change is silently lost on save.
-[file-formats.md](file-formats.md#in-the-source) has the rest.
+**Several maps can be open.** The state atoms hold only the map in front; the others are
+parked records that a tab switch swaps in. A new piece of per-document state must be added
+to the park and install lists in `src/atoms/documentAtoms.ts`, or it leaks from one map
+into the next.
 
-**Edits are invertible change lists.** A brush, a placement or a paste produces a list of
-`{ before, after }` changes per layer, applied by one function in one fixed order and
-reversed for undo. A stroke is one history entry (200 levels). The settings dialogs and
-the trigger editors are OK / Apply / Cancel transactions that hand over no change list:
-what an OK wrote is found by comparing the tables with how they were, and that difference
-is the history entry. Resize and the tileset change are transactions outside the undo
-model, and clear it.
+**Only changed sections are written.** The scenario keeps the set of sections to re-encode
+on save, and everything else goes out byte for byte. Code that changes the scenario must
+mark every section it touched, or the change is silently lost on save.
 
-**Dialogs are lazy.** Adding one means a `DialogId` in `src/components/dialogs/ids.ts` and
-an entry in the registry in `DialogHost.tsx`, which loads each dialog module on first use.
+**Edits are invertible change lists.** A brush stroke, a placement or a paste produces a
+list of `{ before, after }` changes per layer, applied in one fixed order and reversed for
+undo. A stroke is one history entry; the depth is a preference (Preferences ▸ Editing ▸
+Undo, 200 by default). The settings dialogs and the trigger editors are OK / Apply /
+Cancel transactions, whose history entry is the difference between the tables before and
+after. Resize and the tileset change sit outside the undo model and clear it.
+
+**Every write goes through the commits.** The commit, undo and redo paths, the settings
+and trigger commits and the whole-document changes are where repainting, history and
+shared maps hook in. A new way of changing the scenario that bypasses them is invisible to
+the other people on a shared map.
+
+**Dialogs are lazy.** Adding one means an id in `src/components/dialogs/ids.ts` and an
+entry in the registry in `DialogHost.tsx`, which loads each dialog module on first use.
 Nothing on the startup path may import a dialog module statically, or Vite folds it back
 into the main chunk.
 
-**Anything worth explaining later is logged.** The editor keeps a ring buffer of what it
-did — maps opened and saved, plugins started and stopped, where the game data resolved,
-and every uncaught error and rejected promise — which the user reads in View ▸ Debug
-Console and copies, with a header describing the build, into a bug report. It records
-whether the console is open or not, because the failures worth reporting do not repeat on
-request. Two rules for anything that writes to it: log counts and labels, never payloads
-(an entry holding an edit's change list would pin every cell record it touched for as long
-as the ring holds the line), and log at the granularity of user intent, never the inner
-loop — one line per stroke, nothing on the paint or pointer path. Warnings and errors are
-mirrored to the browser's console as before. The chatty tier — every plugin API call,
-every edit — is behind the console's *Verbose* tick and off by default, and code on a hot
-path checks that flag before it builds a message.
+**Log what is worth explaining later.** The editor keeps a log of what it did, which users
+read in View ▸ Debug Console and copy into bug reports. Log counts and labels, never
+payloads, and one line per user action, never per tile or per frame. Chatty lines go
+behind the console's *Verbose* tick.
 
-**A render that throws is contained.** React drops the whole tree when a component throws
-while rendering and nothing catches it, which used to take the Debug Console down with
-everything else. Error boundaries now sit around each dock panel, the palette, the map
-view and every dialog, with one last boundary around the application: a panel or the map
-is replaced by a notice with Try again, a dialog is closed with a toast, and a failure of
-the application itself shows a page with the log's tail and writes the recovery copies
-that are due. A caught error does not reach the window's error event, so the log line
-comes from the handlers given to React's root, with the component stack under the error's
-own. A new top-level surface (a dock, a strip, a floating panel host) should get a
-boundary of its own; anything inside an existing one is already covered.
+**A render that throws is contained.** Each dock panel, the palette, the map view and
+every dialog has an error boundary, with one last boundary around the whole application. A
+new top-level surface (a dock, a strip, a floating panel host) needs a boundary of its
+own.
 
-**Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract; the
-host builds it over the store with no React and no atoms exposed. A plugin's edit goes
-through the same transaction and history as a brush stroke, and a builder that throws is
-rolled back through the same change lists. See [The plugin host](#the-plugin-host).
+**User-visible text goes through `t()`.** See [Translations](#translations).
 
-## Tests
-
-Tests are `tests/*.test.ts` (and any `src/**/*.test.ts`), run by vitest in Node with no
-browser. The whole suite takes a few seconds. A second, much smaller set drives the built
-editor in a real browser; see [Browser tests](#browser-tests).
-
-The suites open two sets of map files. `tests/maps/` is committed: five small `.scx` and
-`.scm` maps built by `tests/support/testMaps.ts` from the editor's own code, with nothing
-of Blizzard's in them. Between them they cover the four file revisions, the three archive
-compressions, an archive without a file list, triggers, a briefing, locations, a sound,
-unit properties and unit settings. Every clone and CI runs the suites over these.
-`tests/maps.test.ts` rebuilds each one and compares it with the committed file, so after
-changing the code that makes them run `npm run test:maps` and commit the result. What they
-do not have is terrain, which cannot be laid without a tileset.
-
-`fixtures/maps/` holds Blizzard's own maps, on a machine that has them. A suite that holds
-for any map runs over both folders; the ones about terrain, doodads and what StarEdit
-itself writes need the real maps, the extracted data in `public/`, or both. Those use
-`describe.skipIf(...)` and skip silently when the files are absent, so a green run on a
-fresh clone has not exercised them. CI has no game data and always skips them; run them
-locally before touching a tileset decoder, the doodad code or the isometric brush.
-`fixtures/` and the generated `public/` trees are gitignored, and nothing in them may be
-committed.
-
-Two suites are worth knowing about:
-
-- `tests/plugin-network.test.ts` fetches, transpiles and imports the real default plugins
-  from GitHub. It is off unless `SCMJS_NETWORK_TESTS=1`, and CI runs it in the web build
-  and the release pre-flight, since opening the editor no longer walks that path.
-- `tests/docs.test.ts` checks these documents: the split into site pages, every relative
-  link, every picture, and that the plugin guide names only calls the API declares.
-
-## Game data
-
-The editor draws with StarCraft's own graphics, which are not redistributable and are
-never committed. A clone extracts them from an installation with `npm run extract`; a
-build without them falls back to flat colours and asks the user through Help ▸ Game Data….
-No build, container image or hosted site carries the data or an address to fetch it from.
-[game-data.md](game-data.md) covers where the editor looks, the download route and the
-extraction; [ATTRIBUTION.md](../ATTRIBUTION.md) the terms.
-
-## Desktop build
-
-`desktop/` is an Electron shell around the same web bundle. `main.ts` serves `dist/` under
-`app://scmjs/`, searches the disk for the game archives and extracts them into the app's
-data folder, opens maps handed over by the file manager, guards the window's close while a
-map has unsaved changes, and holds the updater. `preload.ts` exposes that to the page as
-`window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
-
-```sh
-npm run desktop                 # bundle the main process and run Electron against dist/
-SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against the dev server instead
-npm run build:desktop           # web build + main bundle + electron-builder for this OS
-```
-
-`npm run build:desktop` takes the packaging step's platform, architectures and targets on
-the command line; with none it builds this OS with the targets `electron-builder.yml`
-lists, which is what CI does:
-
-```sh
-npm run build:desktop -- win                 # Windows: nsis + zip
-npm run build:desktop -- win nsis            # just the installer
-npm run build:desktop -- linux AppImage x64 arm64
-npm run build:desktop -- mac dmg arm64
-npm run build:desktop -- --dir               # unpacked app, no installer: the fast check
-npm run build:desktop -- win --skip-web      # repackage the dist/ already on disk
-npm run build:desktop -- --skip-plugins      # leave plugins/ alone (no vendoring fetch)
-```
-
-Platforms are `win`, `mac` and `linux`; architectures `x64`, `ia32`, `arm64`, `armv7l` and
-`universal`; any electron-builder target name (`nsis`, `dmg`, `zip`, `AppImage`, `deb`, …)
-applies to every platform named. `--skip-web` and `--skip-main` reuse the bundles on disk,
-`--publish <mode>` and anything after a bare `--` go to electron-builder as they are.
-Cross-building is electron-builder's business: the script warns about combinations that
-need tooling the machine may lack (a macOS installer off a Mac, an NSIS installer without
-Wine) and runs them anyway; `--dir` and `zip` cross-build with nothing installed. Output
-lands in `release/`.
-
-The build also writes `THIRD-PARTY-NOTICES.txt` into `dist/`: the license text of every
-runtime dependency and of the compiled-in plugins, generated by `scripts/lib/notices.mjs`
-from `package.json` rather than from a list, so it rides in the web zip, the installers
-and the container image without anyone maintaining it.
-
-The desktop build and the container image also carry the runtimes the default plugins
-would otherwise download on first use — today eudplib's, Pyodide and the eudplib wheel,
-about 15 MB — so building an EUD map needs no network there.
-`scripts/bundle-plugin-runtimes.mjs` reads a `runtime.json` from each pinned default's
-repository, fetches the files it lists (with their licences) and puts them in
-`dist/plugin-runtime/<plugin>/<version>/`; downloads are kept in the gitignored
-`plugin-runtimes/`, so only the first build after a pin moves fetches anything. A plugin
-finds its copy by its own version, so one updated past the editor's goes back to
-downloading. The hosted editor and the web zip carry none: they are online anyway, and
-jsDelivr serves those downloads rather than the site's own bandwidth.
-
-What ships is decided by `electron-builder.yml`: `dist/` and `desktop/dist/` only, never
-`node_modules` (Vite bundles everything, mopaq and the extraction included) and never the
-game data a developer's `public/` may hold. Windows gets an NSIS installer and a zip (not
-electron-builder's `portable` target, which re-extracts the whole app on every launch),
-macOS a dmg per architecture, Linux an AppImage and a `.deb`. The installers register
-`.scm`, `.scx` and `.chk`. Asset names carry no version, for the reason under [Download
-links](#download-links). Only `en-US` of Chromium's locales is included, since the editor
-has no translations. Builds are unsigned: Windows shows SmartScreen's "unrecognized app"
-screen, and macOS refuses an unsigned app until the user clears the quarantine attribute.
-
-The app's data folder is the platform's usual one for an app named `scm-js`
-(`%APPDATA%\scm-js` on Windows, `~/.config/scm-js` on Linux,
-`~/Library/Application Support/scm-js` on macOS). It holds the extracted game data, the
-remembered window geometry in `window.json`, and `startup.log`, the milestones of the last
-launch (process start, main script, window created, `dom-ready`, which signal showed the
-window, and the window geometry at each step). `SCMJS_TRACE=1` echoes the same to the
-terminal. When a launch "hangs and then opens", that log is what tells a slow disk, a
-virus scanner reading the binaries, and a slow first paint apart.
-
-The launch itself is arranged so that something is on screen early: the window is created
-hidden and shown on the renderer's first paint, `index.html` carries a boot splash in
-plain markup so that paint needs no stylesheet or bundle, and the app mounts its chrome
-two frames after the splash. The saved maximized state is applied after the window is
-shown. The reasons, and the measurements behind them, are in the comments in
-`desktop/main.ts` and `src/App.tsx`.
-
-### Running the Windows build from WSL
-
-The desktop build cross-builds from WSL, but where the packaged app is run from changes
-the launch more than anything in the code: `\\wsl.localhost\…` is a network share, and
-Chromium loading its binaries and then every asset through it takes minutes. The same
-build, launched from the WSL filesystem and from `C:`:
-
-| milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
-| --- | --- | --- |
-| main script evaluated | 47 ms | 628 ms |
-| window created | 142 ms | 963 ms |
-| `dom-ready` | 215 ms | not within 25 s |
-
-So copy it over first:
-
-```sh
-npm run build:desktop -- win --dir          # release/win-unpacked
-cp -r release/win-unpacked /mnt/c/Users/<you>/scmjs-test
-SCMJS_TRACE=1 WSLENV=SCMJS_TRACE /mnt/c/Users/<you>/scmjs-test/scmJS.exe
-```
-
-`WSLENV` forwards the variable into the Windows process. From WSL, the app's data folder
-is `/mnt/c/Users/<you>/AppData/Roaming/scm-js`.
-
-### In-app updates
-
-The desktop app checks GitHub releases at startup (a preference, on by default) and
-through Help ▸ Check for Updates…, using electron-updater over the `latest*.yml` feed
-files the release workflow uploads beside the installers. Finding one raises a toast with
-a Download button rather than a dialog; nothing downloads or installs unasked, and
-installing goes through the same unsaved-changes gate as closing the window. A nightly
-build follows the nightlies and a stable build follows stable releases; a preference lets
-a stable install opt into nightlies.
-
-Windows, the AppImage and the `.deb` install updates themselves. macOS can see one but not
-install it until the app is code-signed, so the dialog offers the release page there. A
-development run (`npm run desktop`) and an unpacked Linux folder report that they cannot
-check, since the updater has nothing it could replace. `desktop/updater.ts` is the
-main-process side, `src/editor/updates.ts` the state machine and every string,
-`tests/updates.test.ts` the cases.
+**Plugins get the same API the editor uses.** `src/plugins/api.ts` is the contract. A
+plugin's edit goes through the same transaction and history as a brush stroke. See [The
+plugin host](#the-plugin-host).
 
 ## The plugin host
 
@@ -368,63 +243,43 @@ main-process side, `src/editor/updates.ts` the state machine and every string,
 repository. This is the editor's half: where the plugin system lives and how a plugin gets
 from an address to a running `activate`.
 
-| File | |
+| File | Holds |
 | --- | --- |
-| `src/plugins/api.ts` | The public types, and the only place the contract is written. `PLUGIN_API_VERSION` bumps for a change that is not backward compatible; additions leave it alone. |
-| `src/plugins/host.ts` | `createPluginApi(store, info)` builds one plugin's `PluginApi` over the store, with a `Contributions` bag that `dispose()` empties. `activatePlugin` / `deactivatePlugin` drive the lifecycle; `inspectPlugin` / `installPlugin` are the confirm-then-add pair. |
-| `src/plugins/loader.ts` | Spec parsing, the manifest fetch, and the fetch / transpile / rewrite-imports / blob-URL pipeline. Pure apart from the callbacks it takes, so the tests run it in Node. |
-| `src/plugins/defaults.ts` | The plugins a fresh editor starts with, each pinned to a tag. |
-| `src/plugins/registry.ts` | Browse Plugins: parsing, searching and caching the JSON indexes. |
-| `src/plugins/widgets.ts` | `el` and `api.ui.widgets`: plain DOM in the editor's own class names, so a plugin's dialog looks like a built-in one. The waiting kit — `spinner`, `progressBar`, `statusLine`, `skeleton`, `busy`, and a button's `setBusy` — is here too; its styles are the Waiting block at the end of `src/styles/ui.css`, which is also where the reduced-motion behaviour lives, so nothing here animates in JavaScript. |
-| `src/plugins/claims.ts` | The trigger-list claims the trigger editors read. |
-| `src/plugins/images.ts` | Image loading, clipboard images, and drop / paste transfers for plugin dialogs. |
-| `src/plugins/failures.ts` | The toast a failed activation raises. |
-| `src/plugins/builtin.ts` | `import.meta.glob` over `plugins/*/`, where the vendored defaults land. |
-| `src/plugins/transpile.worker.ts` | TypeScript in a worker, for a `.ts` plugin loaded from source. |
-| `src/atoms/pluginAtoms.ts` | The installed list, the stored code copies, the runtimes, the contribution registries, and the one-at-a-time requests the viewport serves: picks, map tools, overlays, panels, claims. |
-| `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps the runtimes in step with the list. |
-| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, Browse, the Add / Update confirmation, and the frame a plugin's dialog mounts into. |
-| `src/components/panels/PluginPanels.tsx` | The floating frames a plugin's panel mounts into, and `DockedPluginPanels`, the `.panel`s the right dock renders for `dock: "right"`. |
-| `src/components/ui/DialogSlots.tsx` | The footer row a plugin's `dialogSlot` mounts into; a dialog opts in by passing `slot` to `DialogFrame`, naming its id and lending its working-copy fields. |
+| `src/plugins/api.ts` | The public types: the only place the contract is written |
+| `src/plugins/host.ts` | Builds one plugin's API over the store; activation, deactivation, inspect and install |
+| `src/plugins/loader.ts` | Spec parsing, the manifest fetch, and the fetch / transpile / import pipeline |
+| `src/plugins/defaults.ts` | The plugins a fresh editor starts with, each pinned to a tag |
+| `src/plugins/registry.ts` | Browse Plugins: reading, searching and caching the registry indexes |
+| `src/plugins/widgets.ts` | `api.ui.widgets`: plain DOM in the editor's own class names, and the waiting kit |
+| `src/plugins/claims.ts` | The trigger-list claims the trigger editors read |
+| `src/plugins/images.ts` | Image loading, clipboard images, and drops and pastes in plugin dialogs |
+| `src/plugins/failures.ts` | The toast a failed activation raises |
+| `src/plugins/builtin.ts` | The vendored defaults in `plugins/*/`, compiled in |
+| `src/plugins/transpile.worker.ts` | TypeScript in a worker, for a `.ts` plugin loaded from source |
+| `src/atoms/pluginAtoms.ts` | The installed list, stored code copies, runtimes, contributions, and the requests the viewport serves |
+| `src/hooks/usePlugins.ts` | Activates the enabled plugins at startup and keeps the runtimes in step with the list |
+| `src/components/dialogs/PluginDialogs.tsx` | Manage Plugins, Browse, the Add / Update confirmation, a plugin dialog's frame |
+| `src/components/panels/PluginPanels.tsx` | The floating and docked frames a plugin's panel mounts into |
+| `src/components/ui/DialogSlots.tsx` | The footer row a plugin's dialog slot mounts into |
 
-The chrome reads the registries: the menu bar merges plugin menu items into its model, the
-viewport and the terrain palette append the matching context items, the status bar renders
-the plugin status items after its message cell, the right dock renders the docked panels
-after Properties (and stays on screen for them), `DialogFrame` mounts the slots registered
-for its dialog, and the hotkey hook checks plugin combos first. `view.flash` puts boxes in
-map pixels on `viewFlashesAtom`; the viewport paints them fading at the end of its pass
-and repaints every frame until the last one is over. The viewport also serves the
-requests: a pick ahead of every layer, then a running map tool, then the overlays at their
-slots in the paint pass, each with a guarded `finish` so its promise settles exactly once
-however it ends.
+The chrome reads the contributions: the menu bar merges plugin menu items into its model,
+the context menus and status bar add theirs, the right dock renders docked panels after
+Properties, and the hotkey hook checks plugin key combinations first. The viewport serves
+a plugin's map requests: picks, map tools and overlays.
 
-A plugin's `document.edit` wraps the scenario in a transaction whose operations apply as
-they are called and accumulate change lists, then commits one history entry through the
-same path a brush stroke takes, stranded-object pass included. `document.update` is the
-settings-and-triggers equivalent, committing through the settings and triggers commits.
-`document.sections` rewrites the file and installs the re-parsed scenario, which is why it
-drops the history.
-
-`api.sync` hooks the same places. While a map is shared, every commit, undo and redo, the
-settings and trigger commits, a whole-document change and a write to the archive's extra
-files report to the session, which turns the change into an op, applies it again through
-the op's own resolution (so this editor computes exactly what every other one will), and
-hands it to the plugin. Other people's ops queue with the server's confirmations in
-arrival order and are applied when no stroke, map-editing dialog or other tab is in the
-way: the pending local ops are taken back, the queue is applied, the pending ops go on
-again, and the selections, the mirror atoms and the revisions are brought up to date. The
-resolution itself — records found by content, cells by value, locations by slot with their
-names as text, dialog tables whole — is pure and has its own tests, including one that
-interleaves three editors' random edits across a hundred seeds and checks they end
-identical.
+A plugin's `document.edit` commits one history entry through the same path a brush stroke
+takes, and `document.update` commits through the settings and trigger commits.
+`document.sections` rewrites the file and reloads it, which drops the history. While a map
+is shared, every one of those commits also reaches the session. `plugins-host.md` and
+`sync.md` in `.claude/internals/` have the details.
 
 ### The loading pipeline
 
 1. The spec is parsed into a base URL. `builtin:<name>` is a plugin compiled in from
    `plugins/<name>/`; a `github:` spec or a github.com URL resolves to
    `raw.githubusercontent.com/owner/repo/<ref or HEAD>/<dir>/`; any other URL is a
-   manifest, an entry file (a manifest is synthesised from its name) or a directory
-   holding `plugin.json`.
+   manifest, an entry file (a manifest is made up from its name) or a directory holding
+   `plugin.json`.
 2. The manifest is fetched and validated; only `name` is required.
 3. The file to import is the manifest's `build` when it has one (a committed bundle, one
    fetch, no transpile), else its `entry`.
@@ -442,47 +297,44 @@ identical.
 
 Pressing **Add** in Manage Plugins installs nothing. The editor canonicalises the address,
 asks GitHub which commit the ref points at, and reads the `plugin.json` at that commit. No
-entry file is fetched, nothing is transpiled and nothing is imported; probing for
-`plugin.ts` would mean fetching code the user has not agreed to. The confirmation opens
+code is fetched, transpiled or imported before the user agrees. The confirmation opens
 only once a manifest came back; an address with nothing behind it is reported under the
 Add field instead.
 
-The install is the only writer past the dialog. Its three ticks are *Enable it now*, *Pin
-to this version* (the stored spec becomes `github:owner/repo@<sha>`) and *Load from a copy
-saved here* (below). The **Update** button on a pinned row previews the branch and, when
-it holds a different commit, reopens the same dialog with the old commit marked to be
-replaced.
+The install has three ticks: *Enable it now*, *Pin to this version* (the stored spec
+becomes `github:owner/repo@<sha>`) and *Load from a copy saved here* (below). The
+**Update** button on a pinned row previews the branch and, when it holds a different
+commit, reopens the same dialog with the old commit marked to be replaced.
 
-A listed plugin that is not running is still described: the manifest alone is fetched to
-fill in name, version, description and icon, and the answers are cached in browser storage
-so the next visit renders from them while the refresh runs. Browse Plugins reads the
-registry indexes the same way and hands a chosen entry to the same Add path, so a registry
-decides what is listed and never what is trusted.
+A listed plugin that is not running is still described: its manifest alone is fetched for
+the name, version, description and icon, and cached so the next visit shows them at once.
+Browse Plugins hands a chosen entry to the same Add path, so a registry decides what is
+listed and never what is trusted.
 
 ### Loading from a copy
 
 *Load from a copy saved here* means "prefer the copy". With no copy yet, the load records
-every fetched file into browser storage (capped; a larger plugin stays remote with a
-console warning). With a copy, the load has no network path at all and errors on a file
-the copy lacks, so a plugin that grew a file since the copy was made says so rather than
-fetching it. Reload drops the copy and fetches again; turning the option off drops it too.
+every fetched file into browser storage (up to a size cap; a larger plugin stays remote
+with a console warning). With a copy, the load has no network path at all and fails on a
+file the copy lacks. Reload drops the copy and fetches again; turning the option off drops
+it too.
 
 ### Defaults and vendoring
 
-The default plugins (scmscx.com, Repair, Walkability, Terrain from Image, Paint, TrigEdit,
-TrigScript, Stamp Library, scm-sim and scmjs.dev, of which TrigEdit and scmjs.dev are
-installed but start off) are ordinary plugins from their own repositories, each pinned in
-`src/plugins/defaults.ts` to a **tag**, never a branch, so that a push to a plugin
-repository cannot change every editor already in use and any release can be rebuilt as it
-shipped. Moving a default forward is a commit that changes the tag there. A plugin's
-identity is its repository, whatever version follows, which is what keeps an older
-editor's unpinned spec, the compiled-in copy and the pinned default from being listed and
-run as three plugins.
+The default plugins are ordinary plugins from their own repositories: Aftermath, eudplib,
+Paint, Repair, scm-sim, scmjs.dev, scmscx.com, Stamp Library, Terrain from Image,
+TrigEdit, TrigScript and Walkability. All start on except TrigEdit, which is installed but
+off. Each is pinned in `src/plugins/defaults.ts` to a **tag**, never a branch, so a push
+to a plugin repository cannot change editors already in use, and any release can be
+rebuilt as it shipped. Moving a default forward is a commit that changes the tag there. A
+plugin's identity is its repository, whatever the version, so an older unpinned spec, the
+compiled-in copy and the pinned default are one plugin, not three.
 
 `scripts/vendor-plugins.mjs` writes each default's source at its tag into the gitignored
-`plugins/`, where `builtin.ts` compiles it into the bundle. It runs from `predev`,
-`prebuild` and the desktop build, fetches only what is not already there at the pinned
-version, and honours `GITHUB_TOKEN` to stay off the anonymous rate limit (CI sets it). A
+`plugins/`, where `builtin.ts` compiles it into the bundle. Every build does this, so a
+first visit loads no compiler and makes no third-party requests. The script runs from
+`predev`, `prebuild` and the desktop build, fetches only what is not already there at the
+pinned version, and uses `GITHUB_TOKEN` when set to stay off the anonymous rate limit. A
 directory it wrote carries a `vendored.json`; one you put there by hand is left alone.
 
 ```sh
@@ -493,17 +345,13 @@ npm run vendor:plugins -- --list   # print the pinned specs
 SCMJS_SKIP_VENDOR=1 npm run build  # skip it: that bundle fetches its defaults at startup
 ```
 
-Every build compiles them in, not only the desktop, because of the cold path: one remote
-`.ts` plugin starts the transpile worker, and TypeScript is inlined into that worker, so
-five remote defaults put 3.4 MB (975 KB gzipped) of compiler onto a first visit. Measured
-on the production build, a cold visit went from 1235 KB gzipped and 20 cross-origin
-requests to 344 KB and none. `tests/vendor-plugins.test.ts` pins the script's parsing and
-the rule that no default may be unpinned.
+`tests/vendor-plugins.test.ts` pins the script's parsing and the rule that no default may
+be unpinned.
 
-## Plugin typings
+### Plugin typings
 
 Plugin repositories compile against `@scm-js/plugin-api`, an npm package holding one
-generated `index.d.ts` bundled from `src/plugins/api.ts`.
+`index.d.ts` bundled from `src/plugins/api.ts`.
 
 ```sh
 npm run build:plugin-types      # → plugin-api/index.d.ts + package.json (gitignored)
@@ -513,34 +361,220 @@ npm run publish:plugin-types    # publish to npm and push to github.com/scm-js/p
 The build refuses a bundle that still carries an import, since a file naming `jotai` or
 `react` is one a plugin repository cannot compile with alone. The version is the API's,
 not the editor's: the major is `PLUGIN_API_VERSION`, the minor moves when the declarations
-do, and a build that did not move the contract publishes nothing. The `plugin-api` job in
-the Build workflow runs it on every build; the git push needs the `PLUGIN_API_PAT`
-organisation secret (it reports rather than fails without it) and the npm publish is
-behind the `PUBLISH_PLUGIN_API` repository variable, authenticating by OIDC through npm's
-trusted publishing with `--provenance`. Setting that up is in
-`scripts/publish-plugin-api.mjs` and the job's comments.
-`tests/plugin-api-package.test.ts` pins the version rule and the no-imports rule.
+do, and a build that did not change the contract publishes nothing. The `plugin-api` job
+in the Build workflow runs it on every build. The push to `scm-js/plugin-api` uses the
+`PLUGIN_API_KEY` deploy key (without it the job reports and carries on), and the npm
+publish is behind the `PUBLISH_PLUGIN_API` variable, using npm's trusted publishing with
+provenance. `tests/plugin-api-package.test.ts` pins the version rule and the no-imports
+rule.
 
-The shared workflow each plugin repository calls, `scm-js/.github`'s `plugin-ci.yml`,
-type-checks, tests, rebuilds and commits the plugin's `dist/plugin.js` on its main branch,
+Each plugin repository calls the shared workflow `plugin-ci.yml` in `scm-js/.github`. It
+type-checks, tests, rebuilds and commits the plugin's `dist/plugin.js` on the main branch,
 and at a tag checks that the committed bundle is what the source builds to.
 
-## Releases
+## Tests
 
-`.github/workflows/build.yml` has three channels, and the release list only grows when a
-version is cut:
+### Unit tests
 
-| channel | trigger | what lands |
+Tests are `tests/*.test.ts` (and any `src/**/*.test.ts`), run by vitest in Node with no
+browser. The whole suite takes a few seconds.
+
+The suites open two sets of map files:
+
+- **`tests/maps/`** is committed: five small `.scx` and `.scm` maps built by
+  `tests/support/testMaps.ts` from the editor's own code, with nothing of Blizzard's in
+  them. They cover the four file revisions, the three archive compressions, an archive
+  without a file list, triggers, a briefing, locations, a sound and unit settings, but no
+  terrain. `tests/maps.test.ts` fails when the files and the code that makes them
+  disagree: run `npm run test:maps` and commit the result. Only generated maps go here.
+- **`fixtures/maps/`** holds Blizzard's own maps, on a machine that has them. The suites
+  about terrain, doodads and what StarEdit itself writes need these, the extracted data in
+  `public/`, or both, and skip silently when the files are absent. CI has neither, so a
+  green CI run has not exercised them. Run them locally before touching a tileset decoder,
+  the doodad code, the isometric brush or anything under `src/formats/`.
+
+Two suites are worth knowing about:
+
+- `tests/plugin-network.test.ts` fetches, transpiles and imports the real default plugins
+  from GitHub. It runs only with `SCMJS_NETWORK_TESTS=1`; CI runs it in the web build and
+  the release pre-flight.
+- `tests/docs.test.ts` checks these documents: the split into site pages, every relative
+  link and picture, the 90-column wrap, and that the plugin guide names only calls the API
+  declares.
+
+### Browser tests
+
+`e2e/*.spec.ts` are Playwright specs that drive the built editor in headless Chromium.
+They cover what the unit tests cannot: that the bundle starts, that each dialog's chunk
+loads and mounts, and that a change made through the chrome ends up in the saved file.
+
+```sh
+npx playwright install chromium       # once
+npm run build                         # the specs run against dist/
+npm run test:e2e
+npx playwright test e2e/save.spec.ts  # one file
+npx playwright test --ui              # watch a spec run, step through it
+```
+
+`npm run test:e2e` serves `dist/` with `vite preview` on port 4173 and does not build, so
+build again after changing the editor. To run against something already being served, the
+dev server included, set `SCMJS_E2E_URL` to its address.
+
+Every spec runs under the same conditions, set up in `e2e/support/editor.ts`, so a run on
+a machine with game data is the run CI makes:
+
+- **No game data.** Terrain is flat colours, and the editor offers Help ▸ Game Data… soon
+  after it starts; a spec that uses the chrome closes that first.
+- **No network.** Anything not served by the build under test is refused.
+- **No native file pickers.** The editor opens through a file input and saves as a
+  download, as in Firefox and Safari.
+
+A test also fails if the page threw or logged an error.
+
+| Spec | Checks |
+| --- | --- |
+| `boot.spec.ts` | A first visit: splash, editor, the Game Data offer, a blank map drawn |
+| `dialogs.spec.ts` | Every dialog opens, in English and Korean |
+| `save.spec.ts` | A map renamed and saved; every other section comes back byte for byte |
+| `errors.spec.ts` | A dialog whose chunk fails closes with a notice; the editor carries on |
+| `dataPage.spec.ts` | The Game Data page on its own |
+| `installPage.spec.ts` | The page that installs game data for another page of the site |
+| `moveIn.spec.ts` | Settings kept at the old address are brought over on the first visit |
+| `pluginUpdates.spec.ts` | Checking all plugins for updates, and Update all |
+| `docks.spec.ts` | Dragging a dock's edge over a plugin's map view |
+| `rulers.spec.ts` | The rulers line up with the map past the scrollbars |
+
+`dialogs.spec.ts` reads the dialog ids from the registry, so a new dialog is covered
+without touching the spec; one that renders nothing without a payload must be added to its
+`NEEDS_PAYLOAD` list. A failure leaves a trace under `test-results/`;
+`npx playwright show-trace <trace.zip>` replays it. CI runs the specs in the web build and
+keeps the report of a failed run.
+
+## Translations
+
+The editor's own words can be shown in another language; a map's text is never translated.
+English and Korean ship today, chosen in Preferences ▸ General or following the browser.
+
+- **Writing a string.** The English text is the key: `t("Save {name}", { name })`. The
+  argument must be a string literal, since the extractor reads the source. A string kept
+  in a table is marked `msg("…")` where it is written and shown with `translate(value)`.
+  Never call `t()` at module scope, where the language is not yet known. Where one English
+  word means two things, `tc("menu", "Open")` adds a context.
+- **Placeholders** are a small subset of ICU MessageFormat: `{name}`, `{n, plural, …}` and
+  `{x, select, …}`. Korean particles agree with the word before them through `{name|을}`.
+- **The catalogues.** `src/i18n/ko.json` maps the English text to the Korean. After adding
+  a string, run `npm run i18n -- --write`, which adds the new key with an empty value
+  (shown in English until filled in) and drops keys nothing uses. `tests/i18n.test.ts`
+  fails on a missing or unused key, a placeholder mismatch, or a `t()` whose argument is
+  not a literal.
+- **Reviewing.** `npm run i18n -- --export ko ko.csv` writes the catalogue as a
+  spreadsheet with the source files each string appears in; `--import ko ko.csv` reads it
+  back. The Korean was not written by a native speaker, and a native reader's review is
+  welcome.
+
+Plugins get the same translator on `api.i18n`; see [plugins.md](plugins.md#apii18n).
+`.claude/internals/i18n.md` covers adding a language and the Korean particle rules.
+
+## Desktop
+
+`desktop/` is an Electron shell around the same web bundle. `main.ts` serves `dist/` under
+`app://scmjs/`, looks for a StarCraft installation and extracts the game data into the
+app's data folder, opens maps handed over by the file manager, guards the window's close
+while a map has unsaved changes, and holds the updater. `preload.ts` exposes that to the
+page as `window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
+
+```sh
+npm run desktop                 # bundle the main process and run Electron against dist/
+SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against the dev server instead
+npm run build:desktop           # web build + main bundle + electron-builder for this OS
+```
+
+`npm run build:desktop` takes the platform, architectures and targets on the command line;
+with none it builds this OS with the targets `electron-builder.yml` lists, which is what
+CI does:
+
+```sh
+npm run build:desktop -- win                 # Windows: nsis + zip
+npm run build:desktop -- win nsis            # just the installer
+npm run build:desktop -- linux AppImage x64 arm64
+npm run build:desktop -- mac dmg arm64
+npm run build:desktop -- --dir               # unpacked app, no installer: the fast check
+npm run build:desktop -- win --skip-web      # repackage the dist/ already on disk
+npm run build:desktop -- --skip-plugins      # leave plugins/ alone (no vendoring fetch)
+```
+
+Platforms are `win`, `mac` and `linux`; architectures `x64`, `ia32`, `arm64`, `armv7l` and
+`universal`; any electron-builder target name (`nsis`, `dmg`, `zip`, `AppImage`, `deb`, …)
+applies to every platform named. `--skip-web` and `--skip-main` reuse the bundles on disk;
+`--publish <mode>` and anything after a bare `--` go to electron-builder unchanged. The
+script warns about cross-builds that need tooling the machine may lack (a macOS installer
+off a Mac, an NSIS installer without Wine) and runs them anyway; `--dir` and `zip`
+cross-build with nothing installed. Output lands in `release/`.
+
+**What ships.** `electron-builder.yml` packs `dist/` and `desktop/dist/` only: never
+`node_modules` (Vite bundles everything) and never the game data a developer's `public/`
+may hold. Windows gets an NSIS installer and a zip, macOS a dmg per architecture, Linux an
+AppImage and a `.deb`. The installers register `.scm`, `.scx` and `.chk`. Of Chromium's
+own UI locales only those of the editor's languages are included (`en-US` and `ko`): the
+editor's translations are in the bundle, but Chromium reports the system's language to the
+page only when its locale is there. A new language needs its locale added to
+`electronLanguages`. Builds are unsigned: Windows shows SmartScreen's "unrecognized app"
+screen, and macOS refuses the app until the user clears the quarantine attribute.
+
+**What the build adds.** `THIRD-PARTY-NOTICES.txt` in `dist/` carries the licence of every
+runtime dependency and compiled-in plugin, generated from `package.json`. The desktop
+build and the container image also carry the runtimes the default plugins would otherwise
+download on first use (eudplib's Pyodide and wheel, about 15 MB), so building an EUD map
+needs no network there. `scripts/bundle-plugin-runtimes.mjs` reads a `runtime.json` from
+each pinned default's repository and puts the files in
+`dist/plugin-runtime/<plugin>/<version>/`. The hosted editor and the web zip carry none.
+
+**The app's data folder** is `%APPDATA%\scm-js` on Windows, `~/.config/scm-js` on Linux
+and `~/Library/Application Support/scm-js` on macOS. It holds the extracted game data, the
+window geometry, and `startup.log`, the milestones of the last launch. `SCMJS_TRACE=1`
+echoes them to the terminal. When a launch "hangs and then opens", that log tells a slow
+disk, a virus scanner and a slow first paint apart.
+
+**From WSL**, copy a Windows build to the Windows file system before running it. Started
+from `\\wsl.localhost\…`, a network share, it takes minutes to open. `WSLENV` passes the
+variable on to the Windows process:
+
+```sh
+npm run build:desktop -- win --dir          # release/win-unpacked
+cp -r release/win-unpacked /mnt/c/Users/<you>/scmjs-test
+SCMJS_TRACE=1 WSLENV=SCMJS_TRACE /mnt/c/Users/<you>/scmjs-test/scmJS.exe
+```
+
+### In-app updates
+
+The desktop app checks GitHub releases at startup (a preference, on by default) and
+through Help ▸ Check for Updates…, using electron-updater over the `latest*.yml` files the
+release workflow uploads beside the installers. Finding one raises a toast with a Download
+button; nothing downloads or installs unasked, and installing goes through the same
+unsaved-changes check as closing the window. A nightly build follows the nightlies, a
+stable build follows stable releases, and a preference lets a stable install follow the
+nightlies.
+
+Windows, the AppImage and the `.deb` install updates themselves. macOS can see an update
+but not install it until the app is code-signed, so it offers the release page. A
+development run and an unpacked Linux folder report that they cannot check.
+`desktop/updater.ts` is the main-process side, `src/editor/updates.ts` the state machine,
+`tests/updates.test.ts` the cases.
+
+## Releases and hosting
+
+`.github/workflows/build.yml` has three channels:
+
+| Channel | Trigger | What it produces |
 | --- | --- | --- |
-| `ci` | every push to `main`, and every pull request against it | lint, the tests (vitest and the browser tests) and the web bundle, built and thrown away. Nothing is deployed and nothing is released. A pull request's run is read-only and does not publish the plugin typings. |
-| `nightly` | a daily cron at 07:17 UTC, or a manual dispatch with the `nightly` input ticked | installers for Windows, macOS (x64 and arm64) and Linux (AppImage and deb), a zip of the web bundle and the updater's `latest*.yml`, all on one rolling prerelease, plus the same commit built for `/nightly/` and served at `scmjs.dev/nightly`. |
-| `stable` | a pushed `vX.Y.Z` tag | a permanent release with the same assets, its notes, the container image on GHCR, the Pages deploy of `scmjs.dev/editor`, and the docs site. |
+| `ci` | every push to `main` and every pull request | Lint, the unit and browser tests, and a web bundle that is thrown away |
+| `nightly` | a daily cron at 07:17 UTC, or a manual run | Installers, a web zip and the updater files on one rolling prerelease, and `scmjs.dev/nightly` |
+| `stable` | a pushed `vX.Y.Z` tag | A permanent release, the container image, `scmjs.dev/editor` and the docs site |
 
-The cron exits early when `main` has not moved since the last nightly. The nightly is
-updated in place: its `nightly` tag is force-moved and its assets replaced, never deleted
-and recreated, so there is one prerelease in the list however many nights run. Its notes
-link `scmjs.dev/nightly`, which is that same commit running, so the release page is
-somewhere to try it from as well as somewhere to download it from.
+The nightly cron exits early when `main` has not moved since the last nightly. The nightly
+release is updated in place: its `nightly` tag is moved and its assets replaced, so there
+is one prerelease however many nights run. Its notes link `scmjs.dev/nightly`, which runs
+the same commit.
 
 ### Download links
 
@@ -559,332 +593,167 @@ https://github.com/scm-js/scm-js/releases/latest/download/scmJS-web.zip
 https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
 ```
 
-That redirect can only resolve a fixed file name, which is why the asset names carry no
-version; the version is in the release title, the notes and `latest*.yml`. To un-promote a
-bad release, tick "This is a pre-release" on it and the redirect falls back to the one
-before.
+The redirect can only resolve a fixed file name, so asset names carry no version; the
+version is in the release title, the notes and `latest*.yml`. To withdraw a bad release,
+tick "This is a pre-release" on it and the redirect falls back to the one before.
 
 ### The container image
 
-`docker/Dockerfile` is nginx with the built web bundle, pushed to `ghcr.io/scm-js/scm-js`
-by the `image` job on a tagged release only, as `latest`, the full version, and the moving
-`X.Y` and `X`. A nightly publishes no image, because `latest` is what a `docker run` picks
-up without asking.
+`docker/Dockerfile` is nginx with the built web bundle and the default plugins' runtimes,
+pushed to `ghcr.io/scm-js/scm-js` on a tagged release only, as `latest`, the full version,
+and the moving `X.Y` and `X`. One manifest covers `linux/amd64` and `linux/arm64`.
 
 ```sh
 docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest   # http://localhost:8080
 npm run build:image                                       # build it locally, tagged scmjs
 ```
 
-The image copies the release's own web zip rather than building one, so the editor in it
-cannot differ from the download; the one addition is the default plugins' runtimes (see
-the desktop build above), which the zip leaves to the CDN. With no `RUN` step one buildx
-manifest covers `linux/amd64` and `linux/arm64` without emulation. It carries no game
-data: `.dockerignore` cuts the extracted trees out of the build context and
+The image carries no game data: `.dockerignore` keeps the extracted trees out and
 `docker/nginx.conf` answers 404 for those paths, so a container asks through Help ▸ Game
-Data… like the hosted build. Mounting an extracted tree over those paths is in
+Data… like the hosted editor. Mounting an extracted tree is in
 [game-data.md](game-data.md#the-container-image).
 
 ### Cutting a release
 
 Run the **Release** workflow (`.github/workflows/release.yml`) from the Actions tab. It
-takes the version (`0.3`, `1.0` and `1` are padded to three parts; blank promotes the line
-the nightlies have been building), an optional `notes` box, and a `dry_run` tick that does
-everything except push.
+takes the version (`0.3`, `1.0` and `1` are padded to three parts; blank releases the
+version the nightlies have been building), an optional `notes` box, and a `dry_run` tick
+that does everything except push.
 
-It refuses to run anywhere but `main`, refuses a version whose tag exists, refuses one
-that is not newer than the last release, and runs lint, tests (the network suite
-included), the build and a check of the container image before writing anything. Then it
-commits the version into `package.json` and the lock file, tags that commit `vX.Y.Z`, and
-dispatches the Build workflow on the tag. The dispatch is necessary because a push made
-with the repository's own token starts no further workflow run; that one dispatch is the
-whole release, the hosted editor and the docs site included.
+It refuses to run anywhere but `main`, refuses a version whose tag exists or that is not
+newer than the last release, and runs lint, the tests (the network suite included), the
+build and a check of the container image before writing anything. Then it commits the
+version into `package.json` and the lock file, tags that commit `vX.Y.Z`, and starts the
+Build workflow on the tag, which produces everything else.
 
-There is no step moving `package.json` on to a next version. A nightly is named
-`<base>-nightly.<date>.<run number>` where the base is a patch bump of the newest release
-tag, worked out by `scripts/next-version.mjs`. A patch bump is the one choice that sorts
-above the release it follows and below whatever comes next, whether that is a patch, a
-minor or a major, so the updater is never offered a downgrade and never starved. It also
-leaves `package.json` on `main` meaning something true: the last released version.
+Nothing moves `package.json` on to a next version afterwards: on `main` it names the last
+release. A nightly is named `<base>-nightly.<date>.<run number>`, where the base is a
+patch bump of the newest release tag (`scripts/next-version.mjs`). Every job writes the
+version into `package.json` before building; Vite injects it as `__APP_VERSION__`, read
+through `src/version.ts`, and electron-builder writes it into `latest*.yml`.
 
-### Release notes
+The hand-written part of a release's notes comes from `docs/releases/<version>.md` (the
+full three-part name), committed to `main` before the release is cut, or from the Release
+workflow's `notes` input, which wins over the file. Either goes above GitHub's generated
+list of commits. The pre-flight prints what it found, so a dry run shows the body.
+`docs/releases/README.md` is the convention.
 
-The hand-written part of a release comes from `docs/releases/<version>.md`, committed to
-`main` before the release is cut and read from the tag's own tree (the full three-part
-name: cutting `0.3` reads `0.3.0.md`), or from the Release workflow's `notes` input, which
-wins over the file and lives only in the release. Either goes above GitHub's generated
-list of commits; with neither, the release carries that list alone. The pre-flight prints
-what it found, so a dry run shows the body. `docs/releases/README.md` is the convention.
+### The hosted builds
 
-### Versions
-
-The version is the tag's, or the nightly name on `main`. Every job writes it into
-`package.json` before building; `vite.config.ts` injects it as `__APP_VERSION__`,
-`src/version.ts` is where the splash and About read it, the boot splash in `index.html`
-gets it through a small Vite plugin, and electron-builder writes it into `latest*.yml`.
-The run number rather than a commit hash orders same-day nightlies, since semver compares
-prerelease identifiers as strings.
-
-### The two hosted builds
-
-| | deployed by | from |
+| Address | Deployed | How |
 | --- | --- | --- |
-| `scmjs.dev/editor` | the `pages` job, on a tag | GitHub Pages on this repository, built for the `/editor/` path (the `PAGES_BASE` repository variable) and served there by a Cloudflare Worker in front of it |
-| `scmjs.dev/nightly` | the `nightly-site` job, each nightly | the same commit built for the `/nightly/` path (the `NIGHTLY_BASE` repository variable) with `SCMJS_SITE=nightly`, in the `nightly/` folder of one force-pushed orphan commit on `scm-js/nightly`'s `gh-pages` branch, served there by the Cloudflare Worker; the branch's root keeps the old `nightly.editor.scmjs.dev` address sending people on, and its `moved.html` hands their settings over |
-| `docs.scmjs.dev` | the `docs` job, on a tag | the same shape, on `scm-js/docs` |
+| `scmjs.dev/editor` | on a tag, by the `pages` job | GitHub Pages on this repository, built for `/editor/`, served by the site's Cloudflare Worker |
+| `scmjs.dev/nightly` | each nightly, by the `nightly-site` job | The same commit built again for `/nightly/`, pushed to `scm-js/nightly`, served by the same Worker |
+| `docs.scmjs.dev` | on a tag, by the `docs` job, or by hand | `npm run build:docs`, pushed to `scm-js/docs` |
 
-The hosted editor is a release like every other way of running the editor: the site, the
-installers, the image and the notes are one tag. The nightly site is the nightly's own web
-zip unpacked, never a second build, which is why the nightly's notes can point at it: the
-page and the installers on that release are the same version. To put `scmjs.dev/editor`
-back on an older version, dispatch Build on that tag; the deploy is the only thing a
-re-run rewrites.
+The hosted editor is one release with everything else: the site, the installers, the image
+and the notes come from one tag. To put `scmjs.dev/editor` back on an older version, run
+Build on that tag. The docs site can also be deployed without a release, from Actions ▸
+Docs site ▸ Run workflow, so a fix to the guides goes live at once; the next release
+replaces it with the tag's own pages.
 
-The two editors share the `scmjs.dev` origin, and with it the browser's storage, because
-the nightly needs the game's page at `/play/` beside it. The nightly keeps its own
-preferences, recents and plugins under names of its own, rather than writing a stored
-shape the stable build then reads back. The extracted game data is the exception: the
-game's page reads the one copy in the origin's private file storage, so the nightly
-installs it there too, and one install serves both editors and Test Map. A nightly that
-changes how that copy is stored has to keep it readable by the last release.
+The nightly is built with `SCMJS_SITE=nightly`. The two editors share the `scmjs.dev`
+origin, because both need the game's page at `/play/` beside them, and the nightly keeps
+its preferences, recent files and plugins under names of its own. The game data is the
+exception: both editors and the play page read one copy, so a nightly that changes how
+that copy is stored must keep it readable by the last release.
 
 ### Variables and secrets
 
-None of these is required: a fork builds and releases without any of them, and each deploy
-that lacks its own is skipped with a notice.
+None of these is required: a fork builds and releases without them, and a deploy that
+lacks its own is skipped with a notice.
 
-| | Kind | For |
+| Name | Kind | For |
 | --- | --- | --- |
-| `PAGES_BASE` | variable | The hosted editor's base path: `/` for a custom domain, the repository name by default. When it is not `/`, the `web` job builds a second bundle for Pages, since the release zip is always rooted. |
-| `NIGHTLY_DOMAIN` | variable | The domain written into the nightly site's `CNAME`. |
-| `NIGHTLY_PAT` | repository secret | A fine-grained token with Contents: write on `<owner>/nightly`, since a repository's own token cannot write to another repository. |
-| `DOCS_DOMAIN`, `DOCS_PAT` | variable, repository secret | The same pair for the docs site on `<owner>/docs`. |
-| `PLUGIN_API_PAT` | organisation secret | Pushes the plugin typings to `scm-js/plugin-api`. |
-| `PUBLISH_PLUGIN_API` | variable | Turns on the npm publish of `@scm-js/plugin-api`. |
+| `PAGES_BASE` | variable | The hosted editor's base path (`/editor/`); the repository name by default |
+| `NIGHTLY_BASE` | variable | The nightly's path on the site (`/nightly/`); without it the nightly site is the web zip at a domain's root |
+| `NIGHTLY_HOME` | variable | The site the nightly is a path of; `https://scmjs.dev` by default |
+| `NIGHTLY_DOMAIN` | variable | The domain written into the nightly site's `CNAME` |
+| `NIGHTLY_PAT` | secret | A token with Contents: write on `<owner>/nightly` |
+| `DOCS_DOMAIN`, `DOCS_PAT` | variable, secret | The same pair for the docs site on `<owner>/docs` |
+| `CI_BUILD_KEY` | secret | A deploy key on this repository, so the Release workflow can push its commit to a protected `main` |
+| `PLUGIN_API_KEY` | secret | A deploy key on `scm-js/plugin-api`, for pushing the plugin typings |
+| `PUBLISH_PLUGIN_API` | variable | Turns on the npm publish of `@scm-js/plugin-api` |
 
-## The documentation site
+The two deploy keys must be listed as bypass actors in the target repository's branch
+ruleset.
 
-[docs.scmjs.dev](https://docs.scmjs.dev) is `npm run build:docs`, deployed by the `docs`
-job on a tag so the site, the hosted editor and the installers are one version. It has two
-halves. The guides are `docs/*.md`, split at their `##` headings into pages with the `###`
-beneath as each page's contents; nothing on the site is prose a generator wrote, and these
-files stay where it is maintained. The reference is generated from the bundled plugin
-typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site and a member
-with none shows as a bare signature.
+## Docs site and screenshots
 
-```sh
-npm run build:docs                                  # → docs-site/ (gitignored)
-node scripts/build-docs.mjs --out /some/dir
-```
-
-The guides are written to be read on GitHub as well; the site's link rewriter turns a
-relative link to one of the eight documents into a page and anything else in the
-repository into a link back to GitHub, and `tests/docs.test.ts` checks every link and
-picture.
-
-### Browser tests
-
-`e2e/*.spec.ts` are Playwright specs that drive the built editor in a headless Chromium.
-They cover what the vitest suites cannot reach, because those never render anything: that
-the bundle starts, that each dialog's chunk loads and mounts, and that a change made
-through the chrome ends up in the file the Save button writes.
+[docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
+the nine `docs/*.md` files, split at their `##` headings into pages, with the `###`
+beneath as each page's contents. The API reference is generated from the bundled plugin
+typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
 ```sh
-npx playwright install chromium       # once
-npm run build                         # the specs run against dist/
-npm run test:e2e
-npx playwright test e2e/save.spec.ts  # one file
-npx playwright test --ui              # watch a spec run, step through it
+npm run build:docs                            # → docs-site/ (gitignored)
+python3 -m http.server 8000 -d docs-site      # preview it at http://localhost:8000
+node scripts/wrap-docs.mjs                    # rewrap the guides' prose at 90 columns
+node scripts/wrap-docs.mjs docs/guide.md      # one file
+npm run docs:reference                        # the generated tables in triggers.md and chk-format.md
 ```
 
-`npm run test:e2e` serves `dist/` with `vite preview` on port 4173 and does not build, so
-it tests the last build: build again after changing the editor. To run against something
-already being served, the dev server included, set `SCMJS_E2E_URL` to its address.
-
-Every spec starts from the same three conditions, set up in `e2e/support/editor.ts`, so
-that a run on a machine with game data is the run CI makes:
-
-- No game data. Requests for the extracted files are answered as a build without them
-  answers, so terrain is flat colours and the editor offers Help ▸ Game Data… shortly
-  after it starts. A spec that clicks around closes that dialog first.
-- No network. Anything not served by the build under test is refused.
-- No native file pickers. Playwright cannot drive them, so the editor opens through a file
-  input and saves as a download, as it does in Firefox and Safari. Saving straight back to
-  an opened file is not covered.
-
-After each test the fixture fails it if the page threw or logged an error.
-
-There are four specs. `boot.spec.ts` is a first visit: splash, editor, the Game Data
-offer, a blank map drawn. `dialogs.spec.ts` opens every dialog through its deep link, in
-English and in Korean; it reads the dialog ids out of the registry, so a new dialog is
-covered without touching the spec, and the two that are only ever opened with a payload
-are listed in it as skipped. `save.spec.ts` opens one of the `tests/maps/` files, renames
-it in Map Properties, saves, and reads the download back with the editor's own format
-code: the new name is there and every other section is byte for byte what it was.
-`errors.spec.ts` refuses one dialog's chunk and checks that the dialog is closed with a
-notice, the failure is in the Debug Console, and the editor carries on.
-
-A failure leaves a trace under `test-results/`; `npx playwright show-trace <trace.zip>`
-replays it with the DOM at each step. CI runs the specs in the web build, against the
-bundle it is about to publish, and keeps the report of a failed run as an artifact.
+The guides are read on GitHub as well. The site turns a relative link to one of the guides
+into a link to its page, and anything else in the repository into a link to GitHub. Prose
+is wrapped at 90 columns; `tests/docs.test.ts` fails on an unwrapped file, and
+`scripts/wrap-docs.mjs` fixes it, leaving code, tables, headings and generated blocks
+alone. The `<!-- generated: … -->` blocks in the trigger and CHK references are written
+from the code by `npm run docs:reference`; never edit inside them.
 
 ### Guide screenshots
 
-The pictures in the user guide are `docs/images/*.webp`, made by
-`scripts/guide-screenshots.mjs` against the dev server and the fixture maps: it drives a
-headless Chromium through Playwright, opens the maps, paints and places what each picture
-shows, and writes WebP files, lossless for a dialog and lossy for a window of terrain.
-Re-run it after a change to the chrome and commit the pictures that changed.
+The pictures in the guides are `docs/images/*.webp`, made by
+`scripts/guide-screenshots.mjs`. It drives headless Chromium against the dev server, opens
+the fixture maps, sets up what each picture shows, and writes WebP files. Re-run it after
+a change to the chrome and commit the pictures that changed.
 
 ```sh
 npm run dev                                   # in one terminal
-npm i --no-save playwright sharp              # not dependencies: only this script needs them
+npm i --no-save playwright sharp              # only this script needs them
 npx playwright install chromium               # once
 node scripts/guide-screenshots.mjs            # → docs/images/
 node scripts/guide-screenshots.mjs --only units,fog
+node scripts/guide-screenshots.mjs --scenes plugin-guide
 ```
 
-It needs the game data extracted and Big Game Hunters, Binary Burghs, Crescent Moon and
-Ground Zero from the game's own Maps folder in `fixtures/maps/`. Never commit a picture
-that shows anything but the editor.
+It needs the game data and Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero
+from the game's Maps folder in `fixtures/maps/`. Never commit a picture that shows
+anything but the editor.
 
-The plugin guide's pictures are the scene `plugin-guide`
-(`node scripts/guide-screenshots.mjs --scenes plugin-guide`). It needs the game data but
-no fixture map: it makes its own map through the plugin API, and each picture is one of
-the examples in `docs/plugins.md`, run in the API Playground. An example the scene cannot
-find in the guide stops it, so changing an example that has a picture means re-running the
-scene.
+Some scenes have their own needs:
 
-The API Playground pictures (`--scenes api-playground`) install that plugin for their
-scene, since it is not a default: from its repository, or from a local build with
-`--playground http://localhost:3000/` while you work on it. The scene opens Crescent Moon,
-runs the *Place units in a ring* example and takes the hover over `api.document.edit`.
-
-The scmjs.dev pictures — the Account dialog, My Maps, the AI dialogs and the assistant —
-are taken against a stand-in for the service, `scripts/lib/guide-scmjs-mock.mjs`, which
-the script starts on port 8765 and points the plugin at through its stored settings: one
-signed-in account with a ledger, real map storage for what the scene uploads, and recipe
-answers written in advance for the fixture maps. Those pictures show the editor's chrome
-around example content, not a model's output; when a dialog changes, change the scene, and
-when a canned answer no longer fits the map it is written for, change the mock.
-
-The shared-map pictures use the same stand-in, which also runs the rooms and their
-WebSocket the way the service does: the scene shares Big Game Hunters from one editor and
-joins it from a second, signed-out one, so the marines that editor places reach the first
-as real changes. A third person nobody drives is seated by the stand-in, and the others'
-pointers are pinned to set places, since a headless browser has no mouse to follow. The
-link in the Share dialog is rewritten to the hosted editor's address before the picture.
-
-## Translations
-
-The editor's own words — menus, dialogs, hints, Check Map's findings — can be shown in
-another language; a map's text is the map's and is never touched by this. English and
-Korean exist today, chosen in Preferences ▸ General or following the browser. The scheme
-is deliberately small and has no library behind it: the browser's own `Intl` does the
-parts that need data (plural rules, number formatting), and the rest is a hundred lines.
-
-**Writing a string.** The English text is the key. A component calls
-`t("Save {name}", { name })` and reads as it always did; an untranslated string falls back
-to itself; and editing the English deliberately orphans the Korean, which is the right
-failure — a translation of words that are no longer there should not survive them. Where
-one English word means two things (*Open* as a menu label and as an adjective),
-`tc("menu", "Open")` gives it a context. A string kept in a table rather than said at the
-point of use is marked with `msg("…")` where it is written and shown through
-`translate(value)`, so the extractor sees the text and the table keeps its English. The
-argument must be a string literal — never a variable or a template with `${}` in it —
-because the extractor reads the source, not the running program.
-
-Placeholders are a small subset of ICU MessageFormat. `{name}` is filled from the
-parameters; `{n, plural, one {# map} other {# maps}}` picks a branch by the language's
-plural rules, with `=0`-style exact matches first and `#` the number formatted for the
-language; `{x, select, a {…} other {…}}` picks by value. Korean has no plural forms and
-writes only `other`, and its particles agree with the word before them, so a Korean
-translation writes `{name|을}` (or 이/가, 은/는, 과/와, 으로/로) and gets 맵을 or 위치를 by the value's
-last syllable rather than "{name}(을)를".
-
-**The catalogues.** One flat JSON object per language under `src/i18n/` — `ko.json` — with
-the English text as the key and the translation as the value. `npm run i18n` reads every
-`t()`, `tc()` and `msg()` in `src/` with the TypeScript compiler and reports what each
-catalogue is missing, no longer needs, or has wrong (a translation whose placeholders are
-not the source's); `npm run i18n -- --write` brings the files up to date, adding a new key
-with an empty value and dropping keys nothing asks for. An empty value is allowed and
-shows in English, so a string can be added before its translation exists; the test suite
-fails on a missing key, an unused key, a placeholder mismatch or a `t()` whose argument is
-not a literal, so the catalogues cannot drift from the source. Translating is filling in
-the empty values — the report lists them — and a native reader's review of the wording is
-worth more than any of the machinery.
-
-Adding a language is an entry in `LOCALES`, a `src/i18n/<tag>.json`, and its name in the
-script's list. A language that needs its own fonts adds them after the Latin ones in the
-font stack, the way the Korean faces are: Inter has no Hangul, so Latin text keeps its
-look and Hangul falls through to a face that has it.
-
-**Plugins** get the same translator on `api.i18n` — `register` their own catalogues, `t`
-and `tc` over them, `language`, and the `"language"` event — and can run the same
-extractor over their own source; see [docs/plugins.md](plugins.md#apii18n).
-
-**Tables of named things.** A menu label is an item's identity as well as its text —
-plugins place items by the English label — so the menu model keeps the English and
-translates as it draws: `msg()` on the label where the table is written, `translate()`
-where it is shown. The same holds for every table the editor keeps: the layer names, the
-unit, upgrade and technology names (`unitLabel` is the translated `unitName`; the English
-name stays the vocabulary of the text trigger format and the plugin API), the tileset and
-terrain names, the player colours, the trigger editor's choices, the section descriptions
-in the Save dialog. The `Select` control translates its option labels itself, so a table
-handed to it needs nothing more. A string that is not a literal at the point of use must
-never go through `t()` — the extractor cannot see it and the catalogue would drift — and a
-`t()` at module scope runs before the language is known, so a module-level table uses
-`msg()` and is translated where it is read.
-
-**Reviewing the Korean.** `npm run i18n -- --export ko ko.csv` writes the catalogue as a
-spreadsheet: the English, the Korean, and the source files each string appears in, so a
-term can be checked in context. A reviewer edits the Translation column;
-`npm run i18n -- --import ko ko.csv` reads it back, matching rows by their English. The
-whole editor is translated, but by its author with a dictionary rather than by a native
-speaker: the vocabulary follows the Korean StarCraft community's transliterations (마린,
-저글링, 질럿; 장식물 for doodads, 로케이션 for locations, 세력 for forces), and every sentence would
-benefit from a native reader.
+- **`plugin-guide`** needs no fixture map. Each picture is one of the examples in
+  `docs/plugins.md`, run in the API Playground; changing an example that has a picture
+  means re-running the scene.
+- **`api-playground`** installs the API Playground plugin, which is not a default;
+  `--playground <url>` points it at a local build.
+- **The scmjs.dev and shared-map pictures** run against a stand-in for the service,
+  `scripts/lib/guide-scmjs-mock.mjs`, which the script starts itself. When a dialog
+  changes, change the scene; when a canned answer no longer fits, change the mock.
 
 ## Contributing
 
-- **Keep the documents current.** `docs/guide.md`, `docs/installing.md`,
-  `docs/trigscript.md`, `docs/triggers.md`, `docs/file-formats.md`, `docs/chk-format.md`,
-  `docs/game-data.md`, `docs/plugins.md` and this file are the documentation site, and
-  `README.md` is the repository's front page; a behaviour change that is not in them is
-  undocumented. `CLAUDE.md` carries the implementation detail and is kept in step with the
-  code too.
+- **Keep the documents current.** The nine guides under `docs/` are the documentation site
+  and `README.md` is the repository's front page; a behaviour change that is not in them
+  is undocumented. Write them for their readers, with `src/` paths only in a guide's
+  closing *In the source* section. Keep the matching note in `.claude/internals/` in step
+  too.
 - **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not
   the fixture maps. `.gitignore` covers the generated trees; check before adding a test
   fixture.
 - **Record where adapted code comes from.** The rule is in
   [ATTRIBUTION.md](../ATTRIBUTION.md#maintenance-rule): a provenance comment beside
-  adapted algorithms and tables, an entry there naming the source and license, and the
+  adapted algorithms and tables, an entry there naming the source and licence, and the
   original notice kept.
-- **Run what CI runs**: `npm run lint`, `npm test` and `npm run build`. With the game data
-  and fixture maps on disk, the real-data suites run too, and that is the run that counts
-  for anything under `src/formats/`.
+- **Run what CI runs**: `npm run lint`, `npm test` and `npm run build`, and
+  `npm run test:e2e` after a change to the chrome. With the game data and fixture maps on
+  disk the real-data suites run too, and that is the run that counts for anything under
+  `src/formats/`.
 - **Plugin API changes are additive.** `PLUGIN_API_VERSION` stays where it is for an
-  addition; document the addition in `docs/plugins.md` and with a doc comment in
-  `src/plugins/api.ts`, which is what the reference is generated from. The example plugin
-  at [scm-js/plugin-hello-world](https://github.com/scm-js/plugin-hello-world) should keep
+  addition. Document the addition in `docs/plugins.md` and with a doc comment in
+  `src/plugins/api.ts`, which the reference is generated from. The example plugin at
+  [scm-js/plugin-hello-world](https://github.com/scm-js/plugin-hello-world) should keep
   building.
 - **The plugins are separate repositories** under
   [github.com/scm-js](https://github.com/scm-js). A change to the editor that a default
-  plugin needs is released by moving that plugin's tag in `src/plugins/defaults.ts`.
-
-## Where things are documented
-
-Each topic has one place it is written down:
-
-| Topic | Where |
-| --- | --- |
-| What the editor does, for map makers | [guide.md](guide.md); the [README](../README.md) is the short version |
-| What is in a map file and what the editor does with it | [file-formats.md](file-formats.md) |
-| Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
-| Using, installing and writing plugins, the plugin API | [plugins.md](plugins.md), and the generated reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
-| TrigScript, the trigger scripting language | [trigscript.md](trigscript.md) for map makers; the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s README for the compiler and the commands it offers other plugins |
-| Each plugin's internals | its own repository's README |
-| Running, building, releasing, contributing | this file |
-| Per-subsystem implementation notes | [CLAUDE.md](../CLAUDE.md) |
-| Provenance of adapted code and data | [ATTRIBUTION.md](../ATTRIBUTION.md) |
-| Release notes | [docs/releases/](releases/README.md) |
+  plugin needs ships by moving that plugin's tag in `src/plugins/defaults.ts`.

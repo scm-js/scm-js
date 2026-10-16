@@ -29,27 +29,27 @@ export const SOURCES = [
     id: "installing",
     file: "docs/installing.md",
     title: "Installing",
-    blurb: "Getting to the hosted editor, downloading and installing the desktop app for Windows, macOS and Linux, the container, and getting the game's graphics.",
+    blurb: "Running the editor in the browser, as a desktop app or in a container, and giving it the game's graphics from your StarCraft folder.",
   },
   {
     id: "guide",
     file: "docs/guide.md",
     title: "User guide",
     pageTitle: "StarCraft map editor guide",
-    blurb: "How to use the editor: Your first map, then each layer and dialog - terrain, units, triggers, settings, saving, editing one map with multiple people, map sharing, and how to install plugins.",
+    blurb: "How to use the editor: a first map, then each layer and dialog — terrain, units, triggers, settings, testing and saving — replays, plugins, and editing a map together.",
   },
   {
     id: "trigscript",
     file: "docs/trigscript.md",
     title: "TrigScript",
-    blurb: "Triggers written as TypeScript: the script window, tests, triggers made by code, programs that run in the game on StarCraft: Remastered, examples and the reference.",
+    blurb: "Triggers written as TypeScript: a quick start, triggers made by code, programs that run in StarCraft: Remastered, testing, the workspace and the reference.",
     pageTitle: "TrigScript, StarCraft triggers as code",
   },
   {
     id: "plugins",
     file: "docs/plugins.md",
     title: "Plugins",
-    blurb: "Installing plugins and what they may do, writing one, and a tour of the API.",
+    blurb: "Installing plugins, writing your first one, the core concepts, putting things on screen, and a tour of the API.",
   },
   {
     id: "triggers",
@@ -78,13 +78,13 @@ export const SOURCES = [
     id: "game-data",
     file: "docs/game-data.md",
     title: "Game data",
-    blurb: "Where the graphics come from, how they are extracted, and what the editor does without them.",
+    blurb: "Where the graphics come from, what is kept, Remastered, mods as data sets, and how the pictures are drawn.",
   },
   {
     id: "development",
     file: "docs/development.md",
     title: "Development",
-    blurb: "Building the editor and the desktop app, the release channels, and the repository layout.",
+    blurb: "Running from source, the repository layout and conventions, tests, the desktop app, releases and the docs site.",
   },
 ];
 
@@ -174,4 +174,43 @@ export function linkResolver(guides, { repoUrl = REPO_URL } = {}) {
 function splitFragment(href) {
   const at = href.indexOf("#");
   return at === -1 ? [href, ""] : [href.slice(0, at), href.slice(at + 1)];
+}
+
+/**
+ * Pages the site used to serve under another address, so a bookmark or a search result
+ * still lands. Keyed by the old path, valued by where that content lives now (a page, and
+ * an anchor on it where it became part of one). A heading that is still in its document
+ * needs no entry here: `redirects` sends its old page to its anchor on its own.
+ */
+export const MOVED = {
+  "/development/desktop-build/": "/development/desktop/",
+  "/development/game-data/": "/development/getting-started/",
+  "/development/how-the-editor-is-put-together/": "/development/conventions/",
+  "/development/releases/": "/development/releases-and-hosting/",
+  "/development/the-documentation-site/": "/development/docs-site-and-screenshots/",
+  "/development/where-things-are-documented/": "/development/",
+  "/game-data/what-the-editor-needs/": "/game-data/what-is-kept/",
+  "/map-files/sections/": "/map-files/the-scenario/#known-and-unknown-sections",
+  "/trigscript/examples/": "/trigscript/examples-of-triggers/",
+};
+
+/**
+ * Every address a page may once have had, with where it goes now: each heading below a
+ * page's own (a `###` that was a page before its document was regrouped, as each trigger
+ * action was) at `/<guide>/<slug>/`, sent to its anchor, and the entries of `MOVED`.
+ * An address that is a page today is never redirected.
+ */
+export function redirects(guides) {
+  const live = new Set(guides.flatMap((g) => [g.url, ...g.pages.map((p) => p.url)]));
+  const out = new Map();
+  for (const g of guides) {
+    for (const p of g.pages) {
+      for (const h of headingsIn(p.body)) {
+        const from = `/${g.id}/${h.slug}/`;
+        if (h.depth > 2 && !live.has(from) && !out.has(from)) out.set(from, `${p.url}#${h.slug}`);
+      }
+    }
+  }
+  for (const [from, to] of Object.entries(MOVED)) if (!live.has(from)) out.set(from, to);
+  return [...out].map(([from, to]) => ({ from, to }));
 }

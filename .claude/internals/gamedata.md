@@ -314,3 +314,22 @@ run* with `extractedFrom` (later launches find the copy at the bundled step and 
 `install.ts` are all reachable from startup and `remastered.ts` imports `extract.ts`. After the
 split the extraction is in the worker chunk only (checked: its strings appear in
 `extract.worker-*.js` and nowhere else in `dist/assets`).
+
+**Moved out of `docs/game-data.md` (docs refresh, 2026-10-16).** Two things to know before
+changing the extraction or the decoders: the manifests the extraction writes are what the loaders
+probe for, so changing what is extracted means re-running it and checking the app against the
+result, not only the tests; and `tests/dat.test.ts`, `tests/iscript.test.ts`,
+`tests/animate.test.ts`, `tests/palette.test.ts` and `tests/tileset.test.ts` run against the real
+files in `public/` and skip when they are absent, so a green run on a clone without them has not
+exercised the decoders. Also cut from the reader's doc, recorded here: the download goes through
+`gamedata.scmjs.dev` (scm-js/cloudflare-blizzard-forwarder) because Blizzard's download server's
+HTTPS certificate is for another name, plain HTTP is blocked on an HTTPS page, and it sends no CORS
+header — the forwarder adds the header and passes range requests through, stores nothing, and the
+desktop app uses it too (its window has the same rules). Only the open map's tileset is decoded
+into an atlas (a decoded tileset is ~20 MB of pixels); the others are fetched into the HTTP cache
+but not decoded. Remastered terrain: six to nine thousand compressed pictures per tileset, a map
+uses a few hundred, decoded on first draw. A copy in the browser keeps two of a Remastered sprite's
+seven layers (diffuse + teamcolor) unless the lighting tick adds four more. The size figures the
+docs give (browser copy ~140 MB classic, ~650 / ~850 MB Remastered (641 MB measured 2026-10-12); desktop ~30 / ~365 MB) come
+from the measurements above; the classic browser figure is 30 MB + ~95 MB sounds + the play set's
+small classic files, an estimate rather than a measured copy.

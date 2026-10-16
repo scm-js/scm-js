@@ -175,6 +175,12 @@ other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both
 `?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
 
 
+### The API Playground pictures (scene `api-playground`)
+
+The API Playground is not a default, so the scene installs it — from its repository, or from a local
+build with `--playground http://localhost:3110/` while working on it. It opens Crescent Moon, runs the
+*Place units in a ring* example and takes the hover over `api.document.edit`.
+
 ### The plugin guide's pictures (scene `plugin-guide`, 2026-10-04)
 
 Eight pictures (`plugin-base-check`, `-dialog`, `-waiting`, `-map-tool`, `-overlay`, `-trigger-editor`,

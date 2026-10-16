@@ -23,7 +23,8 @@ import {
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { claimBadge, locateClaims } from "./claims";
-import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView } from "./mapViews";
+import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
+import { zoomToAtom } from "../atoms/zoomAtoms";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
@@ -115,7 +116,7 @@ import {
   pluginIdOf, PLUGIN_API_VERSION,
   type Cells, type CommandInfo, type DataApi, type Deactivate, type GameDataApi, type GameDataSource, type DialogHandle, type DocumentEvent, type DoodadInfo, type EditResult, type EditTransaction, type MapToolHandle,
   type MapToolSpec, type MapToolStopReason, type OverlayHandle, type OverlaySpec, type PanelHandle, type PickedObject, type PickObjectOptions, type PluginApi, type PluginEvent, type ServiceInfo,
-  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewCamera, type MapViewHandle, type MapViewSpec, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
+  type FlashTarget, type StatusItemHandle, type StatusItemSpec, type MapButtonHandle, type MapButtonSpec, type MapViewCamera, type MapViewHandle, type MapViewSpec, type MapViewWheel, type BeforeBuildSpec, type BuildStepSpec, type Disposable,
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
@@ -1456,6 +1457,8 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
   store.set(pluginMapViewsAtom, [...store.get(pluginMapViewsAtom), { key, plugin: info, spec: { ...spec }, element }]);
   let live = true;
   let minimapRaf = 0;
+  /** What the wheel has turned toward the next zoom step (`wheelStep`). */
+  let wheelLeft = 0;
   const listeners = new Set<(shown: boolean) => void>();
   const isShown = () => live && store.get(mapViewStateAtom).shown.get(mapViewDocument(store)) === key;
   let was = false;
@@ -1507,6 +1510,17 @@ export function addMapView(store: Store, bag: Contributions, info: PluginInfo, s
       const was = store.get(mapViewCamerasAtom).get(key);
       if (was && was.x === x && was.y === y && was.width === width && was.height === height) return;
       store.set(mapViewCamerasAtom, new Map(store.get(mapViewCamerasAtom)).set(key, { x, y, width, height }));
+    },
+    wheel: (w: MapViewWheel) => {
+      if (!w || typeof w.deltaY !== "number" || !Number.isFinite(w.deltaY) || !isShown() || !spec.onZoom) { wheelLeft = 0; return false; }
+      const view = store.get(preferencesAtom).view;
+      const step = wheelStep(wheelLeft, w, view.wheel);
+      wheelLeft = step.acc;
+      if (step.dir) {
+        const at = view.zoomToCursor && Number.isFinite(w.x) && Number.isFinite(w.y) ? { x: w.x, y: w.y } : undefined;
+        store.set(zoomToAtom, step.dir > 0 ? "in" : "out", at);
+      }
+      return step.zooms;
     },
     redrawMinimap: () => {
       if (!live || minimapRaf) return;

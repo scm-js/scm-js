@@ -2870,6 +2870,15 @@ export interface MapViewSpec {
    */
   onShow?(look: MapViewCamera): void;
   /**
+   * The person zoomed while the view is shown — View ▸ Zoom In, Zoom Out, one of the levels or
+   * Zoom to Fit, the toolbar's buttons, their keys, or a wheel you passed on (`MapViewHandle.wheel`):
+   * look at `look`, at that scale or as near to it as the view goes. The editor works the view's
+   * zoom out from where it last said it looks (`setCamera`) and the view's size on the screen, and
+   * shows it in the toolbar and the status bar: say where you look after each change, or the next
+   * step starts from the old scale. Without `onZoom` the editor's zoom is the map's, hidden behind.
+   */
+  onZoom?(look: MapViewCamera): void;
+  /**
    * What the minimap shows while the view is shown. Without it the minimap shows the map, and
    * its box and presses are the map's own view's (hidden behind this one).
    */
@@ -2920,6 +2929,21 @@ export interface MapViewMinimapSpec {
   press?(x: number, y: number): void;
 }
 
+/**
+ * A wheel turned over a map view (`MapViewHandle.wheel`): as the browser's `WheelEvent` has it,
+ * and the map pixel under the pointer.
+ */
+export interface MapViewWheel {
+  deltaY: number;
+  /** `WheelEvent.deltaMode`: 0 pixels (as when left out), 1 lines, 2 pages. */
+  deltaMode?: number;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  x: number;
+  y: number;
+}
+
 /** Map pixels to minimap canvas pixels, for `MapViewMinimapSpec.draw`. */
 export interface MinimapView {
   /** Minimap canvas pixels per map pixel. */
@@ -2953,6 +2977,17 @@ export interface MapViewHandle extends Disposable {
    * the same scale.
    */
   setCamera(camera: MapViewCamera): void;
+  /**
+   * A wheel turned over the view, for the editor to zoom by the same rule as over the map: with
+   * Ctrl, or alone where the person's preferences say the wheel zooms, toward the pointer where
+   * they say that. A step calls `onZoom`. Whether the editor took the wheel for zooming — false
+   * too while the view is not shown or has no `onZoom`, and the wheel is yours to use.
+   *
+   * @example
+   * // The play page in an iframe hands its wheel back; zoom the game by the editor's rule.
+   * game.onWheel((w) => view.wheel(w));
+   */
+  wheel(wheel: MapViewWheel): boolean;
   /** Make the minimap's picture again (`minimap.draw`), at most once a frame. Cheap: call it as the view's contents move. */
   redrawMinimap(): void;
 }

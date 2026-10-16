@@ -21,7 +21,8 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, viewOnlyAtom, zoomAtom, zoomToFitAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, viewOnlyAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
@@ -49,7 +50,6 @@ const Sep = () => <span className="tb-sep" />;
 export default function ToolBar() {
   const t = useT();
   const open = useSetAtom(openDialogAtom);
-  const zoomToFit = useSetAtom(zoomToFitAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const { save } = useMapFileActions();
   const [undoLabel, undo] = useAtom(undoAtom);
@@ -57,7 +57,8 @@ export default function ToolBar() {
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
-  const [zoom, setZoom] = useAtom(zoomAtom);
+  const zoom = useAtomValue(shownZoomAtom);
+  const zoomTo = useSetAtom(zoomToAtom);
   const hotkeys = useAtomValue(hotkeysAtom);
   const key = (command: string) => shortcutOf(hotkeys, command);
 
@@ -65,8 +66,6 @@ export default function ToolBar() {
   // A map open to look at only: the buttons that would change or save it are off.
   const viewOnly = useAtomValue(viewOnlyAtom) !== null;
   const clipTools = useClipboardTools();
-  const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
-  const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
 
   return (
     <div className="toolbar" role="toolbar">
@@ -107,10 +106,10 @@ export default function ToolBar() {
       <TB icon={FlipHorizontal2} label={t("Symmetry…")} onClick={dlg("symmetry")} />
       <TB icon={Search} label={t("Find…")} shortcut={key("edit.find")} onClick={dlg("find")} />
       <Sep />
-      <TB icon={ZoomOut} label={t("Zoom Out")} shortcut={key("view.zoomOut")} onClick={zoomOut} disabled={zoom <= ZOOM_LEVELS[0]} />
+      <TB icon={ZoomOut} label={t("Zoom Out")} shortcut={key("view.zoomOut")} onClick={() => zoomTo("out")} disabled={zoom <= ZOOM_LEVELS[0]} />
       <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
-      <TB icon={ZoomIn} label={t("Zoom In")} shortcut={key("view.zoomIn")} onClick={zoomIn} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
-      <TB icon={Maximize} label={t("Zoom to Fit")} shortcut={key("view.zoomFit")} onClick={() => { zoomToFit(); }} />
+      <TB icon={ZoomIn} label={t("Zoom In")} shortcut={key("view.zoomIn")} onClick={() => zoomTo("in")} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} />
+      <TB icon={Maximize} label={t("Zoom to Fit")} shortcut={key("view.zoomFit")} onClick={() => zoomTo("fit")} />
       <span className="tb-spacer" />
       <TB icon={Users} label={t("Player Settings…")} disabled={viewOnly} onClick={dlg("playerSettings")} text={t("Players")} />
       <TB icon={Zap} label={t("Trigger Editor…")} shortcut={key("tools.triggers")} disabled={viewOnly} onClick={dlg("triggerEditor")} text={t("Triggers")} accent />

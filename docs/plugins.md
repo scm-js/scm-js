@@ -2165,14 +2165,21 @@ game.onChange((shown) => api.log(shown ? "the game is shown" : "the map is shown
 if (await api.document.open(bytes, "replay.scx", { viewOnly: { label: "Replay" } })) game.show(true);
 ```
 
-A view that can be moved around the map should feel like the map itself. Three things make
+A view that can be moved around the map should feel like the map itself. Four things make
 that happen. Say where the view is looking with `setCamera`, in map pixels (its middle and how
 much of the map it shows). The editor's minimap then draws its box there, and switching back
 to *Map* opens the map on the same place at the same scale. `onShow` hears where the map was
-looking when the user switches to your view, so you can open there. And `minimap` replaces
-what the minimap shows while your view is in front. The minimap draws the map's ground, then
-your `draw` in place of the map's units, start locations and fog, and a press or a drag on it
-goes to your `press` instead of moving the hidden map.
+looking when the user switches to your view, so you can open there. `onZoom` takes the
+editor's zoom while your view is in front: View ▸ Zoom In and Zoom Out, the zoom levels, Zoom
+to Fit, the toolbar's magnifiers and their keys ask your view to look at a new scale instead
+of zooming the hidden map, and the toolbar and the status bar show your view's zoom, worked
+out from what `setCamera` last said. If your view gets the mouse wheel itself, as an iframe
+does, pass it to `wheel` and the editor zooms by the same rule as over the map: Ctrl and the
+wheel, or the wheel alone when the user's preferences say so, toward the pointer when they
+say that. And `minimap` replaces what the minimap shows while your view is in front. The
+minimap draws the map's ground, then your `draw` in place of the map's units, start
+locations and fog, and a press or a drag on it goes to your `press` instead of moving the
+hidden map.
 
 ```ts
 let units: { x: number; y: number; colour: string }[] = [];
@@ -2180,6 +2187,7 @@ const replay = api.ui.mapView({
   title: "Replay",
   mount: (el) => el.append(frame),
   onShow: (look) => viewer.lookAt(look.x, look.y, look.height),
+  onZoom: (look) => viewer.lookAt(look.x, look.y, look.height),
   minimap: {
     draw(ctx, m) {
       for (const u of units) { ctx.fillStyle = u.colour; ctx.fillRect(m.x(u.x) - 1, m.y(u.y) - 1, 2, 2); }
@@ -2188,6 +2196,7 @@ const replay = api.ui.mapView({
   },
 });
 viewer.onMove((c) => replay.setCamera({ x: c.x, y: c.y, width: c.width, height: c.height }));
+viewer.onWheel((w) => replay.wheel({ deltaY: w.deltaY, ctrlKey: w.ctrlKey, x: w.mapX, y: w.mapY }));
 viewer.onUnits((list) => { units = list; replay.redrawMinimap(); });
 ```
 

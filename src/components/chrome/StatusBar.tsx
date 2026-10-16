@@ -1,5 +1,6 @@
 import { useAtomValue } from "jotai";
-import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom, zoomAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom } from "../../atoms/editorAtoms";
+import { shownZoomAtom } from "../../atoms/zoomAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
@@ -23,7 +24,7 @@ export default function StatusBar() {
   const h = useAtomValue(mapHeightAtom);
   const tileset = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const layer = useAtomValue(activeLayerAtom);
-  const zoom = useAtomValue(zoomAtom);
+  const zoom = useAtomValue(shownZoomAtom);
   const status = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
   const viewOnly = useAtomValue(viewOnlyAtom);

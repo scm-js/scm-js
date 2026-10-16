@@ -57,6 +57,7 @@ import { useTileset } from "../../hooks/useTileset";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
+import { wheelStep } from "../../plugins/mapViews";
 import PluginPanels from "../panels/PluginPanels";
 import { useUnitTools } from "../../hooks/useUnitTools";
 import { useDoodadTools } from "../../hooks/useDoodadTools";
@@ -795,13 +796,12 @@ export default function MapViewport() {
     let acc = 0;
     const onWheel = (e: WheelEvent) => {
       const view = store.get(preferencesAtom).view;
-      const zooms = e.ctrlKey || e.metaKey || (view.wheel === "zoom" && !e.shiftKey);
-      if (!zooms) { acc = 0; return; }
+      const step = wheelStep(acc, e, view.wheel);
+      acc = step.acc;
+      if (!step.zooms) return;
       e.preventDefault();
-      acc += e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? e.deltaY : e.deltaY * 40;
-      if (Math.abs(acc) < 40) return;
-      const dir = acc < 0 ? 1 : -1;
-      acc = 0;
+      if (!step.dir) return;
+      const dir = step.dir;
       const zoom = store.get(zoomAtom);
       const next = dir > 0 ? ZOOM_STEPS.find((z) => z > zoom) : [...ZOOM_STEPS].reverse().find((z) => z < zoom);
       if (next === undefined || next === zoom) return;

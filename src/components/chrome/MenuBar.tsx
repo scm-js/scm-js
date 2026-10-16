@@ -15,12 +15,11 @@ import {
   selectedSpritesAtom,
   selectedUnitsAtom,
   viewFlagsAtom,
-  zoomAtom,
   ZOOM_STEPS,
-  zoomToFitAtom,
   type EditorLayer,
   type ViewFlags,
 } from "../../atoms/editorAtoms";
+import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { desktopBridge } from "../../gamedata/desktop";
 import {
   activeDocumentIdAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
@@ -221,7 +220,6 @@ function useMenus(): Menu[] {
   };
   const store = useStore();
   const desktop = desktopBridge();
-  const zoomToFit = useSetAtom(zoomToFitAtom);
   const hasMap = useAtomValue(scenarioAtom) !== null;
   // A map open to look at only: everything that would change it is off, and Edit a Copy is the way to.
   const viewOnly = useAtomValue(viewOnlyAtom) !== null;
@@ -237,7 +235,8 @@ function useMenus(): Menu[] {
   const [consoleOpen, setConsoleOpen] = useAtom(debugConsoleAtom);
   const diagnostics = useAtomValue(diagnosticsTextAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
-  const [zoom, setZoom] = useAtom(zoomAtom);
+  const zoom = useAtomValue(shownZoomAtom);
+  const zoomTo = useSetAtom(zoomToAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
   const { save, openRecent } = useMapFileActions();
   const tabs = useAtomValue(documentTabsAtom);
@@ -294,8 +293,6 @@ function useMenus(): Menu[] {
     store.set(selectedSpritesAtom, []);
     store.set(selectedLocationsAtom, []);
   };
-  const zoomIn = () => setZoom(ZOOM_LEVELS.find((z) => z > zoom) ?? zoom);
-  const zoomOut = () => setZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? zoom);
 
   const menus: Menu[] = [
     {
@@ -374,14 +371,14 @@ function useMenus(): Menu[] {
     {
       label: msg("View"),
       items: [
-        { kind: "item", label: msg("Zoom In"), shortcut: key("view.zoomIn"), onSelect: zoomIn },
-        { kind: "item", label: msg("Zoom Out"), shortcut: key("view.zoomOut"), onSelect: zoomOut },
+        { kind: "item", label: msg("Zoom In"), shortcut: key("view.zoomIn"), onSelect: () => zoomTo("in") },
+        { kind: "item", label: msg("Zoom Out"), shortcut: key("view.zoomOut"), onSelect: () => zoomTo("out") },
         {
           kind: "sub",
           label: msg("Zoom"),
-          items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => setZoom(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? key("view.zoomActual") : undefined })) }],
+          items: [{ kind: "radio-group", value: String(zoom), onChange: (v) => zoomTo(Number(v)), items: ZOOM_LEVELS.map((z) => ({ value: String(z), label: `${Math.round(z * 100)}%`, shortcut: z === 1 ? key("view.zoomActual") : undefined })) }],
         },
-        { kind: "item", label: msg("Zoom to Fit"), shortcut: key("view.zoomFit"), onSelect: () => { zoomToFit(); } },
+        { kind: "item", label: msg("Zoom to Fit"), shortcut: key("view.zoomFit"), onSelect: () => zoomTo("fit") },
         sep,
         flag("grid", msg("Grid"), key("view.grid")),
         dlgWith(msg("Grid Settings…"), "preferences", { page: "editing" }),

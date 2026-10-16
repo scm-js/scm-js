@@ -89,6 +89,15 @@ walks, nothing fights and nothing is built, so no unit dies unless the script ki
 script that waits for the enemy to be dead waits for ever here. It is a check on the
 logic; the fight is what [tests](#tests) stand in for, and Play is for.
 
+Simulate keeps the game's time, so the frames it lists are the frames the game would act
+on. The game goes through the trigger list in passes, the first on frame 2. A script of
+`trigger()`s alone has a pass every 31 frames (frames 2, 33, 64 and so on), and on the
+frame after a Wait runs out; a Wait holds its trigger for its time at Fastest, and each
+player has one wait slot their triggers share
+([How triggers run](triggers.md#how-triggers-run)). A script with a program is built to
+have a pass every frame, and its programs run inside the passes, so a program first runs
+on frame 2.
+
 ![Simulate: the script's actions, each with its frame and line](images/trigscript-simulate.webp)
 
 **A map with a program is built when it is saved.** The first time, the eudplib plugin
@@ -97,9 +106,9 @@ carry it. A notice shows while the build runs (a few seconds) with a button to s
 without waiting. The file you get is the one to play and to share. It also holds the map
 as you see it in the editor, which is what comes back when you open it again, so the
 trigger list never fills with generated triggers. One thing changes for the whole map:
-the build makes the game run *every* trigger every frame, not every two seconds, the way
-hyper triggers do. A preserved trigger that adds a mineral does so twenty-four times a
-second in such a map.
+the build makes the game go through the trigger list every frame, not every 31 frames.
+Even hyper triggers only manage every 2 frames. A preserved trigger that adds a mineral
+does so twenty-four times a second in such a map.
 
 The files and a record of the last apply live in the map archive under `trigscript\` —
 `main.ts`, any other file, and `build.json` — next to the scenario, so they travel with
@@ -144,7 +153,9 @@ test("the second wave is bigger", (sim) => {
 
 Every test gets `sim`, a world of its own: the map's placed units, locations and players,
 the script's programs at their first frame and its triggers beside them, and the same
-`random()` every run. What a test does with it:
+`random()` every run. Time in a test is the game's, as in Simulate: nothing runs on frame
+1, the first pass is on frame 2, and `sim.frames(3)` gives a program two runs. What a test
+does with it:
 
 | | |
 | --- | --- |
@@ -296,7 +307,8 @@ program(() => {
 }, { owner: P1 });
 ```
 
-**A program runs every frame, from where it left off.** Its body runs until it reaches a
+**A program runs every frame, from where it left off**, starting on frame 2, the game's
+first pass. Its body runs until it reaches a
 `sleep()` or its end, all within one frame of the game, and the next frame it carries on
 from there. A body that ends stops for good. So the loop above is a game loop: it looks
 at the beacon, sends a wave if the alarm is up, and sleeps twenty seconds.
@@ -383,9 +395,10 @@ end of the line.
 later, while other programs and the map's triggers go on. `frames(n)` is the game's own
 clock, a second is twenty-four frames at Fastest, and `minutes()` is there too.
 Something that runs on its own clock is another program — one program per concurrent
-activity. The game's own `wait()` is allowed but is a different thing: it stalls every
-trigger of that player, so use it for a short pause (a text, then a sound) and `sleep`
-to pass time.
+activity. The game's own `wait()` is allowed but is a different thing: it holds the rest
+of its trigger for the time, and a player has one wait slot, so any other Wait of that
+player stops until it is free ([Waits](triggers.md#waits)). Use it for a short pause (a
+text, then a sound) and `sleep` to pass time.
 
 **Edges.** `if (rose(bring(…)))` is true on the frame the condition becomes true and not
 again until it has been false in between; `once(…)` is true the first time only.

@@ -19,7 +19,7 @@ import { UnitClass } from "../formats/chk/sections/triggers";
 import type { DialogId } from "../components/dialogs/ids";
 import type { IsomStatus } from "./isom";
 import { CUWP_SLOTS, cuwpSlotActive } from "./cuwp";
-import { isAnywhereIntact, locationName } from "./locations";
+import { isAnywhereIntact, locationCapacity, locationName } from "./locations";
 import { TILE_PX } from "./units";
 import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
 
@@ -67,12 +67,17 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   const add = (level: IssueLevel, text: string, where: string, target?: IssueTarget) => { issues.push({ level, text, where, target }); };
 
   // ── Sections the game needs ──
-  // The original-layout settings pairs are what StarCraft 1.00 reads; a Brood War map (205+)
-  // carries only the `x` layouts (Blizzard's own do), a hybrid one both.
-  const required = requiredSections(scn.fileVersion);
-  const missing = required.filter((n) => !hasSection(scn, n) && !(n === "STR " && scn.strings.extended && hasSection(scn, "STRx")));
-  if (missing.length > 0) {
-    add("error", t("Missing {join} — the game will not load this map.", { join: missing.map((n) => n.trim()).join(", ") }), msg("File"), { kind: "dialog", id: "mapRevision" });
+  // Every game needs the map-list sections and the terrain, sprites and units; only Use Map
+  // Settings reads the fog, locations, triggers and settings tables (docs/chk-format.md).
+  const absent = (n: string) => !hasSection(scn, n) && !(n === "STR " && scn.strings.extended && hasSection(scn, "STRx"));
+  const missingAll = requiredSections(scn.fileVersion, "melee").filter(absent);
+  const missingUms = requiredSections(scn.fileVersion, "ums").filter((n) => absent(n) && !missingAll.includes(n));
+  const names = (list: string[]) => list.map((n) => n.trim()).join(", ");
+  if (missingAll.length > 0) {
+    add("error", t("Missing {join} — the game will not load this map.", { join: names(missingAll) }), msg("File"), { kind: "dialog", id: "mapRevision" });
+  }
+  if (missingUms.length > 0) {
+    add(scn.triggers.length > 0 ? "error" : "warn", t("Missing {join} — a Use Map Settings game of this map stops as it starts. Melee and the other game types do not need them.", { join: names(missingUms) }), msg("File"), { kind: "dialog", id: "mapRevision" });
   }
   add("info", t("Map revision: {label} (VER {ver}, {type}, {table}).", { label: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label, ver: scn.fileVersion, type: scn.type, table: scn.strings.extended ? "STRx" : "STR" }), msg("Header"));
   // What the parser noticed on the way in: a section cut short, a DIM that had to be guessed.
@@ -103,6 +108,12 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   });
 
   // ── Locations ──
+  const slots = locationCapacity(scn);
+  scn.locations.forEach((l, index) => {
+    if (index >= slots && isLocationUsed(l)) {
+      add("error", t("Location {n} is past the {slots} slots a StarCraft 1.00 file holds, and is lost on save. Move it to a lower slot, or change the map's revision.", { n: index, slots }), msg("Locations"), { kind: "location", index });
+    }
+  });
   if (!isAnywhereIntact(scn)) add("warn", t("Location 63 'Anywhere' is not the whole map; triggers that use Anywhere will not see everything."), msg("Locations"), { kind: "location", index: 63 });
   const seenNames = new Map<string, number>();
   scn.locations.forEach((l, index) => {

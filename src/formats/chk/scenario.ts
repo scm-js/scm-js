@@ -5,7 +5,7 @@ import { decodeStrings, encodeStrings, getString, setString, type StringTable } 
 import { DEFAULT_TEXT_ENCODING, type TextEncoding } from "../text/encoding";
 import {
   decodeDoodads, decodeLocations, decodeSprites, decodeUnits,
-  encodeDoodads, encodeLocations, encodeSprites, encodeUnits,
+  encodeDoodads, encodeLocations, encodeSprites, encodeUnits, locationSlots,
   type DoodadRecord, type LocationRecord, type SpriteRecord, type UnitRecord,
 } from "./sections/objects";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   decodeTechRestrictions, decodeTechSettings, decodeUnitAvailability, decodeUnitSettings, decodeUpgradeRestrictions, decodeUpgradeSettings,
   encodeTechRestrictions, encodeTechSettings, encodeUnitAvailability, encodeUnitSettings, encodeUpgradeRestrictions, encodeUpgradeSettings,
+  layTechSettings, layUnitSettings, layUpgradeSettings,
   TECHS_BW, TECHS_ORIGINAL, UPGRADES_BW, UPGRADES_ORIGINAL, WEAPONS_BW, WEAPONS_ORIGINAL,
   type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
 } from "./sections/settings";
@@ -181,7 +182,13 @@ export function isExpansion(scn: Scenario): boolean {
  */
 export function setMapVersion(scn: Scenario, version: MapVersion, extendedStrings = version === "remastered") {
   const v = MAP_VERSIONS[version];
-  if (scn.fileVersion !== v.ver) { scn.fileVersion = v.ver; markDirty(scn, "VER "); }
+  if (scn.fileVersion !== v.ver) {
+    // The number of location slots goes with the revision (64 below 63, 255 from there).
+    if (locationSlots(scn.fileVersion) !== locationSlots(v.ver)) markDirty(scn, "MRGN");
+    scn.fileVersion = v.ver;
+    markDirty(scn, "VER ");
+    while (scn.locations.length < locationSlots(v.ver)) scn.locations.push({ left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 });
+  }
   if (scn.type !== v.type) { scn.type = v.type; markDirty(scn, "TYPE"); }
   setExtendedStrings(scn, extendedStrings && version === "remastered");
 }
@@ -236,24 +243,26 @@ export const techRestrictionSections = (scn: Scenario) => revisionSections(scn, 
 /* ── Parsing ─────────────────────────────────────────────── */
 
 /**
- * One model out of a revision-specific pair (UNIS / UNIx and the four like it).
+ * One model out of a revision-specific pair (UNIS / UNIx and the four like it), read the
+ * way StarCraft 1.16.1 reads it at the start of a Use Map Settings game.
  *
- * A file can carry both, and they need not agree: an original StarCraft map (`VER` 59)
- * that an editor also gave the Brood War sections keeps whatever those held when they were
- * last written. The game reads one of the two by the file's revision — the original five
- * below `VER` 63, the `x` five from there up (`isExpansion`) — so that is the one the model
- * is read from; reading `x` whenever it was present showed, and on a save wrote back over
- * the real ones, settings the game never used for that file.
+ * A Brood War file (`VER` 205 up) is read from the `x` section alone. A `VER` 59 or 63
+ * file is read from the original section, and then the `x` section, when the file has one,
+ * on top of it — whether or not Brood War is on. The two need not agree: an editor may
+ * have changed the original and left the `x` section as it was, and the game still applies
+ * the `x` one last. For the costs tables (`lay`) the `x` section changes only the entries
+ * it customises; a restrictions table has no such flag, and the `x` one replaces the
+ * original whole.
  *
- * Where the section the game reads is the original, the other is decoded first and the
- * original laid over it. The original is the narrower of the two (46 upgrades of 61, 24
- * technologies of 44, 100 weapons of 130), and the columns only the `x` section has
- * would otherwise be reset to defaults the next time the pair was written.
+ * The original is decoded over the `x` section, so the columns only the `x` one has (the
+ * Brood War upgrades, abilities and weapons) keep their values and are not reset to
+ * defaults the next time the pair is written.
  */
-function readPair<T>(fileVersion: number, original: Uint8Array | null, expansion: Uint8Array | null, decode: (data: Uint8Array, over?: T) => T): T | null {
-  if (fileVersion >= 63) return expansion ? decode(expansion) : original ? decode(original) : null;
-  if (!original) return expansion ? decode(expansion) : null;
-  return decode(original, expansion ? decode(expansion) : undefined);
+function readPair<T>(fileVersion: number, original: Uint8Array | null, expansion: Uint8Array | null, decode: (data: Uint8Array, over?: T) => T, lay?: (base: T, top: T) => T): T | null {
+  if (fileVersion >= 205 || !original) return expansion ? decode(expansion) : original ? decode(original) : null;
+  if (!expansion) return decode(original);
+  if (!lay) return decode(expansion);
+  return lay(decode(original, decode(expansion)), decode(expansion));
 }
 
 export function parseScenario(bytes: Uint8Array): Scenario {
@@ -268,7 +277,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const take = (name: string, dim = { width: 0, height: 0 }) => {
     const spec = specFor(name);
     if (!spec) return null;
-    return combine(chk, name, spec.mode, sizeOf(spec, dim), spec.minimum);
+    return combine(chk, name, spec.mode, sizeOf(spec, dim), spec.minimum, spec.entries);
   };
 
   // DIM has to come first: the terrain sections' buffer sizes are derived from it.
@@ -348,11 +357,11 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     playerColors: colr ? decodeBytes(colr, FORCE_SLOTS) : [0, 1, 2, 3, 4, 5, 6, 7],
     playerRgb: crgb ? decodePlayerRgb(crgb) : null,
     forces: forcData ? decodeForces(forcData) : defaultForces(),
-    unitSettings: readPair(fileVersion, unis, unix, decodeUnitSettings),
+    unitSettings: readPair(fileVersion, unis, unix, decodeUnitSettings, layUnitSettings),
     unitAvailability: puni ? decodeUnitAvailability(puni) : null,
-    upgradeSettings: readPair(fileVersion, upgs, upgx, decodeUpgradeSettings),
+    upgradeSettings: readPair(fileVersion, upgs, upgx, decodeUpgradeSettings, layUpgradeSettings),
     upgradeRestrictions: readPair(fileVersion, upgr, pupx, decodeUpgradeRestrictions),
-    techSettings: readPair(fileVersion, tecs, tecx, decodeTechSettings),
+    techSettings: readPair(fileVersion, tecs, tecx, decodeTechSettings, layTechSettings),
     techRestrictions: readPair(fileVersion, ptec, ptex, decodeTechRestrictions),
     wavs: wav ? decodeWavs(wav) : null,
     cuwp: uprp ? decodeCuwp(uprp) : null,
@@ -467,7 +476,7 @@ function encodeSection(scn: Scenario, name: string): Uint8Array | null {
     case "DD2 ":
       return encodeDoodads(scn.doodads);
     case "MRGN":
-      return encodeLocations(scn.locations);
+      return encodeLocations(scn.locations, locationSlots(scn.fileVersion));
     case "TRIG":
       return encodeTriggers(scn.triggers);
     case "MBRF":

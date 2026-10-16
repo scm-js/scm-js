@@ -175,9 +175,12 @@ versions of the game can play the map:
 
 Brood War widened the five settings tables and gave the wider versions new names, so a
 1.00 map carries the original five, a Brood War map the `x` five, and a hybrid both; the
-[CHK format reference](chk-format.md#revisions) lists the pairs. The editor keeps one model at the Brood War width and writes whichever layouts the
-file's revision calls for, plus any the file already carried, so a hybrid map stays a
-hybrid. Changing the revision in Scenario ▸ Map Revision rewrites `VER ` and `TYPE`,
+[CHK format reference](chk-format.md#revisions) lists the pairs and how the game reads
+them. The editor reads them the way the game does, keeps one model at the Brood War width,
+and writes whichever layouts the file's revision calls for, plus any the file already
+carried, so a hybrid map stays a hybrid. The location table goes with the revision too:
+64 slots in a 1.00 file and 255 from a hybrid one up, the only sizes the game accepts, so
+a 1.00 map is saved with its first 64 and Check Map names any location past them. Changing the revision in Scenario ▸ Map Revision rewrites `VER ` and `TYPE`,
 switches the string table between `STR ` and `STRx` for Remastered (and the text to
 UTF-8 with it), sets the text encoding the table is written in, and leaves every
 string index where it was, so triggers and locations keep pointing at the right text.

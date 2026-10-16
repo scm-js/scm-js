@@ -413,10 +413,10 @@ Double-click one for its name and exact bounds, and for the elevation ticks: a l
 applies only on the ticked elevations, which is how you keep a trigger from firing on the
 cliff above it. An amber stripe on a location's row marks one that excludes something.
 
-Locations live in a fixed table of slots — 64 in original maps, 255 in Brood War — so
-nothing is ever inserted or removed: a new location takes the lowest free slot, deleting
-one blanks it, and triggers keep pointing at the slot they named. The last slot is
-**Anywhere**, the location every trigger can pick, and the game and other editors depend
+Locations live in a fixed table of slots — 64 in StarCraft 1.00 maps, 255 in hybrid and
+Brood War ones — so nothing is ever inserted or removed: a new location takes the lowest
+free slot, deleting one blanks it, and triggers keep pointing at the slot they named. Slot
+64 is **Anywhere**, the location every trigger can pick, and the game and other editors depend
 on it being exactly the map. It is pinned at the top of the list with a lock, never
 drawn, never picked by a click, and cannot be moved, renamed or deleted. If a map's
 Anywhere has gone missing or drifted off the map bounds, the editor offers to put it

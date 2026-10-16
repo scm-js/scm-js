@@ -16,7 +16,7 @@
  * it, so a click on the map cannot land on it.
  */
 import { markDirty, strSectionName, type Scenario } from "../formats/chk/scenario";
-import { ANYWHERE_INDEX, ELEVATION_MASK, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
+import { ANYWHERE_INDEX, ELEVATION_MASK, isLocationUsed, locationSlots, type LocationRecord } from "../formats/chk/sections/objects";
 import { findString, getString } from "../formats/chk/sections/strings";
 import { TILE_PX } from "./units";
 
@@ -34,7 +34,7 @@ export interface LocationChange {
   string?: LocationStringChange;
 }
 
-/** StarEdit writes 64 slots for original / hybrid maps and 255 for Brood War ones. */
+/** A StarCraft 1.00 file has 64 location slots, a hybrid or later one 255 (`locationSlots`). */
 export const ORIGINAL_LOCATION_SLOTS = 64;
 export const BW_LOCATION_SLOTS = 255;
 export const ANYWHERE_NAME = "Anywhere";
@@ -43,9 +43,9 @@ export function blankLocation(): LocationRecord {
   return { left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 };
 }
 
-/** How many slots the map's MRGN has room for (a longer table than expected is kept as it is). */
+/** How many slots the map's MRGN has: the game takes it only at exactly this size, and Save writes no more. */
 export function locationCapacity(scn: Scenario): number {
-  return Math.max(scn.locations.length, scn.fileVersion >= 205 ? BW_LOCATION_SLOTS : ORIGINAL_LOCATION_SLOTS);
+  return locationSlots(scn.fileVersion);
 }
 
 /**
@@ -182,7 +182,8 @@ export function locationAt(scn: Scenario, px: number, py: number): number {
 
 /** The lowest unused slot other than Anywhere, or -1 when the table is full. */
 export function firstFreeSlot(scn: Scenario): number {
-  for (let i = 0; i < scn.locations.length; i++) if (i !== ANYWHERE_INDEX && !isLocationUsed(scn.locations[i])) return i;
+  const slots = Math.min(scn.locations.length, locationCapacity(scn));
+  for (let i = 0; i < slots; i++) if (i !== ANYWHERE_INDEX && !isLocationUsed(scn.locations[i])) return i;
   return -1;
 }
 

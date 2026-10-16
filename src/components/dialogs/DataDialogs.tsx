@@ -9,7 +9,7 @@ import {
 import { weaponName } from "../../data/weapons";
 import { NO_UNIT, NO_WEAPON } from "../../formats/dat/dat";
 import {
-  isExpansion, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario,
+  techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario,
 } from "../../formats/chk/scenario";
 import {
   cloneTechRestrictions, cloneTechSettings, cloneUnitAvailability, cloneUnitSettings, cloneUpgradeRestrictions, cloneUpgradeSettings,
@@ -344,7 +344,8 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
   const dat = assets?.upgrades ?? null;
   const useDefault = settings.useDefault[sel] !== 0;
   const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
-  const beyondOriginal = !isExpansion(scenario) && sel >= UPGRADES_ORIGINAL;
+  // A file of an original revision with no Brood War tables has nowhere to keep these.
+  const beyondOriginal = !upgradeSettingsSections(scenario).includes("UPGx") && sel >= UPGRADES_ORIGINAL;
 
   const setDefault = (on: boolean) => edit(() => {
     settings.useDefault[sel] = on ? 1 : 0;
@@ -410,7 +411,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
             </div>
             <Check label={t("Use default upgrade settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
           </div>
-          {beyondOriginal && <p className="hint">{t("Only Brood War maps (UPGx / PUPx) store upgrades past #{v}; on this map's revision the game reads the original layout and ignores this one.", { v: UPGRADES_ORIGINAL - 1 })}</p>}
+          {beyondOriginal && <p className="hint">{t("Only the Brood War tables (UPGx / PUPx) hold upgrades past #{v}, and this map has none, so these settings are not saved. A hybrid or Brood War revision keeps them.", { v: UPGRADES_ORIGINAL - 1 })}</p>}
           <Group title={t("Cost")}>
             <table className="table dense">
               <thead><tr><th></th><th style={{ width: 150 }}>{t("Base")}</th><th style={{ width: 150 }}>{t("Factor (per level)")}</th></tr></thead>
@@ -496,7 +497,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
   const dat = assets?.techs ?? null;
   const useDefault = settings.useDefault[sel] !== 0;
   const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
-  const beyondOriginal = !isExpansion(scenario) && sel >= TECHS_ORIGINAL;
+  const beyondOriginal = !techSettingsSections(scenario).includes("TECx") && sel >= TECHS_ORIGINAL;
 
   const setDefault = (on: boolean) => edit(() => {
     settings.useDefault[sel] = on ? 1 : 0;
@@ -550,7 +551,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
             </div>
             <Check label={t("Use default technology settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
           </div>
-          {beyondOriginal && <p className="hint">{t("Only Brood War maps (TECx / PTEx) store abilities past #{v}; on this map's revision the game reads the original layout and ignores this one.", { v: TECHS_ORIGINAL - 1 })}</p>}
+          {beyondOriginal && <p className="hint">{t("Only the Brood War tables (TECx / PTEx) hold abilities past #{v}, and this map has none, so these settings are not saved. A hybrid or Brood War revision keeps them.", { v: TECHS_ORIGINAL - 1 })}</p>}
           <Group title={t("Cost")}>
             <div className="form" style={{ gridTemplateColumns: "max-content 160px max-content 160px" }}>
               {TECH_COST_ROWS.map((r) => (

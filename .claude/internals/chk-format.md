@@ -170,14 +170,24 @@ UMS adds MASK, settings, PUNI, UPRP, MRGN, TRIG) → "Error loading scenario fil
 (STR MBRF) → result ignored. Sizes are exact except MTXM ≤ 131072, FORC ≤ 20 (zero-padded),
 STR/MASK any; records whole. VCOD hashes only OWNR+SIDE (12 × 36-byte lobby records).
 
-Where the editor still disagrees with the game (not fixed in the docs pass; each a
-separate change):
-- `REQUIRED_SECTIONS` (create.ts, used by Check Map / Repair) lists MBRF (never required)
-  and lacks MASK and the UMS-only nature of PUNI/UPRP/MRGN/TRIG/settings, and COLR at 205.
-- A `VER` 59 file is written with a 5100-byte MRGN; 1.16.1 refuses that at a UMS start
-  (needs 1280, 64 locations). `tests/maps/original.scm` is such a file.
-- The reader's combine modes: MRGN `overlay` (game: every copy whole, last wins), the
-  settings tables `last` (game: entry by entry, and the `x` tables applied over the
-  originals in a 59/63 file), STR `minimum: 2` (Remastered's rule; 1.16.1 takes any).
+Where the editor now follows the game (2026-10-15, the follow-up to the docs pass):
+- `requiredSections(ver, game = "ums")` in create.ts: `REQUIRED_SECTIONS` is what every game
+  needs (map list + melee start), plus COLR from 205; `"ums"` adds `REQUIRED_UMS_SECTIONS`
+  (MASK PUNI UPRP MRGN TRIG) and the original five below 205 or the `x` five from 205. A
+  hybrid no longer requires the `x` tables. Check Map: missing "melee" sections are an
+  error; missing UMS-only ones a warning, an error when the map has triggers.
+- MRGN is written at exactly `locationSlots(fileVersion)` records (64 below 63, 255 from
+  63), padded or cut; `setMapVersion` marks MRGN dirty and grows the model when the count
+  changes; `locationCapacity` / `firstFreeSlot` stay inside it; Check Map errors on a used
+  location past it. `tests/maps/original.scm` was regenerated (MRGN 1280).
+- Combine modes: MRGN `last`; the six costs tables `entries` (`EntryLayout` on the spec,
+  `reader.ts#layEntries`; plugin API type `CombineMode` gained the value, additive).
+  `readPair` in scenario.ts: 205+ reads `x` alone; 59/63 read the original then the `x`
+  one on top — costs tables entry by entry (`lay*Settings`), restrictions replaced whole.
+  The one approximation: weapon columns go with the unit types that fire them (units.dat),
+  so the parser takes them whole from a later copy that customises any unit type.
+- Settings dialogs' "beyond the original layout" hint now keys on whether the file writes
+  the `x` table, not on `VER`.
+- STR keeps `minimum: 2` (Remastered's rule) on purpose.
 - Remastered is known to differ on STR decoys; the rest is unchecked there. Twelve probes
   for a Remastered pass are in the user's maps folder `CHK/Remastered/` with a checklist.

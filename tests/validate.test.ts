@@ -26,28 +26,38 @@ describe("validateScenario", () => {
     expect(issues[0].text).toMatch(/Brood War 1.04/);
   });
 
-  it("reports missing required sections by revision", () => {
-    // A Brood War map needs only the `x` settings layouts, like Blizzard's own.
+  it("reports missing required sections by revision and game type", () => {
+    const missing = (scn: ReturnType<typeof fresh>) => texts(scn).filter((t) => /^(error|warn): Missing/.test(t));
+    const UMS = "— a Use Map Settings game of this map stops as it starts. Melee and the other game types do not need them.";
+    // A Brood War map needs only the `x` settings layouts, like Blizzard's own, and only
+    // for Use Map Settings: a melee game never reads them.
     const bw = fresh();
     for (const n of ["UNIS", "UPGS", "TECS", "UPGR", "PTEC"]) bw.dirty.delete(n);
-    expect(texts(bw).some((t) => t.startsWith("error: Missing"))).toBe(false);
+    expect(missing(bw)).toEqual([]);
     bw.dirty.delete("UNIx");
-    expect(texts(bw)).toContain("error: Missing UNIx — the game will not load this map.");
-    // A hybrid map needs both; an original one only the original layouts.
+    bw.dirty.delete("MASK");
+    expect(missing(bw)).toEqual([`warn: Missing MASK, UNIx ${UMS}`]);
+    bw.triggers.push(newTrigger());
+    expect(missing(bw)).toEqual([`error: Missing MASK, UNIx ${UMS}`]);
+    // And COLR, which every game of a Brood War file reads.
+    const colr = fresh();
+    colr.dirty.delete("COLR");
+    expect(missing(colr)).toEqual(["error: Missing COLR — the game will not load this map."]);
+    // A hybrid or original map needs the original layouts; the `x` ones are read on top when present.
     const ORIGINAL = ["UNIS", "UPGS", "TECS", "UPGR", "PTEC"];
     const hybrid = fresh();
     hybrid.fileVersion = 63;
     for (const n of ORIGINAL) hybrid.dirty.add(n);
-    expect(texts(hybrid).some((t) => t.startsWith("error: Missing"))).toBe(false);
+    expect(missing(hybrid)).toEqual([]);
     hybrid.dirty.delete("UPGS");
     hybrid.dirty.delete("PUPx");
-    expect(texts(hybrid).some((t) => t.startsWith("error: Missing UPGS, PUPx"))).toBe(true);
+    expect(missing(hybrid)).toEqual([`warn: Missing UPGS ${UMS}`]);
     const orig = fresh();
     orig.fileVersion = 59;
-    expect(texts(orig).some((t) => t.startsWith("error: Missing UNIS, UPGS, TECS, UPGR, PTEC"))).toBe(true);
+    expect(missing(orig)).toEqual([`warn: Missing UNIS, UPGS, TECS, UPGR, PTEC ${UMS}`]);
     for (const n of ORIGINAL) orig.dirty.add(n);
-    for (const n of ["UNIx", "UPGx", "TECx", "PUPx", "PTEx"]) orig.dirty.delete(n);
-    expect(texts(orig).some((t) => t.startsWith("error: Missing"))).toBe(false);
+    for (const n of ["UNIx", "UPGx", "TECx", "PUPx", "PTEx", "COLR"]) orig.dirty.delete(n);
+    expect(missing(orig)).toEqual([]);
 
     const scn = fresh();
     scn.dirty.delete("MTXM");

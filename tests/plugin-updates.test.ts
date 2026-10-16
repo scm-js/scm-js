@@ -7,7 +7,7 @@ import type { UpdateCheck } from "../src/plugins/host";
 import { unpin, type PluginPreview } from "../src/plugins/loader";
 import { parseRegistry, type Registry } from "../src/plugins/registry";
 import {
-  autoUpdateBlock, autoUpdateToast, compareVersions, runUpdatePass, shouldCheckPlugins, updatesFromRegistries, updateToast, type UpdateDeps,
+  answerFor, autoUpdateBlock, autoUpdateToast, checkAllForUpdates, compareVersions, runUpdatePass, shouldCheckPlugins, updateAllPlugins, updatesFromRegistries, updateToast, type UpdateDeps,
 } from "../src/plugins/updates";
 
 const rt = (spec: string, name: string, version: string): Record<string, PluginRuntime> => ({
@@ -68,7 +68,9 @@ describe("plugin updates from the registries", () => {
     // Listed, but nothing loaded or cached to compare against: left to the row's button
     // rather than asked at its address, which keeps the defaults off GitHub's meter.
     const unknown = updatesFromRegistries([installs[0]], {}, {}, [registry({ spec: "github:scm-js/plugin-paint", name: "Paint", version: "9.0.0" })]);
-    expect(unknown).toEqual({ found: [], ask: [] });
+    expect(unknown).toMatchObject({ found: [], ask: [], current: [] });
+    // No running version to compare: the startup pass leaves it, a press asks its address.
+    expect(unknown.unversioned.map((a) => a.spec)).toEqual([installs[0].spec]);
     // A version cached from an earlier session stands in for one no plugin loaded.
     const cached = { [paint]: { manifest: { name: "Paint", version: "0.9.0" }, icon: null, at: 0 } } as never;
     expect(updatesFromRegistries([installs[0]], {}, cached, [reg]).found[0]).toMatchObject({ from: "0.9.0", to: "1.0.0" });
@@ -105,10 +107,10 @@ describe("plugin update notices", () => {
     let opened = 0;
     const t = updateToast([one], () => { opened++; })!;
     expect(t).toMatchObject({ kind: "info", title: "Repair 1.3.0 is available", ttl: 0 });
-    expect(t.detail).toBe("You have 1.2.0. Each update shows what it is before anything changes.");
+    expect(t.detail).toBe("You have 1.2.0.");
     t.action!.run();
     expect(opened).toBe(1);
-    expect(updateToast([one, two], () => {})!).toMatchObject({ title: "2 plugins have newer versions", detail: "Repair 1.2.0 to 1.3.0, Paint to 2.0.0. Each update shows what it is before anything changes." });
+    expect(updateToast([one, two], () => {})!).toMatchObject({ title: "2 plugin updates are available", detail: "Repair 1.2.0 to 1.3.0, Paint to 2.0.0." });
     expect(updateToast([], () => {})).toBeNull();
   });
 
@@ -198,5 +200,90 @@ describe("plugin update pass", () => {
     const { found } = await runUpdatePass(store, "auto", { ...deps, checkForUpdate: async (a) => check(a, "0.3.0", false) });
     expect(found.find((u) => u.name === "Mine")).toBeUndefined();
     expect(installed).toEqual([]);
+  });
+});
+
+describe("checking and updating every plugin on request", () => {
+  const paint = defaultPlugins().find((d) => pluginKey(d.spec) === pluginKey("github:scm-js/plugin-paint"))!.spec;
+  const other = defaultPlugins().find((d) => d.spec !== paint)!.spec;
+  const mine = "github:me/plugin-mine@v0.3.0";
+  const listed = [
+    { spec: "github:scm-js/plugin-paint", name: "Paint", version: "1.1.0" },
+    ...defaultPlugins().filter((d) => d.spec !== paint).map((d) => ({ spec: unpin(updateAddress(d.spec)!), name: d.spec, version: "0.0.1" })),
+  ];
+  const setup = (opts: { needsApi?: number } = {}) => {
+    const store = createStore();
+    store.set(installedPluginsAtom, [{ spec: mine, enabled: false, local: true }]);
+    store.set(pluginRuntimesAtom, { ...rt(paint, "Paint", "1.0.0"), ...rt(mine, "Mine", "0.3.0"), ...rt(other, "Other", "0.0.1") });
+    store.set(pluginManifestCacheAtom, {});
+    const asked: string[] = [];
+    const forced: (boolean | undefined)[] = [];
+    const installed: { replaces: string; local: boolean; enabled?: boolean }[] = [];
+    const deps: UpdateDeps = {
+      loadRegistries: async (_s, o) => { forced.push(o?.force); return [registry(...listed)]; },
+      checkForUpdate: async (address) => {
+        asked.push(address);
+        const bare = address.replace(/@.*$/, "");
+        if (bare.endsWith("plugin-mine")) return check(bare, "0.4.0");
+        if (bare.endsWith("plugin-paint")) return { ...check(bare, "1.1.0"), preview: preview(bare, "1.1.0", { needsApi: opts.needsApi ?? null }) };
+        return check(bare, "0.0.1", false);
+      },
+      installPlugin: async (_s, _p, o) => { installed.push({ replaces: o.replaces, local: o.local, enabled: o.enabled }); },
+      now: () => 777,
+    };
+    return { store, asked, forced, installed, deps };
+  };
+
+  it("answers every row: the registry where it can, the address for the rest, fetched fresh", async () => {
+    const { store, asked, forced, deps } = setup();
+    const r = await checkAllForUpdates(store, deps);
+    expect(forced).toEqual([true]);
+    // Paint and Other are answered by the registry alone; Mine is listed nowhere.
+    expect(asked).toContain(mine);
+    expect(asked.some((a) => a.includes("plugin-paint"))).toBe(false);
+    expect(asked).not.toContain(updateAddress(other));
+    // The other defaults are off here (no runtime): their tag names the version, so nobody is asked.
+    expect(asked).toEqual([mine]);
+    const answers = store.get(pluginUpdatesAtom);
+    expect(answers[paint]).toEqual({ kind: "newer", version: "1.1.0", preview: null });
+    expect(answers[mine]).toMatchObject({ kind: "newer", version: "0.4.0" });
+    expect(answers[other]).toMatchObject({ kind: "current" });
+    expect(r.newer).toBe(2);
+    expect(r.problem).toBe(0);
+    expect(store.get(pluginUpdateCheckAtom)).toEqual({ at: 777 });
+  });
+
+  it("puts a check that failed on its row", async () => {
+    const { store, deps } = setup();
+    const r = await checkAllForUpdates(store, { ...deps, checkForUpdate: async () => { throw new Error("rate limited"); } });
+    expect(store.get(pluginUpdatesAtom)[mine]).toEqual({ kind: "problem", text: "rate limited" });
+    expect(r.problem).toBeGreaterThan(0);
+  });
+
+  it("installs every offer, keeping each row's settings, and clears what it installed", async () => {
+    const { store, installed, deps } = setup();
+    await checkAllForUpdates(store, deps);
+    const outcome = await updateAllPlugins(store, deps);
+    expect(outcome.installed.map((u) => u.name).sort()).toEqual(["Mine", "Paint"]);
+    expect(installed).toContainEqual({ replaces: mine, local: true, enabled: false });
+    expect(installed).toContainEqual({ replaces: paint, local: false, enabled: true });
+    const answers = store.get(pluginUpdatesAtom);
+    expect(answers[paint]).toBeUndefined();
+    expect(answers[mine]).toBeUndefined();
+  });
+
+  it("leaves a release built for a newer plugin API, and says why", async () => {
+    const { store, installed, deps } = setup({ needsApi: 99 });
+    await checkAllForUpdates(store, deps);
+    const outcome = await updateAllPlugins(store, deps);
+    expect(outcome.skipped).toEqual([{ update: expect.objectContaining({ name: "Paint" }), reason: expect.stringMatching(/plugin API \(99\)/) }]);
+    expect(installed.map((i) => i.replaces)).toEqual([mine]);
+    expect(store.get(pluginUpdatesAtom)[paint]).toMatchObject({ kind: "newer" });
+  });
+
+  it("words an address check as the row shows it", () => {
+    expect(answerFor(check("github:me/x", "1.0.0", false))).toEqual({ kind: "current", text: "X v1.0.0 is the newest version there is." });
+    expect(answerFor(check("github:me/x", "1.1.0"))).toMatchObject({ kind: "newer", version: "1.1.0" });
+    expect(answerFor({ ...check("github:me/x", "1.0.0"), preview: preview("github:me/x", "1.0.0", { manifest: null, problem: "404" }) })).toMatchObject({ kind: "problem" });
   });
 });

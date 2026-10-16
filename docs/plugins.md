@@ -111,7 +111,15 @@ it installed. To move forward:
 
 - **Check for update** on a row in Manage Plugins asks the repository for its newest
   release. If it is newer, the button becomes *Update to …*, which shows the new manifest
-  and asks before changing anything. **Check all for updates** does every row.
+  and asks before changing anything. The answer is on the row: *Up to date*, *Could not
+  check*, or the *Update to …* button.
+- **Check all for updates** answers every row at once. It reads the plugin lists first and
+  asks a repository only for a plugin no list carries, so it costs a request or two however
+  many plugins you have. A line under the button sums up what it found.
+- **Update all** appears when two or more rows offer an update. It installs them one after
+  another, without the confirmation screen, and each plugin keeps its settings (on or off,
+  loaded from a saved copy or not). A version that needs a newer editor is left, and the
+  line under the button says so.
 - Only releases (version tags) count. Commits pushed after the newest release are not
   offered.
 - Browse Plugins also marks *v… available* on a row when its list carries a newer version

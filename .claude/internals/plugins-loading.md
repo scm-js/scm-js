@@ -170,11 +170,24 @@ and un-copy the old commit before installing the new one.
 That button is on every row with an address to ask, whether or not anything is newer, so
 most presses can only answer "nothing is" — it used to say **Update** and put that answer in
 one dim line at the top of the pane, which for a button near the bottom of a scrolling list
-read as the press doing nothing at all. The answer is a `CheckAnswer` per spec now
-(`InstalledPane`'s `checked`): *Up to date* or *Could not check* on the row itself, a toast
-beside it (worded with the release it found — "the newest commit" answered a question nobody
-asked), and for a newer release the button becomes `Update to v…` holding the preview it was
-found with, so cancelling the confirmation neither loses the answer nor asks GitHub twice.
+read as the press doing nothing at all. The answer is a `PluginUpdateAnswer` per spec now
+(`updates.ts#answerFor`, kept in `pluginUpdatesAtom`): *Up to date* or *Could not check* on
+the row itself, under the button that was pressed (worded with the release it found — "the
+newest commit" answered a question nobody asked), and for a newer release the button
+becomes `Update to v…` holding the preview it was found with, so cancelling the
+confirmation neither loses the answer nor asks GitHub twice. **No toast**: there used to be
+one per answer as well, and *Check all* then filled the corner with a "No update" per
+plugin (and opened a confirmation per newer one, mid-loop).
+*Check all* is `updates.ts#checkAllForUpdates`, not the row button in a loop: the
+registries (fetched with `force`), then the address only for an unlisted plugin or a listed
+one with no running version (`RegistryAnswers.unversioned`). The loop was 2–3 GitHub
+requests a row against 60 an hour, so a few presses spent the limit and the rows then said
+*Could not check*. A registry up to an hour behind a release is the row button's job,
+which always asks the address. Its result is one `plugin-bulk-note` line under the
+buttons. **Update all** (shown at two or more offers) is `updateAllPlugins`: sequential
+installs keeping each row's `enabled`/`local`, defaults included (the press is the
+user's), a registry answer previewed at its address first, `needsApi` past
+`PLUGIN_API_VERSION` left with the reason; no confirmation screen, the same as `auto`.
 Which rows get it is `defaults.ts#updateAddress`, not `isPinned`: vendoring swaps a default's
 spec for `builtin:paint`, which is not pinned, so the one button that moves a plugin forward
 appeared on every row **except** the ones the editor ships — and only in builds that skipped

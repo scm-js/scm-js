@@ -21,6 +21,10 @@
  * editor has; and always release tag to release tag in the same repository, which is
  * what `checkForUpdate` offers.
  *
+ * Manage Plugins' *Check all for updates* and *Update all* are here too
+ * (`checkAllForUpdates`, `updateAllPlugins`): the same registry-first reading, asked for,
+ * and the same install, pressed for.
+ *
  * The pure half is tested against stand-ins in `tests/plugin-updates.test.ts`; the pass
  * itself takes its collaborators as `UpdateDeps` for the same reason.
  */
@@ -56,6 +60,27 @@ export interface PluginToAsk {
   address: string;
   name: string;
   from: string | null;
+}
+
+/** A listed plugin the registry names at the version it runs, or an older one. */
+export interface PluginCurrent {
+  spec: string;
+  name: string;
+  /** The registry's newest release. */
+  version: string;
+}
+
+/**
+ * What the registries answer about the installed plugins. The startup pass reads `found`
+ * and `ask`; *Check all for updates* reads all four, since a press is owed an answer for
+ * every row — `unversioned` is a listed plugin with no running version to compare (off,
+ * nothing cached), which only a press goes on to ask at its address.
+ */
+export interface RegistryAnswers {
+  found: PluginUpdate[];
+  ask: PluginToAsk[];
+  current: PluginCurrent[];
+  unversioned: (PluginToAsk & { listed: string | null })[];
 }
 
 /* ── Versions ───────────────────────────────────────────── */
@@ -114,11 +139,13 @@ export function updatesFromRegistries(
   runtimes: Record<string, PluginRuntime>,
   cached: Record<string, CachedManifest>,
   registries: readonly Registry[],
-): { found: PluginUpdate[]; ask: PluginToAsk[] } {
+): RegistryAnswers {
   const listed = new Map<string, RegistryEntry>();
   for (const r of registries) for (const e of r.plugins) if (!e.unlisted && !listed.has(pluginKey(e.spec))) listed.set(pluginKey(e.spec), e);
   const found: PluginUpdate[] = [];
   const ask: PluginToAsk[] = [];
+  const current: PluginCurrent[] = [];
+  const unversioned: RegistryAnswers["unversioned"] = [];
   for (const p of installs) {
     const address = updateAddress(p.spec);
     if (address === null) continue;
@@ -129,10 +156,11 @@ export function updatesFromRegistries(
       ask.push({ spec: p.spec, address, name, from });
       continue;
     }
-    if (!entry.version || from === null) continue;
+    if (!entry.version || from === null) { unversioned.push({ spec: p.spec, address, name, from, listed: entry.version ?? null }); continue; }
     if (compareVersions(entry.version, from) > 0) found.push({ spec: p.spec, address, name, from, to: entry.version, preview: null });
+    else current.push({ spec: p.spec, name, version: entry.version });
   }
-  return { found, ask };
+  return { found, ask, current, unversioned };
 }
 
 /* ── Installing on its own ──────────────────────────────── */
@@ -166,11 +194,11 @@ const versionLine = (u: PluginUpdate) => (u.from ? `${u.name} ${u.from} to ${u.t
 export function updateToast(updates: readonly PluginUpdate[], openPlugins: () => void): Omit<Toast, "id"> | null {
   if (updates.length === 0) return null;
   const title = updates.length === 1
-    ? `${updates[0].name} ${updates[0].to} is available`
-    : `${updates.length} plugins have newer versions`;
+    ? t("{name} {version} is available", { name: updates[0].name, version: updates[0].to })
+    : t("{n} plugin updates are available", { n: updates.length });
   const detail = updates.length === 1
-    ? (updates[0].from ? `You have ${updates[0].from}. Each update shows what it is before anything changes.` : "The update shows what it is before anything changes.")
-    : `${updates.map(versionLine).join(", ")}. Each update shows what it is before anything changes.`;
+    ? (updates[0].from ? t("You have {current}.", { current: updates[0].from }) : undefined)
+    : `${updates.map(versionLine).join(", ")}.`;
   return { kind: "info", title, detail, ttl: 0, action: { label: t("Plugins…"), run: openPlugins } };
 }
 
@@ -207,14 +235,14 @@ export function autoUpdateToast(outcome: AutoUpdateOutcome, openPlugins: () => v
 
 /** The collaborators the pass takes, so a test can drive it without a network or a plugin. */
 export interface UpdateDeps {
-  loadRegistries: (store: Store) => Promise<Registry[]>;
+  loadRegistries: (store: Store, opts?: { force?: boolean }) => Promise<Registry[]>;
   checkForUpdate: (address: string, installed: { version?: string | null }) => Promise<UpdateCheck>;
-  installPlugin: (store: Store, preview: PluginPreview, opts: { replaces: string; pin: true; local: false }) => Promise<void>;
+  installPlugin: (store: Store, preview: PluginPreview, opts: { replaces: string; pin: true; local: boolean; enabled?: boolean }) => Promise<void>;
   now: () => number;
 }
 
 export const browserUpdateDeps = (): UpdateDeps => ({
-  loadRegistries: (store) => loadRegistries(store),
+  loadRegistries: (store, opts) => loadRegistries(store, opts),
   checkForUpdate: (address, installed) => checkForUpdate(address, undefined, installed),
   installPlugin: (store, preview, opts) => installPlugin(store, preview, opts),
   now: () => Date.now(),
@@ -274,4 +302,130 @@ export async function runUpdatePass(store: Store, mode: PluginUpdateMode, deps: 
     }
   }
   return { found, outcome };
+}
+
+/* ── Asked for: Check all, Update all ───────────────────── */
+
+/**
+ * What an address check says about one row, in the words the row shows. The row's own
+ * **Check for update** and *Check all* both answer through this.
+ */
+export function answerFor(check: UpdateCheck): PluginUpdateAnswer {
+  const { preview, newer, tag } = check;
+  if (!preview.manifest) return { kind: "problem", text: `${t("Could not find plugin data at that address.")} ${preview.problem ?? ""}`.trim() };
+  if (newer && preview.pin) return { kind: "newer", version: preview.manifest.version ?? tag, preview };
+  if (!preview.pin) return { kind: "problem", text: preview.pinProblem ?? t("Could not ask for a newer version.") };
+  // Naming the version is the whole answer: "the newest commit" said nothing about whether
+  // the plugin had been released since, which is what was actually asked.
+  const at = tag ?? (preview.manifest.version ? `v${preview.manifest.version}` : preview.pin.short);
+  return { kind: "current", text: t("{name} {at} is the newest version there is.", { name: preview.manifest.name, at }) };
+}
+
+/** How a *Check all* came out, counted over the rows it answered for. */
+export interface CheckAllResult {
+  newer: number;
+  current: number;
+  problem: number;
+}
+
+/**
+ * *Check all for updates*: an answer on every row that has an address, the way the
+ * startup pass finds them — the registries first (fetched fresh, since this was asked
+ * for), and the address only for a plugin no registry lists or one with no running
+ * version to compare. Asking every address in turn was two or three GitHub requests a
+ * row against sixty an hour, so three presses with the defaults installed spent the limit
+ * and the row buttons then answered *Could not check*. A registry an hour behind a
+ * release is caught by the row's own button, which always asks the address.
+ */
+export async function checkAllForUpdates(store: Store, deps: UpdateDeps = browserUpdateDeps()): Promise<CheckAllResult> {
+  store.set(pluginUpdateCheckAtom, { at: deps.now() });
+  const installs = effectiveInstalls(store.get(installedPluginsAtom));
+  const runtimes = store.get(pluginRuntimesAtom);
+  const cached = store.get(pluginManifestCacheAtom);
+  const registries = await deps.loadRegistries(store, { force: true }).catch(() => [] as Registry[]);
+  const { found, ask, current, unversioned } = updatesFromRegistries(installs, runtimes, cached, registries);
+  const answers: Record<string, PluginUpdateAnswer> = {};
+  for (const u of found) answers[u.spec] = { kind: "newer", version: u.to, preview: null };
+  const currentAnswer = (name: string, version: string): PluginUpdateAnswer =>
+    ({ kind: "current", text: t("{name} {at} is the newest version there is.", { name, at: `v${version.replace(/^v/i, "")}` }) });
+  for (const c of current) answers[c.spec] = currentAnswer(c.name, c.version);
+  // A plugin that is off has no running version, but one pinned to a release tag names it.
+  const toAsk: PluginToAsk[] = [...ask];
+  for (const u of unversioned) {
+    const tagged = tagVersion(u.address);
+    if (!tagged || !u.listed) { toAsk.push(u); continue; }
+    answers[u.spec] = compareVersions(u.listed, tagged) > 0
+      ? { kind: "newer", version: u.listed, preview: null }
+      : currentAnswer(u.name, u.listed);
+  }
+  for (const a of toAsk) {
+    try {
+      answers[a.spec] = answerFor(await deps.checkForUpdate(a.address, { version: a.from }));
+    } catch (err) {
+      answers[a.spec] = { kind: "problem", text: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  store.set(pluginUpdatesAtom, { ...store.get(pluginUpdatesAtom), ...answers });
+  const result: CheckAllResult = { newer: 0, current: 0, problem: 0 };
+  for (const a of Object.values(answers)) result[a.kind]++;
+  return result;
+}
+
+/** The release a spec is pinned to, when its ref is a version tag (`…@v1.2.0`). */
+function tagVersion(spec: string): string | null {
+  const m = /@v?(\d+(?:\.\d+)*(?:-[\w.]+)?)$/.exec(spec);
+  return m ? m[1] : null;
+}
+
+/** The rows Manage Plugins offers an update on, as updates — what *Update all* would install. */
+export function offeredUpdates(store: Store): PluginUpdate[] {
+  const answers = store.get(pluginUpdatesAtom);
+  const runtimes = store.get(pluginRuntimesAtom);
+  const cached = store.get(pluginManifestCacheAtom);
+  return effectiveInstalls(store.get(installedPluginsAtom)).flatMap((p) => {
+    const a = answers[p.spec];
+    const address = updateAddress(p.spec);
+    if (a?.kind !== "newer" || address === null) return [];
+    const to = a.preview?.manifest?.version ?? a.version ?? "?";
+    return [{ spec: p.spec, address, name: rowName(p.spec, runtimes, cached), from: runningVersion(p.spec, runtimes, cached), to, preview: a.preview }];
+  });
+}
+
+/**
+ * *Update all*: install every update the rows offer, one after another, keeping each
+ * row's own choices (on or off, loaded from a saved copy or not). Unlike `auto` it takes
+ * the defaults too — the press is the user's, as the row's own button is — and leaves
+ * only a release built for a newer plugin API than this editor has. A registry answer
+ * carries no preview, so the address is asked first, which is also the second opinion on
+ * whether the release is newer at all.
+ */
+export async function updateAllPlugins(store: Store, deps: UpdateDeps = browserUpdateDeps()): Promise<AutoUpdateOutcome> {
+  const outcome: AutoUpdateOutcome = { installed: [], skipped: [], failed: [] };
+  for (const u of offeredUpdates(store)) {
+    const install = effectiveInstalls(store.get(installedPluginsAtom)).find((p) => p.spec === u.spec);
+    if (!install) continue;
+    try {
+      const got = u.preview ? { to: u.to, preview: u.preview } : offered(await deps.checkForUpdate(u.address, { version: u.from }));
+      if (!got) {
+        outcome.skipped.push({ update: u, reason: t("already the newest release") });
+        const rest = { ...store.get(pluginUpdatesAtom) };
+        delete rest[u.spec];
+        store.set(pluginUpdatesAtom, rest);
+        continue;
+      }
+      const needsApi = got.preview.needsApi;
+      if (needsApi != null && needsApi > PLUGIN_API_VERSION) {
+        outcome.skipped.push({ update: u, reason: t("built for a newer plugin API ({needsApi}) than this editor has", { needsApi }) });
+        continue;
+      }
+      await deps.installPlugin(store, got.preview, { replaces: u.spec, pin: true, local: install.local === true, enabled: install.enabled });
+      outcome.installed.push({ ...u, to: got.to, preview: got.preview });
+      const rest = { ...store.get(pluginUpdatesAtom) };
+      delete rest[u.spec];
+      store.set(pluginUpdatesAtom, rest);
+    } catch (err) {
+      outcome.failed.push({ update: u, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return outcome;
 }

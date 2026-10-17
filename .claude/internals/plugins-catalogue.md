@@ -1,5 +1,13 @@
 # The plugins themselves
 
+Since 1.39.0 (2026-10-17, ai-server 0.27.0 on ai-engine 0.2.0) the assistant **keeps the server's
+`<map_state>` block** in its history: the `agent` answer hands it back (`output.state`) and
+`keepState` puts it at the end of the message it was added to. Before, every request sent that
+message without it, and the 5.5 models — which drop a replayed thinking block, and every later one,
+when the conversation before it changed — ran each round without the earlier rounds' reasoning. The
+server's call log counts what is still dropped (*Thinking lost* in `npm run report` and on `/admin`);
+the history trim (`trimHistory` / `fitHistory`) still drops it once per trim, by design.
+
 Since 1.38.0 (2026-10-16, ai-server 0.25.0) the AI runs on **the person's own Anthropic key** unless
 their role pays for it (admins): Preferences ▸ scmjs.dev ▸ *Your Anthropic key*, checked by the
 server's free `POST /v1/key/check` before it is kept, sent with recipe calls only — never in the

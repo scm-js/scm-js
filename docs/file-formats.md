@@ -32,7 +32,7 @@ The Save dialog's **Archive** fold decides how the scenario is stored:
 | Option | What it means |
 | --- | --- |
 | **PKWARE** | The compression StarEdit uses and every Blizzard map is stored with. Every version of the game reads it. |
-| **zlib** | Smaller. Read by 1.16.1 and Remastered, not by older builds. |
+| **zlib** | Smaller. Read by Remastered only: 1.16.1 and older builds cannot open the map. |
 | **None** | The largest, readable by anything. |
 | **Encrypt** | StarEdit's light encryption of the members. It hides nothing from a map editor; some tools expect it. |
 

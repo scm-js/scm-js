@@ -18,6 +18,7 @@ import {
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
 import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName } from "../data/units";
+import { PALETTE_AVAILABILITY, type UnitsDat } from "../formats/dat/dat";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
 import type { TriggerNames } from "../formats/triggers/text";
@@ -211,12 +212,48 @@ export function newCondition(type: number): ConditionRecord {
   return c;
 }
 
+/**
+ * The owners the game hands a trigger to at the start: Players 1–8, All Players and the
+ * four forces. A trigger ticked only for anything else (Player 9–12, Current Player, Foes,
+ * Allies, Neutral Players, None, Unused, Non Allied Victory Players) never runs.
+ */
+export const TRIGGER_OWNERS: ReadonlySet<number> = new Set([
+  PlayerGroup.Player1, PlayerGroup.Player2, PlayerGroup.Player3, PlayerGroup.Player4,
+  PlayerGroup.Player5, PlayerGroup.Player6, PlayerGroup.Player7, PlayerGroup.Player8,
+  PlayerGroup.AllPlayers, PlayerGroup.Force1, PlayerGroup.Force2, PlayerGroup.Force3, PlayerGroup.Force4,
+]);
+
+/**
+ * Actions whose unit must be a real unit type to do anything: Create Unit makes nothing of
+ * a class, and Set Deaths writes nothing for Any unit (and Men, Buildings or Factories are
+ * the player's real losses). They start on Terran Marine, as in StarEdit.
+ */
+const REAL_UNIT_ACTIONS: ReadonlySet<number> = new Set([ActionType.CreateUnit, ActionType.CreateUnitWithProperties, ActionType.SetDeaths]);
+/** The actions that create units, which the game refuses for a type without the palette flag. */
+export const CREATING_ACTIONS: ReadonlySet<number> = new Set([ActionType.CreateUnit, ActionType.CreateUnitWithProperties]);
+
+/**
+ * Whether Create Unit can make this type: the game refuses a class or anything past the
+ * unit types, and every type units.dat leaves off StarEdit's palette (larvae, eggs, traps,
+ * doors, turrets on tanks …). Without units.dat only the id range is known.
+ */
+export function triggerCanCreate(units: UnitsDat | null, unitId: number): boolean {
+  if (unitId < 0 || unitId >= UNIT_TYPE_COUNT) return false;
+  // The pre-Brood War layout has no availability words at all.
+  if (!units || !units.availability.some((v) => v !== 0)) return true;
+  return (units.availability[unitId] & PALETTE_AVAILABILITY) !== 0;
+}
+
 export function newAction(type: number, briefing = false): ActionRecord {
   const a = { ...emptyAction(), type };
   const def = actionDef(type, briefing);
   if (def) {
     seed(a, def);
-    if (def.args.some((x) => x.kind === "unit")) a.flags |= ActionFlag.UnitTypeUsed;
+    const unit = def.args.find((x) => x.kind === "unit");
+    if (unit) {
+      a.flags |= ActionFlag.UnitTypeUsed;
+      if (!briefing && REAL_UNIT_ACTIONS.has(type)) (a as unknown as Record<string, number>)[unit.field] = 0;
+    }
   }
   return a;
 }

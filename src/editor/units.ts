@@ -168,6 +168,8 @@ const MINERAL_FIELDS = new Set<number>(MINERAL_FIELD_IDS);
 export function isResource(unitId: number): boolean {
   return MINERAL_FIELDS.has(unitId) || unitId === VESPENE_GEYSER;
 }
+/** Refinery, Extractor, Assimilator: buildings that hold the gas of the geyser they stand on. */
+export const GAS_BUILDINGS: ReadonlySet<number> = new Set([110, 149, 157]);
 const CARRIERS = new Set([72, 82, 83, 81]); // Carrier, Gantrithor, Reaver, Warbringer
 
 /** Serial ids only need to be unique within the map; StarEdit hands them out increasing. */
@@ -186,7 +188,10 @@ export function makeUnit(units: UnitsDat | null, unitId: number, owner: number, 
   const flags = units ? units.flags[unitId] : 0;
   const has = (f: number) => (flags & f) !== 0;
   const isStart = unitId === START_LOCATION;
-  const resources = MINERAL_FIELDS.has(unitId) ? DEFAULT_MINERALS : unitId === VESPENE_GEYSER ? DEFAULT_GAS : 0;
+  // The game gives a resource container exactly the amount its record holds, so a gas
+  // building placed without one has no gas (StarEdit writes 5000 for it, as for a geyser).
+  const resources = MINERAL_FIELDS.has(unitId) ? DEFAULT_MINERALS
+    : unitId === VESPENE_GEYSER || GAS_BUILDINGS.has(unitId) || has(UnitFlag.ResourceContainer) ? DEFAULT_GAS : 0;
   const shields = units ? units.shieldEnable[unitId] !== 0 : false;
   const energy = has(UnitFlag.Spellcaster);
   const hangar = CARRIERS.has(unitId);
@@ -222,6 +227,63 @@ export function makeUnit(units: UnitsDat | null, unitId: number, owner: number, 
     unused: 0,
     relatedSerial: 0,
   };
+}
+
+/** Each Terran add-on and the buildings it attaches to. */
+export const ADDON_HOSTS: ReadonlyMap<number, readonly number[]> = new Map([
+  [107, [106]], [108, [106]], // Comsat Station, Nuclear Silo → Command Center
+  [115, [114]], // Control Tower → Starport
+  [117, [116]], [118, [116]], // Covert Ops, Physics Lab → Science Facility
+  [120, [113]], // Machine Shop → Factory
+]);
+/** Where an add-on stands from its building's centre: four tiles right and one down on their placement boxes (every pair in Blizzard's maps). */
+export const ADDON_OFFSET = { x: 96, y: 16 } as const;
+/** The relation word StarEdit writes on both units of a linked pair. The game does not read it. */
+const STAREDIT_RELATION = 0x200;
+
+export const NYDUS_CANAL = 134;
+
+/**
+ * Link the unit at `index` just placed — an add-on against its building, a building where
+ * a free add-on of its owner stands, or a Nydus Canal to its owner's last unpaired one —
+ * the way the game reads a link: each record names the other's serial (a one-sided link
+ * leaves an add-on detached in the game). Empty when there is nothing to link.
+ */
+export function linkPlaced(scn: Scenario, index: number): UnitChange[] {
+  const u = scn.units[index];
+  if (!u) return [];
+  const free = (r: UnitRecord) => r.relatedSerial === 0 || !scn.units.some((o) => o.serial === r.relatedSerial);
+  const fits = (addon: UnitRecord, host: UnitRecord) =>
+    addon.owner === host.owner && (ADDON_HOSTS.get(addon.unitId) ?? []).includes(host.unitId)
+    && addon.x === host.x + ADDON_OFFSET.x && addon.y === host.y + ADDON_OFFSET.y && free(addon) && free(host);
+  const isAddon = ADDON_HOSTS.has(u.unitId);
+  const partner = u.unitId === NYDUS_CANAL
+    ? scn.units.findLastIndex((o, i) => i !== index && o.unitId === NYDUS_CANAL && o.owner === u.owner && free(o))
+    : scn.units.findIndex((o, i) => i !== index && (isAddon ? fits(u, o) : fits(o, u)));
+  if (partner < 0) return [];
+  const p = scn.units[partner];
+  return [
+    { index, before: u, after: { ...u, relatedSerial: p.serial, relationType: STAREDIT_RELATION } },
+    { index: partner, before: p, after: { ...p, relatedSerial: u.serial, relationType: STAREDIT_RELATION } },
+  ];
+}
+
+/**
+ * After the unit at `index` was given a related unit: that unit names it back, and any
+ * other unit still naming it lets go — the game links two units only when each names the
+ * other, so a link set from one side alone does nothing in the game.
+ */
+export function pairRelated(scn: Scenario, index: number): UnitChange[] {
+  const u = scn.units[index];
+  if (!u) return [];
+  const out: UnitChange[] = [];
+  scn.units.forEach((o, i) => {
+    if (i === index) return;
+    const named = u.relatedSerial !== 0 && o.serial === u.relatedSerial;
+    if (named && o.relatedSerial !== u.serial) out.push({ index: i, before: o, after: { ...o, relatedSerial: u.serial, relationType: o.relationType || u.relationType } });
+    else if (!named && o.relatedSerial === u.serial && u.serial !== 0) out.push({ index: i, before: o, after: { ...o, relatedSerial: 0 } });
+  });
+  return out;
 }
 
 /** Append records to the end of the list. */

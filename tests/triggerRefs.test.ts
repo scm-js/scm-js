@@ -30,7 +30,14 @@ describe("resolvePlayers", () => {
 
   it("says when the group is only settled in the game", () => {
     expect(resolvePlayers(PlayerGroup.Foes, [], FORCES).approximate).toBe(true);
-    expect(resolvePlayers(PlayerGroup.CurrentPlayer, [PlayerGroup.Allies], FORCES).approximate).toBe(true);
+  });
+
+  it("hands a trigger only to the owners the game gives copies to", () => {
+    // Allies, Player 12 or Current Player as an owner gives the trigger to no one.
+    expect(resolvePlayers(PlayerGroup.CurrentPlayer, [PlayerGroup.Allies, PlayerGroup.Player12, PlayerGroup.CurrentPlayer], FORCES).players).toEqual([]);
+    const [t] = triggerReferences([trigger([PlayerGroup.Player12], [], [])], FORCES);
+    expect([t.owners, t.inert]).toEqual([[], true]);
+    expect(resolvePlayers(PlayerGroup.CurrentPlayer, [PlayerGroup.Player2, PlayerGroup.AllPlayers], FORCES).players).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

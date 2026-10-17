@@ -13,6 +13,7 @@ import {
   FORCE_SLOTS, PLAYER_SLOTS, type Forces, type PlayerRgb,
 } from "./sections/players";
 import {
+  defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
   decodeTechRestrictions, decodeTechSettings, decodeUnitAvailability, decodeUnitSettings, decodeUpgradeRestrictions, decodeUpgradeSettings,
   encodeTechRestrictions, encodeTechSettings, encodeUnitAvailability, encodeUnitSettings, encodeUpgradeRestrictions, encodeUpgradeSettings,
   layTechSettings, layUnitSettings, layUpgradeSettings,
@@ -20,6 +21,7 @@ import {
   type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
 } from "./sections/settings";
 import { decodeWavs, encodeWavs } from "./sections/sounds";
+import { requiredSections } from "./create";
 import { decodeCuwp, decodeCuwpUsed, encodeCuwp, encodeCuwpUsed, type CuwpSlot } from "./sections/cuwp";
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
@@ -200,9 +202,34 @@ export function setMapVersion(scn: Scenario, version: MapVersion, extendedString
     scn.fileVersion = v.ver;
     markDirty(scn, "VER ");
     while (scn.locations.length < locationSlots(v.ver)) scn.locations.push({ left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 });
+    addMissingSections(scn);
   }
   if (scn.type !== v.type) { scn.type = v.type; markDirty(scn, "TYPE"); }
   setExtendedStrings(scn, extendedStrings && isRemasteredRevision(v.ver));
+}
+
+/**
+ * Write every section the file's revision needs and the file lacks. A Brood War map moved
+ * to 1.00 or Hybrid has only UNIx and its kin, and the game refuses a Use Map Settings
+ * start without UNIS, UPGS, TECS, UPGR and PTEC; one moved up from 1.00 lacks COLR and the
+ * `x` tables. A settings model the file never had starts from the defaults.
+ */
+function addMissingSections(scn: Scenario) {
+  scn.unitSettings ??= defaultUnitSettings();
+  scn.unitAvailability ??= defaultUnitAvailability();
+  scn.upgradeSettings ??= defaultUpgradeSettings();
+  scn.upgradeRestrictions ??= defaultUpgradeRestrictions();
+  scn.techSettings ??= defaultTechSettings();
+  scn.techRestrictions ??= defaultTechRestrictions();
+  const names = new Set<string>([
+    ...requiredSections(scn.fileVersion).filter((n) => n !== "STR " && MODELLED_SECTIONS.has(n)),
+    ...unitSettingsSections(scn), ...upgradeSettingsSections(scn), ...upgradeRestrictionSections(scn),
+    ...techSettingsSections(scn), ...techRestrictionSections(scn),
+  ]);
+  for (const name of names) {
+    if (scn.dirty.has(name) || scn.chk.sections.some((s) => s.name === name)) continue;
+    if (encodeSection(scn, name)) markDirty(scn, name as SectionName);
+  }
 }
 
 /**

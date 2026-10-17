@@ -141,7 +141,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
             <Field label={t("Doodads")}><span className="mono">{scenario ? scenario.doodads.length : 0}</span></Field>
             <Field label={t("Locations")}><span className="mono">{scenario ? scenario.locations.filter(isLocationUsed).length : 0}</span></Field>
             <Field label={t("Triggers")}><span className="mono">{scenario ? scenario.triggers.length : 0}</span></Field>
-            <Field label={t("Strings")}><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0} / {scenario?.strings.extended ? 65535 : 1024}</span></Field>
+            <Field label={t("Strings")}><span className="mono">{scenario ? scenario.strings.strings.length - 1 : 0}</span></Field>
           </div>
         </Group>
       </div>

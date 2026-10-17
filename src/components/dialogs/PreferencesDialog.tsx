@@ -392,7 +392,7 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
             <Select
               value={p.save.compression}
               onChange={(e) => save({ compression: e.target.value as Preferences["save"]["compression"] })}
-              options={[{ value: "asOpened", label: t("StarEdit's layout (PKWARE, encrypted)") }, { value: "none", label: t("Uncompressed") }, { value: "pkware", label: t("PKWARE") }, { value: "zlib", label: t("zlib (1.16.1 or Remastered)") }]}
+              options={[{ value: "asOpened", label: t("StarEdit's layout (PKWARE, encrypted)") }, { value: "none", label: t("Uncompressed") }, { value: "pkware", label: t("PKWARE") }, { value: "zlib", label: t("zlib (Remastered only)") }]}
             />
           </Field>
         </div>

@@ -15,7 +15,7 @@ import {
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, type ArgDef } from "../data/triggerDefs";
 import { UNIT_TYPE_COUNT } from "../data/units";
-import { addressOfEpd } from "./triggers";
+import { addressOfEpd, TRIGGER_OWNERS } from "./triggers";
 
 /** Every kind of thing a condition or action can refer to. */
 export type TriggerRefKind =
@@ -102,8 +102,9 @@ const TWELVE = [...EIGHT, 8, 9, 10, 11];
 
 /**
  * The 0-based slots a player group names. `forces` holds each force's slots; `owners` are
- * the groups the trigger is ticked for, which *Current Player* stands for. Groups past the
- * 27 (EUD values) name no slot.
+ * the groups the trigger is ticked for, which *Current Player* stands for — only those the
+ * game hands triggers to (Players 1–8, All Players, the forces). Groups past the 27 (EUD
+ * values) name no slot.
  */
 export function resolvePlayers(group: number, owners: readonly number[], forces: readonly (readonly number[])[]): { players: number[]; approximate: boolean } {
   if (group < 0 || group >= PLAYER_GROUP_COUNT) return { players: [], approximate: false };
@@ -113,7 +114,7 @@ export function resolvePlayers(group: number, owners: readonly number[], forces:
       const out = new Set<number>();
       let approximate = false;
       for (const o of owners) {
-        if (o === PlayerGroup.CurrentPlayer) continue;
+        if (!TRIGGER_OWNERS.has(o)) continue;
         const r = resolvePlayers(o, [], forces);
         r.players.forEach((p) => out.add(p));
         approximate ||= r.approximate;

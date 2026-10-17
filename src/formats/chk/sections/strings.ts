@@ -76,36 +76,77 @@ export function unencodableStrings(table: StringTable): { index: number; chars: 
   return out;
 }
 
-export function encodeStrings(table: StringTable): Uint8Array {
+/** The highest offset STR's 16-bit table can hold: a string must start at or before it. */
+export const STR_OFFSET_LIMIT = 0xffff;
+
+/**
+ * Where each string goes: offsets by index and the text blobs in file order. Identical
+ * strings share one blob, which is what StarEdit does and keeps files small. With
+ * `longestLast`, the longest blob goes at the end, which is the layout that lets the most
+ * text fit under STR's 64 KB of offsets (only where a string starts has to fit).
+ */
+function layoutStrings(table: StringTable, longestLast: boolean): { headerSize: number; offsets: number[]; blobs: Uint8Array[] } {
   const { strings, extended, encoding } = table;
   const count = strings.length - 1;
   const width = extended ? 4 : 2;
   const headerSize = width * (count + 1);
 
-  // Identical strings share one blob, which is what StarEdit does and keeps files small.
-  const blobs = new Map<string, number>();
-  const body = new Writer(1024);
-  body.u8(0); // shared empty string, so unset slots point somewhere harmless
-  const offsets: number[] = [];
-
+  const encoded = new Map<string, Uint8Array>();
   for (let i = 1; i <= count; i++) {
     const s = strings[i];
-    if (s === null || s === undefined) { offsets.push(headerSize); continue; }
-    let at = blobs.get(s);
-    if (at === undefined) {
-      at = headerSize + body.length;
-      blobs.set(s, at);
-      body.bytes(encodeText(s, encoding));
-      body.u8(0);
-    }
-    offsets.push(at);
+    if (s !== null && s !== undefined && !encoded.has(s)) encoded.set(s, encodeText(s, encoding));
   }
+  const order = [...encoded.keys()];
+  if (longestLast && order.length > 1) {
+    let longest = 0;
+    order.forEach((s, i) => { if (encoded.get(s)!.length > encoded.get(order[longest])!.length) longest = i; });
+    order.push(...order.splice(longest, 1));
+  }
+  // A shared empty string first, so unset slots point somewhere harmless.
+  const at = new Map<string, number>();
+  let next = headerSize + 1;
+  const blobs: Uint8Array[] = [new Uint8Array(1)];
+  for (const s of order) {
+    const bytes = encoded.get(s)!;
+    at.set(s, next);
+    blobs.push(bytes, new Uint8Array(1));
+    next += bytes.length + 1;
+  }
+  const offsets: number[] = [];
+  for (let i = 1; i <= count; i++) {
+    const s = strings[i];
+    offsets.push(s === null || s === undefined ? headerSize : at.get(s)!);
+  }
+  return { headerSize, offsets, blobs };
+}
+
+const overflowing = (offsets: number[]) => offsets.filter((o) => o > STR_OFFSET_LIMIT).length;
+
+/**
+ * How many strings would start past what STR's 16-bit offsets reach, so that the game (and
+ * the editor, reading the file back) would show other text in their place. Always 0 for
+ * STRx, whose offsets are 32-bit.
+ */
+export function stringTableOverflow(table: StringTable): number {
+  if (table.extended) return 0;
+  const plain = overflowing(layoutStrings(table, false).offsets);
+  return plain === 0 ? 0 : overflowing(layoutStrings(table, true).offsets);
+}
+
+/**
+ * The table's bytes. STR offsets that would wrap are the caller's to prevent — Save refuses
+ * a table `stringTableOverflow` counts, and Check Map reports it.
+ */
+export function encodeStrings(table: StringTable): Uint8Array {
+  const { extended } = table;
+  let layout = layoutStrings(table, false);
+  if (!extended && overflowing(layout.offsets) > 0) layout = layoutStrings(table, true);
+  const { headerSize, offsets, blobs } = layout;
 
   const out = new Writer(headerSize + 1024);
-  if (extended) out.u32(count); else out.u16(count);
-  // Slot 0 has no string; point it at the first byte past the offset table.
-  for (const off of offsets) { if (extended) out.u32(off); else out.u16(off); }
-  out.bytes(body.finish());
+  if (extended) out.u32(offsets.length); else out.u16(offsets.length);
+  for (const off of offsets) { if (extended) out.u32(off); else out.u16(off & 0xffff); }
+  for (const b of blobs) out.bytes(b);
   return out.finish();
 }
 

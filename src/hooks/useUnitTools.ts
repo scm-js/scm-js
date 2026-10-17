@@ -4,7 +4,7 @@ import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, symmetryAtom, 
 import { commitEditAtom, deleteSelectedUnitsAtom, scenarioAtom, tilesetFileNameAtom, unitsRevisionAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  addUnits, applyUnitChanges, makeUnit, nextSerial, snapPlacement, unitAt, unitGeometry, unitsInBox, updateUnits,
+  addUnits, applyUnitChanges, linkPlaced, makeUnit, pairRelated, nextSerial, snapPlacement, unitAt, unitGeometry, unitsInBox, updateUnits,
   type PixelBox, type UnitChange, type UnitGeometry,
 } from "../editor/units";
 import { checkPlacement, placementReason, type PlacementProblem } from "../editor/placement";
@@ -98,7 +98,10 @@ export function useUnitTools() {
       if (g !== ghost && checkPlacement(scn, tilesetOf(), tables, opts, g.unitId, g.x, g.y).problem !== null) { skipped++; continue; }
       const list = addUnits(scn, [makeUnit(tables, g.unitId, g.owner, g.x, g.y, serial++)]);
       applyUnitChanges(scn, list);
-      units.push(...list);
+      // Add-ons and Nydus Canals are linked as StarEdit links them, both records naming each other.
+      const links = linkPlaced(scn, list[0].index);
+      applyUnitChanges(scn, links);
+      units.push(...list, ...links);
     }
     const n = units.length;
     commit({ label: n === 1 ? t("Place {unitName}", { unitName: unitLabel(ghost.unitId) }) : t("Place {n} × {unitName}", { n, unitName: unitLabel(ghost.unitId) }), changes: [], units });
@@ -215,6 +218,15 @@ export function useUnitTools() {
     const units = updateUnits(scn, selected, patch);
     if (units.length === 0) return 0;
     applyUnitChanges(scn, units);
+    // A related unit set on one side is set on the other too, or the game ignores it.
+    for (let i = 0, n = units.length; i < n; i++) {
+      const c = units[i];
+      if (c.after && c.before && c.after.relatedSerial !== c.before.relatedSerial) {
+        const pairs = pairRelated(scn, c.index);
+        applyUnitChanges(scn, pairs);
+        units.push(...pairs);
+      }
+    }
     commit({ label, changes: [], units });
     setSelected(selected);
     return units.length;

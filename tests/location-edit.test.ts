@@ -9,7 +9,7 @@ import { findString, getString } from "../src/formats/chk/sections/strings";
 import {
   addLocation, applyLocationChanges, blankLocation, BW_LOCATION_SLOTS, dragBounds, editLocation, ensureLocationSlots, firstFreeSlot, handleAt,
   isAnywhereIntact, isInverted, locationAt, locationCapacity, locationName, moveLocations, ORIGINAL_LOCATION_SLOTS, removeLocations, resizeBounds,
-  restoreAnywhere, snapTo, usedLocations,
+  restoreAnywhere, scrambledLocations, snapTo, usedLocations,
 } from "../src/editor/locations";
 
 function fresh(): Scenario {
@@ -251,5 +251,32 @@ describe("map files", () => {
     expect(locationName(again, index)).toBe("Round trip");
     expect(again.locations[index]).toMatchObject({ left: 32, top: 32, right: 96, bottom: 96 });
     expect(again.locations.filter(isLocationUsed).length).toBe(scn.locations.filter(isLocationUsed).length);
+  });
+});
+
+describe("scrambled tables", () => {
+  /** What eudplib leaves in MRGN: every slot four random 32-bit coordinates. */
+  function scrambled(scn: Scenario, slots: number) {
+    let seed = 12345;
+    const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) | 0);
+    for (let i = 0; i < slots; i++) scn.locations[i] = { left: next(), top: next(), right: next(), bottom: next(), nameIndex: next() & 0xffff, elevationFlags: next() & 0xffff };
+  }
+
+  it("tells a table of noise from real locations", () => {
+    const scn = fresh();
+    expect(scrambledLocations(scn)).toBe(false);
+    scrambled(scn, 60);
+    expect(scrambledLocations(scn)).toBe(true);
+  });
+
+  it("keeps a few far-off locations, a trick some maps use, as real", () => {
+    const scn = fresh();
+    for (let i = 0; i < 15; i++) scn.locations[i] = { left: 0, top: 0, right: 1 << 30, bottom: 32, nameIndex: 0, elevationFlags: 0 };
+    expect(scrambledLocations(scn)).toBe(false);
+  });
+
+  it.each(mapFiles())("$name has real locations", async ({ path }) => {
+    const { chk } = await loadMap(new Uint8Array(readFileSync(path)));
+    expect(scrambledLocations(parseScenario(chk))).toBe(false);
   });
 });

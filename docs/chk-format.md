@@ -227,10 +227,8 @@ taken.
   alike. 1.16.1 reads every string in the code page of the machine it runs on. The Korean
   test is loose: it passes whenever every byte above 127 is followed by a byte that could
   be the second half of a Korean character, so some Windows-1252 text in Western languages
-  would show as Hangul (see [`STR`](#str)). This is read in Remastered's code. One string
-  was played, "Ärger Don’t café España", and showed as written, which the reading also
-  predicts, since the "é" before a space fails the test. A string that passes it has not
-  been played yet. UTF-8 text reads the same everywhere.
+  shows as Hangul (see [`STR`](#str)). (Read in Remastered's code and found playing an
+  English copy of it.) UTF-8 text reads the same everywhere.
 - A string number past the count, or an offset outside the section, gives no text: a map
   whose last string table held no strings was listed with `<MISSING>` for its name and
   description. (Found playing Remastered.) 1.16.1 reads whatever lies past the table in
@@ -1376,10 +1374,12 @@ The Korean test only asks that every byte above 127 be followed by a byte from 0
 0xFE. Western text in Windows-1252 can pass it: a capital À to Æ, or a curly quote or
 dash, followed by a letter, or two accented letters in a row. Remastered then turns each
 part of the string between colour codes into Korean where every such pair is a Korean
-character, and leaves the other parts as Windows-1252. Read that way, "Don’t stop Ärger"
-would show as "Don뭪 stop 훣ger", while "Défense España" and "Señor" stay as written. This
-comes from Remastered's code and has not yet been seen in a game; writing the table as
-UTF-8 avoids it.
+character, and leaves the other parts as Windows-1252. On an English copy of Remastered, a
+map whose text was stored in Windows-1252 showed "Ärger Don’t" as "훣ger Don뭪" and "Größe"
+as "Gr秤e", in the map list, the lobby and the game, while "Défense España" and "café"
+stayed as written: an accented small letter followed by a plain letter is not a Korean
+character, and one followed by a space or the end of the text fails the test. (Read in
+Remastered's code and found playing it.) Writing the table as UTF-8 avoids it.
 
 scmJS reads the table as UTF-8 when it is valid UTF-8. Otherwise it tries each legacy code
 page above, keeps those that decode the bytes without error, and scores each by how much

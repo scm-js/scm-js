@@ -771,9 +771,11 @@ encoding its text is in, so the editor guesses from the bytes when the map opens
 **Scenario ▸ Map Revision…**, choose the right encoding (*Korean*, say), and every string
 is fixed at once. The same choice decides how the text is written on save, so a map made
 for 1.16.1 on a Korean Windows stays readable there. A new map is UTF-8, which Remastered
-reads, and a map moved to Remastered's string table becomes UTF-8 too. A character the
-chosen encoding cannot hold is saved as `?`; Check Map and the Save dialog say so
-beforehand.
+reads, and a map moved to Remastered's string table becomes UTF-8 too. Keep Western text
+in UTF-8 for Remastered players: Remastered reads some Windows-1252 text as Korean, so
+"Ärger Don’t" shows as "훣ger Don뭪" (see [the string table](chk-format.md#str)). A
+character the chosen encoding cannot hold is saved as `?`; Check Map and the Save dialog
+say so beforehand.
 
 ### Sounds and switches
 

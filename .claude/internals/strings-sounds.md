@@ -94,7 +94,9 @@ Played in Remastered (2026-10-17, probes R1/R4/R4b/R5 in `Maps/Audit`):
 - Names: map list shows name and description in full; lobby/game keep 31 bytes of the name **as UTF-8**
   (20-syllable Korean name → 10 syllables); force names cut at 29 bytes in both games. Check Map counts
   the name as max(file bytes, UTF-8 bytes).
-- Western Windows-1252 text was NOT shown as Korean on the user's (English) client, though the Ghidra
-  reading predicted "Ärger" → Hangul; the Korean path probably needs a Korean-language client. No
-  Check Map warning for it (one was in #64's first commit and taken out).
+- Remastered DOES show Western Windows-1252 text as Korean when the string passes its test (probe R6,
+  English client, 2026-10-17): "Ärger Don’t" → "훣ger Don뭪", "Größe" → "Gr秤e" in map list, lobby and
+  game; "Défense España"/"café" as written. R5e looked like a refutation only because "é " fails the test.
+  The dump's table object had its try-Korean byte = 1. No Check Map warning yet (one was in #64's first
+  commit and taken out on the R5e misreading).
 - `<01>` steps back one colour and grey `<05>` locks later codes — read from both games' code, not played.

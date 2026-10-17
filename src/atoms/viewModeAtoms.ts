@@ -11,7 +11,7 @@ import { atom } from "jotai";
 import { t } from "../i18n";
 import type { ViewFlags } from "../editor/view";
 import { logError } from "../editor/log";
-import { viewFlagsAtom, viewOnlyAtom } from "./editorAtoms";
+import { locationsAutoHiddenAtom, viewFlagsAtom, viewOnlyAtom } from "./editorAtoms";
 import { mapViewFogAtom, mapViewPointerAtom, shownMapViewAtom, type PluginMapViewEntry, type PluginOverlayEntry } from "./pluginAtoms";
 import { statusMessageAtom } from "./uiAtoms";
 
@@ -81,4 +81,5 @@ export const toggleFlagAtom = atom(null, (get, set, k: keyof ViewFlags, on?: boo
     return;
   }
   set(viewFlagsAtom, (f) => ({ ...f, [k]: next }));
+  if (k === "locations") set(locationsAutoHiddenAtom, false);
 });

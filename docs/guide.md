@@ -472,6 +472,13 @@ lock, never drawn, never picked by a click, and cannot be moved, renamed or dele
 map's Anywhere has gone missing or no longer matches the map, the editor offers to put it
 back.
 
+A map built with eudplib (euddraft, or TrigScript's Remastered build) has no readable
+locations in the file. eudplib stores its loader in the location table, scrambled, and the
+game puts the real locations back when the map starts. Drawn, those slots would cover the
+whole map, so the editor hides locations when it opens such a map and says so in a notice.
+Its *Show* button or the Locations eye brings them back. The next map with real locations
+shows them again, unless you have turned them on or off yourself in between.
+
 ## Fog of war
 
 The fog of war decides which tiles a player starts the game unable to see. Every player

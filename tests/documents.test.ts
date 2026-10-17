@@ -6,9 +6,10 @@ import {
   activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, closeDocumentAtom, documentChangeAtom, documentsAtom, documentTabsAtom, loadDocumentAtom, parkedTilesetsAtom,
   redoStackAtom, scenarioAtom, undoStackAtom,
 } from "../src/atoms/documentAtoms";
-import { centerViewOnAtom, clipSelectionAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom, selectedUnitsAtom, viewportRectAtom, zoomAtom } from "../src/atoms/editorAtoms";
+import { centerViewOnAtom, clipSelectionAtom, locationsAutoHiddenAtom, viewFlagsAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom, selectedUnitsAtom, viewportRectAtom, zoomAtom } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
-import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
+import { closeDialogAtom, dialogStackAtom, toastsAtom } from "../src/atoms/uiAtoms";
+import { toggleFlagAtom } from "../src/atoms/viewModeAtoms";
 import { closeDocumentIn, isUntouchedBlank, needsCloseConfirm, newMapInto, openFileInto, openTarget, quitGuard, stepDocumentIn, type PendingAction } from "../src/hooks/useMapFileActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import { tabTitle } from "../src/components/chrome/TabStrip";
@@ -265,5 +266,49 @@ describe("the plugin API over several maps", () => {
     expect(api.document.isOpen()).toBe(false);
     expect(seen.at(-1)).toEqual({ reason: "close", id: null });
     expect(await api.document.close()).toBe(false);
+  });
+});
+
+describe("a map whose locations are scrambled", () => {
+  /** A map as eudplib leaves it: the location table full of noise. */
+  function packed(name: string) {
+    const s = scn(name);
+    let seed = 99;
+    const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) | 0);
+    for (let i = 0; i < 40; i++) s.locations[i] = { left: next(), top: next(), right: next(), bottom: next(), nameIndex: 0, elevationFlags: 0 };
+    return s;
+  }
+
+  it("hides locations on open with a notice, and shows them again for the next map", () => {
+    const store = withA();
+    expect(store.get(viewFlagsAtom).locations).toBe(true);
+    expect(store.get(toastsAtom)).toEqual([]);
+
+    store.set(loadDocumentAtom, { scenario: packed("p"), extras: new Map(), fileName: "p.scx", into: "tab" });
+    expect(store.get(viewFlagsAtom).locations).toBe(false);
+    expect(store.get(toastsAtom)).toHaveLength(1);
+    expect(store.get(toastsAtom)[0]).toMatchObject({ kind: "info", action: { label: "Show" } });
+
+    // Back to the first map: its locations are real, so they show; and hidden again on the way back, quietly.
+    const [a, p] = store.get(documentsAtom).map((d) => d.id);
+    store.set(activateDocumentAtom, a);
+    expect(store.get(viewFlagsAtom).locations).toBe(true);
+    store.set(activateDocumentAtom, p);
+    expect(store.get(viewFlagsAtom).locations).toBe(false);
+    expect(store.get(toastsAtom)).toHaveLength(1);
+
+    // The notice's button shows them, and that is the person's choice from then on.
+    store.get(toastsAtom)[0].action!.run();
+    expect(store.get(viewFlagsAtom).locations).toBe(true);
+    expect(store.get(locationsAutoHiddenAtom)).toBe(false);
+  });
+
+  it("leaves the toggle alone once the person has set it", () => {
+    const store = withA();
+    store.set(loadDocumentAtom, { scenario: packed("p"), extras: new Map(), fileName: "p.scx" });
+    expect(store.get(viewFlagsAtom).locations).toBe(false);
+    store.set(toggleFlagAtom, "locations", false);
+    store.set(loadDocumentAtom, { scenario: scn("b"), extras: new Map(), fileName: "b.scx" });
+    expect(store.get(viewFlagsAtom).locations).toBe(false);
   });
 });

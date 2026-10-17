@@ -58,6 +58,18 @@ during a drag (`beginMove`/`beginResize` → `dragTo` → `endDrag` commits one 
 `dragBounds` turns a create-drag into the grid cells it touched. `tests/location-edit.test.ts`
 pins all of this, including against the fixture maps.
 
+**Scrambled tables (eudplib output).** eudplib's injector uses MRGN as loader scratch:
+`vector_reloc.py` writes XOR'd trigger data over the first 3244 bytes and `payload_init.py`
+subtracts an obfuscation key from every dword; the loader restores the real locations in game.
+So a built map's slots are random 32-bit boxes, most spanning the map — drawn, a solid
+location-tint sheet. `scrambledLocations` = ≥16 used non-Anywhere slots with a coordinate more
+than 65536 px off the map. `installRegisters` → `followScrambledLocations` turns
+`viewFlags.locations` off for such a map (toast on open, status line on a tab switch) and marks
+`locationsAutoHiddenAtom`; the next real map turns it back on only while that marker is set.
+`toggleFlagAtom` and the Layers eye clear the marker — the person's choice wins.
+`tests/documents.test.ts` pins the open/switch behaviour. The real locations are not
+recoverable without running the loader.
+
 ### Fog of war (`src/editor/fog.ts`, `src/hooks/useFogTools.ts`, `src/components/viewport/fog.ts`)
 
 `scenario.mask` is the `MASK` section (one byte per tile, bit n = player n+1 starts *unexplored*),

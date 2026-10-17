@@ -197,6 +197,27 @@ export function isAnywhereIntact(scn: Scenario): boolean {
   return !!r && getString(scn.strings, r.nameIndex) !== null && sameBounds(r, anywhereBounds(scn));
 }
 
+/** How far off the map a coordinate may be before it is noise rather than a location: eight of the largest maps. */
+const FAR_OFF_MAP = 65536;
+/** How many such slots make a table scrambled; a map with a few far-off locations as a trick stays shown. */
+const SCRAMBLED_SLOTS = 16;
+
+/**
+ * Whether the MRGN table holds noise rather than locations — what eudplib (euddraft, TrigScript's
+ * build) leaves: its loader keeps its own data in the slots, scrambled, and puts the real
+ * locations back when the game starts. Drawn, they cover the whole map.
+ */
+export function scrambledLocations(scn: Scenario): boolean {
+  const w = scn.width * TILE_PX, h = scn.height * TILE_PX;
+  const far = (v: number, size: number) => v < -FAR_OFF_MAP || v > size + FAR_OFF_MAP;
+  let count = 0;
+  scn.locations.forEach((l, i) => {
+    if (i === ANYWHERE_INDEX || !isLocationUsed(l)) return;
+    if (far(l.left, w) || far(l.right, w) || far(l.top, h) || far(l.bottom, h)) count++;
+  });
+  return count >= SCRAMBLED_SLOTS;
+}
+
 /* ── Building change lists ───────────────────────────────── */
 
 /**

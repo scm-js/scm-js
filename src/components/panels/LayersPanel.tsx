@@ -1,6 +1,6 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
-import { activeLayerAtom, lockedLayersAtom, viewFlagsAtom, type EditorLayer, type ViewFlags } from "../../atoms/editorAtoms";
+import { activeLayerAtom, locationsAutoHiddenAtom, lockedLayersAtom, viewFlagsAtom, type EditorLayer, type ViewFlags } from "../../atoms/editorAtoms";
 import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
 import { RAIL_ICON } from "./PalettePanel";
@@ -24,6 +24,7 @@ export default function LayersPanel() {
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const [locked, setLocked] = useAtom(lockedLayersAtom);
+  const setLocationsAutoHidden = useSetAtom(locationsAutoHiddenAtom);
   // Plugin overlays (`api.ui.overlay`): a picture over the map with an eye of its own, not a layer to edit on.
   const overlays = useAtomValue(pluginOverlaysAtom);
   const setOverlayVisible = useSetAtom(setOverlayVisibleAtom);
@@ -41,7 +42,11 @@ export default function LayersPanel() {
                 <button
                   className={`eye ${visible ? "" : "off"}`}
                   title={visible ? t("Hide layer") : t("Show layer")}
-                  onClick={(e) => { e.stopPropagation(); setFlags({ ...flags, [r.flag!]: !visible }); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFlags({ ...flags, [r.flag!]: !visible });
+                    if (r.flag === "locations") setLocationsAutoHidden(false);
+                  }}
                 >
                   {visible ? <Eye size={13} /> : <EyeOff size={13} />}
                 </button>

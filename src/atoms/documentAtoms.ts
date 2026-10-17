@@ -14,7 +14,7 @@ import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load
 import { TILESETS, type TilesetId } from "../data/tilesets";
 import {
   viewOnlyAtom, viewOnlyMessage, type ViewOnly,
-  centerViewOnAtom, clipPastingAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
+  centerViewOnAtom, clipPastingAtom, locationsAutoHiddenAtom, viewFlagsAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
 } from "./editorAtoms";
@@ -23,7 +23,7 @@ import type { BuiltBy } from "../editor/mapBuild";
 import type { Rect } from "../editor/terrain";
 import type { OpenDocumentInfo } from "../plugins/api";
 import { START_LOCATION } from "../data/units";
-import { statusMessageAtom } from "./uiAtoms";
+import { pushToastAtom, statusMessageAtom } from "./uiAtoms";
 import { baseName, isVerbose, logInfo } from "../editor/log";
 import { applyChanges } from "../editor/terrain";
 import { applyUnitChanges, removeUnits } from "../editor/units";
@@ -33,7 +33,7 @@ import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
-import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, usedLocations } from "../editor/locations";
+import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { resizeScenario, type ResizeResult } from "../editor/resize";
@@ -588,6 +588,43 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
+  followScrambledLocations(get, set, scenario, reason);
+}
+
+/**
+ * A map built by eudplib keeps its loader in the location table, and drawn those slots wash
+ * the whole map in location tint: hide them for that map, say so, and show them again for the
+ * next map with real locations — unless the person has set the toggle in between.
+ */
+function followScrambledLocations(get: Getter, set: Setter, scenario: Scenario, reason: DocumentChangeReason) {
+  const flags = get(viewFlagsAtom);
+  if (!scrambledLocations(scenario)) {
+    if (get(locationsAutoHiddenAtom)) {
+      set(locationsAutoHiddenAtom, false);
+      if (!flags.locations) set(viewFlagsAtom, { ...flags, locations: true });
+    }
+    return;
+  }
+  if (!flags.locations) return;
+  set(viewFlagsAtom, { ...flags, locations: false });
+  set(locationsAutoHiddenAtom, true);
+  if (reason === "switch") {
+    set(statusMessageAtom, t("Locations are hidden: this map was built by eudplib"));
+    return;
+  }
+  set(pushToastAtom, {
+    kind: "info",
+    title: t("Locations are hidden by default"),
+    detail: t("This map was built by eudplib."),
+    ttl: 10000,
+    action: {
+      label: t("Show"),
+      run: () => {
+        set(viewFlagsAtom, (f) => ({ ...f, locations: true }));
+        set(locationsAutoHiddenAtom, false);
+      },
+    },
+  });
 }
 
 /**

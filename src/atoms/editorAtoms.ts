@@ -202,6 +202,13 @@ export const viewFlagsAtom = atom<ViewFlags>({
   hdGraphics: false,
 });
 
+/**
+ * The Locations toggle was turned off by opening a map whose locations are scrambled
+ * (`scrambledLocations`), not by the person: the next map with real ones turns it back on.
+ * Cleared as soon as the person sets the toggle themselves.
+ */
+export const locationsAutoHiddenAtom = atom(false);
+
 /** View ▸ Grid Settings' spacing, remembered like the grid's look (`scmjs.gridSize`). */
 export const gridSizeAtom = atomWithStorage<8 | 16 | 32 | 64 | 128>("scmjs.gridSize", 32, createJSONStorage(browserStorage), { getOnInit: true });
 

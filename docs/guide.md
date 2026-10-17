@@ -1470,6 +1470,23 @@ A few things are the same for every feature:
 - **Cost.** Every AI dialog shows its progress while you wait, and what the request cost
   when it finishes.
 
+### Where your key goes
+
+Each AI request goes from your browser to the scmjs.dev server with your key attached. The
+server passes it to Anthropic and sends the answer back. It keeps nothing of the request:
+not what you typed, not the answer, not your key or your address. To hold everyone to 30
+requests a minute, 1,000 a day and 4 at once, it counts requests per address, in memory
+only: the counts are never written to disk. What Anthropic keeps is set by Anthropic's own
+terms for the API.
+
+What the model is told, and what the editor does with its answer, is public in
+[scm-js/ai-engine](https://github.com/scm-js/ai-engine). Each AI feature is one file
+there. The server's sign-in, accounts and limits are not public.
+
+If a feature gives you a bad result, open an issue on
+[ai-engine](https://github.com/scm-js/ai-engine/issues) with what you asked, what came
+back, and the map if you can share it.
+
 ### The assistant
 
 ![The assistant placing a squad for Player 1 on Big Game Hunters](images/assistant.webp)

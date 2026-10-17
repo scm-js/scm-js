@@ -190,3 +190,17 @@ Found on the way, not fixed here: scm-sim's multiplayer engine never sets the ga
 multiplayer byte (0x57F0B4), so its two-person games run trigger code on the single-player
 branches (Pause Game works, Transmission and Center View hold until a portrait/scroll
 timer that never comes, results keep trigger lists).
+
+Owners and units the game honours (2026-10-17 audit, T1/T3/T4; runs EA01–EA03):
+- `TRIGGER_OWNERS` (editor/triggers.ts): the game copies a trigger only to P1–8, All Players and
+  Force 1–4. The Players tab shows only those (others only while ticked, with a note);
+  `resolvePlayers(CurrentPlayer, owners)` in triggerRefs skips the rest, so such a trigger is
+  `inert` for plugins.
+- `newAction` seeds Create Unit, CUWP and Set Deaths with unit 0 (Terran Marine): Create Unit of a
+  class makes nothing, Set Deaths(Any unit) writes nothing, Men/Buildings/Factories write the real
+  "lost" counters. Conditions keep Any unit.
+- `triggerCanCreate`: Create Unit refuses id ≥ 228 and every type without units.dat availability
+  0x02 (`PALETTE_AVAILABILITY`; 168 of 228 have it, measured on the real 1.16.1 too). The two
+  creating actions' unit list is filtered by it when unit assets are loaded (`peekUnitAssets`).
+- Remastered's Create Unit, read from its Ghidra project, applies the same rules (P9–12 refused,
+  palette bit) — at odds with the earlier "P12 Overlord made in Remastered" probe; not played yet.

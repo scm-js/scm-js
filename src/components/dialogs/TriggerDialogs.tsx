@@ -85,6 +85,8 @@ interface ArgProps {
   scenario: Scenario;
   /** The unit the same condition or action names, for the widgets that follow it (the sound list). */
   unit?: number;
+  /** A unit argument of Create Unit: only the types the game can create are offered. */
+  creates?: boolean;
 }
 
 /** A select whose current value is kept selectable even when the table does not list it. */
@@ -94,7 +96,8 @@ function ChoiceSelect({ value, onChange, options, width }: { value: number; onCh
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
 }
 
-import { addressOfEpd, epdOf, sameTriggers } from "../../editor/triggers";
+import { addressOfEpd, CREATING_ACTIONS, epdOf, sameTriggers, triggerCanCreate, TRIGGER_OWNERS } from "../../editor/triggers";
+import { peekUnitAssets } from "../../formats/units/load";
 export { addressOfEpd, epdOf };
 
 /**
@@ -124,7 +127,7 @@ function PlayerArg({ value, onChange }: { value: number; onChange: (v: number) =
   );
 }
 
-function ArgWidget({ kind, value, onChange, names, scenario, unit }: ArgProps) {
+function ArgWidget({ kind, value, onChange, names, scenario, unit, creates }: ArgProps) {
   const open = useSetAtom(openDialogAtom);
   switch (kind) {
     case "cuwp": {
@@ -140,11 +143,14 @@ function ArgWidget({ kind, value, onChange, names, scenario, unit }: ArgProps) {
     case "player":
       return <PlayerArg value={value} onChange={onChange} />;
     case "unit": {
+      const dat = creates ? peekUnitAssets()?.units ?? null : null;
       const options = [
-        ...UNIT_CLASS_CHOICES,
+        // Create Unit makes nothing of a class or of a type off StarEdit's palette.
+        ...(creates ? [] : UNIT_CLASS_CHOICES),
         // An `<option>` cannot carry the colours, so a custom name's codes show escaped
         // rather than as the raw bytes the browser draws as tofu.
-        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitLabel(id)) })),
+        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitLabel(id)) }))
+          .filter((o) => !creates || triggerCanCreate(dat, o.value)),
       ];
       return <ChoiceSelect value={value} onChange={onChange} options={options} width={260} />;
     }
@@ -191,12 +197,13 @@ function ArgWidget({ kind, value, onChange, names, scenario, unit }: ArgProps) {
 }
 
 /** Argument rows for one condition or action, editing the record in place through `onChange`. */
-function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onChange, names, scenario }: {
+function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onChange, names, scenario, creates }: {
   record: R;
   def: ConditionDef | ActionDef | undefined;
   onChange: (next: R) => void;
   names: TriggerNames;
   scenario: Scenario;
+  creates?: boolean;
 }) {
   if (!def) return <p className="hint">{t("Unknown type {type}; edit it through the text editor.", { type: record.type })}</p>;
   const r = record as unknown as Record<string, number>;
@@ -213,7 +220,7 @@ function ItemEditor<R extends ConditionRecord | ActionRecord>({ record, def, onC
       {def.args.map((arg, i) => (
         <label key={i} className="trig-arg">
           <span className="lbl">{arg.label}</span>
-          <ArgWidget kind={arg.kind} value={arg.kind === "textFlags" ? r.flags & ActionFlag.AlwaysDisplay : r[arg.field]} onChange={(v) => set(arg, v)} names={names} scenario={scenario} unit={unitArg ? r[unitArg.field] : undefined} />
+          <ArgWidget kind={arg.kind} value={arg.kind === "textFlags" ? r.flags & ActionFlag.AlwaysDisplay : r[arg.field]} onChange={(v) => set(arg, v)} names={names} scenario={scenario} unit={unitArg ? r[unitArg.field] : undefined} creates={creates} />
         </label>
       ))}
     </div>
@@ -307,7 +314,7 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
             />
             <Check label={t("Disabled")} checked={(cur.flags & disabledBit) !== 0} onChange={(e) => replace(sel, { ...cur, flags: e.target.checked ? cur.flags | disabledBit : cur.flags & ~disabledBit })} />
           </div>
-          <ItemEditor record={cur} def={defOf(cur)} onChange={(r) => replace(sel, r)} names={names} scenario={scenario} />
+          <ItemEditor record={cur} def={defOf(cur)} onChange={(r) => replace(sel, r)} names={names} scenario={scenario} creates={kind === "action" && !briefing && CREATING_ACTIONS.has(cur.type)} />
         </div>
       )}
     </div>
@@ -554,7 +561,8 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
                     content: (
                       <div className="listbox" style={{ padding: 8, overflow: "auto" }}>
                         <div className="player-check-grid">
-                          {PLAYER_GROUP_CHOICES.map((p) => (
+                          {/* Only the owners the game hands triggers to, and any other already ticked so it can be cleared. */}
+                          {PLAYER_GROUP_CHOICES.filter((p) => TRIGGER_OWNERS.has(p.value) || !!cur.players[p.value]).map((p) => (
                             <Check
                               key={p.value}
                               label={p.label}
@@ -563,6 +571,9 @@ function TriggerListEditor({ list, setList, briefing, names, scenario, claims, i
                             />
                           ))}
                         </div>
+                        {PLAYER_GROUP_CHOICES.some((p) => !TRIGGER_OWNERS.has(p.value) && !!cur.players[p.value]) && (
+                          <p className="hint" style={{ marginTop: 8 }}>{t("The game hands a trigger only to Players 1–8, All Players and the forces; the other ticks give it to no one.")}</p>
+                        )}
                       </div>
                     ),
                   },

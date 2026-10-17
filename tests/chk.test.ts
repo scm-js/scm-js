@@ -5,11 +5,11 @@ import {
   isRemasteredRevision, mapVersionOf, markDirty, parseScenario, scenarioDescription, scenarioName,
   serializeScenario, setMapVersion, setScenarioName, tilesetIndex,
 } from "../src/formats/chk/scenario";
-import { validateScenario } from "../src/editor/validate";
-import { createScenario } from "../src/formats/chk/create";
+import { strOverflowText, validateScenario } from "../src/editor/validate";
+import { createScenario, requiredSections } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX, isLocationUsed, locationSlots } from "../src/formats/chk/sections/objects";
 import { specFor } from "../src/formats/chk/sections/registry";
-import { decodeStrings, encodeStrings, getString } from "../src/formats/chk/sections/strings";
+import { decodeStrings, encodeStrings, getString, stringTableOverflow } from "../src/formats/chk/sections/strings";
 
 function section(name: string, data: Uint8Array | number[]): Uint8Array {
   const body = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -180,6 +180,22 @@ describe("string table", () => {
   it("handles the 32-bit STRx layout", () => {
     const decoded = decodeStrings(encodeStrings({ strings: [null, "hello"], extended: true }), true);
     expect(decoded.strings[1]).toBe("hello");
+  });
+
+  it("counts the STR strings past 64 KB, which the game cannot reach", () => {
+    const filler = (n: number) => Array.from({ length: n }, (_, i) => `${i}`.padEnd(100, "x"));
+    const many = { strings: [null, ...filler(700), "the last string"], extended: false, encoding: "windows-1252" as const };
+    const over = stringTableOverflow(many);
+    expect(over).toBeGreaterThan(0);
+    expect(stringTableOverflow({ ...many, extended: true })).toBe(0);
+    const scn = createScenario({ width: 64, height: 64, era: 0, name: "x" });
+    scn.strings = many;
+    expect(validateScenario(scn).some((i) => i.level === "error" && i.text === strOverflowText(over))).toBe(true);
+
+    // Only where a string starts has to fit, so one long string goes last and the table still works.
+    const long = { strings: [null, "x".repeat(70000), "after"], extended: false, encoding: "windows-1252" as const };
+    expect(stringTableOverflow(long)).toBe(0);
+    expect(decodeStrings(encodeStrings(long), false).strings).toEqual(long.strings);
   });
 });
 
@@ -362,6 +378,22 @@ describe("locations by revision", () => {
     setMapVersion(down, "hybrid");
     expect(down.locations).toHaveLength(255);
     expect(parseScenario(serializeScenario(down)).locations).toHaveLength(255);
+  });
+
+  it("writes the settings tables the new revision needs", () => {
+    const has = (bytes: Uint8Array) => new Set(parseChk(bytes).sections.map((s) => s.name));
+    for (const version of ["original", "hybrid", "remasteredHybrid"] as const) {
+      const scn = parseScenario(serializeScenario(createScenario({ width: 64, height: 64, era: 0, name: "x" })));
+      setMapVersion(scn, version);
+      const names = has(serializeScenario(scn));
+      for (const name of requiredSections(scn.fileVersion)) if (name !== "STR ") expect([version, names.has(name)]).toEqual([version, true]);
+    }
+    const up = parseScenario(serializeScenario(createScenario({ width: 64, height: 64, era: 0, name: "x" })));
+    setMapVersion(up, "original");
+    const old = parseScenario(serializeScenario(up));
+    setMapVersion(old, "broodwar");
+    const names = has(serializeScenario(old));
+    for (const name of requiredSections(205)) expect([name, names.has(name)]).toEqual([name, true]);
   });
 });
 

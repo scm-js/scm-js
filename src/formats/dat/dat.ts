@@ -17,6 +17,9 @@ export const SPRITE_TYPES = 517;
 export const IMAGE_TYPES = 999;
 
 export const UNITS_DAT_SIZE = 19876;
+/** `availability` bit for a unit StarEdit lists in its palette — the units a trigger can create. */
+export const PALETTE_AVAILABILITY = 0x02;
+
 /** Pre-Brood War layout: no `broodWar` byte or `availability` word. */
 export const UNITS_DAT_SIZE_LEGACY = 19192;
 export const FLINGY_DAT_SIZE = 3135;

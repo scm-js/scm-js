@@ -12,6 +12,8 @@ import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
+import { stringTableOverflow } from "../formats/chk/sections/strings";
+import { strOverflowText } from "../editor/validate";
 import { mapVersionOf, markDirty, parseScenario, serializeScenario, setMapVersion, tilesetIndex } from "../formats/chk/scenario";
 import type { NewMapVersion } from "../editor/preferences";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
@@ -310,6 +312,9 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   if (viewOnly && !req.copy) { store.set(statusMessageAtom, viewOnlyMessage(viewOnly)); return false; }
   const what = req.copy ? "copy" : "map";
   try {
+    // Offsets past 64 KB wrap, and every string after that shows other text; the file on disk stays as it was.
+    const unreachable = stringTableOverflow(scenario.strings);
+    if (unreachable > 0) throw new Error(strOverflowText(unreachable));
     // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
     const built = await buildOutgoing(store, { options: req.options, fileName: req.fileName, purpose: "save", plain: req.bytes });
     const bytes = built.bytes;

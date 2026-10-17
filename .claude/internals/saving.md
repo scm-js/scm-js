@@ -210,3 +210,8 @@ Discard). Preferences ▸ Storage has a Previous versions section beside Recover
 
 Verified headlessly: Save As → Save over an OPFS handle (picker stubbed to OPFS) keeps the version
 and the dialog reopens it.
+
+zlib is Remastered-only (2026-10-17 audit, archive T1): 1.16.1's storm.dll decodes ADPCM, Huffman and
+PKWARE alone — its decompressor, run under Unicorn on the editor's own sectors, refused every zlib
+one and decoded every PKWARE one. The labels, the save warning, scm.ts and the docs say so. The
+scm-sim lifted engine reads archives with mopaq, so it cannot catch this kind of thing.

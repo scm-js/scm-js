@@ -266,7 +266,7 @@ const FORMAT_OPTIONS: { value: MapFormat; label: string }[] = [
 
 const COMPRESSION_OPTIONS: { value: ArchiveCompression; label: string; short: string; hint: string }[] = [
   { value: "pkware", label: msg("PKWARE — what StarEdit writes"), short: "PKWARE", hint: msg("Every StarCraft build reads it. Blizzard's own maps are stored this way.") },
-  { value: "zlib", label: msg("zlib — smallest"), short: "zlib", hint: msg("StarCraft 1.16.1 and Remastered read it; older builds do not.") },
+  { value: "zlib", label: msg("zlib — smallest"), short: "zlib", hint: msg("Only Remastered reads it; StarCraft 1.16.1 and older cannot open the map.") },
   { value: "none", label: msg("None"), short: msg("uncompressed"), hint: msg("The largest file; anything that opens an MPQ reads it.") },
 ];
 

@@ -172,7 +172,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
           </div>
           <div className="sep-h" style={{ margin: "8px 0" }} />
           <div className="form">
-            <Field label={t("Related unit")} hint={t("Serial of the add-on's parent or the other end of a Nydus Canal; 0 for none.")}>
+            <Field label={t("Related unit")} hint={t("Serial of the linked unit: an add-on's building, or the other Nydus Canal; 0 for none. The game links two units only when each names the other, so OK sets the other unit too.")}>
               <NumberInput value={form.relatedSerial} onChange={(v) => set("relatedSerial", v)} min={0} max={0xffffffff} width={130} />
             </Field>
             <Field label={t("Relation")}>

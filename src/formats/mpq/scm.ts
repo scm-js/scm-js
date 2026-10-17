@@ -122,8 +122,9 @@ export interface SaveOptions {
   stored?: StoredMembers | null;
   /**
    * How every member is compressed. `pkware` is what StarEdit writes and the one method
-   * every StarCraft build reads; `zlib` is smaller but needs 1.16.1 or Remastered; `none`
-   * (the default) is readable by anything that opens an MPQ at all.
+   * every StarCraft build reads; `zlib` is smaller but only Remastered reads it (1.16.1's
+   * Storm decodes PKWARE, Huffman and ADPCM alone); `none` (the default) is readable by
+   * anything that opens an MPQ at all.
    */
   compress?: ArchiveCompression;
   /** Encrypt the members as StarEdit does — a Storm feature every build reads. Default off. */

@@ -991,8 +991,9 @@ Then the unit is made, and the record's fields are applied, each only when its b
 Some of what the game does with the fields is not what the layout suggests:
 
 - The relations word at offset 10 is never read. An add-on is attached to its building,
-  and a nydus canal paired with its exit, by the linked serial number alone, and only with
-  a unit in the same `UNIT` section.
+  and a nydus canal paired with its exit, only when each of the two records names the
+  other's serial number, and only with a unit in the same `UNIT` section. A link written
+  on one side alone leaves the add-on detached and the canal without an exit.
 - The owner bit of the fields-set word, and bit 0x40, are never read: the owner byte
   always counts.
 - Hit points, shields and energy are per cent of the unit's maximum, and capped at it. Hit

@@ -8,7 +8,7 @@ import { isRemasteredRevision, MAP_VERSIONS, mapVersionOf, tilesetIndex, type Sc
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { FORCE_SLOTS, isPaletteMode, PlayerType } from "../formats/chk/sections/players";
-import { getString, unencodableStrings } from "../formats/chk/sections/strings";
+import { getString, stringTableOverflow, unencodableStrings } from "../formats/chk/sections/strings";
 import { textEncodingInfo } from "../formats/text/encoding";
 import { msg, t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
@@ -51,8 +51,15 @@ export interface ValidateContext {
 
 /** The game keeps at most this many units in play; StarEdit refuses to place more. */
 export const UNIT_LIMIT = 1700;
-/** String slots the game's fixed table holds. */
-export const STR_CAPACITY = 1024;
+/**
+ * Why a map whose STR table runs past 64 KB cannot be saved: Check Map's error, and the
+ * reason Save gives for refusing.
+ */
+export function strOverflowText(n: number): string {
+  return t("{n, plural, one {# string starts} other {# strings start}} past the first 64 KB of the STR table, which is as far as its offsets reach; the game would show other text in their place. Shorten or remove text, or move the map to a Remastered revision (Scenario ▸ Map Revision), whose STRx table has no such limit.", { n });
+}
+
+/** String slots the editor keeps in an STRx table. */
 export const STRX_CAPACITY = 65535;
 
 const normalize = (name: string) => name.replace(/\//g, "\\").toLowerCase();
@@ -144,8 +151,11 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
 
   // ── Strings ──
   const count = scn.strings.strings.length - 1;
-  const capacity = scn.strings.extended ? STRX_CAPACITY : STR_CAPACITY;
-  if (count > capacity) add("error", t("{count} strings — the {table} table holds {capacity}.", { count, table: scn.strings.extended ? "STRx" : "STR", capacity }), msg("Strings"), { kind: "dialog", id: "stringEditor" });
+  if (scn.strings.extended && count > STRX_CAPACITY) add("error", t("{count} strings — the {table} table holds {capacity}.", { count, table: "STRx", capacity: STRX_CAPACITY }), msg("Strings"), { kind: "dialog", id: "stringEditor" });
+  // The game has no fixed number of STR strings (1024 is StarEdit's own table); what it cannot
+  // do is reach a string that starts past the 16-bit offsets' 64 KB.
+  const unreachable = stringTableOverflow(scn.strings);
+  if (unreachable > 0) add("error", strOverflowText(unreachable), msg("Strings"), { kind: "dialog", id: "stringEditor" });
   const lost = unencodableStrings(scn.strings);
   if (lost.length > 0) {
     const chars = [...new Set(lost.flatMap((l) => l.chars))];

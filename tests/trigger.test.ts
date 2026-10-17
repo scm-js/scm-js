@@ -11,7 +11,8 @@ import {
 } from "../src/formats/chk/sections/triggers";
 import { ACTION_DEFS, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CONDITION_DEFS } from "../src/data/triggerDefs";
 import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, TriggerTextError, triggerComment, withComment, type TriggerNames } from "../src/formats/triggers/text";
-import { applyTriggers, moveTrigger, newTrigger, removeTriggers, switchName, triggerNames } from "../src/editor/triggers";
+import { applyTriggers, moveTrigger, newAction, newCondition, newTrigger, removeTriggers, switchName, triggerCanCreate, triggerNames } from "../src/editor/triggers";
+import { decodeUnitsDat } from "../src/formats/dat/dat";
 import { loadMap } from "../src/formats/mpq/scm";
 
 /** A name context over fixed tables, so the format can be tested without a scenario. */
@@ -234,7 +235,28 @@ describe("trigger list operations", () => {
     expect(moveTrigger([a, b, c], 2, 0)).toEqual([c, a, b]);
     expect(removeTriggers([a, b, c], [0, 2])).toEqual([b]);
   });
+  it("starts the actions that need a real unit on Terran Marine", () => {
+    for (const type of [ActionType.CreateUnit, ActionType.CreateUnitWithProperties, ActionType.SetDeaths]) {
+      const { unitId } = newAction(type);
+      expect([type, unitId]).toEqual([type, 0]);
+    }
+    // Where a class means something, it stays the default.
+    expect(newAction(ActionType.KillUnit).unitId).toBe(UnitClass.Any);
+    expect(newCondition(ConditionType.Deaths).unitId).toBe(UnitClass.Any);
+  });
+
+  it("knows which units a trigger can create", () => {
+    expect(triggerCanCreate(null, 0)).toBe(true);
+    expect(triggerCanCreate(null, UnitClass.Any)).toBe(false);
+    if (!existsSync(UNITS_DAT)) return;
+    const dat = decodeUnitsDat(new Uint8Array(readFileSync(UNITS_DAT)));
+    // 168 types are on StarEdit's palette; Create Unit makes exactly those.
+    expect(Array.from({ length: 228 }, (_, id) => id).filter((id) => triggerCanCreate(dat, id))).toHaveLength(168);
+    expect(triggerCanCreate(dat, 35)).toBe(false); // Larva
+  });
 });
+
+const UNITS_DAT = join(import.meta.dirname, "..", "public", "arr", "units.dat");
 
 const MAPS = join(import.meta.dirname, "..", "fixtures", "maps");
 const mapFiles = existsSync(MAPS) ? readdirSync(MAPS).filter((f) => /\.sc[mx]$/i.test(f)) : [];

@@ -239,3 +239,19 @@ Editor follow-ups this found:
   decides per string (UTF-8 → CP949 → 1252), so a table mixing UTF-8 and CP949 strings reads
   differently.
 - Check Map: CRGB ≠ 32 bytes, DIM > 256 and TRIG ≢ 0 mod 2400 are map-list refusals.
+
+Editor audit against the game (2026-10-17, branch `editor-follows-the-game`; private evidence in
+`~/github/scm-sim-reader/editor-audit/`, findings C1–C14):
+- `setMapVersion` now calls `addMissingSections`: every `requiredSections(newVer)` name and both
+  halves `revisionSections` wants are marked dirty when the file lacks them (null settings models
+  take the defaults first). Before, a new map or a 205 map moved to 59/63/64 was saved without
+  UNIS/UPGS/TECS/UPGR/PTEC and refused at the start of a UMS game (run: AUD V59/V63/C59).
+  `tests/support/testMaps.ts` marks those five by hand, which is why the committed maps never showed it.
+- STR offsets are u16 in both games; past 64 KB they wrapped silently (AUD S64K: 126 of 700 strings
+  wrong). `layoutStrings` / `stringTableOverflow` in `sections/strings.ts`: the layout is unchanged
+  unless it overflows, then the longest blob goes last (only a string's start must fit). Save
+  (`saveDocument`) throws `strOverflowText` before writing, so the file on disk stays good; Check
+  Map has the same error. Internal round trips (`parseScenario(serializeScenario(…))` in sync, tab
+  copies) still wrap — they cannot refuse.
+- The "STR holds 1024" Check Map error is gone: 1024 is StarEdit's table, the game read string 1500
+  (AUD S1500). STRx keeps its 65,535 check.

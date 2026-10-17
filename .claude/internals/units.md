@@ -162,3 +162,13 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
   Big Game Hunters and Enslavers 1 at 100% and 200% in both modes — positions, team colour and
   shadows agree with classic; no errors. Not looked at: a damaged building's fire, cloaked units,
   the unit palette thumbnails, an exported image.
+
+Links and gas the game reads (2026-10-17 audit, OB1/OB3; runs O3/O3b/O7 in the lifted 1.16.1):
+- The game links an add-on to its building, or two Nydus Canals, only when **both** records name
+  each other's serial; the relation word is ignored (StarEdit writes 0x200 on both). `linkPlaced`
+  (units.ts) runs after every placement in `useUnitTools.placeAt`: an add-on at `ADDON_OFFSET`
+  (+96, +16 px from the host's centre, every pair in Blizzard's maps) of a free same-owner host,
+  the reverse, or a Nydus Canal to its owner's last free canal. `updateSelected` calls
+  `pairRelated` when a related serial changes, so the dialog's one field sets both ends.
+- `makeUnit` gives Refinery/Extractor/Assimilator (`GAS_BUILDINGS`, or the ResourceContainer flag)
+  5000 gas with the Resources bit; without it the game gives them 0.

@@ -286,7 +286,7 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
     warnings.push(t("Without the TrigScript files the generated triggers stay but their source is gone."));
   }
   if (options.compression === "zlib" && options.format !== "chk") {
-    warnings.push(t("zlib needs StarCraft 1.16.1 or Remastered; older builds do not read it."));
+    warnings.push(t("Only StarCraft: Remastered reads zlib; 1.16.1 and older builds cannot open the map."));
   }
   const lost = unencodableStrings(scn.strings).length;
   if (lost > 0) {

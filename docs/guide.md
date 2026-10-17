@@ -416,8 +416,16 @@ the game to keep only the first.
 Double-click a unit for every field its record holds: owner, position, hit points,
 shields, energy, resources and hangar count with their "used" ticks, the special
 properties (cloaked, burrowed, lifted off, hallucinated, invincible), and the related-unit
-link an add-on or a Nydus Canal uses. With several units selected, only the fields you
-touch are written to all of them, so a mineral line can be set to one amount in one go.
+link an add-on or a Nydus Canal uses. The game links two units only when each names the
+other, so setting the related unit sets the other unit back to this one. With several
+units selected, only the fields you touch are written to all of them, so a mineral line
+can be set to one amount in one go.
+
+An add-on placed in its spot beside its owner's building is linked to it, as StarEdit
+does, and so is a building placed where a free add-on of its owner stands. Nydus Canals
+are linked in pairs as they are placed: each one to its owner's last canal without an
+exit. A Refinery, Extractor or Assimilator starts with 5000 gas, as a geyser does; without
+an amount in its record it would have none in the game.
 
 **Tools ▸ Auto-place Start Locations…** puts one start location per player on a ring or in
 the corners, each moved to the nearest ground the placement checks accept, and selects
@@ -556,12 +564,23 @@ actions.
 
 ![The Trigger Editor on Big Game Hunters' three melee triggers](images/trigger-editor.webp)
 
+The Players tab offers the owners the game hands triggers to: Players 1–8, All Players and
+the four forces. A trigger ticked for nothing else never runs, so the other groups (Player
+9–12, Current Player, Foes, Allies and the rest, which are arguments rather than owners)
+only show when a trigger already has one ticked, to be cleared.
+
 Every condition and action the game has is there. Each argument gets a widget of its kind
 — a player pick, a unit type list, a location list, a number, a text box with the colour
 codes — and any value the lists do not include can still be typed as a raw number, which
 is how EUD values and unusual unit ids get in. An item can be disabled without deleting
 it; a disabled one is kept in the file and skipped by the game. *Preserve trigger* is the
 flag that keeps a trigger firing more than once.
+
+A new *Create Unit*, *Create Unit with Properties* or *Set Deaths* starts on Terran Marine
+rather than *Any unit*: the game creates nothing for a unit class, and Set Deaths on *Any
+unit* writes nothing. The unit list of the two Create Unit actions holds only what the
+game will create, the units of StarEdit's palette; larvae, eggs, traps, doors and the like
+are left out, because the game refuses them.
 
 ### The Text Trigger Editor
 
@@ -846,11 +865,11 @@ away underneath and can be left alone:
   map in the editor is not changed either way.
 - **Archive** (folded): the compression, StarEdit's encryption tick, and the other files
   in the archive. PKWARE is what StarEdit writes, and every StarCraft version reads it;
-  zlib is smaller and needs 1.16.1 or Remastered; none is the largest and readable by
-  anything. A map keeps the compression it was opened with. The sounds and the files
-  plugins keep in the archive each have a tick, so a copy for release can leave them out.
-  Files in the archive the editor cannot name — common in protected maps — are kept
-  exactly as they were, and the fold says how many there are.
+  zlib is smaller but only Remastered reads it (StarCraft 1.16.1 cannot open such a map);
+  none is the largest and readable by anything. A map keeps the compression it was opened
+  with. The sounds and the files plugins keep in the archive each have a tick, so a copy
+  for release can leave them out. Files in the archive the editor cannot name — common in
+  protected maps — are kept exactly as they were, and the fold says how many there are.
 - **Sections** (folded): every section the file will hold, with its size and whether it
   changed, was left out or was merged.
 

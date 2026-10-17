@@ -3,8 +3,8 @@ import { createScenario } from "../src/formats/chk/create";
 import type { UnitRecord } from "../src/formats/chk/sections/objects";
 import { decodeUnitsDat, UNITS_DAT_SIZE } from "../src/formats/dat/dat";
 import {
-  addUnits, applyUnitChanges, drawOrder, makeUnit, moveUnits, nextSerial, removeUnits, snapPlacement, unitAt, unitGeometry,
-  UnitUsed, UnitValid, updateUnits, type UnitGeometry,
+  ADDON_OFFSET, addUnits, applyUnitChanges, DEFAULT_GAS, drawOrder, linkPlaced, makeUnit, moveUnits, nextSerial, NYDUS_CANAL, pairRelated,
+  removeUnits, snapPlacement, unitAt, unitGeometry, UnitUsed, UnitValid, updateUnits, type UnitGeometry,
 } from "../src/editor/units";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -164,5 +164,58 @@ describe.skipIf(!realUnits)("StarEdit-style defaults from units.dat", () => {
     expect([g.placeW, g.placeH, g.left, g.down]).toEqual([128, 96, 58, 41]);
     expect(unitGeometry(u, 42).flyer).toBe(true);
     expect(UNITS_DAT_SIZE).toBe(19876);
+  });
+});
+
+describe("links the game reads", () => {
+  it("gives a placed gas building its gas", () => {
+    for (const id of [110, 149, 157, 188]) {
+      const u = makeUnit(realUnits, id, 0, 64, 64, 1);
+      expect([id, u.resourceAmount, (u.validStates & UnitUsed.Resources) !== 0]).toEqual([id, DEFAULT_GAS, true]);
+    }
+    expect(makeUnit(realUnits, 0, 0, 64, 64, 1).resourceAmount).toBe(0);
+  });
+
+  it("links an add-on and its building both ways, as StarEdit does", () => {
+    const scn = fresh();
+    const place = (id: number, owner: number, x: number, y: number) => {
+      const list = addUnits(scn, [makeUnit(null, id, owner, x, y, nextSerial(scn))]);
+      applyUnitChanges(scn, list);
+      const links = linkPlaced(scn, list[0].index);
+      applyUnitChanges(scn, links);
+      return [...list, ...links];
+    };
+    place(106, 0, 288, 656); // Command Center
+    place(107, 1, 288 + ADDON_OFFSET.x, 656 + ADDON_OFFSET.y); // someone else's Comsat: not linked
+    expect(scn.units.map((u) => u.relatedSerial)).toEqual([0, 0]);
+    const changes = place(107, 0, 288 + ADDON_OFFSET.x, 656 + ADDON_OFFSET.y);
+    const [cc, , comsat] = scn.units;
+    expect([cc.relatedSerial, comsat.relatedSerial]).toEqual([comsat.serial, cc.serial]);
+    expect([cc.relationType, comsat.relationType]).toEqual([0x200, 0x200]);
+    // One undo step takes the link back with the unit.
+    applyUnitChanges(scn, changes, "undo");
+    expect(scn.units.map((u) => u.relatedSerial)).toEqual([0, 0]);
+
+    // Building placed where a free add-on stands, and Nydus Canals in pairs.
+    place(120, 2, 1000 + ADDON_OFFSET.x, 400 + ADDON_OFFSET.y);
+    place(113, 2, 1000, 400);
+    const shop = scn.units.find((u) => u.unitId === 120)!, factory = scn.units.find((u) => u.unitId === 113)!;
+    expect([shop.relatedSerial, factory.relatedSerial]).toEqual([factory.serial, shop.serial]);
+    place(NYDUS_CANAL, 3, 100, 100);
+    place(NYDUS_CANAL, 3, 900, 900);
+    place(NYDUS_CANAL, 3, 500, 500);
+    const nydus = scn.units.filter((u) => u.unitId === NYDUS_CANAL);
+    expect(nydus.map((u) => u.relatedSerial)).toEqual([nydus[1].serial, nydus[0].serial, 0]);
+  });
+
+  it("sets a related unit on both sides", () => {
+    const scn = fresh();
+    applyUnitChanges(scn, addUnits(scn, [NYDUS_CANAL, NYDUS_CANAL, NYDUS_CANAL].map((id, i) => makeUnit(null, id, 0, 100 + i * 200, 100, i + 1))));
+    applyUnitChanges(scn, updateUnits(scn, [0], () => ({ relatedSerial: 2 })));
+    applyUnitChanges(scn, pairRelated(scn, 0));
+    expect(scn.units.map((u) => u.relatedSerial)).toEqual([2, 1, 0]);
+    applyUnitChanges(scn, updateUnits(scn, [0], () => ({ relatedSerial: 3 })));
+    applyUnitChanges(scn, pairRelated(scn, 0));
+    expect(scn.units.map((u) => u.relatedSerial)).toEqual([3, 0, 1]);
   });
 });

@@ -9,7 +9,8 @@ in the [CHK format reference](chk-format.md).
 The short version: the editor opens `.scm`, `.scx` and bare `.chk` files, rewrites only
 the parts of the scenario you changed, and copies everything else through byte for byte,
 including things it does not understand. A map loses nothing by passing through the editor
-unless you ask for it in the Save dialog.
+unless you ask for it in the Save dialog. The exceptions are two sections the game would
+refuse as they stand, which a save puts right ([below](#known-and-unknown-sections)).
 
 ## The archive
 
@@ -92,7 +93,9 @@ number. The editor reads `STRx` where the game does, in a `VER` 64 or 206 file, 
 it wins over `STR`. A `STRx` in any other revision is kept in the file as it is, and the
 editor shows the `STR` text players see. The editor never renumbers the table on save,
 since sections it carries as bytes still point at the old numbers; a string that stops
-being used is blanked, not removed.
+being used is blanked, not removed. `STR` counts its offsets in 16 bits, so its text must
+fit in 64 KB: Save refuses a map whose strings run past that, and Check Map says which.
+Shorter text, or a Remastered revision with `STRx`, fixes it.
 
 The table does not say which character encoding its text is in. The editor guesses as the
 game would read it and shows the guess in Scenario ▸ Map Revision, where you can change
@@ -108,16 +111,26 @@ It decodes all of them into its own model and re-encodes them when you change th
 through untouched. Tools ▸ Check Map reports a section the game requires and the file
 lacks as an error.
 
+Two sections are rewritten without an edit, because the game would refuse the file as it
+stands:
+
+- A `VCOD` that fails the game's check for the map's players would keep the map from
+  loading at all. Save writes StarEdit's table in its place, which passes for any players,
+  and Check Map says so beforehand.
+- A `MRGN` of the wrong length for the map's revision is written at the right one on the
+  next save. Earlier versions of scmJS wrote 255 location slots into StarCraft 1.00 files,
+  and a Use Map Settings game refuses to start such a file.
+
 ### Sections a map may not have
 
 `ISOM`, `MASK`, `WAV `, `CRGB`, `SWNM`, the CUWP slots and every settings table may be
 missing from a map, and the editor does not add one to a file that had none: a map without
-`MASK` stays without it, rather than gaining an all-clear fog table. The game is stricter.
-A melee game never reads `MASK`, the CUWP slots or the settings tables, but a Use Map
-Settings game needs them and stops at the start without them (see [What a map
-needs](chk-format.md#what-a-map-needs)). The editor shows a map with no `MASK` fully
-fogged, which is how a melee game starts. A map with no `ISOM` cannot use the isometric
-brush until the record is rebuilt.
+`MASK` stays without it, rather than gaining an all-clear fog table. The one exception is
+a change of revision, below. The game is stricter. A melee game never reads `MASK`, the
+CUWP slots or the settings tables, but a Use Map Settings game needs them and stops at the
+start without them (see [What a map needs](chk-format.md#what-a-map-needs)). The editor
+shows a map with no `MASK` fully fogged, which is how a melee game starts. A map with no
+`ISOM` cannot use the isometric brush until the record is rebuilt.
 
 ## Saving
 
@@ -184,8 +197,8 @@ versions of the game can play the map:
 | StarCraft 1.00 | 59 | `RAWS` | `.scm` | every version of the game |
 | Hybrid 1.04 | 63 | `RAWS` | `.scm` | every version; carries both settings layouts |
 | Brood War 1.04 | 205 | `RAWB` | `.scx` | Brood War and Remastered |
-| Remastered 1.21+ without Brood War | 64 | `RAWS` | `.scm` | Remastered only, with `STRx` |
-| Remastered 1.21+ | 206 | `RAWB` | `.scx` | Remastered only, with `STRx` |
+| Remastered 1.21+ without Brood War | 64 | `RAWS` | `.scm` | Remastered only; `STRx` is read |
+| Remastered 1.21+ | 206 | `RAWB` | `.scx` | Remastered only; `STRx` is read |
 
 What the revision changes in the file:
 
@@ -203,8 +216,12 @@ string table between `STR ` and `STRx` for Remastered (and the text to UTF-8 wit
 sets the encoding the text is written in. Every string keeps its number, so triggers and
 locations still point at the right text. A `VER` 64 map, Remastered's revision without
 Brood War, keeps its revision: Map Revision offers it only for a map that already is one.
-Tables the new revision no longer needs are not discarded; the Save dialog lists what will
-be written.
+Sections the new revision needs and the file lacks are added — `COLR` for Brood War, the
+settings tables of the new layout from the game's defaults — so the map still starts in
+the game. Tables the new revision no longer needs are not discarded; the Save dialog lists
+what will be written. A map moved to StarCraft 1.00 or Hybrid whose players do not have
+their slots' own colours gains a `CRGB`, the only place Remastered reads colours in those
+revisions.
 
 ## New maps
 

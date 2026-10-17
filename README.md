@@ -51,7 +51,8 @@ Plugins… rather than installed from the start.
   game would; Section Explorer (*Browse Plugins*) shows the file byte by byte. See
   [Protected and damaged maps](docs/file-formats.md#protected-and-damaged-maps).
 - **Nothing lost on save.** Unknown or malformed sections and unnamed archive files are
-  written back as they were read. See [Opening and saving maps](docs/file-formats.md).
+  written back as they were read, unless the game would refuse the map as it stands. See
+  [Opening and saving maps](docs/file-formats.md).
 - **Terrain from a picture.** File ▸ Import ▸ Terrain from Image… turns an image into
   terrain, cliffs and shores included. See [Plugins](docs/guide.md#plugins).
 - **Stamps.** Save a ramp, a bridge or a mineral line once and lay it down on any map. See

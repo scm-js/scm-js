@@ -3,9 +3,9 @@
 Every trigger condition and action in StarCraft and Brood War: what it does in the game,
 the arguments it takes, how it is written as text, and where each argument is stored in
 the map file. The game's behaviour described here is StarCraft 1.16.1's, found by running
-test maps. StarCraft: Remastered's trigger engine has not been checked separately. Its map
-list does read the triggers, to see whether a map uses EUD triggers; see [Where Remastered
-differs](chk-format.md#where-remastered-differs).
+test maps. Much of StarCraft: Remastered's trigger code has been read as well, and the
+parts a map maker would notice were checked by playing test maps. What it does differently
+is under [In StarCraft: Remastered](#in-starcraft-remastered).
 
 Each condition and action has a number, a line in the text form, and a table of where its
 arguments are stored. These come from the same tables the editor reads and writes maps
@@ -94,8 +94,9 @@ anyone else. Only these owners get copies:
 
 A trigger owned only by anything else (Players 9 to 12, Current Player, Foes, Allies,
 Neutral Players, Non-Allied Victory Players, None or the Unused groups) is dropped when
-the game loads and never runs. An editor lets you tick those owners, but the game ignores
-them.
+the game loads and never runs. Other editors let you tick those owners, but the game
+ignores them. scmJS's Trigger Editor offers only the owners above; when a map's trigger
+already has another ticked, it is shown with a note so you can clear it.
 
 Only Use Map Settings games read a map's triggers at all. Melee and the other game types
 run triggers built into the game. (See [`TRIG`](chk-format.md#trig) in the CHK reference.)
@@ -273,6 +274,38 @@ A condition or action can be disabled without deleting it (a flag in its record)
 skips it: a disabled condition does not count, and a disabled action is not carried out.
 In text, a disabled line starts with `;`.
 
+### Condition and action numbers the game does not have
+
+Conditions are numbered up to 23, actions up to 59 and briefing actions up to 9. StarCraft
+1.16.1 does not check the number: when a trigger reaches a condition or action past the
+end, the game crashes. This was seen for a condition; for actions and briefing actions it
+is read from the game's code. Remastered checks: an unknown condition counts as false, so
+the trigger does not run, and an unknown action is skipped. The editor keeps such a record
+as it is, and Check Map reports it.
+
+### In StarCraft: Remastered
+
+Remastered's own code for running triggers has been read: how it goes through a trigger's
+conditions and actions, the trigger flag 0x02, how it settles results at the end of a
+pass, Victory, Defeat and Draw, and the conditions and actions named below. Those work as
+in 1.16.1, with these differences:
+
+- An unknown condition or action number does not crash it (see above).
+- A [Map Revealer](#create-unit) made by Create Unit stays. 1.16.1 creates it and removes
+  it straight away as unplaceable. (Found playing Remastered.)
+- [Play WAV](#play-wav) plays Ogg Vorbis sounds as well as WAV, in a Brood War map as in a
+  Remastered one. 1.16.1 plays only WAV. (Found playing Remastered.)
+- A map whose triggers use [EUD](#eud) values makes Remastered run its triggers in an EUD
+  mode, where Deaths conditions and Set Deaths actions reach the game's memory.
+
+These were read in its code and also played, with the same result as in 1.16.1: Create
+Unit makes nothing for Player 12, Set Deaths for Player 10 writes nothing in a map without
+EUD triggers, and Bring finds nothing in a location stored inverted.
+
+Two parts were not read: how Remastered hands out the copies of the triggers when the map
+loads, which is in a scrambled part of its code, and the timing of the passes. For those,
+and for the actions not named here, the page describes 1.16.1.
+
 ## Conditions
 
 A condition is a test a trigger makes on every pass, unless the trigger is part way
@@ -353,6 +386,11 @@ A unit counts when its box touches the location. With At least or Exactly, Bring
 finished units and the units aboard a transport in the location; with At most, it counts
 every unit there, finished or not, but nothing aboard. See [Counting
 units](#counting-units).
+
+A location stored inverted, its right edge left of its left edge or its bottom above its
+top, holds nothing for Bring: the condition finds no units in it, so At least 1 is never
+true. (Run in 1.16.1 and found playing Remastered.) Create Unit uses only a location's
+middle, which is the same point for an inverted location.
 
 <!-- generated: condition 3 -->
 **Condition 3** · `Bring(Player, Unit, Location, Comparison, Amount);`
@@ -874,7 +912,32 @@ Creates the number of units of the type for the player, at the middle of the loc
 unit that does not fit there is placed at the nearest spot it fits, up to 128 pixels away;
 a unit with no room that close is not created. A building is not moved: it is not created
 on ground it cannot stand on, or where something is in the way. Mineral fields and geysers
-are always created for Player 12. A count of 0 creates one unit.
+are always created for Player 12. A count of 0 creates one unit, although the text form
+writes it as All.
+
+Not every unit can be created:
+
+- **Only Players 1 to 8.** Create Unit makes nothing for Players 9 to 12 or None, and with
+  All Players it makes units only for Players 1 to 8. (Run in 1.16.1 and found playing
+  Remastered.)
+- **Not a class.** Any unit, Men, Buildings and Factories make nothing; it needs a unit
+  type.
+- **Only the types StarEdit's unit palette offers.** With the game's own unit data that is
+  168 of the 228 types. The rest make nothing: larvae, eggs and cocoons, the tank and
+  Goliath turrets, interceptors, scarabs, the nuclear missile, Scanner Sweep, Disruption
+  Web, Dark Swarm, the doors and traps, start locations, the race markers, the minerals
+  and gas a worker carries, the four heroes Arcturus Mengsk (Battlecruiser), Aldaris,
+  Raszagal and Gerard DuGalle, and the unused types. (Measured in 1.16.1; Remastered's
+  code makes the same check.)
+- **A Map Revealer** is created and at once removed as unplaceable in 1.16.1. Remastered
+  keeps it. (Found playing Remastered.)
+
+The scmJS Trigger Editor's unit list for Create Unit shows only the types that can be
+created, once the game data is installed.
+
+The action has a properties field, bytes 20–23, like [Create Unit with
+Properties](#create-unit-with-properties). The game reads it for Create Unit too: a value
+from 1 to 64 creates the units with that properties slot. Editors write 0 there.
 
 <!-- generated: action 44 -->
 **Action 44** · `Create Unit(Player, Unit, Count, Location);`
@@ -882,8 +945,8 @@ are always created for Player 12. A count of 0 creates one unit.
 | Argument | Takes | Stored in the action |
 | --- | --- | --- |
 | Player | a [player or group](#players-and-groups) | bytes 16–19 |
-| Unit | a unit type, or one of the [unit classes](#unit-classes) | bytes 24–25 |
-| Count | a number of units, 1 to 255, or All (stored as 0) | byte 27 |
+| Unit | a unit type a trigger can make; the [unit classes](#unit-classes) make nothing | bytes 24–25 |
+| Count | a number of units, 1 to 255 (0 makes one) | byte 27 |
 | Location | a location (Anywhere is location 64) | bytes 0–3 |
 <!-- /generated -->
 
@@ -898,7 +961,8 @@ As [Create Unit](#create-unit), and the new units take the properties of one of 
 hangar count, and states such as cloaked, burrowed, lifted or hallucinated. The slots are
 stored in the map's `UPRP` section; the editor's Triggers ▸ Unit Properties Slots… edits
 them. A unit is created cloaked or burrowed only if its owner has the technology that lets
-it, and resources are kept to 16 bits.
+it, and resources are kept to 16 bits. It can create the same units, for the same players,
+as Create Unit.
 
 <!-- generated: action 11 -->
 **Action 11** · `Create Unit with Properties(Player, Unit, Count, Location, Properties);`
@@ -906,8 +970,8 @@ it, and resources are kept to 16 bits.
 | Argument | Takes | Stored in the action |
 | --- | --- | --- |
 | Player | a [player or group](#players-and-groups) | bytes 16–19 |
-| Unit | a unit type, or one of the [unit classes](#unit-classes) | bytes 24–25 |
-| Count | a number of units, 1 to 255, or All (stored as 0) | byte 27 |
+| Unit | a unit type a trigger can make; the [unit classes](#unit-classes) make nothing | bytes 24–25 |
+| Count | a number of units, 1 to 255 (0 makes one) | byte 27 |
 | Location | a location (Anywhere is location 64) | bytes 0–3 |
 | Properties | a [unit properties slot](#create-unit-with-properties) | bytes 20–23 |
 <!-- /generated -->
@@ -1563,9 +1627,10 @@ Remove Unit At Location("All Players", "Men", All, "Void");
 
 Starts an [AI script](#ai-scripts) for the player, which is normally a computer player:
 the custom-level scripts that make it play a normal game, or one of the small scripts that
-change its behaviour. For a person's or a rescuable player's trigger the game runs only
-the scripts that make sense for them: the bunker, transport and web scripts (EnBk, EnTr,
-ExTr, DWHe, PB3F) and the shared-vision ones (+Vi and −Vi); it ignores any other.
+change its behaviour. For anyone but a computer player (a person, a rescuable slot or a
+neutral slot) the game runs only the scripts that make sense for them: the bunker,
+transport and web scripts (EnBk, EnTr, ExTr, DWHe, PB3F) and the shared-vision ones (+Vi
+and −Vi), and for a neutral slot also Rscu. It ignores any other.
 
 <!-- generated: action 15 -->
 **Action 15** · `Run AI Script(Script);`
@@ -1646,7 +1711,13 @@ counts of unit types a map never uses can hold anything.
 
 Add past 4,294,967,295 wraps around to 0, and Subtract stops at 0. It writes nothing for a
 player above Player 8 or a unit number above 232, so in 1.16.1 it cannot reach memory
-outside the table (see [EUD](#eud)).
+outside the table (see [EUD](#eud)). Remastered is the same unless the map uses EUD
+triggers.
+
+The unit classes do not work as counters. Set Deaths of Any unit writes nothing. Men,
+Buildings and Factories change the player's real counts of those lost, the ones the game
+adds to whenever such a unit dies, so a number kept there is mixed with real deaths (see
+[Deaths and kills](#deaths-and-kills)).
 
 <!-- generated: action 45 -->
 **Action 45** · `Set Deaths(Player, Unit, Modifier, Amount);`
@@ -1960,6 +2031,11 @@ record as a trigger, with the condition [Mission Briefing](#mission-briefing) an
 set of actions, numbered separately from a trigger's. Four portrait slots, 0 to 3, hold
 the portraits. The editor's Triggers ▸ Mission Briefing Editor… edits them.
 
+The game keeps the briefing triggers owned by the person playing, by All Players, or by
+the person's force, and plays a briefing trigger only when its first condition is Mission
+Briefing. A briefing written as text without that condition never plays; Check Map points
+it out. (Read in 1.16.1's code; not checked in a game.)
+
 ### Wait (briefing)
 
 Holds the briefing for the time.
@@ -2051,8 +2127,8 @@ Makes the portrait in a slot talk for the time.
 ### Transmission (briefing)
 
 Text and a sound with the portrait in a slot talking, as a trigger's
-[Transmission](#transmission) does. No Blizzard map uses it; its layout follows the
-community's reference and SCMDraft.
+[Transmission](#transmission) does: the modifier and amount change the time, as they do
+there. No Blizzard map uses it; its layout matches what 1.16.1's code reads.
 
 <!-- generated: briefing 8 -->
 **Briefing action 8** · `Transmission(Text, Slot, Modifier, Amount, Duration, WAV);`
@@ -2069,7 +2145,7 @@ community's reference and SCMDraft.
 
 ### Skip Tutorial Enabled
 
-Offers the button that skips the tutorial.
+Offers the button that skips the tutorial. It works only in a single-player campaign.
 
 <!-- generated: briefing 9 -->
 **Briefing action 9** · `Skip Tutorial Enabled();`
@@ -2123,6 +2199,14 @@ player's point of view: **Allies** are the players allied *for victory* with it,
 players who are plain allies count as **Neutral Players**. A rescuable or neutral slot is
 in the game like anyone else, so it is counted in All Players, in its force and in every
 Most and Least comparison. The four **Unused** groups have no players behind them.
+
+**All Players** as a condition's or action's player means more than the players in the
+game. In a condition it also takes in Players 9 to 12, always, so Command(All Players, …)
+counts Player 12's units too. In actions that act on units, such as Kill Unit, Give Units
+to Player or Modify Unit Hit Points, it reaches Players 9 to 12's units as well. Create
+Unit, Set Deaths, Set Resources and Set Score do nothing for Players 9 to 12, whether they
+are named or reached through All Players, except Set Deaths in Remastered's [EUD
+mode](#eud). As a trigger's owner, All Players is only the players in the game.
 
 **None** is no player. As a condition's player it reads somewhere unexpected, and a player
 value past this table reads outside the game's tables; see [EUD](#eud).
@@ -2422,8 +2506,19 @@ unit, for any player and unit number.
 In 1.16.1 this works for reading only. [Set Deaths](#set-deaths), [Set
 Resources](#set-resources) and [Set Score](#set-score) write nothing for a player above
 Player 8, and Set Deaths writes nothing for a unit number above 232, so 1.16.1 has no EUD
-writes. StarCraft: Remastered has EUD support of its own, which this page does not
-describe.
+writes.
+
+StarCraft: Remastered has an EUD mode of its own. When it loads a map it looks through the
+triggers, disabled ones included, for a Deaths condition or a Set Deaths action whose
+player value is above 26 or is 12 (None), or whose unit number is above 232. One is enough
+to turn the mode on for the whole map, and a Deaths condition with None as its player
+counts. (Read in Remastered's code.)
+
+In EUD mode, EUD conditions and Set Deaths use the addresses they would in 1.16.1, for the
+parts of the game's memory Remastered allows, and Set Deaths also writes Players 9 to 12's
+death counts. This is what EUD maps for Remastered, and the editor's TrigScript and
+Magenta plugins, are built on. In a map with no EUD trigger, Set Deaths writes nothing for
+Players 9 to 12, as in 1.16.1. (Found playing Remastered.)
 
 **None** as a condition's player does not check anything: it reads the cell after Player
 12's, which is Player 1's count of the *next* unit type. Deaths(None, unit 7) is Player

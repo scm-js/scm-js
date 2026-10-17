@@ -17,7 +17,7 @@
 <text x="558" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">unit type</text>
 <rect x="617.33" y="62" width="117.17" height="34" fill="#23324a" stroke="#4b5363"/>
 <text x="619.33" y="57" font-size="10" fill="#9aa3b2" text-anchor="start">10</text>
-<text x="676.67" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">relations</text>
+<text x="676.67" y="83" font-size="11" fill="#e6e8ee" text-anchor="middle">link flags</text>
 <rect x="24" y="118" width="117.17" height="34" fill="#35294a" stroke="#4b5363"/>
 <text x="26" y="113" font-size="10" fill="#9aa3b2" text-anchor="start">12</text>
 <text x="83.33" y="139" font-size="11" fill="#e6e8ee" text-anchor="middle">states set</text>

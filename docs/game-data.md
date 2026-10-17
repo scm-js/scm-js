@@ -301,9 +301,13 @@ see [ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
 Each tileset is five files. A tile id in the map file leads through them to pixels:
 
 ```
-MTXM tile id ──(id >> 4)──▶ CV5 group ──(id & 15)──▶ VX4 megatile
+MTXM tile id ──(bits 4–14)──▶ CV5 group ──(bits 0–3)──▶ VX4 megatile
 VX4 megatile ──▶ 16 minitile refs (bit 0 = flipped) ──▶ VR4 8×8 bitmaps ──▶ WPE palette
 ```
+
+Bit 15 of a tile id is not part of the tile. The game files it as a creep flag, but a tile
+with it set plays as the plain tile: no creep shows and no Zerg building can go there. The
+editor draws such a tile as the tile the other bits name.
 
 A tile is a 32×32 megatile made of sixteen 8×8 minitiles, each an index into the tileset's
 256-colour palette. The CV5 groups megatiles into terrain types with their variations and

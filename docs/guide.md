@@ -582,18 +582,20 @@ the four forces. A trigger ticked for nothing else never runs, so the other grou
 9–12, Current Player, Foes, Allies and the rest, which are arguments rather than owners)
 only show when a trigger already has one ticked, to be cleared.
 
-Every condition and action the game has is there. Each argument gets a widget of its kind
-— a player pick, a unit type list, a location list, a number, a text box with the colour
-codes — and any value the lists do not include can still be typed as a raw number, which
-is how EUD values and unusual unit ids get in. An item can be disabled without deleting
-it; a disabled one is kept in the file and skipped by the game. *Preserve trigger* is the
-flag that keeps a trigger firing more than once.
+Every condition and action the game has is there, except that *Mission Briefing* is
+offered only in briefings, since in a trigger it is never true. Each argument gets a
+widget of its kind — a player pick, a unit type list, a location list, a number, a text
+box with the colour codes — and any value the lists do not include can still be typed as a
+raw number, which is how EUD values and unusual unit ids get in. An item can be disabled
+without deleting it; a disabled one is kept in the file and skipped by the game. *Preserve
+trigger* is the flag that keeps a trigger firing more than once.
 
 A new *Create Unit*, *Create Unit with Properties* or *Set Deaths* starts on Terran Marine
 rather than *Any unit*: the game creates nothing for a unit class, and Set Deaths on *Any
-unit* writes nothing. The unit list of the two Create Unit actions holds only what the
-game will create, the units of StarEdit's palette; larvae, eggs, traps, doors and the like
-are left out, because the game refuses them.
+unit* writes nothing. A Create Unit amount of 0 makes one unit, where elsewhere 0 means
+all of them. The unit list of the two Create Unit actions holds only what the game will
+create, the units of StarEdit's palette; larvae, eggs, traps, doors and the like are left
+out, because the game refuses them.
 
 ### The Text Trigger Editor
 
@@ -702,11 +704,20 @@ race, colour and force.
 victory, shared vision, allies and random start locations.
 
 **Player Colors** picks each slot's palette colour and, for Remastered, a custom RGB,
-random, or the player's own choice; the map repaints as you change them. Remastered reads
-these settings in a map of any revision. Only the first twelve colours work as a palette
-colour in the game: for the rest older versions show a wrong colour and Remastered the
-player's usual one, and Tools ▸ Check Map says so. In Remastered, a custom RGB gives the
-player any colour, those ten included.
+random, or the player's own choice; the map repaints as you change them. What the game
+shows depends on the map's revision:
+
+- **Brood War and Remastered 1.21+**: the game reads the palette colours. Only the first
+  twelve work as a palette colour: for the rest StarCraft 1.16.1 shows a wrong colour and
+  Remastered the player's usual one, and Tools ▸ Check Map says so.
+- **StarCraft 1.00, Hybrid and Remastered without Brood War**: StarCraft 1.16.1 shows
+  every player in their slot's usual colour, whatever the map says. Remastered takes the
+  colours from its own colour table, which the editor writes whenever a colour is not the
+  slot's own.
+
+In Remastered, a custom RGB gives the player any colour, those ten included. Random and
+the player's own choice both show as Random in the lobby, the player's choice as a list
+the player can change, and a player left on Random gets a different colour each game.
 
 ![Player Colors](images/player-colors.webp)
 
@@ -745,7 +756,10 @@ The previews follow Remastered's rule, where a colour set on one line carries on
 next. StarCraft 1.16.1 reset the colour at every line break, so an older map's text can
 show in colours its author did not choose. The *1.16.1 colours* tick (also in Preferences
 ▸ View) switches every preview to the old rule, and the Repair plugin offers to write the
-resets the old game supplied.
+resets the old game supplied. Two codes do something you might not expect, in both games:
+`<01>` goes back to the colour before the last change rather than to the default, and once
+the text is grey (`<05>`) the game ignores every later colour code in the string. The
+previews follow both.
 
 **File ▸ Export ▸ Strings (.txt)…** writes every string to a numbered text file, and
 **File ▸ Import ▸ Strings (.txt)…** reads such a file back, replacing the strings by
@@ -768,7 +782,9 @@ play, remove, and adopt files the archive carries but the list does not. Import 
 file the browser can decode (MP3, FLAC, AAC, Ogg, WAV in any encoding) and writes it as a
 WAV in the format picked next to the button. The default, 22050 Hz 16-bit mono, is what
 the game's own sounds are; the smaller presets are for maps near the size limit. A *Play
-WAV* action then names the file.
+WAV* action then names the file. Some maps made for Remastered carry Ogg sounds instead;
+Remastered plays them in a map of any revision, while StarCraft 1.16.1 stays silent, and
+Check Map points them out.
 
 A trigger can also play one of the game's own sounds, a unit's voice or an interface
 click, without the file being in the map. In the Trigger Editor, **Browse…** beside a WAV
@@ -795,7 +811,8 @@ triggers is judged as a melee map and one with triggers as a scenario, since tha
 each is played.
 
 - **The file:** missing sections, and any section whose length the game does not accept,
-  with what the player would see (*Invalid Scenario*, a game that stops as it starts, a
+  with what the player would see (*Invalid Scenario* in the map list, *Error loading
+  scenario file* as a game starts, in every game type or only in Use Map Settings, a
   briefing that does not play); a revision the game does not know; a map side longer than
   256; a Brood War tileset on a revision without Brood War, and an Installation map with
   no triggers, which the game plays only as Use Map Settings. A verification table
@@ -804,24 +821,34 @@ each is played.
 - **Players and start locations:** a player without a start location, which eliminates
   them at once in melee and only moves the opening view in a scenario; several start
   locations for one player (the game uses the last); start locations for Players 9–12;
-  player colours on a revision that does not read them.
+  player colours on a StarCraft 1.00 or Hybrid map, which StarCraft 1.16.1 does not show,
+  and colours past the twelve the game takes from the palette.
 - **Units the game leaves out:** in a scenario, the placed units of a player whose race is
   User Selectable (the game removes them and hands out melee start units instead) and of a
   slot that is not in the game; in melee, everything but start locations and Player 12's
   resources and critters; ground units standing where they cannot walk; resource amounts
   past 65,535, which the game keeps as 16 bits; more than 1700 units, or units off the
   map.
-- **Text:** a string table past STR's 64 KB of offsets (Save refuses it), names longer
-  than StarCraft 1.16.1 shows, UTF-8 text a 1.16.1 player sees garbled, a custom unit name
-  on a type that uses the default settings (the game ignores it).
+- **Text:** a string table past STR's 64 KB of offsets (Save refuses it), or a Remastered
+  string table in a revision that does not read it; a map name or force name longer than
+  the lobby shows (Remastered counts the name's bytes as UTF-8, where a Korean syllable
+  takes three), and a description longer than StarCraft 1.16.1 shows; UTF-8 text a 1.16.1
+  player sees garbled; a custom unit name on a type that uses the default settings (the
+  game ignores it).
 - **Triggers:** a missing or moved Anywhere location; locations that are unused or not set
   at all (a location action without one does nothing); strings that do not exist; unit and
   player values the game does not have; condition and action types it does not have, which
-  crash StarCraft 1.16.1; Create Unit, Set Resources and Set Score for Players 9–12, which
-  do nothing; a trigger ticked twice for one player, which runs twice; Mission Briefing in
-  a trigger, and a briefing that does not start with it; AI scripts a human player's
-  trigger cannot run; Play WAV actions with no file in the map; switches tested for Set
-  but never set.
+  crash StarCraft 1.16.1 (Remastered takes such a condition as false and skips such an
+  action); Create Unit, Set Resources and Set Score for Players 9–12, which do nothing; a
+  trigger ticked twice for one player, which runs twice; a trigger with flag 0x02, which
+  defeats every other player each time its actions run; Mission Briefing in a trigger, and
+  a briefing that does not start with it; AI scripts a human player's trigger cannot run;
+  Play WAV actions with no file in the map, and Ogg sounds, which only Remastered plays;
+  switches tested for Set but never set.
+- **Terrain:** tiles with bit 15 set, which the game files as a creep flag, though in play
+  such a tile shows no creep and takes no Zerg building; tiles from groups the tileset
+  does not have; tiles only Remastered's tilesets have; a missing or outdated isometric
+  record.
 
 A map with triggers gets three more checks:
 

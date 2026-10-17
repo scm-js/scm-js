@@ -12,6 +12,7 @@
  * game does, and a section length that is negative or runs past the end of the file
  * stops it; protected maps rely on both (see "Odd lengths" on the reference page).
  */
+import { GAME_NEVER, REMASTERED_ONLY } from "./chk-game.mjs";
 import { LAYOUTS } from "./chk-reference.mjs";
 import { ACTION_FIELDS, CONDITION_FIELDS } from "./trigger-reference.mjs";
 
@@ -198,6 +199,14 @@ function sectionType(spec, defs) {
   return { types: {}, type: { "doc-ref": doc, seq } };
 }
 
+/** Who reads a section, from what the game does (`chk-game.mjs`), as the reference's Read by row says. */
+function readBy(name) {
+  if (name === "TYPE") return "looked for by the game but never read.";
+  if (GAME_NEVER.includes(name)) return "read by editors only.";
+  if (REMASTERED_ONLY.includes(name)) return "read by StarCraft: Remastered only.";
+  return "read by the game.";
+}
+
 /** The whole description, as the text of a .ksy file. */
 export function chkKaitai(defs) {
   const sectionTypes = {};
@@ -205,7 +214,7 @@ export function chkKaitai(defs) {
   const cases = {};
   for (const spec of defs.SECTION_SPECS.values()) {
     const { types, type } = sectionType(spec, defs);
-    type.doc = plain(`${spec.name.trimEnd()}: ${spec.editorOnly ? "read by editors only." : "read by the game."}`);
+    type.doc = plain(`${spec.name.trimEnd()}: ${readBy(spec.name)}`);
     sectionTypes[typeName(spec.name)] = type;
     Object.assign(shared, types);
     cases[JSON.stringify(spec.name)] = typeName(spec.name);

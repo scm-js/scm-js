@@ -48,8 +48,15 @@ function bytes([offset, width]) {
   return width === 1 ? `byte ${offset}` : `${COUNT_WORDS[width]} ${offset}–${offset + width - 1}`;
 }
 
+/** The two actions that make units: their count of 0 makes one, and a unit class makes nothing. */
+const CREATES = new Set(["Create Unit", "Create Unit with Properties"]);
+
 /** What an argument of each kind takes, in a reader's words, linking to the table of its values. */
-function takes(arg) {
+function takes(arg, def) {
+  if (CREATES.has(def?.name)) {
+    if (arg.kind === "unit") return "a unit type a trigger can make; the [unit classes](#unit-classes) make nothing";
+    if (arg.kind === "count") return "a number of units, 1 to 255 (0 makes one)";
+  }
   switch (arg.kind) {
     case "player": return "a [player or group](#players-and-groups)";
     case "unit": return "a unit type, or one of the [unit classes](#unit-classes)";
@@ -92,7 +99,7 @@ function entryBlock(noun, def, fields) {
     lines.push("It takes no arguments.");
   } else {
     lines.push(`| Argument | Takes | Stored in the ${noun.toLowerCase()} |`, "| --- | --- | --- |");
-    for (const arg of def.args) lines.push(`| ${arg.label} | ${takes(arg)} | ${where(arg, fields)} |`);
+    for (const arg of def.args) lines.push(`| ${arg.label} | ${takes(arg, def)} | ${where(arg, fields)} |`);
   }
   return lines.join("\n");
 }

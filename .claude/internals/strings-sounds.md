@@ -97,6 +97,7 @@ Played in Remastered (2026-10-17, probes R1/R4/R4b/R5 in `Maps/Audit`):
 - Remastered DOES show Western Windows-1252 text as Korean when the string passes its test (probe R6,
   English client, 2026-10-17): "Ärger Don’t" → "훣ger Don뭪", "Größe" → "Gr秤e" in map list, lobby and
   game; "Défense España"/"café" as written. R5e looked like a refutation only because "é " fails the test.
-  The dump's table object had its try-Korean byte = 1. No Check Map warning yet (one was in #64's first
-  commit and taken out on the R5e misreading).
+  The dump's table object had its try-Korean byte = 1. Check Map warns again (`remasteredReadsAsKorean`
+  in formats/text/encoding.ts, restored from #64's first commit; the string-level test plus run-by-run
+  CP949 conversion, its pair table checked against Remastered's own).
 - `<01>` steps back one colour and grey `<05>` locks later codes — read from both games' code, not played.

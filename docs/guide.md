@@ -835,8 +835,8 @@ each is played.
   string table in a revision that does not read it; a map name or force name longer than
   the lobby shows (Remastered counts the name's bytes as UTF-8, where a Korean syllable
   takes three), and a description longer than StarCraft 1.16.1 shows; UTF-8 text a 1.16.1
-  player sees garbled; a custom unit name on a type that uses the default settings (the
-  game ignores it).
+  player sees garbled; Windows-1252 text Remastered shows as Korean; a custom unit name on
+  a type that uses the default settings (the game ignores it).
 - **Triggers:** a missing or moved Anywhere location; locations that are unused or not set
   at all (a location action without one does nothing); strings that do not exist; unit and
   player values the game does not have; condition and action types it does not have, which

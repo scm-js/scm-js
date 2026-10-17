@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  decodeText, decodesCleanly, detectTextEncoding, encodeText, TEXT_ENCODINGS, unencodable, type TextEncoding,
+  decodeText, decodesCleanly, detectTextEncoding, encodeText, remasteredReadsAsKorean, TEXT_ENCODINGS, unencodable, type TextEncoding,
 } from "../src/formats/text/encoding";
 import { decodeStrings, encodeStrings, unencodableStrings } from "../src/formats/chk/sections/strings";
 import { decodeTbl } from "../src/formats/dat/tbl";
@@ -192,5 +192,20 @@ describe("tbl encoding", () => {
     expect(decodeTbl(tbl(["Marine", "Zealot", "Café"], "windows-1252"))).toEqual(["Marine", "Zealot", "Café"]);
     expect(decodeTbl(tbl(["해병", "광전사"], "utf-8"))).toEqual(["해병", "광전사"]);
     expect(decodeTbl(tbl(["해병", "광전사"], "euc-kr"))).toEqual(["해병", "광전사"]);
+  });
+});
+
+describe("what Remastered reads as Korean", () => {
+  // The cases the Remastered decoder gave on its own tables; probe R6 played the first two lists' ends.
+  it("takes Western text for Korean when its accented letters pair up into Hangul", () => {
+    const korean = (text: string) => remasteredReadsAsKorean(encodeText(text, "windows-1252"));
+    for (const text of ["Ärger im Spiel", "Åland", "Ángel", "Don\u2019t", "Ärger Don\u2019t", "Größe"]) expect([text, korean(text)]).toEqual([text, true]);
+    for (const text of ["Défense España", "café", "café au lait", "naïve", "Señor", "Ça va", "plain", "Ärger Don\u2019t café España"]) expect([text, korean(text)]).toEqual([text, false]);
+    expect(remasteredReadsAsKorean(encodeText("Ärger", "utf-8"))).toBe(false);
+    const scn = createScenario({ width: 64, height: 64, era: 0, name: "Ärger im Spiel" });
+    setTextEncoding(scn, "windows-1252");
+    expect(validateScenario(scn).some((i) => i.text.startsWith("1 string reads as Korean in Remastered (the first: 'Ärger im Spiel')"))).toBe(true);
+    setTextEncoding(scn, "utf-8");
+    expect(validateScenario(scn).some((i) => i.text.includes("as Korean in Remastered"))).toBe(false);
   });
 });

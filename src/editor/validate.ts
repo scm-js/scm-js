@@ -27,7 +27,8 @@ import { TILE_PX } from "./units";
 import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
 import { gameAcceptsSize, gameReadSections, gameSizeRule, KNOWN_VERSIONS, vcodPasses, type GameRead, type SizeRule } from "../formats/chk/game";
 import { PlayerRace } from "../formats/chk/sections/players";
-import { encodeText } from "../formats/text/encoding";
+import { encodeText, remasteredReadsAsKorean } from "../formats/text/encoding";
+import { plainText } from "./textColors";
 import { TILESETS } from "../data/tilesets";
 import type { UnitsDat } from "../formats/dat/dat";
 import { TILE_CREEP_FLAG, tileGroupOf, type Tileset } from "../formats/tileset/decode";
@@ -300,6 +301,12 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   if (!remastered && scn.strings.encoding === "utf-8") {
     const wide = scn.strings.strings.filter((s) => s && [...s].some((c) => c.charCodeAt(0) > 0x7f)).length;
     if (wide > 0) add("info", t("{n, plural, one {# string is} other {# strings are}} written as UTF-8 with characters outside ASCII: Remastered reads them, StarCraft 1.16.1 shows other characters in their place.", { n: wide }), msg("Strings"), { kind: "dialog", id: "mapRevision" });
+  }
+  // Remastered reads a legacy string as Korean when its accented letters pair up into Hangul
+  // (probe R6: "Ärger Don’t" in Windows-1252 showed as Hangul in the map list, lobby and game).
+  if (scn.strings.encoding !== "utf-8" && scn.strings.encoding !== "euc-kr") {
+    const korean = scn.strings.strings.filter((s): s is string => !!s && remasteredReadsAsKorean(encodeText(s, scn.strings.encoding)));
+    if (korean.length > 0) add("warn", t("{n, plural, one {# string reads} other {# strings read}} as Korean in Remastered (the first: '{first}'): its accented letters pair up into Hangul characters, which Remastered takes for Korean text. UTF-8 avoids it, but StarCraft 1.16.1 shows UTF-8 garbled (Scenario ▸ Map Revision).", { n: korean.length, first: plainText(korean[0]).slice(0, 40) }), msg("Strings"), { kind: "dialog", id: "mapRevision" });
   }
   const lost = unencodableStrings(scn.strings);
   if (lost.length > 0) {

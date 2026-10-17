@@ -159,12 +159,13 @@ function layEntries(parts: ChkSection[], layout: EntryLayout): Uint8Array {
  * Returns null when the section is absent entirely.
  *
  * For "overlay", `size` gives the game's fixed buffer width; omitted, the buffer grows
- * to the longest occurrence.
+ * to the longest occurrence. The bytes no copy reaches are `fill`, what the game's buffer
+ * holds before the section is read.
  *
  * For "last" and "first", a copy shorter than `minimum` is passed over: the game does not
  * take it, so it neither counts nor replaces an earlier one. Null when no copy is long enough.
  */
-export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number, minimum = 0, entries?: EntryLayout): Uint8Array | null {
+export function combine(file: ChkFile, name: string, mode: CombineMode, size?: number, minimum = 0, entries?: EntryLayout, fill = 0): Uint8Array | null {
   let parts = sectionsNamed(file, name);
   if (mode === "last" || mode === "first") parts = parts.filter((p) => p.data.length >= minimum);
   if (parts.length === 0) return null;
@@ -186,7 +187,7 @@ export function combine(file: ChkFile, name: string, mode: CombineMode, size?: n
     }
     case "overlay": {
       const width = size ?? Math.max(...parts.map((p) => p.data.length));
-      const buf = new Uint8Array(width);
+      const buf = new Uint8Array(width).fill(fill);
       for (const part of parts) buf.set(part.data.subarray(0, width), 0);
       return buf;
     }

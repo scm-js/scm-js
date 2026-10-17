@@ -806,7 +806,7 @@ Layout:
 
 The terrain the game draws: one 16-bit tile number per tile, including the tiles of placed
 doodads. A tile number is a tile group of the tileset times 16 plus the tile's place in
-the group, 0 to 15.
+the group, 0 to 15. The top bit, 0x8000, is not part of the number: it is a creep flag.
 
 <!-- generated: section MTXM -->
 | Name | `MTXM` (4D 54 58 4D) |
@@ -829,8 +829,12 @@ and Use Map Settings both read it.
 ### What a tile number points at
 
 A tile number is a *tile group* and a *variation*: the group is the number divided by 16,
-and the variation the remainder. Tile 0x0132 is group 19, variation 2. The groups are the
-records of the tileset's CV5 file, 52 bytes each:
+and the variation the remainder. Tile 0x0132 is group 19, variation 2. The top bit takes
+no part in this: the game reads the group from the next eleven bits, so tile 0x8084 draws
+as tile 0x0084, and the bit marks the ground as creep, where Zerg can build. A group past
+the end of the tileset's table is drawn as plain ground (tile 0x0020) by Remastered, while
+StarCraft 1.16.1 reads past the end of the table. The groups are the records of the
+tileset's CV5 file, 52 bytes each:
 
 | Offset | Type | Holds |
 | --- | --- | --- |

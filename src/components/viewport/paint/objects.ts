@@ -5,7 +5,7 @@
  */
 import type { Scenario } from "../../../formats/chk/scenario";
 import { tilesetIndex } from "../../../formats/chk/scenario";
-import { SpriteFlag, UnitState, UnitUsed } from "../../../formats/chk/sections/objects";
+import { SpriteFlag, UnitState, UnitValid } from "../../../formats/chk/sections/objects";
 import { NO_UNIT } from "../../../formats/dat/dat";
 import type { LoadedTileset } from "../../../formats/tileset/load";
 import type { UnitAnimator, SpriteState } from "../../../formats/units/animate";
@@ -97,6 +97,8 @@ export function spritePainter(v: PaintView, scenario: Scenario | null, unitAsset
     if (!(flags & SpriteFlag.PureSprite)) return unit(spriteId, owner, px, py, alpha);
     const imageId = unitAssets.sprites.image[spriteId];
     if (imageId === undefined) return false;
+    // Frame 0 without the Init script, which is what flips a sprite in the game: StarEdit's
+    // 0x4000 bit, written where that script flips the overlay, stands in for it.
     const frame = getImageFrame(unitAssets, imageId, 0, (flags & SpriteFlag.Flipped) !== 0, teamOf(owner), palette, paletteKey);
     if (!frame) return false;
     const w = frame.width * zoom, h = frame.height * zoom;
@@ -176,8 +178,9 @@ export function drawObjects(
     const u = scenario.units[d.i];
     const ux = u.x * zoom - sx;
     const uy = u.y * zoom - sy;
-    // A cloaked unit is drawn faint, the way the game shows your own cloaked units.
-    const cloaked = (u.validStates & UnitUsed.State) !== 0 && (u.stateFlags & UnitState.Cloaked) !== 0;
+    // A cloaked unit is drawn faint, the way the game shows your own cloaked units. The game
+    // takes the state with its "valid" bit (the "state flags used" bit is never read).
+    const cloaked = (u.validProperties & UnitValid.Cloak) !== 0 && (u.stateFlags & UnitState.Cloaked) !== 0;
     const sprite = animated?.spriteFor(u);
     if (sprite && tilePx >= 8 && paint.animated(sprite, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;
     if (paint.unit(u.unitId, u.owner, ux, uy, cloaked ? 0.5 : 1)) continue;

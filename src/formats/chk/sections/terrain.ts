@@ -39,11 +39,12 @@ export function encodeIsom(isom: Uint16Array): Uint8Array {
 
 /** MASK is one byte per tile: bits 0-7 hide the tile from that player. */
 export function decodeMask(data: Uint8Array, width: number, height: number): Uint8Array {
-  const out = new Uint8Array(width * height);
+  // Tiles a short MASK does not reach start unexplored, as the game sets them before reading it.
+  const out = new Uint8Array(width * height).fill(0xff);
   out.set(data.subarray(0, Math.min(out.length, data.length)));
   return out;
 }
 
 /** Split an MTXM tile id into its CV5 group and the megatile slot within it. */
-export function tileGroup(id: number): number { return id >> 4; }
+export function tileGroup(id: number): number { return (id >> 4) & 0x7ff; }
 export function tileSubIndex(id: number): number { return id & 0xf; }

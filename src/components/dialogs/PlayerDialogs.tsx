@@ -212,6 +212,9 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
 
   return (
     <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{playerRgbFor(colors, rgb) ? " + CRGB" : ""}</span>}>
+      {scenario.fileVersion < 205 && (
+        <p className="hint" style={{ marginTop: 0 }}>{t("This map's revision does not read COLR: in StarCraft every player has their slot's usual colour. Brood War revisions read it.")}</p>
+      )}
       <div className="split" style={{ ["--split" as string]: "200px" }}>
         <Group title={t("Player")} flush>
           <ListBox

@@ -128,7 +128,7 @@ export const ACTION_DEFS: ActionDef[] = [
   { type: ActionType.RunAiScript, name: "Run AI Script", args: [a("aiScript", "target", "Script")] },
   { type: ActionType.RunAiScriptAt, name: "Run AI Script At Location", args: [a("aiScript", "target", "Script"), LOCATION] },
   { type: ActionType.SetAllianceStatus, name: "Set Alliance Status", args: [PLAYER, a("alliance", "unitId", "Status")] },
-  { type: ActionType.SetCountdownTimer, name: "Set Countdown Timer", args: [MODIFIER, a("duration", "time", "Seconds")] },
+  { type: ActionType.SetCountdownTimer, name: "Set Countdown Timer", args: [MODIFIER, a("number", "time", "Seconds")] },
   { type: ActionType.SetDeaths, name: "Set Deaths", args: [PLAYER, UNIT, MODIFIER, a("amount", "target", "Amount")] },
   { type: ActionType.SetDoodadState, name: "Set Doodad State", args: [PLAYER, UNIT, LOCATION, a("unitState", "modifier", "State")] },
   { type: ActionType.SetInvincibility, name: "Set Invincibility", args: [PLAYER, UNIT, LOCATION, a("unitState", "modifier", "State")] },

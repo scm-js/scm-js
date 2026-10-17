@@ -75,6 +75,7 @@ if (units && haveTileset) describe("terrain checks against the real tileset", ()
       makeUnit(units, marine, 0, 48, 48, 1), // tile 1,1
       makeUnit(units, marine, 0, 10 * 32 + 16, 48, 2), // tile 10,1
       makeUnit(units, overlord, 0, 48, 48, 3), // flyer over tile 1,1
+      makeUnit(units, cc, 0, 128, 48, 4), // building over tiles 2..5: the game keeps it on any ground
     ]));
     const changes = stampTile(map, [0, 1 * 16 + 1, 2 * 16 + 2], water);
     applyChanges(map, changes);

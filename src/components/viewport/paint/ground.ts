@@ -6,7 +6,7 @@
 import type { RemasteredEffects } from "../../../editor/preferences";
 import type { LoadedTileset } from "../../../formats/tileset/load";
 import { atlasSource, atlasTileSize } from "../../../formats/tileset/atlas";
-import { groupBuildable, groupHeight, megatileForTile, minitileHeight } from "../../../formats/tileset/decode";
+import { groupBuildable, megatileForTile, megatileHeight, minitileHeight, tileGroupOf } from "../../../formats/tileset/decode";
 import { HD_TILE_PX, hdSource, type HdEffects } from "../../../formats/tileset/hd";
 import type { EffectPass } from "../effectPass";
 import { hashNoise } from "../noise";
@@ -224,12 +224,12 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
             lc.fillRect(mx, my, px + Math.round(((col + 1) * pw) / 4) - mx, py + Math.round(((row + 1) * ph) / 4) - my);
           }
         } else {
-          const height = groupHeight(ts.groups[id >> 4] ?? ts.groups[0]);
+          const height = megatileHeight(ts, megatile);
           if (height > 0) { lc.fillStyle = height === 2 ? HIGH : MID; lc.fillRect(px, py, pw, ph); }
         }
       }
       if (g.buildability) {
-        const group = ts.groups[id >> 4];
+        const group = ts.groups[tileGroupOf(id)];
         if (group && !groupBuildable(group)) {
           lc.fillStyle = UNBUILDABLE;
           lc.fillRect(px, py, pw, ph);

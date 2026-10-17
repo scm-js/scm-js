@@ -350,8 +350,9 @@ not mirrored.
 
 ![The Symmetry dialog](images/symmetry.webp)
 
-The Terrain palette's *Remove stranded units* tick deletes the units a stroke has just
-made illegal (a building now half on a cliff) as part of the same undo step.
+The Terrain palette's *Remove stranded units* tick deletes the ground units a stroke has
+just left where they cannot walk, which the game would remove at the start, as part of the
+same undo step. Buildings stay where they are: the game makes them on any ground.
 
 ## Doodads
 
@@ -446,8 +447,10 @@ into a unit when the map loads, which is how StarEdit does Installation doors an
 
 The palette has a tab for each. Pure Sprites lists all 517 entries grouped as Units,
 Effects and Doodads, the last named after the graphics file since the game has no names
-for them. Placement is free: click anywhere, no rules to refuse a spot. The *Flipped* and
-*Disabled* ticks are the sprite flags.
+for them. Placement is free: click anywhere, no rules to refuse a spot. The *Disabled*
+tick is the sprite flag that starts a door or trap closed or switched off. Sprite
+Properties also shows the 0x4000 bit StarEdit writes on some doodad overlays; the game
+does not read it, and a sprite faces the way its own animation sets.
 
 Doodad overlays are ordinary sprites and can be selected here too. The Properties panel
 says which doodad one belongs to, and warns that moving it alone leaves the doodad's tiles
@@ -472,6 +475,13 @@ table.
 Double-click one for its name and exact bounds, and for the elevation ticks: a location
 applies only on the ticked elevations, which is how you keep a trigger from firing on the
 cliff above it. An amber stripe on a location's row marks one that excludes something.
+
+A location can be stored inverted, its right edge left of its left edge or its bottom
+above its top; some maps do this on purpose, and the bounds in Location Properties can set
+it. The game finds no units inside such a location, so Bring and the other conditions and
+actions that look for units there see nothing, while a unit created there still appears at
+its centre. The map draws an inverted location with a dashed edge, and dragging one of its
+handles makes it an ordinary location again.
 
 A map has a fixed number of location slots — 64 in StarCraft 1.00 maps, 255 in hybrid and
 Brood War ones. A new location takes the lowest free slot, deleting one empties it, and

@@ -130,7 +130,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
         <Field label={t("Owner")}>
           <div className="row">
             <Select value={String(form.owner)} onChange={(e) => set("owner", Number(e.target.value))} options={owners} />
-            <Check label={t("owner used")} title={t("Legacy 'owner is valid' bit; StarEdit leaves it clear")} checked={has("validStates", UnitUsed.Owner)} onChange={(e) => setBit("validStates", UnitUsed.Owner, e.target.checked)} />
+            <Check label={t("owner used")} title={t("The 'owner is valid' bit. StarEdit sets it on players' units; the game does not read it and always takes the owner.")} checked={has("validStates", UnitUsed.Owner)} onChange={(e) => setBit("validStates", UnitUsed.Owner, e.target.checked)} />
           </div>
         </Field>
         <Field label={t("Position")} hint={single ? t("Map pixels; buildings are normally tile-aligned by their placement box.") : t("Position is edited one unit at a time.")}>
@@ -168,8 +168,9 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
             ))}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Check label={t("State flags used")} title={t("Bit 6 of the 'properties used' mask: the state column above applies")} checked={has("validStates", UnitUsed.State)} onChange={(e) => setBit("validStates", UnitUsed.State, e.target.checked)} />
+            <Check label={t("State flags used")} title={t("Bit 6 of the 'properties used' mask. The game does not read it: each state applies when it and its Valid tick are set.")} checked={has("validStates", UnitUsed.State)} onChange={(e) => setBit("validStates", UnitUsed.State, e.target.checked)} />
           </div>
+          <p className="hint" style={{ marginTop: 6 }}>{t("A unit starts cloaked only if its owner has the cloaking tech, and burrowed only with Burrowing (Lurkers always can).")}</p>
           <div className="sep-h" style={{ margin: "8px 0" }} />
           <div className="form">
             <Field label={t("Related unit")} hint={t("Serial of the linked unit: an add-on's building, or the other Nydus Canal; 0 for none. The game links two units only when each names the other, so OK sets the other unit too.")}>
@@ -177,8 +178,8 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
             </Field>
             <Field label={t("Relation")}>
               <div className="col" style={{ gap: 2 }}>
-                <Check label={t("Nydus link")} checked={has("relationType", UnitRelation.NydusLink)} onChange={(e) => setBit("relationType", UnitRelation.NydusLink, e.target.checked)} />
-                <Check label={t("Add-on")} checked={has("relationType", UnitRelation.Addon)} onChange={(e) => setBit("relationType", UnitRelation.Addon, e.target.checked)} />
+                <Check label={t("Linked (0x200)")} title={t("StarEdit sets this on both units of a linked pair. The game does not read it; the related unit is what links them.")} checked={has("relationType", UnitRelation.NydusLink)} onChange={(e) => setBit("relationType", UnitRelation.NydusLink, e.target.checked)} />
+                <Check label={t("0x400")} title={t("Not seen in StarEdit's maps, and not read by the game.")} checked={has("relationType", UnitRelation.Addon)} onChange={(e) => setBit("relationType", UnitRelation.Addon, e.target.checked)} />
               </div>
             </Field>
           </div>
@@ -398,7 +399,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
       </div>
       <Group title={t("Flags")}>
         <div className="col" style={{ gap: 2 }}>
-          <Check label={t("Flipped (0x2000)")} title={t("Mirror the graphic left-to-right")} checked={has(SpriteFlag.Flipped)} onChange={(e) => setBit(SpriteFlag.Flipped, e.target.checked)} />
+          <Check label={t("Flipped (0x4000)")} title={t("StarEdit writes this bit for some doodad overlays. The game does not read it: a sprite faces the way its own animation sets.")} checked={has(SpriteFlag.Flipped)} onChange={(e) => setBit(SpriteFlag.Flipped, e.target.checked)} />
           <Check label={t("Disabled (0x8000)")} title={t("Unit sprites only: the unit starts inactive — a closed door, an unarmed trap")} checked={has(SpriteFlag.Disabled)} disabled={kind === "pure"} onChange={(e) => setBit(SpriteFlag.Disabled, e.target.checked)} />
         </div>
         <div className="form" style={{ marginTop: 8 }}>

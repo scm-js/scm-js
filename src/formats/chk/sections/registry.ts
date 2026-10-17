@@ -27,6 +27,8 @@ export interface SectionSpec {
   minimum?: number;
   /** The layout of a settings table, for the "entries" mode. */
   entries?: EntryLayout;
+  /** For "overlay": what the bytes no copy reaches hold in the game. 0 when not given. */
+  fill?: number;
   what: string;
   /**
    * Read by StarEdit and other editors only — the game skips it. Leaving one out of a
@@ -60,7 +62,8 @@ const SPECS: SectionSpec[] = [
   { name: "TILE", mode: "overlay", size: (d) => d.width * d.height * 2, what: msg("Terrain (StarEdit tiles)"), editorOnly: true },
   { name: "DD2 ", mode: "append", stride: 8, what: msg("Isometric doodads"), editorOnly: true },
   { name: "THG2", mode: "append", stride: 10, what: msg("Sprites") },
-  { name: "MASK", mode: "overlay", size: (d) => d.width * d.height, what: msg("Fog of war") },
+  // The game sets every tile unexplored before it reads MASK, so a short one leaves the rest fogged.
+  { name: "MASK", mode: "overlay", size: (d) => d.width * d.height, fill: 0xff, what: msg("Fog of war") },
   // Measured in Remastered: a 1-byte copy after the real table is passed over, a 2-byte one
   // (no strings) is taken and leaves every string missing. 1.16.1 takes any copy; the
   // editor follows Remastered here, the game most maps are played in.

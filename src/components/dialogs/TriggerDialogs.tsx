@@ -184,7 +184,8 @@ function ArgWidget({ kind, value, onChange, names, scenario, unit, creates }: Ar
       return (
         <span className="row" style={{ gap: 6 }}>
           <NumberInput value={value} onChange={onChange} min={0} max={255} width={90} />
-          <span className="hint">{value === 0 ? "all" : ""}</span>
+          {/* Create Unit makes one for 0; everywhere else 0 means every unit. */}
+          <span className="hint">{value === 0 ? (creates ? t("one") : t("all")) : ""}</span>
         </span>
       );
     case "number": case "amount": case "duration": case "percent": case "slot":
@@ -238,7 +239,8 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
   scenario: Scenario;
 }) {
   const [sel, setSel] = useState<number | null>(items.length ? 0 : null);
-  const defs = kind === "condition" ? CONDITION_DEFS : briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS;
+  // Mission Briefing belongs to briefings; in a trigger it is never true, so it is not offered there.
+  const defs = kind === "condition" ? CONDITION_DEFS.filter((d) => d.type !== ConditionType.Briefing) : briefing ? BRIEFING_ACTION_DEFS : ACTION_DEFS;
   const [addType, setAddType] = useState(defs[0].type);
   const max = kind === "condition" ? MAX_CONDITIONS : MAX_ACTIONS;
   const cur = sel !== null ? items[sel] : undefined;
@@ -310,7 +312,7 @@ function ItemList<R extends ConditionRecord | ActionRecord>({ items, setItems, k
               style={{ width: 240 }}
               value={String(cur.type)}
               onChange={(e) => replace(sel, (kind === "condition" ? newCondition(Number(e.target.value)) : newAction(Number(e.target.value), briefing)) as R)}
-              options={[...defs.map((d) => ({ value: String(d.type), label: d.name })), ...(defOf(cur) ? [] : [{ value: String(cur.type), label: t("{type} (raw)", { type: cur.type }) }])]}
+              options={[...defs.map((d) => ({ value: String(d.type), label: d.name })), ...(defs.some((d) => d.type === cur.type) ? [] : [{ value: String(cur.type), label: defOf(cur)?.name ?? t("{type} (raw)", { type: cur.type }) }])]}
             />
             <Check label={t("Disabled")} checked={(cur.flags & disabledBit) !== 0} onChange={(e) => replace(sel, { ...cur, flags: e.target.checked ? cur.flags | disabledBit : cur.flags & ~disabledBit })} />
           </div>

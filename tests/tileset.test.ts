@@ -6,8 +6,8 @@ import { TILESETS } from "../src/data/tilesets";
 import { ATLAS_PITCH, atlasCell, buildAtlasImageData, drawAnimationPixels, megatileAverages } from "../src/formats/tileset/atlas";
 import { CYCLE_BANDS, cycleBands, cycleLength, cyclePalette, cycleStepAt, cyclingMegatiles, CYCLE_STEP_MS } from "../src/formats/tileset/cycle";
 import {
-  decodeCv5, decodePalette, drawMegatile, loadTileset, megatileForTile,
-  MEGATILE_PX, minitileHeight, TileFlag, type Tileset,
+  decodeCv5, decodePalette, drawMegatile, loadTileset, megatileForTile, megatileHeight,
+  MEGATILE_PX, minitileHeight, TileFlag, tileGroupOf, type Tileset,
 } from "../src/formats/tileset/decode";
 import { baseTerrain, DIRT, flatTerrain } from "../src/formats/tileset/terrain";
 
@@ -88,6 +88,22 @@ describe("tileset decoding", () => {
     expect(megatileForTile(ts, 0x0000)).toBe(1); // group 0, slot 0
     expect(megatileForTile(ts, 0x0003)).toBe(0); // group 0, slot 3
     expect(megatileForTile(ts, 0x0010)).toBe(-1); // group 1 does not exist
+    // Bit 15 is the game's creep flag, not part of the group.
+    expect(megatileForTile(ts, 0x8000)).toBe(1);
+    expect(tileGroupOf(0x8132)).toBe(0x13);
+  });
+
+  it("takes a tile's height from its minitiles, as the game does", () => {
+    const ts = syntheticTileset();
+    const set = (megatile: number, high: number, mid: number) => {
+      for (let m = 0; m < 16; m++) ts.megatileFlags[megatile * 16 + m] = m < high ? TileFlag.HighGround : m < high + mid ? TileFlag.MidGround : 0;
+    };
+    set(1, 12, 0);
+    expect(megatileHeight(ts, 1)).toBe(2);
+    set(1, 11, 1);
+    expect(megatileHeight(ts, 1)).toBe(1);
+    set(1, 6, 5);
+    expect(megatileHeight(ts, 1)).toBe(0);
   });
 
   it("paints minitiles, honouring the horizontal flip bit", () => {

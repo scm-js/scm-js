@@ -71,3 +71,12 @@ listed tile follows undo), and the palette's `tools.blendAt(side, id)` is the on
 `placeBlend` on the neighbour cell, committed through `commitTerrain`, then the anchor moves onto it
 when `blendFollowAtom` is set. `tests/blend.test.ts` pins the edge extraction (including the minitile
 flip bit), ranking and placement against a synthetic tileset and the designed seams of the real ones.
+
+Tile values as the game reads them (2026-10-17 audit, PR 3): MTXM bit 15 is a creep flag — the
+group is `(id >> 4) & 0x7FF` (`tileGroupOf`, `TILE_CREEP_FLAG` in tileset/decode.ts; run T01:
+0x8084 draws as 0x84, flags 0x41FFFF). `megatileForTile`, `tileGroup`, placement, the overlays
+and `tileInfo` mask it; the ISOM/TILE editing code does not (it works on StarEdit's own tiles).
+Tile height for the far-zoom overlay and the panel is `megatileHeight` (VF4: ≥12 high → high, else
+high+mid ≥12 → mid); the CV5 height bits are masked off by the game (0xD8FA) and differ on 19–48%
+of megatiles. Check Map counts creep tiles (info) and groups past the CV5 (warn: Remastered draws
+tile 0x20, 1.16.1 reads past the table).

@@ -172,7 +172,11 @@ export const ActionFlag = {
 export const TriggerFlag = {
   /** Game bookkeeping: every condition was met this cycle. */
   ConditionsMet: 0x01,
-  /** Ignore Defeat / Draw for this trigger. */
+  /**
+   * Not what the name says: each time the trigger's actions run, the player counts as won
+   * without winning, so every other player in the game with no result is defeated, and a
+   * Defeat or Draw of this trigger stalls (docs/triggers.md). The name stays for plugins.
+   */
   IgnoreGameEnd: 0x02,
   /** Same as a Preserve Trigger action. */
   Preserve: 0x04,

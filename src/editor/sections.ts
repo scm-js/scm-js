@@ -114,7 +114,7 @@ export function sectionInfos(scn: Scenario, file: ChkFile = currentChk(scn)): Se
 export function combinedSection(scn: Scenario, name: string, file: ChkFile = currentChk(scn)): Uint8Array | null {
   const spec = specFor(name);
   const dim = { width: scn.width, height: scn.height };
-  return combine(file, name, spec?.mode ?? "last", spec ? sizeOf(spec, dim) : undefined, spec?.minimum, spec?.entries);
+  return combine(file, name, spec?.mode ?? "last", spec ? sizeOf(spec, dim) : undefined, spec?.minimum, spec?.entries, spec?.fill);
 }
 
 /* ── Raw edits ──────────────────────────────────────────── */

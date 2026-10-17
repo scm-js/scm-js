@@ -182,9 +182,20 @@ export function loadTileset(files: TilesetFiles): Tileset {
   };
 }
 
+/**
+ * Bit 15 of an MTXM value is a flag, not part of the tile: the game draws the tile the other
+ * bits name and treats the ground as creep, so Zerg can build there.
+ */
+export const TILE_CREEP_FLAG = 0x8000;
+
+/** The CV5 group an MTXM value names, as the game takes it: bit 15 left out. */
+export function tileGroupOf(tileId: number): number {
+  return (tileId >> 4) & 0x7ff;
+}
+
 /** Resolve an MTXM tile id to a VX4 megatile index, or -1 when the id is out of range. */
 export function megatileForTile(tileset: Tileset, tileId: number): number {
-  const group = tileset.groups[tileId >> 4];
+  const group = tileset.groups[tileGroupOf(tileId)];
   if (!group) return -1;
   const megatile = group.megatiles[tileId & 0xf];
   return megatile < tileset.megatileCount ? megatile : -1;
@@ -283,6 +294,22 @@ export const TileFlag = {
   BlocksView: 0x0008,
   Ramp: 0x0010,
 } as const;
+
+/**
+ * A megatile's ground height as the game takes it, from its 16 minitiles (the CV5 height
+ * bits are not read): high when at least 12 are high, else mid when high and mid together
+ * are at least 12, else low.
+ */
+export function megatileHeight(tileset: Tileset, megatile: number): 0 | 1 | 2 {
+  let high = 0, mid = 0;
+  for (let m = 0; m < 16; m++) {
+    const flags = tileset.megatileFlags[megatile * 16 + m] ?? 0;
+    if (flags & TileFlag.HighGround) high++;
+    else if (flags & TileFlag.MidGround) mid++;
+  }
+  if (high >= 12) return 2;
+  return high + mid >= 12 ? 1 : 0;
+}
 
 /** Ground height 0/1/2 for a minitile, as the elevation overlay draws it. */
 export function minitileHeight(tileset: Tileset, megatile: number, minitile: number): 0 | 1 | 2 {

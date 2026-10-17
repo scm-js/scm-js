@@ -29,7 +29,7 @@ import { PlayerRace } from "../formats/chk/sections/players";
 import { encodeText } from "../formats/text/encoding";
 import { TILESETS } from "../data/tilesets";
 import type { UnitsDat } from "../formats/dat/dat";
-import type { Tileset } from "../formats/tileset/decode";
+import { TILE_CREEP_FLAG, tileGroupOf, type Tileset } from "../formats/tileset/decode";
 import { terrainFits } from "./placement";
 import { isResource, unitGeometry } from "./units";
 
@@ -321,6 +321,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const target: IssueTarget | undefined = briefing ? { kind: "dialog", id: "missionBriefing" } : { kind: "trigger", index };
     const label = briefing ? `Briefing ${index + 1}` : `Trigger ${index + 1}`;
     if (trig.flags & TriggerFlag.Disabled) add("info", t("{label} is disabled.", { label }), where, target);
+    if (!briefing && (trig.flags & TriggerFlag.IgnoreGameEnd)) add("warn", t("{label} has flag 0x02 (Defeat Others): each time its actions run, every other player in the game without a result is defeated, and its own Defeat or Draw never takes effect.", { label }), where, target);
     const checkLocation = (value: number, what: string, condition = false) => {
       if (value === 0) {
         add("warn", condition
@@ -432,6 +433,19 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const pct = Math.round(((mismatched - inherent) / Math.max(1, rects)) * 100);
     add("warn", t("ISOM is behind the tiles on {pct}% of the map (the Repair plugin rebuilds it: Tools ▸ Repair Map…).", { pct }), msg("Terrain"));
   }
+
+  // Bit 15 of a tile is the game's creep flag; a group past the tileset's table is drawn as
+  // plain ground by Remastered and read past the table's end by 1.16.1.
+  let creep = 0, outside = 0, firstOutside = -1;
+  for (let i = 0; i < scn.tiles.length; i++) {
+    if (scn.tiles[i] & TILE_CREEP_FLAG) creep++;
+    if (ctx.tileset && tileGroupOf(scn.tiles[i]) >= ctx.tileset.groups.length && !isRemasteredOnlyTile(era, scn.tiles[i])) {
+      if (firstOutside < 0) firstOutside = i;
+      outside++;
+    }
+  }
+  if (creep > 0) add("info", t("{n, plural, one {# tile carries} other {# tiles carry}} the creep flag (bit 15): the game draws the tile the other bits name, and Zerg can build there.", { n: creep }), msg("Terrain"));
+  if (outside > 0) add("warn", t("{n, plural, one {# tile names a group} other {# tiles name groups}} this tileset does not have (the first at {x}, {y}): Remastered draws plain ground there, and StarCraft 1.16.1 reads past the end of its tileset table.", { n: outside, x: firstOutside % scn.width, y: Math.floor(firstOutside / scn.width) }), msg("Terrain"));
 
   // Tiles only Remastered has: doodads it added. Worth knowing rather than wrong — the map
   // plays in Remastered — but it is drawn only from Remastered's files, here and in the game.

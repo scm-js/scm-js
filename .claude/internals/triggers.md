@@ -204,3 +204,8 @@ Owners and units the game honours (2026-10-17 audit, T1/T3/T4; runs EA01–EA03)
   creating actions' unit list is filtered by it when unit assets are loaded (`peekUnitAssets`).
 - Remastered's Create Unit, read from its Ghidra project, applies the same rules (P9–12 refused,
   palette bit) — at odds with the earlier "P12 Overlord made in Remastered" probe; not played yet.
+- Flag 0x02 prints as "Defeat Others" (still reads "Ignore Game End"); `TriggerFlag.IgnoreGameEnd`
+  keeps its name for plugins. Check Map warns on it.
+- Set Countdown Timer's time is a plain number (seconds), not a ms duration. Mission Briefing is
+  not offered as a TRIG condition (never true there). A Create Unit count of 0 hints "one".
+- Not done: All Players in `triggerRefs` for conditions and unit actions should reach P9–12 (T18).

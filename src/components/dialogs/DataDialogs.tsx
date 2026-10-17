@@ -88,7 +88,7 @@ function raceOf(race: RaceKey | null): string {
   return race ? translate(RACE_LABEL[race]) : t("unused id");
 }
 
-const FRAMES_HINT = msg("Game frames: 15 per second on Fastest.");
+const FRAMES_HINT = msg("Game frames: about 24 per second on Fastest, 15 on Normal.");
 
 /* ── Unit Settings ──────────────────────────────────────── */
 
@@ -252,7 +252,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
                 {number(t("Hit points"), "hitPoints", defaults.hp, 0xffffff, undefined, t("Stored ×256; whole points are shown."))}
                 {number(t("Shield points"), "shields", defaults.shields, 0xffff)}
                 {number(t("Armor"), "armor", defaults.armor, 255)}
-                {number(t("Build time"), "buildTime", defaults.build, 0xffff, "frames", t("15 frames per second on Fastest."))}
+                {number(t("Build time"), "buildTime", defaults.build, 0xffff, "frames", t("About 24 frames per second on Fastest, 15 on Normal."))}
               </div>
             </Group>
             <Group title={t("Cost")}>

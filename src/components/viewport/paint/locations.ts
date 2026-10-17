@@ -25,7 +25,7 @@ function textWidth(ctx: CanvasRenderingContext2D, font: string, text: string): n
 
 /**
  * StarEdit's translucent plates with the name in the corner; overlaps stack darker, the
- * selection goes gold, the one under the pointer lights up. Anywhere (slot 63) is not in
+ * selection goes gold, the one under the pointer lights up, an inverted one is dashed. Anywhere (slot 63) is not in
  * the list — it is the whole map.
  */
 export function drawLocations(v: PaintView, locations: readonly ViewLocation[], opts: { selected: ReadonlySet<number>; hover: number; names: boolean }) {
@@ -47,7 +47,10 @@ export function drawLocations(v: PaintView, locations: readonly ViewLocation[], 
       ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
     }
     ctx.strokeStyle = sel ? INK.goldPale : hot ? INK.tealPale : "rgba(79,209,197,0.9)";
+    // A location stored inverted gets a dashed edge: the game finds no units inside it.
+    if (l.inverted) ctx.setLineDash([4, 3]);
     ctx.strokeRect(bx, by, Math.max(1, bw), Math.max(1, bh));
+    if (l.inverted) ctx.setLineDash([]);
     if (opts.names && tilePx >= 8) {
       const tw = textWidth(ctx, font, l.name);
       const plateH = fontPx + 5;

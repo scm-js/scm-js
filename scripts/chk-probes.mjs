@@ -356,8 +356,8 @@ probe("F04", "VCOD operation changed", "list", "The game checks VCOD and refuses
   "Is it refused? (The first operation byte is changed.)",
   () => sectionsOf(base("F04", "VCOD operation changed")).map((s) => (s.name === "VCOD" ? { ...s, data: Uint8Array.from(s.data, (b, i) => (i === 1024 ? (b + 1) % 8 : b)) } : s)));
 probe("F05", "text encodings", "list",
-  "Remastered reads STR as UTF-8 when the bytes are valid UTF-8, and in the local code page when they are not.",
-  "Name: \"CHK F05 UTF-8: é ü ß 한글\". Description: \"Latin-1: café naïve\". Note exactly how each shows: does the invalid description spoil the name (the whole table read one way) or only itself?",
+  "Remastered reads each string as UTF-8 when its bytes are valid UTF-8, else as Korean when they are valid Korean, else as Windows-1252.",
+  "Name: \"CHK F05 UTF-8: é ü ß 한글\". Description: \"Latin-1: café naïve\" (read as Windows-1252). Each string is read on its own, so the description does not spoil the name.",
   () => {
     const s = base("F05", "x");
     const list = sectionsOf(s);
@@ -397,10 +397,10 @@ function colours(id, version) {
     return sectionsOf(s);
   };
 }
-probe("F09", "CRGB (206)", "ums", "CRGB: a Custom mode colour replaces COLR; Palette mode uses COLR.",
-  "Player 1's units are magenta (Custom 255,0,255). Player 2's are white (Palette, COLR White).", colours("F09", "remastered"));
-probe("F10", "CRGB (205)", "ums", "The same in a VER 205 file: does Remastered read CRGB there?",
-  "Player 1 magenta or red? Player 2 white?", colours("F10", "broodwar"));
+probe("F09", "CRGB (206)", "ums", "CRGB: a Custom mode colour replaces COLR; a Palette slot keeps its COLR colour whatever its third byte says (0 here).",
+  "Player 1's units are magenta (Custom 255,0,255). Player 2's are white (COLR), not red.", colours("F09", "remastered"));
+probe("F10", "CRGB (205)", "ums", "The same in a VER 205 file: Remastered reads CRGB in every revision.",
+  "Player 1 magenta (CRGB read) or red? Player 2 white?", colours("F10", "broodwar"));
 probe("F11", "MASK bits", "ums", "MASK: bit 0 is Player 1; a set bit means the tile starts unexplored.",
   "The left half starts explored for you (you see the ground in grey fog), the right half black.",
   () => { const s = base("F11", "MASK bits"); for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) s.mask[y * W + x] = 0xfe; markDirty(s, "MASK"); return sectionsOf(s); });
@@ -450,6 +450,21 @@ probe("F15", "unit sprites", "ums",
       { spriteId: UNIT.marine, x: px(18), y: px(48), owner: 0, unused: 0, flags: SpriteFlag.Disabled },
     ];
     markDirty(s, "THG2");
+    return sectionsOf(s);
+  });
+
+const SUPPLY_DEPOT = 109;
+probe("F16", "CRGB and COLR disagree", "ums",
+  "When CRGB (Palette, colour in the third byte) and COLR give a player different colours, which one does Remastered show?",
+  "Three Supply Depots by your start, Players 1, 2 and 3 from left to right. Player 1's depot: blue (CRGB wins), teal (COLR wins) or pink (COLR re-shuffles the lobby colours: Player 1 takes Player 3's)? Player 2 should be orange and Player 3 pink either way.",
+  () => {
+    const s = base("F16", "CRGB and COLR");
+    setMapVersion(s, "remastered");
+    s.playerTypes[2] = PlayerType.Computer; s.editorPlayerTypes[2] = PlayerType.Computer; s.playerRaces[2] = PlayerRace.Protoss;
+    s.units.push(unit(UNIT.start, 2, 52, 52), unit(SUPPLY_DEPOT, 0, 10, 46), unit(SUPPLY_DEPOT, 1, 14, 46), unit(SUPPLY_DEPOT, 2, 18, 46));
+    s.playerColors = [2, 1, 2, 3, 4, 5, 6, 7]; // Player 1 Teal in COLR; 2 and 3 on their own slots, which COLR leaves alone
+    s.playerRgb = { rgb: Array.from({ length: 8 }, (_, i) => [0, 0, [1, 4, 16][i] ?? i]), mode: Array.from({ length: 8 }, () => ColorMode.Palette) };
+    markDirty(s, "OWNR", "IOWN", "SIDE", "UNIT", "COLR", "CRGB");
     return sectionsOf(s);
   });
 

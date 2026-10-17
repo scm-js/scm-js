@@ -181,6 +181,7 @@ versions of the game can play the map:
 | StarCraft 1.00 | 59 | `RAWS` | `.scm` | every version of the game |
 | Hybrid 1.04 | 63 | `RAWS` | `.scm` | every version; carries both settings layouts |
 | Brood War 1.04 | 205 | `RAWB` | `.scx` | Brood War and Remastered |
+| Remastered 1.21+ without Brood War | 64 | `RAWS` | `.scm` | Remastered only, with `STRx` |
 | Remastered 1.21+ | 206 | `RAWB` | `.scx` | Remastered only, with `STRx` |
 
 What the revision changes in the file:

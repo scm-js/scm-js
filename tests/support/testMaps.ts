@@ -18,7 +18,7 @@ import { SpriteFlag, UnitState, UnitUsed, type UnitRecord } from "../../src/form
 import { ActionType, BriefingActionType, ConditionType, PlayerGroup } from "../../src/formats/chk/sections/triggers";
 import { CuwpField, CuwpState, CuwpValid } from "../../src/formats/chk/sections/cuwp";
 import { cloneUnitSettings } from "../../src/formats/chk/sections/settings";
-import { internString } from "../../src/editor/settings";
+import { applyPlayerColors, internString } from "../../src/editor/settings";
 import { applySounds, wavMemberName } from "../../src/editor/sounds";
 import { newAction, newCondition, newTrigger } from "../../src/editor/triggers";
 import { encodeWav } from "../../src/formats/wav";
@@ -225,8 +225,7 @@ function remastered(): TestMap {
   const rgb = defaultPlayerRgb();
   rgb.mode[0] = ColorMode.Custom;
   rgb.rgb[0] = [0x20, 0x90, 0xd0];
-  scn.playerRgb = rgb;
-  markDirty(scn, "CRGB");
+  applyPlayerColors(scn, scn.playerColors, rgb);
   setLocation(scn, 0, "시작", 6, 50, 16, 58);
   return { name: "remastered.scx", scenario: scn, extras: new Map(), compress: "zlib", encrypt: true, listfile: false };
 }

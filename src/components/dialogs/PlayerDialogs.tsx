@@ -4,9 +4,8 @@ import { ChevronLeft, ChevronRight, Palette, Shield, Users } from "lucide-react"
 import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { displayColorHex, hexToRgb, PLAYER_COLORS, PLAYER_RACES, PLAYER_TYPES, playerTypeLabel, rgbToHex } from "../../data/players";
-import { ColorMode, defaultPlayerRgb, ForceFlag, FORCE_SLOTS, PLAYER_SLOTS, type PlayerRgb } from "../../formats/chk/sections/players";
-import { MAP_VERSIONS, mapVersionOf } from "../../formats/chk/scenario";
-import { applyForceSettings, applyPlayerColors, applyPlayerSettings, readForceSettings, readPlayerSettings } from "../../editor/settings";
+import { ColorMode, defaultPlayerRgb, ForceFlag, FORCE_SLOTS, isPaletteMode, PLAYER_SLOTS, type PlayerRgb } from "../../formats/chk/sections/players";
+import { applyForceSettings, applyPlayerColors, applyPlayerSettings, CLASSIC_COLORS, playerRgbFor, readForceSettings, readPlayerSettings, withPaletteBytes } from "../../editor/settings";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { Button, Check, Group, ListBox, Select, TextInput } from "../ui";
 import { ColorTextField } from "../ui/ColorCodes";
@@ -158,7 +157,7 @@ export function ForceSettingsDialog({ entry }: DialogProps) {
 /* ── Player Colors ──────────────────────────────────────── */
 
 const COLOR_MODES: { mode: number; label: string; hint: string }[] = [
-  { mode: ColorMode.Palette, label: msg("Palette colour (COLR)"), hint: msg("The entry picked above — what every client reads") },
+  { mode: ColorMode.Palette, label: msg("Palette colour"), hint: msg("The colour picked above") },
   { mode: ColorMode.Random, label: msg("Random predefined"), hint: msg("Any entry from the table, chosen when the game starts") },
   { mode: ColorMode.PlayerChoice, label: msg("Player's choice"), hint: msg("Whatever the player set in the lobby") },
   { mode: ColorMode.Custom, label: msg("Custom RGB"), hint: msg("The exact colour below") },
@@ -166,14 +165,13 @@ const COLOR_MODES: { mode: number; label: string; hint: string }[] = [
 
 /** What the list says beside a slot: its palette name, or the CRGB mode that overrides it. */
 function slotLabel(colr: number, mode: number | undefined): string {
-  if (mode === undefined || mode === ColorMode.Palette) return PLAYER_COLORS[colr]?.name ?? `Colour ${colr}`;
+  if (isPaletteMode(mode)) return translate(PLAYER_COLORS[colr]?.name ?? `Colour ${colr}`);
   return translate(COLOR_MODES.find((m) => m.mode === mode)?.label ?? `Mode ${mode}`);
 }
 
 /**
- * COLR for every client, plus Remastered's CRGB when the map wants a colour the table
- * does not have. The CRGB section exists only while some slot needs it; setting every
- * slot back to its palette colour removes it again.
+ * COLR for every version, plus Remastered's CRGB while some slot is on a mode other than
+ * Palette (`applyPlayerColors` decides whether the section is written).
  */
 export function PlayerColorsDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
@@ -187,18 +185,17 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   const [hexText, setHexText] = useState<string | null>(null);
   if (!scenario || !form) return <NoMap entry={entry} title={t("Player Colors")} icon={<Palette size={14} />} />;
   const { colors, rgb } = form;
-  const setColors = (c: number[]) => setForm({ ...form, colors: c });
-  const setRgb = (r: PlayerRgb | null) => setForm({ ...form, rgb: r });
+  const setColors = (c: number[]) => setForm({ ...form, colors: c, rgb: rgb && withPaletteBytes(c, rgb) });
+  const setRgb = (r: PlayerRgb | null) => setForm({ ...form, rgb: r && withPaletteBytes(colors, r) });
 
-  const mode = rgb?.mode[sel] ?? ColorMode.Palette;
+  const mode = rgb && !isPaletteMode(rgb.mode[sel]) ? rgb.mode[sel] : ColorMode.Palette;
   const current = displayColorHex(colors, rgb, sel);
   const customHex = rgb ? rgbToHex(rgb.rgb[sel]) : PLAYER_COLORS[colors[sel]]?.hex ?? "#000000";
-  const version = mapVersionOf(scenario.fileVersion);
 
   const setMode = (m: number) => {
     const next = rgb ?? defaultPlayerRgb();
-    // Seed a fresh custom colour from the palette entry so the picker opens on something sensible.
-    const seed = m === ColorMode.Custom && next.rgb[sel].every((v) => v === 0) ? hexToRgb(PLAYER_COLORS[colors[sel]]?.hex ?? "#000000") ?? [0, 0, 0] : null;
+    // Coming to Custom from another mode, start the picker on the palette colour.
+    const seed = m === ColorMode.Custom && next.mode[sel] !== ColorMode.Custom ? hexToRgb(PLAYER_COLORS[colors[sel]]?.hex ?? "#000000") ?? [0, 0, 0] : null;
     setRgb({ rgb: next.rgb.map((c, i) => [...(i === sel && seed ? seed : c)] as [number, number, number]), mode: next.mode.map((v, i) => (i === sel ? m : v)) });
     setHexText(null);
   };
@@ -209,14 +206,12 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   };
   const pickPalette = (id: number) => setColors(colors.map((c, i) => (i === sel ? id : c)));
   const apply = () => {
-    // A CRGB that says "palette" for every slot adds nothing the file does not already say.
-    const wanted = rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? rgb : null;
-    applyPlayerColors(scenario, colors, wanted);
+    applyPlayerColors(scenario, colors, rgb);
     commit();
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{rgb && rgb.mode.some((m) => m !== ColorMode.Palette) ? " + CRGB" : ""}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{playerRgbFor(colors, rgb) ? " + CRGB" : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "200px" }}>
         <Group title={t("Player")} flush>
           <ListBox
@@ -237,8 +232,9 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
             <div className="row" style={{ marginTop: 10 }}>
               <span className="dim" style={{ fontSize: 11 }}>{t("Shown as:")}</span>
               <span className="swatch" style={{ background: current, width: 18, height: 18 }} />
-              <strong>{mode === ColorMode.Custom ? current : PLAYER_COLORS[colors[sel]]?.name ?? t("Colour {v}", { v: colors[sel] })}</strong>
+              <strong>{mode === ColorMode.Custom ? current : translate(PLAYER_COLORS[colors[sel]]?.name ?? "") || t("Colour {v}", { v: colors[sel] })}</strong>
             </div>
+            {isPaletteMode(mode) && colors[sel] >= CLASSIC_COLORS && <p className="hint" style={{ marginTop: 6 }}>{t("The game takes only the first twelve colours as a palette colour: older versions show a wrong colour for this one, and Remastered the player's usual colour. For Remastered, Custom RGB gives the player this colour.")}</p>}
           </Group>
           <Group title={t("Remastered (CRGB)")}>
             <div className="col" style={{ gap: 2 }}>
@@ -249,7 +245,7 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
               <TextInput className="mono" disabled={mode !== ColorMode.Custom} style={{ width: 90 }} value={hexText ?? customHex} onChange={(e) => { setHexText(e.target.value); setCustom(e.target.value); }} onBlur={() => setHexText(null)} />
             </div>
             <p className="hint" style={{ marginTop: 6 }}>
-              {version === "remastered" ? t("The map draws a custom colour with a ramp built from the RGB — an approximation of Remastered's shading.") : t("This map is {label}: older clients ignore CRGB and read COLR. Set the revision to Remastered in Map Revision for it to take effect.", { label: MAP_VERSIONS[version].label })}
+              {t("Remastered reads these settings in a map of any revision; older versions read only the palette colour. A custom colour is drawn with a ramp built from the RGB, close to Remastered's shading.")}
             </p>
           </Group>
         </div>

@@ -9,7 +9,7 @@ import {
   MAP_VERSIONS, mapVersionOf, markDirty, setMapVersion, setTextEncoding, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections,
   type MapVersion, type Scenario,
 } from "../formats/chk/scenario";
-import { ColorMode, FORCE_SLOTS, ForceFlag, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
+import { ColorMode, FORCE_SLOTS, ForceFlag, isPaletteMode, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
 import { getString, findString, setString } from "../formats/chk/sections/strings";
 import type { TextEncoding } from "../formats/text/encoding";
 import {
@@ -70,20 +70,41 @@ export function applyPlayerSettings(scn: Scenario, next: PlayerSettings) {
     markDirty(scn, "OWNR", "IOWN");
   }
   if (differs(scn.playerRaces, next.races)) { scn.playerRaces = next.races.slice(); markDirty(scn, "SIDE"); }
-  if (differs(scn.playerColors, next.colors)) { scn.playerColors = next.colors.slice(); markDirty(scn, "COLR"); }
+  if (differs(scn.playerColors, next.colors)) applyPlayerColors(scn, next.colors, scn.playerRgb);
   if (differs(scn.forces.playerForce, next.force)) { scn.forces.playerForce = next.force.slice(); markDirty(scn, "FORC"); }
 }
 
 /* ── Colours ─────────────────────────────────────────────── */
 
-/** COLR plus, when present, CRGB. A null `rgb` leaves the file without a CRGB section. */
+/** The colours COLR can give a player: older versions show a wrong one past them, and Remastered skips the value. */
+export const CLASSIC_COLORS = 12;
+
+/**
+ * `rgb` with every Palette slot's triple set to `[0, 0, colour]`. Remastered's loader takes
+ * that third byte as the slot's lobby colour, but in a game the player shows its COLR colour
+ * (probe R13, played 2026-10-17), so this only keeps the two from contradicting each other.
+ */
+export function withPaletteBytes(colors: readonly number[], rgb: PlayerRgb): PlayerRgb {
+  return {
+    rgb: rgb.rgb.map((c, i) => (isPaletteMode(rgb.mode[i]) ? [0, 0, colors[i] ?? i] : [...c]) as [number, number, number]),
+    mode: rgb.mode.map((m) => (isPaletteMode(m) ? ColorMode.Palette : m)),
+  };
+}
+
+/** The CRGB these colours need: none while every slot is on Palette, else `rgb` with the Palette slots' colours filled in. */
+export function playerRgbFor(colors: readonly number[], rgb: PlayerRgb | null): PlayerRgb | null {
+  return rgb !== null && rgb.mode.some((m) => !isPaletteMode(m)) ? withPaletteBytes(colors, rgb) : null;
+}
+
+/** COLR, and the CRGB it needs (`playerRgbFor`); `rgb` carries the Remastered modes, null for all Palette. */
 export function applyPlayerColors(scn: Scenario, colors: number[], rgb: PlayerRgb | null) {
   if (colors.some((v, i) => v !== scn.playerColors[i])) { scn.playerColors = colors.slice(); markDirty(scn, "COLR"); }
-  const same = rgb === null
+  const next = playerRgbFor(colors, rgb);
+  const same = next === null
     ? scn.playerRgb === null
-    : scn.playerRgb !== null && rgb.mode.every((m, i) => m === scn.playerRgb!.mode[i]) && rgb.rgb.every((c, i) => c.every((v, j) => v === scn.playerRgb!.rgb[i][j]));
+    : scn.playerRgb !== null && next.mode.every((m, i) => m === scn.playerRgb!.mode[i]) && next.rgb.every((c, i) => c.every((v, j) => v === scn.playerRgb!.rgb[i][j]));
   if (!same) {
-    scn.playerRgb = rgb ? { rgb: rgb.rgb.map((c) => [...c] as [number, number, number]), mode: rgb.mode.slice() } : null;
+    scn.playerRgb = next;
     markDirty(scn, "CRGB");
   }
 }
@@ -233,7 +254,7 @@ export function playerSlotViews(scn: Scenario): PlayerSlotView[] {
 export interface PlayerPatch {
   type?: number;
   race?: number;
-  /** COLR index 0–15 (playable slots). */
+  /** COLR index 0–11 (playable slots). Older versions show a wrong colour past 11, and Remastered skips it. */
   color?: number;
   /** A CRGB custom colour, or null to go back to the palette colour (playable slots). */
   rgb?: [number, number, number] | null;
@@ -245,6 +266,7 @@ export interface PlayerPatch {
 export function patchPlayer(scn: Scenario, slot: number, patch: PlayerPatch): string[] {
   const sections: string[] = [];
   if (slot < 0 || slot >= PLAYER_SLOTS) return sections;
+  const rgbBefore = JSON.stringify(scn.playerRgb);
   const next = readPlayerSettings(scn);
   if (patch.type !== undefined && patch.type !== next.types[slot]) { next.types[slot] = patch.type & 0xff; sections.push("OWNR", "IOWN"); }
   if (patch.race !== undefined && patch.race !== next.races[slot]) { next.races[slot] = patch.race & 0xff; sections.push("SIDE"); }
@@ -259,11 +281,9 @@ export function patchPlayer(scn: Scenario, slot: number, patch: PlayerPatch): st
       : { rgb: Array.from({ length: FORCE_SLOTS }, () => [0, 0, 0] as [number, number, number]), mode: Array.from({ length: FORCE_SLOTS }, () => ColorMode.Palette as number) };
     if (patch.rgb === null) rgb.mode[slot] = ColorMode.Palette;
     else { rgb.mode[slot] = ColorMode.Custom; rgb.rgb[slot] = [patch.rgb[0] & 0xff, patch.rgb[1] & 0xff, patch.rgb[2] & 0xff]; }
-    const allPalette = rgb.mode.every((m) => m === ColorMode.Palette);
-    const before = JSON.stringify(scn.playerRgb);
-    applyPlayerColors(scn, scn.playerColors, allPalette ? null : rgb);
-    if (JSON.stringify(scn.playerRgb) !== before) sections.push("CRGB");
+    applyPlayerColors(scn, scn.playerColors, rgb);
   }
+  if (JSON.stringify(scn.playerRgb) !== rgbBefore) sections.push("CRGB");
   return sections;
 }
 

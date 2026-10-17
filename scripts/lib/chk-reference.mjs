@@ -15,7 +15,7 @@
 import { createHash } from "node:crypto";
 import { fillBlocks } from "./generated-blocks.mjs";
 import { ISOM_EXAMPLE, ISOM_SHAPES, isomExampleValues } from "./chk-diagrams.mjs";
-import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_NEEDS, REMASTERED_ONLY, gameUse } from "./chk-game.mjs";
+import { COPY_RULES, GAME_COPIES, GAME_NEVER, GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_NEEDS, REMASTERED_ONLY, REMASTERED_SECTIONS, REMASTERED_VERSIONS, gameUse } from "./chk-game.mjs";
 
 const P = 12; // player slots
 const U = 228; // unit types
@@ -291,7 +291,7 @@ const STOPS = "stops at the start with *Error loading scenario file.*";
 /** Where the game reads a section, in a reader's words. */
 function gameReadText(name) {
   if (GAME_NEVER.includes(name)) return "Editors only. The game never reads it.";
-  if (REMASTERED_ONLY.includes(name)) return "StarCraft: Remastered only. 1.16.1 does not know it.";
+  if (REMASTERED_SECTIONS[name]) return REMASTERED_SECTIONS[name].readBy;
   if (name === "TYPE") return "No one. The game looks for it before every read but never reads what it holds.";
   if (name === "VER ") return "The game, first, before every read of the map: the revision decides which sections it reads next.";
   const u = readsOf(name);
@@ -308,7 +308,7 @@ function gameReadText(name) {
 
 /** Whether the game needs a section, and what the player sees without it. */
 function gameRequiredText(name) {
-  if (name === "STRx") return "In place of `STR ` on a Remastered map that uses it.";
+  if (REMASTERED_SECTIONS[name]) return REMASTERED_SECTIONS[name].required;
   if (GAME_NEVER.includes(name) || REMASTERED_ONLY.includes(name) || name === "TYPE") return "No.";
   const u = readsOf(name);
   if (u.list) return "Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played.";
@@ -323,6 +323,7 @@ function gameRequiredText(name) {
 
 /** The lengths the game accepts. */
 function gameSizeText(name, layout) {
+  if (REMASTERED_SECTIONS[name]) return REMASTERED_SECTIONS[name].accepts;
   const rule = GAME_SIZES[name];
   if (!rule) return null;
   if (rule.any) return "Any length.";
@@ -367,6 +368,7 @@ function sectionBlock(spec, defs) {
     `| Required | ${gameRequiredText(name)}${REMASTERED_NEEDS[name] ? ` ${REMASTERED_NEEDS[name]}` : ""} |`,
     ...(gameSizeText(name, layout) ? [`| The game accepts | ${gameSizeText(name, layout)} |`] : []),
     ...(GAME_COPIES[name] ? [`| More than one copy | ${COPY_RULES[GAME_COPIES[name]]} |`] : []),
+    ...(REMASTERED_SECTIONS[name] ? [`| More than one copy | ${REMASTERED_SECTIONS[name].copies} |`] : []),
     `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : "Kept as it is and written back unchanged."} |`,
   ];
   if (layout.rows) {
@@ -445,7 +447,10 @@ function sizesTable() {
 
 function revisionTable(defs) {
   const lines = ["| Revision | `VER` | `TYPE` | Extension |", "| --- | --- | --- | --- |"];
-  for (const v of Object.values(defs.MAP_VERSIONS)) lines.push(`| ${v.label} | ${v.ver} | \`${v.type}\` | \`.${v.extension}\` |`);
+  // The editor writes four revisions; Remastered also knows a fifth, 64, listed with its 206.
+  const remastered = new Set(REMASTERED_VERSIONS.map((v) => v.ver));
+  const known = [...Object.values(defs.MAP_VERSIONS).filter((v) => !remastered.has(v.ver)), ...REMASTERED_VERSIONS];
+  for (const v of known) lines.push(`| ${v.label} | ${v.ver} | \`${v.type}\` | \`.${v.extension}\` |`);
   return lines.join("\n");
 }
 

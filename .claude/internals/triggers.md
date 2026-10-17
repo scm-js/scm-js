@@ -143,7 +143,9 @@ players, group?, approximate?, address?, mask?, disabled? }` per thing a conditi
 Decisions worth keeping:
 
 - Player groups resolve more precisely than `playerSlotsOf` (which is deliberately conservative, all 12, because a
-  counter allocator must not collide): *All Players* = slots 0–7, *Force N* = FORC's members, *Current Player* = the
+  counter allocator must not collide): *All Players* = slots 0–11 in a record (conditions and unit actions reach
+  P9–12, measured `extended-players`), 0–7 as an owner and through Create Unit/CUWP/Set Deaths/Set Resources/Set
+  Score (`EIGHT_ONLY`, they refuse P9–12), *Force N* = FORC's members, *Current Player* = the
   owners. *Foes / Allies / Non Allied Victory* = 0–7 and *Neutral* = 0–11, flagged `approximate` — the game settles
   them at run time. Blizzard's melee Victory trigger is exactly this case (`tests/triggerRefs.test.ts`, Ice Floes).
 - Deaths: unit < 228 unmasked = a `deaths` cell; 228–232 unmasked = a class sum, reported as a `units` *read* (a
@@ -203,9 +205,12 @@ Owners and units the game honours (2026-10-17 audit, T1/T3/T4; runs EA01–EA03)
   0x02 (`PALETTE_AVAILABILITY`; 168 of 228 have it, measured on the real 1.16.1 too). The two
   creating actions' unit list is filtered by it when unit assets are loaded (`peekUnitAssets`).
 - Remastered's Create Unit, read from its Ghidra project, applies the same rules (P9–12 refused,
-  palette bit) — at odds with the earlier "P12 Overlord made in Remastered" probe; not played yet.
+  palette bit); probe R5b played it (no P12 Overlord), so the earlier "P12 Overlord" note was wrong.
 - Flag 0x02 prints as "Defeat Others" (still reads "Ignore Game End"); `TriggerFlag.IgnoreGameEnd`
   keeps its name for plugins. Check Map warns on it.
 - Set Countdown Timer's time is a plain number (seconds), not a ms duration. Mission Briefing is
   not offered as a TRIG condition (never true there). A Create Unit count of 0 hints "one".
-- Not done: All Players in `triggerRefs` for conditions and unit actions should reach P9–12 (T18).
+- The text format writes a Create Unit / CUWP count of 0 as `0`, not `All` (it makes one); `All` still parses to 0.
+- Check Map: Create Unit / CUWP of a class or a non-palette type (`triggerCanCreate`, needs units.dat for the
+  palette half); Run AI Script owned only by Human/Rescuable/Neutral slots outside `HUMAN_AI_SCRIPTS` (Neutral
+  also runs Rscu, ledger A15).

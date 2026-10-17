@@ -1478,8 +1478,9 @@ export interface TriggersApi {
   references(list?: readonly ReadonlyTrigger[], options?: { briefing?: boolean }): TriggerRefs[];
   /**
    * The 0-based player slots a player group names on the open map: a slot itself, the
-   * members of a force, players 1–8 for *All Players*, and for *Current Player* the slots
-   * of `owners` (the groups a trigger is ticked for). `approximate` when the group is only
+   * members of a force, players 1–12 for *All Players* (as conditions and the unit actions
+   * take it; as a trigger's owner it is players 1–8), and for *Current Player* the slots of
+   * `owners` (the groups a trigger is ticked for). `approximate` when the group is only
    * settled while the game runs (*Foes*, *Allies*, *Neutral Players*, *Non Allied Victory
    * Players*); `players` is then every slot it could name.
    */

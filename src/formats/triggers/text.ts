@@ -17,7 +17,7 @@
  * flags SCMDraft has no syntax for, and is omitted when there are none.
  */
 import {
-  ActionFlag, ConditionFlag, TriggerFlag, cloneTrigger, emptyAction, emptyCondition, emptyTrigger,
+  ActionFlag, ActionType, ConditionFlag, TriggerFlag, cloneTrigger, emptyAction, emptyCondition, emptyTrigger,
   type ActionRecord, type ConditionRecord, type TriggerRecord,
   type ReadonlyTrigger,
 } from "../chk/sections/triggers";
@@ -114,7 +114,9 @@ export function formatAction(a: ActionRecord, names: TriggerNames, briefing = fa
   const def = actionDef(a.type, briefing);
   const prefix = a.flags & ActionFlag.Disabled ? ";" : "";
   if (!def) return `${prefix}Action ${a.type}(${[a.location, a.text, a.wav, a.time, a.player, a.target, a.unitId, a.modifier].join(", ")});`;
-  const args = def.args.map((arg) => formatValue(arg.kind, argValue(a, arg), names));
+  // The two Create Unit actions make one unit for a count of 0, so it is not written as All.
+  const creates = a.type === ActionType.CreateUnit || a.type === ActionType.CreateUnitWithProperties;
+  const args = def.args.map((arg) => creates && arg.kind === "count" ? String(argValue(a, arg)) : formatValue(arg.kind, argValue(a, arg), names));
   return `${prefix}${def.name}(${args.join(", ")});`;
 }
 

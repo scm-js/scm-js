@@ -12,7 +12,8 @@ import { getString, stringTableOverflow, unencodableStrings } from "../formats/c
 import { textEncodingInfo } from "../formats/text/encoding";
 import { msg, t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, SwitchState, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
-import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, conditionDef } from "../data/triggerDefs";
+import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, conditionDef, UNIT_CLASS_CHOICES } from "../data/triggerDefs";
+import { CREATING_ACTIONS, triggerCanCreate } from "./triggers";
 import { isRemasteredOnlyTile } from "../data/remasteredTiles";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel } from "../data/units";
 import { PLAYER_COLORS } from "../data/players";
@@ -368,7 +369,10 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       }
     }
     const owners = triggerRunsFor(trig, scn);
-    const humanOnly = owners.size > 0 && [...owners].every((p) => scn.playerTypes[p] === PlayerType.Human || scn.playerTypes[p] === PlayerType.Rescuable);
+    // A computer runs any AI script. A person, a rescuable or a neutral slot runs only the few
+    // that act on a player, and a neutral slot Rscu as well.
+    const restricted = (p: number) => scn.playerTypes[p] === PlayerType.Human || scn.playerTypes[p] === PlayerType.Rescuable || scn.playerTypes[p] === PlayerType.Neutral;
+    const noOwnerRuns = (script: string) => owners.size > 0 && [...owners].every((p) => restricted(p) && !HUMAN_AI_SCRIPTS.has(script) && !(script === "Rscu" && scn.playerTypes[p] === PlayerType.Neutral));
     for (const a of trig.actions) {
       if (a.type === ActionType.None) break;
       if (a.flags & ActionFlag.Disabled) continue;
@@ -381,8 +385,14 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       if (!briefing && a.type === ActionType.ModifyResourceAmount && a.target > RESOURCE_LIMIT) {
         add("warn", t("{label}: {name} sets {amount}; the game keeps 16 bits, so it becomes {wrapped}.", { label, name: def.name, amount: a.target, wrapped: a.target & RESOURCE_LIMIT }), where, target);
       }
-      if (!briefing && humanOnly && (a.type === ActionType.RunAiScript || a.type === ActionType.RunAiScriptAt) && !HUMAN_AI_SCRIPTS.has(aiScriptId(a.target))) {
-        add("warn", t("{label}: {name} runs {script} for human or rescuable players only; for them the game runs just the few scripts that act on a player (EnBk, EnTr, ExTr, DWHe, PB3F, +Vi, -Vi), so this one does nothing.", { label, name: def.name, script: aiScriptId(a.target) }), where, target);
+      if (!briefing && (a.type === ActionType.RunAiScript || a.type === ActionType.RunAiScriptAt) && noOwnerRuns(aiScriptId(a.target))) {
+        add("warn", t("{label}: {name} runs {script} for human, rescuable or neutral players only; for them the game runs just the few scripts that act on a player (EnBk, EnTr, ExTr, DWHe, PB3F, +Vi, -Vi, and Rscu for a neutral slot), so this one does nothing.", { label, name: def.name, script: aiScriptId(a.target) }), where, target);
+      }
+      // The game creates only unit types, and only those StarEdit's palette offers.
+      if (!briefing && CREATING_ACTIONS.has(a.type)) {
+        const klass = UNIT_CLASS_CHOICES.find((c) => c.value === a.unitId);
+        if (klass) add("warn", t("{label}: {name} names a unit class, {unit}; the game creates nothing for a class.", { label, name: def.name, unit: translate(klass.label) }), where, target);
+        else if (a.unitId < UNIT_TYPE_COUNT && !triggerCanCreate(ctx.units ?? null, a.unitId)) add("warn", t("{label}: {name} creates {unit}, which the game does not make from a trigger (it creates only the types StarEdit's unit palette offers).", { label, name: def.name, unit: unitLabel(a.unitId) }), where, target);
       }
       for (const arg of def.args) {
         if (arg.kind === "location") checkLocation(a[arg.field], def.name);

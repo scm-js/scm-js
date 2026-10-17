@@ -10,7 +10,9 @@ import { parseScenario, serializeScenario, setMapVersion, setTextEncoding } from
 import { applyPlayerColors, changeMapVersion } from "../src/editor/settings";
 import { PlayerRace, PlayerType } from "../src/formats/chk/sections/players";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
-import { ActionType, ConditionType, PlayerGroup, SwitchState, TriggerFlag } from "../src/formats/chk/sections/triggers";
+import { ActionType, ConditionType, PlayerGroup, SwitchState, TriggerFlag, UnitClass } from "../src/formats/chk/sections/triggers";
+import { aiScriptCode } from "../src/data/triggerDefs";
+import { PALETTE_AVAILABILITY, type UnitsDat } from "../src/formats/dat/dat";
 import { START_LOCATION } from "../src/data/units";
 import { makeUnit } from "../src/editor/units";
 import { newAction, newCondition, newTrigger } from "../src/editor/triggers";
@@ -185,6 +187,28 @@ describe("triggers the game does not run as written", () => {
     expect(out).toContain("warn: Trigger 1: Create Unit does nothing for Player 12; the game takes only Players 1–8 there.");
     expect(out).toContain("warn: Trigger 1: Create Unit has no location, so it does nothing (a Transmission shows no text either).");
     expect(out).toContain("error: Trigger 1: action type 70 is not one the game has; StarCraft 1.16.1 crashes when the trigger reaches it.");
+  });
+
+  it("Create Unit of a class, or of a type off StarEdit's palette, makes nothing", () => {
+    const scn = scenario();
+    const men = { ...newAction(ActionType.CreateUnit), unitId: UnitClass.Men };
+    const larva = { ...newAction(ActionType.CreateUnit), unitId: 35 };
+    scn.triggers[0].actions.push(men, larva);
+    // Only the Marine (0) is on this palette.
+    const units = { availability: Array.from({ length: 228 }, (_, i) => (i === 0 ? PALETTE_AVAILABILITY : 0)) } as unknown as UnitsDat;
+    const out = validateScenario(scn, { units }).map((i) => `${i.level}: ${i.text}`);
+    expect(out).toContain("warn: Trigger 1: Create Unit names a unit class, Men; the game creates nothing for a class.");
+    expect(out.some((t) => t.startsWith("warn: Trigger 1: Create Unit creates Zerg Larva, which the game does not make from a trigger"))).toBe(true);
+  });
+
+  it("Run AI Script for a neutral slot runs only the player scripts and Rscu", () => {
+    const scn = scenario();
+    scn.playerTypes[0] = PlayerType.Neutral;
+    const run = (id: string) => ({ ...newAction(ActionType.RunAiScript), target: aiScriptCode(id) });
+    scn.triggers[0].actions.push(run("Rscu"), run("TMCu"));
+    const out = texts(scn).filter((t) => t.includes("Run AI Script runs"));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("runs TMCu for human, rescuable or neutral players only");
   });
 
   it("flag 0x02 defeats everyone else, and reads as Defeat Others", () => {

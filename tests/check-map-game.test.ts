@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import { createScenario } from "../src/formats/chk/create";
 import { gameReadSections, gameSizeRule, vcodHash, vcodPasses } from "../src/formats/chk/game";
 import { parseChk } from "../src/formats/chk/reader";
-import { parseScenario, serializeScenario, setMapVersion } from "../src/formats/chk/scenario";
+import { parseScenario, serializeScenario, setMapVersion, setTextEncoding } from "../src/formats/chk/scenario";
+import { applyPlayerColors, changeMapVersion } from "../src/editor/settings";
 import { PlayerRace, PlayerType } from "../src/formats/chk/sections/players";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
 import { ActionType, ConditionType, PlayerGroup, SwitchState, TriggerFlag } from "../src/formats/chk/sections/triggers";
@@ -113,12 +114,33 @@ describe("tiles and the fog", () => {
   it("notes creep-flagged tiles, and fills a short MASK with unexplored", () => {
     const scn = fresh();
     scn.tiles[5] |= 0x8000;
-    expect(has(scn, "info: 1 tile carries the creep flag (bit 15)")).toBe(true);
+    expect(has(scn, "info: 1 tile carries bit 15, which the game files as a creep flag")).toBe(true);
     const saved = parseScenario(serializeScenario(fresh()));
     const mask = saved.chk.sections.find((s) => s.name === "MASK")!;
     Object.assign(mask, { data: new Uint8Array(10), declaredSize: 10 });
     const again = parseScenario(serializeScenario(saved));
     expect([again.mask![0], again.mask![9], again.mask![10], again.mask![64 * 64 - 1]]).toEqual([0, 0, 0xff, 0xff]);
+  });
+});
+
+describe("what Remastered showed in play", () => {
+  it("carries colours in CRGB on a revision that reads no COLR (probe R3)", () => {
+    const scn = fresh();
+    applyPlayerColors(scn, [6, 5, 2, 3, 4, 5, 6, 7], null);
+    expect(scn.playerRgb).toBeNull(); // Brood War reads COLR
+    changeMapVersion(scn, "hybrid");
+    expect(scn.playerRgb?.mode.slice(0, 2)).toEqual([3, 3]);
+    expect(scn.playerRgb?.rgb.slice(0, 2)).toEqual([[0, 0, 6], [0, 0, 5]]);
+    expect(has(scn, "info: This revision does not read COLR: Remastered shows the player colours from CRGB")).toBe(true);
+    changeMapVersion(scn, "broodwar");
+    expect(scn.playerRgb).toBeNull();
+  });
+
+  it("counts the map name in UTF-8, as Remastered's lobby does (probe R4b)", () => {
+    const scn = fresh();
+    scn.strings.strings[scn.nameIndex] = "가나다라마바사아자차카";
+    setTextEncoding(scn, "euc-kr"); // 22 bytes in the file, 33 in UTF-8
+    expect(has(scn, "info: The map name is 33 bytes")).toBe(true);
   });
 });
 

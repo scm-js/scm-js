@@ -69,7 +69,7 @@ const MELEE_KEPT = new Set([176, 177, 178, 188, 89, 90, 93, 94, 95, 96]);
 const CREATED_SLOT_TYPES = new Set([1, 2, 3, 4, 5, 6, 7]);
 /** Resource amounts, CUWP resources and Modify Unit Resource Amount are kept as 16 bits. */
 const RESOURCE_LIMIT = 0xffff;
-/** What StarCraft 1.16.1 shows of the map name, description and a force name, in bytes. */
+/** What the game shows of the map name (lobby), description (1.16.1 only) and a force name, in bytes. */
 const NAME_BYTES = 31, DESCRIPTION_BYTES = 255, FORCE_NAME_BYTES = 29;
 /** The scripts Run AI Script runs for a human or rescuable owner; a computer runs any. */
 /** Actions the game refuses for Players 9–12 and None. */
@@ -181,10 +181,14 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   }
   // COLR holds twelve colours: older versions show a wrong one past them, and Remastered skips
   // the value (docs/chk-format.md, COLR). A slot on a Remastered colour mode does not use it.
-  // Only a Brood War revision (205, 206) reads COLR at all.
+  // Only a Brood War revision (205, 206) reads COLR; in an older one Remastered takes the
+  // colours from CRGB, a Palette slot's from its third byte (probe R3), and 1.16.1 from nowhere.
   const colorName = (c: number) => translate(PLAYER_COLORS[c]?.name ?? "") || String(c);
   if (scn.fileVersion < 205 && scn.playerColors.some((c, p) => c !== p)) {
-    add("info", t("This revision does not read the player colours (COLR): in the game every player has their slot's usual colour."), msg("Players"), { kind: "dialog", id: "playerColors" });
+    const carried = scn.playerRgb !== null && scn.playerColors.every((c, p) => !isPaletteMode(scn.playerRgb!.mode[p]) || scn.playerRgb!.rgb[p][2] === c);
+    add("info", carried
+      ? t("This revision does not read COLR: Remastered shows the player colours from CRGB, and StarCraft 1.16.1 shows every player in their slot's usual colour.")
+      : t("This revision does not read COLR, and the map's CRGB does not carry these colours, so the game shows every player in their slot's usual colour. OK in Player Colors writes CRGB, which Remastered reads."), msg("Players"), { kind: "dialog", id: "playerColors" });
   }
   for (let p = 0; p < FORCE_SLOTS && scn.fileVersion >= 205; p++) {
     if (scn.playerTypes[p] !== PlayerType.Human && scn.playerTypes[p] !== PlayerType.Computer) continue;
@@ -282,10 +286,14 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   if (unreachable > 0) add("error", strOverflowText(unreachable), msg("Strings"), { kind: "dialog", id: "stringEditor" });
   // StarCraft 1.16.1 shows only so many bytes of the names (colour codes count).
   const bytesOf = (index: number) => { const s = getString(scn.strings, index); return s ? encodeText(s, scn.strings.encoding).length : 0; };
-  if (bytesOf(scn.nameIndex) > NAME_BYTES) add("info", t("The map name is {n} bytes; StarCraft 1.16.1 shows only the first {max}.", { n: bytesOf(scn.nameIndex), max: NAME_BYTES }), msg("Strings"), { kind: "dialog", id: "mapProperties" });
-  if (bytesOf(scn.descriptionIndex) > DESCRIPTION_BYTES) add("info", t("The map description is {n} bytes; StarCraft 1.16.1 shows only the first {max}.", { n: bytesOf(scn.descriptionIndex), max: DESCRIPTION_BYTES }), msg("Strings"), { kind: "dialog", id: "mapProperties" });
+  // The lobby and the game keep 31 bytes of the name: 1.16.1 of the file's bytes, Remastered of
+  // the name as UTF-8 (probe R4b: 10 Korean syllables); the map list shows it all in Remastered.
+  const name = getString(scn.strings, scn.nameIndex) ?? "";
+  const nameBytes = Math.max(bytesOf(scn.nameIndex), encodeText(name, "utf-8").length);
+  if (nameBytes > NAME_BYTES) add("info", t("The map name is {n} bytes; the lobby and the game show only the first {max} (Remastered counts them in UTF-8, where a Korean syllable takes 3).", { n: nameBytes, max: NAME_BYTES }), msg("Strings"), { kind: "dialog", id: "mapProperties" });
+  if (bytesOf(scn.descriptionIndex) > DESCRIPTION_BYTES) add("info", t("The map description is {n} bytes; StarCraft 1.16.1 shows only the first {max}, Remastered all of it.", { n: bytesOf(scn.descriptionIndex), max: DESCRIPTION_BYTES }), msg("Strings"), { kind: "dialog", id: "mapProperties" });
   scn.forces.nameIndex.forEach((index, f) => {
-    if (bytesOf(index) > FORCE_NAME_BYTES) add("info", t("Force {v}'s name is {n} bytes; StarCraft 1.16.1 shows only the first {max}.", { v: f + 1, n: bytesOf(index), max: FORCE_NAME_BYTES }), msg("Strings"), { kind: "dialog", id: "forceSettings" });
+    if (bytesOf(index) > FORCE_NAME_BYTES) add("info", t("Force {v}'s name is {n} bytes; the game shows only the first {max}.", { v: f + 1, n: bytesOf(index), max: FORCE_NAME_BYTES }), msg("Strings"), { kind: "dialog", id: "forceSettings" });
   });
   // StarCraft 1.16.1 shows text byte by byte in the local code page; only Remastered reads UTF-8.
   if (!remastered && scn.strings.encoding === "utf-8") {
@@ -310,10 +318,11 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   });
 
   // ── Triggers ──
-  // A type past the game's tables: 1.16.1 calls past their end (a crash); Remastered runs
-  // whatever follows, which is no action at all or the wrong one.
+  // A type past the game's tables: 1.16.1 calls past their end (a crash); Remastered's walker
+  // bounds them, taking an unknown condition as false and skipping an unknown action.
   const unknownLevel: IssueLevel = remastered ? "warn" : "error";
-  const unknownText = remastered ? t("Remastered does something else in its place") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
+  const unknownCondition = remastered ? t("Remastered takes it as false, so the trigger does not run") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
+  const unknownAction = remastered ? t("Remastered skips it") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
   const tested = new Set<number>();
   const set = new Set<number>();
   const stringOk = (i: number) => i < scn.strings.strings.length;
@@ -348,7 +357,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       if (c.type === ConditionType.None) break;
       if (c.flags & ConditionFlag.Disabled) continue;
       const def = conditionDef(c.type);
-      if (!def) { add(unknownLevel, t("{label}: condition type {type} is not one the game has; {what}.", { label, type: c.type, what: unknownText }), where, target); continue; }
+      if (!def) { add(unknownLevel, t("{label}: condition type {type} is not one the game has; {what}.", { label, type: c.type, what: unknownCondition }), where, target); continue; }
       if (!briefing && c.type === ConditionType.Briefing) add("warn", t("{label}: Mission Briefing is never true in a trigger, so the trigger never runs.", { label }), where, target);
       for (const a of def.args) {
         if (a.kind === "location") checkLocation(c[a.field], def.name, true);
@@ -364,7 +373,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       if (a.type === ActionType.None) break;
       if (a.flags & ActionFlag.Disabled) continue;
       const def = actionDef(a.type, briefing);
-      if (!def) { add(unknownLevel, t("{label}: action type {type} is not one the game has; {what}.", { label, type: a.type, what: unknownText }), where, target); continue; }
+      if (!def) { add(unknownLevel, t("{label}: action type {type} is not one the game has; {what}.", { label, type: a.type, what: unknownAction }), where, target); continue; }
       // These refuse Players 9–12 (and None) in the game.
       if (!briefing && PLAYERS_1_TO_8_ONLY.has(a.type) && a.player >= PlayerGroup.Player9 && a.player <= PlayerGroup.None) {
         add("warn", t("{label}: {name} does nothing for {player}; the game takes only Players 1–8 there.", { label, name: def.name, player: a.player === PlayerGroup.None ? t("None") : t("Player {v}", { v: a.player + 1 }) }), where, target);
@@ -411,11 +420,11 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     }
     if (twice.length > 0 && !(trig.flags & TriggerFlag.Disabled)) add("warn", t("Trigger {v} is ticked more than once for {players} (a player and All Players, or a player and their force): each tick gives that player a copy, so the trigger runs twice.", { v: i + 1, players: twice.map((p) => t("Player {v}", { v: p })).join(", ") }), msg("Triggers"), { kind: "trigger", index: i });
   });
-  // An Ogg plays in Remastered only; an older revision's game skips it.
+  // Remastered plays an Ogg in a map of any revision (probe R1); StarCraft 1.16.1 plays only WAV.
   if (scn.wavs && !remastered) {
     scn.wavs.forEach((i, slot) => {
       const path = i > 0 ? getString(scn.strings, i) : null;
-      if (path && /\.ogg$/i.test(path)) add("warn", t("Sound {slot} is an Ogg ({path}); only Remastered plays those, and this map's revision is {label}.", { slot, path, label: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label }), msg("Sounds"), { kind: "dialog", id: "soundEditor" });
+      if (path && /\.ogg$/i.test(path)) add("info", t("Sound {slot} is an Ogg ({path}): Remastered plays it, StarCraft 1.16.1 stays silent.", { slot, path }), msg("Sounds"), { kind: "dialog", id: "soundEditor" });
     });
   }
   scn.briefing.forEach((trig, i) => checkTrigger(trig, i, msg("Briefing"), true));
@@ -444,7 +453,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       outside++;
     }
   }
-  if (creep > 0) add("info", t("{n, plural, one {# tile carries} other {# tiles carry}} the creep flag (bit 15): the game draws the tile the other bits name, and Zerg can build there.", { n: creep }), msg("Terrain"));
+  if (creep > 0) add("info", t("{n, plural, one {# tile carries} other {# tiles carry}} bit 15, which the game files as a creep flag: it draws the tile the other bits name, and in play the flag shows no creep and lets no Zerg building go there.", { n: creep }), msg("Terrain"));
   if (outside > 0) add("warn", t("{n, plural, one {# tile names a group} other {# tiles name groups}} this tileset does not have (the first at {x}, {y}): Remastered draws plain ground there, and StarCraft 1.16.1 reads past the end of its tileset table.", { n: outside, x: firstOutside % scn.width, y: Math.floor(firstOutside / scn.width) }), msg("Terrain"));
 
   // Tiles only Remastered has: doodads it added. Worth knowing rather than wrong — the map

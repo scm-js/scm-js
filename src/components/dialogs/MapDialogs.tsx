@@ -7,7 +7,8 @@ import { ensureTileset, TILESET_FILENAMES } from "../../formats/tileset/load";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
 import { useTileset } from "../../hooks/useTileset";
-import { isRemasteredRevision, MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, setTextEncoding, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { isRemasteredRevision, MAP_VERSIONS, mapVersionOf, setScenarioDescription, setScenarioName, setTextEncoding, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { changeMapVersion } from "../../editor/settings";
 import { isTextEncoding, TEXT_ENCODINGS, textEncodingInfo, type TextEncoding } from "../../formats/text/encoding";
 import { unencodableStrings } from "../../formats/chk/sections/strings";
 import { PLAYER_TYPES } from "../../data/players";
@@ -293,7 +294,7 @@ export function MapRevisionDialog({ entry }: DialogProps) {
     const on = isRemasteredRevision(MAP_VERSIONS[id].ver) && (strx || scenario?.strings.extended === false);
     setForm({ v: id, strx: on, enc: on && !strx ? "utf-8" : form.enc });
   };
-  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); setTextEncoding(scenario, remastered && strx ? "utf-8" : enc); commit(); } };
+  const apply = () => { if (scenario) { changeMapVersion(scenario, v, strx); setTextEncoding(scenario, remastered && strx ? "utf-8" : enc); commit(); } };
 
   if (!scenario) {
     return <DialogFrame dialogKey={entry.key} title={t("Map Revision")} icon={<ScrollText size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;

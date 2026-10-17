@@ -119,6 +119,16 @@ describe("runsOf", () => {
     const [line] = runsOf(`${b(0x06)}red${b(0x01)}back`);
     expect(line.runs[1].color).toBe(DEFAULT_TEXT_COLOR);
   });
+
+  it("takes <01> back one colour only, as both games do", () => {
+    const [line] = runsOf(`${b(0x03)}A${b(0x04)}B${b(0x01)}C`);
+    expect(line.runs.map((r) => r.color)).toEqual([textCode(0x03)!.rgb, textCode(0x04)!.rgb, textCode(0x03)!.rgb]);
+  });
+
+  it("ignores every colour code while the text is grey", () => {
+    const [line] = runsOf(`${b(0x05)}grey${b(0x06)}still${b(0x01)}grey`);
+    expect(new Set(line.runs.map((r) => r.color))).toEqual(new Set([textCode(0x05)!.rgb]));
+  });
 });
 
 describe("inlineRuns", () => {

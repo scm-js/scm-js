@@ -61,7 +61,7 @@ const x = (byte: number, label: string, effect: CodeEffect): TextCode =>
  * showing an unexplained `<XX>`.
  */
 export const TEXT_CODES: readonly TextCode[] = [
-  x(0x01, msg("Mimic (keeps the current colour)"), "mimic"),
+  x(0x01, msg("Previous colour (the one before the last change)"), "mimic"),
   c(0x02, msg("Cyan"), "#b8b8e8"),
   c(0x03, msg("Yellow"), "#dcdc3c"),
   c(0x04, msg("White"), "#ffffff"),
@@ -151,6 +151,10 @@ export function runsOf(text: string, options: RunOptions = {}): TextLine[] {
   let runs: TextRun[] = [];
   let align: Align = "left";
   let color = initial;
+  // The colour before the last change, which <01> goes back to (one level), and whether the
+  // current colour is grey <05>: while it is, the game ignores every colour code (both games).
+  let previous = initial;
+  let grey = false;
   let invisible = false;
   let clipped = false;
   let buf = "";
@@ -167,7 +171,7 @@ export function runsOf(text: string, options: RunOptions = {}): TextLine[] {
     clipped = false;
     // 0x0B / 0x14 hide the rest of the string, not the rest of the line, so `invisible`
     // deliberately survives a newline; the colour only resets on the old game's rule.
-    if (options.resetPerLine) color = initial;
+    if (options.resetPerLine) { color = initial; previous = initial; grey = false; }
   };
 
   for (let i = 0; i < text.length; i++) {
@@ -183,8 +187,8 @@ export function runsOf(text: string, options: RunOptions = {}): TextLine[] {
     const def = BY_BYTE.get(b);
     if (!def) continue;
     switch (def.effect) {
-      case "color": flush(); color = def.rgb!; break;
-      case "mimic": flush(); color = initial; break;
+      case "color": if (grey) break; flush(); previous = color; color = def.rgb!; grey = def.byte === 0x05; break;
+      case "mimic": if (grey) break; flush(); color = previous; break;
       case "invisible": flush(); invisible = true; break;
       case "clip": flush(); clipped = true; break;
       case "align": flush(); align = def.byte === 0x12 ? "right" : "center"; break;
@@ -269,7 +273,7 @@ export function bleedingLines(text: string): BleedingLine[] {
   return out;
 }
 
-/** Whether the line takes the colour back to the default with `<01>`. */
+/** Whether the line has `<01>`, which can take the colour back to the default. */
 function hasMimic(line: string): boolean {
   for (const ch of line) if (ch.charCodeAt(0) === 0x01) return true;
   return false;
@@ -290,22 +294,27 @@ function firstEffect(line: string): CodeEffect | null {
   return null;
 }
 
-/** The colour code a line leaves set, or null when it sets none (the mimic clears it). */
+/**
+ * The colour code a line leaves set, or null for the default: `<01>` goes back to the colour
+ * before the last change, and nothing changes the colour once it is grey `<05>`.
+ */
 function lastColorOf(line: string): TextCode | null {
   let color: TextCode | null = null;
+  let previous: TextCode | null = null;
   for (const ch of line) {
     const def = BY_BYTE.get(ch.charCodeAt(0));
-    if (!def) continue;
-    if (def.effect === "color") color = def;
-    else if (def.effect === "mimic") color = null;
+    if (!def || color?.byte === 0x05) continue;
+    if (def.effect === "color") { previous = color; color = def; }
+    else if (def.effect === "mimic") color = previous;
   }
   return color;
 }
 
 /**
  * The byte `fixBleeding` writes: 0x02, the cyan that *is* `DEFAULT_TEXT_COLOR`. `<01>`
- * (mimic) reads as the default too, but says so indirectly — an explicit colour is what
- * survives being read back by another editor, and it is exactly the reset 1.16.1 supplied.
+ * only goes back to the colour before the last change, which is not always the default —
+ * an explicit colour is what survives being read back by another editor, and it is exactly
+ * the reset 1.16.1 supplied.
  */
 export const RESET_CODE = "\x02";
 

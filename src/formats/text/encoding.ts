@@ -3,9 +3,9 @@
  *
  * StarEdit wrote the string table in whatever code page Windows was running — EUC-KR
  * (CP949) on a Korean machine, Shift_JIS on a Japanese one, Windows-1252 nearly everywhere
- * else — and 1.16.1 still reads it that way. Remastered writes UTF-8 and, reading, tries
- * UTF-8 first and falls back to the client's legacy code page when the bytes are not
- * valid UTF-8. The file itself carries no note of which was used, so a table is *guessed*
+ * else — and 1.16.1 still reads it that way. Remastered writes UTF-8 and, reading, decides
+ * per string: UTF-8 when the bytes are valid UTF-8, else Korean when they pass its CP949
+ * test, else Windows-1252 (`remasteredReadsAsKorean`). The file itself carries no note of which was used, so a table is *guessed*
  * on open (`detectTextEncoding`) and the guess is a setting the user can correct
  * (Scenario ▸ Map Revision).
  *
@@ -84,6 +84,65 @@ export function decodeText(bytes: Uint8Array, encoding: TextEncoding): string {
 /** True when every byte sequence is one the encoding defines. */
 export function decodesCleanly(bytes: Uint8Array, encoding: TextEncoding): boolean {
   try { decoderFor(encoding, true).decode(bytes); return true; } catch { return false; }
+}
+
+/**
+ * Whether StarCraft: Remastered shows these bytes as Korean. A string that is not valid UTF-8
+ * passes its Korean test when every byte 0x81–0xFE but 0x92 has a byte 0x41–0xFE after it,
+ * whatever the pair; it is then converted run by run between control bytes, each run as
+ * CP949 unless one of its pairs is not a CP949 character, when that run is read as
+ * Windows-1252. So Western text whose accented letters happen to pair up into Hangul
+ * ("Ärger", "Åland", "Don’t" with a curly apostrophe) is shown as Korean.
+ */
+export function remasteredReadsAsKorean(bytes: Uint8Array): boolean {
+  if (decodesCleanly(bytes, "utf-8")) return false;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b < 0x81 || b > 0xfe || b === 0x92) continue;
+    const next = bytes[i + 1];
+    if (next === undefined || next < 0x41 || next > 0xfe) return false;
+    i++;
+  }
+  let start = 0;
+  for (let i = 0; i <= bytes.length; i++) {
+    if (i < bytes.length && bytes[i] >= 0x20) continue;
+    if (runIsCp949(bytes.subarray(start, i))) return true;
+    start = i + 1;
+  }
+  return false;
+}
+
+/** A run with high bytes, each of which makes a CP949 character with the byte after it. */
+function runIsCp949(run: Uint8Array): boolean {
+  let high = false;
+  for (let i = 0; i < run.length; i++) {
+    if (run[i] < 0x80) continue;
+    if (i + 1 >= run.length || !isCp949Pair(run[i], run[i + 1])) return false;
+    high = true;
+    i++;
+  }
+  return high;
+}
+
+/**
+ * Whether two bytes are a CP949 character. The extended Hangul CP949 adds below the EUC-KR
+ * range is laid out by rule (8,822 syllables); the EUC-KR range is the decoder's, which
+ * every platform has. (Not the decoder for both: Node's "euc-kr" is strict EUC-KR, while a
+ * browser's is CP949.)
+ */
+function isCp949Pair(lead: number, trail: number): boolean {
+  const letter = (trail >= 0x41 && trail <= 0x5a) || (trail >= 0x61 && trail <= 0x7a);
+  if (lead >= 0x81 && lead <= 0xa0) return letter || (trail >= 0x81 && trail <= 0xfe);
+  if (lead >= 0xa1 && lead <= 0xc6 && trail < 0xa1) {
+    if (lead === 0xc6) return trail >= 0x41 && trail <= 0x52;
+    return letter || (trail >= 0x81 && trail <= 0xa0);
+  }
+  if (lead < 0xa1 || lead > 0xfe || trail < 0xa1 || trail > 0xfe) return false;
+  // Remastered's table has no user-defined rows (C9, FE), and has the euro and registered
+  // signs CP949 added at A2E6 and A2E7 (checked against its own table, every pair).
+  if (lead === 0xc9 || lead === 0xfe) return false;
+  if (lead === 0xa2 && (trail === 0xe6 || trail === 0xe7)) return true;
+  return decodesCleanly(new Uint8Array([lead, trail]), "euc-kr");
 }
 
 /* ── Encoding ───────────────────────────────────────────── */

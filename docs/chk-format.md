@@ -220,9 +220,9 @@ taken.
   over, and the table before it stays. 1.16.1 takes a copy of any length.
 - In a 64 or 206 file the game reads every `STR` copy and then every `STRx` copy, so a
   `STRx` wins whatever the order in the file. In any other revision `STRx` is never read.
-- Each string is read as UTF-8 if its bytes are valid UTF-8, as Korean (CP949) if they are
-  valid Korean, and as Windows-1252 otherwise. This holds for `STR` and `STRx` alike.
-  1.16.1 reads every string in the code page of the machine it runs on.
+- Each string is read as UTF-8 if its bytes are valid UTF-8, as Korean (CP949) if they
+  pass its Korean test, and as Windows-1252 otherwise. This holds for `STR` and `STRx`
+  alike. 1.16.1 reads every string in the code page of the machine it runs on.
 - A string number past the count, or an offset outside the section, gives no text. 1.16.1
   reads whatever lies past the table in memory.
 - A colour code carries on to the next line of the same string, where 1.16.1 starts each
@@ -1312,9 +1312,17 @@ The table does not say how its bytes spell characters. StarEdit wrote the code p
 Windows it ran on: EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
 Chinese, Windows-1251 for Russian, Windows-1252 for the rest. 1.16.1 reads a file in the
 code page of the machine it runs on. Remastered decides string by string: UTF-8 when the
-bytes are valid UTF-8, Korean (CP949) when they are valid Korean, and Windows-1252 for
+bytes are valid UTF-8, Korean (CP949) when they pass its Korean test, and Windows-1252 for
 anything else. So a Japanese, Chinese or Russian map that is not UTF-8 shows garbled text
 in Remastered whatever the player's Windows.
+
+The Korean test is loose. A string passes when every byte from 0x81 to 0xFE, except 0x92,
+has a byte from 0x41 to 0xFE after it. The string is then converted piece by piece, the
+pieces split at control bytes, and a piece is shown as Korean unless one of its byte pairs
+is not a Korean character, when that piece falls back to Windows-1252. So Western text
+whose accented letters happen to pair up into Hangul is shown as Korean: *Ärger* in
+Windows-1252 reads as *훣ger*, and *Don’t* with a curly apostrophe as *Don뭪*, while *café*
+and *España* come out as written. Check Map lists the strings this happens to.
 
 scmJS reads the table as UTF-8 when it is valid UTF-8. Otherwise it tries each legacy code
 page above, keeps those that decode the bytes without error, and scores each by how much
@@ -1377,12 +1385,14 @@ Bytes 0x01 to 0x1F in a string are not characters. Most set the colour of the te
 them, and a few align it, hide it or cut it short. Editors write them as `<XX>`, the byte
 in hexadecimal, and the game draws the text from the byte where the code stands. In 1.16.1
 each new line of a string starts in the default colour again; in Remastered a colour
-carries on to the next line of the same string.
+carries on to the next line of the same string. In both games `<01>` goes back to the
+colour before the last change, one step only, and once the text is grey (`<05>`) every
+later colour code in the string is ignored, `<01>` included.
 
 <!-- generated: text codes -->
 | Byte | Written | What it does |
 | --- | --- | --- |
-| 0x01 | `<01>` | Mimic (keeps the current colour) |
+| 0x01 | `<01>` | Previous colour (the one before the last change) |
 | 0x02 | `<02>` | Colour: Cyan (#b8b8e8) |
 | 0x03 | `<03>` | Colour: Yellow (#dcdc3c) |
 | 0x04 | `<04>` | Colour: White (#ffffff) |

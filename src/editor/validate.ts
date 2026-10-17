@@ -24,9 +24,10 @@ import { isAnywhereIntact, locationCapacity, locationName } from "./locations";
 import { CLASSIC_COLORS } from "./settings";
 import { TILE_PX } from "./units";
 import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
+import { plainText } from "./textColors";
 import { gameAcceptsSize, gameReadSections, gameSizeRule, KNOWN_VERSIONS, vcodPasses, type GameRead, type SizeRule } from "../formats/chk/game";
 import { PlayerRace } from "../formats/chk/sections/players";
-import { encodeText } from "../formats/text/encoding";
+import { encodeText, remasteredReadsAsKorean } from "../formats/text/encoding";
 import { TILESETS } from "../data/tilesets";
 import type { UnitsDat } from "../formats/dat/dat";
 import { TILE_CREEP_FLAG, tileGroupOf, type Tileset } from "../formats/tileset/decode";
@@ -292,6 +293,11 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     const wide = scn.strings.strings.filter((s) => s && [...s].some((c) => c.charCodeAt(0) > 0x7f)).length;
     if (wide > 0) add("info", t("{n, plural, one {# string is} other {# strings are}} written as UTF-8 with characters outside ASCII: Remastered reads them, StarCraft 1.16.1 shows other characters in their place.", { n: wide }), msg("Strings"), { kind: "dialog", id: "mapRevision" });
   }
+  // Remastered reads a legacy string as Korean when its accented letters pair up into Hangul.
+  if (scn.strings.encoding !== "utf-8" && scn.strings.encoding !== "euc-kr") {
+    const korean = scn.strings.strings.filter((s): s is string => !!s && remasteredReadsAsKorean(encodeText(s, scn.strings.encoding)));
+    if (korean.length > 0) add("warn", t("{n, plural, one {# string reads} other {# strings read}} as Korean in Remastered (the first: '{first}'): its accented letters pair up into Hangul characters, which Remastered takes for Korean text. UTF-8 avoids it, but StarCraft 1.16.1 shows UTF-8 garbled (Scenario ▸ Map Revision).", { n: korean.length, first: plainText(korean[0]).slice(0, 40) }), msg("Strings"), { kind: "dialog", id: "mapRevision" });
+  }
   const lost = unencodableStrings(scn.strings);
   if (lost.length > 0) {
     const chars = [...new Set(lost.flatMap((l) => l.chars))];
@@ -310,10 +316,11 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   });
 
   // ── Triggers ──
-  // A type past the game's tables: 1.16.1 calls past their end (a crash); Remastered runs
-  // whatever follows, which is no action at all or the wrong one.
+  // A type past the game's tables: 1.16.1 calls past their end (a crash); Remastered's walker
+  // bounds them, taking an unknown condition as false and skipping an unknown action.
   const unknownLevel: IssueLevel = remastered ? "warn" : "error";
-  const unknownText = remastered ? t("Remastered does something else in its place") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
+  const unknownCondition = remastered ? t("Remastered takes it as false, so the trigger does not run") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
+  const unknownAction = remastered ? t("Remastered skips it") : t("StarCraft 1.16.1 crashes when the trigger reaches it");
   const tested = new Set<number>();
   const set = new Set<number>();
   const stringOk = (i: number) => i < scn.strings.strings.length;
@@ -348,7 +355,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       if (c.type === ConditionType.None) break;
       if (c.flags & ConditionFlag.Disabled) continue;
       const def = conditionDef(c.type);
-      if (!def) { add(unknownLevel, t("{label}: condition type {type} is not one the game has; {what}.", { label, type: c.type, what: unknownText }), where, target); continue; }
+      if (!def) { add(unknownLevel, t("{label}: condition type {type} is not one the game has; {what}.", { label, type: c.type, what: unknownCondition }), where, target); continue; }
       if (!briefing && c.type === ConditionType.Briefing) add("warn", t("{label}: Mission Briefing is never true in a trigger, so the trigger never runs.", { label }), where, target);
       for (const a of def.args) {
         if (a.kind === "location") checkLocation(c[a.field], def.name, true);
@@ -364,7 +371,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
       if (a.type === ActionType.None) break;
       if (a.flags & ActionFlag.Disabled) continue;
       const def = actionDef(a.type, briefing);
-      if (!def) { add(unknownLevel, t("{label}: action type {type} is not one the game has; {what}.", { label, type: a.type, what: unknownText }), where, target); continue; }
+      if (!def) { add(unknownLevel, t("{label}: action type {type} is not one the game has; {what}.", { label, type: a.type, what: unknownAction }), where, target); continue; }
       // These refuse Players 9–12 (and None) in the game.
       if (!briefing && PLAYERS_1_TO_8_ONLY.has(a.type) && a.player >= PlayerGroup.Player9 && a.player <= PlayerGroup.None) {
         add("warn", t("{label}: {name} does nothing for {player}; the game takes only Players 1–8 there.", { label, name: def.name, player: a.player === PlayerGroup.None ? t("None") : t("Player {v}", { v: a.player + 1 }) }), where, target);

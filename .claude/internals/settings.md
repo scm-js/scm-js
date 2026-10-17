@@ -32,7 +32,15 @@ Sections: OWNR is always written together with IOWN (StarEdit's copy, decoded in
 `scenario.editorPlayerTypes` — `applyPlayerSettings` sets both, `encodeSection` writes IOWN from it,
 and Check Map warns when a file's two disagree); `playerRgb` is CRGB
 (Remastered: an RGB triple and a `ColorMode` per playable slot; `null` = no section, and Player
-Colors drops it again when every slot is back on `Palette`) — `displayColorHex` is the colour a slot shows
+Colors drops it again when every slot is back on `Palette`). A Palette slot shows its **COLR**
+colour in Remastered: probe R13 (2026-10-17, single player) gave Palette slots third bytes Blue /
+Orange / Pink and every player played in its COLR colour, although the loader copies that byte
+into the lobby colour choice (reading the code alone said otherwise — trust the played result).
+`applyPlayerColors` → `playerRgbFor` still writes `[0, 0, COLR]` into Palette slots
+(`withPaletteBytes`) so the file does not contradict itself; `applyPlayerSettings` and
+`patchPlayer` route colour changes through it. COLR ≥ 12 (`CLASSIC_COLORS`) is a wrong colour in
+1.16.1 and skipped by Remastered; Check Map warns. Custom played in a game (F09 VER 206, F10
+VER 205: magenta Marine); Random / Player choice not yet played. — `displayColorHex` is the colour a slot shows
 anywhere in the chrome and `playerTeamColor` what its sprites are painted with (`TeamColorSpec`: a `tunit.pcx`
 row for the sixteen classic colours, else an RGB — Pink … Black and any CRGB custom colour — for which
 `teamColor.ts` synthesises a ramp and `sprites.ts` draws through a palette copy with slots 8–15 overridden,

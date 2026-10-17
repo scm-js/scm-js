@@ -65,7 +65,7 @@ export const GAME_PREAMBLE = [{ name: "TYPE", required: false }, { name: "VER ",
 
 /** Sections in no read: the game's code does not contain their names. */
 export const GAME_NEVER = ["IVER", "IVE2", "IOWN", "ISOM", "TILE", "DD2 ", "UPUS", "WAV ", "SWNM"];
-/** Sections only Remastered reads. 1.16.1 does not know them, and refuses `VER` 206. */
+/** Sections only Remastered reads. 1.16.1 does not know them, and refuses `VER` 64 and 206. */
 export const REMASTERED_ONLY = ["STRx", "CRGB"];
 
 /**
@@ -145,7 +145,7 @@ export const GAME_COPIES = {
 export const COPY_RULES = {
   never: "The game never reads what it holds, so copies make no difference.",
   last: "The last copy replaces the others. Every copy must still be the right size, or the map is refused.",
-  anyLast: "The last copy replaces the others, whatever its length: a copy of 1 byte replaces the real table, and the map loses its text. Remastered passes over a copy shorter than 2 bytes.",
+  anyLast: "The last copy replaces the others, whatever its length: a copy of 1 byte replaces the real table, and the map loses its text. Remastered passes over a copy shorter than 2 bytes, and in a `VER` 64 or 206 file a `STRx` of 4 bytes or more replaces it.",
   padded: "The last copy replaces the others. A copy shorter than 20 bytes is filled out with zeros.",
   whole: "The last copy replaces the others. Every copy must be the full size, so a short copy refuses the map rather than overwriting part of the first.",
   every: "Every copy is checked, and one copy that fails refuses the map. A good copy after a bad one does not help.",
@@ -158,12 +158,34 @@ export const COPY_RULES = {
 };
 
 /**
- * Where StarCraft: Remastered was found to need a section 1.16.1 does not, by playing probe
- * maps in it (the twelve in `Maps/CHK/Remastered`, 2026-10-15). The other eleven behaved
- * as in 1.16.1. Shown on the section's Required row and in the index.
+ * Where StarCraft: Remastered needs a section 1.16.1 does not. Found by reading Remastered's
+ * loader (2026-10-17) and by playing probe maps in it (the twelve in `Maps/CHK/Remastered`,
+ * 2026-10-15). Shown on the section's Required row and in the index.
  */
 export const REMASTERED_NEEDS = {
-  "TRIG": "In StarCraft: Remastered every map needs it, whatever the game type: without it the map list shows the map as *Invalid Scenario*. (Found playing Remastered.)",
+  "TRIG": "In StarCraft: Remastered every map needs it, whatever the game type: its map list reads the triggers, and shows a map without them, or with a length that is not whole triggers, as *Invalid Scenario*.",
+};
+
+/** The revisions only Remastered knows, and the 1.16.1 revision whose reads each follows. */
+export const REMASTERED_VERSIONS = [
+  { ver: 64, type: "RAWS", label: "Remastered 1.21+ without Brood War", extension: "scm", like: 63 },
+  { ver: 206, type: "RAWB", label: "Remastered 1.21+", extension: "scx", like: 205 },
+];
+
+/** What Remastered accepts of the two sections only it reads. */
+export const REMASTERED_SECTIONS = {
+  "STRx": {
+    readBy: "StarCraft: Remastered only, every time it reads a `VER` 64 or 206 file. Older revisions' copies are never read, and 1.16.1 does not know it.",
+    required: "In a `VER` 64 or 206 file, `STR ` or `STRx`: without either the map list shows the map as *Invalid Scenario*.",
+    accepts: "Any length. A copy shorter than 4 bytes is passed over.",
+    copies: "The last copy of 4 bytes or more replaces the others, and replaces `STR ` whatever the file order.",
+  },
+  "CRGB": {
+    readBy: "StarCraft: Remastered only, for the map list, in a file of any revision. 1.16.1 does not know it.",
+    required: "No.",
+    accepts: "Exactly 32 bytes. Any other length shows the map as *Invalid Scenario*.",
+    copies: "The last copy replaces the others. Every copy must still be the right size, or the map is refused.",
+  },
 };
 
 /** The messages a player sees, by where the game gives up. */

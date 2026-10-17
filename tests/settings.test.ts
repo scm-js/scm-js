@@ -12,8 +12,10 @@ import {
 } from "../src/formats/chk/sections/settings";
 import { getString } from "../src/formats/chk/sections/strings";
 import {
-  applyForceSettings, applyPlayerColors, applyPlayerSettings, applyUnitSettings, forceName, internString, readForceSettings, readPlayerSettings, readUnitSettings, unitCustomName,
+  applyForceSettings, applyPlayerColors, applyPlayerSettings, applyUnitSettings, forceName, internString, patchPlayer, playerSlotViews, readForceSettings, readPlayerSettings, readUnitSettings, unitCustomName,
 } from "../src/editor/settings";
+import { validateScenario } from "../src/editor/validate";
+import { displayColorHex, PLAYER_COLORS } from "../src/data/players";
 import { loadMap } from "../src/formats/mpq/scm";
 
 function section(name: string, data: Uint8Array | number[]): Uint8Array {
@@ -60,11 +62,57 @@ describe("CRGB", () => {
     applyPlayerColors(scn, [7, 1, 2, 3, 4, 5, 6, 0], rgb);
     out = serializeScenario(scn);
     const back = parseScenario(out);
-    expect(back.playerRgb).toEqual(rgb);
+    expect(back.playerRgb!.mode).toEqual(rgb.mode);
+    expect(back.playerRgb!.rgb[0]).toEqual([250, 100, 50]);
     expect(names(out).indexOf("CRGB")).toBe(names(out).length - 1);
 
     applyPlayerColors(back, back.playerColors, null);
     expect(names(serializeScenario(back))).not.toContain("CRGB");
+  });
+
+  // Remastered's loader takes a Palette slot's third byte as its lobby colour; in a game the
+  // player shows COLR (probe R13). The editor writes the COLR colour there so they agree.
+  it("writes each Palette slot's COLR colour into the third byte", () => {
+    const scn = fresh();
+    const rgb = defaultPlayerRgb();
+    rgb.mode[0] = ColorMode.Custom;
+    rgb.rgb[0] = [250, 100, 50];
+    applyPlayerColors(scn, [7, 1, 2, 3, 4, 5, 6, 0], rgb);
+    const bytes = sectionData(serializeScenario(scn), "CRGB")!;
+    expect(Array.from(bytes.subarray(0, 3))).toEqual([250, 100, 50]);
+    expect(Array.from(bytes.subarray(3, 6))).toEqual([0, 0, 1]);
+    expect(Array.from(bytes.subarray(21, 24))).toEqual([0, 0, 0]);
+    expect(bytes[24 + 1]).toBe(ColorMode.Palette);
+  });
+
+  it("draws a Palette slot in its COLR colour whatever the third byte says", () => {
+    const rgb = defaultPlayerRgb();
+    rgb.rgb[0] = [0, 0, 19];
+    expect(displayColorHex([1, 1, 2, 3, 4, 5, 6, 7], rgb, 0)).toBe(PLAYER_COLORS[1].hex);
+    rgb.mode[0] = ColorMode.Custom;
+    expect(displayColorHex([1, 1, 2, 3, 4, 5, 6, 7], rgb, 0)).toBe("#000013");
+  });
+
+  it("keeps CRGB in step when a plugin patches a slot's colour", () => {
+    const scn = fresh();
+    const rgb = defaultPlayerRgb();
+    rgb.mode[3] = ColorMode.Random;
+    applyPlayerColors(scn, scn.playerColors, rgb);
+    expect(patchPlayer(scn, 0, { color: 9 })).toEqual(["COLR", "CRGB"]);
+    expect(scn.playerRgb!.rgb[0]).toEqual([0, 0, 9]);
+    expect(playerSlotViews(scn)[0].color).toBe(9);
+  });
+
+  it("has Check Map name a player whose COLR colour is past the twelve the game takes", () => {
+    const scn = fresh();
+    scn.playerTypes[0] = PlayerType.Human;
+    scn.playerColors[0] = 16;
+    const player1 = () => validateScenario(scn).filter((i) => i.target?.kind === "dialog" && i.target.id === "playerColors" && i.text.startsWith("Player 1"));
+    expect(player1().map((i) => i.level)).toEqual(["warn"]);
+    const rgb = defaultPlayerRgb();
+    rgb.mode[0] = ColorMode.Custom;
+    applyPlayerColors(scn, scn.playerColors, rgb);
+    expect(player1()).toEqual([]);
   });
 });
 

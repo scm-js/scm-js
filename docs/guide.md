@@ -669,8 +669,12 @@ race, colour and force.
 **Force Settings** groups the players into up to four teams and sets, per team, allied
 victory, shared vision, allies and random start locations.
 
-**Player Colors** picks each slot's palette colour and, for a Remastered map, a custom
-RGB, random, or the player's own choice; the map repaints as you change them.
+**Player Colors** picks each slot's palette colour and, for Remastered, a custom RGB,
+random, or the player's own choice; the map repaints as you change them. Remastered reads
+these settings in a map of any revision. Only the first twelve colours work as a palette
+colour in the game: for the rest older versions show a wrong colour and Remastered the
+player's usual one, and Tools ▸ Check Map says so. In Remastered, a custom RGB gives the
+player any colour, those ten included.
 
 ![Player Colors](images/player-colors.webp)
 

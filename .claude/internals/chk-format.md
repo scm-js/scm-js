@@ -207,3 +207,30 @@ Where the editor now follows the game (2026-10-15, the follow-up to the docs pas
   with no TRIG is *Invalid Scenario* in Remastered's map list, melee included
   (`REMASTERED_NEEDS` in chk-game.mjs; the page's "Which game" lists the eleven). STR
   decoys were already known to differ.
+
+Remastered's loader read (2026-10-17, 1.23.10.13515 dump + Ghidra; private ledgers
+`~/github/scm-sim-reader/chk-ledger/REMASTERED-{loader,strings}.md`, tables in
+`remastered/chk-tables.txt`). Same machinery and tables as 1.16.1, plus: VER 64 (= 63's
+lists, no BW) and 206 (= 205's, needs BW), each with STR (o) + STRx (o) in every pass; the
+map-list pass adds TRIG (required, size % 2400, scans for EUD Deaths/Set Deaths) and CRGB
+(optional, exactly 32) for all five versions; after the map-list pass no string table →
+fail. STR < 2 / STRx < 4 passed over; STRx after STR (table order). Per-string decoding:
+UTF-8 → CP949 → Windows-1252, STRx included. DIM > 256 refused; MASK capped at 65,536;
+UNIT start location owner ≥ 8 ignored; COLR values ≥ 12 skipped; CRGB mode ≥ 3 copies the
+third byte into the lobby colour choice, but probe R13 played every Palette slot in its COLR
+colour — the byte makes no difference in a game. UMS TRIG handler obfuscated (not read).
+The page's "Where Remastered differs" and `REMASTERED_VERSIONS` / `REMASTERED_SECTIONS`
+in chk-game.mjs carry it.
+
+Editor follow-ups this found:
+- DONE 2026-10-17: CRGB Palette slots get `[0, 0, COLR]` (was zeros; harmless either way, R13),
+  Check Map warns on COLR ≥ 12 (`settings.md`). A first version that drew from the third byte
+  was reverted after R13.
+- `mapVersionOf(64)` → "hybrid"; a 64 file is Remastered-only (STRx allowed).
+- The reader takes STRx whenever present (`scenario.ts` "STRx wins"); the game reads it
+  only at VER 64/206, so a 205 file with STR + STRx shows different text in the editor —
+  a decoy. STRx < 4 bytes should be passed over like STR < 2.
+- The editor guesses one encoding for the whole table (`detectTextEncoding`); Remastered
+  decides per string (UTF-8 → CP949 → 1252), so a table mixing UTF-8 and CP949 strings reads
+  differently.
+- Check Map: CRGB ≠ 32 bytes, DIM > 256 and TRIG ≢ 0 mod 2400 are map-list refusals.

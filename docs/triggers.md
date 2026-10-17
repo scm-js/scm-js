@@ -3,7 +3,9 @@
 Every trigger condition and action in StarCraft and Brood War: what it does in the game,
 the arguments it takes, how it is written as text, and where each argument is stored in
 the map file. The game's behaviour described here is StarCraft 1.16.1's, found by running
-test maps; StarCraft: Remastered has not been checked separately.
+test maps. StarCraft: Remastered's trigger engine has not been checked separately. Its map
+list does read the triggers, to see whether a map uses EUD triggers; see [Where Remastered
+differs](chk-format.md#where-remastered-differs).
 
 Each condition and action has a number, a line in the text form, and a table of where its
 arguments are stored. These come from the same tables the editor reads and writes maps

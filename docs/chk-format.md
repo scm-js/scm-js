@@ -12,9 +12,9 @@ is in [Opening and saving maps](file-formats.md).
 reads and writes maps with, which re-encodes Blizzard's own maps byte for byte. What the
 game does with a section (whether it reads it, needs it, which lengths it accepts, what a
 second copy does) describes StarCraft: Brood War 1.16.1, confirmed by loading test maps in
-the game. StarCraft: Remastered reads maps much the same way; the differences known are
-listed under [Where Remastered differs](#where-remastered-differs). Where this page and
-the community's older reference,
+the game. StarCraft: Remastered's loader has been studied too, and reads maps much the
+same way; the differences are listed under [Where Remastered
+differs](#where-remastered-differs). Where this page and the community's older reference,
 [wiki.staredit.net/wiki/Scenario.chk](http://wiki.staredit.net/wiki/Scenario.chk),
 disagree about the game, this page is the one checked against it.
 
@@ -165,7 +165,7 @@ The smallest file each kind of game will load:
 
 | A map for | Needs |
 | --- | --- |
-| Melee and the other game types | `VER`, `DIM`, `ERA`, `OWNR`, `SIDE`, `STR`, `SPRP`, `FORC`, `VCOD`, `MTXM`, `THG2` and `UNIT`, and `COLR` in a Brood War file (`VER` 205). Remastered also needs `TRIG`. |
+| Melee and the other game types | `VER`, `DIM`, `ERA`, `OWNR`, `SIDE`, `STR`, `SPRP`, `FORC`, `VCOD`, `MTXM`, `THG2` and `UNIT`, and `COLR` in a Brood War file (`VER` 205). Remastered also needs `TRIG`, and takes `STRx` in place of `STR` in a `VER` 64 or 206 file. |
 | Use Map Settings | All of those, and `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and five settings tables: `UNIx`, `UPGx`, `TECx`, `PUPx` and `PTEx` in a Brood War file; `UNIS`, `UPGS`, `TECS`, `UPGR` and `PTEC` in an older one |
 
 `THG2` can be empty when the map has no sprites. Everything else is optional or for
@@ -179,7 +179,7 @@ What a player sees, and what causes it:
 | The player sees | When | Why |
 | --- | --- | --- |
 | *Invalid Scenario*, with "This scenario is unreadable because it is invalid or corrupted." | In the map list | The map list read failed, and the file's `VER` is 59 or lower, or could not be read at all. Any fault gives this message in a StarCraft 1.00 file. |
-| *Invalid Scenario*, with "This scenario is intended for use with a StarCraft Expansion Set." | In the map list | The map list read failed, and the file's `VER` is above 59. That covers a Brood War map in the original StarCraft, but **also every other fault**: a missing `DIM`, a `SIDE` of the wrong length, a failed [`VCOD`](#vcod) check, a `VER` the game does not know such as Remastered's 206, and in Remastered a missing `TRIG`. The game names the expansion set whatever the real fault. Remastered gives the same message. |
+| *Invalid Scenario*, with "This scenario is intended for use with a StarCraft Expansion Set." | In the map list | The map list read failed, and the file's `VER` is above 59. That covers a Brood War map in the original StarCraft, but **also every other fault**: a missing `DIM`, a `SIDE` of the wrong length, a failed [`VCOD`](#vcod) check, a `VER` the game does not know such as Remastered's 64 and 206, and in Remastered a missing `TRIG` or a `CRGB` of the wrong length. The game names the expansion set whatever the real fault. Remastered gives the same message. |
 | "This map can only be played with the 'Use Map Settings' game type." | Making a game | The tileset is Installation and the game type is not Use Map Settings. Installation maps can only be played as Use Map Settings. |
 | "Error loading scenario file." | Starting a game | A section this game type needs is missing, the wrong length, or runs past the end of the file. Melee needs `MTXM`, `THG2`, `UNIT` and, in a Brood War file, `COLR`; Use Map Settings also needs `MASK`, `PUNI`, `UPRP`, `MRGN`, `TRIG` and the settings tables. The same map may still start as melee. |
 | "WARNING: Unit unplaceable! (name) (x,y)" | The first moments of a game | A placed unit had no room where it stands, and was removed. |
@@ -189,33 +189,88 @@ What a player sees, and what causes it:
 ### Where Remastered differs
 
 What this page says about the game describes StarCraft: Brood War 1.16.1, the last version
-before Remastered. Remastered is known to differ in these ways:
+before Remastered. Remastered's own loader has been studied the same way, and twelve of
+the test maps played in it. It reads a map almost exactly as 1.16.1 does: the same walk
+through the sections, the same reads in the same order, the same lengths and the same
+rules for repeated sections. These are the differences.
 
-- Its map list needs [`TRIG`](#trig). A map with no `TRIG` section is *Invalid Scenario*
-  in Remastered whatever the game type, where 1.16.1 lists it and plays it as melee.
-- It reads `VER` 206, [`STRx`](#strx) and [`CRGB`](#crgb). 1.16.1 refuses `VER` 206 and
-  never reads the other two.
-- It passes over a [`STR`](#str) copy shorter than 2 bytes, where 1.16.1 takes it.
-- It reads text as UTF-8 when the bytes are valid UTF-8 (see [`STR`](#str)).
-- In a string, a colour carries on to the next line.
+**Two more revisions.** Remastered also knows `VER` 64 and 206, the two revisions that can
+carry the [`STRx`](#strx) string table. A 206 file is read like a Brood War 205 file and
+needs Brood War. A 64 file is read like a hybrid 63 file and does not. See
+[Revisions](#revisions).
 
-These rules are confirmed to be the same in Remastered:
+**The map list reads two more sections**, in a file of any revision:
+
+- [`TRIG`](#trig), which every map now needs. The game looks through the triggers for EUD
+  triggers, Deaths conditions and Set Deaths actions that reach outside the table of death
+  counts, and marks the map as using them. A map with no `TRIG`, or a `TRIG` that is not
+  whole triggers, is *Invalid Scenario* whatever the game type. 1.16.1 lists such a map
+  and plays it as melee.
+- [`CRGB`](#crgb), the player colours, when the file has one. A `CRGB` that is not exactly
+  32 bytes makes the map *Invalid Scenario*.
+
+**The map list refuses more.** A [`DIM`](#dim) width or height above 256 is *Invalid
+Scenario*, where 1.16.1 does not look at the values. So is a 64 or 206 file that ends up
+with no string table: one with neither `STR` nor `STRx`, or only copies too short to be
+taken.
+
+**Strings:**
+
+- A [`STR`](#str) copy shorter than 2 bytes, or a `STRx` copy shorter than 4, is passed
+  over, and the table before it stays. 1.16.1 takes a copy of any length.
+- In a 64 or 206 file the game reads every `STR` copy and then every `STRx` copy, so a
+  `STRx` wins whatever the order in the file. In any other revision `STRx` is never read.
+- Each string is read as UTF-8 if its bytes are valid UTF-8, as Korean (CP949) if they are
+  valid Korean, and as Windows-1252 otherwise. This holds for `STR` and `STRx` alike.
+  1.16.1 reads every string in the code page of the machine it runs on.
+- A string number past the count, or an offset outside the section, gives no text. 1.16.1
+  reads whatever lies past the table in memory.
+- A colour code carries on to the next line of the same string, where 1.16.1 starts each
+  line in the default colour again. (Found playing Remastered.)
+
+**Colours.** [`COLR`](#colr) values of 12 and up are skipped, where 1.16.1 gives a wrong
+colour. Remastered also reads the player colours in [`CRGB`](#crgb). A player that `CRGB`
+sets to Palette shows its `COLR` colour, whatever the rest of its `CRGB` entry says.
+(Found playing Remastered.)
+
+**Smaller limits:**
+
+- Only the first 65,536 bytes of [`MASK`](#mask) are used, one for each tile of a 256 ×
+  256 map. 1.16.1 has no limit.
+- A start location in [`UNIT`](#unit) owned by a player above Player 8 is ignored.
+- A negative section length that jumps back past the start of the file ends the walk
+  there. 1.16.1 reads on from memory outside the file.
+
+These rules are the same in Remastered. Its loader shows all of them, and the test maps
+confirmed the first nine:
 
 - a section one byte too long, or a `UNIT` section that ends in part of a record, refuses
   the map with the same message;
 - a StarCraft 1.00 file with 255 locations, and a map with no `MASK`, start as melee and
   stop as Use Map Settings;
 - a Brood War file with no `COLR` stops at the start of any game;
-- a map with no `MBRF` plays, with no briefing;
 - start locations come from the last `UNIT` section;
 - a Ghost placed cloaked starts cloaked only if its owner has Personal Cloaking;
 - a hybrid file's `UNIx` is applied over its `UNIS`;
 - a section the game never reads may run past the end of the file;
 - the rules for User Selectable races in [`SIDE`](#side) and for empty player slots in
-  [`UNIT`](#unit).
+  [`UNIT`](#unit);
+- a melee game keeps only the start locations and Player 12's resources and critters;
+- [`VCOD`](#vcod) is checked against the same table, with the same operations;
+- [`MRGN`](#mrgn) must be 1280 bytes in a 1.00 file and 5100 in every later one, `VER` 64
+  and 206 included;
+- the settings tables have the same lengths, and repeated copies combine entry by entry.
 
-Anything else has not been checked in Remastered. A map that 1.16.1 accepts, and that has
-a `TRIG` section, is the safe target.
+A map with no `MBRF` plays with no briefing, as in 1.16.1. That one rests on playing
+alone.
+
+Two things are still open. What Remastered does with the triggers once a Use Map Settings
+game starts was not read, because that part of its code is scrambled, so the [trigger
+reference](triggers.md) describes 1.16.1 alone. And `CRGB`'s Random and Player choice
+modes have been read in the loader but not yet checked in a game.
+
+A map that 1.16.1 accepts, that has a `TRIG` section, and whose `CRGB` (if it has one) is
+32 bytes long, is the safe target.
 
 ## Protected maps
 
@@ -227,8 +282,9 @@ map as the game does. The archive around the scenario has tricks of its own, suc
 missing file list or a renamed scenario; those are in [Opening and saving
 maps](file-formats.md#protected-and-damaged-maps).
 
-The table says what 1.16.1 does. Protectors write for Remastered, which is known to differ
-on short `STR` copies, so a trick that works there may refuse the map in 1.16.1.
+The table says what 1.16.1 does. Protectors write for Remastered, which differs on short
+`STR` copies and checks string offsets, so a trick that works there may refuse the map in
+1.16.1 or lose its text.
 
 ### In the container
 
@@ -239,7 +295,7 @@ on short `STR` copies, so a trick that works there may refuse the map in 1.16.1.
 | Gives a section more bytes than it needs | Refuses the map, except for `MTXM` (up to 131,072 bytes), `MASK`, `STR`, and sections it never reads | Nothing: such a map does not load. |
 | Ends a record section in part of a record | Refuses the map | Nothing: such a map does not load. |
 | Declares a length that runs past the end of the file | Stops walking there. It refuses the map if it reads that section, and does not mind if it never does | Keep what is there, and stop. |
-| Declares a negative length | Moves backwards by that much and reads on from there, so bytes are read a second time as different sections | Follow the jump. A reader that stops there misses the sections found after it. |
+| Declares a negative length | Moves backwards by that much and reads on from there, so bytes are read a second time as different sections. Remastered stops if the jump lands before the start of the file | Follow the jump. A reader that stops there misses the sections found after it. |
 | Includes sections whose names mean nothing, or are not text at all | Passes over them | Pass over them rather than rejecting the file. |
 | Leaves bytes after the last section | Ignores fewer than 8; reads 8 or more as another header | Keep them or drop them; they are not part of the map. |
 | Puts the sections in an unusual order | Reads them in its own order whatever the file's | Do not depend on StarEdit's order. |
@@ -363,11 +419,15 @@ reads. [`TYPE`](#type) goes with it.
 | StarCraft 1.00 | 59 | `RAWS` | `.scm` |
 | Hybrid 1.04 | 63 | `RAWS` | `.scm` |
 | Brood War 1.04 | 205 | `RAWB` | `.scx` |
+| Remastered 1.21+ without Brood War | 64 | `RAWS` | `.scm` |
 | Remastered 1.21+ | 206 | `RAWB` | `.scx` |
 <!-- /generated -->
 
-1.16.1 knows the first three values and refuses any other: Remastered's 206 always, and
-205 too when Brood War is not on.
+1.16.1 knows the first three values and refuses any other: Remastered's 64 and 206 always,
+and 205 too when Brood War is not on. Remastered knows all five. It reads a 64 file as it
+reads a hybrid 63 file, and a 206 file as a Brood War 205 file, with one difference:
+either may carry its strings in [`STRx`](#strx) instead of `STR`. Like 205, a 206 file
+needs Brood War.
 
 Brood War added units, upgrades and technologies, so it has wider versions of the five
 settings tables, under new names: [`UNIS`](#unis) and [`UNIx`](#unix), [`UPGS`](#upgs) and
@@ -679,8 +739,9 @@ Layout:
 
 The map's size in tiles. The sizes of [`MTXM`](#mtxm), [`TILE`](#tile), [`MASK`](#mask)
 and [`ISOM`](#isom) follow from it. StarEdit offers sides of 64, 96, 128, 192 and 256
-tiles. The game checks that the section is 4 bytes long, not the values in it; `MTXM`
-holds at most 65,536 tiles, a 256 × 256 map.
+tiles. 1.16.1 checks that the section is 4 bytes long, not the values in it; `MTXM` holds
+at most 65,536 tiles, a 256 × 256 map. Remastered also shows a map wider or taller than
+256 tiles as *Invalid Scenario*.
 
 <!-- generated: section DIM -->
 | Name | `DIM␠` (44 49 4D 20) |
@@ -1221,8 +1282,9 @@ unexplored.
 Only Players 1 to 8 have a bit. A byte of 0x05, bits 0 and 2, means Players 1 and 3 start
 with that tile unexplored and the other six start with it explored. The game starts every
 tile unexplored and writes the section over that, one byte per tile, so tiles past the end
-of a short `MASK` stay unexplored. Blizzard's melee maps have 0xFF in every byte; some of
-the campaign and scenario maps, where the maker set the fog, do not.
+of a short `MASK` stay unexplored. Remastered uses at most the first 65,536 bytes, one for
+each tile of a 256 × 256 map. Blizzard's melee maps have 0xFF in every byte; some of the
+campaign and scenario maps, where the maker set the fog, do not.
 
 ## STR
 
@@ -1243,8 +1305,10 @@ of a force's name.
 The table does not say how its bytes spell characters. StarEdit wrote the code page of the
 Windows it ran on: EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
 Chinese, Windows-1251 for Russian, Windows-1252 for the rest. 1.16.1 reads a file in the
-code page of the machine it runs on. Remastered reads `STR` as UTF-8 when the bytes are
-valid UTF-8, and in the local code page when they are not.
+code page of the machine it runs on. Remastered decides string by string: UTF-8 when the
+bytes are valid UTF-8, Korean (CP949) when they are valid Korean, and Windows-1252 for
+anything else. So a Japanese, Chinese or Russian map that is not UTF-8 shows garbled text
+in Remastered whatever the player's Windows.
 
 scmJS reads the table as UTF-8 when it is valid UTF-8. Otherwise it tries each legacy code
 page above, keeps those that decode the bytes without error, and scores each by how much
@@ -1261,7 +1325,7 @@ with `?` for a character it cannot hold.
 | Read by | The game, every time it reads the map: for the map list, at the start of every game, and for the briefing. |
 | Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
 | The game accepts | Any length. |
-| More than one copy | The last copy replaces the others, whatever its length: a copy of 1 byte replaces the real table, and the map loses its text. Remastered passes over a copy shorter than 2 bytes. |
+| More than one copy | The last copy replaces the others, whatever its length: a copy of 1 byte replaces the real table, and the map loses its text. Remastered passes over a copy shorter than 2 bytes, and in a `VER` 64 or 206 file a `STRx` of 4 bytes or more replaces it. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1275,10 +1339,11 @@ Layout:
 
 A string runs from its offset to the next 0 byte, and nothing else marks where it ends. So
 two strings can share their bytes, one string can be the end of another, and an offset can
-point anywhere in the section, the offset table included. The game checks neither the
-count nor the offsets against the section's length: an offset at or past the end reads
-whatever lies after the table in memory, so an editor has to read it as no string. A
-string number past the count is an empty string.
+point anywhere in the section, the offset table included. 1.16.1 checks neither the count
+nor the offsets against the section's length: an offset at or past the end reads whatever
+lies after the table in memory, so an editor has to read it as no string. A string number
+past the count is an empty string. Remastered checks both, and gives no text for a string
+that falls outside the table.
 
 StarEdit writes a table of 1024 strings, and points every unused one at a single 0 byte
 straight after the offsets: an empty string. Blizzard's maps are laid out this way.
@@ -1347,15 +1412,20 @@ carries on to the next line of the same string.
 ## STRx
 
 The string table of StarCraft: Remastered: the same as [`STR`](#str) with 32-bit numbers,
-so the table has no 64 KB limit. Only Remastered reads it, and it is always UTF-8. Whether
-Remastered loads a map that has `STRx` and no `STR` at all has not been checked.
+so the table has no 64 KB limit. Only Remastered reads it, and only in a `VER` 64 or 206
+file. There it reads every `STR` copy first and every `STRx` copy after, so a `STRx` wins
+whatever the order in the file, and a map may have either table or both but not neither.
+Its text is read string by string the way `STR`'s is: UTF-8 when it is valid UTF-8, then
+Korean, then Windows-1252. Editors write it as UTF-8.
 
 <!-- generated: section STRx -->
 | Name | `STRx` (53 54 52 78) |
 | --- | --- |
 | Size | Whatever the text needs. |
-| Read by | StarCraft: Remastered only. 1.16.1 does not know it. |
-| Required | In place of `STR ` on a Remastered map that uses it. |
+| Read by | StarCraft: Remastered only, every time it reads a `VER` 64 or 206 file. Older revisions' copies are never read, and 1.16.1 does not know it. |
+| Required | In a `VER` 64 or 206 file, `STR ` or `STRx`: without either the map list shows the map as *Invalid Scenario*. |
+| The game accepts | Any length. A copy shorter than 4 bytes is passed over. |
+| More than one copy | The last copy of 4 bytes or more replaces the others, and replaces `STR ` whatever the file order. |
 | In scmJS | Read, and written again when you change what it holds. |
 <!-- /generated -->
 
@@ -1511,8 +1581,9 @@ The triggers, 2400 bytes each, in the order they run. The record is laid out in 
 condition and action.
 
 Only Use Map Settings reads the map's triggers. Melee and the other game types run
-triggers of their own, built into the game, and never read this section. Remastered still
-wants it there: its map list refuses a map with no `TRIG` section, even for melee.
+triggers of their own, built into the game, and never read this section. Remastered's map
+list reads it for every map, to see whether the map uses EUD triggers, so there a map with
+no `TRIG` section is refused, even for melee.
 
 When the game loads the triggers, it hands each player in the game a copy of every trigger
 that runs for them, and drops the rest. Which owners that covers is in the trigger
@@ -1525,7 +1596,7 @@ reference, under [Who a trigger runs for](triggers.md#who-a-trigger-runs-for).
 | --- | --- |
 | Size | 2400 bytes per trigger. |
 | Read by | The game, at the start of a Use Map Settings game. Melee and the other game types never read it. |
-| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. In StarCraft: Remastered every map needs it, whatever the game type: without it the map list shows the map as *Invalid Scenario*. (Found playing Remastered.) |
+| Required | For Use Map Settings. Without it a Use Map Settings game stops at the start with *Error loading scenario file.* Melee and the other game types play without it. In StarCraft: Remastered every map needs it, whatever the game type: its map list reads the triggers, and shows a map without them, or with a length that is not whole triggers, as *Invalid Scenario*. |
 | The game accepts | Whole triggers only. A length that is not a multiple of 2400 refuses the map. |
 | More than one copy | The copies are joined into one list: the records of all of them, in file order. |
 | In scmJS | Read, and written again when you change what it holds. |
@@ -1792,8 +1863,10 @@ scenario file.* A `VER` 59 or 63 file's `COLR` is ignored, and its players get t
 colours.
 
 The game applies it by giving Player n the colour slot `COLR[n]` had before, so a value of
-n leaves the player's colour alone. 1.16.1 has twelve colours, 0 to 11; the values from 12
-up are Remastered's, and give a wrong colour in 1.16.1.
+n leaves the player's colour alone. Only the twelve colours 0 to 11 work here: 1.16.1
+gives a wrong colour for 12 and up, and Remastered skips such a value, which leaves the
+player its usual colour. In Remastered a [`CRGB`](#crgb) Custom colour can give the player
+any colour.
 
 <!-- generated: section COLR -->
 | Name | `COLR` (43 4F 4C 52) |
@@ -2006,16 +2079,33 @@ Layout:
 ## CRGB
 
 StarCraft: Remastered's player colours. For each of Players 1 to 8, how its colour is
-chosen, and a colour of its own. The RGB value is used only when the mode is Custom; with
-Palette the game uses the [`COLR`](#colr) colour, which is also what every older version
-reads.
+chosen, and three bytes that go with it. Remastered reads it for the map list, in a file
+of any revision:
+
+- **Random** gives the player a random colour.
+- **Player choice** leaves the colour to the player in the lobby.
+- **Custom** uses the three bytes as red, green and blue.
+- **Palette** gives the player its [`COLR`](#colr) colour, as older versions do. Any mode
+  above 3 counts as Palette.
+
+Remastered's loader also takes the third byte of a Palette entry as a colour number, 0 to
+21, for the lobby. But a test map whose Palette entries said Blue, Orange and Pink there
+played with every player in its `COLR` colour, so in a game the third byte makes no
+difference. scmJS writes the `COLR` colour there, so the two agree.
+
+Custom was checked in a game, in a `VER` 206 file and in a 205 file: the player's units
+took the stored colour. So Custom is the way to give a player one of Remastered's colours
+past the first twelve, or any other colour. Random and Player choice are what the loader
+does with them, and have not been checked in a game.
 
 <!-- generated: section CRGB -->
 | Name | `CRGB` (43 52 47 42) |
 | --- | --- |
 | Size | 32 bytes. |
-| Read by | StarCraft: Remastered only. 1.16.1 does not know it. |
+| Read by | StarCraft: Remastered only, for the map list, in a file of any revision. 1.16.1 does not know it. |
 | Required | No. |
+| The game accepts | Exactly 32 bytes. Any other length shows the map as *Invalid Scenario*. |
+| More than one copy | The last copy replaces the others. Every copy must still be the right size, or the map is refused. |
 | In scmJS | Read, and written again when you change what it holds. |
 
 Layout:

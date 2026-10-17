@@ -7,7 +7,7 @@
 import { MAP_VERSIONS, mapVersionOf, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
-import { PlayerType } from "../formats/chk/sections/players";
+import { FORCE_SLOTS, isPaletteMode, PlayerType } from "../formats/chk/sections/players";
 import { getString, unencodableStrings } from "../formats/chk/sections/strings";
 import { textEncodingInfo } from "../formats/text/encoding";
 import { msg, t, translate } from "../i18n";
@@ -15,11 +15,13 @@ import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, Swit
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, conditionDef } from "../data/triggerDefs";
 import { isRemasteredOnlyTile } from "../data/remasteredTiles";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel } from "../data/units";
+import { PLAYER_COLORS } from "../data/players";
 import { UnitClass } from "../formats/chk/sections/triggers";
 import type { DialogId } from "../components/dialogs/ids";
 import type { IsomStatus } from "./isom";
 import { CUWP_SLOTS, cuwpSlotActive } from "./cuwp";
 import { isAnywhereIntact, locationCapacity, locationName } from "./locations";
+import { CLASSIC_COLORS } from "./settings";
 import { TILE_PX } from "./units";
 import { findStockSound, isStockPath, type StockSounds } from "./stockSounds";
 
@@ -86,6 +88,14 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   // ── Players and start locations ──
   if (scn.editorPlayerTypes && scn.editorPlayerTypes.some((trig, i) => trig !== scn.playerTypes[i])) {
     add("warn", t("The player types StarEdit shows (IOWN) differ from the ones the game reads (OWNR); another tool wrote one and not the other. Player Settings rewrites both."), msg("Players"), { kind: "dialog", id: "playerSettings" });
+  }
+  // COLR holds twelve colours: older versions show a wrong one past them, and Remastered skips
+  // the value (docs/chk-format.md, COLR). A slot on a Remastered colour mode does not use it.
+  const colorName = (c: number) => translate(PLAYER_COLORS[c]?.name ?? "") || String(c);
+  for (let p = 0; p < FORCE_SLOTS; p++) {
+    if (scn.playerTypes[p] !== PlayerType.Human && scn.playerTypes[p] !== PlayerType.Computer) continue;
+    if (scn.playerColors[p] < CLASSIC_COLORS || (scn.playerRgb && !isPaletteMode(scn.playerRgb.mode[p]))) continue;
+    add("warn", t("Player {n}'s colour, {name}, is past the twelve the game takes as a palette colour: older versions show a wrong colour and Remastered the player's usual one.", { n: p + 1, name: colorName(scn.playerColors[p]) }), msg("Players"), { kind: "dialog", id: "playerColors" });
   }
   const starts = scn.units.map((u, index) => ({ u, index })).filter(({ u }) => u.unitId === START_LOCATION);
   scn.playerTypes.forEach((type, p) => {

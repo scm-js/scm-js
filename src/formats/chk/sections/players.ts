@@ -100,13 +100,20 @@ export const ColorMode = {
   PlayerChoice: 1,
   /** The RGB triple stored alongside. */
   Custom: 2,
-  /** The COLR byte, as every older client reads it (StarEdit's default). */
+  /**
+   * The COLR colour, as every older version reads it. Remastered's loader also takes the
+   * triple's third byte as the slot's lobby colour (22+ random) and reads any value above 3
+   * as this mode, but in a game the player shows its COLR colour (probe R13).
+   */
   Palette: 3,
 } as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
 
+/** Whether Remastered reads a slot's mode byte as Palette: 3, and anything above it. */
+export const isPaletteMode = (mode: number | undefined): boolean => mode === undefined || mode >= ColorMode.Palette;
+
 export interface PlayerRgb {
-  /** `[r, g, b]` for each of the 8 playable slots; only read when `mode` is `Custom`. */
+  /** `[r, g, b]` for each of the 8 playable slots: the colour when `mode` is `Custom`; the editor writes `[0, 0, COLR]` for `Palette`. */
   rgb: [number, number, number][];
   /** A `ColorMode` per slot. */
   mode: number[];
@@ -129,7 +136,7 @@ export function encodePlayerRgb(colors: PlayerRgb): Uint8Array {
   return w.finish();
 }
 
-/** What StarEdit writes: every slot on its COLR colour, RGB zeroed. */
+/** Every slot on Palette, triples zeroed; `playerRgbFor` fills the third bytes in before writing it. */
 export function defaultPlayerRgb(): PlayerRgb {
   return {
     rgb: Array.from({ length: FORCE_SLOTS }, () => [0, 0, 0]),

@@ -67,7 +67,15 @@ a timer behind it — nor is seen. The last launch's milestones are always writt
 stdout too), which is how "it hung and then opened" is told apart from a slow exe unpack, a
 virus scanner, or the launch path: a Windows build run from `\\wsl.localhost\…` takes 628 ms
 to evaluate its main script and never reaches `dom-ready`, so copy `release/win-unpacked` to
-`/mnt/c/…` before running it (`docs/development.md`).
+`/mnt/c/…` before running it (`docs/development.md`, Desktop). The same build, both ways
+(measured 2026-09; `\\wsl.localhost\…` is a network share, and Chromium loads its binaries and
+every asset through it):
+
+| milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
+| --- | --- | --- |
+| main script evaluated | 47 ms | 628 ms |
+| window created | 142 ms | 963 ms |
+| `dom-ready` | 215 ms | not within 25 s |
 
 `src/moveIn.ts` is `main.tsx`'s second import and ends in a top-level `await`: on the first visit
 to `scmjs.dev/editor/` it holds every module after it until the settings kept under the editor's

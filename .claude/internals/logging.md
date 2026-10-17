@@ -2,7 +2,7 @@
 
 ### The buffer (`src/editor/log.ts`, `src/editor/diagnostics.ts`, `src/atoms/logAtoms.ts`, `src/components/chrome/DebugConsole.tsx`, `src/hooks/useErrorCapture.ts`)
 
-`docs/guide.md#when-something-goes-wrong` is the user's half; `docs/development.md#how-the-editor-is-put-together`
+`docs/guide.md#when-something-goes-wrong` is the user's half; `docs/development.md#conventions`
 has the paragraph for contributors. This is why it is shaped the way it is.
 
 **The problem it solves.** Everything the editor knew about a misbehaving session went to

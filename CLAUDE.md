@@ -163,6 +163,7 @@ note in the code's. UI copy and docs prose stay plain — no marketing or AI-sou
 **UI, briefly.** All state is Jotai; there is no context/provider layering beyond the default store.
 CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs →
 splash` under `src/styles/`, with the design tokens as CSS variables in `tokens.css`. Adding a dialog
-means touching *both* the `DialogId` union (`src/atoms/uiAtoms.ts`) and the `REGISTRY` of
-`React.lazy` components (`DialogHost.tsx`), and dialog modules **must not** be imported statically
-from anything on the startup path or Vite folds them back into the main chunk. See `viewport-ui.md`.
+means touching *both* the `DialogId` union (`src/components/dialogs/ids.ts`, re-exported by
+`src/atoms/uiAtoms.ts`) and the `REGISTRY` of `React.lazy` components (`DialogHost.tsx`), and dialog
+modules **must not** be imported statically from anything on the startup path or Vite folds them
+back into the main chunk. See `viewport-ui.md`.

@@ -98,6 +98,18 @@
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
   game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib
   needs 1.16.1+.
+- **Modelling a new section** (checklist; was in `docs/file-formats.md` until 2026-10-16): a codec under
+  `sections/`, decode it in `parseScenario`, a case in `encodeSection`, its name in the `MODELLED`
+  tuple (`MODELLED_SECTIONS`, the `SectionName` union), and a round trip in `tests/chk.test.ts`. An
+  optional section is `null` in the model when the file had none; never write a zeroed one.
+- **The byte-for-byte suites need `fixtures/maps/*.scx`**: `tests/chk.test.ts`, `save.test.ts`,
+  `settings.test.ts`, `data-settings.test.ts`, `trigger.test.ts`, `briefing.test.ts` and
+  `cuwp.test.ts` re-encode Blizzard's maps and skip without them, so a green run on a clone (or CI)
+  has not exercised them. Run them locally before changing anything under `src/formats/`.
+- **The public docs' split.** `docs/file-formats.md` is the map maker's account (what Save keeps, the
+  archive, revisions, protected maps); the text-encoding guess and everything byte-level live in
+  `docs/chk-format.md` (the encoding guess is on the `STR` page, the `ISOM` explanation is the
+  appendix *The isometric record explained* at the end, after every section's page).
 
 ### The reference's extras (2026-09-23): ISOM model, examples, pictures, chk.ksy
 

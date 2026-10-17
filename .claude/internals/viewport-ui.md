@@ -59,7 +59,9 @@ read in the first effect pass is still null.
   `useStartupMap` steps aside because a scenario is open, `usePlugins` re-activates nothing
   already active, and `usePreload` runs again (its `started` is a ref) — a second game-data
   probe and its log lines, nothing else. The menu bar, toolbar, tab strip and status bar have
-  no boundary of their own and fall to that last one. Logging is not done by any of them; see
+  no boundary of their own and fall to that last one. **A new top-level surface** (a dock, a strip,
+  a floating panel host) gets a boundary of its own; anything inside an existing one is covered.
+  Logging is not done by any of them; see
   `logging.md`. Checked in headless Chromium with a component rigged to throw in a panel, the
   map and `App` (rig not committed); `e2e/errors.spec.ts` keeps the dialog path.
 - **Leaving a dialog with edits asks first** (2026-10-04). `useScenarioForm` returns a third value,

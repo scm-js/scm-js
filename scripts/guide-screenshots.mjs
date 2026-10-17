@@ -152,7 +152,16 @@ const SCENES = [
     await p.menu("Triggers", /^Trigger Editor/); await p.wait(1200);
     await p.page.locator(".dlg .trig-list .item").nth(1).click().catch(() => {}); await p.wait(600);
     await p.dialog("trigger-editor"); await p.esc();
-    await p.menu("Triggers", /^Text Trigger Editor/); await p.wait(1200); await p.dialog("text-triggers"); await p.esc();
+    // The Text Trigger Editor is the TrigEdit plugin, installed but off by default: its
+    // picture is taken only when the build has it turned on.
+    await p.page.click('.menubar button:has-text("Triggers")'); await p.wait(200);
+    const textTriggers = p.page.locator(".menu-item", { hasText: /^Text Trigger Editor/ }).first();
+    if (await textTriggers.count()) {
+      await textTriggers.click(); await p.wait(2000); await p.dialog("text-triggers"); await p.esc();
+    } else {
+      await p.esc();
+      console.log("text-triggers: skipped — TrigEdit is off");
+    }
     await p.page.keyboard.press("Control+Shift+W"); await p.wait(4000); await p.take("walkability");
     await p.page.keyboard.press("Control+Shift+W"); await p.wait(500);
   }),
@@ -917,9 +926,13 @@ function driver(page, mock, other) {
      */
     async example(markers, { before = "", after = "", wait: settle = 1500 } = {}) {
       const blocks = [...readFileSync(join(root, "docs/plugins.md"), "utf8").matchAll(/^```ts\n([\s\S]*?)^```/gm)].map((m) => m[1]);
+      // The API reference's own examples too: the guide links to those rather than repeating them.
+      for (const m of readFileSync(join(root, "src/plugins/api.ts"), "utf8").matchAll(/^\s*\* @example\n((?:\s*\*(?! @|\/).*\n)+)/gm)) {
+        blocks.push(m[1].split("\n").map((l) => l.replace(/^\s*\* ?/, "")).filter((l) => !l.startsWith("```")).join("\n"));
+      }
       const code = [before, ...markers.map((marker) => {
         const found = blocks.filter((b) => b.includes(marker));
-        if (found.length === 0) throw new Error(`docs/plugins.md has no example containing: ${marker}`);
+        if (found.length === 0) throw new Error(`neither docs/plugins.md nor api.ts has an example containing: ${marker}`);
         // The whole plugin (the block with `activate`) over a step of the same code.
         return found.find((b) => b.includes("export default")) ?? found[0];
       }), after].filter(Boolean).join("\n");

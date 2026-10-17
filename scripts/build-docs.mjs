@@ -30,7 +30,7 @@ import { assignTypes, buildReference, slugOf } from "./lib/docs/api.mjs";
 import { headingsIn, renderMarkdown, splitPages } from "./lib/docs/markdown.mjs";
 import { codeBlock, escapeHtml, memberHtml, navHtml, page, tocHtml, typeHtml } from "./lib/docs/render.mjs";
 import { codeBlocksOf, playgroundUrl, runnableSnippets } from "./lib/docs/tryit.mjs";
-import { buildGuide, IMAGES_DIR, linkResolver, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
+import { buildGuide, IMAGES_DIR, linkResolver, redirects, REPO_URL, SOURCES } from "./lib/docs/site.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const EDITOR_URL = "https://scmjs.dev/editor";
@@ -45,21 +45,24 @@ const API_DTS = join(root, "plugin-api/index.d.ts");
  * *demonstrates* a group is a judgement, not a fact in the code.
  */
 export const EXAMPLE_PLUGINS = [
-  { repo: "plugin-hello-world", name: "Hello World", groups: ["menu", "ui"], of: "the smallest complete plugin: one menu item and one dialog, to copy from" },
+  { repo: "plugin-hello-world", name: "Hello World", groups: ["menu", "ui", "i18n"], of: "the smallest complete plugin: one menu item, one dialog and a Korean catalogue, to copy from" },
+  { repo: "plugin-api-playground", name: "API Playground", groups: [], of: "running other code in a scope and taking back everything it registered" },
   { repo: "plugin-paint", name: "Paint", groups: ["ui", "palette", "document"], of: "map tools, a floating panel, and painting with the active layer's brush" },
   { repo: "plugin-walkability", name: "Walkability", groups: ["ui", "tileset", "query", "view"], of: "a read-only overlay drawn over the map" },
-  { repo: "plugin-section-explorer", name: "Section Explorer", groups: ["document", "names"], of: "raw section bytes, re-parsed into the open map" },
-  { repo: "plugin-repair", name: "Repair", groups: ["document", "text", "events"], of: "checking a file on open and repairing it" },
-  { repo: "plugin-melee-wizard", name: "Melee Wizard", groups: ["query", "document", "ui"], of: "placing units with the editor's own placement checks" },
   { repo: "plugin-image-to-terrain", name: "Terrain from Image", groups: ["terrain", "ui"], of: "an image turned into terrain, one transaction" },
+  { repo: "plugin-melee-wizard", name: "Melee Wizard", groups: ["query", "document", "ui"], of: "placing units with the editor's own placement checks" },
+  { repo: "plugin-repair", name: "Repair", groups: ["document", "text", "events"], of: "checking a file on open and repairing it" },
+  { repo: "plugin-section-explorer", name: "Section Explorer", groups: ["document", "names"], of: "raw section bytes, re-parsed into the open map" },
   { repo: "plugin-scm-scx", name: "scmscx.com", groups: ["document", "ui"], of: "opening a map fetched from elsewhere" },
   { repo: "plugin-trigscript", name: "TrigScript", groups: ["triggers", "commands"], of: "generating a run of triggers and claiming it" },
   { repo: "plugin-trigedit", name: "TrigEdit", groups: ["triggers", "ui"], of: "the text trigger format, and a dialog that offers a slot to other plugins" },
   { repo: "plugin-magenta", name: "Magenta", groups: ["triggers", "consts", "services"], of: "a trigger editor that needs another plugin's service" },
   { repo: "plugin-eudplib", name: "eudplib", groups: ["services"], of: "a library plugin: one versioned service for others to build with" },
+  { repo: "plugin-scm-sim", name: "scm-sim", groups: ["services"], of: "a library plugin whose service talks by message to another page" },
   { repo: "plugin-stamp-library", name: "Stamp Library", groups: ["clipboard", "graphics", "storage"], of: "clips kept in storage, drawn as thumbnails and pasted as one edit" },
+  { repo: "plugin-trigger-map", name: "Trigger Map", groups: ["triggers", "view", "ui"], of: "the trigger list as a graph, from what each trigger reads and writes" },
   { repo: "plugin-timelapse", name: "Timelapse", groups: ["events", "graphics", "tileset"], of: "following every commit, one frame per change" },
-  { repo: "plugin-aftermath", name: "Aftermath", groups: ["ui", "view"], of: "a replay drawn over its map with an overlay" },
+  { repo: "plugin-aftermath", name: "Aftermath", groups: ["ui", "document", "graphics"], of: "replays opened as view-only maps, with the game shown in the map's place" },
   { repo: "plugin-scmjs-dev", name: "scmjs.dev", groups: ["services", "sync", "menu", "ui"], of: "an account, shared maps, docked panels and dialog slots" },
 ];
 
@@ -212,7 +215,7 @@ function main(argv) {
     description: "Guides and the plugin API reference for scmJS, a StarCraft: Brood War map editor that runs in a browser tab.",
     url: `${base}/`,
     section: "Home",
-    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "what-it-does")?.body ?? "",
+    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "current-features")?.body ?? "",
       (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt, code: codeOpts })),
   });
 
@@ -244,6 +247,20 @@ ${guide.pages.map((p) => `<li><a class="card" href="${base}${p.url}"><b>${escape
         body: `<h1>${escapeHtml(p.title)}</h1>\n${renderMarkdown(p.body, { shift: -1, rewriteLink: (h) => resolveLink(guide.file, h), tryIt, code: codeOpts })}`,
       });
     }
+  }
+
+  /* ── old addresses ── */
+  // A page that became part of another (a trigger action, a renamed section) keeps its old
+  // address as a forwarding page, left out of the sitemap and the search index.
+  for (const { from, to } of redirects(guides)) {
+    const target = `${base}${to}`;
+    write(out, `${base}${from}`, `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Moved</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="${escapeHtml(origin + target)}">
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+</head><body><p>This page has moved to <a href="${escapeHtml(target)}">${escapeHtml(target)}</a>.</p></body></html>
+`);
   }
 
   /* ── the API reference ── */
@@ -394,9 +411,10 @@ function homeHtml(guides, api, base, features, render) {
     ? `<h2 id="what-it-does">What it does</h2>\n${render(features.replace(/^!\[.*$/gm, "").trim())}\n`
     : "";
   return `<h1>scmJS documentation</h1>
-<p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files.</p>
+<p class="lede">scmJS is a StarCraft: Brood War map editor that runs in a browser tab or as a desktop app. It opens, edits and saves StarCraft maps: <code>.scm</code>, <code>.scx</code> and <code>.chk</code> files and reads <code>.rep</code> files.</p>
 <p class="home-shot"><img src="${base}/images/editor-plain.webp" width="1400" height="900" alt="The editor with Big Game Hunters open on the Terrain layer"></p>
-<p class="lede">The latest version of the editor is always available at <a href="${EDITOR_URL}/" target="_blank" rel="noopener noreferrer">${EDITOR_URL.replace("https://", "")}</a>.</p>
+<p style="font-weight: bold;">The latest version of the editor is always available at <a href="${EDITOR_URL}/" target="_blank" rel="noopener noreferrer">${EDITOR_URL.replace("https://", "")}</a>.</p>
+<p>See the <a href="${base}/guide/getting-started/">getting started page</a> for more information.</p>
 ${featuresHtml}<h2 id="documents">The documents</h2>
 <ul class="cards">
 ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.blurb)}</span></a></li>`).join("\n")}
@@ -436,7 +454,7 @@ ${rows}
 <h2 id="root">On the api object itself</h2>
 <ul>
 ${plain}
-<li><code>api.plugin</code> — the manifest of the plugin this <code>api</code> belongs to (<a href="${base}/api/types/#plugininfo"><code>PluginInfo</code></a>).</li>
+<li><code>api.plugin</code> — the manifest of the plugin this <code>api</code> belongs to (<a href="${base}/api/ui/#plugininfo"><code>PluginInfo</code></a>).</li>
 </ul>
 <h2 id="examples">Plugins to read</h2>
 <p>Every plugin the editor ships is a repository of its own, compiled against these declarations; <a href="${base}/plugins/plugins-to-read/">Plugins to read</a> says what each one demonstrates.</p>

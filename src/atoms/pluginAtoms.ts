@@ -324,7 +324,7 @@ export const cancelMapToolAtom = atom(null, (get) => {
 
 /**
  * One `api.ui.overlay`: a picture the viewport draws at the spec's slot while `visible`,
- * listed under View ▸ Overlays and in the Layers panel. The list is in registration
+ * listed as a tick in the View menu and in the Layers panel. The list is in registration
  * order; `visible` is the one field the chrome writes (through `setOverlayVisibleAtom`).
  */
 export interface PluginOverlayEntry {

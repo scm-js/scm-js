@@ -114,7 +114,7 @@ types:
         size: 4
         encoding: ASCII
         doc: "RAWS for a StarCraft file, RAWB for Brood War"
-    doc: "TYPE: read by the game."
+    doc: "TYPE: looked for by the game but never read."
   sec_ver:
     doc-ref: "https://docs.scmjs.dev/chk/ver/"
     seq:
@@ -223,7 +223,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 2736
-        doc: "Per player, per unit type: 1 if the player uses the default"
+        doc: "Per player, per unit type: 0 to use this player's own byte above; anything else for the default"
     doc: "PUNI: read by the game."
   sec_upgr:
     doc-ref: "https://docs.scmjs.dev/chk/upgr/"
@@ -252,7 +252,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 552
-        doc: "Per player, per upgrade: 1 if the player uses the defaults"
+        doc: "Per player, per upgrade: 0 to use this player's own values above; anything else for the defaults"
     doc: "UPGR: read by the game."
   sec_ptec:
     doc-ref: "https://docs.scmjs.dev/chk/ptec/"
@@ -281,7 +281,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 288
-        doc: "Per player, per ability: 1 if the player uses the defaults"
+        doc: "Per player, per ability: 0 to use this player's own values above; anything else for the defaults"
     doc: "PTEC: read by the game."
   sec_unit:
     doc-ref: "https://docs.scmjs.dev/chk/unit/"
@@ -428,7 +428,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 228
-        doc: "Per unit type: 1 to use the game's own values and ignore the rest of this section"
+        doc: "Per unit type: 0 to use this section's values; anything else for the game's own, ignoring the rest of this section"
       - id: hit_points
         type: u4
         repeat: expr
@@ -482,7 +482,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 46
-        doc: "Per upgrade: 1 to use the game's own values"
+        doc: "Per upgrade: 0 to use this section's values; anything else for the game's own"
       - id: mineral_cost
         type: u2
         repeat: expr
@@ -521,7 +521,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 24
-        doc: "Per ability: 1 to use the game's own values"
+        doc: "Per ability: 0 to use this section's values; anything else for the game's own"
       - id: mineral_cost
         type: u2
         repeat: expr
@@ -589,7 +589,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 732
-        doc: "Per player, per upgrade: 1 if the player uses the defaults"
+        doc: "Per player, per upgrade: 0 to use this player's own values above; anything else for the defaults"
     doc: "PUPx: read by the game."
   sec_ptex:
     doc-ref: "https://docs.scmjs.dev/chk/ptex/"
@@ -618,7 +618,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 528
-        doc: "Per player, per ability: 1 if the player uses the defaults"
+        doc: "Per player, per ability: 0 to use this player's own values above; anything else for the defaults"
     doc: "PTEx: read by the game."
   sec_unix:
     doc-ref: "https://docs.scmjs.dev/chk/unix/"
@@ -627,7 +627,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 228
-        doc: "Per unit type: 1 to use the game's own values and ignore the rest of this section"
+        doc: "Per unit type: 0 to use this section's values; anything else for the game's own, ignoring the rest of this section"
       - id: hit_points
         type: u4
         repeat: expr
@@ -681,7 +681,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 61
-        doc: "Per upgrade: 1 to use the game's own values"
+        doc: "Per upgrade: 0 to use this section's values; anything else for the game's own"
       - id: unused
         type: u1
         doc: Unused
@@ -723,7 +723,7 @@ types:
         type: u1
         repeat: expr
         repeat-expr: 44
-        doc: "Per ability: 1 to use the game's own values"
+        doc: "Per ability: 0 to use this section's values; anything else for the game's own"
       - id: mineral_cost
         type: u2
         repeat: expr
@@ -761,7 +761,7 @@ types:
         repeat: expr
         repeat-expr: count
         doc: "strings[0] is string 1."
-    doc: "STRx: read by the game."
+    doc: "STRx: read by StarCraft: Remastered only."
   sec_crgb:
     doc-ref: "https://docs.scmjs.dev/chk/crgb/"
     seq:
@@ -776,7 +776,7 @@ types:
         repeat-expr: 8
         doc: "How each player's colour is chosen (modes, below)"
         enum: color_mode
-    doc: "CRGB: read by the game."
+    doc: "CRGB: read by StarCraft: Remastered only."
   unit:
     seq:
       - id: serial
@@ -793,7 +793,7 @@ types:
         doc: "Unit type"
       - id: relation_type
         type: u2
-        doc: "How the unit is linked to another (relations, below)"
+        doc: "Link flags editors write; the game ignores them (below)"
       - id: valid_properties
         type: u2
         doc: "Which special states the record sets (below)"

@@ -12,7 +12,7 @@
   every string, and Repair's on-open collapse then deleted the real table, so the saved map no
   longer loaded ("intended for use with a StarCraft expansion set", in Brood War mode too). Probe
   copies settled the rule: two full tables → the second's name shows (last wins); real + a 2-byte
-  count-0 table → loads with `<Missing>` name and description (2 bytes counts). **STRx's is 4**,
+  count-0 table → loads with `<MISSING>` name (the image's spelling) and description (2 bytes counts). **STRx's is 4**,
   read from Remastered's loader (2026-10-17: `minimum = 2 + 2·isStrx`), not probed. No other
   section has one — if another decoy turns up, probe it the same way (Maps/Download copies, user
   reads the lobby) before adding one.

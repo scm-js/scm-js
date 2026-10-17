@@ -46,7 +46,7 @@ export const LAYOUTS = {
     rows: [
       row("u8", P * U, "Per player, per unit type: 1 if the player can build it. Player 1's 228 bytes first", undefined, "available"),
       row("u8", U, "Per unit type: 1 if it can be built, for every player that uses the default", undefined, "default_available"),
-      row("u8", P * U, "Per player, per unit type: 1 if the player uses the default", undefined, "uses_default"),
+      row("u8", P * U, "Per player, per unit type: 0 to use this player's own byte above; anything else for the default", undefined, "uses_default"),
     ],
   },
   UPGR: { rows: upgradeRows(46) },
@@ -58,7 +58,7 @@ export const LAYOUTS = {
       row("u16", 1, "X position in pixels", "x"),
       row("u16", 1, "Y position in pixels", "y"),
       row("u16", 1, "Unit type", "unitId"),
-      row("u16", 1, "How the unit is linked to another (relations, below)", "relationType"),
+      row("u16", 1, "Link flags editors write; the game ignores them (below)", "relationType"),
       row("u16", 1, "Which special states the record sets (below)", "validProperties"),
       row("u16", 1, "Which of the following fields the record sets (fields set, below)", "validStates"),
       row("u8", 1, "Owner, 0 for Player 1", "owner"),
@@ -71,7 +71,14 @@ export const LAYOUTS = {
       row("u32", 1, "Unused", "unused"),
       row("u32", 1, "Serial number of the linked unit", "relatedSerial"),
     ],
-    flags: [["Relations", "UnitRelation", false, "relationType"], ["Special states", "UnitState", false, "stateFlags"], ["Fields set", "UnitUsed", false, "validStates"]],
+    flags: [
+      ["Link flags", "UnitRelation", false, "relationType", {
+        NydusLink: "StarEdit writes it on both units of every linked pair, an add-on and its building or two nydus canals. The game ignores it",
+        Addon: "Called the add-on link in older references. The game ignores it",
+      }],
+      ["Special states", "UnitState", false, "stateFlags", { InTransit: "In transit: a Terran building that can fly starts lifted off" }],
+      ["Fields set", "UnitUsed", false, "validStates"],
+    ],
   },
   ISOM: {
     isom: true,
@@ -173,7 +180,7 @@ function upgradeRows(n) {
     row("u8", P * n, "Per player, per upgrade: the level they start at", undefined, "start_levels"),
     row("u8", n, "Per upgrade: the default highest level", undefined, "default_max_levels"),
     row("u8", n, "Per upgrade: the default starting level", undefined, "default_start_levels"),
-    row("u8", P * n, "Per player, per upgrade: 1 if the player uses the defaults", undefined, "uses_default"),
+    row("u8", P * n, "Per player, per upgrade: 0 to use this player's own values above; anything else for the defaults", undefined, "uses_default"),
   ];
 }
 
@@ -183,13 +190,13 @@ function techRows(n) {
     row("u8", P * n, "Per player, per ability: 1 if they start with it", undefined, "researched"),
     row("u8", n, "Per ability: the default for may research", undefined, "default_available"),
     row("u8", n, "Per ability: the default for start with", undefined, "default_researched"),
-    row("u8", P * n, "Per player, per ability: 1 if the player uses the defaults", undefined, "uses_default"),
+    row("u8", P * n, "Per player, per ability: 0 to use this player's own values above; anything else for the defaults", undefined, "uses_default"),
   ];
 }
 
 function unitSettingsRows(weapons) {
   return [
-    row("u8", U, "Per unit type: 1 to use the game's own values and ignore the rest of this section", "useDefault"),
+    row("u8", U, "Per unit type: 0 to use this section's values; anything else for the game's own, ignoring the rest of this section", "useDefault"),
     row("u32", U, "Hit points × 256", "hitPoints"),
     row("u16", U, "Shields", "shields"),
     row("u8", U, "Armour", "armor"),
@@ -204,7 +211,7 @@ function unitSettingsRows(weapons) {
 
 function upgradeSettingsRows(n, padded) {
   return [
-    row("u8", n, "Per upgrade: 1 to use the game's own values", "useDefault"),
+    row("u8", n, "Per upgrade: 0 to use this section's values; anything else for the game's own", "useDefault"),
     ...(padded ? [row("u8", 1, "Unused", undefined, "unused")] : []),
     row("u16", n, "Mineral cost of the first level", "mineralCost"),
     row("u16", n, "Minerals added for each further level", "mineralFactor"),
@@ -217,7 +224,7 @@ function upgradeSettingsRows(n, padded) {
 
 function techSettingsRows(n) {
   return [
-    row("u8", n, "Per ability: 1 to use the game's own values", "useDefault"),
+    row("u8", n, "Per ability: 0 to use this section's values; anything else for the game's own", "useDefault"),
     row("u16", n, "Mineral cost", "mineralCost"),
     row("u16", n, "Gas cost", "gasCost"),
     row("u16", n, "Research time, in game frames", "researchTime"),
@@ -243,6 +250,8 @@ const trimName = (name) => name.trimEnd();
 const code = (name) => `\`${name.replace(/ /g, "␠")}\``;
 const hexOf = (name) => [...name].map((c) => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")).join(" ");
 const SPELLING = { Addon: "Add-on" };
+/** Lowercases a hint's first letter to follow a dash, but not an initialism's ("AI-controlled"). */
+const lowerFirst = (text) => (/^.[A-Z]/.test(text) ? text : text.charAt(0).toLowerCase() + text.slice(1));
 const words = (key) => SPELLING[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])(?=[a-z])/g, (_, c) => ` ${c.toLowerCase()}`);
 
 function layoutTable(rows) {
@@ -254,17 +263,17 @@ function layoutTable(rows) {
   return lines.join("\n");
 }
 
-function flagTable(consts, enumerated) {
+function flagTable(consts, enumerated, meanings = {}) {
   const lines = [enumerated ? "| Value | Meaning |" : "| Bit | Meaning |", "| --- | --- |"];
   for (const [key, value] of Object.entries(consts)) {
-    lines.push(`| ${enumerated ? value : `0x${value.toString(16).padStart(value > 0xff ? 4 : 2, "0")}`} | ${words(key)} |`);
+    lines.push(`| ${enumerated ? value : `0x${value.toString(16).padStart(value > 0xff ? 4 : 2, "0")}`} | ${meanings[key] ?? words(key)} |`);
   }
   return lines.join("\n");
 }
 
 function valueTable(kind, defs) {
   switch (kind) {
-    case "playerTypes": return ["| Value | Type |", "| --- | --- |", ...[...defs.PLAYER_TYPES].sort((a, b) => a.value - b.value).map((t) => `| ${t.value} | ${t.label}${t.hint ? ` — ${t.hint.charAt(0).toLowerCase()}${t.hint.slice(1)}` : ""} |`)].join("\n");
+    case "playerTypes": return ["| Value | Type |", "| --- | --- |", ...[...defs.PLAYER_TYPES].sort((a, b) => a.value - b.value).map((t) => `| ${t.value} | ${t.label}${t.hint ? ` — ${lowerFirst(t.hint)}` : ""} |`)].join("\n");
     case "races": return ["| Value | Race |", "| --- | --- |", ...[...defs.PLAYER_RACES].sort((a, b) => a.value - b.value).map((r) => `| ${r.value} | ${r.label} |`)].join("\n");
     case "tilesets": return ["| Value | Tileset |", "| --- | --- |", ...defs.TILESETS.map((t, i) => `| ${i} | ${t.name} |`)].join("\n");
     case "colors": return ["| Value | Colour |", "| --- | --- |", ...defs.PLAYER_COLORS.map((c) => `| ${c.id} | ${c.name} |`)].join("\n");
@@ -298,10 +307,10 @@ function gameReadText(name) {
   if (u.list && u.melee.length === ALL) return "The game, every time it reads the map: for the map list, at the start of every game, and for the briefing.";
   if (u.list) return "The game, for the map list. It reads it again when a game is created and when it starts.";
   if (u.melee.length === ALL) return "The game, at the start of every game, whatever its type.";
-  if (u.melee.length) return "The game, at the start of every game, in a Brood War file (`VER` 205). In an older file the game never reads it.";
+  if (u.melee.length) return "The game, at the start of every game, in a Brood War file (`VER` 205, or Remastered's 206). In a `VER` 59, 63 or 64 file the game never reads it.";
   if (u.ums.length === ALL) return "The game, at the start of a Use Map Settings game. Melee and the other game types never read it.";
   if (u.ums.length && u.umsOptional.length) return "The game, at the start of a Use Map Settings game, in a file of any revision.";
-  if (u.ums.length) return "The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file. A Brood War file's copy is never read.";
+  if (u.ums.length) return "The game, at the start of a Use Map Settings game, in a `VER` 59 or 63 file, or Remastered's 64. A Brood War file's copy is never read.";
   if (u.briefing) return "The game, for the briefing of a Use Map Settings game.";
   throw new Error(`No reading rule for "${name}"`);
 }
@@ -313,10 +322,10 @@ function gameRequiredText(name) {
   const u = readsOf(name);
   if (u.list) return "Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played.";
   if (u.melee.length === ALL) return `Yes. Without it the map is listed, but every game on it ${STOPS}`;
-  if (u.melee.length) return `In a Brood War file (\`VER\` 205). Without it every game on the map ${STOPS}`;
+  if (u.melee.length) return `In a Brood War file (\`VER\` 205, or Remastered's 206). Without it every game on the map ${STOPS}`;
   if (u.ums.length === ALL) return `For Use Map Settings. Without it a Use Map Settings game ${STOPS} Melee and the other game types play without it.`;
-  if (u.ums.length && u.umsOptional.length) return "For Use Map Settings in a Brood War file (`VER` 205). In an older file it is optional, and read after the original table when present.";
-  if (u.ums.length) return "For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63).";
+  if (u.ums.length && u.umsOptional.length) return "For Use Map Settings in a Brood War file (`VER` 205, or Remastered's 206). In a `VER` 59, 63 or 64 file it is optional, and read after the original table when present.";
+  if (u.ums.length) return "For Use Map Settings in a StarCraft 1.00 or hybrid file (`VER` 59 or 63), and in Remastered's `VER` 64.";
   if (u.briefing) return "No. Without it there is no briefing, and nothing else changes.";
   throw new Error(`No requirement rule for "${name}"`);
 }
@@ -332,7 +341,7 @@ function gameSizeText(name, layout) {
   if (rule.atMost && name === "FORC") return `Up to ${rule.atMost} bytes. A shorter section is filled out with zeros; a longer one refuses the map.`;
   if (rule.atMost) return `Up to ${rule.atMost} bytes, the most a 256 × 256 map needs. A longer section refuses the map; a shorter one is taken.`;
   if (typeof rule.exactly === "object") {
-    return `Exactly ${rule.exactly[59]} bytes (64 locations) in a \`VER\` 59 file, and ${rule.exactly[205]} (255 locations) in \`VER\` 63 and 205. Any other length refuses the map.`;
+    return `Exactly ${rule.exactly[59]} bytes (64 locations) in a \`VER\` 59 file, and ${rule.exactly[205]} (255 locations) in \`VER\` 63 and 205, and Remastered's 64 and 206. Any other length refuses the map.`;
   }
   return `Exactly ${rule.exactly} bytes. Any other length refuses the map.`;
 }
@@ -375,8 +384,8 @@ function sectionBlock(spec, defs) {
     const each = layout.record ? `Each ${layout.record}:` : "Layout:";
     lines.push("", each, "", layoutTable(layout.rows));
   }
-  for (const [title, key, enumerated] of layout.flags ?? []) {
-    lines.push("", `${title}:`, "", flagTable(defs[key], enumerated));
+  for (const [title, key, enumerated, , meanings] of layout.flags ?? []) {
+    lines.push("", `${title}:`, "", flagTable(defs[key], enumerated, meanings));
   }
   if (layout.values) lines.push("", valueTable(layout.values, defs));
   return lines.join("\n");
@@ -447,7 +456,7 @@ function sizesTable() {
 
 function revisionTable(defs) {
   const lines = ["| Revision | `VER` | `TYPE` | Extension |", "| --- | --- | --- | --- |"];
-  // The editor writes four revisions; Remastered also knows a fifth, 64, listed with its 206.
+  // The editor's revisions, with the two only Remastered knows (64, 206) last, from chk-game.mjs.
   const remastered = new Set(REMASTERED_VERSIONS.map((v) => v.ver));
   const known = [...Object.values(defs.MAP_VERSIONS).filter((v) => !remastered.has(v.ver)), ...REMASTERED_VERSIONS];
   for (const v of known) lines.push(`| ${v.label} | ${v.ver} | \`${v.type}\` | \`.${v.extension}\` |`);
@@ -574,7 +583,7 @@ function unitExample(defs) {
     x: (v) => `x ${v} px (tile ${Math.floor(v / 32)})`,
     y: (v) => `y ${v} px (tile ${Math.floor(v / 32)})`,
     unitId: (v) => `unit type ${v}, ${defs.unitName(v)}`,
-    relationType: () => "not linked",
+    relationType: () => "no link flags (the game ignores them)",
     validProperties: () => "sets no special states",
     validStates: (v) => `sets: ${set(v, defs.UnitUsed)}`,
     owner: (v) => `owner: Player ${v + 1}`,

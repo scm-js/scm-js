@@ -687,7 +687,7 @@ function rulerLines(fields, { x0, y0, perLine, byteW, labels, base = 0 }) {
 /** Short labels for the ruler of each record, by the layout row's field name. */
 const RULER_LABELS = {
   UNIT: {
-    serial: "serial", x: "x", y: "y", unitId: "unit type", relationType: "relations",
+    serial: "serial", x: "x", y: "y", unitId: "unit type", relationType: "link flags",
     validProperties: "states set", validStates: "fields set", owner: "owner", hitPointsPercent: "hit points %",
     shieldPercent: "shields %", energyPercent: "energy %", resourceAmount: "resources", hangarUnits: "hangar",
     stateFlags: "states", unused: "unused", relatedSerial: "linked serial",
@@ -1043,52 +1043,53 @@ function vcodSvg() {
 /** Picture: what happens to one record of UNIT when a game starts. */
 function unitPathSvg() {
   const parts = [HEAD];
-  const ox = 24, qx = ox, qw = 300, ax = 380, aw = 356, bh = 40, step = 58;
+  const ox = 24, qx = ox, qw = 300, ax = 380, aw = 356, gap = 18;
   parts.push(text(ox, 30, "What the game does with a placed unit", { size: 15, anchor: "start", weight: 600 }));
   const steps = [
     ["Is it a start location?", "No unit is made: its place becomes the owner's start location.", "keep"],
     ["Is the owner Player 1 to 8, and is", "that slot empty in this game?", "Dropped.", "drop"],
     ["Is this melee, or any type but", "Use Map Settings?", "Kept only if it is a Player 12 mineral field, geyser or critter.", "drop"],
-    ["Use Map Settings, with the owner's race", "set to User Selectable?", "Kept only if it is a neutral kind: minerals, geysers, critters, power-ups.", "drop"],
+    ["Use Map Settings, with the owner's race", "set to User Selectable?", "Kept only if it is a neutral kind: a mineral field, geyser, critter, power-up, door or trap, or a Map Revealer, Dark Swarm or Disruption Web.", "drop"],
     ["A Brood War unit, in a game of", "the original StarCraft?", "Not made.", "drop"],
-    ["Is there room to place it?", "Removed, with WARNING: Unit unplaceable! on screen.", "drop"],
+    ["A ground unit whose footprint touches", "ground it cannot walk on?", "Removed, with WARNING: Unit unplaceable! on screen.", "drop"],
   ];
   let y = 52;
   for (const st of steps) {
     const kind = st.at(-1);
     const question = st.length === 4 ? [st[0], st[1]] : [st[0]];
     const answer = st.length === 4 ? st[2] : st[1];
-    parts.push(`<rect x="${qx}" y="${y}" width="${qw}" height="${bh}" rx="6" fill="#2b313e" stroke="${RECT_LINE}"/>`);
-    question.forEach((q, i) => parts.push(text(qx + 12, y + (question.length === 1 ? 25 : 17 + i * 15), q, { size: 12, anchor: "start" })));
-    parts.push(arrow(qx + qw + 2, y + bh / 2, ax - 4, y + bh / 2));
-    parts.push(text(qx + qw + 28, y + bh / 2 - 5, st === steps[5] ? "no" : "yes", { size: 10.5, fill: MUTED }));
     const words = answer.split(" ");
     const linesOut = [];
     let cur = "";
     for (const w of words) { if ((cur + " " + w).trim().length > 52) { linesOut.push(cur.trim()); cur = w; } else cur += " " + w; }
     linesOut.push(cur.trim());
+    const bh = linesOut.length > 2 ? 56 : 40;
+    parts.push(`<rect x="${qx}" y="${y}" width="${qw}" height="${bh}" rx="6" fill="#2b313e" stroke="${RECT_LINE}"/>`);
+    const qTop = y + bh / 2 - (question.length - 1) * 7.5 + 4;
+    question.forEach((q, i) => parts.push(text(qx + 12, qTop + i * 15, q, { size: 12, anchor: "start" })));
+    parts.push(arrow(qx + qw + 2, y + bh / 2, ax - 4, y + bh / 2));
+    parts.push(text(qx + qw + 28, y + bh / 2 - 5, "yes", { size: 10.5, fill: MUTED }));
     const color = kind === "keep" ? NEED_FILL : FAIL_FILL;
     parts.push(`<rect x="${ax}" y="${y}" width="${aw}" height="${bh}" rx="6" fill="${color}" stroke="${kind === "keep" ? "#3c5a86" : "#6a3a3a"}"/>`);
-    linesOut.slice(0, 2).forEach((l, i) => parts.push(text(ax + 10, y + (linesOut.length === 1 ? 25 : 17 + i * 15), l, { size: 11.5, anchor: "start" })));
-    if (st !== steps.at(-1)) {
-      parts.push(arrow(qx + 40, y + bh + 2, qx + 40, y + step - 2));
-      parts.push(text(qx + 50, y + bh + 13, "no", { size: 10.5, fill: MUTED, anchor: "start" }));
-    }
-    y += step;
+    const aTop = y + bh / 2 - (linesOut.length - 1) * 7.5 + 4;
+    linesOut.forEach((l, i) => parts.push(text(ax + 10, aTop + i * 15, l, { size: 11.5, anchor: "start" })));
+    parts.push(arrow(qx + 40, y + bh + 2, qx + 40, y + bh + gap - 2));
+    parts.push(text(qx + 50, y + bh + 13, "no", { size: 10.5, fill: MUTED, anchor: "start" }));
+    y += bh + gap;
   }
   // Created.
-  parts.push(arrow(qx + 40, y - step + bh + 2, qx + 40, y - 2));
-  parts.push(text(qx + 50, y - step + bh + 13, "yes", { size: 10.5, fill: MUTED, anchor: "start" }));
   parts.push(`<rect x="${qx}" y="${y}" width="${ax + aw - qx}" height="58" rx="6" fill="#1d2a20" stroke="${OK}"/>`);
   parts.push(text(qx + 12, y + 22, "The unit is made, then the record's fields are applied, each only when its bit is set:", { size: 12, anchor: "start" }));
-  parts.push(text(qx + 12, y + 42, "hit points, shields, energy, resources, hangar, and the states: cloaked, burrowed, in transit, hallucinated, invincible.", { size: 11.5, anchor: "start", fill: MUTED }));
+  parts.push(text(qx + 12, y + 42, "hit points, shields, energy, resources, hangar, and the states: cloaked, burrowed, lifted off, hallucinated, invincible.", { size: 11.5, anchor: "start", fill: MUTED }));
   const foot = y + 86;
   parts.push(lines(ox, foot, [
-    "Only the last UNIT section's start locations count. Hit points of 0% leave the unit at 1/256 of a hit point. Resources",
-    "are kept to 16 bits, so 70,000 becomes 4,464. Only Carriers, Reavers and their heroes take a hangar count. A Ghost placed",
-    "cloaked starts cloaked only if its owner has Personal Cloaking. Add-ons and nydus canals link within one UNIT section.",
+    "A unit standing on another is moved aside to the nearest free spot. Buildings are made where the record puts them,",
+    "on any ground. Only the last UNIT section's start locations count. Hit points of 0% leave the unit at 1/256 of a hit",
+    "point. Resources are kept to 16 bits, so 70,000 becomes 4,464. Only Carriers, Reavers and their heroes take a hangar",
+    "count. A Ghost placed cloaked starts cloaked only if its owner has Personal Cloaking. Add-ons and nydus canals link",
+    "within one UNIT section.",
   ], { size: 11.5, fill: MUTED }));
-  return svg(760, foot + 56, "What the game does with a placed unit", "The checks a UNIT record passes when a game starts: start locations are noted, not made; units of empty player slots are dropped; melee keeps only Player 12 minerals, geysers and critters; in Use Map Settings a User Selectable player keeps only neutral kinds of unit; Brood War units are not made in the original game; a unit with no room is removed with a warning. Then the unit is made and its fields applied.", parts.join("\n"));
+  return svg(760, foot + 88, "What the game does with a placed unit", "The checks a UNIT record passes when a game starts: start locations are noted, not made; units of empty player slots are dropped; melee keeps only Player 12 minerals, geysers and critters; in Use Map Settings a User Selectable player keeps only neutral kinds of unit; Brood War units are not made in the original game; a ground unit touching ground it cannot walk on is removed with a warning, while a unit on top of another is moved aside and buildings are always made. Then the unit is made and its fields applied.", parts.join("\n"));
 }
 
 /* ── Pictures of the trigger reference: when triggers run (measured in 1.16.1) ── */

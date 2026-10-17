@@ -84,7 +84,7 @@ const SPECS: SectionSpec[] = [
   { name: "UNIx", mode: "entries", size: 4168, entries: UNIT_ENTRIES, what: msg("Unit settings (BW)") },
   { name: "UPGx", mode: "entries", size: 794, entries: { count: 61, pad: 1, columns: UPGRADE_WIDTHS }, what: msg("Upgrade settings (BW)") },
   { name: "TECx", mode: "entries", size: 396, entries: { count: 44, columns: TECH_WIDTHS }, what: msg("Tech settings (BW)") },
-  { name: "STRx", mode: "last", what: msg("String table (Remastered, 32-bit offsets)") },
+  { name: "STRx", mode: "last", minimum: 4, what: msg("String table (Remastered, 32-bit offsets)") },
   { name: "CRGB", mode: "last", size: 32, what: msg("Player colours (Remastered RGB)") },
 ];
 

@@ -12,9 +12,10 @@
   every string, and Repair's on-open collapse then deleted the real table, so the saved map no
   longer loaded ("intended for use with a StarCraft expansion set", in Brood War mode too). Probe
   copies settled the rule: two full tables → the second's name shows (last wins); real + a 2-byte
-  count-0 table → loads with `<Missing>` name and description (2 bytes counts). STRx is **not**
-  measured and has no minimum; nor does any other section — if another decoy turns up, probe it
-  the same way (Maps/Download copies, user reads the lobby) before adding one.
+  count-0 table → loads with `<Missing>` name and description (2 bytes counts). **STRx's is 4**,
+  read from Remastered's loader (2026-10-17: `minimum = 2 + 2·isStrx`), not probed. No other
+  section has one — if another decoy turns up, probe it the same way (Maps/Download copies, user
+  reads the lobby) before adding one.
   `serializeChk` writes each header's **declared** size, not `data.length`: the two differ only for a
   section the reader could not take whole (a length past the end of the file, or a negative one — a
   protection trick the game acts on), and a plain Save must leave such a header as it found it. So
@@ -226,10 +227,14 @@ Editor follow-ups this found:
 - DONE 2026-10-17: CRGB Palette slots get `[0, 0, COLR]` (was zeros; harmless either way, R13),
   Check Map warns on COLR ≥ 12 (`settings.md`). A first version that drew from the third byte
   was reverted after R13.
-- `mapVersionOf(64)` → "hybrid"; a 64 file is Remastered-only (STRx allowed).
-- The reader takes STRx whenever present (`scenario.ts` "STRx wins"); the game reads it
-  only at VER 64/206, so a 205 file with STR + STRx shows different text in the editor —
-  a decoy. STRx < 4 bytes should be passed over like STR < 2.
+- DONE 2026-10-17: VER 64 is `MapVersion` "remasteredHybrid" (label "Remastered 1.21+ without
+  Brood War"); `isRemasteredRevision` (64, ≥206) gates STRx in `setMapVersion`, the Map
+  Revision dialog (which offers 64 only to a file that already is one) and Check Map's Ogg
+  warning. Every numeric `fileVersion` test already treated 64 like 63, as the game does.
+- DONE 2026-10-17: `parseScenario` takes STRx only at VER 64/206 (or when the file has no STR
+  at all, so the text still shows — Check Map then errors "strings are in STRx"); an unread
+  STRx is never dirty, so it is written back byte for byte. Check Map notes the decoy. STRx
+  registry `minimum: 4`.
 - The editor guesses one encoding for the whole table (`detectTextEncoding`); Remastered
   decides per string (UTF-8 → CP949 → 1252), so a table mixing UTF-8 and CP949 strings reads
   differently.

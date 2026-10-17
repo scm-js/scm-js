@@ -88,8 +88,11 @@ section are kept too, unless the Save dialog is told to drop them. So:
 
 Every piece of text in the map lives in one string table, [`STR `](chk-format.md#str) (or
 [`STRx`](chk-format.md#strx) on a Remastered map), and other sections point into it by
-number. The editor never renumbers the table on save, since sections it carries as bytes
-still point at the old numbers; a string that stops being used is blanked, not removed.
+number. The editor reads `STRx` where the game does, in a `VER` 64 or 206 file, and there
+it wins over `STR`. A `STRx` in any other revision is kept in the file as it is, and the
+editor shows the `STR` text players see. The editor never renumbers the table on save,
+since sections it carries as bytes still point at the old numbers; a string that stops
+being used is blanked, not removed.
 
 The table does not say which character encoding its text is in. The editor guesses as the
 game would read it and shows the guess in Scenario ▸ Map Revision, where you can change
@@ -198,8 +201,10 @@ What the revision changes in the file:
 Scenario ▸ Map Revision changes the revision. It rewrites `VER ` and `TYPE`, switches the
 string table between `STR ` and `STRx` for Remastered (and the text to UTF-8 with it), and
 sets the encoding the text is written in. Every string keeps its number, so triggers and
-locations still point at the right text. Tables the new revision no longer needs are not
-discarded; the Save dialog lists what will be written.
+locations still point at the right text. A `VER` 64 map, Remastered's revision without
+Brood War, keeps its revision: Map Revision offers it only for a map that already is one.
+Tables the new revision no longer needs are not discarded; the Save dialog lists what will
+be written.
 
 ## New maps
 

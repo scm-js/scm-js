@@ -4,7 +4,7 @@
  * extras for sound paths and the ISOM health the hook already measured), so the checks
  * are testable; `ValidateMapDialog` renders the list and jumps to the targets.
  */
-import { MAP_VERSIONS, mapVersionOf, tilesetIndex, type Scenario } from "../formats/chk/scenario";
+import { isRemasteredRevision, MAP_VERSIONS, mapVersionOf, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { requiredSections } from "../formats/chk/create";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import { FORCE_SLOTS, isPaletteMode, PlayerType } from "../formats/chk/sections/players";
@@ -71,10 +71,18 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   // ── Sections the game needs ──
   // Every game needs the map-list sections and the terrain, sprites and units; only Use Map
   // Settings reads the fog, locations, triggers and settings tables (docs/chk-format.md).
-  const absent = (n: string) => !hasSection(scn, n) && !(n === "STR " && scn.strings.extended && hasSection(scn, "STRx"));
+  // The game takes STRx in place of STR only in a Remastered revision (VER 64 or 206).
+  const remastered = isRemasteredRevision(scn.fileVersion);
+  const strxOnly = scn.strings.extended && !hasSection(scn, "STR ");
+  const absent = (n: string) => !hasSection(scn, n) && !(n === "STR " && strxOnly);
   const missingAll = requiredSections(scn.fileVersion, "melee").filter(absent);
   const missingUms = requiredSections(scn.fileVersion, "ums").filter((n) => absent(n) && !missingAll.includes(n));
   const names = (list: string[]) => list.map((n) => n.trim()).join(", ");
+  if (strxOnly && !remastered) {
+    add("error", t("The strings are in STRx, which the game reads only in a Remastered revision, so this map shows as Invalid Scenario. Map Revision fixes it: choose Remastered to keep STRx, or press OK as it is to move the strings to STR."), msg("File"), { kind: "dialog", id: "mapRevision" });
+  } else if (!remastered && hasSection(scn, "STRx")) {
+    add("info", t("The file also has a STRx string table, which the game does not read in this revision. The editor shows the STR text, as the game does."), msg("File"), { kind: "dialog", id: "mapRevision" });
+  }
   if (missingAll.length > 0) {
     add("error", t("Missing {join} — the game will not load this map.", { join: names(missingAll) }), msg("File"), { kind: "dialog", id: "mapRevision" });
   }
@@ -210,7 +218,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   };
   scn.triggers.forEach((trig, i) => checkTrigger(trig, i, msg("Triggers"), false));
   // An Ogg plays in Remastered only; an older revision's game skips it.
-  if (scn.wavs && scn.fileVersion < 206) {
+  if (scn.wavs && !remastered) {
     scn.wavs.forEach((i, slot) => {
       const path = i > 0 ? getString(scn.strings, i) : null;
       if (path && /\.ogg$/i.test(path)) add("warn", t("Sound {slot} is an Ogg ({path}); only Remastered plays those, and this map's revision is {label}.", { slot, path, label: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label }), msg("Sounds"), { kind: "dialog", id: "soundEditor" });

@@ -7,7 +7,7 @@ import { ensureTileset, TILESET_FILENAMES } from "../../formats/tileset/load";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
 import { useTileset } from "../../hooks/useTileset";
-import { MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, setTextEncoding, type MapVersion, type Scenario } from "../../formats/chk/scenario";
+import { isRemasteredRevision, MAP_VERSIONS, mapVersionOf, setMapVersion, setScenarioDescription, setScenarioName, setTextEncoding, type MapVersion, type Scenario } from "../../formats/chk/scenario";
 import { isTextEncoding, TEXT_ENCODINGS, textEncodingInfo, type TextEncoding } from "../../formats/text/encoding";
 import { unencodableStrings } from "../../formats/chk/sections/strings";
 import { PLAYER_TYPES } from "../../data/players";
@@ -281,15 +281,19 @@ export function MapRevisionDialog({ entry }: DialogProps) {
     { id: "hybrid", hint: t("loads in both StarCraft and Brood War") },
     { id: "broodwar", hint: t("full Brood War unit set (recommended)") },
     { id: "remastered", hint: t("extended unit / string limits (STRx)") },
+    // Offered only to keep a file that already is one: the editor does not make VER 64 maps.
+    ...(scenario && mapVersionOf(scenario.fileVersion) === "remasteredHybrid" ? [{ id: "remasteredHybrid" as const, hint: t("Remastered only, read like a hybrid file, without Brood War") }] : []),
   ];
+  // The two revisions whose STRx the game reads.
+  const remastered = isRemasteredRevision(MAP_VERSIONS[v].ver);
   // A new map's CHK is empty until its first save; what it will write is in the dirty set.
   const has = (name: string) => (scenario?.chk.sections.some((s) => s.name === name) || scenario?.dirty.has(name)) ?? false;
   const pick = (id: MapVersion) => {
     if (!form) return;
-    const on = id === "remastered" && (strx || scenario?.strings.extended === false);
+    const on = isRemasteredRevision(MAP_VERSIONS[id].ver) && (strx || scenario?.strings.extended === false);
     setForm({ v: id, strx: on, enc: on && !strx ? "utf-8" : form.enc });
   };
-  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); setTextEncoding(scenario, v === "remastered" && strx ? "utf-8" : enc); commit(); } };
+  const apply = () => { if (scenario) { setMapVersion(scenario, v, strx); setTextEncoding(scenario, remastered && strx ? "utf-8" : enc); commit(); } };
 
   if (!scenario) {
     return <DialogFrame dialogKey={entry.key} title={t("Map Revision")} icon={<ScrollText size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
@@ -311,20 +315,20 @@ export function MapRevisionDialog({ entry }: DialogProps) {
         </div>
       </Group>
       <Group title={t("String table")}>
-        <Check label={t("Write the extended string table (STRx, 32-bit offsets)")} disabled={v !== "remastered"} checked={v === "remastered" && strx} onChange={(e) => setStrx(e.target.checked)} />
+        <Check label={t("Write the extended string table (STRx, 32-bit offsets)")} disabled={!remastered} checked={remastered && strx} onChange={(e) => setStrx(e.target.checked)} />
         <p className="hint" style={{ marginTop: 4 }}>
-          {scenario.strings.extended && v !== "remastered"
+          {scenario.strings.extended && !remastered
             ? t("This file has STRx; leaving Remastered converts it back to STR. Strings past 65535 or offsets past 64 KB would not fit.")
             : t("Only Remastered reads STRx. The table's indices are unchanged either way; triggers and locations keep pointing where they did.")}
         </p>
         <div className="row" style={{ marginTop: 8 }}>
           <span>{t("Text encoding")}</span>
-          <Select value={enc} options={encodingOptions} onChange={(e) => setEnc(e.target.value)} disabled={v === "remastered" && strx} style={{ flex: 1 }} />
+          <Select value={enc} options={encodingOptions} onChange={(e) => setEnc(e.target.value)} disabled={remastered && strx} style={{ flex: 1 }} />
         </div>
         <p className="hint" style={{ marginTop: 4 }}>
           {lost.length > 0
             ? t("{n, plural, one {# string uses} other {# strings use}} characters {encoding} cannot hold; they would be saved as '?'.", { n: lost.length, encoding: translate(textEncodingInfo(enc).label) })
-            : t("The file does not say how its text is encoded, so this was guessed from its bytes. {hint}. Remastered reads UTF-8 and falls back to the code page of the machine it runs on; 1.16.1 reads only that code page.", { hint: translate(textEncodingInfo(enc).hint) })}
+            : t("The file does not say how its text is encoded, so this was guessed from its bytes. {hint}. Remastered reads each string as UTF-8 when it is valid UTF-8, else as Korean, else as Windows-1252; 1.16.1 reads the code page of the machine it runs on.", { hint: translate(textEncodingInfo(enc).hint) })}
         </p>
       </Group>
       <Group title={t("In this file")}>

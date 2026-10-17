@@ -115,14 +115,16 @@ export function resolvePlayers(group: number, owners: readonly number[], forces:
       let approximate = false;
       for (const o of owners) {
         if (!TRIGGER_OWNERS.has(o)) continue;
-        const r = resolvePlayers(o, [], forces);
+        // As an owner All Players is the players in the game, 1–8; as a record's player it is more.
+        const r = o === PlayerGroup.AllPlayers ? { players: EIGHT, approximate: false } : resolvePlayers(o, [], forces);
         r.players.forEach((p) => out.add(p));
         approximate ||= r.approximate;
       }
       return { players: [...out].sort((a, b) => a - b), approximate };
     }
+    // In conditions and the unit actions the game takes in Players 9–12 as well.
     case PlayerGroup.AllPlayers:
-      return { players: EIGHT.slice(), approximate: false };
+      return { players: TWELVE.slice(), approximate: false };
     case PlayerGroup.Force1: case PlayerGroup.Force2: case PlayerGroup.Force3: case PlayerGroup.Force4:
       return { players: [...(forces[group - PlayerGroup.Force1] ?? [])].sort((a, b) => a - b), approximate: false };
     case PlayerGroup.Foes: case PlayerGroup.Allies: case PlayerGroup.NonAlliedVictoryPlayers:
@@ -212,13 +214,13 @@ function actionRefs(a: ActionRecord, slot: number, groups: number[], owners: num
     }
   }
   if (briefing) return;
-  const who = (group = a.player) => withPlayers(group, groups, forces);
+  const who = (group = a.player) => withPlayers(group, groups, forces, EIGHT_ONLY.has(a.type));
   switch (a.type) {
     case ActionType.SetSwitch:
       out.push({ ...base, kind: "switch", access: "write", id: a.target, players: [] });
       break;
     case ActionType.SetDeaths:
-      deathsRefs(base, "write", a.player, a.unitId, a.mask === MASKED_RECORD ? a.location : undefined, groups, forces, out);
+      deathsRefs(base, "write", a.player, a.unitId, a.mask === MASKED_RECORD ? a.location : undefined, groups, forces, out, true);
       break;
     case ActionType.SetCountdownTimer: case ActionType.PauseTimer: case ActionType.UnpauseTimer:
       out.push({ ...base, kind: "timer", access: "write", id: 0, players: [] });
@@ -249,9 +251,17 @@ function actionRefs(a: ActionRecord, slot: number, groups: number[], owners: num
   }
 }
 
+/** Actions that do nothing for Players 9–12, so All Players reaches only 1–8 through them. */
+const EIGHT_ONLY: ReadonlySet<number> = new Set([ActionType.CreateUnit, ActionType.CreateUnitWithProperties, ActionType.SetDeaths, ActionType.SetResources, ActionType.SetScore]);
+
+/** {@link resolvePlayers}, with All Players kept to 1–8 for the actions that refuse 9–12. */
+function groupPlayers(group: number, owners: number[], forces: readonly (readonly number[])[], eightOnly: boolean) {
+  return eightOnly && group === PlayerGroup.AllPlayers ? { players: EIGHT.slice(), approximate: false } : resolvePlayers(group, owners, forces);
+}
+
 /** `players` / `group` / `approximate` for a record's player group. */
-function withPlayers(group: number, owners: number[], forces: readonly (readonly number[])[]): Pick<TriggerRef, "players" | "group" | "approximate"> {
-  const r = resolvePlayers(group, owners, forces);
+function withPlayers(group: number, owners: number[], forces: readonly (readonly number[])[], eightOnly = false): Pick<TriggerRef, "players" | "group" | "approximate"> {
+  const r = groupPlayers(group, owners, forces, eightOnly);
   return { players: r.players, group, ...(r.approximate ? { approximate: true } : {}) };
 }
 
@@ -264,7 +274,7 @@ function union(a: number[], b: number[]): number[] {
  * and the unit is a real unit, the sum the game computes for a unit class (which counts
  * as reading *units* of that class), and a memory address for everything else.
  */
-function deathsRefs(base: Base, access: TriggerRefAccess, player: number, unitId: number, mask: number | undefined, owners: number[], forces: readonly (readonly number[])[], out: TriggerRef[]) {
+function deathsRefs(base: Base, access: TriggerRefAccess, player: number, unitId: number, mask: number | undefined, owners: number[], forces: readonly (readonly number[])[], out: TriggerRef[], eightOnly = false) {
   const masked = mask !== undefined ? { mask: mask >>> 0 } : {};
   const address = (slot: number) => addressOfEpd(slot, unitId);
   if (player >= PLAYER_GROUP_COUNT) {
@@ -272,7 +282,7 @@ function deathsRefs(base: Base, access: TriggerRefAccess, player: number, unitId
     out.push({ ...base, kind: "memory", access, id: unitId, players: [], group: player, address: address(player), ...masked });
     return;
   }
-  const r = resolvePlayers(player, owners, forces);
+  const r = groupPlayers(player, owners, forces, eightOnly);
   const approximate = r.approximate ? { approximate: true } : {};
   if (unitId < UNIT_TYPE_COUNT && mask === undefined) {
     out.push({ ...base, kind: "deaths", access, id: unitId, players: r.players, group: player, ...approximate });

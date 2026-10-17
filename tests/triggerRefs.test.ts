@@ -23,9 +23,20 @@ describe("resolvePlayers", () => {
   it("names a slot, a force, All Players and Current Player", () => {
     expect(resolvePlayers(3, [], FORCES)).toEqual({ players: [3], approximate: false });
     expect(resolvePlayers(PlayerGroup.Force2, [], FORCES)).toEqual({ players: [2, 3], approximate: false });
-    expect(resolvePlayers(PlayerGroup.AllPlayers, [], FORCES).players).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(resolvePlayers(PlayerGroup.AllPlayers, [], FORCES).players).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(resolvePlayers(PlayerGroup.CurrentPlayer, [PlayerGroup.Force1, 6], FORCES)).toEqual({ players: [0, 1, 6], approximate: false });
     expect(resolvePlayers(PlayerGroup.None, [], FORCES).players).toEqual([]);
+  });
+
+  it("takes All Players to 9–12 where the game does", () => {
+    const all = PlayerGroup.AllPlayers;
+    const [t] = triggerReferences([trigger([0], [{ type: ConditionType.Command, player: all, unitId: 0 }], [
+      { type: ActionType.KillUnit, player: all, unitId: 0 },
+      { type: ActionType.CreateUnit, player: all, unitId: 0 },
+      { type: ActionType.SetDeaths, player: all, unitId: 0 },
+    ])], FORCES);
+    const twelve = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], eight = twelve.slice(0, 8);
+    expect(t.refs.filter((r) => r.kind !== "location").map((r) => r.players)).toEqual([twelve, twelve, eight, eight]);
   });
 
   it("says when the group is only settled in the game", () => {

@@ -487,11 +487,11 @@ A map has a fixed number of location slots — 64 in StarCraft 1.00 maps, 255 in
 Brood War ones. A new location takes the lowest free slot, deleting one empties it, and
 triggers keep pointing at the slot they named.
 
-Slot 64 is **Anywhere**, the location every trigger can pick, and the game and other
-editors depend on it covering exactly the map. It is pinned at the top of the list with a
-lock, never drawn, never picked by a click, and cannot be moved, renamed or deleted. If a
-map's Anywhere has gone missing or no longer matches the map, the editor offers to put it
-back.
+The 64th slot, numbered 63 in the editor, which counts slots from 0, is **Anywhere**, the
+location every trigger can pick, and the game and other editors depend on it covering
+exactly the map. It is pinned at the top of the list with a lock, never drawn, never
+picked by a click, and cannot be moved, renamed or deleted. If a map's Anywhere has gone
+missing or no longer matches the map, the editor offers to put it back.
 
 A map built with eudplib (euddraft, or TrigScript's Remastered build) has no readable
 locations in the file. eudplib stores its loader in the location table, scrambled, and the
@@ -839,12 +839,13 @@ each is played.
   at all (a location action without one does nothing); strings that do not exist; unit and
   player values the game does not have; condition and action types it does not have, which
   crash StarCraft 1.16.1 (Remastered takes such a condition as false and skips such an
-  action); Create Unit, Set Resources and Set Score for Players 9–12, which do nothing; a
-  trigger ticked twice for one player, which runs twice; a trigger with flag 0x02, which
-  defeats every other player each time its actions run; Mission Briefing in a trigger, and
-  a briefing that does not start with it; AI scripts a human player's trigger cannot run;
-  Play WAV actions with no file in the map, and Ogg sounds, which only Remastered plays;
-  switches tested for Set but never set.
+  action); Create Unit, Set Resources and Set Score for Players 9–12, which do nothing;
+  Create Unit of a unit class or of a type StarEdit's palette leaves out, which makes
+  nothing; a trigger ticked twice for one player, which runs twice; a trigger with flag
+  0x02, which defeats every other player each time its actions run; Mission Briefing in a
+  trigger, and a briefing that does not start with it; AI scripts a trigger owned only by
+  people, rescuable or neutral slots cannot run; Play WAV actions with no file in the map,
+  and Ogg sounds, which only Remastered plays; switches tested for Set but never set.
 - **Terrain:** tiles with bit 15 set, which the game files as a creep flag, though in play
   such a tile shows no creep and takes no Zerg building; tiles from groups the tileset
   does not have; tiles only Remastered's tilesets have; a missing or outdated isometric

@@ -2039,8 +2039,10 @@ Reading triggers and everything needed to show one. Writing is `document.update`
   - A condition *reads*. An action *writes*, or *uses* something without changing it
     (the location units are created at, the text a message shows).
   - Player groups come resolved to slots, with `approximate` set for groups the game
-    settles only while it runs, such as *Foes*. `resolvePlayers(group)` does that
-    resolution on its own.
+    settles only while it runs, such as *Foes*. *All Players* reaches Players 9–12 in
+    conditions and the unit actions, as the game does, but not as a trigger's owner or in
+    Create Unit, Set Deaths, Set Resources and Set Score, which refuse them.
+    `resolvePlayers(group)` does that resolution on its own.
 
 **To generate triggers, write text.** `tx.triggers.fromText` parses the text format,
 interns its strings and resolves names against the open map. That is easier than filling

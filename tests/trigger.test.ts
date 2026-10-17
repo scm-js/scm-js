@@ -134,6 +134,20 @@ describe("text triggers", () => {
     expect(encodeTriggers([back.trigger])).toEqual(encodeTriggers([t]));
   });
 
+  it("writes a Create Unit count of 0 as 0, since it makes one unit", () => {
+    const names = fakeNames();
+    const t = newTrigger([0]);
+    t.actions = [
+      { ...newAction(ActionType.CreateUnit), unitId: 1, modifier: 0, location: 2 },
+      { ...newAction(ActionType.KillUnitAt), unitId: 1, modifier: 0, location: 2 },
+    ];
+    const text = formatTrigger(t, names);
+    expect(text).toContain('Create Unit("Current Player", "Terran Ghost", 0, "Base");');
+    expect(text).toContain('Kill Unit At Location("Current Player", "Terran Ghost", All, "Base");');
+    const [back] = parseTriggers(text, names);
+    expect(encodeTriggers([back.trigger])).toEqual(encodeTriggers([t]));
+  });
+
   it("parses hand-written text with comments, disabled items and flags", () => {
     const names = fakeNames();
     const text = `

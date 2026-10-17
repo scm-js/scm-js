@@ -4,7 +4,7 @@ import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, symmetryAtom, 
 import { commitEditAtom, deleteSelectedUnitsAtom, scenarioAtom, tilesetFileNameAtom, unitsRevisionAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  addUnits, applyUnitChanges, linkPlaced, makeUnit, pairRelated, nextSerial, snapPlacement, unitAt, unitGeometry, unitsInBox, updateUnits,
+  addUnits, applyUnitChanges, isResource, linkPlaced, makeUnit, pairRelated, nextSerial, snapPlacement, unitAt, unitGeometry, unitsInBox, updateUnits,
   type PixelBox, type UnitChange, type UnitGeometry,
 } from "../editor/units";
 import { checkPlacement, placementReason, type PlacementProblem } from "../editor/placement";
@@ -66,7 +66,8 @@ export function useUnitTools() {
     const opts = store.get(placementOptionsAtom);
     const { x, y } = snapPlacement(geometry, p.px, p.py, scn.width, scn.height, opts.snapToGrid);
     const verdict = checkPlacement(scn, tilesetOf(), tables, opts, unitId, x, y);
-    return { unitId, owner: store.get(unitOwnerAtom), x, y, geometry, ...verdict };
+    // Resources go to Player 12, as StarEdit places them: a melee game keeps no one else's.
+    return { unitId, owner: isResource(unitId) ? 11 : store.get(unitOwnerAtom), x, y, geometry, ...verdict };
   }, [store, tables, tilesetOf]);
 
   /** The ghost and its images under the symmetry mode (Tools ▸ Symmetry…), the pointed one first. */

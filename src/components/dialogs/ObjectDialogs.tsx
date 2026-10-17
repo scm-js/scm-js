@@ -149,8 +149,8 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
             {vital(t("Hit points"), "hitPointsPercent", UnitUsed.HitPoints, 255, "%")}
             {vital(t("Shields"), "shieldPercent", UnitUsed.Shields, 255, "%")}
             {vital(t("Energy"), "energyPercent", UnitUsed.Energy, 255, "%")}
-            {vital(t("Resources"), "resourceAmount", UnitUsed.Resources, 0xffffffff, undefined, t("Minerals or gas in a resource field."))}
-            {vital(t("Hangar"), "hangarUnits", UnitUsed.Hangar, 0xffff, undefined, t("Interceptors or scarabs on board."))}
+            {vital(t("Resources"), "resourceAmount", UnitUsed.Resources, 0xffff, undefined, t("Minerals or gas in a resource field or gas building; the game keeps up to 65535."))}
+            {vital(t("Hangar"), "hangarUnits", UnitUsed.Hangar, 0xff, undefined, t("Interceptors or scarabs on board: Carriers, Reavers and their heroes only, up to what the unit holds."))}
           </div>
           <p className="hint" style={{ marginTop: 8 }}>{PERCENT_HINT}</p>
         </Group>

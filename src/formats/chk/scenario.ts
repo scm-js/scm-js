@@ -22,6 +22,8 @@ import {
 } from "./sections/settings";
 import { decodeWavs, encodeWavs } from "./sections/sounds";
 import { requiredSections } from "./create";
+import { vcodPasses } from "./game";
+import { defaultVcod } from "./sections/vcod";
 import { decodeCuwp, decodeCuwpUsed, encodeCuwp, encodeCuwpUsed, type CuwpSlot } from "./sections/cuwp";
 import {
   decodeIsom, decodeMask, decodeTiles, encodeIsom, encodeTiles,
@@ -421,6 +423,11 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     switchNames: swnm ? decodeSwitchNames(swnm) : null,
   };
 
+  // The game refuses an MRGN copy of any length but its revision's (1280 bytes in a 1.00 file,
+  // 5100 after), and scm-js wrote 5100 into 1.00 files before it knew. The model is sound, so
+  // the next save writes the right length.
+  if (chk.sections.some((s) => s.name === "MRGN" && s.data.length !== locationSlots(fileVersion) * 20)) markDirty(scn, "MRGN");
+
   return scn;
 }
 
@@ -585,6 +592,21 @@ function insertionPoint(sections: readonly ChkSection[], name: string): number {
 }
 
 export function serializeScenario(scn: Scenario): Uint8Array {
+  // The game checks VCOD against OWNR and SIDE, and a table other than StarEdit's passes only
+  // for some players: a failing copy means the map does not load at all, so StarEdit's table,
+  // which passes for every combination, takes the place of every copy.
+  const vcodFails = scn.chk.sections.some((s) => s.name === "VCOD" && !vcodPasses(s.data, scn.playerTypes, scn.playerRaces));
+  if (vcodFails) {
+    let first = true;
+    const sections = scn.chk.sections.flatMap((s) => {
+      if (s.name !== "VCOD") return [s];
+      if (!first) return [];
+      first = false;
+      const data = defaultVcod();
+      return [{ ...s, data, declaredSize: data.length, truncated: undefined }];
+    });
+    return serializeScenario({ ...scn, chk: { ...scn.chk, sections } });
+  }
   if (scn.dirty.size === 0) return serializeChk(scn.chk);
 
   // For each dirty name, the last occurrence is the one that decides the final value,

@@ -278,7 +278,7 @@ export function MapRevisionDialog({ entry }: DialogProps) {
   const lost = useMemo(() => (scenario ? unencodableStrings({ ...scenario.strings, encoding: enc }) : []), [scenario, enc]);
   const opts: { id: MapVersion; hint: string }[] = [
     { id: "original", hint: t("original unit set only, no Brood War units") },
-    { id: "hybrid", hint: t("loads in both StarCraft and Brood War") },
+    { id: "hybrid", hint: t("loads in both StarCraft and Brood War, on a StarCraft tileset") },
     { id: "broodwar", hint: t("full Brood War unit set (recommended)") },
     { id: "remastered", hint: t("extended unit / string limits (STRx)") },
     // Offered only to keep a file that already is one: the editor does not make VER 64 maps.

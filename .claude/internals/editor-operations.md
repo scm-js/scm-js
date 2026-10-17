@@ -95,3 +95,23 @@ group counts, not a look at the loaded tileset. `tests/validate.test.ts` pins ea
 Remastered files when `SCM_REMASTERED_DIR` is set — which is what caught Twilight's row being
 written without its low range. Info, not warn: the map is fine in Remastered. No jump target —
 `IssueTarget` has no tile kind — so the text carries the first tile's coordinates.
+
+Check Map follows the game (2026-10-17 audit, PR 2; evidence `~/github/scm-sim-reader/editor-audit/`):
+- `formats/chk/game.ts` holds the game's reads per revision (`gameReadSections`), its length rules
+  (`gameSizeRule`/`gameAcceptsSize`) and the VCOD hash (`vcodPasses`); `tests/check-map-game.test.ts`
+  holds it equal to `scripts/lib/chk-game.mjs` (the docs' table). Add a fact in both or the test fails.
+- Every copy of a section a read takes, not dirty (a dirty one is re-encoded right), is judged:
+  list → error "Invalid Scenario", melee → error, UMS → error with triggers / warn without,
+  briefing → warn.
+- "ums" in validate = the map has triggers. Melee vs UMS decides: start-location level (melee
+  error/warn, UMS info), which units the game drops (UNIT loader steps 2–4: slot types 1–7,
+  User Selectable keeps only units.dat group flag 0x80, melee keeps P12 176–178/188/89/90/93–96).
+- `ValidateContext.units` / `.tileset` (the dialog passes `useUnitAssets` + `peekTileset`; the plugin
+  API too): without both the unwalkable-ground rule is skipped (no flyer flag without units.dat).
+- `serializeScenario` replaces every VCOD copy with StarEdit's when any copy fails `vcodPasses` for
+  the current OWNR/SIDE (a failing VCOD = map does not load). Rerun AUD VC2 lists now.
+- `parseScenario` marks MRGN dirty when a copy is not `locationSlots(ver) × 20` bytes (C3).
+- Defeat: a human "can lose" also through another in-game slot's Victory, Draw or a flag-0x02 trigger
+  (LOOP L7.4). Wait slot: any non-hyper trigger with a Wait (or a Transmission for a human) of a
+  hyper player; above-and-not-preserved is the one harmless case.
+- Placement puts mineral fields and geysers on Player 12 (`ghostAt`), as StarEdit does.

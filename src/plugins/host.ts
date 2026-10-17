@@ -760,6 +760,9 @@ function openDocument(store: Store, source: File | Blob | Uint8Array, fileName?:
 function createDocument(store: Store, options: NewDocumentOptions): Promise<boolean> {
   const { into, ...rest } = options;
   const full = { name: "Untitled Scenario", description: "", ...rest };
+  // As Resize: Remastered refuses a side past 256, and 1.16.1 runs past its terrain buffers.
+  if (full.width !== undefined) full.width = Math.max(1, Math.min(256, Math.round(full.width)));
+  if (full.height !== undefined) full.height = Math.max(1, Math.min(256, Math.round(full.height)));
   return guardedAction(store, () => newMapInto(store, full, false, into), (done) => ({ action: "new", options: full, into, done }));
 }
 
@@ -1201,7 +1204,7 @@ export function queryApi(store: Store): QueryApi {
     },
     validate: () => {
       const scn = scenario();
-      return scn ? validateScenario(scn, { extras: store.get(archiveExtrasAtom) }) : [];
+      return scn ? validateScenario(scn, { extras: store.get(archiveExtrasAtom), units: tables(), tileset: loaded()?.tileset ?? null }) : [];
     },
     statistics: () => {
       const scn = scenario();

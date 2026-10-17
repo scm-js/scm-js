@@ -172,6 +172,8 @@ export function ValidateMapDialog({ entry }: DialogProps) {
   useAtomValue(unitsRevisionAtom);
   useAtomValue(locationsRevisionAtom);
   const isom = useIsomStatus();
+  const units = useUnitAssets().loaded?.units ?? null;
+  const tilesetName = useAtomValue(tilesetFileNameAtom);
   const close = useSetAtom(closeDialogAtom);
   const jump = useJump(entry.key);
   const only = entry.payload?.only === "triggers";
@@ -185,9 +187,9 @@ export function ValidateMapDialog({ entry }: DialogProps) {
   const issues = useMemo(() => {
     void run;
     if (!scenario) return [];
-    const all = validateScenario(scenario, { extras, isom, stockSounds });
+    const all = validateScenario(scenario, { extras, isom, stockSounds, units, tileset: peekTileset(tilesetName)?.tileset ?? null });
     return only ? triggerIssues(all) : all;
-  }, [scenario, extras, isom, stockSounds, only, run]);
+  }, [scenario, extras, isom, stockSounds, units, tilesetName, only, run]);
   const counts = issueCounts(issues);
   const listed = issues.filter((i) => show[i.level]);
   const title = only ? t("Validate Triggers") : t("Check Map");

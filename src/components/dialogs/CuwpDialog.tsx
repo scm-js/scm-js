@@ -132,8 +132,8 @@ export function CuwpDialog({ entry }: DialogProps) {
               {vital(t("Hit points"), "hitPointsPercent", CuwpField.HitPoints, 100, "%")}
               {vital(t("Shields"), "shieldsPercent", CuwpField.Shields, 100, "%")}
               {vital(t("Energy"), "energyPercent", CuwpField.Energy, 100, "%")}
-              {vital(t("Resources"), "resources", CuwpField.Resources, 4294967295, "")}
-              {vital(t("Hangar"), "hangar", CuwpField.Hangar, 65535, "units")}
+              {vital(t("Resources"), "resources", CuwpField.Resources, 65535, "")}
+              {vital(t("Hangar"), "hangar", CuwpField.Hangar, 255, "units")}
             </div>
             <p className="hint">{t("Percentages of the unit type's maximum. Resources apply to mineral fields and geysers, hangar to carriers and reavers.")}</p>
           </Group>

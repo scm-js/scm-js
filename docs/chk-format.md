@@ -578,7 +578,7 @@ the game, and a new map made in the editor gets them too.
 | Required | Yes. Without it the map list shows the map as *Invalid Scenario*, and it cannot be played. |
 | The game accepts | Exactly 1040 bytes. Any other length refuses the map. |
 | More than one copy | Every copy is checked, and one copy that fails refuses the map. A good copy after a bad one does not help. |
-| In scmJS | Kept as it is and written back unchanged. |
+| In scmJS | Kept as it is, unless it fails the game's check for the map's players: then Save writes StarEdit's table in its place. |
 
 Layout:
 

@@ -248,8 +248,9 @@ what a new map is set to already. Force Settings… groups them into teams for t
 
 ### 5. Check the map
 
-Tools ▸ Check Map… lists what the game would object to: a start location with no player, a
-unit off the map, too many units, and so on. Double-click a line to go to it.
+Tools ▸ Check Map… lists what the game would object to: a start location with no player,
+units it would leave out, a section it would refuse, and so on. Double-click a line to go
+to it.
 
 View ▸ Walkability (Ctrl+Shift+W) draws the ground as a unit sees it: which areas connect,
 where the chokes are and how wide, and which pockets cannot be reached at all. It updates
@@ -425,7 +426,9 @@ An add-on placed in its spot beside its owner's building is linked to it, as Sta
 does, and so is a building placed where a free add-on of its owner stands. Nydus Canals
 are linked in pairs as they are placed: each one to its owner's last canal without an
 exit. A Refinery, Extractor or Assimilator starts with 5000 gas, as a geyser does; without
-an amount in its record it would have none in the game.
+an amount in its record it would have none in the game. Mineral fields and geysers are
+always placed for Player 12, whatever owner the palette has, as StarEdit places them: a
+melee game keeps no one else's.
 
 **Tools ▸ Auto-place Start Locations…** puts one start location per player on a ring or in
 the corners, each moved to the nearest ground the placement checks accept, and selects
@@ -777,26 +780,47 @@ saved in the form you want to release.
 
 ![Check Map on a new map: eight players and no start locations yet](images/check-map.webp)
 
-Tools ▸ Check Map… looks for what the game would refuse or silently drop:
+Tools ▸ Check Map… looks for what the game would refuse or silently drop. A map with no
+triggers is judged as a melee map and one with triggers as a scenario, since that is how
+each is played.
 
-- start locations that do not match the player settings;
-- more than 1700 units, or units off the map;
-- a missing or moved Anywhere location;
-- triggers that point at unused locations or at strings that do not exist;
-- unit and player values the game does not have, and AI scripts it does not ship;
-- Play WAV actions with no file in the map;
-- switches tested but never set;
-- the file's own health: missing sections, player settings the game reads differently from
-  StarEdit, the isometric record.
+- **The file:** missing sections, and any section whose length the game does not accept,
+  with what the player would see (*Invalid Scenario*, a game that stops as it starts, a
+  briefing that does not play); a revision the game does not know; a map side longer than
+  256; a Brood War tileset on a revision without Brood War, and an Installation map with
+  no triggers, which the game plays only as Use Map Settings. A verification table
+  (`VCOD`) that fails the game's check for the map's players is reported, and Save puts
+  StarEdit's table, which always passes, in its place.
+- **Players and start locations:** a player without a start location, which eliminates
+  them at once in melee and only moves the opening view in a scenario; several start
+  locations for one player (the game uses the last); start locations for Players 9–12;
+  player colours on a revision that does not read them.
+- **Units the game leaves out:** in a scenario, the placed units of a player whose race is
+  User Selectable (the game removes them and hands out melee start units instead) and of a
+  slot that is not in the game; in melee, everything but start locations and Player 12's
+  resources and critters; ground units standing where they cannot walk; resource amounts
+  past 65,535, which the game keeps as 16 bits; more than 1700 units, or units off the
+  map.
+- **Text:** a string table past STR's 64 KB of offsets (Save refuses it), names longer
+  than StarCraft 1.16.1 shows, UTF-8 text a 1.16.1 player sees garbled, a custom unit name
+  on a type that uses the default settings (the game ignores it).
+- **Triggers:** a missing or moved Anywhere location; locations that are unused or not set
+  at all (a location action without one does nothing); strings that do not exist; unit and
+  player values the game does not have; condition and action types it does not have, which
+  crash StarCraft 1.16.1; Create Unit, Set Resources and Set Score for Players 9–12, which
+  do nothing; a trigger ticked twice for one player, which runs twice; Mission Briefing in
+  a trigger, and a briefing that does not start with it; AI scripts a human player's
+  trigger cannot run; Play WAV actions with no file in the map; switches tested for Set
+  but never set.
 
-A map with triggers is a scenario and gets three more checks:
+A map with triggers gets three more checks:
 
-- a human player no trigger ever gives Victory or Defeat (in a scenario nobody wins or
-  loses unless a trigger says so);
+- a human player with no way to win or lose: no Victory, and no Defeat or win for another
+  player (in a scenario nobody wins or loses unless a trigger says so);
 - no Set Mission Objectives;
-- with hyper triggers present, a Wait in another preserved trigger of the same player,
-  which fights them for the player's one wait slot (see [Waits](triggers.md#waits) in the
-  trigger reference).
+- with hyper triggers present, a Wait or a person's Transmission in another trigger of the
+  same player, which fights them for the player's one wait slot (see
+  [Waits](triggers.md#waits) in the trigger reference).
 
 Double-click an issue to go to it. The same check runs inside the Save dialog.
 

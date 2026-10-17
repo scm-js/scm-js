@@ -110,3 +110,9 @@ game reads, plus "the saved file parses to the same settings" and "saving it aga
 nothing". The old expectation — every present section byte for byte after marking it dirty —
 cannot hold for a file whose two sections disagree unless both are modelled separately, which
 nothing needs.
+
+CRGB on VER 59/63/64 (2026-10-17, probe R3/R3b played, Hybrid, SP): Custom → the RGB; Palette → the colour
+number in the triple's third byte (Orange played orange); Random and Player choice → random each game (the
+lobby shows both as Random). No COLR is read in those revisions, so `playerRgbFor(colors, rgb, fileVersion)`
+writes CRGB whenever a colour is not the slot's own there, and `changeMapVersion` re-runs
+`applyPlayerColors`. In 205/206 COLR overrides the Palette byte (R13). 1.16.1 reads neither in 59/63.

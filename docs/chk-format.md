@@ -229,9 +229,10 @@ taken.
   line in the default colour again. (Found playing Remastered.)
 
 **Colours.** [`COLR`](#colr) values of 12 and up are skipped, where 1.16.1 gives a wrong
-colour. Remastered also reads the player colours in [`CRGB`](#crgb). A player that `CRGB`
-sets to Palette shows its `COLR` colour, whatever the rest of its `CRGB` entry says.
-(Found playing Remastered.)
+colour. Remastered also reads the player colours in [`CRGB`](#crgb), in a file of any
+revision. In a Brood War file a player that `CRGB` sets to Palette shows its `COLR`
+colour; in a `VER` 59, 63 or 64 file, which has no `COLR` to read, it shows the colour
+number in its `CRGB` entry. (Found playing Remastered.)
 
 **Smaller limits:**
 
@@ -806,7 +807,7 @@ Layout:
 
 The terrain the game draws: one 16-bit tile number per tile, including the tiles of placed
 doodads. A tile number is a tile group of the tileset times 16 plus the tile's place in
-the group, 0 to 15. The top bit, 0x8000, is not part of the number: it is a creep flag.
+the group, 0 to 15. The top bit, 0x8000, is not part of the number.
 
 <!-- generated: section MTXM -->
 | Name | `MTXM` (4D 54 58 4D) |
@@ -831,10 +832,11 @@ and Use Map Settings both read it.
 A tile number is a *tile group* and a *variation*: the group is the number divided by 16,
 and the variation the remainder. Tile 0x0132 is group 19, variation 2. The top bit takes
 no part in this: the game reads the group from the next eleven bits, so tile 0x8084 draws
-as tile 0x0084, and the bit marks the ground as creep, where Zerg can build. A group past
-the end of the tileset's table is drawn as plain ground (tile 0x0020) by Remastered, while
-StarCraft 1.16.1 reads past the end of the table. The groups are the records of the
-tileset's CV5 file, 52 bytes each:
+as tile 0x0084. The game files the bit as a creep flag, but in play it does nothing you
+can see: Remastered shows no creep there, and a Zerg building that needs creep cannot be
+placed on it. A group past the end of the tileset's table is drawn as plain ground (tile
+0x0020) by Remastered, while StarCraft 1.16.1 reads past the end of the table. The groups
+are the records of the tileset's CV5 file, 52 bytes each:
 
 | Offset | Type | Holds |
 | --- | --- | --- |
@@ -1304,25 +1306,20 @@ numbers count from 1: the first offset is string 1. Several strings may share th
 offset. Because the offsets are 16-bit, the whole table must fit in 64 KB.
 
 Every read of the map reads `STR` again, and a map without one is shown in the map list as
-*Invalid Scenario*, not under its file name. The map list shows the first 31 bytes of the
-scenario's name and the first 255 of its description, and a game shows the first 29 bytes
-of a force's name.
+*Invalid Scenario*, not under its file name. StarCraft 1.16.1 shows the first 31 bytes of
+the scenario's name and the first 255 of its description. Remastered's map list shows both
+in full, but its lobby and game keep only the first 31 bytes of the name, counted after
+the name is turned into UTF-8: ten Korean syllables, where a CP949 file holds them in 20
+bytes. Both games show the first 29 bytes of a force's name. (Remastered's limits found
+playing it.)
 
 The table does not say how its bytes spell characters. StarEdit wrote the code page of the
 Windows it ran on: EUC-KR (CP949) for Korean, Shift_JIS for Japanese, GBK or Big5 for
 Chinese, Windows-1251 for Russian, Windows-1252 for the rest. 1.16.1 reads a file in the
 code page of the machine it runs on. Remastered decides string by string: UTF-8 when the
-bytes are valid UTF-8, Korean (CP949) when they pass its Korean test, and Windows-1252 for
+bytes are valid UTF-8, Korean (CP949) when they are valid Korean, and Windows-1252 for
 anything else. So a Japanese, Chinese or Russian map that is not UTF-8 shows garbled text
 in Remastered whatever the player's Windows.
-
-The Korean test is loose. A string passes when every byte from 0x81 to 0xFE, except 0x92,
-has a byte from 0x41 to 0xFE after it. The string is then converted piece by piece, the
-pieces split at control bytes, and a piece is shown as Korean unless one of its byte pairs
-is not a Korean character, when that piece falls back to Windows-1252. So Western text
-whose accented letters happen to pair up into Hangul is shown as Korean: *Ärger* in
-Windows-1252 reads as *훣ger*, and *Don’t* with a curly apostrophe as *Don뭪*, while *café*
-and *España* come out as written. Check Map lists the strings this happens to.
 
 scmJS reads the table as UTF-8 when it is valid UTF-8. Otherwise it tries each legacy code
 page above, keeps those that decode the bytes without error, and scores each by how much
@@ -2101,18 +2098,24 @@ of any revision:
 - **Random** gives the player a random colour.
 - **Player choice** leaves the colour to the player in the lobby.
 - **Custom** uses the three bytes as red, green and blue.
-- **Palette** gives the player its [`COLR`](#colr) colour, as older versions do. Any mode
-  above 3 counts as Palette.
+- **Palette** gives the player a colour from the palette. Any mode above 3 counts as
+  Palette.
 
-Remastered's loader also takes the third byte of a Palette entry as a colour number, 0 to
-21, for the lobby. But a test map whose Palette entries said Blue, Orange and Pink there
-played with every player in its `COLR` colour, so in a game the third byte makes no
-difference. scmJS writes the `COLR` colour there, so the two agree.
+Which palette colour depends on the revision. The third byte of a Palette entry is a
+colour number, 0 to 21, and the lobby shows it. In a Brood War file (`VER` 205 or 206) the
+game then applies [`COLR`](#colr) over it: a test map whose Palette entries said Blue,
+Orange and Pink played with every player in its `COLR` colour. A `VER` 59, 63 or 64 file
+has no `COLR` to read, so there the third byte is the player's colour: a Hybrid test map's
+Palette entry saying Orange played orange, in single player. scmJS writes the `COLR`
+colour into the third byte, so the two agree in every revision, and in a `VER` 59, 63 or
+64 file it writes `CRGB` whenever a colour is not the slot's own, since that is the only
+way those colours reach the game. StarCraft 1.16.1 reads neither section in those files.
 
-Custom was checked in a game, in a `VER` 206 file and in a 205 file: the player's units
-took the stored colour. So Custom is the way to give a player one of Remastered's colours
-past the first twelve, or any other colour. Random and Player choice are what the loader
-does with them, and have not been checked in a game.
+Custom was checked in a game, in `VER` 206, 205 and 63 files: the player's units took the
+stored colour. So Custom is the way to give a player one of Remastered's colours past the
+first twelve, or any other colour. Random and Player choice were played in a `VER` 63
+file: the lobby showed both as Random, and each game gave those players a different
+colour.
 
 <!-- generated: section CRGB -->
 | Name | `CRGB` (43 52 47 42) |

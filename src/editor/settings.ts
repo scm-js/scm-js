@@ -9,7 +9,7 @@ import {
   MAP_VERSIONS, mapVersionOf, markDirty, setMapVersion, setTextEncoding, strSectionName, techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections,
   type MapVersion, type Scenario,
 } from "../formats/chk/scenario";
-import { ColorMode, FORCE_SLOTS, ForceFlag, isPaletteMode, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
+import { ColorMode, defaultPlayerRgb, FORCE_SLOTS, ForceFlag, isPaletteMode, PLAYER_SLOTS, type Forces, type PlayerRgb } from "../formats/chk/sections/players";
 import { getString, findString, setString } from "../formats/chk/sections/strings";
 import type { TextEncoding } from "../formats/text/encoding";
 import {
@@ -80,9 +80,9 @@ export function applyPlayerSettings(scn: Scenario, next: PlayerSettings) {
 export const CLASSIC_COLORS = 12;
 
 /**
- * `rgb` with every Palette slot's triple set to `[0, 0, colour]`. Remastered's loader takes
- * that third byte as the slot's lobby colour, but in a game the player shows its COLR colour
- * (probe R13, played 2026-10-17), so this only keeps the two from contradicting each other.
+ * `rgb` with every Palette slot's triple set to `[0, 0, colour]`. Remastered takes that third
+ * byte as the slot's colour; in a Brood War revision COLR then overrides it (probe R13), and
+ * in an older one, which has no COLR to read, it is the colour the player gets (probe R3).
  */
 export function withPaletteBytes(colors: readonly number[], rgb: PlayerRgb): PlayerRgb {
   return {
@@ -91,15 +91,22 @@ export function withPaletteBytes(colors: readonly number[], rgb: PlayerRgb): Pla
   };
 }
 
-/** The CRGB these colours need: none while every slot is on Palette, else `rgb` with the Palette slots' colours filled in. */
-export function playerRgbFor(colors: readonly number[], rgb: PlayerRgb | null): PlayerRgb | null {
-  return rgb !== null && rgb.mode.some((m) => !isPaletteMode(m)) ? withPaletteBytes(colors, rgb) : null;
+/**
+ * The CRGB these colours need, with the Palette slots' colours filled in: when a slot is not
+ * on Palette, and in a revision before Brood War's 205 whenever a colour is not the slot's
+ * own — the game reads no COLR there, and Remastered takes the colours from CRGB instead
+ * (StarCraft 1.16.1 reads neither and shows the slots' own colours). Null otherwise.
+ */
+export function playerRgbFor(colors: readonly number[], rgb: PlayerRgb | null, fileVersion = 205): PlayerRgb | null {
+  const custom = rgb !== null && rgb.mode.some((m) => !isPaletteMode(m));
+  const moved = fileVersion < 205 && colors.some((c, i) => c !== i);
+  return custom || moved ? withPaletteBytes(colors, rgb ?? defaultPlayerRgb()) : null;
 }
 
 /** COLR, and the CRGB it needs (`playerRgbFor`); `rgb` carries the Remastered modes, null for all Palette. */
 export function applyPlayerColors(scn: Scenario, colors: number[], rgb: PlayerRgb | null) {
   if (colors.some((v, i) => v !== scn.playerColors[i])) { scn.playerColors = colors.slice(); markDirty(scn, "COLR"); }
-  const next = playerRgbFor(colors, rgb);
+  const next = playerRgbFor(colors, rgb, scn.fileVersion);
   const same = next === null
     ? scn.playerRgb === null
     : scn.playerRgb !== null && next.mode.every((m, i) => m === scn.playerRgb!.mode[i]) && next.rgb.every((c, i) => c.every((v, j) => v === scn.playerRgb!.rgb[i][j]));
@@ -728,8 +735,12 @@ export function mapVersionView(scn: Scenario): MapVersionView {
 export function changeMapVersion(scn: Scenario, version: MapVersion, extendedStrings?: boolean): string[] {
   const before = mapVersionView(scn);
   setMapVersion(scn, version, extendedStrings);
+  // Whether the colours need CRGB depends on the revision (`playerRgbFor`).
+  const rgbBefore = scn.playerRgb;
+  applyPlayerColors(scn, scn.playerColors, scn.playerRgb);
   const after = mapVersionView(scn);
   const out: string[] = [];
+  if (scn.playerRgb !== rgbBefore) out.push("CRGB");
   if (before.fileVersion !== after.fileVersion) out.push("VER ");
   if (before.type !== after.type) out.push("TYPE");
   if (before.extendedStrings !== after.extendedStrings) out.push("STR ", "STRx");

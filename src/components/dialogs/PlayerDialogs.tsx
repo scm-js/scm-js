@@ -211,9 +211,9 @@ export function PlayerColorsDialog({ entry }: DialogProps) {
   };
 
   return (
-    <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{playerRgbFor(colors, rgb) ? " + CRGB" : ""}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Player Colors")} icon={<Palette size={14} />} size="md" onOk={apply} showApply footerLeft={<span className="mono hint">COLR{playerRgbFor(colors, rgb, scenario.fileVersion) ? " + CRGB" : ""}</span>}>
       {scenario.fileVersion < 205 && (
-        <p className="hint" style={{ marginTop: 0 }}>{t("This map's revision does not read COLR: in StarCraft every player has their slot's usual colour. Brood War revisions read it.")}</p>
+        <p className="hint" style={{ marginTop: 0 }}>{t("This map's revision does not read COLR. Remastered takes these colours from CRGB, which is written for any colour that is not the slot's own; StarCraft 1.16.1 shows every player in their slot's usual colour.")}</p>
       )}
       <div className="split" style={{ ["--split" as string]: "200px" }}>
         <Group title={t("Player")} flush>

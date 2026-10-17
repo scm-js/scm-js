@@ -184,7 +184,8 @@ export function loadTileset(files: TilesetFiles): Tileset {
 
 /**
  * Bit 15 of an MTXM value is a flag, not part of the tile: the game draws the tile the other
- * bits name and treats the ground as creep, so Zerg can build there.
+ * bits name. Remastered also sets its tile's creep bit from it, but played it shows no creep
+ * and a Zerg building cannot go there (probe R2), so it is drawn as the plain tile.
  */
 export const TILE_CREEP_FLAG = 0x8000;
 

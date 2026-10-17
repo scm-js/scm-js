@@ -87,3 +87,14 @@ has been played.
 `editor/switches.ts` edits SWNM (`applySwitchNames` creates the section on the first name and interns
 names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
 `tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.
+
+Played in Remastered (2026-10-17, probes R1/R4/R4b/R5 in `Maps/Audit`):
+- Ogg from Play WAV plays in a VER 205 and a 206 map; 1.16.1 plays only WAV. Check Map's Ogg line is an
+  info about 1.16.1.
+- Names: map list shows name and description in full; lobby/game keep 31 bytes of the name **as UTF-8**
+  (20-syllable Korean name → 10 syllables); force names cut at 29 bytes in both games. Check Map counts
+  the name as max(file bytes, UTF-8 bytes).
+- Western Windows-1252 text was NOT shown as Korean on the user's (English) client, though the Ghidra
+  reading predicted "Ärger" → Hangul; the Korean path probably needs a Korean-language client. No
+  Check Map warning for it (one was in #64's first commit and taken out).
+- `<01>` steps back one colour and grey `<05>` locks later codes — read from both games' code, not played.

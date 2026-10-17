@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  decodeText, decodesCleanly, detectTextEncoding, encodeText, remasteredReadsAsKorean, TEXT_ENCODINGS, unencodable, type TextEncoding,
+  decodeText, decodesCleanly, detectTextEncoding, encodeText, TEXT_ENCODINGS, unencodable, type TextEncoding,
 } from "../src/formats/text/encoding";
 import { decodeStrings, encodeStrings, unencodableStrings } from "../src/formats/chk/sections/strings";
 import { decodeTbl } from "../src/formats/dat/tbl";
@@ -65,19 +65,6 @@ describe("text encoding", () => {
 
   it("has an entry for every encoding in the table", () => {
     for (const e of TEXT_ENCODINGS) expect(decodesCleanly(bytes(0x41), e.id)).toBe(true);
-  });
-});
-
-describe("what Remastered reads as Korean", () => {
-  // The cases the Remastered decoder gave, run on its own tables.
-  it("takes Western text for Korean when its accented letters pair up into Hangul", () => {
-    const korean = (text: string) => remasteredReadsAsKorean(encodeText(text, "windows-1252"));
-    for (const text of ["Ärger im Spiel", "Åland", "Ángel", "Don\u2019t"]) expect([text, korean(text)]).toEqual([text, true]);
-    for (const text of ["Défense España", "café", "café au lait", "naïve", "Señor", "Ça va", "plain"]) expect([text, korean(text)]).toEqual([text, false]);
-    expect(remasteredReadsAsKorean(encodeText("Ärger", "utf-8"))).toBe(false);
-    const scn = createScenario({ width: 64, height: 64, era: 0, name: "Ärger im Spiel" });
-    setTextEncoding(scn, "windows-1252");
-    expect(validateScenario(scn).some((i) => i.text.startsWith("1 string reads as Korean in Remastered (the first: 'Ärger im Spiel')"))).toBe(true);
   });
 });
 

@@ -153,7 +153,12 @@ export function strSectionName(scn: Scenario): "STRx" | "STR " {
 
 /* ── Map revision ────────────────────────────────────────── */
 
-export type MapVersion = "original" | "hybrid" | "broodwar" | "remastered";
+/**
+ * The revisions. `remasteredHybrid` is Remastered's VER 64: read like a hybrid 63 file, with
+ * no Brood War needed, and allowed STRx. The editor keeps it but does not offer it for a map
+ * that is not already one.
+ */
+export type MapVersion = "original" | "hybrid" | "broodwar" | "remastered" | "remasteredHybrid";
 
 /** VER values StarEdit writes for each revision. */
 export const MAP_VERSIONS: Record<MapVersion, { ver: number; type: string; label: string; extension: string }> = {
@@ -161,13 +166,20 @@ export const MAP_VERSIONS: Record<MapVersion, { ver: number; type: string; label
   hybrid: { ver: 63, type: "RAWS", label: "Hybrid 1.04", extension: "scm" },
   broodwar: { ver: 205, type: "RAWB", label: "Brood War 1.04", extension: "scx" },
   remastered: { ver: 206, type: "RAWB", label: "Remastered 1.21+", extension: "scx" },
+  remasteredHybrid: { ver: 64, type: "RAWS", label: "Remastered 1.21+ without Brood War", extension: "scm" },
 };
 
 export function mapVersionOf(fileVersion: number): MapVersion {
   if (fileVersion >= 206) return "remastered";
   if (fileVersion >= 205) return "broodwar";
+  if (fileVersion === 64) return "remasteredHybrid";
   if (fileVersion >= 63) return "hybrid";
   return "original";
+}
+
+/** Whether only Remastered opens a file of this revision: VER 64 and 206, the two whose STRx the game reads. */
+export function isRemasteredRevision(fileVersion: number): boolean {
+  return fileVersion === 64 || fileVersion >= 206;
 }
 
 /** Whether the game reads the Brood War (`x`) settings sections for this file. */
@@ -180,7 +192,7 @@ export function isExpansion(scn: Scenario): boolean {
  * to or from Remastered. Sections of the other revision are left alone — a hybrid map
  * legitimately carries both UNIS and UNIx.
  */
-export function setMapVersion(scn: Scenario, version: MapVersion, extendedStrings = version === "remastered") {
+export function setMapVersion(scn: Scenario, version: MapVersion, extendedStrings = isRemasteredRevision(MAP_VERSIONS[version].ver)) {
   const v = MAP_VERSIONS[version];
   if (scn.fileVersion !== v.ver) {
     // The number of location slots goes with the revision (64 below 63, 255 from there).
@@ -190,7 +202,7 @@ export function setMapVersion(scn: Scenario, version: MapVersion, extendedString
     while (scn.locations.length < locationSlots(v.ver)) scn.locations.push({ left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 });
   }
   if (scn.type !== v.type) { scn.type = v.type; markDirty(scn, "TYPE"); }
-  setExtendedStrings(scn, extendedStrings && version === "remastered");
+  setExtendedStrings(scn, extendedStrings && isRemasteredRevision(v.ver));
 }
 
 /**
@@ -200,8 +212,8 @@ export function setMapVersion(scn: Scenario, version: MapVersion, extendedString
 export function setExtendedStrings(scn: Scenario, extended: boolean) {
   if (scn.strings.extended === extended) return;
   scn.strings.extended = extended;
-  // Remastered reads STRx as UTF-8 and nothing else reads STRx at all, so moving to it
-  // moves the text too; moving back keeps UTF-8, which Remastered still reads from STR.
+  // Only Remastered reads STRx, and it reads valid UTF-8 as UTF-8, so moving to it moves the
+  // text too; moving back keeps UTF-8, which Remastered still reads from STR.
   if (extended) scn.strings.encoding = "utf-8";
   markDirty(scn, "STR ", "STRx");
 }
@@ -300,9 +312,12 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const fileVersion = verData && verData.length >= 2 ? new Reader(verData).u16() : 205;
   const eraData = take("ERA ");
 
-  // Remastered maps carry STRx; when both are present STRx wins.
-  const strxData = take("STRx");
+  // The game reads STRx only in a VER 64 or 206 file: every STR copy first, then every STRx
+  // copy, so there a STRx wins whatever the order in the file. In any other revision it never
+  // reads STRx, and neither does the editor, unless the file has no STR at all: its text still
+  // shows then, and Check Map says why the game refuses the map.
   const strData = take("STR ");
+  const strxData = isRemasteredRevision(fileVersion) || !strData ? take("STRx") : null;
   const strings = strxData
     ? decodeStrings(strxData, true)
     : strData

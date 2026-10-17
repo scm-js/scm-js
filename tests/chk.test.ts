@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { Writer } from "../src/formats/chk/binary";
 import { combine, parseChk, serializeChk } from "../src/formats/chk/reader";
 import {
-  markDirty, parseScenario, scenarioDescription, scenarioName,
+  isRemasteredRevision, mapVersionOf, markDirty, parseScenario, scenarioDescription, scenarioName,
   serializeScenario, setMapVersion, setScenarioName, tilesetIndex,
 } from "../src/formats/chk/scenario";
+import { validateScenario } from "../src/editor/validate";
 import { createScenario } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX, isLocationUsed, locationSlots } from "../src/formats/chk/sections/objects";
 import { specFor } from "../src/formats/chk/sections/registry";
@@ -179,6 +180,80 @@ describe("string table", () => {
   it("handles the 32-bit STRx layout", () => {
     const decoded = decodeStrings(encodeStrings({ strings: [null, "hello"], extended: true }), true);
     expect(decoded.strings[1]).toBe("hello");
+  });
+});
+
+/** The sample scenario at revision `ver`, with `tables` (STR / STRx sections, in this order) for its strings. */
+function stringsChk(ver: number, ...tables: Uint8Array[]): Uint8Array {
+  const tiles = new Uint16Array(16).fill(0x0021);
+  return concat(
+    section("TYPE", [0x52, 0x41, 0x57, 0x42]),
+    section("VER ", u16(ver)),
+    section("ERA ", u16(4)),
+    section("DIM ", u16(4, 4)),
+    section("OWNR", new Uint8Array([6, 6, 5, 0, 0, 0, 0, 0, 7, 7, 7, 7])),
+    section("SIDE", new Uint8Array([1, 2, 0, 7, 7, 7, 7, 7, 4, 4, 4, 4])),
+    section("MTXM", new Uint8Array(tiles.buffer)),
+    ...tables,
+    section("SPRP", u16(1, 2)),
+    section("FORC", new Uint8Array(20)),
+  );
+}
+const strTable = (name: string) => section("STR ", encodeStrings({ strings: [null, name], extended: false }));
+const strxTable = (name: string) => section("STRx", encodeStrings({ strings: [null, name], extended: true }));
+
+// The game reads STRx only in a VER 64 or 206 file, after every STR copy, and passes over a
+// copy shorter than 4 bytes (docs/chk-format.md, Where Remastered differs).
+describe("which string table the game reads", () => {
+  it("takes STRx over STR in a VER 206 or 64 file, whatever the order in the file", () => {
+    for (const ver of [206, 64]) {
+      const scn = parseScenario(stringsChk(ver, strxTable("from STRx"), strTable("from STR")));
+      expect(scenarioName(scn)).toBe("from STRx");
+      expect(scn.strings.extended).toBe(true);
+    }
+  });
+
+  it("passes over a STRx copy shorter than 4 bytes", () => {
+    const scn = parseScenario(stringsChk(206, strTable("from STR"), section("STRx", [1, 0, 0])));
+    expect(scenarioName(scn)).toBe("from STR");
+    expect(scn.strings.extended).toBe(false);
+  });
+
+  it("ignores STRx in a VER 205 file, as the game does, and keeps it in the file unchanged", () => {
+    const bytes = stringsChk(205, strTable("from STR"), strxTable("decoy"));
+    const scn = parseScenario(bytes);
+    expect(scenarioName(scn)).toBe("from STR");
+    expect(scn.strings.extended).toBe(false);
+    expect(validateScenario(scn).some((i) => i.level === "info" && i.text.startsWith("The file also has a STRx"))).toBe(true);
+    setScenarioName(scn, "renamed");
+    const back = parseChk(serializeScenario(scn));
+    expect(back.sections.find((x) => x.name === "STRx")!.data).toEqual(strxTable("decoy").subarray(8));
+    expect(scenarioName(parseScenario(serializeScenario(scn)))).toBe("renamed");
+  });
+
+  it("still shows a VER 205 file's STRx when it has no STR, and Check Map says the game refuses it", () => {
+    const scn = parseScenario(stringsChk(205, strxTable("only STRx")));
+    expect(scenarioName(scn)).toBe("only STRx");
+    const errors = validateScenario(scn).filter((i) => i.level === "error");
+    expect(errors.some((i) => i.text.startsWith("The strings are in STRx"))).toBe(true);
+    expect(errors.some((i) => i.text.startsWith("Missing STR"))).toBe(false);
+    setMapVersion(scn, "remastered");
+    expect(validateScenario(scn).some((i) => i.text.startsWith("The strings are in STRx"))).toBe(false);
+  });
+});
+
+describe("VER 64", () => {
+  it("is Remastered's revision without Brood War, kept as it is", () => {
+    expect(mapVersionOf(64)).toBe("remasteredHybrid");
+    expect(mapVersionOf(63)).toBe("hybrid");
+    expect([59, 63, 64, 205, 206].map(isRemasteredRevision)).toEqual([false, false, true, false, true]);
+    const scn = parseScenario(stringsChk(64, strxTable("name")));
+    setMapVersion(scn, "remasteredHybrid", true);
+    expect(scn.fileVersion).toBe(64);
+    expect(scn.strings.extended).toBe(true);
+    expect(scn.dirty.has("VER ")).toBe(false);
+    setMapVersion(scn, "hybrid");
+    expect([scn.fileVersion, scn.strings.extended]).toEqual([63, false]);
   });
 });
 

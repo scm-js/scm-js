@@ -15,7 +15,7 @@ import { LAYERS } from "./MenuBar";
 import { msg, pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
-const VERSION_LABEL = { original: msg("StarCraft 1.00"), hybrid: msg("Hybrid 1.04"), broodwar: msg("Brood War"), remastered: msg("Remastered") } as const;
+const VERSION_LABEL = { original: msg("StarCraft 1.00"), hybrid: msg("Hybrid 1.04"), broodwar: msg("Brood War"), remastered: msg("Remastered"), remasteredHybrid: msg("Remastered") } as const;
 
 export default function StatusBar() {
   const t = useT();

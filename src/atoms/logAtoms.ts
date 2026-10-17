@@ -40,7 +40,7 @@ export const logVerboseAtom = atom(
   (_get, set, on: boolean) => { set(verboseBox, on); setVerbose(on); },
 );
 
-const VERSION_LABEL: Record<string, string> = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", broodwar: "Brood War", remastered: "Remastered" };
+const VERSION_LABEL: Record<string, string> = { original: "StarCraft 1.00", hybrid: "Hybrid 1.04", broodwar: "Brood War", remastered: "Remastered", remasteredHybrid: "Remastered (VER 64)" };
 
 /** What the header is built from, read live so a copy describes the editor as it is now. */
 export const diagnosticsFactsAtom = atom<DiagnosticsFacts>((get) => {

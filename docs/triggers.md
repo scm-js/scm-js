@@ -1631,7 +1631,7 @@ seconds. [Countdown Timer](#countdown-timer) tests it. The timer stays between 0
 | Argument | Takes | Stored in the action |
 | --- | --- | --- |
 | Modifier | [Set To, Add or Subtract](#modifiers) | byte 27 |
-| Seconds | a number of seconds | bytes 12–15 |
+| Seconds | a whole number, 0 to 4,294,967,295 | bytes 12–15 |
 <!-- /generated -->
 
 ```trigedit

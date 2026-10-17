@@ -240,7 +240,7 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
         planned.fate = "dropped"; planned.reason = t("merged into the first occurrence");
       } else {
         merged.add(s.name);
-        const data = combine(source, s.name, spec.mode, sizeOf(spec, dim), spec.minimum, spec.entries) ?? s.data;
+        const data = combine(source, s.name, spec.mode, sizeOf(spec, dim), spec.minimum, spec.entries, spec.fill) ?? s.data;
         planned.fate = "merged";
         planned.reason = t("{n} occurrences combined as the game reads them", { n: occurrences.get(s.name) ?? 0 });
         planned.size = data.length;

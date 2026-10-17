@@ -9,11 +9,11 @@ import { parseChk } from "../src/formats/chk/reader";
 import { parseScenario, serializeScenario, setMapVersion } from "../src/formats/chk/scenario";
 import { PlayerRace, PlayerType } from "../src/formats/chk/sections/players";
 import { defaultVcod } from "../src/formats/chk/sections/vcod";
-import { ActionType, ConditionType, PlayerGroup, SwitchState } from "../src/formats/chk/sections/triggers";
+import { ActionType, ConditionType, PlayerGroup, SwitchState, TriggerFlag } from "../src/formats/chk/sections/triggers";
 import { START_LOCATION } from "../src/data/units";
 import { makeUnit } from "../src/editor/units";
 import { newAction, newCondition, newTrigger } from "../src/editor/triggers";
-import { triggersFromText } from "../src/editor/exchange";
+import { triggersFromText, triggersToText } from "../src/editor/exchange";
 import { validateScenario } from "../src/editor/validate";
 import { GAME_READS, GAME_SIZES, GAME_VERSIONS, REMASTERED_SECTIONS } from "../scripts/lib/chk-game.mjs";
 
@@ -109,6 +109,19 @@ describe("what the game refuses", () => {
   });
 });
 
+describe("tiles and the fog", () => {
+  it("notes creep-flagged tiles, and fills a short MASK with unexplored", () => {
+    const scn = fresh();
+    scn.tiles[5] |= 0x8000;
+    expect(has(scn, "info: 1 tile carries the creep flag (bit 15)")).toBe(true);
+    const saved = parseScenario(serializeScenario(fresh()));
+    const mask = saved.chk.sections.find((s) => s.name === "MASK")!;
+    Object.assign(mask, { data: new Uint8Array(10), declaredSize: 10 });
+    const again = parseScenario(serializeScenario(saved));
+    expect([again.mask![0], again.mask![9], again.mask![10], again.mask![64 * 64 - 1]]).toEqual([0, 0, 0xff, 0xff]);
+  });
+});
+
 describe("units the game leaves out", () => {
   it("in Use Map Settings: User Selectable races and slots not in the game", () => {
     const scn = scenario();
@@ -150,6 +163,16 @@ describe("triggers the game does not run as written", () => {
     expect(out).toContain("warn: Trigger 1: Create Unit does nothing for Player 12; the game takes only Players 1–8 there.");
     expect(out).toContain("warn: Trigger 1: Create Unit has no location, so it does nothing (a Transmission shows no text either).");
     expect(out).toContain("error: Trigger 1: action type 70 is not one the game has; StarCraft 1.16.1 crashes when the trigger reaches it.");
+  });
+
+  it("flag 0x02 defeats everyone else, and reads as Defeat Others", () => {
+    const scn = scenario();
+    scn.triggers[0].flags |= TriggerFlag.IgnoreGameEnd;
+    expect(has(scn, "warn: Trigger 1 has flag 0x02 (Defeat Others)")).toBe(true);
+    const text = 'Trigger("Player 1"){\nConditions:\n\tAlways();\n\nActions:\n\tComment("x");\n\nFlags:\n\tIgnore Game End;\n}\n';
+    const [old] = triggersFromText(scn, text);
+    expect(old.flags & TriggerFlag.IgnoreGameEnd).toBeTruthy();
+    expect(triggersToText(scn, [old])).toContain("Defeat Others");
   });
 
   it("a switch tested for Cleared needs nothing to set it", () => {

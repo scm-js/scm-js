@@ -282,6 +282,8 @@ function drawObjects(
     if (!(flags & SpriteFlag.PureSprite)) return drawUnit(spriteId, owner, px, py, alpha);
     const imageId = unitAssets.sprites.image[spriteId];
     if (imageId === undefined) return false;
+    // Frame 0 without the Init script, which is what flips a sprite in the game: StarEdit's
+    // 0x4000 bit, written where that script flips the overlay, stands in for it.
     const frame = getImageFrame(unitAssets, imageId, 0, (flags & SpriteFlag.Flipped) !== 0, teamOf(owner), palette, paletteKey);
     if (!frame) return false;
     ctx.globalAlpha = alpha;

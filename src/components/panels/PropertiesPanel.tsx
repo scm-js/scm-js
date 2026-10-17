@@ -301,7 +301,7 @@ function SpriteProps() {
         <div className="props-section">{t("Flags")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null} <span className="faint mono">{`0x${first.flags.toString(16).toUpperCase().padStart(4, "0")}`}</span></div>
         <div className="span col" style={{ gap: 0 }}>
           <Check label={t("Pure sprite")} title={t("Drawn as a graphic only; unticked, the game creates a unit of this id on load (0x1000)")} checked={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.PureSprite, e.target.checked, e.target.checked ? t("Make pure sprite") : t("Make unit sprite"))} />
-          <Check label={t("Flipped")} title={t("Mirror the graphic left-to-right (0x2000)")} checked={flipped} onChange={(e) => tools.setFlag(SpriteFlag.Flipped, e.target.checked, e.target.checked ? t("Flip sprite") : t("Unflip sprite"))} />
+          <Check label={t("Flipped (0x4000)")} title={t("StarEdit writes this bit for some doodad overlays. The game does not read it: a sprite faces the way its own animation sets.")} checked={flipped} onChange={(e) => tools.setFlag(SpriteFlag.Flipped, e.target.checked, e.target.checked ? t("Flip sprite") : t("Unflip sprite"))} />
           <Check label={t("Disabled")} title={t("Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (0x8000)")} checked={disabled} disabled={k === "pure"} onChange={(e) => tools.setFlag(SpriteFlag.Disabled, e.target.checked, e.target.checked ? t("Disable sprite") : t("Enable sprite"))} />
         </div>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
@@ -434,7 +434,7 @@ function LocationProps() {
       <Row k={t("Left · Top")}><div className="row" style={{ gap: 4 }}>{edge("left", maxX)}{edge("top", maxY)}</div></Row>
       <Row k={t("Right · Btm")}><div className="row" style={{ gap: 4 }}>{edge("right", maxX)}{edge("bottom", maxY)}</div></Row>
       <Row k={t("Size")}><span className="mono">{fmtTiles(b.right - b.left)} × {fmtTiles(b.bottom - b.top)}</span> {" "}{t("tiles")}{" "}<span className="faint mono">{b.right - b.left}×{b.bottom - b.top}px</span></Row>
-      {isInverted(rec) && <div className="span hint">{t("Stored inverted (right < left or bottom < top): the game reads the normalised box; dragging a handle normalises it.")}</div>}
+      {isInverted(rec) && <div className="span hint">{t("Stored inverted (right < left or bottom < top): the game finds no units inside it, though units created there appear at its centre. Dragging a handle makes it an ordinary location.")}</div>}
       <div className="props-section">{t("Elevations")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null} <span className="faint mono">0x{rec.elevationFlags.toString(16).toUpperCase().padStart(2, "0")}</span></div>
       <div className="span" style={{ display: "grid", gridAutoFlow: "column", gridTemplateRows: "repeat(3, auto)", gap: "0 8px" }}>
         {ELEVATIONS.map((e) => (

@@ -174,7 +174,9 @@ export class UnitAnimator {
    * Match sprites to the THG2 list: a pure sprite (`SpriteFlag.PureSprite`) plays its
    * sprites.dat image's Init, a unit sprite is drawn like a placed unit of that type.
    * A record replaced in place (re-owned, moved with its doodad) keeps its sprite by
-   * position; the `Flipped` bit mirrors the whole image stack.
+   * position. The record's `Flipped` bit is not read: the game never reads it either, and a
+   * sprite faces the way its own Init script sets (StarEdit writes the bit where that script
+   * flips the overlay, so honouring it here mirrored those twice).
    */
   syncSprites(sprites: readonly SpriteRecord[], tilesetIndex: number) {
     this.setTileset(tilesetIndex);
@@ -220,7 +222,6 @@ export class UnitAnimator {
   }
 
   private createThg2Sprite(r: SpriteRecord): SpriteState | null {
-    const flipped = (r.flags & SpriteFlag.Flipped) !== 0;
     let s: SpriteState;
     if (r.flags & SpriteFlag.PureSprite) {
       const imageId = this.assets.sprites.image[r.spriteId];
@@ -229,10 +230,6 @@ export class UnitAnimator {
     } else {
       if (r.spriteId < 0 || r.spriteId >= NO_UNIT) return null;
       s = this.createSprite(null, r.spriteId, true);
-    }
-    if (flipped) {
-      for (const img of s.images) img.flipState = !img.flipState;
-      this.settle(s);
     }
     s.spriteRecord = r;
     return s;

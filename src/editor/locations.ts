@@ -73,7 +73,11 @@ export function normalizeBounds(b: Bounds): Bounds {
   return { left: Math.min(b.left, b.right), top: Math.min(b.top, b.bottom), right: Math.max(b.left, b.right), bottom: Math.max(b.top, b.bottom) };
 }
 
-/** MRGN allows right < left / bottom < top; the game reads such a location as its normalised box, and some maps use the trick. */
+/**
+ * MRGN allows right < left / bottom < top. The game finds no units inside such a location
+ * (Bring, Command At, Kill / Remove At and the like see nothing), while Create Unit, Move
+ * Location and the rest that use its centre work as for the normalised box.
+ */
 export function isInverted(r: Bounds): boolean {
   return r.right < r.left || r.bottom < r.top;
 }

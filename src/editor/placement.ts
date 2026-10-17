@@ -1,17 +1,21 @@
 /**
  * Whether a unit can stand where it is: the checks StarEdit and SCMDraft offer as
- * placement options, and the game itself applies when it loads a map (a preplaced unit
- * that does not fit is silently dropped).
+ * placement options.
  *
  *   - terrain: a building's placement box must sit on buildable tiles; a ground unit's
  *     collision box on walkable minitiles (VF4 flags). Flyers go anywhere.
  *   - collision: ground units and buildings may not overlap each other's collision boxes.
  *
+ * The game is less strict when it loads a map: it makes buildings wherever they are, on
+ * any ground and overlapping anything; it moves overlapping ground units aside; and it
+ * removes only a ground unit whose collision box touches unwalkable ground, with "Unit
+ * unplaceable" on screen (the terrain rule here, for non-buildings).
+ *
  * Start locations are markers rather than units and skip both checks.
  */
 import type { Scenario } from "../formats/chk/scenario";
 import type { UnitsDat } from "../formats/dat/dat";
-import { groupBuildable, megatileForTile, TileFlag, type Tileset } from "../formats/tileset/decode";
+import { groupBuildable, megatileForTile, TileFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
 import { placementBox, TILE_PX, unitBox, unitGeometry, type PixelBox, type UnitGeometry } from "./units";
 import { START_LOCATION, unitLabel } from "../data/units";
 import { t } from "../i18n";
@@ -52,7 +56,7 @@ export function terrainFits(scn: Scenario, tileset: Tileset | null, g: UnitGeome
     for (let ty = r.y0; ty <= r.y1; ty++) {
       for (let tx = r.x0; tx <= r.x1; tx++) {
         const id = scn.tiles[ty * scn.width + tx];
-        const group = tileset.groups[id >> 4];
+        const group = tileset.groups[tileGroupOf(id)];
         if (!group || !groupBuildable(group) || megatileForTile(tileset, id) <= 0) return false;
       }
     }
@@ -123,8 +127,9 @@ export function checkPlacement(
 }
 
 /**
- * Units that no longer fit their terrain after the tiles at `changedTiles` (flat indices)
- * were replaced — only units touching a changed tile are re-examined.
+ * Units the game would now remove after the tiles at `changedTiles` (flat indices) were
+ * replaced: ground units touching unwalkable ground. Buildings stay — the game makes them
+ * wherever they stand. Only units touching a changed tile are re-examined.
  */
 export function strandedUnits(scn: Scenario, tileset: Tileset | null, tables: UnitsDat | null, changedTiles: Iterable<number>): number[] {
   if (!tileset) return [];
@@ -133,8 +138,8 @@ export function strandedUnits(scn: Scenario, tileset: Tileset | null, tables: Un
   const out: number[] = [];
   scn.units.forEach((u, i) => {
     const g = unitGeometry(tables, u.unitId);
-    if (g.flyer || u.unitId === START_LOCATION) return;
-    const box = g.building ? placementBox(g, u.x, u.y) : unitBox(g, u.x, u.y);
+    if (g.flyer || g.building || u.unitId === START_LOCATION) return;
+    const box = unitBox(g, u.x, u.y);
     const r = tileIndexRange(box, scn.width, scn.height);
     let touched = false;
     for (let ty = r.y0; ty <= r.y1 && !touched; ty++) {

@@ -26,7 +26,7 @@ export interface UnitSettings {
   hitPoints: Uint32Array;
   shields: Uint16Array;
   armor: Uint8Array;
-  /** Game frames (15 per second at Fastest). */
+  /** Game frames (about 24 per second at Fastest, 15 at Normal). */
   buildTime: Uint16Array;
   mineralCost: Uint16Array;
   gasCost: Uint16Array;

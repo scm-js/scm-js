@@ -418,7 +418,6 @@ function SpritePalette() {
         <input className="input grow" placeholder={t("Search sprites…")} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <div className="placement-options" title={t("Flags on newly placed sprites")}>
-        <Check label={t("Flipped")} title={t("Mirror the graphic left-to-right (THG2 flag 0x2000)")} checked={options.flipped} onChange={(e) => setOptions({ ...options, flipped: e.target.checked })} />
         <Check label={t("Disabled")} title={t("Unit sprites only: the unit starts inactive — a closed door, an unarmed trap (THG2 flag 0x8000)")} checked={options.disabled} disabled={kind !== "unit"} onChange={(e) => setOptions({ ...options, disabled: e.target.checked })} />
       </div>
       <Tabs

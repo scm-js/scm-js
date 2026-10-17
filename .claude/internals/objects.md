@@ -89,3 +89,17 @@ explored tiles are untouched. It shows while `viewFlags.fog` is on; the viewport
 on when the fog layer is entered and back off on leaving if it was the one that set it.
 `fogImageData` gives the minimap the same picture (also drawn with `multiply`).
 `tests/fog-edit.test.ts` pins the bit semantics and the MASK round trip.
+
+Display follows the game (2026-10-17 audit, PR 3; runs O4, O5, O11 in the lifted 1.16.1 game):
+- THG2 0x4000 is never read by the game; a sprite faces the way its Init script sets. The
+  animator no longer flips on it (StarEdit writes it exactly where that script flips the overlay,
+  so honouring it mirrored those twice: Installation right doors/traps, Ice/Twilight sprites).
+  The static frame-0 paths (zoomed out, map image) still use it as a stand-in for the script.
+  The palette's Flipped tick is gone; Sprite Properties / the panel keep the bit, labelled 0x4000.
+- Inverted MRGN boxes: Bring finds nothing inside (O5), Create Unit uses the centre. Drawn dashed;
+  resizing still normalises.
+- MASK: the game sets every tile unexplored before reading it, so `combine` takes a `fill` (MASK
+  spec `fill: 0xff`) and `decodeMask` pads with 0xFF.
+- Cloak is drawn faint on `validProperties & UnitValid.Cloak` + state (0x40 is never read).
+- `strandedUnits` skips buildings: the game makes buildings on any ground and only removes ground
+  units touching unwalkable minitiles.

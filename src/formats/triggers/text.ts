@@ -69,12 +69,16 @@ const SEPARATOR = "//-----------------------------------------------------------
 export const TRIGGER_FLAG_NAMES: [number, string][] = [
   [TriggerFlag.Preserve, "Preserve"],
   [TriggerFlag.Disabled, "Disabled"],
-  [TriggerFlag.IgnoreGameEnd, "Ignore Game End"],
+  // Each time the actions run, everyone else in the game without a result is defeated.
+  [TriggerFlag.IgnoreGameEnd, "Defeat Others"],
   [TriggerFlag.IgnoreDisplay, "Ignore Display"],
   [TriggerFlag.ConditionsMet, "Conditions Met"],
   [TriggerFlag.Paused, "Paused"],
   [TriggerFlag.WaitSkipDisabled, "Wait Skip Disabled"],
 ];
+
+/** Names older text used, still read: "Ignore Game End" was the name of what is now "Defeat Others". */
+const FLAG_ALIASES: [number, string][] = [[TriggerFlag.IgnoreGameEnd, "Ignore Game End"]];
 
 function formatValue(kind: ArgKind, value: number, names: TriggerNames): string {
   switch (kind) {
@@ -289,7 +293,7 @@ class Parser {
       const tok = this.next();
       if (tok.kind === "punct") continue;
       const key = tok.text.toLowerCase();
-      const hit = TRIGGER_FLAG_NAMES.find(([, name]) => name.toLowerCase() === key);
+      const hit = TRIGGER_FLAG_NAMES.find(([, name]) => name.toLowerCase() === key) ?? FLAG_ALIASES.find(([, name]) => name.toLowerCase() === key);
       if (hit) flags |= hit[0];
       else if (/^0x[0-9a-f]+$/i.test(tok.text)) flags |= parseInt(tok.text, 16);
       else if (/^\d+$/.test(tok.text)) flags |= Number(tok.text);

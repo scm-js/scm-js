@@ -472,7 +472,7 @@ export default function TerrainPalette() {
       <div className="placement-options" title={t("What a terrain edit does to the units on it")}>
         <Check
           label={t("Remove stranded units")}
-          title={t("When the new terrain can no longer hold a unit standing on it (e.g. water under a base, unbuildable ground under a building), delete it as part of the same edit")}
+          title={t("When the new terrain leaves a ground unit where it cannot walk, which the game removes at the start, delete it as part of the same edit. Buildings stay: the game makes them on any ground.")}
           checked={placement.removeStranded}
           onChange={(e) => setPlacement({ ...placement, removeStranded: e.target.checked })}
         />

@@ -318,7 +318,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const take = (name: string, dim = { width: 0, height: 0 }) => {
     const spec = specFor(name);
     if (!spec) return null;
-    return combine(chk, name, spec.mode, sizeOf(spec, dim), spec.minimum, spec.entries);
+    return combine(chk, name, spec.mode, sizeOf(spec, dim), spec.minimum, spec.entries, spec.fill);
   };
 
   // DIM has to come first: the terrain sections' buffer sizes are derived from it.

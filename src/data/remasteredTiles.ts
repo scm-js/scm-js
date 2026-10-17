@@ -32,7 +32,7 @@ export function tileGroupRanges(era: number): { classic: number; remastered: num
 
 /** Whether a tile (an MTXM value) is one only Remastered's tables have, on the tileset with ERA index `era`. */
 export function isRemasteredOnlyTile(era: number, tile: number): boolean {
-  const group = tile >> 4;
+  const group = (tile >> 4) & 0x7ff;
   const [classic, remastered, filledFrom] = GROUPS[era & 7];
   if (group >= classic) return group < remastered;
   return group >= filledFrom && group < FIRST_DOODAD_GROUP;

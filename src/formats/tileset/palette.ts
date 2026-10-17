@@ -8,7 +8,7 @@
  * index 0 marks slots the tileset does not use (a few still hold real graphics).
  */
 import type { TerrainName } from "../../data/tilesets";
-import { groupBuildable, groupHeight, megatileForTile, TileFlag, type Cv5Group, type Tileset } from "./decode";
+import { groupBuildable, groupHeight, megatileForTile, megatileHeight, TileFlag, tileGroupOf, type Cv5Group, type Tileset } from "./decode";
 
 /** Doodad groups mark themselves with index 1. */
 const DOODAD_INDEX = 1;
@@ -115,7 +115,7 @@ export function heightLabel(height: 0 | 1 | 2): string {
 
 /** Everything the properties panel shows about one MTXM id. */
 export function tileInfo(tileset: Tileset, names: readonly TerrainName[], id: number): TileInfo {
-  const group = id >> 4;
+  const group = tileGroupOf(id);
   const slot = id & 0xf;
   const cv5 = tileset.groups[group];
   // Megatile 0 is the null megatile: it "resolves", but there is nothing there.
@@ -149,7 +149,8 @@ export function tileInfo(tileset: Tileset, names: readonly TerrainName[], id: nu
     megatile,
     kind,
     label,
-    height: cv5 ? groupHeight(cv5) : 0,
+    // The game's height comes from the megatile's minitiles; without one, the group's flags say what was meant.
+    height: megatile >= 0 ? megatileHeight(tileset, megatile) : cv5 ? groupHeight(cv5) : 0,
     buildable: cv5 ? groupBuildable(cv5) && megatile >= 0 : false,
     walkable,
   };

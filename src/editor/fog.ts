@@ -3,8 +3,10 @@
  *
  * MASK is one byte per tile; bit n set means the tile starts the game *unexplored* for
  * player n+1 (black), clear means explored (the player sees the terrain, darkened, until
- * a unit gives vision). StarEdit writes 0xFF everywhere and a map without the section
- * behaves the same, so "no MASK" reads as fully fogged and the first edit creates a
+ * a unit gives vision). StarEdit writes 0xFF everywhere. The game sets every tile
+ * unexplored before it reads MASK, so tiles a short MASK does not reach stay fogged, and a
+ * melee game, which never reads it, starts all fogged; a Use Map Settings game refuses a map
+ * without the section. So "no MASK" reads as fully fogged and the first edit creates a
  * 0xFF-filled section (`ensureMask`) for the caller to record in the undo history.
  *
  * The brushes here are the fog counterparts of `editor/terrain.ts`: they compute

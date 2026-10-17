@@ -42,7 +42,8 @@ Plugins… rather than installed from the start.
   itself.
 - **AI on your own key.** With your Anthropic API key, an assistant reads and edits the
   open map with you, and Tools ▸ AI lays out maps, writes triggers and briefings, and
-  reviews a map. See [The AI](docs/guide.md#the-ai).
+  reviews a map. The prompts are public in
+  [ai-engine](https://github.com/scm-js/ai-engine). See [The AI](docs/guide.md#the-ai).
 - **Triggers as a graph.** Trigger Map (*Browse Plugins*) shows which triggers set and
   read each switch, death counter and location, and what is never set, read or run.
 - **The ground as a unit walks it.** View ▸ Walkability (Ctrl+Shift+W) draws islands,

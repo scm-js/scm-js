@@ -74,11 +74,18 @@ describe("validateScenario", () => {
     scn.units.push(makeUnit(null, START_LOCATION, 0, 300, 300, 3)); // a second for player 1
     scn.units.push(makeUnit(null, START_LOCATION, 5, 500, 500, 4)); // an inactive slot
     const out = texts(scn);
-    expect(out).toContain("warn: No start location for Player 3 (slot is Computer).");
-    expect(out).toContain("warn: Player 1 has 2 start locations; the game uses one.");
+    // No triggers: a melee map, where a player without one is eliminated at once.
+    expect(out).toContain("warn: No start location for Player 3 (slot is Computer): in a melee game that player gets no start units and is eliminated at once.");
+    expect(out).toContain("warn: Player 1 has 2 start locations; the game uses the last one in the unit list.");
     expect(out).toContain("warn: Player 6 has a start location but its slot is not playable.");
     const second = validateScenario(scn).find((i) => i.text.includes("2 start locations"));
     expect(second?.target).toEqual({ kind: "unit", index: 2 });
+    // In a Use Map Settings game it is only where the view starts; Players 9–12 never get one.
+    scn.triggers.push(newTrigger());
+    scn.units.push(makeUnit(null, START_LOCATION, 9, 600, 600, 5));
+    const ums = texts(scn);
+    expect(ums).toContain("info: No start location for Player 3 (slot is Computer): in a Use Map Settings game the view starts at the top-left corner.");
+    expect(ums.some((t) => t.startsWith("error: Player 10 has a start location. Only Players 1–8 can"))).toBe(true);
   });
 
   it("checks units and locations", () => {
@@ -126,7 +133,7 @@ describe("validateScenario", () => {
     scn.strings.strings[2] = "staredit\\wav\\boom.wav";
     const out = texts(scn, { extras: new Map([["staredit\\wav\\other.wav", new Uint8Array(1)]]) });
     expect(out).toContain("warn: Trigger 1: Bring uses location 4, which does not exist.");
-    expect(out).toContain("error: Trigger 1: Display Text Message refers to string #999, past the end of the table.");
+    expect(out).toContain("warn: Trigger 1: Display Text Message refers to string #999, past the end of the table, so the game shows nothing.");
     expect(out).toContain("warn: Trigger 1: Play WAV plays 'staredit\\wav\\boom.wav', which is not in the archive.");
     expect(out).toContain("warn: Switch 4 is tested by a condition but no action ever sets it.");
     expect(out).toContain("info: Trigger 2 is disabled.");
@@ -175,7 +182,8 @@ describe("scenario (UMS) checks", () => {
     scn.triggers.push(trigger([PlayerGroup.Player1], [action(ActionType.Victory)]));
     let out = texts(scn);
     expect(out).toContain("warn: No trigger gives Player 2 Victory; in a scenario a player wins only when a trigger says so.");
-    expect(out.some((t) => t.startsWith("warn: No trigger gives Player 1, Player 2 Defeat"))).toBe(true);
+    // Player 1's Victory defeats Player 2; nothing makes Player 1 lose.
+    expect(out).toContain("warn: Nothing makes Player 1 lose: no Defeat, and no Victory or Draw for another player. A scenario does not end when a player's units are gone.");
     expect(out.some((t) => t.startsWith("info: No Set Mission Objectives for Player 1, Player 2"))).toBe(true);
     // All Players covers everyone; a force covers its members.
     scn.triggers.push(trigger([PlayerGroup.AllPlayers], [action(ActionType.Defeat)]));

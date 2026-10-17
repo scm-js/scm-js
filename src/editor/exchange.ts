@@ -14,9 +14,9 @@
  */
 import { markDirty, strSectionName, type Scenario } from "../formats/chk/scenario";
 import { setString, type StringTable } from "../formats/chk/sections/strings";
-import { decodeTriggers, encodeTriggers, TRIGGER_STRIDE, type ReadonlyTrigger, type TriggerRecord } from "../formats/chk/sections/triggers";
+import { ConditionType, decodeTriggers, encodeTriggers, MAX_CONDITIONS, TRIGGER_STRIDE, type ReadonlyTrigger, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { formatTriggers, parseTriggers } from "../formats/triggers/text";
-import { triggerNames } from "./triggers";
+import { newCondition, triggerNames } from "./triggers";
 import { t } from "../i18n";
 
 /* ── Triggers ────────────────────────────────────────────── */
@@ -39,7 +39,16 @@ export function triggersToText(scn: Scenario, triggers: TriggerRecord[], briefin
 
 /** Parse TrigEdit text against the map's names; throws `TriggerTextError` with the line. */
 export function triggersFromText(scn: Scenario, text: string, briefing = false): TriggerRecord[] {
-  return parseTriggers(text, triggerNames(scn), briefing).map((t) => t.trigger);
+  const triggers = parseTriggers(text, triggerNames(scn), briefing).map((t) => t.trigger);
+  // The game plays a briefing only when its first condition is Mission Briefing, which
+  // StarEdit always writes and briefing text usually leaves out.
+  if (briefing) {
+    for (const trig of triggers) {
+      if (trig.conditions[0]?.type === ConditionType.Briefing) continue;
+      trig.conditions = [newCondition(ConditionType.Briefing), ...trig.conditions].slice(0, MAX_CONDITIONS);
+    }
+  }
+  return triggers;
 }
 
 export type TriggerFileFormat = "trg" | "txt";

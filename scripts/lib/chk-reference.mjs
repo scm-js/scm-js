@@ -369,7 +369,7 @@ function sectionBlock(spec, defs) {
     ...(gameSizeText(name, layout) ? [`| The game accepts | ${gameSizeText(name, layout)} |`] : []),
     ...(GAME_COPIES[name] ? [`| More than one copy | ${COPY_RULES[GAME_COPIES[name]]} |`] : []),
     ...(REMASTERED_SECTIONS[name] ? [`| More than one copy | ${REMASTERED_SECTIONS[name].copies} |`] : []),
-    `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : "Kept as it is and written back unchanged."} |`,
+    `| In scmJS | ${defs.MODELLED_SECTIONS.has(name) ? "Read, and written again when you change what it holds." : name === "VCOD" ? "Kept as it is, unless it fails the game's check for the map's players: then Save writes StarEdit's table in its place." : "Kept as it is and written back unchanged."} |`,
   ];
   if (layout.rows) {
     const each = layout.record ? `Each ${layout.record}:` : "Layout:";

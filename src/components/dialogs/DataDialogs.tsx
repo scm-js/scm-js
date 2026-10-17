@@ -259,7 +259,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
               <div className="form">
                 {number(t("Minerals"), "mineralCost", defaults.minerals, 0xffff)}
                 {number(t("Vespene gas"), "gasCost", defaults.gas, 0xffff)}
-                <Field label={t("Custom name")} hint={t("Empty for the game's own name. Applies whether or not the type uses default settings.")}>
+                <Field label={t("Custom name")} hint={t("Empty for the game's own name. The game reads it only when the type does not use the default settings.")}>
                   <ColorTextField placeholder={unitLabel(sel)} value={customName} onChange={(v) => setNames(new Map(names).set(sel, v))} />
                 </Field>
               </div>

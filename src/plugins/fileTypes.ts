@@ -7,7 +7,7 @@
 import type { createStore } from "jotai";
 import { pluginFileTypesAtom, type PluginFileTypeEntry } from "../atoms/pluginAtoms";
 import { logError } from "../editor/log";
-import { count, extOf, pluginName } from "../services/usage";
+import { count, countReplays, extOf, pluginName } from "../services/usage";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -42,6 +42,7 @@ export function handFilesToPlugins(store: Store, files: readonly File[]): File[]
   }
   for (const [type, list] of claimed) {
     for (const f of list) count("file.open", { plugin: pluginName(type.plugin.source), ext: extOf(f.name) });
+    countReplays(list, "open");
     try {
       const done = type.spec.open(list);
       if (done && typeof (done as Promise<void>).then === "function") (done as Promise<void>).catch((err) => logError(type.plugin.name, `Opening ${list.map((f) => f.name).join(", ")} failed`, err));

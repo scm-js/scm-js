@@ -188,7 +188,7 @@ typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `g
 `commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), undo/redo, resize, tileset,
 `openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), Test Map, `api.sync.start`
 (`map.share`), the host's menu/context/hotkey `run` wrappers + map buttons (`plugin.use`), file
-types (`file.open`), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`, area
+types (`file.open`), replays (`replay.open` via `countReplays`: file types, the host's `pickFiles`, and a window capture-phase `drop` listener in `useUsageCounts` that sees drops on plugin panels too; deduped by name+size+date for 10 s), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`, area
 only), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
 items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never
 sent), and `useUsageCounts` (`start`, `plugin.running`, layer/terrain mode/symmetry/map view

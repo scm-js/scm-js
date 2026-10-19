@@ -160,6 +160,26 @@ export function setListedPlugins(fn: (spec: string) => boolean): void {
   listed = fn;
 }
 
+/** Replays counted lately, by name, size and date, so one file reaching a plugin two ways (a drop, then the plugin's own handler) counts once. */
+const replaysSeen = new Map<string, number>();
+const REPLAY_SAME_MS = 10_000;
+
+/**
+ * Replays opened in the editor, one `replay.open` each: every `.rep` among `files`, `via`
+ * how they came (`drop`, `open` for File ▸ Open, `pick` for a plugin's own file dialog).
+ * Counted however they arrive, since a replay viewer may take them through its own panel.
+ */
+export function countReplays(files: readonly File[], via: string, now = Date.now()): void {
+  for (const [key, at] of replaysSeen) if (now - at > REPLAY_SAME_MS) replaysSeen.delete(key);
+  for (const f of files) {
+    if (!/\.rep$/i.test(f.name)) continue;
+    const key = `${f.name}\u0000${f.size}\u0000${f.lastModified}`;
+    if (replaysSeen.has(key)) continue;
+    replaysSeen.set(key, now);
+    count("replay.open", { where: "editor", via });
+  }
+}
+
 /** `pluginCountName` with the registries' lists. */
 export const pluginName = (spec: string) => pluginCountName(spec, listed);
 

@@ -4,17 +4,17 @@
  * `start` line for the session — the editor's language, the game data in use — and one
  * `plugin.running` line for each plugin that is running. The layer, the terrain tool, the
  * mirror and a plugin's view in the map's place (a replay) are counted as they change,
- * however they were changed.
+ * however they were changed, and a replay dropped anywhere on the page is counted as opened.
  */
 import { useEffect, useRef } from "react";
 import { useAtomValue, useStore } from "jotai";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { pluginRuntimesAtom, pluginsStartedAtom, registryCacheAtom, shownMapViewAtom } from "../atoms/pluginAtoms";
+import { pluginFileTypesAtom, pluginRuntimesAtom, pluginsStartedAtom, registryCacheAtom, shownMapViewAtom } from "../atoms/pluginAtoms";
 import { activeLayerAtom, symmetryAtom, terrainModeAtom } from "../atoms/editorAtoms";
 import { currentAssetSource } from "../gamedata/source";
 import { locale } from "../i18n";
 import { DEFAULT_REGISTRIES, pluginKey } from "../plugins/defaults";
-import { count, countingHere, countingWanted, gameDataOf, pluginName, setCounting, setListedPlugins } from "../services/usage";
+import { count, countingHere, countingWanted, countReplays, gameDataOf, pluginName, setCounting, setListedPlugins } from "../services/usage";
 
 let started = false;
 
@@ -53,7 +53,14 @@ export function useUsageCounts() {
         if (view) count("plugin.view", { plugin: pluginName(view.plugin.source) });
       }),
     ];
-    return () => { for (const unsub of subs) unsub(); };
+    // A replay dropped anywhere, the map or a plugin's own panel, while a plugin that opens replays is running.
+    // Capturing on the window sees it before a panel's handler can stop it.
+    const onDrop = (e: DragEvent) => {
+      if (!store.get(pluginFileTypesAtom).some((t) => t.extensions.includes(".rep"))) return;
+      countReplays([...(e.dataTransfer?.files ?? [])], "drop");
+    };
+    window.addEventListener("drop", onDrop, true);
+    return () => { for (const unsub of subs) unsub(); window.removeEventListener("drop", onDrop, true); };
   }, [store]);
 
   useEffect(() => {

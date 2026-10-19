@@ -4,6 +4,7 @@ import { browserStorage } from "./storage";
 import type { DialogId } from "../components/dialogs/ids";
 import type { Toast } from "../editor/view";
 import { msg } from "../i18n";
+import { count } from "../services/usage";
 import { viewOnlyAtom, viewOnlyMessage } from "./editorAtoms";
 
 export type { DialogId, Toast };
@@ -39,6 +40,9 @@ export const openDialogAtom = atom(null, (get, set, id: DialogId, payload?: Reco
   if (viewOnly && EDITING_DIALOGS.has(id)) { set(statusMessageAtom, viewOnlyMessage(viewOnly)); return -1; }
   const key = ++dialogSeq;
   set(dialogStackAtom, [...get(dialogStackAtom), { id, key, payload }]);
+  // Preferences opened on a page (View ▸ Grid Settings… is Editing) says which; a plugin's page is the plugin's.
+  const page = id === "preferences" && typeof payload?.page === "string" && !payload.page.startsWith("plugin:") ? payload.page : undefined;
+  count("dialog", page ? { id, page } : { id });
   return key;
 });
 

@@ -20,6 +20,7 @@ import { useRecovery } from "./hooks/useRecovery";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
+import { useUsageCounts } from "./hooks/useUsageCounts";
 import { droppedHandle } from "./services/mapIo";
 import { handFilesToPlugins } from "./plugins/fileTypes";
 import { TooltipProvider } from "./components/ui";
@@ -92,6 +93,7 @@ export default function App() {
   useDesktopFiles();
   useUpdateCheck();
   useWhatsNew();
+  useUsageCounts();
 
   useEffect(() => {
     if (chrome) return;

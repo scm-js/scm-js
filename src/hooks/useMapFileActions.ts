@@ -7,7 +7,7 @@ import {
 } from "../atoms/documentAtoms";
 import { blankFillAtom } from "../atoms/gameDataAtoms";
 import { ensurePermission, loadHandle, removeHandle } from "../services/handleStore";
-import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
+import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, mapTilesetAtom, placementOptionsAtom, saveOptionsAtom, screenAtom } from "../atoms/editorAtoms";
 import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
@@ -27,6 +27,8 @@ import { defaultSaveOptions, formatBytes, type SaveOptions } from "../editor/sav
 import { buildOutgoing } from "../services/mapBuild";
 import { handFilesToPlugins } from "../plugins/fileTypes";
 import { hostTerms } from "../editor/platform";
+import { count, extOf, sizeOf } from "../services/usage";
+import { buildStepName } from "../services/usageNames";
 import { t, translate } from "../i18n";
 
 export interface NewMapOptions {
@@ -121,6 +123,10 @@ export async function openFileInto(store: Store, file: File, handle: MapFileHand
     const doc = await openMapFile(file, handle);
     store.set(loadDocumentAtom, { ...doc, into: target, viewOnly });
     store.set(screenAtom, "editor");
+    count("map.open", {
+      ext: extOf(file.name), tileset: store.get(mapTilesetAtom), size: sizeOf(doc.scenario.width, doc.scenario.height),
+      version: mapVersionOf(doc.scenario.fileVersion), tab: target === "tab", ...(viewOnly ? { viewOnly: true } : {}),
+    });
     const warnings = doc.scenario.warnings.length;
     store.set(
       statusMessageAtom,
@@ -180,6 +186,7 @@ export async function newMapInto(store: Store, options: NewMapOptions = DEFAULT_
     reason: "new",
     into: target,
   });
+  if (!onlyWhenEmpty) count("map.new", { tileset: options.tileset, size: sizeOf(width, height), version, starts: wanted });
   // Without the CV5 every pair took variation 0, which draws as one megatile repeated once
   // the graphics arrive; remember to lay it again if they do (`relayBlankTerrain`).
   if (!loaded) store.set(blankFillAtom, { terrainId: terrain.id });
@@ -324,6 +331,11 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     const outcome = await write(bytes, req.fileName, req.handle, before);
     if (!outcome) { logInfo("document", `Save of the ${what} was dismissed`); return false; }
     const size = formatBytes(bytes.length);
+    count("map.save", {
+      ext: extOf(outcome.fileName), compression: req.options?.compression ?? "none", route: outcome.route,
+      ...(req.copy ? { copy: true } : {}), steps: built.builtBy?.length ?? 0, backup: kept.result !== null,
+    });
+    for (const b of built.builtBy ?? []) count("map.build", { step: buildStepName(store, b.id) });
     logInfo("document", `Saved the ${what}`, { file: baseName(outcome.fileName), bytes: bytes.length, route: outcome.route, format: req.options?.format, compression: req.options?.compression });
     if (!req.copy) {
       store.set(mapFilePathAtom, outcome.fileName);

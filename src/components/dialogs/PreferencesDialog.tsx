@@ -57,7 +57,7 @@ import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } 
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
 import { hostTerms, isDesktop } from "../../editor/platform";
-import { DEFAULT_REMASTERED_EFFECTS, PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
+import { changedPreferences, DEFAULT_REMASTERED_EFFECTS, PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
@@ -66,6 +66,7 @@ import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import { LOCALES, msg, t, translate } from "../../i18n";
+import { count, countingHere } from "../../services/usage";
 import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import FlagIcon from "../ui/FlagIcon";
@@ -169,6 +170,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
   }, [shownPlugin, visited]);
   const patch = (p: Partial<Preferences>) => setW({ ...w, prefs: { ...w.prefs, ...p } });
   const apply = () => {
+    for (const changed of changedPreferences(store.get(preferencesAtom), w.prefs)) count("preferences", changed);
     setPrefs(w.prefs);
     setGridSize(w.gridSize);
     setLook(w.look);
@@ -425,6 +427,15 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
         </div>
         <Hint>{t("A copy is also made when the editor goes to the background, and is removed when the map is saved or closed. If the editor closes before a map is saved, the copy is offered back at the next start. Copies are kept in {here}, not beside your files.", { here: hostTerms().here })}</Hint>
       </Section>
+      {countingHere() && (
+        <Section title={t("Privacy")}>
+          <Check label={t("Count which parts of the editor are used")} checked={p.counting} onChange={(e) => patch({ counting: e.target.checked })} />
+          <Hint>
+            {t("Sends the name of what was used, such as a dialog, a tool or a save, with no identifier. Nothing of the map is sent: not its name, its contents or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
+            <a href="https://scmjs.dev/privacy.html" target="_blank" rel="noopener noreferrer">{t("What is counted")}</a>
+          </Hint>
+        </Section>
+      )}
     </div>
   );
 }
@@ -696,6 +707,8 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.plugin-updates": msg("Last plugin update check"),
   // Written by the hosted site's visit count (the front-door worker's script), not the editor.
   "scmjs.visits": msg("Visit count dates"),
+  // Preferences ▸ General ▸ Privacy turned off, for the site's script to read.
+  "scmjs.counting": msg("Counting turned off"),
 };
 
 /**

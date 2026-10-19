@@ -23,6 +23,7 @@ import { takesText, type TextTarget } from "../../editor/commands";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
 import { msg, pluginText, t, translate } from "../../i18n";
+import { count, pluginName } from "../../services/usage";
 
 /** The box `api.ui.dialog` shares with `DialogHandle.setTitle`, so a title change reaches the frame. */
 interface TitleBox { value: string; listeners: Set<() => void> }
@@ -942,6 +943,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
   }, [spec, looking, list, store]);
 
   const toggle = (s: string, enabled: boolean) => {
+    count(enabled ? "plugin.on" : "plugin.off", { plugin: pluginName(s) });
     if (enabled) { void enableWithRequirements(store, s); return; }
     setInstalled(store, s, { enabled });
     deactivatePlugin(store, s);
@@ -958,6 +960,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
     if (local && isPluginActive(store, s)) void reloadPlugin(store, s);
   };
   const remove = (s: string) => {
+    count("plugin.remove", { plugin: pluginName(s) });
     deactivatePlugin(store, s);
     setInstalled(store, s, { remove: true });
   };

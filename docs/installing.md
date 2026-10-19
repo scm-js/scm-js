@@ -9,10 +9,10 @@ question. The [user guide](guide.md) starts once the editor is open.
 ## In the browser
 
 [scmjs.dev/editor](https://scmjs.dev/editor/) is the newest numbered release. There is
-nothing to install. Your maps stay on your own disk, and nothing is sent anywhere unless
-you use a network feature, such as a copy kept on your scmjs.dev account, a map you share
-for others to edit with you, or an AI request on your own Anthropic key. The user guide
-describes each.
+nothing to install. Your maps stay on your own disk, and nothing about them is sent
+anywhere unless you use a network feature, such as a copy kept on your scmjs.dev account,
+a map you share for others to edit with you, or an AI request on your own Anthropic key.
+The user guide describes each.
 
 [scmjs.dev/nightly](https://scmjs.dev/nightly/) is rebuilt every night from the latest
 changes, for trying what is in development. It keeps its own settings, plugins and
@@ -22,9 +22,12 @@ add them once for all three.
 Chrome and Edge save a map back to the file you opened. In Firefox and Safari every save
 is a download, and File ▸ Open Recent asks for the file again.
 
-The hosted editor, the nightly and the documentation site count visits with Cloudflare Web
-Analytics (no cookies, and nothing about your maps). The desktop app and a copy you host
-yourself do not.
+The hosted editor, the nightly and the documentation site count visits, and the editor
+counts which of its features are used: the name of a dialog that opened, the layer an edit
+was on, the kind of file a map was saved as. They never send a map, its name, a file name
+or anything you typed, and set no cookies. Preferences ▸ General ▸ Privacy turns the
+counting off, and the site's [privacy page](https://scmjs.dev/privacy.html) says exactly
+what is sent. The desktop app and a copy you host yourself count nothing.
 
 ## The desktop app
 

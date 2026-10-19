@@ -168,13 +168,23 @@ helpers take the base off the page's own path. The parts:
 - The server's `AI_SERVER_ALLOWED_ORIGINS` must include `https://scmjs.dev`, and the sign-in
   provider's redirect list whatever it holds for the old origin.
 
-**Analytics** are Cloudflare Web Analytics only (visits, referrers, countries, load timings; no
-cookies, no events): an inline script in `index.html` loads the beacon when `location.hostname` is
+**Analytics** are our own visit count plus Cloudflare Web Analytics beside it (for comparison
+while the own count beds in; 2026-10-18). The own count: a second inline script in `index.html`
+loads `/_e.js` when the host is `scmjs.dev` (stable and nightly both — same origin), and
+`render.mjs` loads `https://scmjs.dev/_e.js` on `docs.scmjs.dev`. The script is the front-door
+worker's (`cloudflare-link-previews`, `tracker` in `worker.js`), which also relays what it sends
+(`/_e`) to ai-server's `POST /v1/hits` with the IP/UA/country/region in headers; ai-server hashes
+IP+UA with a memory-only salt rotated at UTC midnight and shows it all in `/admin`'s Visitors
+section. The script keeps `scmjs.visits` in localStorage (last UTC day/week/month + first week;
+flags on a view give weekly/monthly/new without an ID) — labelled "Visit count dates" in
+Preferences ▸ Browser storage and left out of preferences export. `scmjsHits.track(name, props)`
+on `window` is the hook for editor events (step 2: user wants them ON by default, behind a
+Preferences switch). Cloudflare's part: an inline script in `index.html` loads the beacon when `location.hostname` is
 `scmjs.dev` (the site's own token, the editor being a path of it), `editor.scmjs.dev` (while it still serves) or `nightly.editor.scmjs.dev`, and
 `scripts/lib/docs/render.mjs` does the same for `docs.scmjs.dev`. The switch is the hostname and not
 a build flag because the stable Pages site *is* the release zip, the container image and the desktop
 bundle (`scmjs://`), and none of those may report. Decided 2026-09-21: no editor event counter
-(saves, errors, versions) until someone needs the answer. The "real users" figure is the game data
+(saves, errors, versions) until someone needs the answer — reversed 2026-10-18, see above. The "real users" figure is the game data
 forwarder's own count of `HEAD /StarEdit.zip` (one per install started, web only — the desktop goes
 to Blizzard directly), written to its Analytics Engine dataset. The site's privacy page has to
 keep saying what is counted.

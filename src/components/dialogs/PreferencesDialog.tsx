@@ -694,6 +694,8 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.plugin-registries": msg("Plugin sources"),
   "scmjs.plugin-registry": msg("Browse Plugins cache"),
   "scmjs.plugin-updates": msg("Last plugin update check"),
+  // Written by the hosted site's visit count (the front-door worker's script), not the editor.
+  "scmjs.visits": msg("Visit count dates"),
 };
 
 /**

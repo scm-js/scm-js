@@ -1246,6 +1246,7 @@
   "Plugin sources": "플러그인 소스",
   "Browse Plugins cache": "플러그인 찾아보기 캐시",
   "Last plugin update check": "마지막 플러그인 업데이트 확인",
+  "Visit count dates": "방문 집계 날짜",
   "Plugin data · {id}": "플러그인 데이터 · {id}",
   "{length, plural, one {# entry} other {# entries}} kept by the plugin": "플러그인이 보관한 항목 {length, plural, other {#개}}",
   "Hide what is stored": "저장된 내용 숨기기",

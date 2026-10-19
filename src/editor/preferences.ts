@@ -140,6 +140,12 @@ export interface Preferences {
    */
   hotkeys: HotkeyOverrides;
   /**
+   * The hosted editor's count of which features are used (`services/usage.ts`), and with it
+   * the site's visit count for this browser. On by default; only shown, and only does
+   * anything, on scmjs.dev.
+   */
+  counting: boolean;
+  /**
    * Which cells the status bar shows (Preferences ▸ View). The message, the symmetry badge
    * while a mode is on, and the plugins' items always show.
    */
@@ -196,6 +202,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   updates: { checkOnStart: true, nightly: false },
   plugins: { updates: "notify" },
   hotkeys: {},
+  counting: true,
   statusBar: { tile: true, pixel: true, tileId: true, size: true, tileset: true, layer: true, zoom: true, revision: true },
 };
 
@@ -209,4 +216,27 @@ export function animationSpeedIndex(value: number): number {
     if (Math.abs(ANIMATION_SPEEDS[i] - value) < Math.abs(ANIMATION_SPEEDS[best] - value)) best = i;
   }
   return best;
+}
+
+/**
+ * What Preferences' Apply changes, for the feature counts (`services/usage.ts`): each setting by name (one level into a group,
+ * `save.backup`), with the new value only when it is on or off — a folder, a number or a
+ * colour is the user's own.
+ */
+export function changedPreferences(before: Preferences, after: Preferences): { changed: string; to?: boolean }[] {
+  const out: { changed: string; to?: boolean }[] = [];
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  for (const key of Object.keys(after) as (keyof Preferences)[]) {
+    const a = before[key], b = after[key];
+    if (same(a, b)) continue;
+    if (b && typeof b === "object" && !Array.isArray(b) && key !== "hotkeys") {
+      for (const sub of Object.keys(b)) {
+        const x = (a as Record<string, unknown> | undefined)?.[sub], y = (b as Record<string, unknown>)[sub];
+        if (!same(x, y)) out.push(typeof y === "boolean" ? { changed: `${key}.${sub}`, to: y } : { changed: `${key}.${sub}` });
+      }
+    } else {
+      out.push(typeof b === "boolean" ? { changed: key, to: b } : { changed: key });
+    }
+  }
+  return out;
 }

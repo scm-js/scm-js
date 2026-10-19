@@ -37,7 +37,8 @@ import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, editCopyIn, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { msg, pluginText, t, translate } from "../../i18n";
+import { isOwnText, msg, pluginText, t, translate } from "../../i18n";
+import { count } from "../../services/usage";
 import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
@@ -518,6 +519,17 @@ function useMenus(): Menu[] {
 
 /* ── Rendering ──────────────────────────────────────────── */
 
+/**
+ * The feature count of a built-in menu item, by its English words. A plugin's item is
+ * counted where the plugin host runs it, and an item whose words are made at run time — a
+ * recent file's name, Undo with the edit in it — is not one of the editor's own strings
+ * and is not counted here.
+ */
+function countItem(it: { label: string; pluginId?: string }, on?: boolean) {
+  if (it.pluginId || !isOwnText(it.label)) return;
+  count("menu", on === undefined ? { item: it.label } : { item: it.label, on });
+}
+
 /** A built-in label through the editor's catalogue; a plugin's through its own. */
 function labelOf(it: { label: string; pluginId?: string }): string {
   return it.pluginId ? pluginText(it.pluginId, it.label) : translate(it.label);
@@ -533,7 +545,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         return <Menubar.Label key={i} className="menu-label">{labelOf(it)}</Menubar.Label>;
       case "item":
         return (
-          <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => (it.dialog ? open(it.dialog, it.payload) : it.onSelect?.())}>
+          <Menubar.Item key={i} className="menu-item" disabled={it.disabled} onSelect={() => { countItem(it); if (it.dialog) open(it.dialog, it.payload); else it.onSelect?.(); }}>
             {it.icon && <span className="indicator menu-icon"><PluginIconView icon={it.icon} size={14} /></span>}
             {labelOf(it)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
@@ -541,7 +553,7 @@ function Items({ items }: { items: Item[] }): ReactNode {
         );
       case "check":
         return (
-          <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} disabled={it.disabled} onCheckedChange={it.onChange}>
+          <Menubar.CheckboxItem key={i} className="menu-item" checked={it.checked} disabled={it.disabled} onCheckedChange={(on) => { countItem(it, on); it.onChange(on); }}>
             <Menubar.ItemIndicator className="indicator"><Check size={12} /></Menubar.ItemIndicator>
             {labelOf(it)}
             {it.shortcut && <span className="shortcut">{it.shortcut}</span>}

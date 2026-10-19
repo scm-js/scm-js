@@ -24,6 +24,7 @@ import type { UnitAssets } from "../../formats/units/load";
 import { doodadLabel, type useDoodadTools } from "../../hooks/useDoodadTools";
 import { spriteName } from "../../hooks/useSpriteTools";
 import { t } from "../../i18n";
+import { countPluginUse } from "../../services/usage";
 
 /** What the pointer would do on the map right now, as the viewport worked it out. */
 export interface ViewportMode {
@@ -111,7 +112,7 @@ function PluginMapButtons() {
           className={`hud-chip hud-btn${spec.active ? " active" : ""}`}
           title={spec.title ?? `${spec.label} (${plugin.name})`}
           aria-pressed={spec.active ?? undefined}
-          onClick={() => { try { spec.onClick(); } catch (err) { logError("plugins", `${plugin.name}: its map button failed`, err); } }}
+          onClick={() => { countPluginUse(plugin, "button", spec.label); try { spec.onClick(); } catch (err) { logError("plugins", `${plugin.name}: its map button failed`, err); } }}
         >
           {spec.label}
           {spec.badge !== undefined && spec.badge !== null && spec.badge !== 0 && spec.badge !== "" && <span className="hud-badge">{spec.badge}</span>}

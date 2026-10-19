@@ -17,6 +17,7 @@ import {
   centerViewOnAtom, clipPastingAtom, locationsAutoHiddenAtom, viewFlagsAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
+  activeLayerAtom, symmetryAtom, terrainModeAtom,
 } from "./editorAtoms";
 import type { SaveOptions } from "../editor/save";
 import type { BuiltBy } from "../editor/mapBuild";
@@ -40,6 +41,7 @@ import { resizeScenario, type ResizeResult } from "../editor/resize";
 import { changeTileset, type ChangeTilesetResult } from "../editor/tileset";
 import { baseTerrain } from "../formats/tileset/terrain";
 import { t } from "../i18n";
+import { count } from "../services/usage";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -275,6 +277,7 @@ export const commitTriggersAtom = atom(null, (get, set, how: TablesCommit = true
   set(mapModifiedAtom, true);
   set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
   get(syncTapAtom)?.tables(get, set);
+  count("edit", { layer: "triggers", part: "triggers" });
   if (wantsNotice(how)) set(commitNoticeAtom, { reason: "tables", label: label ?? "", area: null, parts: { ...NO_PARTS, triggers: true } });
 });
 
@@ -292,6 +295,7 @@ export const commitSettingsAtom = atom(null, (get, set, how: TablesCommit = true
   const scn = get(scenarioAtom);
   if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
   get(syncTapAtom)?.tables(get, set);
+  count("edit", { layer: "settings", part: "settings" });
   if (wantsNotice(how)) set(commitNoticeAtom, { reason: "tables", label: label ?? "", area: null, parts: { ...NO_PARTS, settings: true } });
 });
 
@@ -326,6 +330,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   afterWholeDocumentChange(get, set);
   get(syncTapAtom)?.whole(get, set, t("Resize map"));
   set(noticeWholeAtom, { reason: "whole", label: t("Resize map") });
+  count("map.resize", { size: `${scn.width}x${scn.height}` });
   return result;
 });
 
@@ -360,6 +365,7 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
   afterWholeDocumentChange(get, set);
   get(syncTapAtom)?.whole(get, set, t("Change tileset"));
   set(noticeWholeAtom, { reason: "whole", label: t("Change tileset") });
+  count("map.tileset", { tileset: req.tileset, keepTiles: req.keepTiles === true });
   return result;
 });
 
@@ -800,7 +806,16 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   // A rebuilt lattice is the one edit the ISOM status is re-measured after.
   if (entry.createdIsom || entry.rebuiltIsom) set(isomRevisionAtom, get(isomRevisionAtom) + 1);
   noticeEntry(get, set, "edit", entry, entry.label);
+  countEdit(get, entry);
 });
+
+/** The feature count of an edit: the layer it was made on, what it changed, and the terrain tool or mirror in use. */
+function countEdit(get: Getter, entry: HistoryEntry) {
+  const layer = get(activeLayerAtom);
+  const symmetry = get(symmetryAtom);
+  const part = Object.entries(entryParts(entry)).filter(([, on]) => on).map(([k]) => k).join("+") || "other";
+  count("edit", { layer, part, ...(layer === "terrain" ? { mode: get(terrainModeAtom) } : {}), ...(symmetry !== "none" ? { symmetry } : {}) });
+}
 
 /**
  * Record a finished terrain edit the way a brush stroke is recorded. Doodads the edit
@@ -907,6 +922,7 @@ export const undoAtom = atom(
     const stack = get(undoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
+    count("undo");
     if (entry.tables) {
       stepTables(get, set, scn, entry, "undo");
       set(undoStackAtom, stack.slice(0, -1));
@@ -958,6 +974,7 @@ export const redoAtom = atom(
     const stack = get(redoStackAtom);
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
+    count("redo");
     if (entry.tables) {
       stepTables(get, set, scn, entry, "do");
       set(redoStackAtom, stack.slice(0, -1));

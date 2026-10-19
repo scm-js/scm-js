@@ -19,7 +19,8 @@ export function codeBlock(code, opts) {
 }
 
 /**
- * Cloudflare Web Analytics for docs.scmjs.dev: visits and referrers, no cookies. Keyed on
+ * Cloudflare Web Analytics for docs.scmjs.dev, and our own visit count beside it (the
+ * site's front-door worker serves the script): visits and referrers, no cookies. Keyed on
  * the hostname, as the editor's is in `index.html`, so a fork's docs site or a local
  * `build:docs` preview reports nothing.
  */
@@ -31,6 +32,11 @@ const BEACON = `<script>
   s.src = "https://static.cloudflareinsights.com/beacon.min.js";
   s.setAttribute("data-cf-beacon", '{"token": "f8c64ccade704612a5f2b8fe8194e363"}');
   document.head.appendChild(s);
+  // Our own visit count, served from the site by its front-door worker.
+  var c = document.createElement("script");
+  c.defer = true;
+  c.src = "https://scmjs.dev/_e.js";
+  document.head.appendChild(c);
 })();
 </script>`;
 

@@ -28,6 +28,7 @@ import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store"
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
 import { clearComposedImages } from "../plugins/graphics";
 import { t } from "../i18n";
+import { count, gameDataOf } from "./usage";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -41,6 +42,8 @@ export const sameFiles = (a: AssetSource | null, b: AssetSource) => a !== null &
  * startup map is laid again with real variations.
  */
 export function adoptSource(store: Store, next: AssetSource, switched: boolean): void {
+  const before = gameDataOf(store.get(gameDataSourceAtom));
+  if (before !== gameDataOf(next)) count("gamedata", { data: gameDataOf(next), was: before });
   if (switched) dropDecodedData();
   retryFailedParts();
   retryTilesetParts();

@@ -149,6 +149,7 @@ import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseString
 import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ClipParts, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
 import { writeMapBytes } from "../services/mapIo";
+import { count, countPluginUse, pluginName } from "../services/usage";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
 export type Store = ReturnType<typeof createStore>;
@@ -2434,7 +2435,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         // Sharing is editing together; a view-only map is shared by sharing an editable copy.
         if (store.get(scenarioAtom)) assertWritable(store);
         const session = startSync(store, options);
-        if (session) bag.add(() => session.stop());
+        if (session) { bag.add(() => session.stop()); count("map.share", { plugin: pluginName(info.source) }); }
         return session;
       },
       current: () => currentSync(store),
@@ -2560,7 +2561,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const key = nextContributionKey();
         const { run: own, command, icon: wanted, ...rest } = item;
         const icon = wanted === "plugin" ? info.icon ?? { kind: "text", text: "⌘" } : wanted;
-        const run = () => { if (own) own(); else if (command) runCommand(store, qualifyCommand(info.id, command)); };
+        const run = () => { countPluginUse(info, "menu", command ?? item.label); if (own) own(); else if (command) runCommand(store, qualifyCommand(info.id, command)); };
         store.set(pluginMenuItemsAtom, [...store.get(pluginMenuItemsAtom), { ...rest, run, icon, key, pluginId: info.id, path }]);
         return bag.add(() => store.set(pluginMenuItemsAtom, store.get(pluginMenuItemsAtom).filter((i) => i.key !== key)), "menu");
       },
@@ -2570,7 +2571,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       add: (surface, item) => {
         const key = nextContributionKey();
         const { run: own, command, ...rest } = item;
-        const run = (ctx: ContextMenuContext) => { if (own) own(ctx); else if (command) runCommand(store, qualifyCommand(info.id, command), [ctx]); };
+        const run = (ctx: ContextMenuContext) => { countPluginUse(info, "context", command ?? (typeof item.label === "string" ? item.label : undefined)); if (own) own(ctx); else if (command) runCommand(store, qualifyCommand(info.id, command), [ctx]); };
         store.set(pluginContextItemsAtom, [...store.get(pluginContextItemsAtom), { ...rest, run, key, pluginId: info.id, surface }]);
         return bag.add(() => store.set(pluginContextItemsAtom, store.get(pluginContextItemsAtom).filter((i) => i.key !== key)), "contextMenu");
       },
@@ -2579,7 +2580,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     hotkeys: {
       add: (combo, action) => {
         const key = nextContributionKey();
-        const run = typeof action === "function" ? action : () => runCommand(store, qualifyCommand(info.id, action.command));
+        const act = typeof action === "function" ? action : () => runCommand(store, qualifyCommand(info.id, action.command));
+        const run = () => { countPluginUse(info, "key", typeof action === "function" ? combo : action.command); act(); };
         store.set(pluginHotkeysAtom, [...store.get(pluginHotkeysAtom), { key, pluginId: info.id, combo: normalizeCombo(combo), run }]);
         return bag.add(() => store.set(pluginHotkeysAtom, store.get(pluginHotkeysAtom).filter((i) => i.key !== key)), "hotkeys");
       },
@@ -3089,6 +3091,8 @@ export async function installPlugin(
 ) {
   const enabled = opts.enabled !== false;
   const deps = opts.deps ?? browserLoaderDeps();
+  // A requirement installed along the way is counted on its own call (`seen` is shared then).
+  count("plugin.install", { plugin: pluginName(preview.spec), ...(opts.seen ? { required: true } : {}), ...(opts.replaces ? { replacing: true } : {}) });
   // What this plugin requires goes in first, with the same choices, so the plugin never
   // runs a moment without its provider. One already in the list is not installed again —
   // only turned on, if it was off and this one is going on. The confirmation hands over the

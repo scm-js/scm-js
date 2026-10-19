@@ -185,6 +185,22 @@
         document.head.appendChild(s);
       })();
     </script>
+    <!--
+      Our own visit count: the script at /_e.js and the address it sends to are the
+      front-door worker's (scm-js/cloudflare-link-previews), and the numbers are on the
+      scmjs.dev server's /admin page. No cookies and no identifier; the site's privacy page
+      says what is sent. Only on the hosted editor, for the same reason as above (the script
+      checks the host again itself).
+    -->
+    <script>
+      (function () {
+        if (location.hostname !== "scmjs.dev") return;
+        var s = document.createElement("script");
+        s.defer = true;
+        s.src = "/_e.js";
+        document.head.appendChild(s);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

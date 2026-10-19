@@ -28,6 +28,8 @@
  * subscribes; `atoms/logAtoms.ts` is the store side.
  */
 
+import { count as countUse } from "../services/usage";
+
 export type LogLevel = "info" | "warn" | "error";
 
 /** Small, flat facts about one entry. Never a reference to editor state — see the note above. */
@@ -120,12 +122,17 @@ export function setVerbose(on: boolean): void {
   log("info", "app", on ? "Verbose logging on" : "Verbose logging off");
 }
 
+/** The editor's own log sources; any other is a plugin's name, counted as `plugin`. */
+const EDITOR_AREAS: ReadonlySet<string> = new Set(["app", "document", "edit", "gamedata", "plugins", "recovery", "startup", "sync"]);
+
 /**
  * Record one entry. Cheap enough to call unconditionally on the always-on tier; the
  * verbose tier must gate itself on `isVerbose()` so it does not build the message either.
  */
 export function log(level: LogLevel, source: string, message: string, data?: LogData, stack?: string): void {
   const entry: LogEntry = { seq: ++seq, at: Date.now() - started, level, source, message };
+  // The feature counts take how many errors there were and where, never what they said.
+  if (level === "error") countUse("error", { area: EDITOR_AREAS.has(source) ? source : "plugin" });
   if (data) {
     // Undefined values are dropped rather than printed, so a caller can pass an optional
     // fact without a conditional at every call site.

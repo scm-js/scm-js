@@ -16,6 +16,7 @@ import { chromeModeAtom, notOnView, toggleFlagAtom } from "../atoms/viewModeAtom
 import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
+import { count } from "../services/usage";
 
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
@@ -123,7 +124,7 @@ export function useHotkeys() {
       const id = hotkeys.byCombo.get(combo);
       const command = id ? commandById(id) : undefined;
 
-      if (command?.inDialogs) { e.preventDefault(); run[command.id]?.(); return; }
+      if (command?.inDialogs) { e.preventDefault(); count("key", { command: command.id }); run[command.id]?.(); return; }
       if (dialogs.length > 0) return;
 
       // Plugin hotkeys come first, never while typing (a plugin cannot know which fields are safe).
@@ -144,6 +145,7 @@ export function useHotkeys() {
         if (typing && !firesWhileTyping(command, combo)) return;
         e.preventDefault();
         if (view && isMapCommand(command.id)) { setStatus(notOnView(view)); return; }
+        count("key", { command: command.id });
         run[command.id]?.();
         return;
       }

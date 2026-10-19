@@ -12,6 +12,7 @@ import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./TestFolder";
 import { t } from "../../i18n";
+import { count } from "../../services/usage";
 
 /**
  * Tools ▸ Test Map (Ctrl+F5): where the map will be written for the game, and Run. The
@@ -43,6 +44,7 @@ export function TestMapDialog({ entry }: DialogProps) {
     try {
       const r = await runTestMap(store, { launch: prefs.testMap.launch, download });
       if (!r) { setProblem(bridge ? t("No StarCraft folder is known — choose one.") : t("Choose a folder first.")); return; }
+      count("map.test", { route: r.route, launched: r.launched });
       const where = r.route === "download" ? t("{path} downloaded — move it into the game's Maps folder", { path: r.path }) : t("Wrote {path}", { path: r.path });
       const launched = r.launched ? t(" and started StarCraft") : r.message ? ` — ${r.message}` : "";
       setStatus(`${where}${launched}`);

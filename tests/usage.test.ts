@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countingWanted, countPluginUse, extOf, flushCounts, gameDataOf, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, waitingCounts } from "../src/services/usage";
+import { count, countingWanted, countPluginUse, countReplays, extOf, flushCounts, gameDataOf, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, waitingCounts } from "../src/services/usage";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
@@ -83,6 +83,17 @@ describe("feature counts", () => {
     countPluginUse({ source: "github:someone/private-tool" }, "menu", "Secret Thing");
     countPluginUse({ source: "github:scm-js/plugin-paint@v1.1.0" }, "menu", "Paint");
     expect(waitingCounts().map((c) => c.props)).toEqual([{ plugin: "other", via: "menu" }, { plugin: "plugin-paint", via: "menu", item: "Paint" }]);
+  });
+
+  it("counts each replay once, however many ways it reached a plugin", () => {
+    const rep = new File([new Uint8Array(10)], "My Game.rep", { lastModified: 1 });
+    const other = new File([new Uint8Array(10)], "map.scx", { lastModified: 1 });
+    countReplays([rep, other], "drop", 1_000);
+    countReplays([rep], "open", 2_000);
+    expect(waitingCounts()).toEqual([{ name: "replay.open", props: { where: "editor", via: "drop" }, n: 1 }]);
+    // Opened again later: a second replay opened.
+    countReplays([rep], "pick", 20_000);
+    expect(waitingCounts().map((c) => [c.props, c.n])).toEqual([[{ where: "editor", via: "drop" }, 1], [{ where: "editor", via: "pick" }, 1]]);
   });
 
   it("says a file's kind, never its name", () => {

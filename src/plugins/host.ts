@@ -149,7 +149,7 @@ import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseString
 import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ClipParts, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
 import { writeMapBytes } from "../services/mapIo";
-import { count, countPluginUse, pluginName } from "../services/usage";
+import { count, countPluginUse, countReplays, pluginName } from "../services/usage";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
 export type Store = ReturnType<typeof createStore>;
@@ -2530,7 +2530,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         input.type = "file";
         if (options.accept) input.accept = options.accept;
         input.multiple = options.multiple ?? false;
-        input.addEventListener("change", () => resolve(input.files ? [...input.files] : []), { once: true });
+        input.addEventListener("change", () => { const files = input.files ? [...input.files] : []; countReplays(files, "pick"); resolve(files); }, { once: true });
         input.addEventListener("cancel", () => resolve([]), { once: true });
         input.click();
       }),

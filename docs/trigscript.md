@@ -525,9 +525,11 @@ it is gone, its numbers read 0 and nothing written to it has any effect. `if (u)
 whether it is still there.
 
 A loop over units runs within one frame, so a `sleep` inside one is an error. To take
-units one at a time, find the next one after each sleep. Each loop and each pick looks
-through all 1700 of the game's unit slots, which is nothing a few times a second but worth
-a thought every frame; the editor marks such a line *scans units*.
+units one at a time, find the next one after each sleep. Units come oldest first, and a
+loop or a pick costs about what the map holds — a few hundred units are a few hundredths of
+a millisecond — which is nothing a few times a second but worth a thought every frame; the
+editor marks such a line *scans units*. A unit made in the place of one that died can come
+where the dead one did, since the game hands its places out again.
 
 ### The game's tables
 

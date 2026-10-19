@@ -16,7 +16,8 @@
  *
  * Counts are gathered for `FLUSH_MS` and sent together: the same feature with the same
  * words is one line with `n` uses, so a painting session is a handful of lines rather than
- * a request per stroke. Leaving or hiding the page sends what is waiting.
+ * a request per stroke. Leaving or hiding the page sends what is waiting, so the long wait
+ * only costs the counts of a tab that crashed or was killed.
  *
  * Preferences ▸ General ▸ Privacy turns it off (`Preferences.counting`, on by default).
  * Off also writes `OFF_KEY` — outside the editor's own keys and the nightly's prefix, since
@@ -38,7 +39,8 @@ interface HitsWindow {
 /** What the site's counting script reads before it sends anything. */
 export const OFF_KEY = "scmjs.counting";
 
-const FLUSH_MS = 20_000;
+/** Two minutes: an hour of steady editing is about 30 requests. */
+const FLUSH_MS = 120_000;
 /** Lines waiting while the script has not arrived (or never will); past this, new ones are dropped. */
 const MAX_WAITING = 200;
 

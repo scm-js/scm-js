@@ -180,7 +180,7 @@ flags on a view give weekly/monthly/new without an ID) — labelled "Visit count
 Preferences ▸ Browser storage and left out of preferences export.
 
 **Feature counts** (step 2, ON by default, user 2026-10-18): `services/usage.ts` `count(name,
-props)` gathers lines for 20 s (same name+props → one line with `n`) and hands them to
+props)` gathers lines for 2 min (same name+props → one line with `n`) and hands them to
 `window.scmjsHits.track`, which batches up to 20 a beacon; nothing unless `location.hostname` is
 `scmjs.dev` (not `HOSTED_SITE`: the stable build is also the zip, container and desktop bundle). Props are words from fixed lists only — never a file/map name,
 typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,

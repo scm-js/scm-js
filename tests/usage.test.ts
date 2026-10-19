@@ -41,7 +41,7 @@ describe("feature counts", () => {
       { name: "undo", props: undefined, n: 1 },
     ]);
     expect(sent).toEqual([]);
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(120_000);
     expect(sent).toEqual([
       { name: "edit", props: { layer: "terrain", part: "terrain", n: 2 } },
       { name: "edit", props: { layer: "units", part: "units" } },
@@ -57,7 +57,7 @@ describe("feature counts", () => {
     flushCounts();
     expect(waitingCounts()).toHaveLength(1);
     (window as unknown as { scmjsHits?: unknown }).scmjsHits = hits;
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(120_000);
     expect(sent).toEqual([{ name: "map.new", props: { tileset: "jungle" } }]);
   });
 

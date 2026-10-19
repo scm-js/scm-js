@@ -129,7 +129,7 @@ export function ownedStoredKeys(): string[] {
  * The keys a preferences file leaves out: caches the editor rebuilds, and the recents,
  * whose file handles live in this browser's IndexedDB and would not travel with them.
  */
-const NOT_EXPORTED = new Set(["scmjs.plugin-code", "scmjs.plugin-manifests", "scmjs.plugin-registry", "scmjs.plugin-updates", "scmjs.recents", "scmjs.visits"]);
+const NOT_EXPORTED = new Set(["scmjs.plugin-code", "scmjs.plugin-manifests", "scmjs.plugin-registry", "scmjs.plugin-updates", "scmjs.recents", "scmjs.visits", "scmjs.counting"]);
 
 /** The shape of the file Preferences ▸ Storage ▸ Export writes. */
 export interface PreferencesFile {

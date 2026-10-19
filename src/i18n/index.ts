@@ -101,6 +101,11 @@ export function msg(text: string): string {
   return text;
 }
 
+/** Whether `text` is one of the editor's own strings (a key of the catalogues) rather than something made at run time — a file name, a plugin's words. */
+export function isOwnText(text: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ko, text);
+}
+
 /**
  * `t` for a text that is not a literal here — one `msg()` marked in a table. The same
  * lookup; a different name so the extractor knows not to expect a literal.

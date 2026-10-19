@@ -177,9 +177,25 @@ worker's (`cloudflare-link-previews`, `tracker` in `worker.js`), which also rela
 IP+UA with a memory-only salt rotated at UTC midnight and shows it all in `/admin`'s Visitors
 section. The script keeps `scmjs.visits` in localStorage (last UTC day/week/month + first week;
 flags on a view give weekly/monthly/new without an ID) — labelled "Visit count dates" in
-Preferences ▸ Browser storage and left out of preferences export. `scmjsHits.track(name, props)`
-on `window` is the hook for editor events (step 2: user wants them ON by default, behind a
-Preferences switch). Cloudflare's part: an inline script in `index.html` loads the beacon when `location.hostname` is
+Preferences ▸ Browser storage and left out of preferences export.
+
+**Feature counts** (step 2, ON by default, user 2026-10-18): `services/usage.ts` `count(name,
+props)` gathers lines for 20 s (same name+props → one line with `n`) and hands them to
+`window.scmjsHits.track`, which batches up to 20 a beacon; nothing unless `location.hostname` is
+`scmjs.dev` (not `HOSTED_SITE`: the stable build is also the zip, container and desktop bundle). Props are words from fixed lists only — never a file/map name,
+typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,
+`builtin:`, or listed in the *default* registry). Hook sites: `openDialogAtom` (`dialog`),
+`commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), undo/redo, resize, tileset,
+`openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), Test Map, `api.sync.start`
+(`map.share`), the host's menu/context/hotkey `run` wrappers + map buttons (`plugin.use`), file
+types (`file.open`), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`, area
+only), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
+items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never
+sent), and `useUsageCounts` (`start`, `plugin.running`, layer/terrain mode/symmetry/map view
+subscriptions). A new count must keep to that rule; the privacy page and the guide describe it.
+The switch is `Preferences.counting` mirrored to the unprefixed `scmjs.counting` = `off` (the
+script reads it; the site's privacy page button writes it too), and at startup the preference
+follows that entry, not the other way round. Cloudflare's part: an inline script in `index.html` loads the beacon when `location.hostname` is
 `scmjs.dev` (the site's own token, the editor being a path of it), `editor.scmjs.dev` (while it still serves) or `nightly.editor.scmjs.dev`, and
 `scripts/lib/docs/render.mjs` does the same for `docs.scmjs.dev`. The switch is the hostname and not
 a build flag because the stable Pages site *is* the release zip, the container image and the desktop

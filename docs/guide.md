@@ -493,7 +493,7 @@ exactly the map. It is pinned at the top of the list with a lock, never drawn, n
 picked by a click, and cannot be moved, renamed or deleted. If a map's Anywhere has gone
 missing or no longer matches the map, the editor offers to put it back.
 
-A map built with eudplib (euddraft, or TrigScript's Remastered build) has no readable
+A map built with eudplib (euddraft, or a TrigScript map built through it) has no readable
 locations in the file. eudplib stores its loader in the location table, scrambled, and the
 game puts the real locations back when the map starts. Drawn, those slots would cover the
 whole map, so the editor hides locations when it opens such a map and says so in a notice.
@@ -956,13 +956,13 @@ then on.
 
 Preferences ▸ General ▸ Saving turns this off.
 
-**Maps built on save.** A map with a TrigScript program is compiled by the eudplib plugin
-as the file is written. The file you save is the one the game plays, and it carries the
-map as you see it in the editor inside, which is what comes back when you open it again. A
-notice shows while the build runs, with a button to save without waiting for it. If the
-build fails, the map is still saved and the notice says what went wrong; the file lacks
-the built part until a later save succeeds. Test Map builds the same way, and stops on a
-failure instead.
+**Maps built on save.** A map with a TrigScript program is built by TrigScript as the file
+is written (or by the eudplib plugin, for a script TrigScript's own build does not take
+yet). The file you save is the one the game plays, and it carries the map as you see it in
+the editor inside, which is what comes back when you open it again. A notice shows while
+the build runs, with a button to save without waiting for it. If the build fails, the map
+is still saved and the notice says what went wrong; the file lacks the built part until a
+later save succeeds. Test Map builds the same way, and stops on a failure instead.
 
 **Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
 scmjs.dev account as a numbered revision with a note. It does not change where Ctrl+S
@@ -1105,7 +1105,7 @@ come installed and on; a few more are a click away in **Plugins ▸ Browse Plugi
 | Plugin | Starts | Where | What it does |
 | --- | --- | --- | --- |
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | On | File ▸ Open Replay… | Opens replays over their map; see [Replays](#replays) |
-| [eudplib](https://github.com/scm-js/plugin-eudplib) | On | Save | Builds TrigScript programs into the saved map |
+| [eudplib](https://github.com/scm-js/plugin-eudplib) | On | Save | Builds into the saved map what TrigScript's own build does not take yet, and Magenta's triggers |
 | [Paint](https://github.com/scm-js/plugin-paint) | On | Tools ▸ Paint… (Ctrl+Shift+P) | Lines, shapes, spray and text, from the palette's pick |
 | [Repair](https://github.com/scm-js/plugin-repair) | On | Tools ▸ Repair Map… | Repairs damaged and protected maps as they open |
 | [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test Map in Browser | Plays the map on scmjs.dev/play |

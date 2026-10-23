@@ -19,10 +19,10 @@ triggers.
 
 Code inside `program(() => { … })` runs in the game instead. It has variables, arrays,
 text, functions, classes, loops and `sleep`, so a lives counter or a wave timer is a loop
-rather than a dozen triggers with hand-numbered death counts. The eudplib plugin (also on
-from the start) builds programs into the map when it is [saved](guide.md#saving), and **a
-map with a program in it needs StarCraft: Remastered**. If the map must play on the
-classic game, use `trigger()` only.
+rather than a dozen triggers with hand-numbered death counts. TrigScript builds programs
+into the map itself when it is [saved](guide.md#saving), in under a second, and **a map
+with a program in it needs StarCraft: Remastered**. If the map must play on the classic
+game, use `trigger()` only.
 
 ![The TrigScript editor on a wave-defence script: the files on the left and the code checked as you type](images/trigscript.webp)
 
@@ -1081,11 +1081,21 @@ Editor can carry on as a script.
 
 ### Saving and building
 
-A script with programs is *built* when the map is saved, tested or exported: the eudplib
-plugin turns the programs into the file being written. The first time, eudplib asks to
-download its runtime, about 15 MB, once; the desktop app and the container image already
-have it. A notice shows while the build runs, which takes a few seconds, and its **Save
-without it** button saves at once without the programs.
+A script with programs is *built* when the map is saved, tested or exported: TrigScript
+lays the programs out into the file being written as the game's own triggers, after the
+map's strings, and makes the file a Remastered one. It takes under a second and nothing
+else has to be installed. The build also does to the map what eudplib does before writing
+one — a null terrain tile made tile 1, a placed unit's flags made to agree with its
+figures — and the Output panel of the TrigScript window lists what it changed. A notice
+shows while the build runs, and its **Save without it** button saves at once without the
+programs.
+
+A script with something TrigScript's own build does not take yet is built through the
+eudplib plugin instead (also on from the start), and Problems says which line and why, as
+a warning. The map plays the same; the build takes a few seconds, and the first time
+eudplib asks to download its runtime, about 15 MB, once (the desktop app and the container
+image already have it). A map that also holds Magenta's triggers is built through eudplib
+with them.
 
 The file you get is the one to play and to share. It also holds the map as you see it in
 the editor, which is what comes back when you open it again, so the trigger list never
@@ -1287,7 +1297,11 @@ renamed on the map. **Update references** changes the script to match.
 
 **The programs are not built.** Look at the status bar of the TrigScript window:
 
-- *eudplib plugin not running*: turn the eudplib plugin on in Plugins ▸ Manage Plugins….
+- *built by TrigScript*: the programs are built by TrigScript itself on every save. If the
+  game shows nothing, the **Output** panel has the last build's lines, and Problems may
+  name a line.
+- *eudplib plugin not running* (shown only for a script TrigScript's own build does not
+  take, which Problems names): turn the eudplib plugin on in Plugins ▸ Manage Plugins….
 - *runtime downloads on the first save*: the next save asks to download eudplib's runtime
   (about 15 MB). If you cancel, nothing is built, and the next save asks again. Edit ▸
   Preferences ▸ Plugins ▸ eudplib installs and removes the runtime. Without a connection,

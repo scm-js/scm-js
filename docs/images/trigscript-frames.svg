@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 572" width="480" height="572" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">A program over the game's frames</title>
+<desc id="d">A program that loops with sleep(frames(3)) runs on frame 2, then frame 5, then frame 8: each time its body runs until it reaches sleep, and the rest of that frame is the game's. A second program that sleeps one frame runs on every frame from frame 2. In a map with a program, the map's triggers also run every frame. Nothing runs on frame 1.</desc>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e7c160"/></marker></defs>
+<rect width="480" height="572" rx="10" fill="#12151b"/>
+<text x="24" y="34" font-size="16" fill="#e6e8ee" font-weight="600">A program over the game's frames</text>
+
+<rect x="24" y="50" width="432" height="136" rx="8" fill="#0f1217" stroke="#4b5363"/>
+<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13" fill="#e6e8ee">
+<text x="40" y="74">program(() =&gt; {</text>
+<text x="55.6" y="94">while (true) {</text>
+<text x="71.2" y="114" fill="#9aa3b2">// look at the map, act</text>
+<rect x="67" y="120" width="146" height="21" rx="3" fill="#2b313e" stroke="#e7c160"/>
+<text x="71.2" y="135">sleep(frames(3));</text>
+<text x="55.6" y="154">}</text>
+<text x="40" y="174">});</text>
+</g>
+<text x="224" y="135" font-size="12.5" fill="#e7c160">the frame ends here</text>
+
+<text x="148" y="222" font-size="12" fill="#9aa3b2" text-anchor="end">frame</text>
+<rect x="156" y="206" width="37.5" height="214" fill="#191d25"/>
+<g font-size="12.5" fill="#e6e8ee" text-anchor="middle">
+<text x="174.75" y="222" fill="#9aa3b2">1</text><text x="212.25" y="222">2</text><text x="249.75" y="222">3</text><text x="287.25" y="222">4</text>
+<text x="324.75" y="222">5</text><text x="362.25" y="222">6</text><text x="399.75" y="222">7</text><text x="437.25" y="222">8</text>
+</g>
+<g stroke="#262b36" stroke-width="1">
+<line x1="193.5" y1="208" x2="193.5" y2="420"/><line x1="231" y1="208" x2="231" y2="420"/><line x1="268.5" y1="208" x2="268.5" y2="420"/>
+<line x1="306" y1="208" x2="306" y2="420"/><line x1="343.5" y1="208" x2="343.5" y2="420"/><line x1="381" y1="208" x2="381" y2="420"/>
+<line x1="418.5" y1="208" x2="418.5" y2="420"/>
+</g>
+
+<path d="M220,264 C226,246 312,246 318,264" fill="none" stroke="#e7c160" stroke-width="1.3" marker-end="url(#head)"/>
+<path d="M332,264 C338,246 424,246 430,264" fill="none" stroke="#e7c160" stroke-width="1.3" marker-end="url(#head)"/>
+<text x="268.5" y="243" font-size="11" fill="#e7c160" text-anchor="middle">3 frames</text>
+<text x="381" y="243" font-size="11" fill="#e7c160" text-anchor="middle">3 frames</text>
+
+<text x="24" y="282" font-size="12" fill="#e6e8ee" font-family="ui-monospace, Menlo, Consolas, monospace">sleep(frames(3))</text>
+<line x1="231" y1="278" x2="306" y2="278" stroke="#9aa3b2" stroke-dasharray="3 3"/>
+<line x1="343.5" y1="278" x2="418.5" y2="278" stroke="#9aa3b2" stroke-dasharray="3 3"/>
+<rect x="196.5" y="266" width="31.5" height="24" rx="3" fill="#e7c160"/>
+<rect x="309" y="266" width="31.5" height="24" rx="3" fill="#e7c160"/>
+<rect x="421.5" y="266" width="31.5" height="24" rx="3" fill="#e7c160"/>
+
+<text x="24" y="330" font-size="12" fill="#e6e8ee" font-family="ui-monospace, Menlo, Consolas, monospace">sleep(frames(1))</text>
+<g fill="#4f7fbf">
+<rect x="196.5" y="314" width="31.5" height="24" rx="3"/><rect x="234" y="314" width="31.5" height="24" rx="3"/>
+<rect x="271.5" y="314" width="31.5" height="24" rx="3"/><rect x="309" y="314" width="31.5" height="24" rx="3"/>
+<rect x="346.5" y="314" width="31.5" height="24" rx="3"/><rect x="384" y="314" width="31.5" height="24" rx="3"/>
+<rect x="421.5" y="314" width="31.5" height="24" rx="3"/>
+</g>
+
+<text x="24" y="378" font-size="12.5" fill="#e6e8ee">the map's triggers</text>
+<g fill="#4a7a4d">
+<rect x="196.5" y="362" width="31.5" height="24" rx="3"/><rect x="234" y="362" width="31.5" height="24" rx="3"/>
+<rect x="271.5" y="362" width="31.5" height="24" rx="3"/><rect x="309" y="362" width="31.5" height="24" rx="3"/>
+<rect x="346.5" y="362" width="31.5" height="24" rx="3"/><rect x="384" y="362" width="31.5" height="24" rx="3"/>
+<rect x="421.5" y="362" width="31.5" height="24" rx="3"/>
+</g>
+<text x="174.75" y="410" font-size="11" fill="#9aa3b2" text-anchor="middle">none</text>
+
+<g font-size="13" fill="#e6e8ee">
+<rect x="24" y="444" width="14" height="14" rx="2" fill="#e7c160"/>
+<text x="46" y="456">The program above. Its body runs until it reaches</text>
+<text x="46" y="474">sleep(), then gives the frame back.</text>
+<line x1="24" y1="494" x2="38" y2="494" stroke="#9aa3b2" stroke-dasharray="3 3"/>
+<text x="46" y="498">Asleep. It carries on from the line after sleep().</text>
+<rect x="24" y="512" width="14" height="14" rx="2" fill="#4f7fbf"/>
+<text x="46" y="524">Another program, which sleeps one frame at a time.</text>
+<text x="24" y="552" fill="#9aa3b2">Several programs and the triggers all run in the same frame.</text>
+</g>
+</svg>

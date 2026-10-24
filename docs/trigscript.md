@@ -279,6 +279,12 @@ helper, a condition, an action. The editor underlines those parts with dots, so 
 see the boundary as you type. That is what lets a helper written outside the program
 supply actions inside it.
 
+In the picture, the lines beside the gold bar run once in the editor, and the lines beside
+the blue bar run in the game, where `price` is the number 150 and `reward(P1)` is the
+action the helper made.
+
+![A script in two halves: the lines outside program() run when the script is applied, the program runs in the game](images/trigscript-halves.svg)
+
 It also means a program variable cannot reach a condition, an action or a helper. The
 location and the player of an action, and the amount a condition compares with, are fixed
 when the script is applied. To compare with a variable, read the quantity and compare it
@@ -301,6 +307,11 @@ first pass. Its body runs until it reaches a `sleep()` or its end, all within on
 the game, and the next frame it carries on from there. A body that ends stops for good. So
 the loop above is a game loop: it looks at the beacon, sends a wave if the alarm is up,
 and sleeps twenty seconds.
+
+In the picture, a program that sleeps three frames at a time runs on frames 2, 5 and 8,
+while one that sleeps a frame at a time runs on every frame.
+
+![A program over the game's frames: its body runs until it sleeps, and carries on that many frames later](images/trigscript-frames.svg)
 
 **Time is `sleep`.** `sleep(seconds(15))` gives the frame back and carries on that much
 later, while other programs and the map's triggers go on. `frames(n)` and `minutes(n)`
@@ -406,7 +417,7 @@ program(() => {
 
 The function sees the program's variables, but it must be written where the method takes
 it: it cannot be kept in a variable. `sort` needs its function (`(a, b) => a - b`) and
-runs within the frame; it is fine for dozens of items, but sorting hundreds every frame
+runs within the frame. That is fine for dozens of items. Sorting hundreds every frame
 slows the game, and the editor marks such a line *sorts in the frame*.
 
 `slice`, `concat`, `toSorted`, `toReversed` and `Array.from` make copies. Patterns and
@@ -525,11 +536,13 @@ it is gone, its numbers read 0 and nothing written to it has any effect. `if (u)
 whether it is still there.
 
 A loop over units runs within one frame, so a `sleep` inside one is an error. To take
-units one at a time, find the next one after each sleep. Units come oldest first, and a
-loop or a pick costs about what the map holds — a few hundred units are a few hundredths
-of a millisecond — which is nothing a few times a second but worth a thought every frame;
-the editor marks such a line *scans units*. A unit made in the place of one that died can
-come where the dead one did, since the game hands its places out again.
+units one at a time, find the next one after each sleep. Units come oldest first. A unit
+made in the place of one that died can come where the dead one did, since the game hands
+its places out again.
+
+A loop or a pick costs about what the map holds: a few hundred units take a few hundredths
+of a millisecond. That is nothing a few times a second, but worth a thought every frame,
+and the editor marks such a line *scans units*.
 
 ### The game's tables
 
@@ -841,6 +854,31 @@ program(() => {
 });
 ```
 
+## TrigScript and eudplib
+
+eudplib is the Python library behind euddraft, which many EUD maps are built with. A
+TrigScript program does the same kind of work: both put code into the map that reads and
+writes the game's memory. The table sets the two side by side. Its figures are
+TrigScript's own measurements: each test map was built both ways, by TrigScript's own
+build and through eudplib, and run in the same game.
+
+| | TrigScript | eudplib and euddraft |
+| --- | --- | --- |
+| What you write | TypeScript, checked as you type against the map's own names, with completion | Python with the eudplib library, or epScript, which euddraft compiles |
+| Where you work | In scmJS, in the browser or the desktop app | On your own computer: euddraft, or eudplib under Python, run from the command line |
+| Building the map | When the map is saved, in the editor: 0.7 s for a small test map | 5.3 s for the same test map |
+| Speed in the game | A benchmark of program statements, all together: 42,936 ns. A loop over units: about 85 to 105 ns for each place of the game's unit table. Slower than eudplib: a `throw`, at 3.2 times the cost, and two kinds of statement in the benchmark | The same benchmark: 90,559 ns. A loop over units: about 190 to 230 ns a place |
+| Map size | Larger on most test maps, often about one and a half times: 2.86 MB for the units test map. Smaller for the tasks test map: 1.37 MB | 1.82 MB for the units test map, 2.05 MB for the tasks test map |
+| Map protection | None, by decision | Scrambles the map's locations against copying, shuffles its code and adds a false ISOM section |
+| Checking before you play | Problems as you type: a type error, or something a program cannot do, is said at its line. Simulate, and `test()` blocks that run in TrigScript's simulator and in StarCraft 1.16.1's own engine through the scm-sim plugin (at scmjs.dev, from your own StarCraft files). The cost of each line, a desync detector, and **Find an EUD Error** for the code Remastered shows | An error in the script stops the build. The rest is found by playing the map |
+| What it reaches | The game's memory, through EUD. The named fields (`stats()`, a unit's fields) are the ones seen working in Remastered; `memory()` and `setMemory()` reach any address | Any address of the game's memory |
+| Libraries | Its own reading of keys, the mouse and typed lines. A small standard library: `trigscript/ui`, `fog`, `screen`, `music`, `cutscene`, `timers`, `random`, `math` and `signals` | Plugins for input, such as MSQC (keys and the mouse) and chatEvent (typed lines), and libraries from its community |
+| Where it plays | A map with a program: StarCraft: Remastered. A script of `trigger()` calls alone: every version | StarCraft: Remastered |
+| History | New: its own build, without eudplib, dates from October 2026 | Years of use and a large community. Many of its maps, guides and libraries are in Korean |
+
+Neither kind of map plays on 1.16.1: that version refuses writes past the end of the
+deaths table, which such a map makes from its first frame.
+
 ## Testing and Simulate
 
 TrigScript can run a script without starting the game, in a simulator built into the
@@ -853,7 +891,9 @@ whatever `createUnit` makes, `giveUnits` hands over, `moveUnit` moves and `killU
 kills, which `bring` and `command` count. It leaves out what it cannot know without the
 game: nothing walks, nothing fights and nothing is built, so no unit dies unless the
 script (or a test) kills it. Scores and the countdown read 0, and keys, clicks, the mouse
-and chat read as nothing.
+and chat read as nothing. The picture sets the two lists side by side.
+
+![What Simulate and the tests see, and what only the game has](images/trigscript-simulator.svg)
 
 The simulator keeps the game's time, so the frames it lists are the frames the game would
 act on: the first pass on frame 2, then one every 31 frames, or every frame in a map with
@@ -1044,7 +1084,10 @@ Beside the map, the names in the code and the objects on the map know about each
 *Applying* the script runs it and puts the triggers it recorded into the map's trigger
 list as one block. The block replaces the one from the last apply, or is added at the end
 the first time. There is no step to remember: **saving the map applies the script**, and
-so do Test Map and anything else that writes the map out.
+so do Test Map and anything else that writes the map out. A save then builds the programs,
+as the picture shows and [Saving and building](#saving-and-building) explains.
+
+![What saving does with a script: apply, then build](images/trigscript-save.svg)
 
 - **Apply** (Ctrl+Shift+B) applies the script without saving, so you can look at the
   triggers in the Trigger Editor first. A click on the status bar's trigger count does the
@@ -1081,21 +1124,19 @@ Editor can carry on as a script.
 
 ### Saving and building
 
-A script with programs is *built* when the map is saved, tested or exported: TrigScript
-lays the programs out into the file being written as the game's own triggers, after the
-map's strings, and makes the file a Remastered one. It takes under a second and nothing
-else has to be installed. The build also does to the map what eudplib does before writing
-one — a null terrain tile made tile 1, a placed unit's flags made to agree with its
-figures — and the Output panel of the TrigScript window lists what it changed. A notice
-shows while the build runs, and its **Save without it** button saves at once without the
-programs.
+A script with programs is *built* when the map is saved, tested or exported. TrigScript
+lays the programs out in the file being written, as the game's own triggers after the
+map's strings, and makes the file a Remastered one. It takes under a second, and nothing
+else has to be installed. The build also tidies the map as an eudplib build would: a null
+terrain tile becomes tile 1, and a placed unit's flags are made to agree with its values.
+The Output panel of the TrigScript window lists what it changed. A notice shows while the
+build runs, and its **Save without it** button saves at once, without the programs.
 
 A script with something TrigScript's own build does not take yet is built through the
-eudplib plugin instead (also on from the start), and Problems says which line and why, as
-a warning. The map plays the same; the build takes a few seconds, and the first time
-eudplib asks to download its runtime, about 15 MB, once (the desktop app and the container
-image already have it). A map that also holds Magenta's triggers is built through eudplib
-with them.
+eudplib plugin (also on from the start), and Problems says which line and why, as a
+warning. The map plays the same. That build takes a few seconds, and the first time it
+asks to download eudplib's runtime, about 15 MB (the desktop app and the container image
+already have it). A map that also holds Magenta's triggers is built through eudplib too.
 
 The file you get is the one to play and to share. It also holds the map as you see it in
 the editor, which is what comes back when you open it again, so the trigger list never

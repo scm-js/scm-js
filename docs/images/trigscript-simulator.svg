@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 486" width="480" height="486" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">What Simulate and the tests see</title>
+<desc id="d">The simulator has the game's frames, death counts, switches, the resources the script sets, the trigger list with its order, preserve and waits, the programs and their variables with the game's arithmetic, the map's players and placed units, and the units the script makes, moves, gives or kills. In a test it also has the keys, clicks, mouse moves and typed lines the test sends. Only the game has units walking, fighting and being built, deaths in a fight, scores and the countdown timer, and the real players' keys, mouse and chat. Both keep the same time.</desc>
+<rect width="480" height="486" rx="10" fill="#12151b"/>
+<text x="24" y="34" font-size="16" fill="#e6e8ee" font-weight="600">What Simulate and the tests see</text>
+
+<rect x="24" y="50" width="432" height="220" rx="8" fill="#191d25" stroke="#4b5363"/>
+<rect x="24" y="50" width="5" height="220" rx="2" fill="#6fbf73"/>
+<text x="42" y="74" font-size="14" fill="#e6e8ee" font-weight="600">In the simulator, as in the game</text>
+<g font-size="13" fill="#e6e8ee">
+<text x="42" y="100">• the frames the game acts on</text>
+<text x="42" y="122">• death counts, switches, and resources the script sets</text>
+<text x="42" y="144">• the trigger list: its order, preserve and waits</text>
+<text x="42" y="166">• the programs, their variables and the game's arithmetic</text>
+<text x="42" y="188">• the map's players, and the units placed on the map</text>
+<text x="42" y="210">• units the script makes, moves, gives or kills</text>
+<text x="42" y="232">• in a test: the keys, clicks, mouse and lines it sends</text>
+<text x="54" y="252" fill="#9aa3b2">(Simulate on its own sends none)</text>
+</g>
+
+<rect x="24" y="286" width="432" height="150" rx="8" fill="#191d25" stroke="#4b5363"/>
+<rect x="24" y="286" width="5" height="150" rx="2" fill="#e7c160"/>
+<text x="42" y="310" font-size="14" fill="#e6e8ee" font-weight="600">Only in the game</text>
+<g font-size="13" fill="#e6e8ee">
+<text x="42" y="336">• units walking, fighting and being built</text>
+<text x="42" y="358">• a unit dying in a fight (a test kills it with sim.kill)</text>
+<text x="42" y="380">• scores and the countdown timer, which read 0 in the</text>
+<text x="54" y="398">simulator</text>
+<text x="42" y="420">• the real players' keys, mouse and chat</text>
+</g>
+
+<text x="24" y="462" font-size="12.5" fill="#9aa3b2">A script that waits for the enemy to die waits for ever in</text>
+<text x="24" y="480" font-size="12.5" fill="#9aa3b2">Simulate. Check it with a test that kills the units, or play the map.</text>
+</svg>

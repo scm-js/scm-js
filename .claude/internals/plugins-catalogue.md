@@ -589,6 +589,16 @@ Wait timing, the shared slot, hyper triggers at every 2 frames, Elapsed Time, Tr
 seven fail on 3.11.0. Also fixed: `hyperTriggers()`'s hover ("every frame" → every 2 frames instead of every 31) and the
 `wait()` wording (it holds its own trigger and the player's one wait slot, not "every trigger of that player").
 
+**TrigScript 4, step 17 (2026-10-25, branch `trigscript-4`): the Python lowering is gone.** `python/trigscript.py`, its
+embedding, the IR's hand-off (`serializeIr`, `packTable`, `IR_VERSION`, the `graph` statement the emitter made for it) and
+the `requires` of plugin-eudplib are deleted; `plugin.json` no longer requires eudplib. The own build (step 14) is the only
+build: a script it does not take is a Problems warning while typing and a failed build step on save (the notice's *Save
+without it* saves the rest), and a map with Magenta's member is refused with the reason (eudplib's build rewrites the
+strings section the payload sits behind; Magenta on TrigScript's layout is the next slice). The editor's compile had been
+handing the own build loops already turned into `graph` statements (the editor never passed `emitter: false`, only the
+tests did), so every script with a plain numeric loop had been falling back to eudplib with a warning since step 14 — fixed
+by the deletion. The input plan no longer reserves a location (that was MSQC's). Guide passages updated in this commit.
+
 **scm-sim** (`github.com/scm-js/plugin-scm-sim`, a default that starts on since 2026-10-13) is the way from the
 editor to scm-sim, the game engine served beside it at `/play/` — a library plugin in eudplib's shape, but with no
 runtime of its own: the engine is another program on the same origin (private, never vendored), and the plugin only

@@ -1132,11 +1132,11 @@ terrain tile becomes tile 1, and a placed unit's flags are made to agree with it
 The Output panel of the TrigScript window lists what it changed. A notice shows while the
 build runs, and its **Save without it** button saves at once, without the programs.
 
-A script with something TrigScript's own build does not take yet is built through the
-eudplib plugin (also on from the start), and Problems says which line and why, as a
-warning. The map plays the same. That build takes a few seconds, and the first time it
-asks to download eudplib's runtime, about 15 MB (the desktop app and the container image
-already have it). A map that also holds Magenta's triggers is built through eudplib too.
+A script with something TrigScript does not take yet is not built: Problems says which
+line and why, as a warning, and the save's notice says so again, with a button to save
+without the programs. The rest of the map is saved as it is. A map that also holds
+Magenta's triggers is not built either, until Magenta builds on TrigScript's layout;
+Magenta's own build runs as before.
 
 The file you get is the one to play and to share. It also holds the map as you see it in
 the editor, which is what comes back when you open it again, so the trigger list never
@@ -1341,12 +1341,8 @@ renamed on the map. **Update references** changes the script to match.
 - *built by TrigScript*: the programs are built by TrigScript itself on every save. If the
   game shows nothing, the **Output** panel has the last build's lines, and Problems may
   name a line.
-- *eudplib plugin not running* (shown only for a script TrigScript's own build does not
-  take, which Problems names): turn the eudplib plugin on in Plugins ▸ Manage Plugins….
-- *runtime downloads on the first save*: the next save asks to download eudplib's runtime
-  (about 15 MB). If you cancel, nothing is built, and the next save asks again. Edit ▸
-  Preferences ▸ Plugins ▸ eudplib installs and removes the runtime. Without a connection,
-  a browser cannot download it; the desktop app has it built in.
+- *not built: Magenta's triggers*: the map holds Magenta's triggers, and TrigScript's
+  programs are not built beside them yet. Keep the two in different maps for now.
 - *Build failed* or *Saved without its programs*: the map was saved with the script in it,
   but its programs do not run in the game. **Show the log** on the notice, or the
   **Output** panel, says why. Fix the error and save again.

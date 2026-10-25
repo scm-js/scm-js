@@ -957,12 +957,11 @@ then on.
 Preferences ▸ General ▸ Saving turns this off.
 
 **Maps built on save.** A map with a TrigScript program is built by TrigScript as the file
-is written (or by the eudplib plugin, for a script TrigScript's own build does not take
-yet). The file you save is the one the game plays, and it carries the map as you see it in
-the editor inside, which is what comes back when you open it again. A notice shows while
-the build runs, with a button to save without waiting for it. If the build fails, the map
-is still saved and the notice says what went wrong; the file lacks the built part until a
-later save succeeds. Test Map builds the same way, and stops on a failure instead.
+is written. The file you save is the one the game plays, and it carries the map as you see
+it in the editor inside, which is what comes back when you open it again. A notice shows
+while the build runs, with a button to save without waiting for it. If the build fails,
+the map is still saved and the notice says what went wrong; the file lacks the built part
+until a later save succeeds. Test Map builds the same way, and stops on a failure instead.
 
 **Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
 scmjs.dev account as a numbered revision with a note. It does not change where Ctrl+S
@@ -1105,7 +1104,7 @@ come installed and on; a few more are a click away in **Plugins ▸ Browse Plugi
 | Plugin | Starts | Where | What it does |
 | --- | --- | --- | --- |
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | On | File ▸ Open Replay… | Opens replays over their map; see [Replays](#replays) |
-| [eudplib](https://github.com/scm-js/plugin-eudplib) | On | Save | Builds into the saved map what TrigScript's own build does not take yet, and Magenta's triggers |
+| [eudplib](https://github.com/scm-js/plugin-eudplib) | On | Save | Builds Magenta's triggers into the saved map |
 | [Paint](https://github.com/scm-js/plugin-paint) | On | Tools ▸ Paint… (Ctrl+Shift+P) | Lines, shapes, spray and text, from the palette's pick |
 | [Repair](https://github.com/scm-js/plugin-repair) | On | Tools ▸ Repair Map… | Repairs damaged and protected maps as they open |
 | [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test Map in Browser | Plays the map on scmjs.dev/play |
@@ -1144,8 +1143,8 @@ A few that need more than a line:
 - **scm-sim** is the game engine behind the play page. Besides Test Map in Browser, it is
   what Aftermath and Walkability use to have the game play a replay or walk a map. It
   works only in the editor at scmjs.dev.
-- **eudplib** has no window of its own. It builds the parts of a map that need StarCraft:
-  Remastered — a TrigScript program, Magenta's EUD triggers — when the map is saved.
+- **eudplib** has no window of its own. It builds Magenta's EUD triggers into the map when
+  it is saved. (TrigScript's programs were built through it before TrigScript 4.)
 
 ![The Paint panel, drawing a line of the terrain palette's pick](images/paint.webp)
 

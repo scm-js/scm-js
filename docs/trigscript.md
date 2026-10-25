@@ -522,9 +522,10 @@ program(() => {
   work as a type.
 
 A unit's hit points, shields, energy, kills, weapon cooldown, spell timers (`stim`,
-`lockdown`, `stasis`, …) and `invincible` can be read and written. Its maximums, position,
-owner, type and states such as `burrowed`, `cloaked`, `hallucinated` and `underAttack` can
-only be read; the editor marks a write to one as you type. A unit can be told
+`lockdown`, `stasis`, …), remaining build time, rank, defensive matrix, `invincible`,
+`hallucinated` and `speedUpgrade` can be read and written. Its maximums, position, owner,
+type, current speed and states such as `burrowed`, `cloaked`, `underAttack`, `hasTarget`
+and `inTransport` can only be read; the editor marks a write to one as you type. A unit can be told
 `order("move" | "patrol" | "attack", location)`, `give(player)`, `kill()`, `remove()`,
 `damage(n)` and `heal(n)` (or `{ percent: 50 }`), and `locate(location)`, which centres a
 location on the unit so that ordinary actions can happen where it stands. The
@@ -604,6 +605,9 @@ program(() => {
 - `mouse(p)` is the place on the map under the player's cursor, in pixels (32 to a tile).
   `centerLocation(location, x, y)` moves a location there, so a unit can be created under
   the cursor. `underMouse(p)` is the unit nearest the cursor, or `null`.
+- `bounds(location)` is where a location is now — `left`, `top`, `right`, `bottom` in
+  pixels — and a write to one edge moves it, so a location another trigger or program
+  moved can be read and followed.
 - `chatted(p, pattern)` is `null` until the player sends a line that fits the pattern, and
   then holds what the pattern read out of it.
 

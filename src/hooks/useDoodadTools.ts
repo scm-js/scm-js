@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, symmetryAtom, unitOwnerAtom } from "../atoms/editorAtoms";
-import { mirrorTileRect } from "../editor/symmetry";
+import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, symmetryAtom, symmetryOptionsAtom, unitOwnerAtom } from "../atoms/editorAtoms";
+import { mirroredOwner, mirrorMoves, mirrorTileRectImages, SAME_MOVE, withMirrorImages, type Linear, type Placed } from "../editor/symmetry";
 import type { TileChange } from "../editor/terrain";
 import { commitEditAtom, convertSelectedDoodadsAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
@@ -25,6 +25,18 @@ export interface DoodadGhost {
   y: number;
   owner: number;
   verdict: DoodadVerdict;
+}
+
+/** How far (pixels) a doodad may sit from the exact mirror image of another and still count as its copy — a tile, for the two-tile snap. */
+const MIRROR_MATCH_PX = 32;
+/** Each doodad by the centre of its footprint, since that is what the mirror images of a footprint share. */
+function placedDoodads(scn: Scenario, catalogue: DoodadCatalogue): (Placed | null)[] {
+  return scn.doodads.map((rec) => {
+    const def = catalogue.byId.get(rec.doodadId);
+    if (!def) return null;
+    const o = doodadOrigin(def, rec.x, rec.y);
+    return { x: (o.x + def.width / 2) * 32, y: (o.y + def.height / 2) * 32, kind: rec.doodadId };
+  });
 }
 
 export function doodadLabel(def: DoodadDef): string {
@@ -56,7 +68,7 @@ export function useDoodadTools() {
   const catalogue: DoodadCatalogue = loaded?.doodads ?? NO_DOODADS;
   const tileset = loaded?.tileset ?? null;
   /** The drag in progress: where it started and the records it moves. */
-  const drag = useRef<{ from: MapPoint; indices: number[]; anchorX: number; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ from: MapPoint; indices: number[]; moves: Map<number, Linear>; anchorX: number; dx: number; dy: number } | null>(null);
 
   const activeDef = useCallback((): DoodadDef | null => {
     const id = store.get(activeDoodadAtom);
@@ -91,8 +103,10 @@ export function useDoodadTools() {
     const first = ghostAt(p);
     if (!scn || !first) return [first].filter((g): g is DoodadGhost => g !== null);
     const opts = store.get(doodadPlacementAtom);
-    return mirrorTileRect(store.get(symmetryAtom), first.x, first.y, first.def.width, first.def.height, scn.width, scn.height).map((q, i) =>
-      i === 0 ? first : { ...first, x: q.x, y: q.y, verdict: checkDoodadPlacement(scn, tileset, first.def, q.x, q.y, opts) });
+    const mode = store.get(symmetryAtom);
+    const own = store.get(symmetryOptionsAtom).players;
+    return mirrorTileRectImages(mode, first.x, first.y, first.def.width, first.def.height, scn.width, scn.height).map((q, i) =>
+      i === 0 ? first : { ...first, x: q.x, y: q.y, owner: own ? mirroredOwner(mode, first.owner, q.element) : first.owner, verdict: checkDoodadPlacement(scn, tileset, first.def, q.x, q.y, opts) });
   }, [store, tileset, ghostAt]);
 
   /**
@@ -156,20 +170,32 @@ export function useDoodadTools() {
     return scn ? doodadAt(scn, catalogue, tx, ty) : -1;
   }, [store, catalogue]);
 
+  /** `indices` and, under a symmetry mode, the doodads standing at their mirror images — what a click selects. */
+  const withImages = useCallback((indices: number[]): number[] => {
+    const scn = store.get(scenarioAtom);
+    const mode = store.get(symmetryAtom);
+    if (!scn || mode === "none" || indices.length === 0) return indices;
+    return withMirrorImages(mode, placedDoodads(scn, catalogue), indices, scn.width, scn.height, MIRROR_MATCH_PX);
+  }, [store, catalogue]);
+
   const select = useCallback((indices: number[], additive = false) => {
-    if (!additive) { setSelected(indices); return; }
+    if (!additive) { setSelected(withImages(indices)); return; }
     const set = new Set(store.get(selectedDoodadsAtom));
-    for (const i of indices) { if (set.has(i)) set.delete(i); else set.add(i); }
+    for (const i of indices) {
+      const group = withImages([i]);
+      if (set.has(i)) for (const j of group) set.delete(j);
+      else for (const j of group) set.add(j);
+    }
     setSelected([...set]);
-  }, [store, setSelected]);
+  }, [store, setSelected, withImages]);
 
   const selectInBox = useCallback((box: TileRect, additive = false) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
-    const hits = doodadsInBox(scn, catalogue, box);
+    const hits = withImages(doodadsInBox(scn, catalogue, box));
     if (additive) setSelected([...new Set([...store.get(selectedDoodadsAtom), ...hits])]);
     else setSelected(hits);
-  }, [store, catalogue, setSelected]);
+  }, [store, catalogue, setSelected, withImages]);
 
   /** The footprint of a placed doodad, for outlines; null when its type is unknown to this tileset. */
   const footprintOf = useCallback((rec: DoodadRecord): TileRect | null => {
@@ -181,18 +207,21 @@ export function useDoodadTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const indices = store.get(selectedDoodadsAtom).filter((i) => scn.doodads[i]);
+    // Under a symmetry mode the mirror images in the selection move as mirror images.
+    const moves = mirrorMoves(store.get(symmetryAtom), placedDoodads(scn, catalogue), indices, { x: p.px, y: p.py }, scn.width, scn.height, MIRROR_MATCH_PX);
     // The column the snap is measured from: the first doodad's own left column, the way a
     // location move snaps the first box's corner rather than the pointer. Snapping the
     // *offset* instead only preserved whatever parity the selection already had, so a
     // doodad sitting on an odd column (an imported map, or one placed with the tick off)
-    // could never be brought onto the two-tile grid by moving it.
+    // could never be brought onto the two-tile grid by moving it. It is one that follows
+    // the pointer; its mirror images move by the same even step, turned.
     let anchorX = 0;
     for (const i of indices) {
       const rec = scn.doodads[i];
       const def = catalogue.byId.get(rec.doodadId);
-      if (def) { anchorX = doodadOrigin(def, rec.x, rec.y).x; break; }
+      if (def && (moves.get(i) ?? SAME_MOVE) === SAME_MOVE) { anchorX = doodadOrigin(def, rec.x, rec.y).x; break; }
     }
-    drag.current = { from: p, indices, anchorX, dx: 0, dy: 0 };
+    drag.current = { from: p, indices, moves, anchorX, dx: 0, dy: 0 };
   }, [store, catalogue]);
 
   /** Track the pointer; returns true when the offset (in tiles, snapped) changed. */
@@ -230,7 +259,8 @@ export function useDoodadTools() {
       const def = rec && catalogue.byId.get(rec.doodadId);
       if (!def) continue;
       const o = doodadOrigin(def, rec.x, rec.y);
-      const x = o.x + d.dx, y = o.y + d.dy;
+      const m = (d.moves.get(i) ?? SAME_MOVE)(d.dx, d.dy);
+      const x = o.x + m.x, y = o.y + m.y;
       out.push({ def, x, y, owner: rec.owner, verdict: checkDoodadPlacement(scn, tileset, def, x, y, opts, tileAt) });
     }
     return out;

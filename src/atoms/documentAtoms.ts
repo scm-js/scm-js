@@ -34,7 +34,8 @@ import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
-import { applyLocationChanges, boundsOf, isInverted, locationName, moveLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
+import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
+import { mirrorMoves } from "../editor/symmetry";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { resizeScenario, type ResizeResult } from "../editor/resize";
@@ -1163,12 +1164,18 @@ export const deleteSelectedLocationsAtom = atom(null, (get, set) => {
   return locations.length;
 });
 
-/** Shift the selected locations by a pixel delta (the arrow keys) as one undo step. Returns how many moved. */
+/**
+ * Shift the selected locations by a pixel delta (the arrow keys) as one undo step; under a
+ * symmetry mode the mirror images among them go the mirrored way, the first selected one
+ * going the way of the arrow. Returns how many moved.
+ */
 export const nudgeSelectedLocationsAtom = atom(null, (get, set, d: { dx: number; dy: number }) => {
   const scn = get(scenarioAtom);
   const selected = get(selectedLocationsAtom);
   if (!scn || selected.length === 0 || !canEdit(get, set)) return 0;
-  const locations = moveLocations(scn, selected, d.dx, d.dy);
+  const first = boundsOf(scn.locations[selected[0]]);
+  const moves = mirrorMoves(get(symmetryAtom), placedLocations(scn), selected, { x: (first.left + first.right) / 2, y: (first.top + first.bottom) / 2 }, scn.width, scn.height, LOCATION_MIRROR_PX);
+  const locations = moveLocationsMirrored(scn, selected, d.dx, d.dy, moves);
   if (locations.length === 0) return 0;
   applyLocationChanges(scn, locations);
   set(commitEditAtom, { label: locations.length === 1 ? t("Move location {locationName}", { locationName: locationName(scn, locations[0].index) }) : t("Move {length} locations", { length: locations.length }), changes: [], locations });

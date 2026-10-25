@@ -9,7 +9,7 @@ import { DEFAULT_PLACEMENT, type PlacementOptions } from "../editor/placement";
 import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor/doodads";
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
-import type { SymmetryMode } from "../editor/symmetry";
+import { symmetryAvailable, type SymmetryMode } from "../editor/symmetry";
 import type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { browserStorage, mergedStorage } from "./storage";
@@ -245,9 +245,37 @@ export const ZOOM_STEPS: readonly number[] = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 
 /* ── Symmetry (see editor/symmetry.ts) ───────────────────── */
 
+export interface SymmetryOptions {
+  /** The mode the toggle (M, the toolbar) turns back on. Never "none". */
+  last: SymmetryMode;
+  /** Each copy of a unit, sprite or doodad placed for one of players 1–8 goes to its own player (`mirroredOwner`). */
+  players: boolean;
+}
+export const DEFAULT_SYMMETRY_OPTIONS: SymmetryOptions = { last: "rot180", players: true };
+/** Remembered (`scmjs.symmetry`); the mode itself starts off with every session. */
+export const symmetryOptionsAtom = atomWithStorage<SymmetryOptions>("scmjs.symmetry", DEFAULT_SYMMETRY_OPTIONS, mergedStorage(DEFAULT_SYMMETRY_OPTIONS), { getOnInit: true });
+
+const symmetryModeAtom = atom<SymmetryMode>("none");
 /**
- * The mirror mode the Rect, Tile and Fog brushes paint under (Tools ▸ Symmetry…). The
- * isometric and Blend brushes ignore it. A square-only mode on a map that is not square
- * behaves as "none".
+ * The mirror mode the brushes paint and the palettes place under (Tools ▸ Symmetry…) —
+ * every terrain brush but Blend, the fog brush, placing, and moving and deleting what a
+ * click selects. A square-only mode on a map that is not square behaves as "none".
+ * Turning a mode on remembers it for the toggle.
  */
-export const symmetryAtom = atom<SymmetryMode>("none");
+export const symmetryAtom = atom(
+  (get) => get(symmetryModeAtom),
+  (get, set, mode: SymmetryMode) => {
+    set(symmetryModeAtom, mode);
+    const options = get(symmetryOptionsAtom);
+    if (mode !== "none" && options.last !== mode) set(symmetryOptionsAtom, { ...options, last: mode });
+  },
+);
+
+/** Symmetry on or off (M): off, or back to the mode last used — the first mode the map can take if it cannot take that one. */
+export const toggleSymmetryAtom = atom(null, (get, set) => {
+  if (get(symmetryAtom) !== "none") { set(symmetryAtom, "none"); return "none" as SymmetryMode; }
+  const last = get(symmetryOptionsAtom).last;
+  const mode = symmetryAvailable(last, get(mapWidthAtom), get(mapHeightAtom)) ? last : "h";
+  set(symmetryAtom, mode);
+  return mode;
+});

@@ -86,7 +86,7 @@ export default function StatusBar() {
         </span>
       )}
       {symmetry !== "none" && onMap && !mode.viewOnly && (
-        <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? t("Symmetry mode: Rect, Tile and Fog brushes paint mirrored (Tools ▸ Symmetry…)") : t("This symmetry mode needs a square map — brushes paint normally")}>
+        <span className="status-cell" title={symmetryAvailable(symmetry, w, h) ? t("Symmetry is on: brushes, placing, moving and deleting are mirrored (Tools ▸ Symmetry…)") : t("This symmetry mode needs a square map — nothing is mirrored")}>
           <span className="k">{t("Sym")}</span>
           <span className={`badge ${symmetryAvailable(symmetry, w, h) ? "teal" : "warn"}`}>{symmetryLabel(symmetry)}</span>
         </span>

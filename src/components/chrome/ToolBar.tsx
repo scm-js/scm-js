@@ -22,14 +22,16 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, viewFlagsAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, mapHeightAtom, mapWidthAtom, symmetryAtom, toggleSymmetryAtom, viewFlagsAtom, type EditorLayer } from "../../atoms/editorAtoms";
 import { chromeModeAtom, flagOffered, flagShown, mapInFront, toggleFlagAtom } from "../../atoms/viewModeAtoms";
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
 import { editCopyIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { Tip } from "../ui";
+import { IconSelect, Tip } from "../ui";
+import { SymmetryIcon } from "../ui/SymmetryIcon";
+import { SYMMETRY_MODES, symmetryAvailable, type SymmetryMode } from "../../editor/symmetry";
 import { hotkeysAtom } from "../../atoms/preferencesAtoms";
 import { shortcutOf } from "../../editor/commands";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
@@ -48,6 +50,30 @@ function TB({ icon: Icon, label, shortcut, onClick, active, disabled, accent, te
 }
 
 const Sep = () => <span className="tb-sep" />;
+
+/**
+ * Symmetry on the toolbar: the button turns it on and off (M), back to the mode last used,
+ * and the list beside it picks the mode. Modes the map cannot take are listed but greyed.
+ * Tools ▸ Symmetry… has the longer descriptions and the options.
+ */
+function SymmetryControl({ shortcut }: { shortcut?: string }) {
+  const t = useT();
+  const [mode, setMode] = useAtom(symmetryAtom);
+  const toggle = useSetAtom(toggleSymmetryAtom);
+  const w = useAtomValue(mapWidthAtom);
+  const h = useAtomValue(mapHeightAtom);
+  const on = mode !== "none";
+  const options = SYMMETRY_MODES.map((m) => {
+    const disabled = !symmetryAvailable(m.id, w, h);
+    return { value: m.id, label: m.short, icon: <SymmetryIcon mode={m.id} />, disabled, title: disabled ? t("Needs a square map") : translate(m.hint) };
+  });
+  return (
+    <div className="tb-group">
+      <TB icon={FlipHorizontal2} label={on ? t("Symmetry on — turn it off") : t("Symmetry off — turn it on")} shortcut={shortcut} active={on} onClick={() => { toggle(); }} />
+      <IconSelect value={mode} onChange={(v) => setMode(v as SymmetryMode)} options={options} width={150} aria-label={t("Symmetry mode")} />
+    </div>
+  );
+}
 
 export default function ToolBar() {
   const t = useT();
@@ -121,7 +147,7 @@ export default function ToolBar() {
       flagButton("fog", CloudFog, t("Toggle Fog of War")),
     ],
     !onMap ? [] : [
-      viewOnly ? null : <TB key="symmetry" icon={FlipHorizontal2} label={t("Symmetry…")} onClick={dlg("symmetry")} />,
+      viewOnly ? null : <SymmetryControl key="symmetry" shortcut={key("tools.symmetry")} />,
       <TB key="find" icon={Search} label={t("Find…")} shortcut={key("edit.find")} onClick={dlg("find")} />,
     ],
     [

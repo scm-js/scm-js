@@ -77,6 +77,10 @@ export interface IconOption {
   label: string;
   /** Drawn to the left of the label, in the list and in the closed control. */
   icon?: ReactNode;
+  /** Listed but not choosable. */
+  disabled?: boolean;
+  /** Shown as the row's tooltip. */
+  title?: string;
 }
 
 /**
@@ -115,7 +119,7 @@ export function IconSelect({
         <RSelect.Content className="menu-content select-content" position="popper" sideOffset={4}>
           <RSelect.Viewport>
             {options.map((o) => (
-              <RSelect.Item key={o.value} value={o.value} className="menu-item select-item">
+              <RSelect.Item key={o.value} value={o.value} className="menu-item select-item" disabled={o.disabled} title={o.title}>
                 {options.some((x) => x.icon) && <span className="opt-icon">{o.icon}</span>}
                 <RSelect.ItemText>{translate(o.label)}</RSelect.ItemText>
               </RSelect.Item>

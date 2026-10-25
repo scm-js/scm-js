@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, symmetryAtom, unitOwnerAtom, unitPlacingAtom } from "../atoms/editorAtoms";
+import { activeUnitAtom, placementOptionsAtom, selectedUnitsAtom, symmetryAtom, symmetryOptionsAtom, unitOwnerAtom, unitPlacingAtom } from "../atoms/editorAtoms";
 import { commitEditAtom, deleteSelectedUnitsAtom, scenarioAtom, tilesetFileNameAtom, unitsRevisionAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -8,14 +8,19 @@ import {
   type PixelBox, type UnitChange, type UnitGeometry,
 } from "../editor/units";
 import { checkPlacement, placementReason, type PlacementProblem } from "../editor/placement";
-import { mirrorPixel } from "../editor/symmetry";
+import { mirroredOwner, mirrorMoves, mirrorPixelImages, SAME_MOVE, withMirrorImages, type Linear, type Placed } from "../editor/symmetry";
 import type { UnitRecord } from "../formats/chk/sections/objects";
+import type { Scenario } from "../formats/chk/scenario";
 import type { UnitsDat } from "../formats/dat/dat";
 import { peekTileset } from "../formats/tileset/load";
 import { unitLabel } from "../data/units";
 import type { MapPoint } from "./useTerrainTools";
 import { useUnitAssets } from "./useUnitAssets";
 import { t } from "../i18n";
+
+/** How far (pixels) a unit may sit from the exact mirror image of another and still count as its copy. */
+const MIRROR_MATCH_PX = 16;
+const placedUnits = (scn: Scenario): Placed[] => scn.units.map((u) => ({ x: u.x, y: u.y, kind: u.unitId }));
 
 export interface UnitGhost {
   unitId: number;
@@ -51,8 +56,8 @@ export function useUnitTools() {
   const { loaded: assets } = useUnitAssets();
   const tables = assets?.units ?? null;
   const tilesetName = useAtomValue(tilesetFileNameAtom);
-  /** Records as they were when the drag started, by index. */
-  const drag = useRef<{ from: MapPoint; origin: Map<number, UnitRecord> } | null>(null);
+  /** Records as they were when the drag started, by index, and how each one turns the movement (symmetry). */
+  const drag = useRef<{ from: MapPoint; origin: Map<number, UnitRecord>; moves: Map<number, Linear> } | null>(null);
 
   const geometryOf = useCallback((unitId: number) => unitGeometry(tables, unitId), [tables]);
   const tilesetOf = useCallback(() => peekTileset(tilesetName)?.tileset ?? null, [tilesetName]);
@@ -70,11 +75,24 @@ export function useUnitTools() {
     return { unitId, owner: isResource(unitId) ? 11 : store.get(unitOwnerAtom), x, y, geometry, ...verdict };
   }, [store, tables, tilesetOf]);
 
-  /** The ghost and its images under the symmetry mode (Tools ▸ Symmetry…), the pointed one first. */
+  /**
+   * The ghost and its images under the symmetry mode (Tools ▸ Symmetry…), the pointed one
+   * first — each image for its own player when the mode's option says so.
+   */
   const ghostsAt = useCallback((p: MapPoint): UnitGhost[] => {
     const scn = store.get(scenarioAtom);
     if (!scn) return [];
-    return mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height).map((q) => ghostAt({ px: q.x, py: q.y })).filter((g): g is UnitGhost => g !== null);
+    const first = ghostAt(p);
+    if (!first) return [];
+    const mode = store.get(symmetryAtom);
+    const own = store.get(symmetryOptionsAtom).players;
+    // The images of where the first one landed, not of the pointer: snapped separately, a
+    // pointer halfway between two grid points rounds the same way on both sides and the
+    // copy lands a tile off its mirror image.
+    return mirrorPixelImages(mode, first.x, first.y, scn.width, scn.height).map((q, i) => {
+      const g = i === 0 ? first : ghostAt({ px: q.x, py: q.y });
+      return g && own ? { ...g, owner: mirroredOwner(mode, g.owner, q.element) } : g;
+    }).filter((g): g is UnitGhost => g !== null);
   }, [store, ghostAt]);
 
   /**
@@ -128,28 +146,42 @@ export function useUnitTools() {
     return scn ? unitAt(scn, tables, p.px, p.py) : -1;
   }, [store, tables]);
 
+  /** `indices` and, under a symmetry mode, the units standing at their mirror images — what a click selects. */
+  const withImages = useCallback((indices: number[]): number[] => {
+    const scn = store.get(scenarioAtom);
+    const mode = store.get(symmetryAtom);
+    if (!scn || mode === "none" || indices.length === 0) return indices;
+    return withMirrorImages(mode, placedUnits(scn), indices, scn.width, scn.height, MIRROR_MATCH_PX);
+  }, [store]);
+
   const select = useCallback((indices: number[], additive = false) => {
     const current = store.get(selectedUnitsAtom);
-    if (!additive) { setSelected(indices); return; }
+    if (!additive) { setSelected(withImages(indices)); return; }
     const set = new Set(current);
-    for (const i of indices) { if (set.has(i)) set.delete(i); else set.add(i); }
+    for (const i of indices) {
+      const group = withImages([i]);
+      if (set.has(i)) for (const j of group) set.delete(j);
+      else for (const j of group) set.add(j);
+    }
     setSelected([...set]);
-  }, [store, setSelected]);
+  }, [store, setSelected, withImages]);
 
   const selectInBox = useCallback((box: PixelBox, additive = false) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
-    const hits = unitsInBox(scn, tables, box);
+    const hits = withImages(unitsInBox(scn, tables, box));
     if (additive) setSelected([...new Set([...store.get(selectedUnitsAtom), ...hits])]);
     else setSelected(hits);
-  }, [store, tables, setSelected]);
+  }, [store, tables, setSelected, withImages]);
 
   const beginDrag = useCallback((p: MapPoint) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const origin = new Map<number, UnitRecord>();
     for (const i of store.get(selectedUnitsAtom)) if (scn.units[i]) origin.set(i, scn.units[i]);
-    drag.current = { from: p, origin };
+    // Under a symmetry mode the mirror images in the selection move as mirror images.
+    const moves = mirrorMoves(store.get(symmetryAtom), placedUnits(scn), [...origin.keys()], { x: p.px, y: p.py }, scn.width, scn.height, MIRROR_MATCH_PX);
+    drag.current = { from: p, origin, moves };
   }, [store]);
 
   const dragTo = useCallback((p: MapPoint) => {
@@ -160,7 +192,8 @@ export function useUnitTools() {
     const snap = store.get(placementOptionsAtom).snapToGrid;
     let changed = false;
     for (const [i, before] of d.origin) {
-      const at = snapPlacement(unitGeometry(tables, before.unitId), before.x + dx, before.y + dy, scn.width, scn.height, snap);
+      const m = (d.moves.get(i) ?? SAME_MOVE)(dx, dy);
+      const at = snapPlacement(unitGeometry(tables, before.unitId), before.x + m.x, before.y + m.y, scn.width, scn.height, snap);
       const cur = scn.units[i];
       if (cur.x !== at.x || cur.y !== at.y) { scn.units[i] = { ...before, ...at }; changed = true; }
     }

@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, brushSizeAtom, centerViewOnAtom, doodadPlacingAtom, locationSnapAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
-  spritePlacingAtom, unitPlacingAtom, viewOnlyAtom, viewportRectAtom,
+  spritePlacingAtom, toggleSymmetryAtom, unitPlacingAtom, viewOnlyAtom, viewportRectAtom,
 } from "../atoms/editorAtoms";
+import { symmetryLabel } from "../editor/symmetry";
 import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
 } from "../atoms/documentAtoms";
@@ -21,7 +22,7 @@ import { count } from "../services/usage";
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 /** Commands on the map's own layers, selection, clipboard and brush: they wait while a plugin's view is in the map's place. */
-const MAP_COMMANDS = new Set(["edit.cut", "edit.copy", "edit.paste", "edit.selectAll", "edit.find", "brush.smaller", "brush.larger"]);
+const MAP_COMMANDS = new Set(["edit.cut", "edit.copy", "edit.paste", "edit.selectAll", "edit.find", "brush.smaller", "brush.larger", "tools.symmetry"]);
 const isMapCommand = (id: string) => MAP_COMMANDS.has(id) || id.startsWith("layer.");
 
 /**
@@ -59,6 +60,7 @@ export function useHotkeys() {
   const cancelPick = useSetAtom(cancelMapPickAtom);
   const cancelTool = useSetAtom(cancelMapToolAtom);
   const selectAll = useSetAtom(selectAllAtom);
+  const toggleSymmetry = useSetAtom(toggleSymmetryAtom);
 
   const hotkeys = useAtomValue(hotkeysAtom);
 
@@ -104,6 +106,11 @@ export function useHotkeys() {
       // SCMDraft grows and shrinks the brush with the bracket keys.
       "brush.smaller": () => setBrush((b) => Math.max(1, b - 1)),
       "brush.larger": () => setBrush((b) => Math.min(7, b + 1)),
+      "tools.symmetry": () => {
+        if (store.get(viewOnlyAtom) || !store.get(scenarioAtom)) return;
+        const mode = toggleSymmetry();
+        setStatus(mode === "none" ? t("Symmetry off") : t("Symmetry: {mode}", { mode: symmetryLabel(mode) }));
+      },
       "tools.triggers": () => open("triggerEditor"),
       "tools.testMap": () => open("testMap", { run: true }),
       "tools.preferences": () => open("preferences"),
@@ -226,5 +233,5 @@ export function useHotkeys() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, open, setLayer, toggleFlag, zoomTo, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, hotkeys]);
+  }, [store, open, setLayer, toggleFlag, zoomTo, setStatus, setBrush, undo, redo, save, dialogs.length, deleteUnits, deleteDoodads, deleteSprites, deleteLocations, nudgeLocations, locationSnap, setSelectedUnits, setSelectedDoodads, setSelectedSprites, setSelectedLocations, placing, setPlacing, placingDoodad, setPlacingDoodad, placingSprite, setPlacingSprite, activeLayer, clipTools, pluginHotkeys, cancelPick, cancelTool, selectAll, toggleSymmetry, hotkeys]);
 }

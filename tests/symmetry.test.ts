@@ -3,8 +3,10 @@ import { createScenario } from "../src/formats/chk/create";
 import { decodeCv5, type Tileset } from "../src/formats/tileset/decode";
 import { brushRect, stampTerrain, stampTile } from "../src/editor/terrain";
 import {
-  keepsShape, mirrorBox, mirrorIndices, mirrorPixel, mirrorPoints, mirrorRect, mirrorTileRect, requiresSquare, symmetryAvailable, symmetryAxes, SYMMETRY_MODES, type SymmetryMode,
+  boxImage, keepsShape, mirrorBox, mirroredOwner, mirrorIndices, mirrorMoves, mirrorPixel, mirrorPixelImages, mirrorPoints, mirrorRect, mirrorTileRect, mirrorTileRectImages,
+  requiresSquare, SAME_MOVE, symmetryAvailable, symmetryAxes, symmetryImages, SYMMETRY_MODES, withMirrorImages, type Placed, type SymmetryMode,
 } from "../src/editor/symmetry";
+import { addLocation, applyLocationChanges, ensureLocationSlots, moveLocationsMirrored, placedLocations } from "../src/editor/locations";
 
 /** A tileset with one dirt pair (groups 2/3), nine variations — the same rig as tests/terrain-edit.test.ts. */
 function dirtTileset(): Tileset {
@@ -144,5 +146,115 @@ describe("axes", () => {
     expect(symmetryAxes("rot90", 8, 8).centre).toBe(true);
     expect(symmetryAxes("adiag", 8, 8).lines).toEqual([{ x0: 8, y0: 0, x1: 0, y1: 8 }]);
     expect(symmetryAxes("none", 8, 8)).toEqual({ lines: [], centre: false });
+  });
+});
+
+describe("copies for their own players", () => {
+  const MODES: SymmetryMode[] = ["h", "v", "hv", "rot180", "rot90", "diag", "adiag"];
+
+  it("numbers each image's element, the original 0", () => {
+    expect(mirrorPixelImages("hv", 100, 60, 10, 8).map((p) => p.element)).toEqual([0, 1, 2, 3]);
+    expect(mirrorPixelImages("rot90", 100, 60, 8, 8).map((p) => p.element)).toEqual([0, 1, 2, 3]);
+    // On the axis an image is the original again, and is dropped.
+    expect(mirrorPixelImages("h", 160, 60, 10, 8)).toEqual([{ x: 160, y: 60, element: 0 }]);
+    expect(mirrorTileRectImages("v", 1, 2, 3, 2, 10, 8)).toEqual([{ x: 1, y: 2, element: 0 }, { x: 1, y: 4, element: 1 }]);
+  });
+
+  it("gives a two-way copy the other player of its pair, and leaves neutral alone", () => {
+    expect(mirroredOwner("rot180", 0, 1)).toBe(1);
+    expect(mirroredOwner("rot180", 1, 1)).toBe(0);
+    expect(mirroredOwner("h", 4, 1)).toBe(5);
+    expect(mirroredOwner("h", 7, 1)).toBe(6);
+    expect(mirroredOwner("h", 11, 1)).toBe(11);
+    expect(mirroredOwner("h", 8, 1)).toBe(8);
+    expect(mirroredOwner("h", 0, 0)).toBe(0);
+  });
+
+  it("hands each corner the same player whichever player places", () => {
+    const w = 16, h = 16, at = { x: 100, y: 70 };
+    for (const mode of MODES) {
+      for (const group of [0, 4]) {
+        const corners = (owner: number, x: number, y: number) =>
+          new Map(mirrorPixelImages(mode, x, y, w, h).map((p) => [`${p.x},${p.y}`, mirroredOwner(mode, owner, p.element)]));
+        const fromFirst = corners(group, at.x, at.y);
+        for (const [pos, owner] of fromFirst) {
+          const [x, y] = pos.split(",").map(Number);
+          expect(corners(owner, x, y), `${mode} from P${owner + 1}`).toEqual(fromFirst);
+        }
+        // Every copy goes to a different player of the group.
+        expect(new Set(fromFirst.values()).size).toBe(fromFirst.size);
+        for (const o of fromFirst.values()) expect(o >= group && o < group + 4).toBe(true);
+      }
+    }
+  });
+
+  it("goes clockwise under the quarter turn: P1 top-left, P2 top-right, P3 bottom-right, P4 bottom-left", () => {
+    const out = mirrorPixelImages("rot90", 64, 64, 16, 16).map((p) => ({ x: p.x, y: p.y, owner: mirroredOwner("rot90", 0, p.element) }));
+    expect(out).toEqual([{ x: 64, y: 64, owner: 0 }, { x: 448, y: 64, owner: 1 }, { x: 448, y: 448, owner: 2 }, { x: 64, y: 448, owner: 3 }]);
+  });
+});
+
+describe("selecting and moving mirror images", () => {
+  // A 10 × 8 map is 320 × 256 pixels.
+  const items: (Placed | null)[] = [
+    { x: 40, y: 50, kind: 7 }, // 0
+    { x: 282, y: 50, kind: 7 }, // 1: the horizontal image of 0, two pixels off
+    { x: 280, y: 50, kind: 9 }, // 2: at the image, but something else
+    null, // 3: a removed slot
+    { x: 40, y: 206, kind: 7 }, // 4: the vertical image of 0
+    { x: 160, y: 128, kind: 7 }, // 5: on both axes
+  ];
+
+  it("selects what stands at the images, matched by kind within the tolerance", () => {
+    expect(withMirrorImages("h", items, [0], 10, 8, 16)).toEqual([0, 1]);
+    expect(withMirrorImages("h", items, [0], 10, 8, 1)).toEqual([0]);
+    expect(withMirrorImages("hv", items, [0], 10, 8, 16).sort()).toEqual([0, 1, 4]);
+    expect(withMirrorImages("v", items, [1], 10, 8, 16)).toEqual([1]);
+    expect(withMirrorImages("hv", items, [5], 10, 8, 16)).toEqual([5]);
+    expect(withMirrorImages("none", items, [0], 10, 8, 16)).toEqual([0]);
+  });
+
+  it("moves the one nearest the pointer as the pointer goes and its images as their mirrors", () => {
+    const moves = mirrorMoves("h", items, [0, 1], { x: 45, y: 50 }, 10, 8, 16);
+    expect(moves.get(0)).toBe(SAME_MOVE);
+    expect(moves.get(1)!(10, 4)).toEqual({ x: -10, y: 4 });
+    // Grabbed from the other side, that side follows the pointer instead.
+    const back = mirrorMoves("h", items, [0, 1], { x: 280, y: 50 }, 10, 8, 16);
+    expect(back.get(1)).toBe(SAME_MOVE);
+    expect(back.get(0)!(10, 4)).toEqual({ x: -10, y: 4 });
+    // Under "hv" the vertical image keeps x and turns y.
+    const four = mirrorMoves("hv", items, [0, 1, 4], { x: 40, y: 50 }, 10, 8, 16);
+    expect(four.get(4)!(10, 4)).toEqual({ x: 10, y: -4 });
+    // Something with no image in the selection follows the pointer; so does everything with the mode off.
+    expect(mirrorMoves("h", items, [0, 2], { x: 40, y: 50 }, 10, 8, 16).get(2)).toBe(SAME_MOVE);
+    expect([...mirrorMoves("none", items, [0, 1], { x: 40, y: 50 }, 10, 8, 16).values()].every((m) => m === SAME_MOVE)).toBe(true);
+  });
+
+  it("keeps a moved point and its moved image mirror images, for every mode", () => {
+    const w = 12, h = 12, p = { x: 70, y: 30 }, d = { x: 13, y: -7 };
+    for (const mode of ["h", "v", "hv", "rot180", "rot90", "diag", "adiag"] as SymmetryMode[]) {
+      for (const img of symmetryImages(mode, w * 32, h * 32)) {
+        const q = img.map(p.x, p.y), m = img.linear(d.x, d.y);
+        expect({ x: q.x + m.x, y: q.y + m.y }, mode).toEqual(img.map(p.x + d.x, p.y + d.y));
+      }
+    }
+  });
+
+  it("resizes and nudges a location's mirror images with it", () => {
+    const scn = blank(10, 8);
+    ensureLocationSlots(scn);
+    const a = addLocation(scn, { left: 32, top: 32, right: 96, bottom: 64 });
+    applyLocationChanges(scn, a.changes);
+    const b = addLocation(scn, { left: 224, top: 32, right: 288, bottom: 64 });
+    applyLocationChanges(scn, b.changes);
+    const image = symmetryImages("h", 320, 256)[0];
+    expect(boxImage(image, { left: 32, top: 32, right: 128, bottom: 64 })).toEqual({ left: 192, top: 32, right: 288, bottom: 64 });
+
+    const placed = placedLocations(scn);
+    expect(withMirrorImages("h", placed, [a.index], 10, 8, 8)).toEqual([a.index, b.index]);
+    const moves = mirrorMoves("h", placed, [a.index, b.index], { x: 64, y: 48 }, 10, 8, 8);
+    // Thirty-two pixels left would take the first box off the map; it stops at the edge, and the image stops with it.
+    const changes = moveLocationsMirrored(scn, [a.index, b.index], -64, 0, moves);
+    expect(changes.map((c) => [c.index, c.after.left, c.after.right])).toEqual([[a.index, 0, 64], [b.index, 256, 320]]);
   });
 });

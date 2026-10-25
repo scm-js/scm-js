@@ -14,6 +14,8 @@ import {
   selectedLocationsAtom,
   selectedSpritesAtom,
   selectedUnitsAtom,
+  symmetryAtom,
+  toggleSymmetryAtom,
   viewFlagsAtom,
   ZOOM_STEPS,
   type EditorLayer,
@@ -245,6 +247,8 @@ function useMenus(): Menu[] {
   const zoom = useAtomValue(shownZoomAtom);
   const zoomTo = useSetAtom(zoomToAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
+  const symmetryOn = useAtomValue(symmetryAtom) !== "none";
+  const toggleSymmetry = useSetAtom(toggleSymmetryAtom);
   const { save, openRecent } = useMapFileActions();
   const tabs = useAtomValue(documentTabsAtom);
   const activeId = useAtomValue(activeDocumentIdAtom);
@@ -459,6 +463,7 @@ function useMenus(): Menu[] {
     {
       label: msg("Tools"),
       items: [
+        { kind: "check", label: msg("Symmetry On"), shortcut: key("tools.symmetry"), checked: symmetryOn, disabled: viewOnly || !hasMap || !onMap, onChange: () => { toggleSymmetry(); } },
         dlg(msg("Symmetry…"), "symmetry", undefined, viewOnly || (hasMap && !onMap)),
         { kind: "sub", label: msg("Brush Size"), items: [{ kind: "radio-group", value: String(brush), disabled: viewOnly || (hasMap && !onMap), onChange: (v) => setBrush(Number(v)), items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: `${n} × ${n}` })) }] },
         sep,

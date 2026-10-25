@@ -230,9 +230,10 @@ geyser is the usual main.
 The two ticks above it are the game's own placement rules; a red ghost means the game
 would drop the unit when it loaded the map, and the status bar says why.
 
-For a symmetric map, Tools ▸ Symmetry… mirrors what you paint and place across the axis
-you choose. The Melee Wizard plugin (Plugins ▸ Browse Plugins…) lays out whole bases with
-the mineral line at the distance the game mines fastest from.
+For a symmetric map, turn on symmetry with `M` or the toolbar and pick the mode beside it:
+what you paint and place is mirrored, and each copy of a start location or base goes to
+the next player. The Melee Wizard plugin (Plugins ▸ Browse Plugins…) lays out whole bases
+with the mineral line at the distance the game mines fastest from.
 
 ### 4. Check the players
 
@@ -342,11 +343,24 @@ on from the start; see [Plugins](#plugins).
 another, over the whole map or the area marked on the Cut / Copy / Paste layer. **Tools ▸
 Fill Terrain** lays the whole map anew. Both are one undo step.
 
-**Tools ▸ Symmetry…** mirrors what you do across the map's axes or about its centre —
-every brush, the fills, and placing units, sprites, doodads and locations, each as one
-undo step. The axes show on the map while a mode is on, the ghost shows where the copies
-will land, and a doodad that would have to turn is skipped. Blend, moving and deleting are
-not mirrored.
+**Symmetry** mirrors what you do across the map's axes or about its centre. `M` or the
+toolbar button turns it on and off, and the list beside the button picks the mode: left ↔
+right, top ↔ bottom, four-way, a half turn, quarter turns, or either diagonal. The last
+three need a square map. While a mode is on, the axes show on the map and the ghost shows
+where the copies will land.
+
+- The terrain brushes (all but Blend), the fills and the fog brush also paint on the
+  mirror images.
+- Placing a unit, sprite, doodad or location places one at each image as well. Each copy
+  goes to its own player: P1's start location gives P2's under the two-way modes, and
+  P2's, P3's and P4's under the four-way ones. Neutral units and resources stay neutral. A
+  doodad that would have to turn is skipped.
+- Selecting something also selects whatever stands at its images. Dragging then moves them
+  all as mirror images, resizing a location resizes its copies, and Delete removes them
+  all. A map made symmetric by hand works the same way.
+
+Each change is one undo step. **Tools ▸ Symmetry…** describes each mode and has the option
+to keep copies for the same player instead.
 
 ![The Symmetry dialog](images/symmetry.webp)
 
@@ -1596,6 +1610,7 @@ the commands can be given other keys on Preferences ▸ Hotkeys:
 | --- | --- |
 | `T` `D` `U` `S` `L` `F` `C` | switch layer |
 | `[` `]` | brush size |
+| `M` | symmetry on / off |
 | Alt+click | pick what is under the cursor |
 | Ctrl+Z / Ctrl+Y | undo / redo |
 | Del / Esc | delete selection / stop placing |
@@ -1810,8 +1825,9 @@ rely on a feature.
 
 - The isometric brush needs the map's isometric record. The Repair plugin, on by default,
   rebuilds one a protected map had stripped.
-- Symmetry mirrors the brushes, the fills and placing things, but not moving, deleting or
-  the Blend brush.
+- Symmetry does not mirror the Blend brush or pasting. The Tile brush copies the same tile
+  to each image, so an edge tile faces the same way on both sides; use the isometric brush
+  for cliffs and shores.
 - Changing the tileset lays the terrain again and drops the doodads; the units, sprites,
   locations, fog and triggers stay.
 

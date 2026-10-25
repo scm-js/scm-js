@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
 import {
-  activeSpriteAtom, activeSpriteKindAtom, activeUnitSpriteAtom, selectedSpritesAtom, spritePlaceOptionsAtom, spritePlacingAtom, symmetryAtom, unitOwnerAtom,
+  activeSpriteAtom, activeSpriteKindAtom, activeUnitSpriteAtom, selectedSpritesAtom, spritePlaceOptionsAtom, spritePlacingAtom, symmetryAtom, symmetryOptionsAtom, unitOwnerAtom,
 } from "../atoms/editorAtoms";
-import { mirrorPixel } from "../editor/symmetry";
+import { mirroredOwner, mirrorMoves, mirrorPixelImages, SAME_MOVE, withMirrorImages, type Linear, type Placed } from "../editor/symmetry";
 import { commitEditAtom, deleteSelectedSpritesAtom, doodadsRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -20,7 +20,13 @@ import { spriteLabel } from "../data/sprites";
 import { unitLabel } from "../data/units";
 import type { MapPoint } from "./useTerrainTools";
 import { useUnitAssets } from "./useUnitAssets";
+import type { Scenario } from "../formats/chk/scenario";
 import { t } from "../i18n";
+
+/** How far (pixels) a sprite may sit from the exact mirror image of another and still count as its copy. */
+const MIRROR_MATCH_PX = 16;
+/** A unit sprite and a pure sprite with the same number are different things. */
+const placedSprites = (scn: Scenario): Placed[] => scn.sprites.map((r) => ({ x: r.x, y: r.y, kind: r.spriteId * 2 + (r.flags & SpriteFlag.PureSprite ? 1 : 0) }));
 
 export interface SpriteGhost {
   kind: SpriteKind;
@@ -71,7 +77,7 @@ export function useSpriteTools() {
   const setPlacing = useSetAtom(spritePlacingAtom);
   const deleteSelectedSprites = useSetAtom(deleteSelectedSpritesAtom);
   const { loaded: assets } = useUnitAssets();
-  const drag = useRef<{ from: MapPoint; origin: Map<number, SpriteRecord> } | null>(null);
+  const drag = useRef<{ from: MapPoint; origin: Map<number, SpriteRecord>; moves: Map<number, Linear> } | null>(null);
 
   /**
    * The graphic's rectangle for hit-testing: the opaque part of the frame the viewport
@@ -115,11 +121,21 @@ export function useSpriteTools() {
     return { ...a, x, y, box };
   }, [store, active, sizeOf]);
 
-  /** The ghost and its images under the symmetry mode, the pointed one first. */
+  /** The ghost and its images under the symmetry mode, the pointed one first, each for its own player when the mode's option says so. */
   const ghostsAt = useCallback((p: MapPoint): SpriteGhost[] => {
     const scn = store.get(scenarioAtom);
     if (!scn) return [];
-    return mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height).map((q) => ghostAt({ px: q.x, py: q.y })).filter((g): g is SpriteGhost => g !== null);
+    const first = ghostAt(p);
+    if (!first) return [];
+    const mode = store.get(symmetryAtom);
+    const own = store.get(symmetryOptionsAtom).players;
+    // The images of where the first one landed, not of the pointer: snapped separately, a
+    // pointer halfway between two grid points rounds the same way on both sides and the
+    // copy lands a tile off its mirror image.
+    return mirrorPixelImages(mode, first.x, first.y, scn.width, scn.height).map((q, i) => {
+      const g = i === 0 ? first : ghostAt({ px: q.x, py: q.y });
+      return g && own ? { ...g, owner: mirroredOwner(mode, g.owner, q.element) } : g;
+    }).filter((g): g is SpriteGhost => g !== null);
   }, [store, ghostAt]);
 
   /** Place the active sprite at `p` and, under a symmetry mode, at its images — one undo step. */
@@ -157,27 +173,41 @@ export function useSpriteTools() {
     return scn ? spriteAt(scn, p.px, p.py, sizeOf) : -1;
   }, [store, sizeOf]);
 
+  /** `indices` and, under a symmetry mode, the sprites standing at their mirror images — what a click selects. */
+  const withImages = useCallback((indices: number[]): number[] => {
+    const scn = store.get(scenarioAtom);
+    const mode = store.get(symmetryAtom);
+    if (!scn || mode === "none" || indices.length === 0) return indices;
+    return withMirrorImages(mode, placedSprites(scn), indices, scn.width, scn.height, MIRROR_MATCH_PX);
+  }, [store]);
+
   const select = useCallback((indices: number[], additive = false) => {
-    if (!additive) { setSelected(indices); return; }
+    if (!additive) { setSelected(withImages(indices)); return; }
     const set = new Set(store.get(selectedSpritesAtom));
-    for (const i of indices) { if (set.has(i)) set.delete(i); else set.add(i); }
+    for (const i of indices) {
+      const group = withImages([i]);
+      if (set.has(i)) for (const j of group) set.delete(j);
+      else for (const j of group) set.add(j);
+    }
     setSelected([...set]);
-  }, [store, setSelected]);
+  }, [store, setSelected, withImages]);
 
   const selectInBox = useCallback((box: SpriteBox, additive = false) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
-    const hits = spritesInBox(scn, box, sizeOf);
+    const hits = withImages(spritesInBox(scn, box, sizeOf));
     if (additive) setSelected([...new Set([...store.get(selectedSpritesAtom), ...hits])]);
     else setSelected(hits);
-  }, [store, sizeOf, setSelected]);
+  }, [store, sizeOf, setSelected, withImages]);
 
   const beginDrag = useCallback((p: MapPoint) => {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const origin = new Map<number, SpriteRecord>();
     for (const i of store.get(selectedSpritesAtom)) if (scn.sprites[i]) origin.set(i, scn.sprites[i]);
-    drag.current = { from: p, origin };
+    // Under a symmetry mode the mirror images in the selection move as mirror images.
+    const moves = mirrorMoves(store.get(symmetryAtom), placedSprites(scn), [...origin.keys()], { x: p.px, y: p.py }, scn.width, scn.height, MIRROR_MATCH_PX);
+    drag.current = { from: p, origin, moves };
   }, [store]);
 
   const dragTo = useCallback((p: MapPoint) => {
@@ -187,7 +217,8 @@ export function useSpriteTools() {
     const dx = p.px - d.from.px, dy = p.py - d.from.py;
     let changed = false;
     for (const [i, before] of d.origin) {
-      const at = clampSprite(before.x + dx, before.y + dy, scn.width, scn.height);
+      const m = (d.moves.get(i) ?? SAME_MOVE)(dx, dy);
+      const at = clampSprite(before.x + m.x, before.y + m.y, scn.width, scn.height);
       const cur = scn.sprites[i];
       if (cur.x !== at.x || cur.y !== at.y) { scn.sprites[i] = { ...before, ...at }; changed = true; }
     }

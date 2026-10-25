@@ -73,6 +73,7 @@ export const COMMANDS: readonly Command[] = [
   { id: "layer.clipboard", label: msg("Layer: Cut / Copy / Paste"), group: "layers", defaults: ["C"] },
   { id: "brush.smaller", label: msg("Brush smaller"), group: "layers", defaults: ["["] },
   { id: "brush.larger", label: msg("Brush larger"), group: "layers", defaults: ["]"] },
+  { id: "tools.symmetry", label: msg("Symmetry on / off"), group: "tools", defaults: ["M"] },
   { id: "tools.triggers", label: msg("Trigger Editor"), group: "tools", defaults: ["Ctrl+T"] },
   { id: "tools.testMap", label: msg("Test Map"), group: "tools", defaults: ["Ctrl+F5"], inText: true },
   { id: "tools.preferences", label: msg("Preferences"), group: "tools", defaults: ["Ctrl+,"], inText: true },

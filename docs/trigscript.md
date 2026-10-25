@@ -525,11 +525,11 @@ A unit's hit points, shields, energy, kills, weapon cooldown, spell timers (`sti
 `lockdown`, `stasis`, …), remaining build time, rank, defensive matrix, `invincible`,
 `hallucinated` and `speedUpgrade` can be read and written. Its maximums, position, owner,
 type, current speed and states such as `burrowed`, `cloaked`, `underAttack`, `hasTarget`
-and `inTransport` can only be read; the editor marks a write to one as you type. A unit can be told
-`order("move" | "patrol" | "attack", location)`, `give(player)`, `kill()`, `remove()`,
-`damage(n)` and `heal(n)` (or `{ percent: 50 }`), and `locate(location)`, which centres a
-location on the unit so that ordinary actions can happen where it stands. The
-[Reference](#inside-a-program) lists them all.
+and `inTransport` can only be read; the editor marks a write to one as you type. A unit
+can be told `order("move" | "patrol" | "attack", location)`, `give(player)`, `kill()`,
+`remove()`, `damage(n)` and `heal(n)` (or `{ percent: 50 }`), and `locate(location)`,
+which centres a location on the unit so that ordinary actions can happen where it stands.
+The [Reference](#inside-a-program) lists them all.
 
 A variable can keep a unit across a `sleep`. Units die, and the game hands a dead unit's
 place to the next unit made, so every use checks that the unit is still the same one: once

@@ -43,7 +43,14 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
     const { compileScript } = await import(join(plugin, "compiler", "compiler.ts"));
     const { scriptNames } = await import(join(plugin, "compiler", "names.ts"));
     const { defaultLib } = await import(join(plugin, "bundle", "lib.mjs"));
+    const { writeVideo } = await import(join(plugin, "compiler", "media.ts"));
     const lib = defaultLib();
+    // A video an example imports (the Showcase's) is the reader's own file: a stand-in of a
+    // few frames at the guide's 128 × 96, a block of ink moving across, takes its place.
+    const standIn = (): string => {
+      const frames = [0, 1, 2].map((f) => Uint8Array.from({ length: 128 * 96 }, (_, i) => (Math.abs((i % 128) - 40 * f - 20) < 12 && ((i / 128) | 0) > 30 ? 1 : 0)));
+      return writeVideo({ width: 128, height: 96, frameMs: 42, frames });
+    };
     const names = scriptNames({ locations: ["Beacon", "Spawn", "Base", "Hill", "Shop"].map((name, index) => ({ index, name })) });
     const blocks = examples();
     expect(blocks.length).toBeGreaterThan(8);
@@ -51,7 +58,8 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
     for (const { line, code } of blocks) {
       // An example that carries a test() is also run: each location a box of its own, side by side.
       const tests = /\btest\(/.test(code) ? { world: { locations: Object.fromEntries(names.locations.entries.map((e: { value: number }) => [e.value, { left: e.value * 1000, top: 0, right: e.value * 1000 + 200, bottom: 200 }])) } } : undefined;
-      const result = compileScript(ts, { "main.ts": code }, names, { lib, ...(tests ? { tests } : {}) });
+      const videos = Object.fromEntries([...code.matchAll(/from "\.\/([\w-]+\.video)"/g)].map((m) => [m[1], standIn()]));
+      const result = compileScript(ts, { "main.ts": code, ...videos }, names, { lib, ...(tests ? { tests } : {}) });
       for (const d of result.diagnostics) failures.push(`docs/trigscript.md:${line} (${d.file}:${d.line}) ${d.message}`);
       if (tests && !result.tests?.results.length) failures.push(`docs/trigscript.md:${line}: the example's tests did not run`);
       for (const t of result.tests?.results ?? []) if (t.status === "failed") failures.push(`docs/trigscript.md:${line}: the test "${t.id}" fails: ${t.message}`);

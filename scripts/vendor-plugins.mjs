@@ -54,6 +54,8 @@ const DEFAULTS = resolve(root, "src/plugins/defaults.ts");
 const SKIP_DIRS = ["plugin-api/", "node_modules/", "tests/", "test/", "dist/", ".github/", ".git/"];
 const SKIP_FILES = [/^package(-lock)?\.json$/, /^tsconfig.*\.json$/, /^vitest\.config\./, /^README/i, /^\./, /\.test\.[cm]?[jt]sx?$/, /\.d\.ts$/];
 const KEEP = [/\.[cm]?[jt]sx?$/, /^plugin\.json$/, /\.(svg|png|jpe?g|gif|webp|avif|ico)$/i, /^LICENSE/];
+// Tables a plugin's source imports: a `.json` directly under its `data/` (TrigScript's `remastered-regions.json`, 4.0).
+const KEEP_PATHS = [/^data\/[^/]+\.json$/];
 
 /**
  * The pinned defaults, read out of `defaults.ts` rather than imported: that module pulls
@@ -86,7 +88,7 @@ export function keepPath(path) {
   if (SKIP_DIRS.some((d) => path.startsWith(d) || path.includes(`/${d}`))) return false;
   const file = path.slice(path.lastIndexOf("/") + 1);
   if (SKIP_FILES.some((r) => r.test(file))) return false;
-  return KEEP.some((r) => r.test(file));
+  return KEEP.some((r) => r.test(file)) || KEEP_PATHS.some((r) => r.test(path));
 }
 
 const headers = { "user-agent": "scm-js vendor-plugins" };

@@ -1902,8 +1902,11 @@ api.document.buildSteps.add({
   opened again, so generated triggers never appear in the trigger list. See [Opening and
   saving maps](file-formats.md#built-maps).
 - **A step cannot cost the user a save.** If `run` throws, the map is saved unbuilt and a
-  notice shows your error message, so write it for the user. A *Save without it* button
-  aborts the `signal` that `run` is also given. Test Map stops on an error instead.
+  notice shows your error message, so write it for the user. Throw a plain `Error` for
+  that: the editor's log keeps it as a warning, since the step worked as meant. Anything
+  else thrown, such as a `TypeError` or an error class of your own, is logged as an error,
+  as a bug in the step would be. A *Save without it* button aborts the `signal` that `run`
+  is also given. Test Map stops on an error instead.
 - `before({ id, label, applies?, run })` runs earlier, on the open map rather than on the
   bytes, and may use `document.update` and `document.edit`. TrigScript uses it to write
   its triggers into the trigger list before every save.

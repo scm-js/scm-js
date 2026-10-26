@@ -40,8 +40,8 @@ export interface LoaderDeps {
   fetchText: (url: string) => Promise<string>;
   /** TypeScript source → JavaScript (ES modules). */
   transpile: (source: string, fileName: string) => Promise<string>;
-  /** JavaScript module source → a URL `importModule` accepts (a `blob:` in the browser). */
-  createModuleUrl: (code: string) => string;
+  /** JavaScript module source → a URL `importModule` accepts (a `blob:` in the browser); `sourceUrl` is the file it was fetched from. */
+  createModuleUrl: (code: string, sourceUrl: string) => string;
   importModule: (url: string) => Promise<unknown>;
   builtins: Record<string, BuiltinPlugin>;
 }
@@ -386,7 +386,7 @@ export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fet
       }
       // Rewrite from the end so earlier offsets stay valid.
       for (let i = refs.length - 1; i >= 0; i--) code = code.slice(0, refs[i].start) + resolved[i] + code.slice(refs[i].end);
-      const moduleUrl = deps.createModuleUrl(code);
+      const moduleUrl = deps.createModuleUrl(code, url);
       done.set(url, moduleUrl);
       return moduleUrl;
     } finally {

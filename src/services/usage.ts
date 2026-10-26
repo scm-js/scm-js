@@ -53,10 +53,13 @@ let listed: (spec: string) => boolean = () => false;
 
 const hitsWindow = (): HitsWindow | null => (typeof window === "undefined" ? null : (window as unknown as HitsWindow));
 
+const lineKey = (name: string, props: CountProps | undefined) =>
+  props ? `${name}\u0000${JSON.stringify(Object.entries(props).sort(([a], [b]) => (a < b ? -1 : 1)))}` : name;
+
 /** Count one use of `name`. The props are a few words from fixed lists, never the user's text. */
 export function count(name: string, props?: CountProps): void {
   if (!hosted || !on) return;
-  const key = props ? `${name}\u0000${JSON.stringify(Object.entries(props).sort(([a], [b]) => (a < b ? -1 : 1)))}` : name;
+  const key = lineKey(name, props);
   const line = waiting.get(key);
   if (line) line.n++;
   else if (waiting.size < MAX_WAITING) waiting.set(key, { name, props, n: 1 });
@@ -117,6 +120,7 @@ export function resetCountsForTests(asHosted: boolean): void {
   hosted = asHosted;
   on = true;
   waiting.clear();
+  moduleSources.clear();
   if (timer) { clearTimeout(timer); timer = null; }
 }
 
@@ -178,6 +182,95 @@ export function countReplays(files: readonly File[], via: string, now = Date.now
     replaysSeen.set(key, now);
     count("replay.open", { where: "editor", via });
   }
+}
+
+/* ── Errors ─────────────────────────────────────────────── */
+
+/** Frames an error line carries, from where it was thrown outwards, and the characters of each. */
+const STACK_FRAMES = 6;
+const FRAME_CHARS = 90;
+/**
+ * Error lines with frames waiting at once; past this an error is counted without them. The
+ * site's script sends up to 20 lines a request and the worker refuses a request over 16 KB,
+ * which would lose the other counts with it: six lines of frames are about 4 KB.
+ */
+const MAX_STACKS_WAITING = 6;
+
+/** Where each plugin module's `blob:` URL was fetched from, so a frame in it can say which file. */
+const moduleSources = new Map<string, string>();
+
+/** The plugin loader made `moduleUrl` from the file at `sourceUrl`. */
+export function noteModuleSource(moduleUrl: string, sourceUrl: string): void {
+  moduleSources.set(moduleUrl, sourceUrl);
+}
+
+const CHROME_FRAME = /^\s+at (?:async )?(?:new )?(?:(.+?) \()?(\S+):(\d+):(\d+)\)?$/;
+const OTHER_FRAME = /^(.*?)@(\S+):(\d+):(\d+)$/;
+const CODE_NAME = /^[A-Za-z_$][\w$.]{0,47}$/;
+const OWN_PLUGIN_FILE = /^https:\/\/raw\.githubusercontent\.com\/scm-js\/([\w.-]+)\/([^/]+)\/(.+)$/;
+
+/**
+ * The file a frame ran in, as the counts name it: a path of the editor's own (`editor/assets/
+ * index-….js`, which the release's source maps turn back into the source), a file of a plugin
+ * the project publishes (`plugin-trigscript@v4.1.0/src/build.ts`), or `plugin` / `other` for
+ * anything else — a plugin installed from someone's own address, a browser extension.
+ */
+function frameFile(url: string): string | null {
+  const source = moduleSources.get(url);
+  const own = source ? OWN_PLUGIN_FILE.exec(source) : null;
+  if (own) return `${own[1].toLowerCase()}@${own[2].slice(0, 12)}/${own[3]}`;
+  if (source || url.startsWith("blob:")) return null;
+  try {
+    const u = new URL(url);
+    if (typeof location !== "undefined" && u.origin === location.origin) return u.pathname.slice(1);
+  } catch { /* not an address */ }
+  return null;
+}
+
+/** One frame, or `plugin` / `other` for code that is not the project's, with neither its name nor its place. */
+function frameOf(name: string | undefined, url: string, line: string, col: string): string {
+  const file = frameFile(url);
+  if (!file) return url.startsWith("blob:") ? "plugin" : "other";
+  const at = `${file}:${line}:${col}`;
+  const named = name && CODE_NAME.test(name) ? `${name} ${at}` : at;
+  return named.length <= FRAME_CHARS ? named : at.slice(-FRAME_CHARS);
+}
+
+/**
+ * An error's stack as props, `frame0` (where it was thrown) to `frame5`: the function's name
+ * when it is a plain identifier, and the file, line and column. Never the error's message,
+ * which can carry a file name or a map's text, and nothing of code that is not the project's.
+ * A frame in the same place as the one before (`other` after `other`) is left out.
+ */
+export function stackProps(stack: string): CountProps | null {
+  const lines = stack.split("\n");
+  const chrome = lines.some((l) => /^\s+at /.test(l));
+  const frames: string[] = [];
+  for (const l of lines) {
+    if (frames.length >= STACK_FRAMES) break;
+    const m = chrome ? CHROME_FRAME.exec(l) : OTHER_FRAME.exec(l.trim());
+    if (!m) continue;
+    const f = frameOf(m[1], m[2], m[3], m[4]);
+    if (f !== frames[frames.length - 1]) frames.push(f);
+  }
+  return frames.length ? Object.fromEntries(frames.map((f, i) => [`frame${i}`, f])) : null;
+}
+
+/** One error: where (`props`, from fixed lists) and, while few are waiting, the frames of `stack`. */
+export function countError(props: CountProps, stack?: string): void {
+  const frames = stack ? stackProps(stack) : null;
+  if (frames) {
+    const full = { ...props, ...frames };
+    const stacks = [...waiting.values()].filter((l) => l.name === "error" && l.props && "frame0" in l.props).length;
+    if (waiting.has(lineKey("error", full)) || stacks < MAX_STACKS_WAITING) return count("error", full);
+  }
+  count("error", props);
+}
+
+/** An error's kind (`TypeError`, `PluginLoadError`), as long as it is a plain identifier. */
+export function errorKind(err: unknown): string {
+  if (!(err instanceof Error)) return typeof err;
+  return /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
 }
 
 /** `pluginCountName` with the registries' lists. */

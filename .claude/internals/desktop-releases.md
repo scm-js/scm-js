@@ -186,10 +186,18 @@ props)` gathers lines for 2 min (same name+props → one line with `n`) and hand
 typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,
 `builtin:`, or listed in the *default* registry). Hook sites: `openDialogAtom` (`dialog`),
 `commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), undo/redo, resize, tileset,
-`openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), Test Map, `api.sync.start`
+`openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), `services/mapBuild.ts`
+(`map.build.refused` `{ step, plugin }`: a plain `Error` from a plugin's step, its message to the
+user, which is not an `error`), Test Map, `api.sync.start`
 (`map.share`), the host's menu/context/hotkey `run` wrappers + map buttons (`plugin.use`), file
-types (`file.open`), replays (`replay.open` via `countReplays`: file types, the host's `pickFiles`, and a window capture-phase `drop` listener in `useUsageCounts` that sees drops on plugin panels too; deduped by name+size+date for 10 s), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`, area
-only), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
+types (`file.open`), replays (`replay.open` via `countReplays`: file types, the host's `pickFiles`, and a window capture-phase `drop` listener in `useUsageCounts` that sees drops on plugin panels too; deduped by name+size+date for 10 s), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`: `area`, `type` = `errorKind`, a caller's
+`counted` words — `step` save/prepare/build/pack and `plugin` on the document's three — and
+`frame0`…`frame5` from `stackProps`: an identifier-only function name and the file:line:col for the
+editor's own origin or a `raw.githubusercontent.com/scm-js/…` plugin file, the `blob:` mapped back
+through `noteModuleSource` in `browserLoaderDeps`; any other code is `plugin`/`other`; never the
+message. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
+with frames wait at once (`MAX_STACKS_WAITING`) so a 20-line beacon stays under the worker's 16 KB.
+The frames point into the minified bundle — decoding them needs that release's source maps), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
 items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never
 sent), and `useUsageCounts` (`start`, `plugin.running`, layer/terrain mode/symmetry/map view
 subscriptions). A new count must keep to that rule; the privacy page and the guide describe it.

@@ -149,7 +149,7 @@ import { applyStringImport, decodeTrg, encodeTrg, formatStringTable, parseString
 import { ALL_CLIP_PARTS, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects as regionObjectsOf, removeObjects, selectionSize, type Clip, type ClipParts, type ObjectSelection } from "../editor/clipboard";
 import { isUnitAvailable } from "../formats/chk/sections/settings";
 import { writeMapBytes } from "../services/mapIo";
-import { count, countPluginUse, countReplays, pluginName } from "../services/usage";
+import { count, countPluginUse, countReplays, noteModuleSource, pluginName } from "../services/usage";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 
 export type Store = ReturnType<typeof createStore>;
@@ -2740,7 +2740,12 @@ export function browserLoaderDeps(): LoaderDeps {
       return res.text();
     },
     transpile: (source, fileName) => transpileInBackground(source, fileName),
-    createModuleUrl: (code) => URL.createObjectURL(new Blob([code], { type: "text/javascript" })),
+    createModuleUrl: (code, sourceUrl) => {
+      const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+      // So a frame in it can be counted as the file it came from (`services/usage.ts`).
+      noteModuleSource(url, sourceUrl);
+      return url;
+    },
     importModule: async (url) => {
       try { return await import(/* @vite-ignore */ url); } finally { if (url.startsWith("blob:")) URL.revokeObjectURL(url); }
     },

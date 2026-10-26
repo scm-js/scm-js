@@ -431,7 +431,7 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
         <Section title={t("Privacy")}>
           <Check label={t("Count which parts of the editor are used")} checked={p.counting} onChange={(e) => patch({ counting: e.target.checked })} />
           <Hint>
-            {t("Sends the name of what was used, such as a dialog, a tool or a save, with no identifier. Nothing of the map is sent: not its name, its contents or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
+            {t("Sends the name of what was used, such as a dialog, a tool or a save, and where in the editor's code an error happened, with no identifier. Nothing of the map is sent: not its name, its contents or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
             <a href="https://scmjs.dev/privacy.html" target="_blank" rel="noopener noreferrer">{t("What is counted")}</a>
           </Hint>
         </Section>

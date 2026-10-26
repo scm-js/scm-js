@@ -13,6 +13,8 @@ import { saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import type { BuildStepInput } from "../src/plugins/api";
 import { openMapFile } from "../src/services/mapIo";
+import { logEntries, resetLogForTests } from "../src/editor/log";
+import { resetCountsForTests, waitingCounts } from "../src/services/usage";
 import { testMapBytes } from "../src/services/testMap";
 
 const WAV = "staredit\\wav\\x.wav";
@@ -99,6 +101,46 @@ describe("build steps", () => {
     expect(store.get(mapModifiedAtom)).toBe(false);
     expect(store.get(toastsAtom).at(-1)).toMatchObject({ kind: "error", title: "Saved without the built part" });
     expect(store.get(toastsAtom).at(-1)!.detail).toContain("no such unit");
+  });
+
+  it("counts a step's message to the user as a refused build, and anything else it throws as an error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    resetCountsForTests(true);
+    try {
+      for (const [thrown, level, name] of [[new Error("main.ts:3 — no such unit"), "warn", "map.build.refused"], [new TypeError("x is undefined"), "error", "error"]] as const) {
+        resetLogForTests();
+        resetCountsForTests(true);
+        const { store, api } = openStore();
+        api.document.buildSteps.before({ id: "sync", label: "TrigScript", run: () => { throw thrown; } });
+        api.document.buildSteps.add(step({ run: async () => { throw thrown; } }));
+        expect(await save(store, writer())).toBe(true);
+        const failed = logEntries().filter((e) => e.level !== "info");
+        expect(failed.map((e) => e.level)).toEqual([level, level]);
+        expect(failed[1].message).toContain(thrown.message);
+        const counts = waitingCounts().filter((c) => c.name === name);
+        expect(counts.map((c) => c.props && [c.props.step, c.props.plugin])).toEqual([["prepare", "other"], ["build", "other"]]);
+        if (name === "error") expect(counts[0].props).toMatchObject({ area: "document", type: "TypeError" });
+      }
+    } finally {
+      resetCountsForTests(false);
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("counts a step that returns no map as an error", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    resetLogForTests();
+    resetCountsForTests(true);
+    try {
+      const { store, api } = openStore();
+      api.document.buildSteps.add(step({ run: async () => new Uint8Array(0) }));
+      expect(await save(store, writer())).toBe(true);
+      expect(waitingCounts().find((c) => c.name === "error")?.props).toMatchObject({ step: "build", type: "NoMapError" });
+    } finally {
+      resetCountsForTests(false);
+      vi.restoreAllMocks();
+    }
   });
 
   it("stops waiting for a step that never settles when the notice's button is pressed", async () => {

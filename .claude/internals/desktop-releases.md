@@ -186,7 +186,9 @@ props)` gathers lines for 2 min (same name+props → one line with `n`) and hand
 typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,
 `builtin:`, or listed in the *default* registry). Hook sites: `openDialogAtom` (`dialog`),
 `commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), undo/redo, resize, tileset,
-`openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), Test Map, `api.sync.start`
+`openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), `services/mapBuild.ts`
+(`map.build.refused` `{ step, plugin }`: a plain `Error` from a plugin's step, its message to the
+user, which is not an `error`), Test Map, `api.sync.start`
 (`map.share`), the host's menu/context/hotkey `run` wrappers + map buttons (`plugin.use`), file
 types (`file.open`), replays (`replay.open` via `countReplays`: file types, the host's `pickFiles`, and a window capture-phase `drop` listener in `useUsageCounts` that sees drops on plugin panels too; deduped by name+size+date for 10 s), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`: `area`, `type` = `errorKind`, a caller's
 `counted` words — `step` save/prepare/build/pack and `plugin` on the document's three — and

@@ -7,17 +7,22 @@
  * that throws, never settles (the notice carries a button that stops waiting) or returns
  * something that is not a map leaves the bytes Save would have written anyway, and the
  * caller hears why in `problem`.
+ *
+ * A plain `Error` from a plugin's step is its message to the user, as the contract asks (a
+ * script that does not compile, a failing test): a warning in the log and a `map.build.refused`
+ * count. Anything else it throws (`TypeError`, a class of its own, a step that returns no map)
+ * is a bug, logged and counted as an error with its stack.
  */
 import type { createStore } from "jotai";
 import { archiveExtrasAtom, archiveStoredAtom, builtByAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { pluginBeforeBuildAtom, pluginBuildStepsAtom, type PluginBuildStepEntry } from "../atoms/pluginAtoms";
 import { dismissToastAtom, pushToastAtom } from "../atoms/uiAtoms";
-import { logError, logInfo } from "../editor/log";
+import { logError, logInfo, logWarn } from "../editor/log";
 import { packBuiltMap, type BuiltBy } from "../editor/mapBuild";
 import { buildChk, buildMapFile, keptExtras, planSave, type SaveOptions } from "../editor/save";
 import type { BuildPurpose } from "../plugins/api";
 import { t } from "../i18n";
-import { pluginName } from "./usage";
+import { count, pluginName } from "./usage";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -53,6 +58,17 @@ const stepId = (e: { plugin: { id: string }; spec: { id: string } }) => `${e.plu
 const safely = (what: string, plugin: string, ask: () => boolean) => {
   try { return ask() === true; } catch (err) { logError("plugins", `${plugin}: ${what} threw`, err); return false; }
 };
+
+/** Whether a plugin's throw is the message the contract asks for (`BuildStepSpec.run`: "Throw an `Error`…"), not a bug. */
+const isRefusal = (err: unknown): err is Error => err instanceof Error && err.constructor === Error && err.name === "Error";
+
+/** A plugin's step that failed: a warning and a refusal count when it said why in the user's terms, an error otherwise. */
+function stepFailed(what: string, err: unknown, step: "prepare" | "build", plugin: { source: string }) {
+  const counted = { step, plugin: pluginName(plugin.source) };
+  if (!isRefusal(err)) { logError("document", what, err, undefined, counted); return; }
+  logWarn("document", `${what}: ${err.message}`);
+  count("map.build.refused", counted);
+}
 
 export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise<Outgoing> {
   const document = () => {
@@ -100,7 +116,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
         await Promise.race([Promise.resolve(e.spec.run({ purpose: req.purpose, signal: abort.signal })), stopped]);
       } catch (err) {
         if (err instanceof StoppedError) break;
-        logError("document", `${e.spec.label} could not prepare the map`, err, undefined, { step: "prepare", plugin: pluginName(e.plugin.source) });
+        stepFailed(`${e.spec.label} could not prepare the map`, err, "prepare", e.plugin);
         unprepared.push({ label: e.spec.label, message: err instanceof Error ? err.message : String(err) });
       }
     }
@@ -118,7 +134,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
     for (const e of steps) {
       failing = e;
       const next = await Promise.race([e.spec.run({ map: bytes, fileName: req.fileName, purpose: req.purpose, signal: abort.signal }), stopped]);
-      if (!(next instanceof Uint8Array) || next.length === 0) throw new Error(t("{label} returned no map.", { label: e.spec.label }));
+      if (!(next instanceof Uint8Array) || next.length === 0) throw new NoMapError(t("{label} returned no map.", { label: e.spec.label }));
       bytes = next;
     }
     failing = null;
@@ -132,7 +148,8 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
     if (!plain) throw err;
     const out = (more: Partial<Outgoing>): Outgoing => ({ bytes: plain!, builtBy: null, absent: absentNow(), unprepared, ...more });
     if (err instanceof StoppedError) { logInfo("document", "Build stopped by the user", { steps: labels }); return out({ stopped: true, problem: t("{labels} was stopped.", { labels }) }); }
-    logError("document", `Build step failed (${labels})`, err, undefined, failing ? { step: "build", plugin: pluginName(failing.plugin.source) } : { step: "pack" });
+    if (failing) stepFailed(`Build step failed (${labels})`, err, "build", failing.plugin);
+    else logError("document", `Build step failed (${labels})`, err, undefined, { step: "pack" });
     return out({ problem: err instanceof Error ? err.message : String(err) });
   } finally {
     running.delete(store);
@@ -141,3 +158,8 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
 }
 
 class StoppedError extends Error {}
+
+/** A step that returned no map broke its contract: an error, not a refusal. */
+class NoMapError extends Error {
+  name = "NoMapError";
+}

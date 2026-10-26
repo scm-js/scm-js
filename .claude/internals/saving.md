@@ -84,7 +84,14 @@ parsed once for the sound hints and the source parsed after — two parses only 
 **A step can never cost a save.** Throw, a non-map return, or the notice's *Save without it*
 (an `AbortController`; the run is raced against it, since a step may ignore the signal) → the plain
 bytes are written, `saveDocument` still returns true and clears modified, and a ttl-0 toast says
-why. Test Map throws instead (`TestMapDialog` shows the reason). `.chk` is never built. A `running`
+why. Test Map throws instead (`TestMapDialog` shows the reason). `.chk` is never built.
+How the log and the counts take it (2026-10-26, after 0.8.0's "Errors: 10, up from 0, most in
+document"): a plain `Error` (`constructor === Error`, `name === "Error"`) from a step or a `before`
+handler is the contract's message to the user — TrigScript throws one for a script that does not
+compile, a failing test, a block edited by hand — so `stepFailed` logs a *warning* and counts
+`map.build.refused` `{ step, plugin }`; anything else (`TypeError`, a plugin's own class,
+`NoMapError` for an empty return) stays `logError` and an `error` count with its stack. Before
+this, every typo in a script at save time was an editor error on `/admin`. A `running`
 WeakSet makes `export()` from inside a step answer the plain map — Magenta 0.9 and TrigScript 2.6
 both call `export()` to feed their own build, so without it the first step to be registered would
 recurse. `builtByAtom` (per document: in `parkRegisters` / `installRegisters`, kept across a

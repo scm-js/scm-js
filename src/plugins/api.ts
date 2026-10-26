@@ -442,7 +442,8 @@ export interface BuildStepSpec {
    * Build. Return an archive (or a bare scenario) — the editor takes the scenario and any
    * *new* members from it and lays the final file out with the user's save options; the
    * map's own members are written as they were. Throw an `Error` whose message says what
-   * is wrong in the user's terms.
+   * is wrong in the user's terms. A plain `Error` is logged as a warning, a refusal the step
+   * meant; anything else thrown (a `TypeError`, a class of your own) is logged as an error.
    */
   run(input: BuildStepInput): Promise<Uint8Array>;
 }
@@ -463,7 +464,8 @@ export interface BeforeBuildSpec {
   /**
    * May be asynchronous and may write to the document. A throw does not stop the save:
    * the map is written as it stands and a notice shows the error's message, so word it
-   * for the user. Inside it `document.export()` answers the map as it stands, without
+   * for the user. As with a build step, a plain `Error` is logged as a warning and anything
+   * else as an error. Inside it `document.export()` answers the map as it stands, without
    * running anything.
    */
   run(ctx: { purpose: BuildPurpose; signal: AbortSignal }): void | Promise<void>;

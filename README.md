@@ -107,6 +107,8 @@ renders them.
 | [docs/guide.md](docs/guide.md) | The user guide: a first map, then each layer and dialog, saving, sharing, plugins and preferences |
 | [docs/installing.md](docs/installing.md) | The hosted editor, the desktop app, the container, and getting the game's graphics |
 | [docs/trigscript.md](docs/trigscript.md) | TrigScript, triggers written as TypeScript: the script window, tests, programs that run in the game, examples and the reference |
+| [docs/trigscript-language.md](docs/trigscript-language.md) | The language of TrigScript programs: values, arrays, functions, classes, errors, tasks, units, events, input, text, sounds and libraries |
+| [docs/trigscript-library.md](docs/trigscript-library.md) | The modules that come with TrigScript — maths, chance, timers, signals, menus, cutscenes, fog pictures, pixel screens, music — with an example of each |
 | [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, what is kept, mods as data sets, and how the pictures are drawn |
 | [docs/file-formats.md](docs/file-formats.md) | What the editor does with a map file: what it preserves, what Save can strip, revisions, protected maps |

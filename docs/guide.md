@@ -681,7 +681,11 @@ TrigScript has [a guide of its own](trigscript.md):
   triggers it makes.
 - [Writing triggers](trigscript.md#writing-triggers): `trigger()` and the helpers for
   writing many at once.
-- [Programs](trigscript.md#programs): code that runs in the game.
+- [Programs](trigscript.md#programs): code that runs in the game. Its language and its
+  library of modules have guides of their own: [TrigScript
+  language](trigscript-language.md) and [TrigScript library](trigscript-library.md).
+- [Coming from eudplib](trigscript.md#coming-from-eudplib): where each eudplib and
+  epScript idea went, for map makers who build EUD maps with euddraft.
 - [Testing and Simulate](trigscript.md#testing-and-simulate): trying the script in the
   simulator, and tests that run after every change.
 - [The workspace](trigscript.md#the-workspace): the script window, its files, and the

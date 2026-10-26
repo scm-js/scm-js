@@ -8,9 +8,9 @@ A browser-based StarCraft 1 / Brood War map editor (React 19 + Vite + TypeScript
 StarEdit / SCMDraft 2. It opens real `.scm`/`.scx` maps (MPQ archives via `mopaq`), renders terrain from
 the game's own tileset graphics, and writes playable archives back. `docs/guide.md` is the map-maker's
 guide (what each layer does, and what is and is not implemented) — read it first; `README.md` is the
-repository's short front page (what it is, what it does, how to start); the install guide is `docs/installing.md`; the TrigScript guide is `docs/trigscript.md`; the technical companions are `docs/triggers.md` (the trigger reference), `docs/file-formats.md`,
+repository's short front page (what it is, what it does, how to start); the install guide is `docs/installing.md`; the TrigScript guide is `docs/trigscript.md`, with its language guide `docs/trigscript-language.md` and library guide `docs/trigscript-library.md`; the technical companions are `docs/triggers.md` (the trigger reference), `docs/file-formats.md`,
 `docs/chk-format.md` (the section-by-section reference), `docs/game-data.md`, `docs/plugins.md` and
-`docs/development.md`. Keep all ten current when behaviour changes — the nine under `docs/` are also the
+`docs/development.md`. Keep all twelve current when behaviour changes — the eleven under `docs/` are also the
 documentation *site* (`npm run build:docs` → docs.scmjs.dev), which renders them rather
 than holding anything of its own.
 

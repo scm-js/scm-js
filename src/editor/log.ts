@@ -28,7 +28,8 @@
  * subscribes; `atoms/logAtoms.ts` is the store side.
  */
 
-import { count as countUse } from "../services/usage";
+import type { CountProps } from "../services/usage";
+import { countError, errorKind } from "../services/usage";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -129,10 +130,11 @@ const EDITOR_AREAS: ReadonlySet<string> = new Set(["app", "document", "edit", "g
  * Record one entry. Cheap enough to call unconditionally on the always-on tier; the
  * verbose tier must gate itself on `isVerbose()` so it does not build the message either.
  */
-export function log(level: LogLevel, source: string, message: string, data?: LogData, stack?: string): void {
+export function log(level: LogLevel, source: string, message: string, data?: LogData, stack?: string, counted?: CountProps): void {
   const entry: LogEntry = { seq: ++seq, at: Date.now() - started, level, source, message };
-  // The feature counts take how many errors there were and where, never what they said.
-  if (level === "error") countUse("error", { area: EDITOR_AREAS.has(source) ? source : "plugin" });
+  // The feature counts take how many errors there were, where, and the frames of the stack —
+  // never what they said. `counted` is a caller's words from fixed lists (the save's `step`).
+  if (level === "error") countError({ area: EDITOR_AREAS.has(source) ? source : "plugin", ...counted }, stack);
   if (data) {
     // Undefined values are dropped rather than printed, so a caller can pass an optional
     // fact without a conditional at every call site.
@@ -183,10 +185,10 @@ export const logWarn = (source: string, message: string, data?: LogData) => log(
 /**
  * An error, from an `Error` or from whatever was actually thrown. The message goes on the
  * entry and the stack beside it, so the panel can stay one line a row and the copy can
- * carry the part that identifies the bug.
+ * carry the part that identifies the bug. `counted` goes with the error's count (see `log`).
  */
-export function logError(source: string, message: string, err?: unknown, data?: LogData): void {
-  log("error", source, withDetail(message, err), data, err instanceof Error ? err.stack : undefined);
+export function logError(source: string, message: string, err?: unknown, data?: LogData, counted?: CountProps): void {
+  log("error", source, withDetail(message, err), data, err instanceof Error ? err.stack : undefined, err === undefined ? counted : { type: errorKind(err), ...counted });
 }
 
 function withDetail(message: string, err: unknown): string {
@@ -208,7 +210,7 @@ export function logRenderError(message: string, err: unknown, componentStack?: s
   const own = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, RENDER_OWN_LINES) : [];
   const inside = (componentStack ?? "").split("\n").map((l) => l.trim()).filter(Boolean)
     .slice(0, RENDER_LINES - own.length).map((l) => l.replace(/^at /, "in "));
-  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined);
+  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined, { type: errorKind(err) });
 }
 
 /** Everything held, oldest first. A fresh array; the ring is not exposed. */

@@ -10,13 +10,14 @@
  */
 import type { createStore } from "jotai";
 import { archiveExtrasAtom, archiveStoredAtom, builtByAtom, scenarioAtom } from "../atoms/documentAtoms";
-import { pluginBeforeBuildAtom, pluginBuildStepsAtom } from "../atoms/pluginAtoms";
+import { pluginBeforeBuildAtom, pluginBuildStepsAtom, type PluginBuildStepEntry } from "../atoms/pluginAtoms";
 import { dismissToastAtom, pushToastAtom } from "../atoms/uiAtoms";
 import { logError, logInfo } from "../editor/log";
 import { packBuiltMap, type BuiltBy } from "../editor/mapBuild";
 import { buildChk, buildMapFile, keptExtras, planSave, type SaveOptions } from "../editor/save";
 import type { BuildPurpose } from "../plugins/api";
 import { t } from "../i18n";
+import { pluginName } from "./usage";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -88,6 +89,8 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
   const started = Date.now();
   let plain: Uint8Array | null = null;
   let labels = "";
+  // The step that is running, so a failure is counted against its plugin; null once they have all run.
+  let failing: PluginBuildStepEntry | null = null;
   try {
     // The plugins' work on the document comes first, so the bytes below and every step's `applies` see its result.
     if (before.length) notice(before.map((e) => e.spec.label).join(", "));
@@ -97,7 +100,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
         await Promise.race([Promise.resolve(e.spec.run({ purpose: req.purpose, signal: abort.signal })), stopped]);
       } catch (err) {
         if (err instanceof StoppedError) break;
-        logError("document", `${e.spec.label} could not prepare the map`, err);
+        logError("document", `${e.spec.label} could not prepare the map`, err, undefined, { step: "prepare", plugin: pluginName(e.plugin.source) });
         unprepared.push({ label: e.spec.label, message: err instanceof Error ? err.message : String(err) });
       }
     }
@@ -113,10 +116,12 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
     notice(labels);
     let bytes = made.plain;
     for (const e of steps) {
+      failing = e;
       const next = await Promise.race([e.spec.run({ map: bytes, fileName: req.fileName, purpose: req.purpose, signal: abort.signal }), stopped]);
       if (!(next instanceof Uint8Array) || next.length === 0) throw new Error(t("{label} returned no map.", { label: e.spec.label }));
       bytes = next;
     }
+    failing = null;
     const builtBy = steps.map((e) => ({ id: stepId(e), label: e.spec.label }));
     const kept = made.plan.stored?.kept ? made.plan.stored.members : null;
     const packed = await packBuiltMap({ sourceChk: buildChk(made.plan), extras: keptExtras(made.plan, made.extras), stored: kept, built: bytes, steps: builtBy, options: req.options });
@@ -127,7 +132,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
     if (!plain) throw err;
     const out = (more: Partial<Outgoing>): Outgoing => ({ bytes: plain!, builtBy: null, absent: absentNow(), unprepared, ...more });
     if (err instanceof StoppedError) { logInfo("document", "Build stopped by the user", { steps: labels }); return out({ stopped: true, problem: t("{labels} was stopped.", { labels }) }); }
-    logError("document", `Build step failed (${labels})`, err);
+    logError("document", `Build step failed (${labels})`, err, undefined, failing ? { step: "build", plugin: pluginName(failing.plugin.source) } : { step: "pack" });
     return out({ problem: err instanceof Error ? err.message : String(err) });
   } finally {
     running.delete(store);

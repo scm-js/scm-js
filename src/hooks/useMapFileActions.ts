@@ -379,7 +379,7 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) });
+    logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) }, { step: "save" });
     store.set(statusMessageAtom, `Could not save the ${what}: ${message}`);
     store.set(pushToastAtom, { kind: "error", title: t("Could not save the {what}", { what }), detail: message });
     return false;

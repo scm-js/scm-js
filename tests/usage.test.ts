@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countingWanted, countPluginUse, countReplays, extOf, flushCounts, gameDataOf, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, waitingCounts } from "../src/services/usage";
+import { count, countError, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
+import { logError, resetLogForTests } from "../src/editor/log";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
@@ -126,5 +127,84 @@ describe("feature counts", () => {
       { changed: "testMap.dir" },
       { changed: "hotkeys" },
     ]);
+  });
+});
+
+describe("error counts", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("location", { origin: "https://scmjs.dev", hostname: "scmjs.dev" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    resetCountsForTests(true);
+    resetLogForTests();
+  });
+  afterEach(() => {
+    resetCountsForTests(false);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const chrome = [
+    "TypeError: Cannot read properties of undefined (reading 'x') in My Secret Map.scx",
+    "    at Ab (https://scmjs.dev/editor/assets/index-B1x2.js:1:48211)",
+    "    at async run (blob:https://scmjs.dev/0f1e-22)",
+    "    at lower (blob:https://scmjs.dev/0f1e-22:120:5)",
+    "    at blob:https://scmjs.dev/aaaa-11:3:9",
+    "    at chrome-extension://abc/inject.js:10:2",
+    "    at chrome-extension://abc/inject.js:11:2",
+    "    at Object.Cd [as run] (https://scmjs.dev/editor/assets/index-B1x2.js:1:9000)",
+  ].join("\n");
+
+  it("turns a stack into frames: the project's files with line and column, anything else in a word", () => {
+    noteModuleSource("blob:https://scmjs.dev/0f1e-22", "https://raw.githubusercontent.com/scm-js/plugin-trigscript/v4.1.0/src/lower.ts");
+    noteModuleSource("blob:https://scmjs.dev/aaaa-11", "https://raw.githubusercontent.com/someone/private-tool/main/plugin.js");
+    expect(stackProps(chrome)).toEqual({
+      frame0: "Ab editor/assets/index-B1x2.js:1:48211",
+      frame1: "lower plugin-trigscript@v4.1.0/src/lower.ts:120:5",
+      frame2: "plugin",
+      frame3: "other",
+      frame4: "editor/assets/index-B1x2.js:1:9000",
+    });
+  });
+
+  it("reads Firefox and Safari stacks, and never the message", () => {
+    const firefox = "draw@https://scmjs.dev/editor/assets/index-B1x2.js:1:300\n@https://scmjs.dev/editor/assets/index-B1x2.js:1:20\n";
+    expect(stackProps(firefox)).toEqual({ frame0: "draw editor/assets/index-B1x2.js:1:300", frame1: "editor/assets/index-B1x2.js:1:20" });
+    expect(stackProps("Error: at https://scmjs.dev/x.js:1:2 secret")).toBeNull();
+  });
+
+  it("keeps at most six frames, each short", () => {
+    const long = Array.from({ length: 10 }, (_, i) => `    at f${i} (https://scmjs.dev/editor/assets/${"a".repeat(120)}.js:1:${i})`).join("\n");
+    const props = stackProps(`Error\n${long}`)!;
+    expect(Object.keys(props)).toEqual(["frame0", "frame1", "frame2", "frame3", "frame4", "frame5"]);
+    for (const v of Object.values(props)) expect(String(v).length).toBeLessThanOrEqual(90);
+  });
+
+  it("names an error's kind only when it is an identifier", () => {
+    expect(errorKind(new TypeError("x"))).toBe("TypeError");
+    const odd = new Error("x");
+    odd.name = "my map.scx";
+    expect(errorKind(odd)).toBe("other");
+    expect(errorKind("thrown text")).toBe("string");
+  });
+
+  it("counts a logged error with its area, the caller's words, its kind and its frames", () => {
+    const err = new TypeError("in My Secret Map.scx");
+    err.stack = chrome;
+    logError("document", "Could not save the map", err, { file: "My Secret Map.scx" }, { step: "save" });
+    const [line] = waitingCounts();
+    expect(line.name).toBe("error");
+    expect(line.props).toMatchObject({ area: "document", step: "save", type: "TypeError", frame0: "Ab editor/assets/index-B1x2.js:1:48211" });
+    expect(JSON.stringify(line.props)).not.toContain("Secret");
+  });
+
+  it("stops sending frames past six waiting stacks, but still counts the error", () => {
+    for (let i = 0; i < 8; i++) countError({ area: "app" }, `Error\n    at f (https://scmjs.dev/editor/assets/index.js:1:${i})`);
+    countError({ area: "app" }, "Error\n    at f (https://scmjs.dev/editor/assets/index.js:1:0)");
+    const lines = waitingCounts();
+    expect(lines.filter((l) => l.props && "frame0" in l.props)).toHaveLength(6);
+    expect(lines[0].n).toBe(2);
+    expect(lines.find((l) => l.props && !("frame0" in l.props))).toEqual({ name: "error", props: { area: "app" }, n: 2 });
   });
 });

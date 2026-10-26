@@ -1652,10 +1652,12 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
 - **Privacy** (the editor at scmjs.dev only): whether to count which parts of the editor
   are used. It is on unless you turn it off. When you use a feature, the editor sends its
   name and a few words about it, such as which dialog opened or which layer an edit was
-  on. It never sends the map, its name, a file name or anything you typed, and nothing
-  that identifies you. Turning it off also stops the visit count for this browser, and the
-  site's [privacy page](https://scmjs.dev/privacy.html) has the same switch and the
-  details. The desktop app and copies of the editor hosted elsewhere count nothing.
+  on. When something goes wrong, it sends where in the editor's code the error happened
+  (the file, line and function), but never the error's message. It never sends the map,
+  its name, a file name or anything you typed, and nothing that identifies you. Turning it
+  off also stops the visit count for this browser, and the site's [privacy
+  page](https://scmjs.dev/privacy.html) has the same switch and the details. The desktop
+  app and copies of the editor hosted elsewhere count nothing.
 
 **Editing**: the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
 Settings… opens this page); what the palettes start on — the owner of placed units, the

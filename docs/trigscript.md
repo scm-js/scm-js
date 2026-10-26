@@ -175,7 +175,10 @@ sixty-two waits, so that the game goes through the trigger list every 2 frames i
 every 31 ([Hyper triggers](triggers.md#hyper-triggers)). Give them to a player whose other
 triggers never wait, usually a computer slot: each player has one wait slot, and the hyper
 triggers keep it busy ([Waits](triggers.md#waits)). A map with a program does not need
-them, since its build already makes the list run every frame.
+them, since its build already makes the list run every frame: the build leaves hyper
+triggers out, the script's and the map's own alike, and says so in a notice, as it does
+for a trigger owned by a player group the game runs no list for (Players 9 to 12, Foes,
+Allies, Neutral, Non-Allied Victory Players).
 
 ## Examples of triggers
 

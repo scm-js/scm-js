@@ -13,7 +13,7 @@ import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
 import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "./storage";
-import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom } from "./editorAtoms";
+import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom, symmetryOptionsAtom } from "./editorAtoms";
 import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
@@ -102,6 +102,7 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.locationSnap": (set) => set(locationSnapAtom, RESET),
   "scmjs.placement": (set) => set(placementOptionsAtom, RESET),
   "scmjs.doodadPlacement": (set) => set(doodadPlacementAtom, RESET),
+  "scmjs.symmetry": (set) => set(symmetryOptionsAtom, RESET),
   "scmjs.panels": (set) => set(panelsAtom, RESET),
   "scmjs.docks": (set) => set(dockWidthsAtom, RESET),
   "scmjs.whatsNew": (set) => set(whatsNewSeenAtom, RESET),
@@ -190,6 +191,7 @@ const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
   "scmjs.locationSnap": (_get, set) => set(locationSnapAtom, parsed("scmjs.locationSnap", 32)),
   "scmjs.placement": (get, set) => set(placementOptionsAtom, parsedMerged("scmjs.placement", get(placementOptionsAtom))),
   "scmjs.doodadPlacement": (get, set) => set(doodadPlacementAtom, parsedMerged("scmjs.doodadPlacement", get(doodadPlacementAtom))),
+  "scmjs.symmetry": (get, set) => set(symmetryOptionsAtom, parsedMerged("scmjs.symmetry", get(symmetryOptionsAtom))),
   "scmjs.panels": (get, set) => set(panelsAtom, parsedMerged("scmjs.panels", get(panelsAtom))),
   "scmjs.docks": (get, set) => set(dockWidthsAtom, parsedMerged("scmjs.docks", get(dockWidthsAtom))),
   "scmjs.whatsNew": (_get, set) => set(whatsNewSeenAtom, parsed<string | null>("scmjs.whatsNew", null)),

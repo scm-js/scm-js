@@ -19,6 +19,7 @@ import { markDirty, strSectionName, type Scenario } from "../formats/chk/scenari
 import { ANYWHERE_INDEX, ELEVATION_MASK, isLocationUsed, locationSlots, type LocationRecord } from "../formats/chk/sections/objects";
 import { findString, getString } from "../formats/chk/sections/strings";
 import { TILE_PX } from "./units";
+import { SAME_MOVE, type Linear, type Placed } from "./symmetry";
 
 export interface LocationStringChange {
   index: number;
@@ -279,6 +280,18 @@ function editable(scn: Scenario, indices: readonly number[]): number[] {
  * Shift locations by a pixel delta, clamped so the whole group stays on the map. An
  * inverted box keeps its inversion: all four edges move together.
  */
+/** How far (pixels) a location's centre may sit from the exact mirror image of another's and still count as its copy. */
+export const LOCATION_MIRROR_PX = 8;
+
+/** Each location in use by its centre, and its size as the kind — sides sorted, since a quarter turn swaps them. */
+export function placedLocations(scn: Scenario): (Placed | null)[] {
+  return scn.locations.map((r, i) => {
+    if (i === ANYWHERE_INDEX || !r || !isLocationUsed(r)) return null;
+    const w = r.right - r.left, h = r.bottom - r.top;
+    return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, kind: Math.min(w, h) * 65536 + Math.max(w, h) };
+  });
+}
+
 export function moveLocations(scn: Scenario, indices: number[], dx: number, dy: number): LocationChange[] {
   const set = editable(scn, indices);
   if (set.length === 0) return [];
@@ -292,6 +305,24 @@ export function moveLocations(scn: Scenario, indices: number[], dx: number, dy: 
     const r = scn.locations[i];
     return { index: i, before: r, after: { ...r, left: r.left + dx, right: r.right + dx, top: r.top + dy, bottom: r.bottom + dy } };
   });
+}
+
+/**
+ * `moveLocations` under a symmetry mode: `moves` (from `mirrorMoves`) says which of them
+ * move by the delta as it is — those decide how far it can go before the map's edge — and
+ * which move as mirror images of those, by the delta turned.
+ */
+export function moveLocationsMirrored(scn: Scenario, indices: number[], dx: number, dy: number, moves: ReadonlyMap<number, Linear>): LocationChange[] {
+  const leading = indices.filter((i) => (moves.get(i) ?? SAME_MOVE) === SAME_MOVE);
+  const lead = moveLocations(scn, leading, dx, dy);
+  if (lead.length === 0) return [];
+  const ddx = lead[0].after.left - lead[0].before.left, ddy = lead[0].after.top - lead[0].before.top;
+  const rest = editable(scn, indices.filter((i) => !leading.includes(i))).map((i): LocationChange => {
+    const r = scn.locations[i];
+    const m = moves.get(i)!(ddx, ddy);
+    return { index: i, before: r, after: { ...r, ...clampBounds({ left: r.left + m.x, top: r.top + m.y, right: r.right + m.x, bottom: r.bottom + m.y }, scn) } };
+  });
+  return [...lead, ...rest];
 }
 
 export interface LocationPatch {

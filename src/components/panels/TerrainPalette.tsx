@@ -42,8 +42,8 @@ function NoTileset({ what, loading }: { what: string; loading: boolean }) {
 }
 
 /**
- * One line about the active symmetry mode (Tools ▸ Symmetry…): the Rect and Tile brushes
- * paint mirrored under it, the isometric and Blend brushes do not.
+ * One line about the active symmetry mode (Tools ▸ Symmetry…): the Isometric, Rect and
+ * Tile brushes paint mirrored under it, the Blend brush does not.
  */
 function SymmetryNote({ applies }: { applies: boolean }) {
   const mode = useAtomValue(symmetryAtom);
@@ -54,7 +54,7 @@ function SymmetryNote({ applies }: { applies: boolean }) {
     ? t("Symmetry \"{mode}\" needs a square map — strokes paint normally.", { mode: symmetryLabel(mode) })
     : applies
       ? t("Symmetry: {mode} — every stroke is mirrored.", { mode: symmetryLabel(mode) })
-      : t("Symmetry ({mode}) does not apply to this brush — only Rect, Tile and Fog strokes are mirrored.", { mode: symmetryLabel(mode) });
+      : t("Symmetry ({mode}) does not apply to the Blend brush — it places from the tile you picked.", { mode: symmetryLabel(mode) });
   return <div className={`palette-footer sub ${ok && applies ? "" : "warn"}`} title={t("Tools ▸ Symmetry…")}><span>{text}</span></div>;
 }
 
@@ -149,7 +149,7 @@ function IsomTab() {
         )}
       </div>
       <div className="palette-footer"><span>{t("{length} terrain types", { length: list.length })}</span><span>{info.name}</span></div>
-      <SymmetryNote applies={false} />
+      <SymmetryNote applies />
     </>
   );
 }

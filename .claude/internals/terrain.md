@@ -17,9 +17,29 @@ needs no extra merging. Square-only modes (rot90, diag, adiag) act as `none` on 
 centre — `useUnitTools` / `useSpriteTools` expose `ghostsAt` and place every image the checks
 accept), `mirrorBox` (a location's bounds, `useLocationTools.create`) and `mirrorTileRect` (a
 doodad footprint; `keepsShape` drops an image that would turn a non-square one). The isometric
-brush paints the diamond under each image of the pointer (`paintIsomAt`). Blend, moving and
-deleting are deliberately not covered. The viewport draws the axes on every layer but the
-clipboard and draws the mirrored ghosts fainter; `tests/symmetry.test.ts`.
+brush paints the diamond under each image of the pointer (`paintIsomAt`), and `ghostDiamondsAt`
+previews the same set. Blend and pasting are deliberately not covered. The viewport draws the
+axes on every layer but the clipboard and draws the mirrored ghosts fainter.
+
+`symmetryImages` is the one table of a mode's images: each a point map, its linear part (how a
+drag's movement turns) and its *element* of the mode's group — reflections XOR (hv: flipX 1,
+flipY 2, turn 3), rot90 cyclic (quarter turns clockwise 1–3). `mirroredOwner` uses the element
+so a copy's player is consistent whichever corner/player you place from (P1–P2/P3–P4 pairs, or
+P1–P4/P5–P8 quads; owners 8–11 untouched); `*Images` variants of `mirrorPixel` /
+`mirrorTileRect` carry it, and the unit/sprite/doodad `ghostsAt` apply it when
+`symmetryOptionsAtom.players` (stored, `scmjs.symmetry`, default on). Move/delete work by
+**matching, not by remembering** what was placed together: each object hook's `select` /
+`selectInBox` runs `withMirrorImages` (same kind, nearest within a tolerance — units/sprites
+16 px, doodads 32 px by footprint centre, locations `LOCATION_MIRROR_PX` 8 with sorted sides as
+the kind), so Delete needs nothing; `beginDrag` runs `mirrorMoves`, which gives the selected
+thing nearest the pointer `SAME_MOVE` and its partners their image's linear map (doodads snap
+from, and locations clamp over, only the `SAME_MOVE` ones). Locations also resize their
+partners (`mirrorPartners` + `boxImage`) — `handleAtPoint` accepts a selection that is one
+location plus its images, else the handles would vanish whenever symmetry was on — and the
+arrow nudge goes through `moveLocationsMirrored`. Selections made elsewhere (Find, panels, the
+plugin API, Ctrl+A) are not expanded. `symmetryAtom` is a derived atom that records the last
+mode for `toggleSymmetryAtom` (M, `tools.symmetry`; the toolbar's `SymmetryControl`).
+`tests/symmetry.test.ts`.
 
 Replace Terrain (`terrain.ts#replaceTerrain` / `matchingTiles`, `useTerrainTools.replace`,
 `ReplaceTerrainDialog` in `dialogs/TerrainDialogs.tsx`) swaps a `TerrainPick` — a flat terrain by

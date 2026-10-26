@@ -2,12 +2,12 @@ import { useCallback, useMemo, useRef } from "react";
 import { useSetAtom, useStore } from "jotai";
 import { centerViewOnAtom, locationSnapAtom, selectedLocationsAtom, symmetryAtom, viewportRectAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { mirrorBox } from "../editor/symmetry";
+import { boxImage, mirrorBox, mirrorMoves, mirrorPartners, SAME_MOVE, withMirrorImages, type Linear, type SymmetryImage } from "../editor/symmetry";
 import { commitEditAtom, deleteSelectedLocationsAtom, locationsRevisionAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   addLocation, applyLocationChanges, boundsOf, clampBounds, dragBounds, editLocation, ensureLocationSlots, handleAt, isAnywhereIntact, locationAt,
-  locationCapacity, locationName, removeLocations, resizeBounds, restoreAnywhere, snapTo, type Bounds, type Handle, type LocationChange, type LocationPatch,
+  locationCapacity, locationName, LOCATION_MIRROR_PX, placedLocations, removeLocations, resizeBounds, restoreAnywhere, snapTo, type Bounds, type Handle, type LocationChange, type LocationPatch,
 } from "../editor/locations";
 import { TILE_PX } from "../editor/units";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
@@ -16,6 +16,7 @@ import { t } from "../i18n";
 
 /** How close (in screen pixels) the pointer must be to a handle to grab it. */
 const HANDLE_GRAB_PX = 6;
+
 
 const tiles = (b: Bounds) => `${(b.right - b.left) / TILE_PX} × ${(b.bottom - b.top) / TILE_PX} tiles`;
 const at = (b: Bounds) => `${b.left / TILE_PX}, ${b.top / TILE_PX}`;
@@ -36,8 +37,8 @@ export function useLocationTools() {
   const setCenter = useSetAtom(centerViewOnAtom);
   const deleteSelectedLocations = useSetAtom(deleteSelectedLocationsAtom);
   const drag = useRef<
-    | { kind: "move"; from: MapPoint; origin: Map<number, LocationRecord> }
-    | { kind: "resize"; index: number; handle: Handle; origin: LocationRecord }
+    | { kind: "move"; from: MapPoint; origin: Map<number, LocationRecord>; moves: Map<number, Linear> }
+    | { kind: "resize"; index: number; handle: Handle; origin: LocationRecord; images: { index: number; image: SymmetryImage; origin: LocationRecord }[] }
     | null
   >(null);
 
@@ -58,22 +59,41 @@ export function useLocationTools() {
     return scn ? locationAt(scn, p.px, p.py) : -1;
   }, [store]);
 
-  /** The resize handle under the pointer, when exactly one editable location is selected. */
+  /** `indices` and, under a symmetry mode, the locations standing at their mirror images — what a click selects. */
+  const withImages = useCallback((indices: number[]): number[] => {
+    const scn = store.get(scenarioAtom);
+    const mode = store.get(symmetryAtom);
+    if (!scn || mode === "none" || indices.length === 0) return indices;
+    return withMirrorImages(mode, placedLocations(scn), indices, scn.width, scn.height, LOCATION_MIRROR_PX);
+  }, [store]);
+
+  /**
+   * The resize handle under the pointer, when exactly one editable location is selected —
+   * or, under a symmetry mode, one and its mirror images, which a resize then follows.
+   */
   const handleAtPoint = useCallback((p: MapPoint, zoom: number): Handle | null => {
     const scn = store.get(scenarioAtom);
     const selected = store.get(selectedLocationsAtom);
-    if (!scn || selected.length !== 1 || selected[0] === ANYWHERE_INDEX) return null;
+    if (!scn || selected.length === 0 || selected[0] === ANYWHERE_INDEX) return null;
+    if (selected.length > 1) {
+      const group = new Set(withImages([selected[0]]));
+      if (group.size !== selected.length || !selected.every((i) => group.has(i))) return null;
+    }
     const r = scn.locations[selected[0]];
     if (!r || !isLocationUsed(r)) return null;
     return handleAt(boundsOf(r), p.px, p.py, HANDLE_GRAB_PX / zoom);
-  }, [store]);
+  }, [store, withImages]);
 
   const select = useCallback((indices: number[], additive = false) => {
-    if (!additive) { setSelected(indices); return; }
+    if (!additive) { setSelected(withImages(indices)); return; }
     const set = new Set(store.get(selectedLocationsAtom));
-    for (const i of indices) { if (set.has(i)) set.delete(i); else set.add(i); }
+    for (const i of indices) {
+      const group = withImages([i]);
+      if (set.has(i)) for (const j of group) set.delete(j);
+      else for (const j of group) set.add(j);
+    }
     setSelected([...set]);
-  }, [store, setSelected]);
+  }, [store, setSelected, withImages]);
 
   /** Scroll the viewport to a location's centre. */
   const centerOn = useCallback((index: number) => {
@@ -157,14 +177,18 @@ export function useLocationTools() {
       const r = scn.locations[i];
       if (i !== ANYWHERE_INDEX && r && isLocationUsed(r)) origin.set(i, r);
     }
-    drag.current = origin.size > 0 ? { kind: "move", from: p, origin } : null;
+    // Under a symmetry mode the mirror images in the selection move as mirror images.
+    const moves = mirrorMoves(store.get(symmetryAtom), placedLocations(scn), [...origin.keys()], { x: p.px, y: p.py }, scn.width, scn.height, LOCATION_MIRROR_PX);
+    drag.current = origin.size > 0 ? { kind: "move", from: p, origin, moves } : null;
   }, [store]);
 
   const beginResize = useCallback((index: number, handle: Handle) => {
     const scn = store.get(scenarioAtom);
     const r = scn?.locations[index];
     if (!scn || !r || index === ANYWHERE_INDEX) return;
-    drag.current = { kind: "resize", index, handle, origin: r };
+    // Its mirror images in the selection are resized as its images.
+    const partners = mirrorPartners(store.get(symmetryAtom), placedLocations(scn), index, store.get(selectedLocationsAtom), scn.width, scn.height, LOCATION_MIRROR_PX);
+    drag.current = { kind: "resize", index, handle, origin: r, images: partners.map(({ index: j, image }) => ({ index: j, image, origin: scn.locations[j] })) };
   }, [store]);
 
   const dragTo = useCallback((p: MapPoint) => {
@@ -176,25 +200,32 @@ export function useLocationTools() {
     if (d.kind === "move") {
       // Snap the first location's corner rather than the pointer, so a box picked up
       // off-grid lands on it; the rest follow by the same delta and keep their spacing.
-      const first = d.origin.values().next().value!;
-      const fb = boundsOf(first);
+      // Under a symmetry mode only the ones that follow the pointer count here: their
+      // mirror images move by the same delta turned, and stay inside the map with them.
+      const leading = [...d.origin].filter(([i]) => (d.moves.get(i) ?? SAME_MOVE) === SAME_MOVE).map(([, r]) => r);
+      const fb = boundsOf(leading[0]);
       let dx = snapTo(fb.left + (p.px - d.from.px), step) - fb.left;
       let dy = snapTo(fb.top + (p.py - d.from.py), step) - fb.top;
-      const union = [...d.origin.values()].map(boundsOf).reduce((u, b) => ({
+      const union = leading.map(boundsOf).reduce((u, b) => ({
         left: Math.min(u.left, b.left), top: Math.min(u.top, b.top), right: Math.max(u.right, b.right), bottom: Math.max(u.bottom, b.bottom),
       }));
       dx = Math.min(scn.width * TILE_PX - union.right, Math.max(-union.left, dx));
       dy = Math.min(scn.height * TILE_PX - union.bottom, Math.max(-union.top, dy));
       for (const [i, before] of d.origin) {
+        const m = (d.moves.get(i) ?? SAME_MOVE)(dx, dy);
         const cur = scn.locations[i];
-        const next = { ...before, left: before.left + dx, right: before.right + dx, top: before.top + dy, bottom: before.bottom + dy };
-        if (cur.left !== next.left || cur.top !== next.top || cur.right !== next.right || cur.bottom !== next.bottom) { scn.locations[i] = next; changed = true; }
+        const next = clampBounds({ ...before, left: before.left + m.x, right: before.right + m.x, top: before.top + m.y, bottom: before.bottom + m.y }, scn);
+        if (cur.left !== next.left || cur.top !== next.top || cur.right !== next.right || cur.bottom !== next.bottom) { scn.locations[i] = { ...before, ...next }; changed = true; }
       }
     } else {
       const b = clampBounds(resizeBounds(boundsOf(d.origin), d.handle, p.px, p.py, step), scn);
       if (b.right === b.left || b.bottom === b.top) return;
       const cur = scn.locations[d.index];
-      if (cur.left !== b.left || cur.top !== b.top || cur.right !== b.right || cur.bottom !== b.bottom) { scn.locations[d.index] = { ...d.origin, ...b }; changed = true; }
+      if (cur.left !== b.left || cur.top !== b.top || cur.right !== b.right || cur.bottom !== b.bottom) {
+        scn.locations[d.index] = { ...d.origin, ...b };
+        for (const img of d.images) scn.locations[img.index] = { ...img.origin, ...clampBounds(boxImage(img.image, b), scn) };
+        changed = true;
+      }
     }
     if (changed) bump((r) => r + 1);
   }, [store, snap, bump]);
@@ -213,8 +244,10 @@ export function useLocationTools() {
         if (after && differs(before, after)) locations.push({ index: i, before, after });
       }
     } else {
-      const after = scn.locations[d.index];
-      if (after && differs(d.origin, after)) locations.push({ index: d.index, before: d.origin, after });
+      for (const { index, origin } of [{ index: d.index, origin: d.origin }, ...d.images]) {
+        const after = scn.locations[index];
+        if (after && differs(origin, after)) locations.push({ index, before: origin, after });
+      }
     }
     if (locations.length === 0) return false;
     // The records are already in place; this records the step and marks the file dirty.
@@ -226,8 +259,8 @@ export function useLocationTools() {
       commit({ label: n === 1 ? t("Move location {locationName}", { locationName: locationName(scn, one.index) }) : t("Move {n} locations", { n }), changes: [], locations });
       setStatus(n === 1 ? t("Moved location {index} \"{locationName}\" to {at}", { index: one.index, locationName: locationName(scn, one.index), at: at(b) }) : t("Moved {n} locations", { n }));
     } else {
-      commit({ label: t("Resize location {locationName}", { locationName: locationName(scn, one.index) }), changes: [], locations });
-      setStatus(t("Resized location {index} \"{locationName}\" to {tiles} at {at}", { index: one.index, locationName: locationName(scn, one.index), tiles: tiles(b), at: at(b) }));
+      commit({ label: n === 1 ? t("Resize location {locationName}", { locationName: locationName(scn, one.index) }) : t("Resize {n} locations", { n }), changes: [], locations });
+      setStatus(t("Resized location {index} \"{locationName}\" to {tiles} at {at}", { index: one.index, locationName: locationName(scn, one.index), tiles: tiles(b), at: at(b) }) + (n > 1 ? t(" and {n, plural, one {# mirror image} other {# mirror images}}", { n: n - 1 }) : ""));
     }
     return true;
   }, [store, commit, setStatus]);

@@ -389,7 +389,18 @@ export function useTerrainTools() {
   const ghostDiamondsAt = useCallback((p: MapPoint): Diamond[] => {
     const scn = store.get(scenarioAtom);
     if (!scn) return [];
-    return brushDiamonds(scn, diamondAt(p.px, p.py), store.get(brushSizeAtom));
+    // The diamonds under the pointer and, under a symmetry mode, under each of its images — what paintIsomAt paints.
+    const out: Diamond[] = [];
+    const seen = new Set<string>();
+    mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height).forEach((q, i) => {
+      const dq = diamondAt(q.x, q.y);
+      if (i > 0 && !isDiamond(dq)) return;
+      for (const d of brushDiamonds(scn, dq, store.get(brushSizeAtom))) {
+        const k = `${d.x},${d.y}`;
+        if (!seen.has(k)) { seen.add(k); out.push(d); }
+      }
+    });
+    return out;
   }, [store]);
 
   return useMemo(

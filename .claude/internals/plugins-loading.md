@@ -20,7 +20,7 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-Paint, Repair, scm-sim (a default since 2026-10-13, on: Tools ▸ Test Map in Browser moved to it from scmjs.dev, whose pin moved to the version without it in the same commit), scmjs.dev (on since 2026-09-22; off before, while the AI was a paid trial), scmscx.com,
+Aftermath (a default since 2026-10-25, on; it `requires` scm-sim, which `orderedInstalls` starts first), Paint, Repair, scm-sim (a default since 2026-10-13, on: Tools ▸ Test Map in Browser moved to it from scmjs.dev, whose pin moved to the version without it in the same commit), scmjs.dev (on since 2026-09-22; off before, while the AI was a paid trial), scmscx.com,
 Stamp Library, Terrain from Image, TrigEdit (the Text Trigger Editor, moved out 2026-09-07; **off**), TrigScript
 (a default since 2026-09-07, on) and Walkability. Since 2026-09-22 the array is alphabetical by display name and
 the Installed tab sorts by manifest name (the repository name until a manifest is in), matching Browse; before

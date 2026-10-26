@@ -434,7 +434,7 @@ export interface BuildStepInput {
 export interface BuildStepSpec {
   /** Unique within the plugin; the file remembers `plugin id/id`. */
   id: string;
-  /** What the notice says is running: "eudplib". */
+  /** What the notice says is running: "TrigScript". */
   label: string;
   /** Whether the open map has anything for this step. Cheap and synchronous; false leaves Save exactly as it was. */
   applies(): boolean;

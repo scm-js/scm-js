@@ -6,8 +6,8 @@
  *
  * Every match is by `key` (`pluginKey`: the repository behind any version, a bundled
  * copy answering for the spec it was built from), never by spec: a manifest says
- * `github:scm-js/plugin-eudplib`, the installed row is that at a tag or a commit, and
- * the desktop's `builtin:eudplib` stands for the same plugin.
+ * `github:scm-js/plugin-trigscript`, the installed row is that at a tag or a commit, and
+ * the desktop's `builtin:trigscript` stands for the same plugin.
  */
 import type { PluginInstall } from "../atoms/pluginAtoms";
 import type { PluginManifest } from "./api";

@@ -601,3 +601,11 @@ the conversation is tested without a DOM); `src/play.ts` is the `scmjs.play` han
 plugin's `play.ts`, and with it Tools ▸ Test Map in Browser moved here (scmjs.dev 1.36.0 dropped it; the two pins
 moved in one commit so the item was never there twice). The timeline's types are a copy of scm-sim's
 `src/analysis/timeline.ts`; `ReplayTimeline.version` says which form (2, from plugin 0.2.0's contract: a `died` event names the unit the game credited with the kill; 3, from 0.3.0's: `check.parted`, the frame from which the game the engine played is no longer the replay's, the engine having taken replays from 1.18 and Remastered by rewriting them in 1.16.1's form). Nothing in the host's API was added for it.
+
+
+**eudplib out (2026-10-25).** TrigScript 4.0 builds every program itself and Magenta 0.12 hands its rows to
+`trigscript.build`, so nothing shipped requires plugin-eudplib: it left `defaults.ts`, the guide's plugin table, the
+plugins page, the docs site's plugin list and the development notes in the same commit as the 4.0.0 pin, and the
+repository is archived (not deleted: tagged releases keep serving anyone pinning it). The runtime bundling
+(`scripts/bundle-plugin-runtimes.mjs`, the desktop and the container) stays as a mechanism with no default using it.
+A map built by euddraft still opens with its locations hidden (`documentAtoms.ts`); that is about the maps, not the plugin.

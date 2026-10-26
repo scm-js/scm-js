@@ -321,13 +321,13 @@ it too.
 
 ### Defaults and vendoring
 
-The default plugins are ordinary plugins from their own repositories: Aftermath, eudplib,
-Paint, Repair, scm-sim, scmjs.dev, scmscx.com, Stamp Library, Terrain from Image,
-TrigEdit, TrigScript and Walkability. All start on except TrigEdit, which is installed but
-off. Each is pinned in `src/plugins/defaults.ts` to a **tag**, never a branch, so a push
-to a plugin repository cannot change editors already in use, and any release can be
-rebuilt as it shipped. Moving a default forward is a commit that changes the tag there. A
-plugin's identity is its repository, whatever the version, so an older unpinned spec, the
+The default plugins are ordinary plugins from their own repositories: Aftermath, Paint,
+Repair, scm-sim, scmjs.dev, scmscx.com, Stamp Library, Terrain from Image, TrigEdit,
+TrigScript and Walkability. All start on except TrigEdit, which is installed but off. Each
+is pinned in `src/plugins/defaults.ts` to a **tag**, never a branch, so a push to a plugin
+repository cannot change editors already in use, and any release can be rebuilt as it
+shipped. Moving a default forward is a commit that changes the tag there. A plugin's
+identity is its repository, whatever the version, so an older unpinned spec, the
 compiled-in copy and the pinned default are one plugin, not three.
 
 `scripts/vendor-plugins.mjs` writes each default's source at its tag into the gitignored
@@ -524,10 +524,11 @@ screen, and macOS refuses the app until the user clears the quarantine attribute
 **What the build adds.** `THIRD-PARTY-NOTICES.txt` in `dist/` carries the licence of every
 runtime dependency and compiled-in plugin, generated from `package.json`. The desktop
 build and the container image also carry the runtimes the default plugins would otherwise
-download on first use (eudplib's Pyodide and wheel, about 15 MB), so building an EUD map
-needs no network there. `scripts/bundle-plugin-runtimes.mjs` reads a `runtime.json` from
-each pinned default's repository and puts the files in
-`dist/plugin-runtime/<plugin>/<version>/`. The hosted editor and the web zip carry none.
+download on first use (none of today's defaults declares one; eudplib's Pyodide and wheel,
+about 15 MB, did), so such a plugin needs no network there.
+`scripts/bundle-plugin-runtimes.mjs` reads a `runtime.json` from each pinned default's
+repository and puts the files in `dist/plugin-runtime/<plugin>/<version>/`. The hosted
+editor and the web zip carry none.
 
 **The app's data folder** is `%APPDATA%\scm-js` on Windows, `~/.config/scm-js` on Linux
 and `~/Library/Application Support/scm-js` on macOS. It holds the extracted game data, the

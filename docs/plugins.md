@@ -35,9 +35,9 @@ when you do.
 ### What is available
 
 These plugins come with the editor and start on: Walkability, Paint, Repair, Terrain from
-Image, TrigScript, Stamp Library, scmscx.com, scmjs.dev, scm-sim, eudplib and Aftermath.
-TrigEdit, the Text Trigger Editor, comes with the editor too but starts off; tick it on in
-Plugins ▸ Manage Plugins… when you need it.
+Image, TrigScript, Stamp Library, scmscx.com, scmjs.dev, scm-sim and Aftermath. TrigEdit,
+the Text Trigger Editor, comes with the editor too but starts off; tick it on in Plugins ▸
+Manage Plugins… when you need it.
 
 The rest are in Plugins ▸ **Browse Plugins…**: Melee Wizard, Section Explorer, Magenta,
 Trigger Map, Timelapse, Hello World and the API Playground among them. The [user
@@ -789,7 +789,7 @@ A plugin can depend on another, such as a trigger editor that needs a compiler. 
 the manifest with the same address you would paste into Manage Plugins:
 
 ```json
-{ "name": "Magenta", "requires": ["github:scm-js/plugin-eudplib"] }
+{ "name": "Magenta", "requires": ["github:scm-js/plugin-trigscript"] }
 ```
 
 The editor then treats the two as a pair:
@@ -2289,8 +2289,8 @@ whichever starts first.
   repository for consumers to import with `import type`, and pass a `version` so consumers
   can check it.
 
-The scmjs.dev plugin provides its account this way as `scmjs-dev.account`, and eudplib its
-compiler as `eudplib.build`.
+The scmjs.dev plugin provides its account this way as `scmjs-dev.account`, and TrigScript
+its build as `trigscript.build`.
 
 ### `api.sync`
 
@@ -2594,7 +2594,6 @@ closest to what you are writing.
 | [TrigScript](https://github.com/scm-js/plugin-trigscript) | Build steps, claimed triggers, a resizable panel workspace, files kept in the map, published commands. |
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | Printing and parsing the text format, `claims`, and a dialog offering a slot to other plugins. |
 | [Magenta](https://github.com/scm-js/plugin-magenta) | `requires` and a service from another plugin, `document.update` for single records, EUD constants. |
-| [eudplib](https://github.com/scm-js/plugin-eudplib) | A library plugin: one versioned service, a Web Worker, a large runtime downloaded once. |
 | [scm-sim](https://github.com/scm-js/plugin-scm-sim) | A library plugin with no runtime of its own: a service that talks by message to another page of the same origin, with progress and cancellation. |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | `api.storage` for user data, `clipboard.capture`, `tx.paste`, rendered thumbnails. |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | `triggers.references`, a large resizable panel drawn in SVG, a button in the Trigger Editor's slot, `view.goTo` a trigger. |

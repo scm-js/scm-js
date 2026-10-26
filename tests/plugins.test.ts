@@ -1255,10 +1255,11 @@ describe("plugin lifecycle", () => {
     expect(store.get(installedPluginsAtom)).toEqual([{ spec: "github:d/p", enabled: false }]);
   });
 
-  it("ships ten defaults in order, TrigEdit starting off, each pinned to a version", () => {
-    // Which ten, in alphabetical order of their names (what Manage Plugins shows), and
+  it("ships eleven defaults in order, TrigEdit starting off, each pinned to a version", () => {
+    // Which eleven, in alphabetical order of their names (what Manage Plugins shows), and
     // which of them start on — the versions deliberately not, since every plugin release would otherwise have to come back and edit this.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => pluginIdentity(d.spec))).toEqual([
+      "github:scm-js/plugin-aftermath",
       "github:scm-js/plugin-paint",
       "github:scm-js/plugin-repair",
       "github:scm-js/plugin-scm-sim",
@@ -1275,6 +1276,7 @@ describe("plugin lifecycle", () => {
     // listed and badged *default*, and ticking it on is remembered like any other change.
     // scmjs.dev starts on: it sends nothing until it is used or somebody is signed in.
     expect(DEFAULT_REMOTE_PLUGINS.map((d) => [pluginIdentity(d.spec), d.enabled])).toEqual([
+      ["github:scm-js/plugin-aftermath", true],
       ["github:scm-js/plugin-paint", true],
       ["github:scm-js/plugin-repair", true],
       ["github:scm-js/plugin-scm-sim", true],
@@ -1299,7 +1301,7 @@ describe("plugin lifecycle", () => {
     const tagOf = (spec: string) => spec.slice(spec.lastIndexOf("@") + 1);
     expect(parseSpec(DEFAULT_REMOTE_PLUGINS[0].spec)).toMatchObject({
       kind: "remote",
-      manifestUrl: `https://raw.githubusercontent.com/scm-js/plugin-paint/${tagOf(DEFAULT_REMOTE_PLUGINS[0].spec)}/plugin.json`,
+      manifestUrl: `https://raw.githubusercontent.com/scm-js/plugin-aftermath/${tagOf(DEFAULT_REMOTE_PLUGINS[0].spec)}/plugin.json`,
     });
     // Whether this build bundled them (`scripts/vendor-plugins.mjs`, which the desktop
     // build runs) or fetches them, every default is in the list exactly once and under

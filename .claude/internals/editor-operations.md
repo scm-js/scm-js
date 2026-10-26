@@ -61,7 +61,7 @@ without a handle (Firefox, Safari) an entry is listed and reopens through File �
 menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.ts` (`AutoStartsDialog`),
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
-into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. scmscx.com,
+into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. Aftermath, scm-sim, scmscx.com,
 Repair, Walkability, Terrain from Image, Paint, TrigEdit, TrigScript, Stamp Library and scmjs.dev are default
 plugins, all on but TrigEdit (`src/plugins/defaults.ts`); Melee Wizard and Section Explorer are installed from
 Browse Plugins.

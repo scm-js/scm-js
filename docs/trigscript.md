@@ -861,6 +861,104 @@ program(() => {
 });
 ```
 
+## Showcase
+
+Maps made with TrigScript, each with its whole script and a recording of it played in
+StarCraft: Remastered.
+
+### Bad Apple!!
+
+[![Bad Apple!! on the minimap, in Classic graphics: a silhouette drawn in lit and fogged
+tiles](images/showcase-bad-apple.webp)](https://www.youtube.com/watch?v=EbaFmgYyHgU)
+
+[Watch it on YouTube](https://www.youtube.com/watch?v=EbaFmgYyHgU).
+
+The shadow-art video for "Bad Apple!!" played on the minimap, in time with the song. The
+fog of war is the screen: a tile lit this frame is white, a tile seen before is grey, so
+each frame of the game shows one frame of the video, 5,216 of them.
+
+The video is a file of the script. **Import Video…** turned it into `bad-apple.video`, a
+tile a pixel at 128 × 96, and when the script is built the `fog` library works out, for
+every frame, the units whose sight covers exactly its white parts. In the game each of
+those units is made and taken away in the same trigger pass, and what it saw stays lit
+until the next frame, when the library has the game put every tile back in fog. A frame
+takes about 125 units on average and 356 at the most. The plugin's README describes [files
+the script imports](https://github.com/scm-js/plugin-trigscript#files-the-script-imports)
+and [the `fog` library](https://github.com/scm-js/plugin-trigscript#the-standard-library).
+
+```ts
+import { fog } from "trigscript/fog";
+import badApple from "./bad-apple.video";
+
+const W = 128, H = 96;
+// The camera waits below the board: the minimap draws the camera's box over
+// whatever is under it.
+const PARK = reserveLocation("bad apple: the camera, below the board");
+
+// Rows `from` to `to` of the board lit, as a picture: one step of the curtain the
+// video opens and closes behind.
+const band = (from: number, to: number) =>
+  fog.picture(Array.from({ length: H }, (_, y) => (y >= from && y < to ? "#" : ".").repeat(W)));
+const STEP = 4;
+const board = band(0, H);
+// White falls over the board from the top, a second long, then slides off the bottom.
+const fall = Array.from({ length: H / STEP }, (_, i) => band(0, (i + 1) * STEP));
+const lift = Array.from({ length: H / STEP - 1 }, (_, i) => band((i + 1) * STEP, H));
+
+const credits = () => {
+  displayText("\x04Bad Apple!! feat. nomico");
+  displayText("\x05Alstroemeria Records, after a Touhou Project song by ZUN. Shadow art video by Anira.");
+};
+
+program(async () => {
+  centerLocation(PARK, 64 * 32, 116 * 32);
+  centerView(PARK);
+  await sleep(frames(24));
+  credits();
+  displayText("\x05Played on the minimap with the fog of war, written in TrigScript.");
+  for (const p of fall) { fog.light(P1, 0, 0, p); await nextFrame(); }
+  let i = 0;
+  while (i < 72) { fog.light(P1, 0, 0, board); await nextFrame(); i++; }
+  for (const p of lift) { fog.light(P1, 0, 0, p); await nextFrame(); }
+  await sleep(frames(12));
+
+  playWav("staredit\\wav\\badapple.ogg", 0);
+  await fog.play(P1, badApple);
+
+  // The song runs a little past the last frame.
+  await sleep(frames(48));
+  for (const p of fall) { fog.light(P1, 0, 0, p); await nextFrame(); }
+  displayText("\x04Fin.");
+  credits();
+  i = 0;
+  while (i < 120) { fog.light(P1, 0, 0, board); await nextFrame(); i++; }
+  for (const p of lift) { fog.light(P1, 0, 0, p); await nextFrame(); }
+});
+```
+
+The `for … of` loops are written out once per picture when the script is built, so each
+step of the curtain is a fixed set of units; the `while` loops run in the game.
+
+**The map.** 128 × 128 Badlands. The top 96 rows, the picture, are all one tile, 23778,
+laid with the Tile brush: of the tiles measured, its lit and fogged colours lie furthest
+apart on the Classic minimap. The 32 rows below have never been seen, so they stay black,
+and the camera waits there. There are no units, so nothing lights the fog but the script.
+Player 1 is the human and Player 2 a computer: Remastered will not start a Use Map
+Settings map without a computer slot.
+
+**The song** is in the map's archive as a stereo Ogg file, `staredit\wav\badapple.ogg`,
+which Remastered plays. Import Video… also takes a sound file, as a `.sound` file of the
+script that `playWav` plays (mixed to mono).
+
+**Playing it.** Host a multiplayer game alone, which runs at Fastest, the speed the video
+was imported for. Switch to Classic graphics (Options ▸ Graphics, or F5): Classic draws
+the minimap a pixel a tile, sharp, where Remastered graphics blurs it. Turn the music
+volume down, so the game's own music does not play over the song.
+
+"Bad Apple!! feat. nomico" is by Alstroemeria Records, an arrangement of a song from the
+Touhou Project by ZUN; the shadow-art video is by Anira. Neither comes with the editor or
+the plugin.
+
 ## TrigScript and eudplib
 
 eudplib is the Python library behind euddraft, which many EUD maps are built with. A

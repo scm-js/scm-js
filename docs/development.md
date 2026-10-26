@@ -13,7 +13,7 @@ Each topic is written down in one place:
 | What happens to a map file on open and save | [file-formats.md](file-formats.md) |
 | The scenario format, section by section | [chk-format.md](chk-format.md) |
 | Triggers, conditions and actions | [triggers.md](triggers.md) |
-| TrigScript, the trigger scripting language | [trigscript.md](trigscript.md); the compiler is in the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s repository |
+| TrigScript, the trigger scripting language | [trigscript.md](trigscript.md), [trigscript-language.md](trigscript-language.md) for the language of programs, and [trigscript-library.md](trigscript-library.md) for its standard library; the compiler is in the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s repository |
 | Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
 | Using and writing plugins, the plugin API | [plugins.md](plugins.md), and the reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
 | Each plugin's internals | its own repository's README |
@@ -682,7 +682,7 @@ ruleset.
 ## Docs site and screenshots
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
-the nine `docs/*.md` files, split at their `##` headings into pages, with the `###`
+the eleven `docs/*.md` files, split at their `##` headings into pages, with the `###`
 beneath as each page's contents. The API reference is generated from the bundled plugin
 typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
@@ -734,9 +734,9 @@ Some scenes have their own needs:
 
 ## Contributing
 
-- **Keep the documents current.** The nine guides under `docs/` are the documentation site
-  and `README.md` is the repository's front page; a behaviour change that is not in them
-  is undocumented. Write them for their readers, with `src/` paths only in a guide's
+- **Keep the documents current.** The eleven guides under `docs/` are the documentation
+  site and `README.md` is the repository's front page; a behaviour change that is not in
+  them is undocumented. Write them for their readers, with `src/` paths only in a guide's
   closing *In the source* section. Keep the matching note in `.claude/internals/` in step
   too.
 - **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not

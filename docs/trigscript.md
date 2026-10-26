@@ -291,7 +291,8 @@ action the helper made.
 It also means a program variable cannot reach a condition, an action or a helper. The
 location and the player of an action, and the amount a condition compares with, are fixed
 when the script is applied. To compare with a variable, read the quantity and compare it
-yourself: `minerals(P1) >= price` (see [Reading the game](#reading-the-game)).
+yourself: `minerals(P1) >= price` (see [Reading the
+game](trigscript-language.md#reading-the-game)).
 
 These parts of an action can follow a variable:
 
@@ -318,8 +319,8 @@ while one that sleeps a frame at a time runs on every frame.
 
 **Time is `sleep`.** `sleep(seconds(15))` gives the frame back and carries on that much
 later, while other programs and the map's triggers go on. `frames(n)` and `minutes(n)`
-make a duration too. Something that runs on its own clock is another program: one program
-for each thing that happens at the same time.
+make a duration too. Something that keeps its own time is a task beside the program, or
+another program ([Waiting and tasks](trigscript-language.md#waiting-and-tasks)).
 
 The game's own `wait()` is allowed in a program, but it is a different thing: it holds the
 rest of its trigger for the time, and it uses the player's one wait slot, so any other
@@ -350,366 +351,58 @@ value that all of them share.
 `{ name: "waves" }` names a program. The name appears in the Explorer, and a
 [test](#tests) finds the program by it.
 
-### Variables and numbers
+### What a program can use
 
-Variables hold numbers, booleans, texts and units of the game.
-`let p = { lives: 3, gold: 0 }` is a record, one variable per field. Variables live in the
-game while the map is played and take nothing from the map: no death counters, no
-switches, no triggers in the list.
+A program is written in nearly all of TypeScript. The [TrigScript
+language](trigscript-language.md) guide covers each part in full. In short:
 
-Numbers are whole, as the game's are:
+- **Values**: numbers, booleans, texts, units, players and records. `u8`, `u16` and `u32`
+  are numbers that are never below zero, and a number holds a fraction once one is stored
+  in it ([Variables and numbers](trigscript-language.md#variables-and-numbers)).
+- **Arrays, maps and sets**, fixed or growing, with their methods (`map`, `filter`, `sort`
+  and the rest), patterns and spread ([Arrays](trigscript-language.md#arrays), [Tables,
+  maps and sets](trigscript-language.md#tables-maps-and-sets)).
+- **Functions and classes**, including functions kept in variables, closures, `extends`
+  and `try` / `catch` ([Functions](trigscript-language.md#functions),
+  [Classes](trigscript-language.md#classes), [Errors](trigscript-language.md#errors)).
+- **Time**: `sleep`, `async` and `await`, tasks that run beside the program, and
+  `Promise.all` and `race` ([Waiting and
+  tasks](trigscript-language.md#waiting-and-tasks)).
+- **The game**: every condition's quantity as a number, loops over units and their fields,
+  events such as `on.died`, and the game's own tables through `stats()` ([Reading the
+  game](trigscript-language.md#reading-the-game), [Units](trigscript-language.md#units),
+  [Events](trigscript-language.md#events), [The game's tables and
+  memory](trigscript-language.md#the-games-tables-and-memory)).
+- **The players**: keys, clicks, the cursor and typed lines ([Keys, the mouse and
+  chat](trigscript-language.md#keys-the-mouse-and-chat)).
+- **Text and sound**: texts with values, lines of JSX, and sounds the script makes
+  ([Text](trigscript-language.md#text), [Sounds and imported
+  files](trigscript-language.md#sounds-and-imported-files)).
+- **Libraries**: nine modules that come with TrigScript, such as `trigscript/ui` for menus
+  and `trigscript/cutscene` for scenes, and libraries other plugins provide ([TrigScript
+  library](trigscript-library.md)).
 
-| Type | Range | At either end |
-| --- | --- | --- |
-| `number` | −2 147 483 648 to 2 147 483 647 | wraps |
-| `u8` | 0 to 255 | stops |
-| `u16` | 0 to 65 535 | stops |
-| `u32` | 0 to 4 294 967 295 | wraps |
-
-- A plain `number` is signed: `a - b` is below zero when `b` is larger, and a number below
-  zero is shown with its minus sign.
-- `u8` and `u16` (`let lives: u8 = 3`) stop at both ends, which is what lives and
-  cooldowns want.
-- `u32` is for bit masks and hashes. It is kept apart from a plain number in arithmetic
-  unless `u32(x)` or `i32(x)` says which is meant.
-- `+`, `-`, `*`, `/` and `%` work between variables, and so do `Math.min`, `Math.max`,
-  `Math.abs`, `clamp()` and the bitwise `&`, `|`, `^`, `<<`, `>>` and `>>>`.
-- Division is whole and rounds towards zero. Dividing by a variable that is 0 gives 0.
-- Where the game takes nothing below zero (hit points, an amount, a unit count), a number
-  below zero goes in as 0.
-
-### Arrays
-
-Arrays hold numbers, booleans, texts, units, records or other arrays.
-
-- Make one with `let hp = [10, 20, 30]` or `new Array(12).fill(3)`.
-- An index can be a constant or a variable: `hp[i] += 7`.
-- `.length`, `for (const x of xs)`, `fill`, `includes` and `indexOf` work.
-- An array that something pushes to grows, with no size to declare:
-  `const queue: number[] = []; queue.push(x); queue.pop() ?? 0`.
-- An index past the end reads 0 and stores nothing, and Simulate says where.
-- An array of records hands out its records by reference, as TypeScript does:
-  `let waves = [{ count: 4, delay: 2 }]`, `waves[i].count += 1`, `waves.push({ … })`. A
-  record may hold a unit, a text, another record or an array of its own
-  (`squads[i].members.push(u)`).
-- An array of units (`const squad: Unit[] = []`, `squad.push(u)`) may be kept across a
-  `sleep()`.
-- An array of arrays is a grid (`grid[y][x] += 1`) or rows that each grow
-  (`buckets[i].push(v)`).
-- A list made outside the program, such as `const price = [50, 100, 150]` or a wave table,
-  can be looked up with a variable: `price[level]`, `waves[wave].count`.
-
-Arrays that grow share one pool of memory. Its size is set in the workspace's **Settings**
-view (Ctrl+,) and kept in the map.
-
-**The array methods that take a function** work as in TypeScript: `forEach`, `some`,
-`every`, `find`, `findIndex`, `reduce`, `map`, `filter`, `sort` and `reverse`, and chains
-of them. `filter` over the units of the game is how to keep some of them:
+A few of these together: a wave every thirty seconds, each bigger than the last, until
+Player 1 has lost ten Marines.
 
 ```ts
-program(() => {
-  while (true) {
-    // The three most hurt units at the base get 20 hit points, every two seconds.
-    const hurt = unitsAt(locations.Base, { owner: CurrentPlayer }).filter((u) => u.hp < u.maxHp);
-    hurt.sort((a, b) => a.hp - b.hp);
-    for (const u of hurt.slice(0, 3)) u.heal(20);
-    sleep(seconds(2));
-  }
-}, { owner: AllPlayers });
-```
+import { every, SECOND } from "trigscript/timers";
 
-The function sees the program's variables, but it must be written where the method takes
-it: it cannot be kept in a variable. `sort` needs its function (`(a, b) => a - b`) and
-runs within the frame. That is fine for dozens of items. Sorting hundreds every frame
-slows the game, and the editor marks such a line *sorts in the frame*.
-
-`slice`, `concat`, `toSorted`, `toReversed` and `Array.from` make copies. Patterns and
-spread work as well: `const { x, y } = mouse(P1)`,
-`for (const { count, delay } of waves)`, `[a, b] = [b, a]`, `[...xs, 7]`,
-`waves.push({ ...w, count: 9 })`.
-
-### Tables, maps and sets
-
-**A table keyed by an id of the game** has a cell for every id, so looking up a key is one
-read. The keys are unit types, players, locations, switches, weapons, upgrades or
-technologies:
-
-- `const bounty: Record<UnitType, number> = { [units.ZergZergling]: 5 }`, then
-  `bounty[u.type]`;
-- `new Map<UnitType, number>()` with `get` (`?? 0` for a key never set), `set`, `has`,
-  `delete`, `clear` and `size`;
-- `new Set<UnitType>()` with `add` and the same;
-- `for (const [key, value] of lost)` goes through the keys that are set.
-
-**A `Map` or a `Set` over any number, or over units**, is for keys that are not ids of the
-game: `new Map<number, number>()` for a tile packed into one number,
-`new Map<Unit, number>()` for a cooldown per unit, `new Set<Unit>()` for the units already
-dealt with. They go through their keys in the order the keys were added, as JavaScript's
-do. Looking up a key takes a few steps rather than one read, and the values are numbers or
-booleans. A unit that died stays an entry until it is deleted; in a loop over the map it
-reads as no unit, which is the moment to delete it.
-
-### Control flow
-
-`if`/`else`, `while`, `do`, `for`, `switch`, `break`, `continue` and `c ? a : b` all work.
-Conditions go in an `if` or a `while`, and actions stand as statements.
-
-A loop runs all its rounds at once, within the frame. A loop that never ends and never
-sleeps would freeze the game, so the editor refuses one and says where to put
-`sleep(frames(1))`. A `for` whose bounds are known when the script is applied is written
-out round by round, and the editor says so at the end of the line.
-
-### Reading the game
-
-Every condition that compares a quantity is also a *read* of it when the comparison and
-the amount are left out, and a read goes wherever a number goes:
-
-```ts
-program(() => {
-  let price = 50;
-  while (true) {
-    if (minerals(CurrentPlayer) >= price * 2 && bring(CurrentPlayer, units.AnyUnit, locations.Beacon) >= 1) {
-      setResources(CurrentPlayer, "subtract", price, "ore");
-      createUnit(CurrentPlayer, units.TerranMarine, 1, locations.Spawn);
-      price += deaths(CurrentPlayer, units.TerranMarine);
-    }
-    sleep(seconds(1));
-  }
-}, { owner: AllPlayers });
-```
-
-`deaths(p, unit)`, `kill(p, unit)`, `bring(p, unit, location)`, `command(p, unit)`,
-`accumulate(p, resource)`, `score(p, kind)`, `countdownTimer()` and `elapsedTime()` all
-read this way. The common ones have plainer names: `minerals(p)`, `gas(p)`,
-`countUnits(p, unit, location?)`, `kills(p, unit)`, `countdown()` and `elapsed()`.
-
-- A read means what its condition means: a force's minerals are the force's total, and
-  `units.Men` counts what Bring counts.
-- A read is taken when its line runs. `let ore = minerals(P1)` keeps the number, and
-  `minerals(P1)` written twice reads twice.
-- What to read (the player, the unit, the location) is fixed when the script is applied.
-
-About the players themselves:
-
-- `race(p)`, compared with `races.Zerg`, `races.Terran` or `races.Protoss`;
-- `slot(p)`, compared with `slots.Human`, `slots.Computer` or `slots.Empty`;
-- `isHuman(p)` and `hasLeft(p)`;
-- `supply(p, "used" | "max" | "provided")`, as the top bar shows it.
-
-### Units
-
-The units on the map are objects. A loop runs over the ones that match, a pick finds one,
-and a unit has properties and things it can be told to do:
-
-```ts
-program(() => {
-  while (true) {
-    // Everything Player 2 has on the hill is worn down to half health.
-    for (const u of unitsAt(locations.Hill, { owner: P2 })) u.hp = u.maxHp / 2;
-
-    // The Marine nearest the beacon is sent to the base; nobody else moves.
-    const scout = nearest(units.TerranMarine, locations.Beacon, { owner: P1 });
-    if (scout) scout.order("move", locations.Base);
-
-    sleep(seconds(5));
-  }
+program(async () => {
+  let lost = 0;
+  on.died({ owner: P1 }, (u) => {
+    if (u.type == units.TerranMarine) lost += 1;
+  });
+  const waves = every(30 * SECOND, (n) => createUnit(P8, units.ZergZergling, n * 2, locations.Spawn));
+  await until(() => lost >= 10);
+  waves.cancel();
+  displayText("Ten Marines lost.");
+  defeat();
 });
 ```
 
-- `unitsAt(location, filter?)`, `unitsOf(player, filter?)` and `allUnits(filter?)` are
-  what a `for…of` runs over.
-- `first(filter?)`, `nearest(type, location, filter?)` and `randomUnit(filter?)` give one
-  unit, or `null` when nothing matches. So the `if (scout)` is required, and the editor
-  says so when it is missing.
-- A filter is `{ type, owner, at }`. `units.Men`, `units.Buildings` and `units.Factories`
-  work as a type.
-
-A unit's hit points, shields, energy, kills, weapon cooldown, spell timers (`stim`,
-`lockdown`, `stasis`, …), remaining build time, rank, defensive matrix, `invincible`,
-`hallucinated` and `speedUpgrade` can be read and written. Its maximums, position, owner,
-type, current speed and states such as `burrowed`, `cloaked`, `underAttack`, `hasTarget`
-and `inTransport` can only be read; the editor marks a write to one as you type. A unit
-can be told `order("move" | "patrol" | "attack", location)`, `give(player)`, `kill()`,
-`remove()`, `damage(n)` and `heal(n)` (or `{ percent: 50 }`), and `locate(location)`,
-which centres a location on the unit so that ordinary actions can happen where it stands.
-The [Reference](#inside-a-program) lists them all.
-
-A variable can keep a unit across a `sleep`. Units die, and the game hands a dead unit's
-place to the next unit made, so every use checks that the unit is still the same one: once
-it is gone, its numbers read 0 and nothing written to it has any effect. `if (u)` asks
-whether it is still there.
-
-A loop over units runs within one frame, so a `sleep` inside one is an error. To take
-units one at a time, find the next one after each sleep. Units come oldest first. A unit
-made in the place of one that died can come where the dead one did, since the game hands
-its places out again.
-
-A loop or a pick costs about what the map holds: a few hundred units take a few hundredths
-of a millisecond. That is nothing a few times a second, but worth a thought every frame,
-and the editor marks such a line *scans units*.
-
-### The game's tables
-
-`stats()` reaches the game's own tables: what a unit type costs, what a weapon does, which
-upgrades a player has.
-
-```ts
-program(() => {
-  stats(units.TerranMarine).minerals = 25;
-  stats(units.TerranMarine).speed = 6.5;               // pixels a frame; a Marine walks at 4
-  stats(units.ZergZergling).name = "Dog";
-  stats(weapons.GaussRifle).damage += 2;
-  stats(P1).upgrades[upgrades.TerranInfantryWeapons] = 3;
-  stats(P3).color = "teal";
-});
-```
-
-A field reads as a number (or true or false) and takes `=` and `+=`. Unit types, weapons
-(`weapons.`), upgrades (`upgrades.`), technologies (`techs.`) and players each have their
-own fields, and the completion list after the dot is the full list: only what has been
-tested in Remastered is offered. Hover over a field to see what it affects. Most unit-type
-fields apply to units made after the write, a weapon's fields to every unit using it, and
-a colour at once. A write lasts for the rest of the game.
-
-### Keys, the mouse and chat
-
-A program can read what the players do: a key, a mouse button, where the mouse is, and
-what a player types.
-
-```ts
-program(() => {
-  while (true) {
-    if (keyPressed(CurrentPlayer, "F8")) createUnit(CurrentPlayer, units.TerranMarine, 1, locations.Anywhere);
-
-    if (clicked(CurrentPlayer, "right")) {
-      const at = mouse(CurrentPlayer);
-      displayText(`You clicked at ${at.x}, ${at.y}.`);
-    }
-
-    const m = chatted(CurrentPlayer, "-spawn {n} {what:unit}");
-    if (m) createUnit(CurrentPlayer, m.what, m.n, locations.Anywhere);
-
-    underMouse(CurrentPlayer, { owner: CurrentPlayer })?.heal(10);
-    sleep(frames(1));
-  }
-}, { owner: AllPlayers });
-```
-
-> **Reading input takes three things from the map.** One free location among the first 63
-> (nine when the mouse is read), the Valkyrie unit type and Player 12 carry the input
-> between the players' computers. Leave them alone in the rest of the map. The editor tells
-> you when there is no free location.
-
-- A key, a click and a typed line are true on the one frame they arrive, so look for them
-  in a loop that sleeps one frame at a time. Everything reaches every player's computer a
-  few frames after it happens.
-- `keyPressed` is true once per press. It is not true while the key is held, or while the
-  player is typing a message. F6 cannot be read: the game keeps it.
-- `mouse(p)` is the place on the map under the player's cursor, in pixels (32 to a tile).
-  `centerLocation(location, x, y)` moves a location there, so a unit can be created under
-  the cursor. `underMouse(p)` is the unit nearest the cursor, or `null`.
-- `bounds(location)` is where a location is now — `left`, `top`, `right`, `bottom` in
-  pixels — and a write to one edge moves it, so a location another trigger or program
-  moved can be read and followed.
-- `chatted(p, pattern)` is `null` until the player sends a line that fits the pattern, and
-  then holds what the pattern read out of it.
-
-In a chat pattern, the pattern's own words are matched exactly and the whole line has to
-fit. `{n}` reads a whole number, `{what:unit}` a unit type by its name (it takes the rest
-of the line, so it comes last), and `{kind:ore|gas}` one of the listed words, as its place
-in the list. The editor knows the names in the pattern: after `m.` it offers `n` and
-`what`. Start a pattern with a word of its own, such as `-spawn`, so ordinary talk is left
-alone. A single-player game has no chat, so try typed lines in a multiplayer game; hosting
-one alone is enough.
-
-### Text
-
-A text can hold the program's numbers. Write it as a template literal:
-
-```ts
-program(() => {
-  let wave = 0;
-  while (true) {
-    wave += 1;
-    displayText(`Wave ${wave}: you have ${minerals(CurrentPlayer)} ore, ${name(CurrentPlayer)}.`);
-    print(`${color(P1)}${name(P1)}\x01 leads with ${kills(P1, units.AnyUnit)} kills`, { to: AllPlayers, position: "center" });
-    sleep(seconds(30));
-  }
-}, { owner: AllPlayers });
-```
-
-`name(p)` is the player's name and `color(p)` the colour code of their colour, both filled
-in by the game. `displayText` shows the text to the current player.
-`print(text, { to, position })` shows it to someone else (a player, `AllPlayers` or a
-force), and with `position: "center"` on the line in the middle of the screen where the
-game's own messages appear.
-
-A text is a value. A `string` variable holds one, a function takes and returns one, a
-record has one as a field, and there is no length to declare:
-
-```ts
-program(() => {
-  let shown = "";
-  while (true) {
-    const slain = kills(P1, units.AnyUnit);
-    const rank = slain >= 50 ? "Veteran" : slain >= 10 ? "Soldier" : "Recruit";
-    const line = `${rank}: ${slain} kills, ${Math.max(50 - slain, 0)} to go`;
-    if (line != shown) { setMissionObjectives(line); shown = line; }
-    sleep(seconds(1));
-  }
-});
-```
-
-- Texts take `+`, `+=`, templates, the comparisons, `length`, `s[i]`, `slice`, `indexOf`,
-  `includes`, `startsWith`, `endsWith`, `padStart`, `padEnd`, `repeat` and
-  `for (const ch of s)`. A character counts as one, so `"저글링".length` is 3.
-- The objectives, a leaderboard's label, a transmission's line and a unit type's name take
-  a text the program made, up to 255 bytes.
-- The screen shows the text as it was when the action ran, so run the action again when
-  the text changes, as above.
-- A made text holds up to 1 023 bytes. Past that it is cut off, and the game says so once
-  in red.
-
-### Functions and classes
-
-**Functions** declared inside the program, or made with `game()` in any file, run in the
-game too. Arguments pass by value. A function may return a number, a boolean, a text or a
-unit (`function canAfford(price: number) { return gold >= price; }`), and it may sleep.
-
-A function may call itself (`fib(n - 1) + fib(n - 2)`, or a flood fill over an array), as
-long as it does not sleep. Each call has its own parameters and local variables, as in
-TypeScript. It may go 1 024 calls deep unless the workspace's Settings view says
-otherwise; a call past that stops the program, and the game says where.
-
-**Classes** are TypeScript's, declared inside the program: fields, a constructor, methods,
-`get` and `set`, `static`, `private`, `extends` with `super`.
-
-```ts
-program(() => {
-  class Wave {
-    left: number;
-    constructor(public unit: UnitType, count: number) { this.left = count; }
-    get done() { return this.left == 0; }
-    send() {
-      createUnit(P8, this.unit, 1, locations.Spawn);
-      this.left--;
-    }
-  }
-  const waves = [new Wave(units.ZergZergling, 12), new Wave(units.ZergHydralisk, 6)];
-  for (const w of waves) {
-    print(`${w.left} are on their way`, { to: AllPlayers });
-    while (!w.done) { w.send(); sleep(seconds(1)); }
-    sleep(seconds(30));
-  }
-  victory();
-});
-```
-
-An instance is a record, and a method is a function that is handed the instance, so what
-holds for functions holds for methods. The class of each instance is decided when the
-script is applied; nothing of a class is left in the game. So an array of instances holds
-one class, and a function can return an instance only when every `return` gives the same
-class (`return this`, so that calls chain, or `return new Wave(…)`).
+What a program cannot do, and what to write instead, is listed under [What a program does
+not have](trigscript-language.md#what-a-program-does-not-have).
 
 ## Examples of programs
 
@@ -882,9 +575,9 @@ tile a pixel at 128 × 96, and when the script is built the `fog` library works 
 every frame, the units whose sight covers exactly its white parts. In the game each of
 those units is made and taken away in the same trigger pass, and what it saw stays lit
 until the next frame, when the library has the game put every tile back in fog. A frame
-takes about 125 units on average and 356 at the most. The plugin's README describes [files
-the script imports](https://github.com/scm-js/plugin-trigscript#files-the-script-imports)
-and [the `fog` library](https://github.com/scm-js/plugin-trigscript#the-standard-library).
+takes about 125 units on average and 356 at the most. The language guide describes [files
+the script imports](trigscript-language.md#files-the-script-imports) and [the `fog`
+library](trigscript-language.md#the-standard-library).
 
 ```ts
 import { fog } from "trigscript/fog";
@@ -959,30 +652,141 @@ volume down, so the game's own music does not play over the song.
 Touhou Project by ZUN; the shadow-art video is by Anira. Neither comes with the editor or
 the plugin.
 
-## TrigScript and eudplib
+## Coming from eudplib
 
-eudplib is the Python library behind euddraft, which many EUD maps are built with. A
-TrigScript program does the same kind of work: both put code into the map that reads and
-writes the game's memory. The table sets the two side by side. Its figures are
-TrigScript's own measurements: each test map was built both ways, by TrigScript's own
-build and through eudplib, and run in the same game.
+This page is for map makers who already write EUD maps with eudplib, in Python or in
+epScript, and build them with euddraft. A TrigScript program does the same kind of work:
+code that runs inside StarCraft: Remastered, reading and writing the game's memory. Most
+of what you know carries over, and this page says where each idea went.
 
-| | TrigScript | eudplib and euddraft |
-| --- | --- | --- |
-| What you write | TypeScript, checked as you type against the map's own names, with completion | Python with the eudplib library, or epScript, which euddraft compiles |
-| Where you work | In scmJS, in the browser or the desktop app | On your own computer: euddraft, or eudplib under Python, run from the command line |
-| Building the map | When the map is saved, in the editor: 0.7 s for a small test map | 5.3 s for the same test map |
-| Speed in the game | A benchmark of program statements, all together: 42,936 ns. A loop over units: about 85 to 105 ns for each place of the game's unit table. Slower than eudplib: a `throw`, at 3.2 times the cost, and two kinds of statement in the benchmark | The same benchmark: 90,559 ns. A loop over units: about 190 to 230 ns a place |
-| Map size | Larger on most test maps, often about one and a half times: 2.86 MB for the units test map. Smaller for the tasks test map: 1.37 MB | 1.82 MB for the units test map, 2.05 MB for the tasks test map |
-| Map protection | None, by decision | Scrambles the map's locations against copying, shuffles its code and adds a false ISOM section |
-| Checking before you play | Problems as you type: a type error, or something a program cannot do, is said at its line. Simulate, and `test()` blocks that run in TrigScript's simulator and in StarCraft 1.16.1's own engine through the scm-sim plugin (at scmjs.dev, from your own StarCraft files). The cost of each line, a desync detector, and **Find an EUD Error** for the code Remastered shows | An error in the script stops the build. The rest is found by playing the map |
-| What it reaches | The game's memory, through EUD. The named fields (`stats()`, a unit's fields) are the ones seen working in Remastered; `memory()` and `setMemory()` reach any address | Any address of the game's memory |
-| Libraries | Its own reading of keys, the mouse and typed lines. A small standard library: `trigscript/ui`, `fog`, `screen`, `music`, `cutscene`, `timers`, `random`, `math` and `signals` | Plugins for input, such as MSQC (keys and the mouse) and chatEvent (typed lines), and libraries from its community |
-| Where it plays | A map with a program: StarCraft: Remastered. A script of `trigger()` calls alone: every version | StarCraft: Remastered |
-| History | New: its own build, without eudplib, dates from October 2026 | Years of use and a large community. Many of its maps, guides and libraries are in Korean |
+### Which one to use
 
-Neither kind of map plays on 1.16.1: that version refuses writes past the end of the
-deaths table, which such a map makes from its first frame.
+TrigScript suits you when you want to work in one place: the code is checked against the
+map's own names as you type, [Simulate and tests](#testing-and-simulate) try it without
+starting the game, and saving the map builds it, in the browser or the desktop app. Its
+language is TypeScript, with arrays that grow, classes, closures, `try` / `catch` and
+`async`, and the same script can make ordinary triggers for the classic game beside the
+programs.
+
+eudplib stays the better fit when a map depends on an euddraft plugin or a community
+library that TrigScript has nothing like, when you want euddraft's map protection, or when
+you already have a build you are happy with. TrigScript does not read eudplib or epScript
+code: moving a map over means writing its code again.
+
+### The same ideas, side by side
+
+| eudplib, epScript | TrigScript |
+| --- | --- |
+| `EUDVariable()`, `var x = 0;` | `let x = 0;` inside a `program()` ([Variables](trigscript-language.md#variables-and-records)) |
+| `PVariable`, `getcurpl()` / `setcurpl()` | A per-player program, `{ owner: AllPlayers }`: every variable is per player, and `CurrentPlayer` is that player ([Owners](trigscript-language.md#owners-and-per-player-programs)) |
+| `onPluginStart()` | The start of a program's body, before its loop |
+| `beforeTriggerExec()`, `afterTriggerExec()` | A loop in the program: `while (true) { …; await nextFrame(); }` ([How a program runs](#how-a-program-runs)) |
+| `EUDIf()`, `EUDWhile()`, `if`, `while` in epScript | `if`, `while`, `for`, `switch`, with conditions of the game where a boolean goes ([Control flow](trigscript-language.md#control-flow)) |
+| `DoActions(…)`, an action as a statement | An action as a statement: `setDeaths(P1, units.TerranMarine, "set", 0);` |
+| `@EUDFunc`, `function` in epScript | `function`, called or written out by the compiler ([Functions](trigscript-language.md#functions)) |
+| `EUDFuncPtr` | A function kept in a variable, and closures ([Functions as values](trigscript-language.md#functions-as-values)) |
+| `EUDArray`, `EUDVArray` | `number[]`, fixed or growing, with `push`, `map`, `filter`, `sort` and the rest ([Arrays](trigscript-language.md#arrays)) |
+| `foreach (cunit : EUDLoopCUnit())`, `CUnit` | `for (const u of unitsOf(P1))`, `u.hp`, `u.order(…)` ([Units](trigscript-language.md#units)) |
+| `f_dwread_epd`, `SetMemory`, `MemoryEPD` | `stats()` and `memory.*` for the named fields; `memory()` and `setMemory()` for any address ([The game's tables and memory](trigscript-language.md#the-games-tables-and-memory)) |
+| `StringBuffer`, `f_sprintf` | A template literal: `` displayText(`Wave ${wave}`) `` ([Text](trigscript-language.md#text)) |
+| The MSQC plugin (keys and the mouse) | `keyPressed`, `keyHeld`, `clicked`, `mouse`, with nothing to configure ([Keys, the mouse and chat](trigscript-language.md#keys-the-mouse-and-chat)) |
+| The chatEvent plugin | `chatted(player, "-spawn {n} {what:unit}")` and `on.chat` |
+| The `.eds` file and an euddraft run | Saving the map |
+
+One difference shows up everywhere: a unit's fields. eudplib reads them as the game keeps
+them, so hit points are in 256ths and an owner is a number. TrigScript's fields are in the
+units the game shows (`u.hp` is whole hit points, `u.owner` a player), and only the fields
+that have been seen working in Remastered are there.
+
+**A counter of lives**, in epScript as a euddraft plugin, then in TrigScript:
+
+```js
+var lives = 3;
+
+function beforeTriggerExec() {
+    if (Deaths(P1, AtLeast, 1, "Terran Marine")) {
+        lives -= 1;
+        SetDeaths(P1, SetTo, 0, "Terran Marine");
+        if (lives == 0) {
+            setcurpl(P1);
+            DisplayText("Out of lives.");
+        }
+    }
+}
+```
+
+```ts
+program(() => {
+  let lives = 3;
+  while (true) {
+    if (deaths(P1, units.TerranMarine, ">=", 1)) {
+      lives -= 1;
+      setDeaths(P1, units.TerranMarine, "set", 0);
+      if (lives == 0) displayText("Out of lives.");
+    }
+    sleep(frames(1));
+  }
+});
+```
+
+The program runs as Player 1, so `displayText` is already Player 1's. Its loop is the
+`beforeTriggerExec` of the epScript, and the `sleep` gives the frame back.
+
+**A loop over units**: Player 1's Marines under 20 hit points healed to 40.
+
+```js
+function beforeTriggerExec() {
+    foreach (cunit : EUDLoopCUnit()) {
+        if (cunit.owner == P1 && cunit.unitType == $U("Terran Marine") && cunit.hp < 20 * 256) {
+            cunit.hp = 40 * 256;
+        }
+    }
+}
+```
+
+```ts
+program(() => {
+  while (true) {
+    for (const u of unitsOf(P1, { type: units.TerranMarine })) if (u.hp < 20) u.hp = 40;
+    sleep(frames(1));
+  }
+});
+```
+
+The epScript examples here were built with euddraft 0.11 and eudplib 0.81.
+
+### Speed and size
+
+We built the same test maps both ways, with TrigScript's own build and with eudplib, and
+ran them on the same machine. The figures are from October 2026, and they are rounded:
+
+- **Building** a small test map took under a second in the editor, against about five
+  seconds through euddraft.
+- **Running**: a benchmark of program statements ran in about half eudplib's time, and a
+  loop over units cost about half as much a unit. Arrays, text with numbers in it and
+  tasks came out several times faster. One thing is slower: throwing an error costs about
+  three times what it does in eudplib.
+- **Map size**: TrigScript's maps came out larger on most test maps, usually 1.2 to 1.6
+  times eudplib's: 2.9 MB against 1.8 MB for the units test map. The tasks test map came
+  out smaller, 1.4 MB against 2.1 MB.
+
+Neither kind of map plays on StarCraft 1.16.1: that version refuses writes past the end of
+the deaths table, which such a map makes from its first frame. A script of `trigger()`
+calls alone, with no program, plays on every version.
+
+### What does not carry over
+
+- **Map protection.** euddraft's freeze scrambles a map against copying. TrigScript adds
+  no protection, by decision: a map stays one the editor, and anyone else's, can open.
+- **euddraft plugins and Python libraries.** TrigScript has its own [library of
+  modules](trigscript-library.md), and other scmJS plugins can provide [libraries of their
+  own](trigscript-library.md#libraries-from-other-plugins). Neither runs Python.
+- **Fields nobody has checked.** `memory()` and `setMemory()` reach any address, as
+  eudplib does, but the named fields are only the ones seen working in Remastered. Writing
+  a unit's position, for one, ends a Remastered game with "EUD not supported", so it is
+  not offered.
+- **The community.** eudplib has years of maps, guides and libraries behind it, many of
+  them in Korean. TrigScript's own build is new, from October 2026.
 
 ## Testing and Simulate
 
@@ -1318,105 +1122,67 @@ subtitle setting.
 
 ### Inside a program
 
+Each row links to where the [TrigScript language](trigscript-language.md) guide explains
+it.
+
 | | |
 | --- | --- |
-| `program(body, options?)` | Code that runs in the game. Options: `owner` (a player, `AllPlayers`, a force or a list) and `name`. |
-| `game(fn)` | A function that runs in the game, for programs to call. It can live in any file and be imported. |
-| `let n = 0`, `let f = false`, `let s = ""`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a text, a unit, a record. |
-| `u8`, `u16`, `u32` | Number types that are never below zero. See [Variables and numbers](#variables-and-numbers). |
+| `program(body, options?)` | Code that runs in the game. Options: `owner` (a player, `AllPlayers`, a force or a list) and `name`. [Owners](trigscript-language.md#owners-and-per-player-programs) |
+| `game(fn)` | A function that runs in the game, for programs to call. It can live in any file and be imported. [Functions in other files](trigscript-language.md#functions-in-other-files) |
+| `let n = 0`, `let f = false`, `let s = ""`, `let u: Unit \| null = null`, `let p = { … }` | A number, a boolean, a text, a unit, a record. [Variables](trigscript-language.md#variables-and-records) |
+| `u8`, `u16`, `u32`, `fixed` | Numbers never below zero, and a number with a fraction. [Whole numbers](trigscript-language.md#whole-numbers), [fractions](trigscript-language.md#numbers-with-a-fraction) |
 | `u32(x)`, `i32(x)` | The same 32 bits read the other way, where a `u32` meets a plain number. |
-| `number[]`, `string[]`, `Unit[]`, `{ … }[]`, `number[][]` | Arrays. One that is pushed to grows. |
-| `forEach`, `some`, `every`, `find`, `findIndex`, `reduce`, `map`, `filter`, `sort`, `reverse` | Array methods that take a function, on arrays and on units (`unitsOf(P1).filter(…)`). |
-| `slice`, `concat`, `toSorted`, `toReversed`, `Array.from`, `[...xs]` | Copies. |
-| `class`, `new`, `extends`, `get` / `set`, `static` | Classes, declared inside the program. |
-| `Record<K, V>`, `Map<K, V>`, `Set<K>` | Tables keyed by an id of the game (`UnitType`, `Player`, `Location`, …). |
-| `Map<number, V>`, `Set<number>`, `Map<Unit, V>`, `Set<Unit>` | Tables over any number, or over units. |
+| `Math.sqrt`, `Math.hypot`, `Math.sin`, `Math.cos`, `Math.atan2`, … | Fixed numbers. `Math.min`, `max`, `abs`, `floor` and `clamp(x, lo, hi)` work on whole ones. |
+| `number[]`, `string[]`, `Unit[]`, `{ … }[]`, `number[][]` | Arrays. One that is pushed to grows. [Arrays](trigscript-language.md#arrays) |
+| `forEach`, `some`, `every`, `find`, `findIndex`, `reduce`, `map`, `filter`, `sort`, `reverse` | Array methods that take a function, on arrays and on units (`unitsOf(P1).filter(…)`). [The methods](trigscript-language.md#the-methods-that-take-a-function) |
+| `push`, `pop`, `shift`, `unshift`, `splice`, `slice`, `concat`, `join`, `toSorted`, `Array.from`, `[...xs]` | Growing, cutting and copying arrays. |
+| `Record<K, V>`, `Map<K, V>`, `Set<K>` | Tables keyed by an id of the game, by any number, or by units. [Tables](trigscript-language.md#tables-maps-and-sets) |
+| `class`, `extends`, `get` / `set`, `static`, `instanceof` | Classes, in the program or at the top of any file. [Classes](trigscript-language.md#classes) |
+| `const f = (x: number) => …`, `return () => …` | Functions kept as values, and closures. [Functions as values](trigscript-language.md#functions-as-values) |
+| `try`, `catch`, `finally`, `throw new Error(…)` | Errors. One nothing catches is shown in red in the game. [Errors](trigscript-language.md#errors) |
 | `shared(value)` | In a per-player program, one value for all the players. |
-| `sleep(duration)` | Pause the program. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. |
+| `sleep(duration)`, `await sleep(…)`, `await nextFrame()`, `await until(…)` | Pause the program. `frames(n)`, `seconds(n)`, `minutes(n)` make a duration. [Waiting](trigscript-language.md#waiting-and-tasks) |
+| `start(f())`, `t.cancel()`, `Promise.all`, `Promise.race` | Tasks that run beside the program. [Tasks](trigscript-language.md#tasks) |
 | `wait(ms)` | The game's own Wait, which uses the player's wait slot. Prefer `sleep`. |
 | `rose(condition)`, `once(condition)` | True on the frame the condition becomes true; true the first time only. |
 | `random()`, `random(n)` | A coin toss; a whole number from 0 to n − 1. |
-| `deaths(p, unit)`, `bring(p, unit, location)`, `score(p, kind)`, … | A comparing condition without its comparison and amount reads the number. |
+| `deaths(p, unit)`, `bring(p, unit, location)`, `score(p, kind)`, … | A comparing condition without its comparison and amount reads the number. [Reading the game](trigscript-language.md#reading-the-game) |
 | `minerals(p)`, `gas(p)`, `resources(p, kind)`, `countUnits(p, unit, location?)`, `kills(p, unit)`, `countdown()`, `elapsed()` | Reads by plainer names. |
 | `race(p)`, `slot(p)`, `isHuman(p)`, `hasLeft(p)`, `supply(p, of?)` | The player. |
-| `unitsAt(location, filter?)`, `unitsOf(player, filter?)`, `allUnits(filter?)` | The units a `for…of` runs over. |
+| `unitsAt(location, filter?)`, `unitsOf(player, filter?)`, `allUnits(filter?)` | The units a `for…of` runs over. [Units](trigscript-language.md#units) |
 | `first(filter?)`, `nearest(type, location, filter?)`, `randomUnit(filter?)` | One unit, or `null`. |
-| `u.hp`, `u.shields`, `u.energy`, `u.kills`, `u.cooldown`, `u.resources`, `u.stim` …, `u.invincible` | Read and written. `u.hp = 0` kills. |
-| `u.maxHp`, `u.maxShields`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.orderId`, `u.burrowed`, `u.cloaked`, `u.hallucinated`, `u.underAttack` | Read only. |
+| `u.hp`, `u.shields`, `u.energy`, `u.kills`, `u.cooldown`, `u.buildTime`, `u.stim` …, `u.invincible` | Read and written. `u.hp = 0` kills. [A unit's fields](trigscript-language.md#a-units-fields) |
+| `u.maxHp`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.speed`, `u.burrowed`, `u.cloaked`, `u.underAttack`, `u.inTransport` | Read only. |
 | `u.order(kind, location)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told. `damage` and `heal` also take `{ percent }`. |
-| `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables. |
-| `keyPressed(p, key)`, `clicked(p, button?)` | True on the frame a press arrives. |
-| `mouse(p)`, `underMouse(p, filter?)`, `centerLocation(location, x, y)` | The cursor's place on the map; the unit nearest it, or `null`; a location moved onto a point. |
-| `chatted(p, pattern)` | `null`, or the values read out of a typed line. |
-| `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with numbers, a player's name and colour in it, for the current player. |
+| `on.created`, `on.died`, `on.killed`, `on.morphed`, `on.order` | A function run each time something happens to a unit. [Events](trigscript-language.md#events) |
+| `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables. [The game's tables](trigscript-language.md#the-games-tables-and-memory) |
+| `memory.game.frame`, `memory.map.width`, `memory.vision.countdown` | Other values of the game. |
+| `keyPressed(p, key)`, `keyHeld(p, key)`, `clicked(p, button)`, `on.key(key, fn)` | Keys and mouse buttons. [Keys](trigscript-language.md#keys-and-buttons) |
+| `mouse(p)`, `underMouse(p, filter?)`, `centerLocation(location, x, y)`, `bounds(location)` | The cursor's place on the map; the unit nearest it, or `null`; a location moved onto a point; where a location is now. |
+| `chatted(p, pattern)`, `on.chat(pattern, fn)` | `null`, or the values read out of a typed line. [Chat](trigscript-language.md#chat) |
+| `local.player`, `local.camera`, `local.selected`, `await sync(p, value)` | What only this computer knows, and sending it to every computer. [Local values](trigscript-language.md#what-only-one-computer-knows) |
+| `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with numbers, a player's name and colour in it, for the current player. [Text](trigscript-language.md#text) |
 | `print(text, { to?, position? })` | The same for others, in the `"chat"` area or on the `"center"` line. |
-| `clamp(x, lo, hi)`, `Math.min`, `Math.max`, `Math.abs`, the bitwise operators | Work on variables. |
+| `<line>`, `<bar>`, `<cell>`, `ui.lines(p, () => …)` | Lines of JSX, in a `.tsx` file. [Lines of JSX](trigscript-language.md#lines-of-jsx) |
+| `playWav(sound, 0)`, `tone()`, `noise()`, `pluck()` | Sounds, including clips the script makes. [Sounds](trigscript-language.md#sounds) |
+| `import … from "trigscript/<name>"` | The standard library. [Libraries](trigscript-language.md#libraries) |
 
-Keys for `keyPressed` are letters, digits, `"F1"` … `"F12"` except `"F6"`, `"Space"`,
-`"Enter"`, `"Escape"`, the arrows and the rest of the list the editor offers. Buttons are
-`"left"`, `"right"` and `"middle"`. `underMouse` looks within 48 pixels of the cursor, or
-the filter's `within`. `Math.floor` and the other rounding functions are accepted around a
-division and change nothing, since division is already whole.
+Keys for `keyPressed` are letters, digits, `"F1"` and `"F7"` … `"F12"`, `"Space"`,
+`"Enter"`, `"Escape"`, the arrows and the rest of the list the editor offers. The game
+keeps F2 to F6 to itself. Buttons are `"left"`, `"right"` and `"middle"`.
 
 ### TrigScript beside TypeScript
 
 Outside `program()` the script is all of TypeScript: it runs when it is applied, with the
-whole language and its standard library. Inside a program, what is written has to become
-something the game can do. Most of the language works as in TypeScript: types and
-annotations, `let` and `const`, the operators, `if`, `while`, `for`, `switch`, functions
-with default and rest parameters, classes, destructuring and spread, and `import` between
-the script's files.
+whole language and its standard library. Inside a program, nearly all of the language
+works as in TypeScript, and what differs is set out in one table at [TrigScript beside
+TypeScript](trigscript-language.md#trigscript-beside-typescript). Everything a program
+cannot do is refused with a message as you type, never passed over in silence; [What a
+program does not have](trigscript-language.md#what-a-program-does-not-have) says what to
+write instead.
 
-These differ:
-
-- **Numbers** are whole numbers of 32 bits, with no fractions, `NaN` or `bigint`. `/` is
-  whole division.
-- **`==` and `===`** are the same thing, since nothing is converted.
-- **`null`** belongs to units only. A number, a boolean or a text is never `null` or
-  `undefined`, so where JavaScript would give `undefined` (`pop()`, `find()`, `get()`),
-  say what it is then: `xs.pop() ?? 0`.
-- **A loop** runs all its rounds within one frame, so a loop that never ends must
-  `sleep()` on every path, including a `while (true)` that is only left by a `break`.
-- **An arrow function** sees every variable in reach, but it is written only where a
-  method takes it, as in `xs.map((x) => x + bonus)`.
-- **A function declared inside another** sees the program's variables, not the outer
-  function's.
-- **An object literal** is a record with a fixed shape.
-- **`print()`** stands in for `console.log`, and `random(n)` for `Math.random()`.
-
-Everything else that is not there is refused with a message as you type, never passed over
-in silence:
-
-| Not there | Write instead |
-| --- | --- |
-| Fractions, `**`, `Math.sqrt` and the rest of `Math` on a variable | Work in smaller units (pixels, frames, hundredths), or look the value up in a list the script worked out |
-| A variable with no first value (`let n;`) | `let n = 0` |
-| `\|\|=` and `&&=` | `flag = flag \|\| other` |
-| Optional fields and parameters (`y?: number`) | A default: `y = 1` |
-| A function kept in a variable, an array, a field or a return value | `function f() { … }`, or the arrow where the method takes it |
-| A function that returns a record or an array it made | Hand it the record or array to fill in; an instance of a class is the exception |
-| A function that calls itself and sleeps | Sleep outside it |
-| A function more than 1 024 calls deep | Raise the limit in the Settings view, or loop instead |
-| A `for` written out more than 256 times | A `while` loop |
-| `try`, `catch`, `throw` | Return a number that says what happened |
-| `async`, `await`, generators, timers | `sleep()`, and another `program()` for another clock |
-| `for…in`, labels, `typeof`, `in`, `delete` | — |
-| `p[key]` with a key that varies, `Object.keys`, methods on a literal | An array, or a class |
-| On an array: `shift`, `unshift`, `splice`, `at`, `flat`, `lastIndexOf`, `join` of numbers | `push` and `pop`, `xs[xs.length - 1]`, a template in a loop |
-| `map` into texts or records | `push` in a `for…of` |
-| `const b = a` as a second name for an array | Use `a` |
-| On a text: `split`, `replace`, `trim`, `toUpperCase`, `lastIndexOf`, `parseInt`, regular expressions | Keep the number beside the text you made from it |
-| A boolean in a text (`${alive}`) | `${alive ? "yes" : "no"}` |
-| A `Map` with texts or records as values, or texts as keys | The place of a row of an array of records |
-| An array of instances of different classes, a class written as a value, a class with type parameters, decorators | One class per array |
-| An `enum` declared inside the program | Declare it above the program |
-| `JSON`, `Date`, `Object.*` | — |
-| A key held down | `keyPressed`, which is true once per press |
-| Writing a unit's position, cloaking it, or one unit's speed | `order()` or the Move Unit action; `stats(type).speed` for a whole type |
-| Playing on the classic game | `trigger()` only |
-
-The language, its compiler and the commands it offers other plugins are described in full
-in the plugin's own README at
+The compiler and the commands TrigScript offers other plugins are described in the
+plugin's own README at
 [scm-js/plugin-trigscript](https://github.com/scm-js/plugin-trigscript).
 
 ## Troubleshooting

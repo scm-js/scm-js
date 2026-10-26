@@ -158,7 +158,7 @@ function main(argv) {
   const api = buildApi();
   const tryIt = tryItLinks(guides, api);
 
-  /* The sidebar is the same on every page: the nine guides, then the reference. */
+  /* The sidebar is the same on every page: the eleven guides, then the reference. */
   const tree = [
     ...guides.map((g) => ({ title: g.title, url: `${base}${g.url}`, pages: g.pages.map((p) => ({ title: p.title, url: `${base}${p.url}` })) })),
     {

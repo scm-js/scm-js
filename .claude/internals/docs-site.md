@@ -34,9 +34,20 @@ Two halves, and only the second is generated in any interesting sense. The guide
 page's contents list (`markdown.mjs`, `marked`). Nav order is `SOURCES` in `site.mjs`:
 `docs/installing.md` first, then `docs/guide.md` (the user guide), then
 `docs/trigscript.md` — once the guide's `## TrigScript`, a thousand lines that buried
-everything after it; the guide keeps a short overview linking into its pages, and
-`tests/trigscript-guide.test.ts` compiles its examples. **Nothing writes prose**, because a
-generator that did would be one more document to keep current. `site.mjs` is the URL
+everything after it; the guide keeps a short overview linking into its pages. Then
+`docs/trigscript-language.md` (2026-10-25), the language of programs, moved out of the
+TrigScript plugin's README, where it had grown to 1,700 lines the site never showed while
+the guide's own shorter copy went stale (its *beside TypeScript* table still described 3.x:
+no `try`, no `async`, no fractions). The guide's Programs section is now a tour that links
+into it, so the language is written once. `tests/trigscript-guide.test.ts` compiles every
+`ts` / `tsx` block of both against the vendored compiler (multi-file blocks by `// name.ts`
+lines, a stand-in `waves` library, the README test's `// what it prints` check through
+`simulatePrograms`), so an example that stops compiling after a language change fails here.
+`docs/trigscript-library.md` follows the same rule, a page a `trigscript/*` module; its
+examples are compiled too, and the first run caught a signal handler returning an action,
+copied from `signals.ts`'s own header comment, which still carries it.
+**Nothing writes prose**, because a generator that did would be one more document to keep
+current. `site.mjs` is the URL
 model and, with it, the link rewriter that is the whole reason those documents keep
 working here: they are written to be read as GitHub blobs, so `docs/plugins.md` becomes a
 page, a bare `#fragment` finds whichever page that heading landed on, and `LICENSE` or

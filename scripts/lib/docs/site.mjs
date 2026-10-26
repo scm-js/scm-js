@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The nine guides are the repository's own `docs/*.md`, split into
+ * The eleven guides are the repository's own `docs/*.md`, split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -44,6 +44,20 @@ export const SOURCES = [
     title: "TrigScript",
     blurb: "Triggers written as TypeScript: a quick start, triggers made by code, programs that run in StarCraft: Remastered, testing, the workspace and the reference.",
     pageTitle: "TrigScript, StarCraft triggers as code",
+  },
+  {
+    id: "trigscript-language",
+    file: "docs/trigscript-language.md",
+    title: "TrigScript language",
+    blurb: "What a program can say: numbers, arrays, maps, functions, classes, errors, tasks, units, events, input, text, sounds and libraries, and where it differs from TypeScript.",
+    pageTitle: "TrigScript language for StarCraft programs",
+  },
+  {
+    id: "trigscript-library",
+    file: "docs/trigscript-library.md",
+    title: "TrigScript library",
+    blurb: "The modules that come with TrigScript: maths, chance, timers, signals, menus and dialogs, cutscenes, the fog as a picture, pixel screens and music, with an example of each.",
+    pageTitle: "TrigScript library for StarCraft programs",
   },
   {
     id: "plugins",
@@ -142,7 +156,7 @@ export function headingIndex(guides) {
  * The link rewriter handed to `renderMarkdown`.
  *
  * Absolute and `mailto:` links are left alone. A bare `#fragment` is resolved within the
- * guide it was written in. A relative path naming one of the nine source documents
+ * guide it was written in. A relative path naming one of the eleven source documents
  * becomes a page here; anything else in the repository becomes a link to GitHub — a blob
  * for a path inside the tree (the README is the exception: the home page stands in for it), and the repository's own page for one that climbs above it
  * (`../../releases` in `docs/development.md` is written to work that way on github.com).
@@ -192,6 +206,17 @@ export const MOVED = {
   "/game-data/what-the-editor-needs/": "/game-data/what-is-kept/",
   "/map-files/sections/": "/map-files/the-scenario/#known-and-unknown-sections",
   "/trigscript/examples/": "/trigscript/examples-of-triggers/",
+  "/trigscript/trigscript-and-eudplib/": "/trigscript/coming-from-eudplib/",
+  "/trigscript/variables-and-numbers/": "/trigscript-language/variables-and-numbers/",
+  "/trigscript/arrays/": "/trigscript-language/arrays/",
+  "/trigscript/tables-maps-and-sets/": "/trigscript-language/tables-maps-and-sets/",
+  "/trigscript/control-flow/": "/trigscript-language/control-flow/",
+  "/trigscript/reading-the-game/": "/trigscript-language/reading-the-game/",
+  "/trigscript/units/": "/trigscript-language/units/",
+  "/trigscript/the-games-tables/": "/trigscript-language/the-games-tables-and-memory/",
+  "/trigscript/keys-the-mouse-and-chat/": "/trigscript-language/keys-the-mouse-and-chat/",
+  "/trigscript/text/": "/trigscript-language/text/",
+  "/trigscript/functions-and-classes/": "/trigscript-language/functions/",
 };
 
 /**

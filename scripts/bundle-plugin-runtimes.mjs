@@ -5,7 +5,7 @@
  * editor does not, and its plugins keep fetching from their CDN.
  *
  * Why: vendoring (`scripts/vendor-plugins.mjs`) compiles the default plugins in, but a
- * plugin's *runtime* is not source — eudplib's is Pyodide and a wheel, about 15 MB, fetched
+ * plugin's *runtime* is not source — eudplib's was Pyodide and a wheel, about 15 MB, fetched
  * from jsDelivr on the first build. That left the one network dependency in an installed
  * app and an intranet container. The hosted build keeps the CDN on purpose: it is online by
  * definition, and GitHub Pages' bandwidth is better spent on the editor than on 15 MB a user.

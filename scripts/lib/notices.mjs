@@ -82,7 +82,7 @@ export const RUNTIMES_HEADING = "Plugin runtimes (desktop app and container imag
 
 /**
  * The notices of the plugin runtimes a desktop or container build carries: each runtime's
- * `licenses/` files as the plugin ships them (eudplib's are its own licence, euddraft's,
+ * `licenses/` files as the plugin ships them (eudplib's were its own licence, euddraft's,
  * Pyodide's and an ATTRIBUTION.md). The web build cannot write these — the runtimes are
  * copied into `dist/` after it, by `scripts/bundle-plugin-runtimes.mjs` — so that script
  * adds this to the file the build wrote, through `withRuntimeNotices`. `runtimes` is

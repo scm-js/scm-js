@@ -55,7 +55,7 @@ describe.skipIf(!have)("the guide's TrigScript examples", () => {
       for (const d of result.diagnostics) failures.push(`docs/trigscript.md:${line} (${d.file}:${d.line}) ${d.message}`);
       if (tests && !result.tests?.results.length) failures.push(`docs/trigscript.md:${line}: the example's tests did not run`);
       for (const t of result.tests?.results ?? []) if (t.status === "failed") failures.push(`docs/trigscript.md:${line}: the test "${t.id}" fails: ${t.message}`);
-      // A trigger() is a trigger of the map; a program() is IR, built into the saved file by the eudplib plugin.
+      // A trigger() is a trigger of the map; a program() is IR, built into the saved file by TrigScript's own build.
       if (result.diagnostics.length === 0 && result.triggers.length === 0 && (result.ir?.length ?? 0) === 0) failures.push(`docs/trigscript.md:${line}: the example makes neither a trigger nor a program`);
     }
     expect(failures).toEqual([]);

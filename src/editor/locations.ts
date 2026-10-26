@@ -207,8 +207,8 @@ const FAR_OFF_MAP = 65536;
 const SCRAMBLED_SLOTS = 16;
 
 /**
- * Whether the MRGN table holds noise rather than locations — what eudplib (euddraft, TrigScript's
- * build) leaves: its loader keeps its own data in the slots, scrambled, and puts the real
+ * Whether the MRGN table holds noise rather than locations — what euddraft's build (eudplib)
+ * leaves: its loader keeps its own data in the slots, scrambled, and puts the real
  * locations back when the game starts. Drawn, they cover the whole map.
  */
 export function scrambledLocations(scn: Scenario): boolean {

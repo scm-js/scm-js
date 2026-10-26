@@ -57,7 +57,6 @@ export const EXAMPLE_PLUGINS = [
   { repo: "plugin-trigscript", name: "TrigScript", groups: ["triggers", "commands"], of: "generating a run of triggers and claiming it" },
   { repo: "plugin-trigedit", name: "TrigEdit", groups: ["triggers", "ui"], of: "the text trigger format, and a dialog that offers a slot to other plugins" },
   { repo: "plugin-magenta", name: "Magenta", groups: ["triggers", "consts", "services"], of: "a trigger editor that needs another plugin's service" },
-  { repo: "plugin-eudplib", name: "eudplib", groups: ["services"], of: "a library plugin: one versioned service for others to build with" },
   { repo: "plugin-scm-sim", name: "scm-sim", groups: ["services"], of: "a library plugin whose service talks by message to another page" },
   { repo: "plugin-stamp-library", name: "Stamp Library", groups: ["clipboard", "graphics", "storage"], of: "clips kept in storage, drawn as thumbnails and pasted as one edit" },
   { repo: "plugin-trigger-map", name: "Trigger Map", groups: ["triggers", "view", "ui"], of: "the trigger list as a graph, from what each trigger reads and writes" },

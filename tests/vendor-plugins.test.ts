@@ -33,7 +33,7 @@ describe("vendoring the default plugins", () => {
   });
 
   it("takes the plugin's runtime source and leaves the rest", () => {
-    for (const path of ["plugin.ts", "plugin.json", "icon.svg", "analyze.ts", "convert.ts", "LICENSE", "lib/deep.ts"]) {
+    for (const path of ["plugin.ts", "plugin.json", "icon.svg", "analyze.ts", "convert.ts", "LICENSE", "lib/deep.ts", "data/remastered-regions.json"]) {
       expect(keepPath(path), path).toBe(true);
     }
     // `plugin-api/` is imported with `import type` and erased before the bundler sees it;

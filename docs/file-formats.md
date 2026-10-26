@@ -44,8 +44,8 @@ the dialog shows.
 
 ### Built maps
 
-A plugin can put a compiler between the map and the disk; the eudplib plugin does, for
-scripts that need Remastered's extended triggers. The file then holds two scenarios:
+A plugin can put a compiler between the map and the disk; the TrigScript plugin does, for
+a map with programs. The file then holds two scenarios:
 
 - `staredit\scenario.chk` is the compiler's output, which is what the game reads.
 - `scmjs\source.chk` is the map as the editor shows it.

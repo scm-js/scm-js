@@ -1,5 +1,5 @@
 /**
- * A built map: what a build step (a plugin's compiler — eudplib is the case) made of the map
+ * A built map: what a build step (a plugin's compiler — TrigScript's build is the case) made of the map
  * on its way to the disk, with the map as the editor holds it kept inside the same file.
  *
  * The file the game reads is the step's output: `staredit\scenario.chk` is the built

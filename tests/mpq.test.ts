@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { Creator } from "mopaq";
 import { parseScenario, serializeScenario, scenarioName } from "../src/formats/chk/scenario";
 import { loadMap, looksLikeMpq, readMembers, saveMap, SCENARIO_PATH } from "../src/formats/mpq/scm";
 import { createScenario } from "../src/formats/chk/create";
@@ -119,6 +120,29 @@ describe("members without a file list", () => {
     // And a second pass carries the same member again.
     const again = await openMapFile(new File([(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored })) as unknown as BlobPart], "probe.scx"));
     expect(again.stored!.members).toHaveLength(1);
+  });
+
+  it("saves a map whose unnamed members share their bytes", async () => {
+    // What protectors write: a second hash entry for the same bytes. Save used to refuse the
+    // whole map with "stored member at offset … overlaps another".
+    const { bytes } = await protectedMap();
+    const a = (await loadMap(bytes)).archive!;
+    const hashTable = a.hashEntries();
+    const free = hashTable.findIndex((h) => h.blockIndex === 0xffffffff);
+    const twin = new Creator({ sectorSize: a.sectorSize, hashTable, listfile: false });
+    for (const m of a.members()) {
+      twin.addStored(m);
+      if (m.slot === a.slotOf("unknown\\member.bin")) twin.addStored({ ...m, slot: free, hash: { ...m.hash, hashA: m.hash.hashA ^ 1 } });
+    }
+    const doc = await openMapFile(new File([(await twin.writeAsync()) as unknown as BlobPart], "probe.scx"));
+    expect(doc.stored!.members).toHaveLength(2);
+    expect(doc.stored!.members[0].block.filePos).toBe(doc.stored!.members[1].block.filePos);
+    const saved = await loadMap(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored }));
+    expect(await saved.archive!.readFileAsync("unknown\\member.bin")).toEqual(other);
+    expect(await saved.archive!.readFileAsync(WAV)).toEqual(sound);
+    // Both entries still name the one copy of the bytes, where it was.
+    const at = doc.stored!.members[0].block.filePos;
+    expect(saved.archive!.members().filter((m) => m.block.filePos === at)).toHaveLength(2);
   });
 
   it("fills in what an incomplete file list leaves out", async () => {

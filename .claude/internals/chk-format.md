@@ -94,6 +94,12 @@
   the hash table to its old size; `planSave`'s fourth argument carries them (`SavePlan.stored`, a
   warning in words) and `buildMapFile`'s fifth hands them to `saveMap`. Before this, a map with no
   listfile lost every extra member on save with no warning — the first outside review found it.
+  Protectors also point two hash entries at one block, or one block into another, so stored
+  members can share bytes. mopaq before 1.6.1 refused those (`InvalidMember: stored member at
+  offset … overlaps another`) and the map could not be saved at all — the first error the counts
+  caught with a stack, 2026-10-27. 1.6.1 writes them back over each other (one source archive, so
+  the overlapping bytes agree) and refuses only an overlap whose bytes differ; `tests/mpq.test.ts`
+  ("share their bytes") is the case.
   `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
   StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the

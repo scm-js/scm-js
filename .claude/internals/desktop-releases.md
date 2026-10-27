@@ -195,7 +195,12 @@ types (`file.open`), replays (`replay.open` via `countReplays`: file types, the 
 `frame0`…`frame5` from `stackProps`: an identifier-only function name and the file:line:col for the
 editor's own origin or a `raw.githubusercontent.com/scm-js/…` plugin file, the `blob:` mapped back
 through `noteModuleSource` in `browserLoaderDeps`; any other code is `plugin`/`other`; never the
-message. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
+message. A render error (`logRenderError`) counts its own stack and React's component stack
+apart (`log`'s `countFrom`): up to three frames go to the components, `in Xy file:line:col`,
+because a commit-phase error's own frames are all react-dom (the NotFoundError of 2026-10-26
+was five of them and named no panel). `translated: true` when `pageTranslated()` — Chrome's
+`translated-ltr/rtl` on `<html>`, a `<font>` or Edge's `_msttexthash` inside `#root` — since a
+translator moving text React owns is the usual cause of that NotFoundError. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
 with frames wait at once (`MAX_STACKS_WAITING`) so a 20-line beacon stays under the worker's 16 KB.
 The frames point into the minified bundle — decoding them needs that release's source maps), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
 items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never

@@ -130,11 +130,15 @@ const EDITOR_AREAS: ReadonlySet<string> = new Set(["app", "document", "edit", "g
  * Record one entry. Cheap enough to call unconditionally on the always-on tier; the
  * verbose tier must gate itself on `isVerbose()` so it does not build the message either.
  */
-export function log(level: LogLevel, source: string, message: string, data?: LogData, stack?: string, counted?: CountProps): void {
+export function log(level: LogLevel, source: string, message: string, data?: LogData, stack?: string, counted?: CountProps, countFrom?: { stack?: string; components?: string }): void {
   const entry: LogEntry = { seq: ++seq, at: Date.now() - started, level, source, message };
   // The feature counts take how many errors there were, where, and the frames of the stack —
-  // never what they said. `counted` is a caller's words from fixed lists (the save's `step`).
-  if (level === "error") countError({ area: EDITOR_AREAS.has(source) ? source : "plugin", ...counted }, stack);
+  // never what they said. `counted` is a caller's words from fixed lists (the save's `step`);
+  // `countFrom` is the stacks the count reads instead of `stack` (a render error's two halves).
+  if (level === "error") {
+    const from = countFrom ?? { stack };
+    countError({ area: EDITOR_AREAS.has(source) ? source : "plugin", ...counted }, from.stack, from.components);
+  }
   if (data) {
     // Undefined values are dropped rather than printed, so a caller can pass an optional
     // fact without a conditional at every call site.
@@ -210,7 +214,8 @@ export function logRenderError(message: string, err: unknown, componentStack?: s
   const own = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, RENDER_OWN_LINES) : [];
   const inside = (componentStack ?? "").split("\n").map((l) => l.trim()).filter(Boolean)
     .slice(0, RENDER_LINES - own.length).map((l) => l.replace(/^at /, "in "));
-  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined, { type: errorKind(err) });
+  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined, { type: errorKind(err) },
+    { stack: err instanceof Error ? err.stack : undefined, components: componentStack ?? undefined });
 }
 
 /** Everything held, oldest first. A fresh array; the ring is not exposed. */

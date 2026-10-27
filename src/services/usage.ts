@@ -236,29 +236,61 @@ function frameOf(name: string | undefined, url: string, line: string, col: strin
   return named.length <= FRAME_CHARS ? named : at.slice(-FRAME_CHARS);
 }
 
-/**
- * An error's stack as props, `frame0` (where it was thrown) to `frame5`: the function's name
- * when it is a plain identifier, and the file, line and column. Never the error's message,
- * which can carry a file name or a map's text, and nothing of code that is not the project's.
- * A frame in the same place as the one before (`other` after `other`) is left out.
- */
-export function stackProps(stack: string): CountProps | null {
+/** Frames of a render error's line kept for the components it threw inside, at most. */
+const COMPONENT_FRAMES = 3;
+
+/** Up to `max` frames of one stack, in either browser's form. */
+function framesOf(stack: string, max: number): string[] {
   const lines = stack.split("\n");
   const chrome = lines.some((l) => /^\s+at /.test(l));
   const frames: string[] = [];
   for (const l of lines) {
-    if (frames.length >= STACK_FRAMES) break;
+    if (frames.length >= max) break;
     const m = chrome ? CHROME_FRAME.exec(l) : OTHER_FRAME.exec(l.trim());
     if (!m) continue;
     const f = frameOf(m[1], m[2], m[3], m[4]);
     if (f !== frames[frames.length - 1]) frames.push(f);
   }
+  return frames;
+}
+
+/**
+ * An error's stack as props, `frame0` (where it was thrown) to `frame5`: the function's name
+ * when it is a plain identifier, and the file, line and column. Never the error's message,
+ * which can carry a file name or a map's text, and nothing of code that is not the project's.
+ * A frame in the same place as the one before (`other` after `other`) is left out.
+ *
+ * `components` is React's component stack for a render error. Its own stack is React's
+ * internals from top to bottom — a node removed from the wrong parent says nothing of which
+ * panel — so up to three of the frames go to the components, innermost first, marked `in`.
+ */
+export function stackProps(stack: string, components?: string): CountProps | null {
+  const inside = components
+    ? framesOf(components, COMPONENT_FRAMES).map((f) => (f.length <= FRAME_CHARS - 3 ? `in ${f}` : `in ${f.slice(3 - FRAME_CHARS)}`))
+    : [];
+  const frames = [...framesOf(stack, STACK_FRAMES - inside.length), ...inside];
   return frames.length ? Object.fromEntries(frames.map((f, i) => [`frame${i}`, f])) : null;
 }
 
-/** One error: where (`props`, from fixed lists) and, while few are waiting, the frames of `stack`. */
-export function countError(props: CountProps, stack?: string): void {
-  const frames = stack ? stackProps(stack) : null;
+/**
+ * Whether the browser is translating the page. Its translator rewrites text React owns —
+ * Chrome's marks `<html>` and wraps the text in `<font>`, Edge's tags the elements — and React
+ * then fails to remove a node that is no longer where it put it (`NotFoundError`).
+ */
+function pageTranslated(): boolean {
+  if (typeof document === "undefined") return false;
+  const html = document.documentElement;
+  return html.classList.contains("translated-ltr") || html.classList.contains("translated-rtl")
+    || document.querySelector("#root font, #root [_msttexthash]") !== null;
+}
+
+/**
+ * One error: where (`props`, from fixed lists), whether the page was being translated, and,
+ * while few are waiting, the frames of `stack` (and of `components`, for a render error).
+ */
+export function countError(props: CountProps, stack?: string, components?: string): void {
+  if (pageTranslated()) props = { ...props, translated: true };
+  const frames = stack || components ? stackProps(stack ?? "", components) : null;
   if (frames) {
     const full = { ...props, ...frames };
     const stacks = [...waiting.values()].filter((l) => l.name === "error" && l.props && "frame0" in l.props).length;

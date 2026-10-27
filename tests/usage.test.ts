@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { count, countError, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
-import { logError, resetLogForTests } from "../src/editor/log";
+import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
@@ -197,6 +197,53 @@ describe("error counts", () => {
     expect(line.name).toBe("error");
     expect(line.props).toMatchObject({ area: "document", step: "save", type: "TypeError", frame0: "Ab editor/assets/index-B1x2.js:1:48211" });
     expect(JSON.stringify(line.props)).not.toContain("Secret");
+  });
+
+  // React's commit removing a node it no longer holds, from inside two of the editor's components.
+  const commit = [
+    "NotFoundError: Failed to execute 'removeChild' on 'Node'",
+    ...["fl:98049", "_l:99568", "yl:101993", "_l:99693", "yl:99815"].map((f) => `    at ${f.split(":")[0]} (https://scmjs.dev/editor/assets/src-DM4OGw6D.js:8:${f.split(":")[1]})`),
+  ].join("\n");
+  const components = ["    at Pn (https://scmjs.dev/editor/assets/Panels-Ab12.js:1:500)", "    at Suspense", "    at Qx (https://scmjs.dev/editor/assets/src-DM4OGw6D.js:9:10)", "    at Rz (https://scmjs.dev/editor/assets/src-DM4OGw6D.js:9:20)", "    at St (https://scmjs.dev/editor/assets/src-DM4OGw6D.js:9:30)"].join("\n");
+
+  it("gives a render error's components half the frames, marked `in`", () => {
+    expect(stackProps(commit, components)).toEqual({
+      frame0: "fl editor/assets/src-DM4OGw6D.js:8:98049",
+      frame1: "_l editor/assets/src-DM4OGw6D.js:8:99568",
+      frame2: "yl editor/assets/src-DM4OGw6D.js:8:101993",
+      frame3: "in Pn editor/assets/Panels-Ab12.js:1:500",
+      frame4: "in Qx editor/assets/src-DM4OGw6D.js:9:10",
+      frame5: "in Rz editor/assets/src-DM4OGw6D.js:9:20",
+    });
+    // Firefox's component stack, and a long frame still fits.
+    const long = `Xy@https://scmjs.dev/editor/assets/${"a".repeat(120)}.js:1:2`;
+    const props = stackProps("", long)!;
+    expect(String(props.frame0)).toMatch(/^in .*\.js:1:2$/);
+    expect(String(props.frame0).length).toBeLessThanOrEqual(90);
+  });
+
+  it("counts a render error with the components it threw inside", () => {
+    const err = new Error("Failed to execute 'removeChild' on 'Node'");
+    err.name = "NotFoundError";
+    err.stack = commit;
+    logRenderError("Render failed", err, `\n${components}`, { surface: "editor" });
+    const [line] = waitingCounts();
+    expect(line.props).toMatchObject({ area: "app", type: "NotFoundError", frame0: "fl editor/assets/src-DM4OGw6D.js:8:98049", frame3: "in Pn editor/assets/Panels-Ab12.js:1:500" });
+    expect(line.props).not.toHaveProperty("translated");
+  });
+
+  it("says when the browser was translating the page", () => {
+    const page = (classes: string[], found: boolean) => vi.stubGlobal("document", {
+      documentElement: { classList: { contains: (c: string) => classes.includes(c) } },
+      querySelector: () => (found ? {} : null),
+    });
+    page(["translated-ltr"], false);
+    countError({ area: "app" });
+    page([], true);
+    countError({ area: "document" });
+    page([], false);
+    countError({ area: "edit" });
+    expect(waitingCounts().map((l) => l.props)).toEqual([{ area: "app", translated: true }, { area: "document", translated: true }, { area: "edit" }]);
   });
 
   it("stops sending frames past six waiting stacks, but still counts the error", () => {

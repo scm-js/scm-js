@@ -99,7 +99,13 @@
   offset … overlaps another`) and the map could not be saved at all — the first error the counts
   caught with a stack, 2026-10-27. 1.6.1 writes them back over each other (one source archive, so
   the overlapping bytes agree) and refuses only an overlap whose bytes differ; `tests/mpq.test.ts`
-  ("share their bytes") is the case.
+  ("share their bytes") is the case. Protectors also write block entries that point past the end
+  of the file, up to 4 GB out. mopaq 1.6.1 handed those over as empty members at that offset and
+  padded the rewrite out to reach them — tens of megabytes of zeros, or a `RangeError` allocating
+  the archive (`new Uint8Array(archiveSize)` in `assemble`, then `new Blob` in `saveBytes`), the
+  0.8.2 error counts, 2026-10-27/28. mopaq 1.6.2 leaves them out of `members()`; `scm.ts`'s
+  `hasBytes` drops empty stored members on open *and* in `saveMap`, because recovery copies keep
+  the members they were made with. ("past the end of the file" is the test.)
   `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
   StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the

@@ -148,14 +148,15 @@ export const STAREDIT_SECTOR_SIZE = 4096;
 export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promise<Uint8Array> {
   const method: CompressionMethod | false = options.compress === "zlib" || options.compress === "pkware" ? options.compress : false;
   const encrypt = options.encrypt ?? false;
-  const stored = options.stored && options.stored.members.length > 0 ? options.stored : null;
+  const members = options.stored?.members.filter(hasBytes) ?? [];
+  const stored = options.stored && members.length > 0 ? options.stored : null;
   const creator = new Creator({
     sectorSize: stored ? stored.sectorSize : options.sectorSize ?? STAREDIT_SECTOR_SIZE,
     listfile: options.listfile ?? true,
     listfileCompress: method || "zlib",
     ...(stored ? { hashTable: stored.hashTable } : {}),
   });
-  for (const m of stored?.members ?? []) creator.addStored(m);
+  for (const m of members) creator.addStored(m);
   creator.addFile(SCENARIO_PATH, chk, { compress: method, encrypt });
   for (const [name, data] of options.extras ?? []) {
     if (normalize(name) === normalize(SCENARIO_PATH)) continue;
@@ -166,9 +167,20 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
   return creator.writeAsync();
 }
 
+/**
+ * Whether a stored member has bytes to carry. A protector's block entry pointing past the
+ * end of the file came back from mopaq before 1.6.2 as an empty member at that offset, and
+ * the writer padded the archive out to reach it — a save of tens of megabytes of zeros, or a
+ * RangeError allocating 4 GB. Checked on save as well as open, since a recovery copy keeps
+ * the members it was made with. A genuinely empty member is lost with them: it holds nothing.
+ */
+function hasBytes(m: StoredMember): boolean {
+  return m.data.length > 0;
+}
+
 /** The sector size a save with these stored members has to use, else the caller's choice. */
 export function requiredSectorSize(stored: StoredMembers | null | undefined, wanted: number): number {
-  return stored && stored.members.length > 0 ? stored.sectorSize : wanted;
+  return stored && stored.members.some(hasBytes) ? stored.sectorSize : wanted;
 }
 
 export interface ArchiveMembers {
@@ -225,7 +237,7 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
   // Names that only what was read can give (a manifest listing its files): one more pass.
   if (more) await read([...more(extras)].filter((name) => { const key = normalize(name); if (seen.has(key)) return false; seen.add(key); return true; }));
 
-  const members = archive.members().filter((m) => !taken.has(m.slot) || keepStored.has(m.slot));
+  const members = archive.members().filter((m) => hasBytes(m) && (!taken.has(m.slot) || keepStored.has(m.slot)));
   const stored: StoredMembers | null = members.length === 0 ? null : { hashTable: archive.hashEntries(), sectorSize: archive.sectorSize, members, unreadable };
   return { extras, stored };
 }

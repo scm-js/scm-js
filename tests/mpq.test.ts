@@ -145,6 +145,23 @@ describe("members without a file list", () => {
     expect(saved.archive!.members().filter((m) => m.block.filePos === at)).toHaveLength(2);
   });
 
+  it("saves a map whose block table points a member past the end of the file", async () => {
+    // A protector's fake block, as mopaq before 1.6.2 hands it over: no bytes, at its offset.
+    // Carried, the save was padded with zeros out to it — or, near 4 GB, threw a RangeError.
+    const { bytes } = await protectedMap();
+    const doc = await openMapFile(new File([bytes as unknown as BlobPart], "probe.scx"));
+    const [m] = doc.stored!.members;
+    const free = doc.stored!.hashTable.findIndex((h) => h.blockIndex === 0xffffffff);
+    const fake = { ...m, slot: free, hash: { ...m.hash, hashA: m.hash.hashA ^ 1 }, block: { ...m.block, filePos: 50_000_000 }, data: new Uint8Array(0) };
+    const stored = { ...doc.stored!, members: [...doc.stored!.members, fake] };
+    const out = await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored });
+    const plain = await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored });
+    expect(out.length).toBe(plain.length);
+    const saved = await loadMap(out);
+    expect(await saved.archive!.readFileAsync("unknown\\member.bin")).toEqual(other);
+    expect(await saved.archive!.readFileAsync(WAV)).toEqual(sound);
+  });
+
   it("fills in what an incomplete file list leaves out", async () => {
     const scn = createScenario({ width: 32, height: 32, era: 0 });
     const wavs = scn.wavs!.slice();

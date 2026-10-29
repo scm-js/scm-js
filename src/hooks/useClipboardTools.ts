@@ -17,7 +17,6 @@ import { t } from "../i18n";
 /** What Cut / Copy act on: the rectangle marked on the clipboard layer, or an object layer's selection. */
 export type ClipSource = { kind: "region"; rect: Rect } | { kind: "objects"; sel: ObjectSelection };
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 /**
  * Cut / Copy / Paste, bound to the editor's live state so the menu, toolbar, hotkeys and
@@ -86,7 +85,7 @@ export function useClipboardTools() {
   }, [store, source, take, setClip, setStatus]);
 
   /** Remove the source's objects as one undo step (terrain and fog stay). Returns how many went. */
-  const remove = useCallback((src: ClipSource, label: string): number => {
+  const remove = useCallback((src: ClipSource, kind: "cut" | "delete"): number => {
     const scn = store.get(scenarioAtom);
     if (!scn) return 0;
     const { catalogue, tileset } = graphics();
@@ -99,7 +98,7 @@ export function useClipboardTools() {
     if (n === 0) return 0;
     const edit = removeObjects(scn, sel, catalogue, tileset);
     clearObjectSelections();
-    commit({ label: `${label} ${plural(n, "object")}`, ...edit });
+    commit({ label: kind === "cut" ? t("Cut {n, plural, one {# object} other {# objects}}", { n }) : t("Delete {n, plural, one {# object} other {# objects}}", { n }), ...edit });
     return n;
   }, [store, graphics, commit, clearObjectSelections]);
 
@@ -113,7 +112,7 @@ export function useClipboardTools() {
       return false;
     }
     setClip(clip);
-    const n = remove(src, "Cut");
+    const n = remove(src, "cut");
     setStatus(t("Cut {what}", { what: clipSummary(clip) }) + (n === 0 ? t(" — copied; terrain and fog stay on the map") : ""));
     return true;
   }, [store, source, take, remove, setClip, setStatus]);
@@ -122,8 +121,8 @@ export function useClipboardTools() {
   const deleteRegion = useCallback((): number => {
     const rect = store.get(clipSelectionAtom);
     if (!rect || !canEdit(store.get, store.set)) return 0;
-    const n = remove({ kind: "region", rect }, t("Delete"));
-    setStatus(n > 0 ? t("Deleted {plural} in the marked area", { plural: plural(n, "object") }) : t("No objects in the marked area (terrain and fog are not deleted)"));
+    const n = remove({ kind: "region", rect }, "delete");
+    setStatus(n > 0 ? t("Deleted {n, plural, one {# object} other {# objects}} in the marked area", { n }) : t("No objects in the marked area (terrain and fog are not deleted)"));
     return n;
   }, [store, remove, setStatus]);
 
@@ -163,9 +162,13 @@ export function useClipboardTools() {
     commit({ label: t("Paste {clipSummary}", { clipSummary: clipSummary(clip) }), ...result.edit });
     setSelection({ x0: Math.max(0, tx), y0: Math.max(0, ty), x1: Math.min(scn.width, tx + clip.width), y1: Math.min(scn.height, ty + clip.height) });
     const bits = [
-      c.tiles > 0 ? plural(c.tiles, "tile") : null, c.doodads > 0 ? plural(c.doodads, "doodad") : null, c.units > 0 ? plural(c.units, "unit") : null,
-      c.sprites > 0 ? plural(c.sprites, "sprite") : null, c.locations > 0 ? plural(c.locations, "location") : null, c.fog > 0 ? "fog" : null,
-      c.removed > 0 ? `${plural(c.removed, "object")} removed` : null,
+      c.tiles > 0 ? t("{n, plural, one {# tile} other {# tiles}}", { n: c.tiles }) : null,
+      c.doodads > 0 ? t("{n, plural, one {# doodad} other {# doodads}}", { n: c.doodads }) : null,
+      c.units > 0 ? t("{n, plural, one {# unit} other {# units}}", { n: c.units }) : null,
+      c.sprites > 0 ? t("{n, plural, one {# sprite} other {# sprites}}", { n: c.sprites }) : null,
+      c.locations > 0 ? t("{n, plural, one {# location} other {# locations}}", { n: c.locations }) : null,
+      c.fog > 0 ? t("fog") : null,
+      c.removed > 0 ? t("{n, plural, one {# object} other {# objects}} removed", { n: c.removed }) : null,
     ].filter((b): b is string => b !== null);
     setStatus(t("Pasted {what} at {x}, {y}", { what: bits.join(", "), x: tx, y: ty }) + (result.notes.length ? ` — ${result.notes.join("; ")}` : "") + t(" · Esc to stop pasting"));
     return true;

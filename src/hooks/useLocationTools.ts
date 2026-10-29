@@ -12,13 +12,13 @@ import {
 import { TILE_PX } from "../editor/units";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed, type LocationRecord } from "../formats/chk/sections/objects";
 import type { MapPoint } from "./useTerrainTools";
-import { t } from "../i18n";
+import { t, translate } from "../i18n";
 
 /** How close (in screen pixels) the pointer must be to a handle to grab it. */
 const HANDLE_GRAB_PX = 6;
 
 
-const tiles = (b: Bounds) => `${(b.right - b.left) / TILE_PX} × ${(b.bottom - b.top) / TILE_PX} tiles`;
+const tiles = (b: Bounds) => t("{w} × {h} tiles", { w: (b.right - b.left) / TILE_PX, h: (b.bottom - b.top) / TILE_PX });
 const at = (b: Bounds) => `${b.left / TILE_PX}, ${b.top / TILE_PX}`;
 
 /**
@@ -257,7 +257,7 @@ export function useLocationTools() {
     const b = boundsOf(one.after);
     if (d.kind === "move") {
       commit({ label: n === 1 ? t("Move location {locationName}", { locationName: locationName(scn, one.index) }) : t("Move {n} locations", { n }), changes: [], locations });
-      setStatus(n === 1 ? t("Moved location {index} \"{locationName}\" to {at}", { index: one.index, locationName: locationName(scn, one.index), at: at(b) }) : t("Moved {n} locations", { n }));
+      setStatus(n === 1 ? t("Moved location {index} \"{locationName}\" to {at}", { index: one.index, locationName: locationName(scn, one.index), at: at(b) }) : t("Moved {n, plural, one {# location} other {# locations}}", { n }));
     } else {
       commit({ label: n === 1 ? t("Resize location {locationName}", { locationName: locationName(scn, one.index) }) : t("Resize {n} locations", { n }), changes: [], locations });
       setStatus(t("Resized location {index} \"{locationName}\" to {tiles} at {at}", { index: one.index, locationName: locationName(scn, one.index), tiles: tiles(b), at: at(b) }) + (n > 1 ? t(" and {n, plural, one {# mirror image} other {# mirror images}}", { n: n - 1 }) : ""));
@@ -293,8 +293,9 @@ export function useLocationTools() {
       const c = editLocation(scn, i, { elevationFlags: enabled ? r.elevationFlags & ~bit : r.elevationFlags | bit });
       if (c) changes.push(c);
     }
-    const what = changes.length === 1 ? `location ${changes[0].index} "${locationName(scn, changes[0].index)}"` : `${changes.length} locations`;
-    const label = ELEVATIONS.find((e) => e.bit === bit)?.label.toLowerCase() ?? `bit ${bit}`;
+    const what = changes.length === 1 ? t("location {index} \"{name}\"", { index: changes[0].index, name: locationName(scn, changes[0].index) }) : t("{n, plural, one {# location} other {# locations}}", { n: changes.length });
+    const found = ELEVATIONS.find((e) => e.bit === bit);
+    const label = found ? translate(found.label).toLowerCase() : t("bit {bit}", { bit });
     run(enabled ? t("Allow {label} on {what}", { label, what }) : t("Exclude {label} on {what}", { label, what }), changes, enabled ? t("Allowed {label} on {what}", { label, what }) : t("Excluded {label} on {what}", { label, what }));
   }, [store, run]);
 

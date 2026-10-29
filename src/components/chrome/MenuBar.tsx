@@ -617,7 +617,7 @@ export default function MenuBar() {
           </Menubar.Menu>
         </Fragment>
       ))}
-      <div className="menubar-doc" title={modified ? translate("Unsaved changes") : translate("No unsaved changes")}>
+      <div className="menubar-doc" title={modified ? t("Unsaved changes") : t("No unsaved changes")}>
         <span className={`dot ${modified ? "" : "clean"}`} />
         <span>{name}{modified ? " *" : ""}</span>
       </div>

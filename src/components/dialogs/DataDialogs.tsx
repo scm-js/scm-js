@@ -425,7 +425,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
                 ))}
               </tbody>
             </table>
-            <p className="hint" style={{ marginTop: 6 }}>{t("Each level costs the base plus the factor for every level already researched. {FRAMES_HINT}", { FRAMES_HINT })}{dat ? "" : t(" upgrades.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…).")}</p>
+            <p className="hint" style={{ marginTop: 6 }}>{t("Each level costs the base plus the factor for every level already researched. {FRAMES_HINT}", { FRAMES_HINT: translate(FRAMES_HINT) })}{dat ? "" : t(" upgrades.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…).")}</p>
           </Group>
           <Group title={t("Levels per player")} flush>
             <div className="listbox" style={{ border: "none", boxShadow: "none", maxHeight: 300 }}>
@@ -560,7 +560,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
                 </Field>
               ))}
             </div>
-            <p className="hint" style={{ marginTop: 6 }}>{t("Energy is what a cast costs once researched. {FRAMES_HINT}", { FRAMES_HINT })}{dat ? "" : t(" techdata.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…).")}</p>
+            <p className="hint" style={{ marginTop: 6 }}>{t("Energy is what a cast costs once researched. {FRAMES_HINT}", { FRAMES_HINT: translate(FRAMES_HINT) })}{dat ? "" : t(" techdata.dat is not installed, so defaults show as 0 — install the game data again (Help ▸ Game Data…).")}</p>
           </Group>
           <Group title={t("Availability")} flush>
             <div className="row" style={{ padding: "6px 8px 2px", gap: 14 }}>

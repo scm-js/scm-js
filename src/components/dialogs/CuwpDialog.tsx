@@ -113,7 +113,7 @@ export function CuwpDialog({ entry }: DialogProps) {
               <span className="idx">{i + 1}</span>
               {cuwpSlotActive(s) ? <span>{describeCuwpSlot(s)}</span> : <span className="faint">{table.used[i] ? t("in use, nothing set") : t("empty")}</span>}
               <span className="row" style={{ marginLeft: "auto", gap: 4 }}>
-                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title={t("Create Unit with Properties actions naming this slot")}>{usage[i]} use{usage[i] === 1 ? "" : "s"}</span>}
+                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title={t("Create Unit with Properties actions naming this slot")}>{t("{n, plural, one {# use} other {# uses}}", { n: usage[i] })}</span>}
                 {table.used[i] && <span className="badge teal">{t("in use")}</span>}
               </span>
             </>

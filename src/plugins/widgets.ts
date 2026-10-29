@@ -257,7 +257,7 @@ export function createWidgets(): WidgetsApi {
         // On its own it is the only thing saying "working"; beside a label the label says it.
         "aria-hidden": options.label ? "true" : undefined,
         role: options.label ? undefined : "progressbar",
-        "aria-label": options.label ? undefined : "Working",
+        "aria-label": options.label ? undefined : t("Working"),
         title: options.label ? undefined : options.title,
       });
       if (!options.label) return ring;
@@ -303,7 +303,7 @@ export function createWidgets(): WidgetsApi {
       const text = el("span", { className: "grow" }, options.text ?? "");
       const fill = el("i", {});
       const track = el("div", { className: "progress-track", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
-      const cancelBtn = widgets.button("Cancel", { className: "sm" });
+      const cancelBtn = widgets.button(t("Cancel"), { className: "sm" });
       let stopper: (() => void) | null = null;
       cancelBtn.addEventListener("click", () => stopper?.());
       const line = el("div", { className: classes("status-line", options.className), role: "status", "aria-live": "polite", title: options.title }, ring, text, track, cancelBtn);
@@ -332,7 +332,7 @@ export function createWidgets(): WidgetsApi {
       node.busy = (message) => paint(message, "", true, null);
       node.progress = (message, value) => paint(message, "", true, value);
       node.clear = () => paint("", "", false, null);
-      node.cancel = (stop, label) => { stopper = stop; cancelBtn.hidden = !stop; cancelBtn.textContent = label ?? "Cancel"; };
+      node.cancel = (stop, label) => { stopper = stop; cancelBtn.hidden = !stop; cancelBtn.textContent = label ?? t("Cancel"); };
       return node;
     },
 

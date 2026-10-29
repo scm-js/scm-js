@@ -28,7 +28,7 @@ export function encodeTrg(triggers: readonly ReadonlyTrigger[]): Uint8Array {
 /** Read a .trg; throws when the length is not a whole number of records. */
 export function decodeTrg(bytes: Uint8Array): TriggerRecord[] {
   if (bytes.length === 0 || bytes.length % TRIGGER_STRIDE !== 0) {
-    throw new Error(`Not a trigger file: ${bytes.length} bytes is not a multiple of ${TRIGGER_STRIDE}.`);
+    throw new Error(t("Not a trigger file: {n} bytes is not a multiple of {stride}.", { n: bytes.length, stride: TRIGGER_STRIDE }));
   }
   return decodeTriggers(bytes);
 }

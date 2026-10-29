@@ -73,7 +73,7 @@ function stepFailed(what: string, err: unknown, step: "prepare" | "build", plugi
 export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise<Outgoing> {
   const document = () => {
     const scenario = store.get(scenarioAtom);
-    if (!scenario) throw new Error("No map is open.");
+    if (!scenario) throw new Error(t("No map is open."));
     return { scenario, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom) };
   };
   const plainOf = async (given?: Uint8Array) => {

@@ -10,6 +10,7 @@
  */
 import { PLUGIN_API_VERSION } from "./api";
 import type { PluginIcon, PluginManifest } from "./api";
+import { t } from "../i18n";
 
 export type PluginSource =
   | { kind: "builtin"; name: string }
@@ -69,7 +70,7 @@ function dirOf(url: string): string {
  */
 export function parseSpec(spec: string): PluginSource {
   const s = spec.trim();
-  if (s === "") throw new PluginLoadError("Enter a plugin location.");
+  if (s === "") throw new PluginLoadError(t("Enter a plugin location."));
 
   const builtin = /^builtin:([\w-]+)$/i.exec(s);
   if (builtin) return { kind: "builtin", name: builtin[1] };
@@ -82,7 +83,7 @@ export function parseSpec(spec: string): PluginSource {
 
   if (/^https?:\/\//i.test(s)) {
     let url: URL;
-    try { url = new URL(s); } catch { throw new PluginLoadError(`Not a valid URL: ${s}`); }
+    try { url = new URL(s); } catch { throw new PluginLoadError(t("Not a valid URL: {url}", { url: s })); }
     url.hash = "";
     const path = url.pathname;
     if (/\.json$/i.test(path)) return { kind: "remote", manifestUrl: url.href, entryUrl: null, base: dirOf(url.href), display: s };
@@ -91,7 +92,7 @@ export function parseSpec(spec: string): PluginSource {
     return { kind: "remote", manifestUrl: `${base}plugin.json`, entryUrl: null, base, display: s };
   }
 
-  throw new PluginLoadError(`Unrecognised plugin location "${s}". Paste a GitHub repository link such as https://github.com/owner/repo, the short form github:owner/repo, or a URL to a plugin.json or plugin.ts.`);
+  throw new PluginLoadError(t("Unrecognised plugin location \"{location}\". Paste a GitHub repository link such as https://github.com/owner/repo, the short form github:owner/repo, or a URL to a plugin.json or plugin.ts.", { location: s }));
 }
 
 export function githubSource(owner: string, repo: string, ref: string | undefined, dir: string | undefined): PluginSource {
@@ -112,9 +113,9 @@ export function githubSource(owner: string, repo: string, ref: string | undefine
 /* ── Manifest ───────────────────────────────────────────── */
 
 export function validateManifest(raw: unknown, where: string): PluginManifest {
-  if (!raw || typeof raw !== "object") throw new PluginLoadError(`${where} is not a JSON object.`);
+  if (!raw || typeof raw !== "object") throw new PluginLoadError(t("{where} is not a JSON object.", { where }));
   const m = raw as Record<string, unknown>;
-  if (typeof m.name !== "string" || m.name.trim() === "") throw new PluginLoadError(`${where} needs a "name".`);
+  if (typeof m.name !== "string" || m.name.trim() === "") throw new PluginLoadError(t("{where} needs a \"name\".", { where }));
   const str = (k: string) => (typeof m[k] === "string" ? (m[k] as string) : undefined);
   const out: PluginManifest = { name: m.name.trim() };
   for (const k of ["id", "version", "description", "author", "homepage", "entry", "build", "icon"] as const) {
@@ -123,7 +124,7 @@ export function validateManifest(raw: unknown, where: string): PluginManifest {
   }
   if (typeof m.api === "number") out.api = m.api;
   for (const k of ["entry", "build"] as const) {
-    if (out[k] && /^(?:[a-z]+:)?\/\//i.test(out[k])) throw new PluginLoadError(`${where}: "${k}" must be a path relative to the manifest.`);
+    if (out[k] && /^(?:[a-z]+:)?\/\//i.test(out[k])) throw new PluginLoadError(t("{where}: \"{field}\" must be a path relative to the manifest.", { where, field: k }));
   }
   // `requires` is read with the same tolerance as the other optional fields — anything that
   // is not a list of strings is ignored — but a string that *is* there has to be a usable
@@ -135,7 +136,7 @@ export function validateManifest(raw: unknown, where: string): PluginManifest {
       if (typeof r !== "string" || r.trim() === "") continue;
       let spec: string;
       try { spec = canonicalSpec(parseSpec(r)); } catch (err) {
-        throw new PluginLoadError(`${where}: "requires" names a plugin location the editor cannot use, "${r}": ${err instanceof Error ? err.message : String(err)}`);
+        throw new PluginLoadError(t("{where}: \"requires\" names a plugin location the editor cannot use, \"{location}\": {error}", { where, location: r, error: err instanceof Error ? err.message : String(err) }));
       }
       if (!requires.includes(spec)) requires.push(spec);
     }
@@ -196,7 +197,7 @@ export async function resolvePlugin(
   const wantEntry = opts.entry !== false;
   if (source.kind === "builtin") {
     const b = deps.builtins[source.name];
-    if (!b) throw new PluginLoadError(`No built-in plugin called "${source.name}".`);
+    if (!b) throw new PluginLoadError(t("No built-in plugin called \"{name}\".", { name: source.name }));
     const icon = resolveIcon(b.manifest.icon, null) ?? (b.iconUrl ? { kind: "image" as const, url: b.iconUrl } : null);
     return { manifest: b.manifest, entryUrl: null, icon: icon ?? undefined };
   }
@@ -209,10 +210,10 @@ export async function resolvePlugin(
   try {
     text = await deps.fetchText(manifestUrl);
   } catch (err) {
-    throw new PluginLoadError(`Could not fetch ${manifestUrl}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new PluginLoadError(t("Could not fetch {url}: {error}", { url: manifestUrl, error: err instanceof Error ? err.message : String(err) }));
   }
   let json: unknown;
-  try { json = JSON.parse(text); } catch { throw new PluginLoadError(`${manifestUrl} is not valid JSON.`); }
+  try { json = JSON.parse(text); } catch { throw new PluginLoadError(t("{url} is not valid JSON.", { url: manifestUrl })); }
   const manifest = validateManifest(json, manifestUrl);
   const icon = resolveIcon(manifest.icon, manifestUrl) ?? undefined;
   // A built bundle is preferred over the source it was built from: one fetch, no
@@ -232,7 +233,7 @@ export async function resolvePlugin(
       errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  throw new PluginLoadError(`${manifestUrl} names no "entry" and neither default exists (${errors.join("; ")}).`);
+  throw new PluginLoadError(t("{url} names no \"entry\" and neither default exists ({errors}).", { url: manifestUrl, errors: errors.join("; ") }));
 }
 
 /* ── Bundling ───────────────────────────────────────────── */
@@ -353,7 +354,7 @@ async function fetchFirst(candidates: readonly string[], fetchText: LoaderDeps["
       errors.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  throw new PluginLoadError(errors.length === 1 ? `Could not fetch ${errors[0]}` : `Could not fetch any of ${errors.join("; ")}`);
+  throw new PluginLoadError(errors.length === 1 ? t("Could not fetch {what}", { what: errors[0] }) : t("Could not fetch any of {what}", { what: errors.join("; ") }));
 }
 
 /**
@@ -370,7 +371,7 @@ export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fet
     for (const candidate of candidates) {
       const cached = done.get(candidate);
       if (cached) return cached;
-      if (inProgress.has(candidate)) throw new PluginLoadError(`Circular import: ${[...stack, candidate].join(" → ")}`);
+      if (inProgress.has(candidate)) throw new PluginLoadError(t("Circular import: {chain}", { chain: [...stack, candidate].join(" → ") }));
     }
     const { url, text } = await fetchFirst(candidates, deps.fetchText);
     inProgress.add(url);
@@ -380,7 +381,7 @@ export async function bundleModule(entryUrl: string, deps: Pick<LoaderDeps, "fet
       const resolved: string[] = [];
       for (const ref of refs) {
         if (!isRelative(ref.specifier) && !isAbsoluteUrl(ref.specifier)) {
-          throw new PluginLoadError(`${url} imports "${ref.specifier}", but plugins cannot import packages — use a relative path, or bundle the dependency into the plugin.`);
+          throw new PluginLoadError(t("{url} imports \"{specifier}\", but plugins cannot import packages — use a relative path, or bundle the dependency into the plugin.", { url, specifier: ref.specifier }));
         }
         resolved.push(await visit(candidateUrls(ref.specifier, url), [...stack, url]));
       }
@@ -418,7 +419,7 @@ export async function loadPlugin(spec: string, deps: LoaderDeps, opts: { accept?
   try {
     module = await deps.importModule(url);
   } catch (err) {
-    throw new PluginLoadError(`${manifest.name} failed to load: ${err instanceof Error ? err.message : String(err)}`);
+    throw new PluginLoadError(t("{name} failed to load: {error}", { name: manifest.name, error: err instanceof Error ? err.message : String(err) }));
   }
   return { source, manifest, icon, module };
 }
@@ -547,11 +548,11 @@ export async function resolveCommit(
   try {
     text = await fetchText(url);
   } catch (err) {
-    throw new PluginLoadError(`Could not ask GitHub which commit ${gh.ref ?? "HEAD"} is: ${err instanceof Error ? err.message : String(err)}`);
+    throw new PluginLoadError(t("Could not ask GitHub which commit {ref} is: {error}", { ref: gh.ref ?? "HEAD", error: err instanceof Error ? err.message : String(err) }));
   }
   let sha: unknown;
-  try { sha = (JSON.parse(text) as { sha?: unknown }).sha; } catch { throw new PluginLoadError(`${url} did not answer with JSON.`); }
-  if (typeof sha !== "string" || !/^[0-9a-f]{40}$/i.test(sha)) throw new PluginLoadError(`${url} named no commit.`);
+  try { sha = (JSON.parse(text) as { sha?: unknown }).sha; } catch { throw new PluginLoadError(t("{url} did not answer with JSON.", { url })); }
+  if (typeof sha !== "string" || !/^[0-9a-f]{40}$/i.test(sha)) throw new PluginLoadError(t("{url} named no commit.", { url }));
   return sha.toLowerCase();
 }
 
@@ -597,11 +598,11 @@ export async function listTags(
   try {
     text = await fetchText(url);
   } catch (err) {
-    throw new PluginLoadError(`Could not ask GitHub which versions ${gh.owner}/${gh.repo} has: ${err instanceof Error ? err.message : String(err)}`);
+    throw new PluginLoadError(t("Could not ask GitHub which versions {repo} has: {error}", { repo: `${gh.owner}/${gh.repo}`, error: err instanceof Error ? err.message : String(err) }));
   }
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch { throw new PluginLoadError(`${url} did not answer with JSON.`); }
-  if (!Array.isArray(raw)) throw new PluginLoadError(`${url} did not answer with a list of tags.`);
+  try { raw = JSON.parse(text); } catch { throw new PluginLoadError(t("{url} did not answer with JSON.", { url })); }
+  if (!Array.isArray(raw)) throw new PluginLoadError(t("{url} did not answer with a list of tags.", { url }));
   const out: RepoTag[] = [];
   for (const entry of raw as { name?: unknown; commit?: { sha?: unknown } }[]) {
     const sha = entry?.commit?.sha;
@@ -672,7 +673,7 @@ export async function previewPlugin(
     manifest: null,
     icon: null,
     pin: null,
-    pinProblem: gh ? null : "Only plugins on GitHub can be pinned to a version.",
+    pinProblem: gh ? null : t("Only plugins on GitHub can be pinned to a version."),
     ref: gh?.ref ?? null,
     problem: null,
     needsApi: null,
@@ -727,7 +728,7 @@ export function storedDeps<D extends Pick<LoaderDeps, "fetchText">>(deps: D, fil
     ...deps,
     fetchText: async (url: string) => {
       const text = files[url];
-      if (text === undefined) throw new PluginLoadError(`${url} is not in the copy kept in this browser. Press Reload to fetch the plugin again.`);
+      if (text === undefined) throw new PluginLoadError(t("{url} is not in the copy kept in this browser. Press Reload to fetch the plugin again.", { url }));
       return text;
     },
   };

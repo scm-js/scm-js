@@ -12,6 +12,7 @@
  * UNIT record (`UnitValid` / `UnitUsed` / `UnitState` in objects.ts) for the same things.
  */
 import { Reader, Writer } from "../binary";
+import { t } from "../../../i18n";
 
 export const CUWP_SLOTS = 64;
 export const CUWP_STRIDE = 20;
@@ -114,23 +115,23 @@ export function cuwpSlotActive(s: CuwpSlot): boolean {
   return s.validProperties !== 0 || s.validFields !== 0;
 }
 
-/** A one-line reading of a slot for lists: `HP 50%, shields 100%, cloaked`. */
+/** A one-line reading of a slot for lists, in the user's language: `HP 50%, shields 100%, cloaked`. */
 export function describeCuwpSlot(s: CuwpSlot): string {
   const parts: string[] = [];
-  if (s.validFields & CuwpField.HitPoints) parts.push(`HP ${s.hitPointsPercent}%`);
-  if (s.validFields & CuwpField.Shields) parts.push(`shields ${s.shieldsPercent}%`);
-  if (s.validFields & CuwpField.Energy) parts.push(`energy ${s.energyPercent}%`);
-  if (s.validFields & CuwpField.Resources) parts.push(`${s.resources} resources`);
-  if (s.validFields & CuwpField.Hangar) parts.push(`hangar ${s.hangar}`);
-  const states: [number, number, string][] = [
-    [CuwpValid.Cloak, CuwpState.Cloaked, "cloaked"],
-    [CuwpValid.Burrow, CuwpState.Burrowed, "burrowed"],
-    [CuwpValid.InTransit, CuwpState.InTransit, "in transit"],
-    [CuwpValid.Hallucinated, CuwpState.Hallucinated, "hallucinated"],
-    [CuwpValid.Invincible, CuwpState.Invincible, "invincible"],
+  if (s.validFields & CuwpField.HitPoints) parts.push(t("HP {n}%", { n: s.hitPointsPercent }));
+  if (s.validFields & CuwpField.Shields) parts.push(t("shields {n}%", { n: s.shieldsPercent }));
+  if (s.validFields & CuwpField.Energy) parts.push(t("energy {n}%", { n: s.energyPercent }));
+  if (s.validFields & CuwpField.Resources) parts.push(t("{n, plural, one {# resource} other {# resources}}", { n: s.resources }));
+  if (s.validFields & CuwpField.Hangar) parts.push(t("hangar {n}", { n: s.hangar }));
+  const states: [number, number, string, string][] = [
+    [CuwpValid.Cloak, CuwpState.Cloaked, t("cloaked"), t("not cloaked")],
+    [CuwpValid.Burrow, CuwpState.Burrowed, t("burrowed"), t("not burrowed")],
+    [CuwpValid.InTransit, CuwpState.InTransit, t("in transit"), t("not in transit")],
+    [CuwpValid.Hallucinated, CuwpState.Hallucinated, t("hallucinated"), t("not hallucinated")],
+    [CuwpValid.Invincible, CuwpState.Invincible, t("invincible"), t("not invincible")],
   ];
-  for (const [valid, state, name] of states) {
-    if (s.validProperties & valid) parts.push(s.stateFlags & state ? name : `not ${name}`);
+  for (const [valid, state, on, off] of states) {
+    if (s.validProperties & valid) parts.push(s.stateFlags & state ? on : off);
   }
-  return parts.length > 0 ? parts.join(", ") : "nothing set";
+  return parts.length > 0 ? parts.join(", ") : t("nothing set");
 }

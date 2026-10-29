@@ -8,6 +8,7 @@ import {
 } from "./hd";
 import { decodeTbl } from "../dat/tbl";
 import { fetchAsset } from "../../gamedata/source";
+import { t } from "../../i18n";
 
 /** ERA index order, which is also the on-disk file basename in `tileset/`. */
 export const TILESET_FILENAMES = [
@@ -41,7 +42,7 @@ export class TilesetMissingError extends Error {
 
   constructor(tileset: TilesetFileName, cause?: unknown) {
     super(
-      `Tileset "${tileset}" is not available. Help ▸ Game Data… installs the graphics from a StarCraft installation.`,
+      t("Tileset \"{tileset}\" is not available. Help ▸ Game Data… installs the graphics from a StarCraft installation.", { tileset }),
       { cause },
     );
     this.name = "TilesetMissingError";

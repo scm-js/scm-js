@@ -77,7 +77,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
       (patch as Record<string, unknown>)[key] = form[key];
     }
     if (Object.keys(patch).length === 0) return;
-    tools.updateSelected(`Edit ${single ? unitLabel(original.unitId) : `${indices.length} units`}`, () => patch, indices);
+    tools.updateSelected(single ? t("Edit {name}", { name: unitLabel(original.unitId) }) : t("Edit {n, plural, one {# unit} other {# units}}", { n: indices.length }), () => patch, indices);
   };
 
   /** A vital with its "used" bit: the game only reads the number when the bit is set. */
@@ -110,7 +110,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
       size="md"
       showApply
       onOk={apply}
-      footerLeft={<span className="mono">{t("ID {hex} · serial #", { hex: hex(form.unitId, 4) })}{single ? form.serial : "—"}{touched.size > 0 ? ` · ${touched.size} changed` : ""}</span>}
+      footerLeft={<span className="mono">{t("ID {hex} · serial #", { hex: hex(form.unitId, 4) })}{single ? form.serial : "—"}{touched.size > 0 ? t(" · {n} changed", { n: touched.size }) : ""}</span>}
     >
       <div className="form wide">
         <Field label={t("Unit")}>
@@ -152,7 +152,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
             {vital(t("Resources"), "resourceAmount", UnitUsed.Resources, 0xffff, undefined, t("Minerals or gas in a resource field or gas building; the game keeps up to 65535."))}
             {vital(t("Hangar"), "hangarUnits", UnitUsed.Hangar, 0xff, undefined, t("Interceptors or scarabs on board: Carriers, Reavers and their heroes only, up to what the unit holds."))}
           </div>
-          <p className="hint" style={{ marginTop: 8 }}>{PERCENT_HINT}</p>
+          <p className="hint" style={{ marginTop: 8 }}>{translate(PERCENT_HINT)}</p>
         </Group>
         <Group title={t("Special properties")}>
           <div className="flag-grid states">
@@ -161,9 +161,9 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
             <span className="head tick-col" title={t("The 'valid' mask: whether the game reads this property at all")}>{t("Valid")}</span>
             {STATE_ROWS.map((r) => (
               <Fragment key={r.label}>
-                <span className={has("validProperties", r.valid) ? "" : "unused"}>{r.label}</span>
-                <Tick checked={has("stateFlags", r.bit)} onChange={(e) => setBit("stateFlags", r.bit, e.target.checked)} aria-label={t("{label} state", { label: r.label })} />
-                <Tick checked={has("validProperties", r.valid)} onChange={(e) => setBit("validProperties", r.valid, e.target.checked)} aria-label={t("{label} valid", { label: r.label })} />
+                <span className={has("validProperties", r.valid) ? "" : "unused"}>{translate(r.label)}</span>
+                <Tick checked={has("stateFlags", r.bit)} onChange={(e) => setBit("stateFlags", r.bit, e.target.checked)} aria-label={t("{label} state", { label: translate(r.label) })} />
+                <Tick checked={has("validProperties", r.valid)} onChange={(e) => setBit("validProperties", r.valid, e.target.checked)} aria-label={t("{label} valid", { label: translate(r.label) })} />
               </Fragment>
             ))}
           </div>
@@ -275,7 +275,7 @@ export function LocationPropertiesDialog({ entry }: DialogProps) {
       <Group title={t("Elevations")}>
         <p className="hint" style={{ marginBottom: 6 }}>{t("The location applies only on the ticked elevations; the file stores a set bit for each excluded one.")}</p>
         <div className="form" style={{ gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
-          {ELEVATIONS.map((e) => <Check key={e.bit} label={e.label} checked={has(e.bit)} disabled={anywhere} onChange={(ev) => setBit(e.bit, ev.target.checked)} />)}
+          {ELEVATIONS.map((e) => <Check key={e.bit} label={translate(e.label)} checked={has(e.bit)} disabled={anywhere} onChange={(ev) => setBit(e.bit, ev.target.checked)} />)}
         </div>
         <div className="row" style={{ marginTop: 8, gap: 6 }}>
           <Button size="sm" disabled={anywhere || form.elevationFlags === 0} onClick={() => set({ elevationFlags: 0 })}>{t("All")}</Button>
@@ -338,7 +338,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
       (patch as Record<string, unknown>)[key] = form[key];
     }
     if (Object.keys(patch).length === 0) return;
-    tools.updateSelected(`Edit ${single ? spriteName(tools.assets, kind, form.spriteId) : `${indices.length} sprites`}`, () => patch, indices);
+    tools.updateSelected(single ? t("Edit {name}", { name: spriteName(tools.assets, kind, form.spriteId) }) : t("Edit {n, plural, one {# sprite} other {# sprites}}", { n: indices.length }), () => patch, indices);
   };
 
   const owners = Array.from({ length: 12 }, (_, i) => ({ value: String(i), label: t("Player {v} ({name})", { v: i + 1, name: translate(PLAYER_COLORS[playerColorIndex(scenario?.playerColors, i)].name) }) }));
@@ -352,7 +352,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
       size="sm"
       showApply
       onOk={apply}
-      footerLeft={<span className="mono">{t("THG2 #")}{single ? indices[0] : "—"} {" "}{t("· flags {hex}", { hex: hex(form.flags, 4) })}{touched.size > 0 ? ` · ${touched.size} changed` : ""}</span>}
+      footerLeft={<span className="mono">{t("THG2 #")}{single ? indices[0] : "—"} {" "}{t("· flags {hex}", { hex: hex(form.flags, 4) })}{touched.size > 0 ? t(" · {n} changed", { n: touched.size }) : ""}</span>}
     >
       <div className="form wide">
         <Field label={t("Kind")} hint={t("A pure sprite is drawn as it is; a unit sprite becomes a unit of that type when the map loads (Installation doors and traps).")}>

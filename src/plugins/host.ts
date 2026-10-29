@@ -7,7 +7,7 @@
  * — the path a brush stroke takes — so a plugin edit undoes, marks sections dirty,
  * lifts stranded doodads and units, and repaints exactly like the built-in tools.
  */
-import { addPluginCatalogues, locale as currentLocale, makeTranslator, t } from "../i18n";
+import { addPluginCatalogues, locale as currentLocale, makeTranslator, msg, t, translate } from "../i18n";
 import type { createStore, PrimitiveAtom } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
@@ -526,7 +526,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       });
       units.push(...r.changes);
       const missed = r.placed.filter((p) => p === null).length;
-      if (missed > 0) notes.push(`no room for ${missed} start location${missed === 1 ? "" : "s"}`);
+      if (missed > 0) notes.push(t("no room for {n, plural, one {# start location} other {# start locations}}", { n: missed }));
       return r;
     },
 
@@ -615,8 +615,8 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
   const strandedUnits = (entry.units?.length ?? 0) - units.length;
   const strandedDoodads = (entry.doodads?.length ?? 0) - doodads.length;
-  if (strandedUnits > 0) notes.push(`removed ${strandedUnits} stranded unit${strandedUnits === 1 ? "" : "s"}`);
-  if (strandedDoodads > 0) notes.push(`removed ${strandedDoodads} stranded doodad${strandedDoodads === 1 ? "" : "s"}`);
+  if (strandedUnits > 0) notes.push(t("removed {n, plural, one {# stranded unit} other {# stranded units}}", { n: strandedUnits }));
+  if (strandedDoodads > 0) notes.push(t("removed {n, plural, one {# stranded doodad} other {# stranded doodads}}", { n: strandedDoodads }));
   return {
     changed: true,
     tiles: entry.changes.length,
@@ -632,7 +632,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
 
 /* ── Picking on the map ─────────────────────────────────── */
 
-const PICK_PROMPTS: Record<MapPickKind, string> = { area: "Drag a rectangle on the map", tile: "Click a tile on the map", object: "Click a unit or a location on the map" };
+const PICK_PROMPTS: Record<MapPickKind, string> = { area: msg("Drag a rectangle on the map"), tile: msg("Click a tile on the map"), object: msg("Click a unit or a location on the map") };
 
 /**
  * Put a `MapPickRequest` in front of the viewport and resolve when it (or Esc, a
@@ -644,7 +644,7 @@ export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, ki
     store.get(mapPickAtom)?.finish(null);
     if (!store.get(scenarioAtom)) { resolve(null); return; }
     const key = nextContributionKey();
-    const prompt = options.prompt?.trim() || PICK_PROMPTS[kind];
+    const prompt = options.prompt?.trim() || translate(PICK_PROMPTS[kind]);
     let done = false;
     let unsubDoc = () => {};
     let disposable = { dispose: () => {} };
@@ -654,13 +654,13 @@ export function pickOnMap(store: Store, bag: Contributions, info: PluginInfo, ki
       unsubDoc();
       disposable.dispose();
       if (store.get(mapPickAtom)?.key === key) store.set(mapPickAtom, null);
-      store.set(statusMessageAtom, result ? `${prompt} — done` : `${prompt} — cancelled`);
+      store.set(statusMessageAtom, result ? t("{prompt} — done", { prompt }) : t("{prompt} — cancelled", { prompt }));
       resolve(result);
     };
     unsubDoc = store.sub(scenarioAtom, () => finish(null));
     disposable = bag.add(() => finish(null));
     store.set(mapPickAtom, { key, kind, prompt, pluginId: info.id, ...(options.kinds ? { kinds: options.kinds } : {}), finish });
-    store.set(statusMessageAtom, `${prompt} — Esc or right-click to cancel`);
+    store.set(statusMessageAtom, t("{prompt} — Esc or right-click to cancel", { prompt }));
   });
 }
 
@@ -684,14 +684,14 @@ export function startMapTool(store: Store, bag: Contributions, info: PluginInfo,
     unsubDoc();
     disposable.dispose();
     if (store.get(mapToolAtom)?.key === key) store.set(mapToolAtom, null);
-    store.set(statusMessageAtom, `${spec.name} — ${reason === "stopped" ? "done" : reason === "cancelled" ? "cancelled" : "stopped"}`);
+    store.set(statusMessageAtom, reason === "stopped" ? t("{name} — done", { name: spec.name }) : reason === "cancelled" ? t("{name} — cancelled", { name: spec.name }) : t("{name} — stopped", { name: spec.name }));
     try { spec.onStop?.(reason); } catch (err) { logError(info.name, "A map tool's onStop failed", err); }
     store.set(mapToolRevisionAtom, store.get(mapToolRevisionAtom) + 1);
   };
   unsubDoc = store.sub(scenarioAtom, () => finish("document"));
   disposable = bag.add(() => finish("disabled"));
   store.set(mapToolAtom, { key, pluginId: info.id, spec, finish });
-  store.set(statusMessageAtom, `${spec.name}${spec.hint ? ` — ${spec.hint}` : ""} — Esc or right-click to stop`);
+  store.set(statusMessageAtom, spec.hint ? t("{name} — {hint} — Esc or right-click to stop", { name: spec.name, hint: spec.hint }) : t("{name} — Esc or right-click to stop", { name: spec.name }));
   return {
     stop: () => finish("stopped"),
     isActive: () => !done,
@@ -2726,7 +2726,7 @@ export function resolveActivate(module: unknown): PluginModule["activate"] {
   const m = module as Record<string, unknown> | null;
   const candidates = [m?.default, (m?.default as Record<string, unknown> | undefined)?.activate, m?.activate];
   for (const c of candidates) if (typeof c === "function") return c as PluginModule["activate"];
-  throw new Error("The plugin's entry module exports no activate function (export default function activate(api) {…}).");
+  throw new Error(t("The plugin's entry module exports no activate function ({example}).", { example: "export default function activate(api) {…}" }));
 }
 
 /** What the browser build uses to fetch, transpile and import plugin code. */
@@ -2819,7 +2819,7 @@ export function activatePlugin(store: Store, spec: string, deps: LoaderDeps = br
 /** The one compatibility rule: a manifest may not ask for a newer API than the host provides. */
 export function checkApiVersion(manifest: PluginManifest): void {
   if (manifest.api !== undefined && manifest.api > PLUGIN_API_VERSION) {
-    throw new Error(`The plugin needs plugin API ${manifest.api}; this editor provides ${PLUGIN_API_VERSION}.`);
+    throw new Error(t("The plugin needs plugin API {needed}; this editor provides {provided}.", { needed: manifest.api, provided: PLUGIN_API_VERSION }));
   }
 }
 

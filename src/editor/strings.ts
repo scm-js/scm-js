@@ -45,10 +45,12 @@ export function stringUsages(scn: Scenario): Map<number, StringUsage[]> {
   scn.wavs?.forEach((i, slot) => add(i, { kind: "wav", ref: slot, label: t("Sound {slot}", { slot }) }));
 
   const actions = (kind: "trigger" | "briefing", list: { actions: ActionRecord[] }[]) => {
-    const noun = kind === "trigger" ? t("Trigger") : t("Briefing");
-    list.forEach((t, ti) => {
-      for (const a of t.actions) {
-        for (const s of actionStrings(a, kind === "briefing")) add(s.index, { kind, ref: ti, label: `${noun} ${ti + 1}: ${s.action}${s.kind === "wav" ? " (WAV)" : ""}` });
+    list.forEach((trig, ti) => {
+      for (const a of trig.actions) {
+        for (const s of actionStrings(a, kind === "briefing")) {
+          const label = kind === "trigger" ? t("Trigger {n}: {action}", { n: ti + 1, action: s.action }) : t("Briefing {n}: {action}", { n: ti + 1, action: s.action });
+          add(s.index, { kind, ref: ti, label: s.kind === "wav" ? `${label} (WAV)` : label });
+        }
       }
     });
   };

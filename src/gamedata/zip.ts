@@ -16,6 +16,7 @@
  * Only the 32-bit format is handled, which every zip below 4 GB is; a Zip64 record is
  * reported rather than misread.
  */
+import { t } from "../i18n";
 
 /** Somewhere bytes can be read from by range. `to` is inclusive, as HTTP's `Range` is. */
 export interface RangeReader {
@@ -60,7 +61,7 @@ const decodeName = (bytes: Uint8Array) => new TextDecoder("utf-8").decode(bytes)
  */
 export async function readZipDirectory(reader: RangeReader): Promise<Map<string, ZipEntry>> {
   const total = await reader.size();
-  if (!Number.isFinite(total) || total <= 0) throw new ZipError("The archive's length is unknown, so its directory cannot be found.");
+  if (!Number.isFinite(total) || total <= 0) throw new ZipError(t("The archive's length is unknown, so its directory cannot be found."));
 
   const tailLength = Math.min(EOCD_MAX, total);
   const tail = await reader.read(total - tailLength, total - 1);
@@ -69,7 +70,7 @@ export async function readZipDirectory(reader: RangeReader): Promise<Map<string,
   for (let at = tail.length - 22; at >= 0; at--) {
     if (u32(tail, at) === EOCD_SIGNATURE) { eocd = at; break; }
   }
-  if (eocd < 0) throw new ZipError("No end-of-central-directory record: this is not a zip archive.");
+  if (eocd < 0) throw new ZipError(t("No end-of-central-directory record: this is not a zip archive."));
 
   const count = u16(tail, eocd + 10);
   const directorySize = u32(tail, eocd + 12);
@@ -77,7 +78,7 @@ export async function readZipDirectory(reader: RangeReader): Promise<Map<string,
   // Zip64 parks 0xffffffff in the 32-bit fields and puts the real numbers in its own record.
   if (directoryOffset === 0xffffffff || directorySize === 0xffffffff || count === 0xffff) {
     const has64 = tail.length >= 4 && (() => { for (let at = tail.length - 4; at >= 0; at--) if (u32(tail, at) === EOCD64_SIGNATURE) return true; return false; })();
-    throw new ZipError(`This is a Zip64 archive${has64 ? "" : " (or a damaged one)"}, which is not supported.`);
+    throw new ZipError(has64 ? t("This is a Zip64 archive, which is not supported.") : t("This is a Zip64 archive (or a damaged one), which is not supported."));
   }
 
   const directory = await reader.read(directoryOffset, directoryOffset + directorySize - 1);
@@ -97,7 +98,7 @@ export async function readZipDirectory(reader: RangeReader): Promise<Map<string,
     });
     at += 46 + nameLength + extraLength + commentLength;
   }
-  if (entries.size === 0) throw new ZipError("The archive's directory is empty or could not be read.");
+  if (entries.size === 0) throw new ZipError(t("The archive's directory is empty or could not be read."));
   return entries;
 }
 
@@ -107,25 +108,25 @@ export async function readZipDirectory(reader: RangeReader): Promise<Map<string,
  * and the compressed bytes that follow it.
  */
 export async function readZipMember(reader: RangeReader, entry: ZipEntry, progress?: (fraction: number) => void): Promise<Uint8Array> {
-  if (entry.method !== 0 && entry.method !== 8) throw new ZipError(`${entry.name} uses compression method ${entry.method}, which is not supported.`);
+  if (entry.method !== 0 && entry.method !== 8) throw new ZipError(t("{name} uses compression method {method}, which is not supported.", { name: entry.name, method: entry.method }));
 
   const header = await reader.read(entry.localHeaderOffset, entry.localHeaderOffset + 29);
-  if (header.length < 30 || u32(header, 0) !== LOCAL_SIGNATURE) throw new ZipError(`${entry.name}: its local header is not where the directory says it is.`);
+  if (header.length < 30 || u32(header, 0) !== LOCAL_SIGNATURE) throw new ZipError(t("{name}: its local header is not where the directory says it is.", { name: entry.name }));
   const start = entry.localHeaderOffset + 30 + u16(header, 26) + u16(header, 28);
 
   progress?.(0);
   const raw = await reader.read(start, start + entry.compressedSize - 1);
-  if (raw.length !== entry.compressedSize) throw new ZipError(`${entry.name}: read ${raw.length} bytes of ${entry.compressedSize}.`);
+  if (raw.length !== entry.compressedSize) throw new ZipError(t("{name}: read {read} bytes of {size}.", { name: entry.name, read: raw.length, size: entry.compressedSize }));
   progress?.(1);
 
   const bytes = entry.method === 0 ? raw : await inflateRaw(raw);
-  if (bytes.length !== entry.size) throw new ZipError(`${entry.name}: inflated to ${bytes.length} bytes, expected ${entry.size}.`);
+  if (bytes.length !== entry.size) throw new ZipError(t("{name}: inflated to {size} bytes, expected {expected}.", { name: entry.name, size: bytes.length, expected: entry.size }));
   return bytes;
 }
 
 /** Deflate without a zlib wrapper, which is what a zip member is. */
 async function inflateRaw(raw: Uint8Array): Promise<Uint8Array> {
-  if (typeof DecompressionStream === "undefined") throw new ZipError("This browser cannot decompress zip members (no DecompressionStream).");
+  if (typeof DecompressionStream === "undefined") throw new ZipError(t("This browser cannot decompress zip members (no DecompressionStream)."));
   const stream = new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
@@ -172,13 +173,13 @@ export function httpRangeReader(url: string, options: HttpRangeOptions = {}): Ra
       const res = await fetchImpl(url, { method: "HEAD" });
       if (!res.ok) throw new ZipError(`${url}: HTTP ${res.status}`);
       const length = Number(res.headers.get("content-length"));
-      if (!Number.isFinite(length) || length <= 0) throw new ZipError(`${url} did not say how long it is, so its members cannot be found.`);
+      if (!Number.isFinite(length) || length <= 0) throw new ZipError(t("{url} did not say how long it is, so its members cannot be found.", { url }));
       known = length;
       return length;
     },
     async read(from, to) {
       const res = await fetchImpl(url, { headers: { Range: `bytes=${from}-${to}` } });
-      if (res.status !== 206) throw new ZipError(`${url} answered ${res.status} to a range request; the server has to support ranges.`);
+      if (res.status !== 206) throw new ZipError(t("{url} answered {status} to a range request; the server has to support ranges.", { url, status: res.status }));
       const expected = to - from + 1;
       if (!options.onProgress || !res.body) return new Uint8Array(await res.arrayBuffer());
 

@@ -8,16 +8,32 @@
  *
  * This module imports only `iscript.ts` and `anim.ts`, which have no imports of their
  * own, so Node can run it under its built-in type stripping without a build step. Keep it
- * that way: the import specifiers carry the `.ts` extension for the same reason.
+ * that way: the import specifiers carry the `.ts` extension for the same reason. That is also
+ * why its words are not translated here: the i18n module brings a JSON catalogue Node will
+ * not import bare. Each step and error carries its English template and values beside the
+ * English text (`ExtractText`), translated where they are shown (`install.ts#runWorker`); the
+ * type-only import below is erased by Node and lets `scripts/i18n.mjs` see the `msg()` calls.
  */
+import type { Params } from "../i18n";
 import { animMember, animPath, imagesSharingGrp, slimAnim } from "../formats/dat/anim.ts";
 import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../formats/dat/iscript.ts";
 
 /** The member from whichever archive has it (later archives win), or null when none does. */
 export type ReadMember = (member: string) => Uint8Array | null;
 
-/** `fraction` is 0..1 within the extraction; `label` names the current step. */
-export type ExtractProgress = (fraction: number, label: string) => void;
+/** A message as a template and its values, for a caller that translates (`translate(text, params)`). */
+export interface ExtractText { text: string; params?: Params }
+
+/** Marks a template for the catalogue (`i18n#msg`, which this module cannot import). */
+const msg = (text: string) => text;
+/** A template in English: `{name}` filled, the way `i18n#format` does it. */
+const fill = (text: string, params?: Params) => (params ? text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all)) : text);
+
+/** `fraction` is 0..1 within the extraction; `label` names the current step in English, `message` the same to translate. */
+export type ExtractProgress = (fraction: number, label: string, message?: ExtractText) => void;
+
+/** Reports a step as English and as its template; the progress callbacks of `remastered.ts`, `play.ts` and the worker use it too. */
+export const reportStep = (progress: ExtractProgress | undefined, fraction: number, text: string, params?: Params) => progress?.(fraction, fill(text, params), { text, params });
 
 export const TILESET_NAMES = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"] as const;
 const REQUIRED = ["cv5", "vf4", "vr4", "wpe"];
@@ -68,7 +84,7 @@ export function extractTilesets(read: ReadMember, progress?: ExtractProgress): T
   const files = new Map<string, Uint8Array>();
   const have = new Map<string, string[]>();
   TILESET_NAMES.forEach((name, i) => {
-    progress?.(i / TILESET_NAMES.length, `Tileset · ${name}`);
+    reportStep(progress, i / TILESET_NAMES.length, msg("Tileset · {name}"), { name });
     const got: string[] = [];
     const take = (member: string, ext: string) => {
       const data = read(member);
@@ -101,7 +117,7 @@ export function extractTilesets(read: ReadMember, progress?: ExtractProgress): T
   }
   manifest.shared = shared;
   files.set("tileset/manifest.json", json(manifest));
-  progress?.(1, "Tilesets");
+  reportStep(progress, 1, msg("Tilesets"));
   return { files, manifest, complete, incomplete };
 }
 
@@ -160,9 +176,13 @@ export interface UnitExtraction {
 }
 
 export class ExtractError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** The message as its template and values, for `translate`. */
+  readonly text: ExtractText;
+
+  constructor(text: string, params?: Params) {
+    super(fill(text, params));
     this.name = "ExtractError";
+    this.text = { text, params };
   }
 }
 
@@ -177,16 +197,16 @@ export const assetPath = (member: string) => member.toLowerCase().replaceAll("\\
  * wrong ones, and nothing downstream would work.
  */
 export function extractUnits(read: ReadMember, progress?: ExtractProgress): UnitExtraction {
-  progress?.(0, "Reading the unit tables");
+  reportStep(progress, 0, msg("Reading the unit tables"));
   const tables = new Map<string, Uint8Array>();
   for (const member of UNIT_TABLES) {
     const data = read(member);
-    if (!data) throw new ExtractError(`${member} is missing from the archives.`);
+    if (!data) throw new ExtractError(msg("{member} is missing from the archives."), { member });
     tables.set(member, data);
   }
   const units = tables.get("arr\\units.dat")!;
   if (units.length !== UNITS_DAT_SIZE) {
-    throw new ExtractError(`units.dat is ${units.length} bytes; expected the Brood War layout (${UNITS_DAT_SIZE}). Is BrooDat.mpq present?`);
+    throw new ExtractError(msg("units.dat is {size} bytes; expected the Brood War layout ({expected}). Is BrooDat.mpq present?"), { size: units.length, expected: UNITS_DAT_SIZE });
   }
 
   /*
@@ -218,7 +238,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
 
   const iscript = decodeIscript(tables.get("scripts\\iscript.bin")!);
 
-  progress?.(0.05, "Walking the animation scripts");
+  reportStep(progress, 0.05, msg("Walking the animation scripts"));
   const reachable = new Set<number>();
   const todo = [...ENGINE_IMAGES];
   for (let unit = 0; unit < UNIT_COUNT; unit++) todo.push(u16(sprites, u16(flingy, units[unit] * 2) * 2));
@@ -256,7 +276,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   }
   const wanted = [...grpPaths, ...loPaths].sort();
   wanted.forEach((rel, i) => {
-    if (i % 25 === 0) progress?.(0.1 + (i / wanted.length) * 0.9, `Unit graphics · ${i} of ${wanted.length}`);
+    if (i % 25 === 0) reportStep(progress, 0.1 + (i / wanted.length) * 0.9, msg("Unit graphics · {done} of {total}"), { done: i, total: wanted.length });
     const member = `unit\\${rel}`;
     const data = read(member);
     if (data) files.set(assetPath(member), data);
@@ -270,7 +290,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   imageIds.forEach((image, i) => {
     const data = read(animMember(image));
     if (!data) return;
-    if (i % 25 === 0) progress?.(1, `Remastered sprites · ${i} of ${imageIds.length}`);
+    if (i % 25 === 0) reportStep(progress, 1, msg("Remastered sprites · {done} of {total}"), { done: i, total: imageIds.length });
     files.set(animPath(image), slimAnim(data));
     hd.push(image);
   });
@@ -299,7 +319,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
     ...(hd.length > 0 ? { hd } : {}),
   };
   files.set("unit/manifest.json", json(manifest));
-  progress?.(1, "Unit graphics");
+  reportStep(progress, 1, msg("Unit graphics"));
   return { files, manifest };
 }
 
@@ -316,15 +336,19 @@ export interface GameDataExtraction {
 
 /** Everything the editor needs, in one pass. The tilesets come first (they are quick), then the units. */
 export function extractGameData(read: ReadMember, progress?: ExtractProgress): GameDataExtraction {
-  const tilesets = extractTilesets(read, (f, label) => progress?.(f * 0.15, label));
-  const units = extractUnits(read, (f, label) => progress?.(0.15 + f * 0.85, label));
+  const tilesets = extractTilesets(read, (f, label, m) => progress?.(f * 0.15, label, m));
+  const units = extractUnits(read, (f, label, m) => progress?.(0.15 + f * 0.85, label, m));
   const files = new Map([...tilesets.files, ...units.files]);
   let bytes = 0;
   for (const data of files.values()) bytes += data.length;
   return { files, tilesets, units, bytes };
 }
 
-/** A one-line account of what an extraction produced, for logs and the dialog. */
+/**
+ * A one-line account of what an extraction produced, for logs and the dialog. English: it is
+ * kept in the copy's stamp (the desktop app writes one too), and `source.ts#summaryText`
+ * reads it into the user's language where it is shown.
+ */
 export function describeExtraction(x: GameDataExtraction): string {
   const parts = [`${x.tilesets.complete.length} of ${TILESET_NAMES.length} tilesets`, `${x.units.manifest.grps.length} unit graphics`];
   if (x.units.manifest.hd?.length) parts.push(`${x.units.manifest.hd.length} Remastered sprites`);

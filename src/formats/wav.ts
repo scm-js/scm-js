@@ -8,6 +8,7 @@
  * without the browser's help. Pure, so the round trips are tested under Node; the decoding
  * of MP3 / Ogg / FLAC and the resampling are the browser's (`services/audioConvert.ts`).
  */
+import { t } from "../i18n";
 
 /** `fmt ` format tags this module knows by name. */
 export const WAV_FORMAT = {
@@ -86,7 +87,7 @@ function adpcmSamplesPerBlock(info: WavInfo): number {
 
 /** A short label: `22050 Hz · 16-bit · mono`, with the codec named when it is not plain PCM. */
 export function wavFormatLabel(info: WavInfo): string {
-  const ch = info.channels === 1 ? "mono" : info.channels === 2 ? "stereo" : `${info.channels} ch`;
+  const ch = info.channels === 1 ? t("mono") : info.channels === 2 ? t("stereo") : t("{n} ch", { n: info.channels });
   const codec = wavCodecName(info.format);
   return `${info.sampleRate} Hz · ${info.bitsPerSample}-bit · ${ch}${codec ? ` · ${codec}` : ""}`;
 }

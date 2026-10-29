@@ -19,6 +19,7 @@ import { canonicalSpec, parseSpec, resolveIcon, type PluginSource } from "./load
 import type { PluginIcon } from "./api";
 import { registryCacheAtom, registryStateAtom, userRegistriesAtom, type RegistryState } from "../atoms/pluginAtoms";
 import { DEFAULT_REGISTRIES } from "./defaults";
+import { t } from "../i18n";
 
 /** One plugin as a registry lists it: the spec to install, plus what its manifest said. */
 export interface RegistryEntry {
@@ -106,9 +107,9 @@ function entryOf(raw: unknown): RegistryEntry | null {
  * because one bad row in a generated file should not empty the browser.
  */
 export function parseRegistry(raw: unknown, url: string): Registry {
-  if (!raw || typeof raw !== "object") throw new RegistryError(`${url} is not a JSON object.`);
+  if (!raw || typeof raw !== "object") throw new RegistryError(t("{where} is not a JSON object.", { where: url }));
   const r = raw as Record<string, unknown>;
-  if (!Array.isArray(r.plugins)) throw new RegistryError(`${url} has no "plugins" list.`);
+  if (!Array.isArray(r.plugins)) throw new RegistryError(t("{url} has no \"plugins\" list.", { url }));
   const plugins: RegistryEntry[] = [];
   let skipped = 0;
   const seen = new Set<string>();
@@ -351,7 +352,7 @@ export function loadRegistry(
     try {
       const text = await fetchText(url);
       let json: unknown;
-      try { json = JSON.parse(text); } catch { throw new RegistryError(`${url} did not answer with JSON.`); }
+      try { json = JSON.parse(text); } catch { throw new RegistryError(t("{url} did not answer with JSON.", { url })); }
       const registry = parseRegistry(json, url);
       store.set(registryCacheAtom, { ...store.get(registryCacheAtom), [url]: { at: Date.now(), registry } });
       setState(store, url, { status: "ok", error: null });
@@ -385,13 +386,13 @@ export function cachedRegistries(store: Store): Registry[] {
 /** Add a registry to the user's list (canonicalised, no duplicates). Throws on a bad URL. */
 export function addRegistry(store: Store, url: string): string {
   const s = url.trim();
-  if (s === "") throw new RegistryError("Enter the address of a registry.");
+  if (s === "") throw new RegistryError(t("Enter the address of a registry."));
   let parsed: URL;
-  try { parsed = new URL(s); } catch { throw new RegistryError(`Not a valid URL: ${s}`); }
-  if (!/^https?:$/.test(parsed.protocol)) throw new RegistryError("A registry must be an http or https address.");
+  try { parsed = new URL(s); } catch { throw new RegistryError(t("Not a valid URL: {url}", { url: s })); }
+  if (!/^https?:$/.test(parsed.protocol)) throw new RegistryError(t("A registry must be an http or https address."));
   const href = parsed.href;
   const list = store.get(userRegistriesAtom);
-  if (registryUrls(store).includes(href)) throw new RegistryError("That registry is already in the list.");
+  if (registryUrls(store).includes(href)) throw new RegistryError(t("That registry is already in the list."));
   store.set(userRegistriesAtom, [...list, href]);
   return href;
 }

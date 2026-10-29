@@ -1,4 +1,5 @@
 import { Reader } from "./binary";
+import { msg, t } from "../../i18n";
 import { combine, parseChk, serializeChk, type ChkFile, type ChkSection } from "./reader";
 import { sizeOf, specFor } from "./sections/registry";
 import { decodeStrings, encodeStrings, getString, setString, type StringTable } from "./sections/strings";
@@ -164,13 +165,13 @@ export function strSectionName(scn: Scenario): "STRx" | "STR " {
  */
 export type MapVersion = "original" | "hybrid" | "broodwar" | "remastered" | "remasteredHybrid";
 
-/** VER values StarEdit writes for each revision. */
+/** VER values StarEdit writes for each revision. `label` is English, shown through `translate`. */
 export const MAP_VERSIONS: Record<MapVersion, { ver: number; type: string; label: string; extension: string }> = {
-  original: { ver: 59, type: "RAWS", label: "StarCraft 1.00", extension: "scm" },
-  hybrid: { ver: 63, type: "RAWS", label: "Hybrid 1.04", extension: "scm" },
-  broodwar: { ver: 205, type: "RAWB", label: "Brood War 1.04", extension: "scx" },
-  remastered: { ver: 206, type: "RAWB", label: "Remastered 1.21+", extension: "scx" },
-  remasteredHybrid: { ver: 64, type: "RAWS", label: "Remastered 1.21+ without Brood War", extension: "scm" },
+  original: { ver: 59, type: "RAWS", label: msg("StarCraft 1.00"), extension: "scm" },
+  hybrid: { ver: 63, type: "RAWS", label: msg("Hybrid 1.04"), extension: "scm" },
+  broodwar: { ver: 205, type: "RAWB", label: msg("Brood War 1.04"), extension: "scx" },
+  remastered: { ver: 206, type: "RAWB", label: msg("Remastered 1.21+"), extension: "scx" },
+  remasteredHybrid: { ver: 64, type: "RAWS", label: msg("Remastered 1.21+ without Brood War"), extension: "scm" },
 };
 
 export function mapVersionOf(fileVersion: number): MapVersion {
@@ -311,8 +312,8 @@ export function parseScenario(bytes: Uint8Array): Scenario {
   const warnings: string[] = [];
 
   for (const s of chk.sections) {
-    if (s.declaredSize < 0) warnings.push(`Section ${s.name.trim()} declares a negative length (${s.declaredSize}); the game seeks backwards there, and nothing after it is read as a section.`);
-    else if (s.truncated) warnings.push(`Section ${s.name.trim()} declares ${s.declaredSize} bytes but the file ends early.`);
+    if (s.declaredSize < 0) warnings.push(t("Section {name} declares a negative length ({size}); the game seeks backwards there, and nothing after it is read as a section.", { name: s.name.trim(), size: s.declaredSize }));
+    else if (s.truncated) warnings.push(t("Section {name} declares {size} bytes but the file ends early.", { name: s.name.trim(), size: s.declaredSize }));
   }
 
   const take = (name: string, dim = { width: 0, height: 0 }) => {
@@ -330,7 +331,7 @@ export function parseScenario(bytes: Uint8Array): Scenario {
     width = r.u16();
     height = r.u16();
   } else {
-    warnings.push("No usable DIM section; falling back to 64x64.");
+    warnings.push(t("No usable DIM section; falling back to 64x64."));
     width = 64;
     height = 64;
   }

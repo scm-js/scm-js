@@ -125,7 +125,7 @@ export function progressPanel(open: OpenPanel, label: string, options: ProgressO
       const head = el("div", { className: "row between" }, el("span", {}, label), percent);
       const rows: (HTMLElement | false)[] = [head, bar, line];
       if (options.cancellable) {
-        rows.push(el("div", { className: "row end" }, w.button("Cancel", { onClick: cancel })));
+        rows.push(el("div", { className: "row end" }, w.button(t("Cancel"), { onClick: cancel })));
       }
       body.append(el("div", { className: "col", style: { gap: "8px" } }, ...rows));
       return () => { closed = true; };

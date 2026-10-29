@@ -11,13 +11,13 @@ import type { Tileset } from "../formats/tileset/decode";
 import { isFlatPair } from "../formats/tileset/palette";
 import { TILESETS, type TerrainName } from "../data/tilesets";
 import { playerRaceLabel, playerTypeLabel } from "../data/players";
-import { START_LOCATION, unitLabel } from "../data/units";
+import { START_LOCATION, unitName } from "../data/units";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, VESPENE_GEYSER } from "./units";
 import { spriteKind } from "./sprites";
 import { isPreserved } from "./triggers";
 import { tileGroup } from "../formats/chk/sections/terrain";
 import { TriggerFlag } from "../formats/chk/sections/triggers";
-import { t } from "../i18n";
+import { msg, t } from "../i18n";
 
 export interface PlayerStatistics {
   slot: number;
@@ -77,7 +77,7 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
       if (mineral) { resources.minerals += amount; resources.fields++; } else { resources.gas += amount; resources.geysers++; }
     }
   }
-  const top = [...byType].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 10).map(([id, count]) => ({ id, name: unitLabel(id), count }));
+  const top = [...byType].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 10).map(([id, count]) => ({ id, name: unitName(id), count }));
 
   let conditions = 0, actions = 0, preserved = 0, disabled = 0;
   for (const t of scn.triggers) {
@@ -96,9 +96,9 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
     // Flat pairs carry the terrain id; every other group with an index is an edge set — cliff
     // faces and the seams between two terrains — which the CV5 does not name.
     tileset.groups.forEach((g, i) => {
-      const name = g.index === 0 ? t("Null") : g.index === 1 ? t("Doodads")
+      const name = g.index === 0 ? msg("Null") : g.index === 1 ? msg("Doodads")
         : isFlatPair(tileset, i & ~1) ? terrainNames.find((n) => n.id === g.index)?.name ?? `Terrain ${g.index}`
-          : g.index >= 2 ? t("Edges and cliffs") : t("Other");
+          : g.index >= 2 ? msg("Edges and cliffs") : msg("Other");
       nameOf.set(i, name);
     });
     for (const id of scn.tiles) {
@@ -146,7 +146,7 @@ export function statisticsText(s: MapStatistics): string {
     `Switches named: ${s.switchesNamed}; sounds: ${s.sounds}`,
   ];
   if (s.terrain) {
-    lines.push(t("Terrain:"));
+    lines.push("Terrain:");
     for (const t of s.terrain) lines.push(`  ${t.tiles} × ${t.name}`);
   }
   return lines.join("\n") + "\n";

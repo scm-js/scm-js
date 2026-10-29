@@ -311,7 +311,7 @@ function UnitPalette() {
                   <div key={g.label}>
                     <div className="node" style={{ paddingLeft: 12 }} onClick={() => setOpen({ ...open, [g.label]: !isOpen })}>
                       <span className="twisty">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
-                      <span className="dim">{g.label}</span>
+                      <span className="dim">{translate(g.label)}</span>
                       <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.units.length}</span>
                     </div>
                     {isOpen && g.units.map((id) => (
@@ -354,7 +354,7 @@ function GroupedPicker({ groups, active, onPick, query, defaultOpen, title }: { 
           <div key={g.label}>
             <div className="node" onClick={() => setOpen({ ...open, [g.label]: !isOpen })}>
               <span className="twisty">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
-              <span className="dim">{g.label}</span>
+              <span className="dim">{translate(g.label)}</span>
               <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.items.length}</span>
             </div>
             {isOpen && g.items.map((it) => (
@@ -389,13 +389,13 @@ function SpritePalette() {
   const colors = scenario?.playerColors;
 
   const pureGroups = useMemo<PickerGroup[]>(() => {
-    if (!assets) return [{ label: t("Sprites"), items: Array.from({ length: SPRITE_COUNT }, (_, id) => ({ id, label: t("Sprite #{id}", { id }) })) }];
+    if (!assets) return [{ label: msg("Sprites"), items: Array.from({ length: SPRITE_COUNT }, (_, id) => ({ id, label: t("Sprite #{id}", { id }) })) }];
     const cat = spriteCatalogue(assets);
     return cat.groups.map((g) => ({ label: g.label, items: g.ids.map((id) => ({ id, label: cat.entries[id].label })) }));
   }, [assets]);
   // `assets` for the names, which follow the loaded data set.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: translate(g.label), items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
+  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
   const activeId = kind === "pure" ? active : activeUnit;
@@ -432,7 +432,7 @@ function SpritePalette() {
               <>
                 {error && <div className="hint" style={{ padding: "4px 8px" }}>{t("Unit data not installed — sprites are listed by id and drawn as markers.")}</div>}
                 <GroupedPicker groups={pureGroups} active={active} onPick={(id) => pick("pure", id)} query={query} defaultOpen={(l) => l === "Units" || l === `Doodads · ${tileset.name}`} title={(id) => t("Sprite #{id} — click to place", { id })} />
-                <div className="palette-footer"><span>{t("{count} pure sprite", { count })}{count === 1 ? "" : "s"} {" "}{t("on the map")}</span><span>THG2</span></div>
+                <div className="palette-footer"><span>{t("{count, plural, one {# pure sprite} other {# pure sprites}} on the map", { count })}</span><span>THG2</span></div>
               </>
             ),
           },
@@ -442,7 +442,7 @@ function SpritePalette() {
             content: (
               <>
                 <GroupedPicker groups={unitGroups} active={activeUnit} onPick={(id) => pick("unit", id)} query={query} defaultOpen={(l) => l === "Special"} title={(id) => t("Unit #{id} as a sprite — click to place", { id })} />
-                <div className="palette-footer"><span>{scenario ? scenario.sprites.length - count : 0} {" "}{t("unit sprite")}{scenario && scenario.sprites.length - count === 1 ? "" : "s"} {" "}{t("on the map")}</span><span>{t("becomes a unit on load")}</span></div>
+                <div className="palette-footer"><span>{t("{n, plural, one {# unit sprite} other {# unit sprites}} on the map", { n: scenario ? scenario.sprites.length - count : 0 })}</span><span>{t("becomes a unit on load")}</span></div>
               </>
             ),
           },
@@ -640,7 +640,7 @@ function FogPalette() {
         )}
       </div>
       <div className="palette-footer">
-        <span>{hasMap ? <>P{view + 1} · {fogged.toLocaleString()} / {total.toLocaleString()} fogged ({pct}%)</> : t("No map open")}</span>
+        <span>{hasMap ? t("P{n} · {fogged} / {total} fogged ({pct}%)", { n: view + 1, fogged: fogged.toLocaleString(), total: total.toLocaleString(), pct }) : t("No map open")}</span>
         <span>{mode === "fog" ? t("Fog") : t("Clear")}</span>
       </div>
     </>
@@ -668,7 +668,7 @@ function ClipboardPalette() {
     <>
       <div className="palette-toolbar">
         <span className="lbl">{t("Area")}</span>
-        <span className="mono dim" style={{ fontSize: 11 }}>{selection ? `${w} × ${h} at ${selection.x0}, ${selection.y0}` : "— × —"}</span>
+        <span className="mono dim" style={{ fontSize: 11 }}>{selection ? t("{w} × {h} at {x}, {y}", { w, h, x: selection.x0, y: selection.y0 }) : "— × —"}</span>
       </div>
       <div className="palette-toolbar">
         <Button size="sm" onClick={() => { tools.cut(); }} disabled={!selection} title={t("Copy the marked area and remove its objects (Ctrl+X)")}>{t("Cut")}</Button>

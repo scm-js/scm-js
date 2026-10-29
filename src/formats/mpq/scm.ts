@@ -1,4 +1,5 @@
 import { Archive, Creator, MpqError, type CompressionMethod, type HashEntry, type StoredMember } from "mopaq";
+import { t } from "../../i18n";
 
 /** Where StarCraft keeps the scenario inside the archive. */
 export const SCENARIO_PATH = "staredit\\scenario.chk";
@@ -55,7 +56,7 @@ export async function loadMap(bytes: Uint8Array): Promise<LoadedMap> {
   try {
     archive = await Archive.openAsync(bytes);
   } catch (err) {
-    throw new MapLoadError(`Not a readable MPQ archive: ${describe(err)}`, { cause: err });
+    throw new MapLoadError(t("Not a readable MPQ archive: {reason}", { reason: describe(err) }), { cause: err });
   }
 
   let chk: Uint8Array;
@@ -63,7 +64,7 @@ export async function loadMap(bytes: Uint8Array): Promise<LoadedMap> {
     chk = await archive.readFileAsync(SCENARIO_PATH);
   } catch (err) {
     throw new MapLoadError(
-      `Archive has no readable ${SCENARIO_PATH} (${describe(err)}). Protected maps often strip or corrupt it.`,
+      t("Archive has no readable {path} ({reason}). Protected maps often strip or corrupt it.", { path: SCENARIO_PATH, reason: describe(err) }),
       { cause: err },
     );
   }
@@ -229,7 +230,7 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
       } catch (err) {
         unreadable.push(name);
         keepStored.add(slot);
-        problems?.push(`Archive member ${name} could not be read (${err instanceof Error ? err.message : String(err)}); it is kept in a saved copy as it is.`);
+        problems?.push(t("Archive member {name} could not be read ({reason}); it is kept in a saved copy as it is.", { name, reason: err instanceof Error ? err.message : String(err) }));
       }
     }
   };

@@ -73,7 +73,7 @@ export function findInScenario(scn: Scenario, options: FindOptions): FindResult[
       scn.units.forEach((u, index) => {
         const custom = unitCustomName(scn, u.unitId);
         const name = unitLabel(u.unitId);
-        if (u.unitId === id || hit(name) || (custom && hit(custom)) || hit(`player ${u.owner + 1}`)) {
+        if (u.unitId === id || hit(name) || (custom && hit(custom)) || hit(`player ${u.owner + 1}`) || hit(t("player {n}", { n: u.owner + 1 }))) {
           push({ kind, index, label: custom || name, detail: t("Player {v} · {floor}, {floor2}", { v: u.owner + 1, floor: Math.floor(u.x / TILE_PX), floor2: Math.floor(u.y / TILE_PX) }), x: u.x / TILE_PX, y: u.y / TILE_PX });
         }
       });
@@ -90,7 +90,7 @@ export function findInScenario(scn: Scenario, options: FindOptions): FindResult[
       break;
     case "sprites":
       scn.sprites.forEach((s, index) => {
-        const name = options.spriteName ? options.spriteName(s) : `Sprite #${s.spriteId}`;
+        const name = options.spriteName ? options.spriteName(s) : t("Sprite #{id}", { id: s.spriteId });
         if (hit(name) || String(s.spriteId) === q) {
           push({ kind, index, label: name, detail: t("Player {v} · {floor}, {floor2}", { v: s.owner + 1, floor: Math.floor(s.x / TILE_PX), floor2: Math.floor(s.y / TILE_PX) }), x: s.x / TILE_PX, y: s.y / TILE_PX });
         }
@@ -104,7 +104,7 @@ export function findInScenario(scn: Scenario, options: FindOptions): FindResult[
       break;
     case "doodads":
       scn.doodads.forEach((d, index) => {
-        const name = options.doodadName ? options.doodadName(d) : `Doodad #${d.doodadId}`;
+        const name = options.doodadName ? options.doodadName(d) : t("Doodad #{id}", { id: d.doodadId });
         if (hit(name) || String(d.doodadId) === q) {
           push({ kind, index, label: name, detail: t("Player {v} · {floor}, {floor2}", { v: d.owner + 1, floor: Math.floor(d.x / TILE_PX), floor2: Math.floor(d.y / TILE_PX) }), x: d.x / TILE_PX, y: d.y / TILE_PX });
         }

@@ -18,7 +18,7 @@ export function fogPlayersLabel(players: number): string {
   for (let p = 0; p < 8; p++) if (players & playerBit(p)) names.push(`P${p + 1}`);
   if (names.length === 0) return t("no players");
   if (names.length === 8) return t("all players");
-  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return names.length === 1 ? names[0] : t("{list} and {last}", { list: names.slice(0, -1).join(", "), last: names.at(-1)! });
 }
 
 const verb = (mode: FogMode) => (mode === "fog" ? t("Fog") : t("Clear fog"));
@@ -92,7 +92,7 @@ export function useFogTools() {
     if (!s || !scn) return;
     const fog = s.finish();
     if (fog.length === 0 && !created) return;
-    const label = `${verb(strokeMode.current)} for ${fogPlayersLabel(store.get(fogPlayersAtom))}`;
+    const label = strokeMode.current === "fog" ? t("Fog for {players}", { players: fogPlayersLabel(store.get(fogPlayersAtom)) }) : t("Clear fog for {players}", { players: fogPlayersLabel(store.get(fogPlayersAtom)) });
     const entry: HistoryEntry = { label, changes: [], fog };
     if (created) entry.createdMask = created;
     commit(entry);

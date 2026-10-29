@@ -29,7 +29,7 @@ import { desktopBridge, type DesktopBridge } from "./desktop";
 import { hostTerms } from "../editor/platform";
 import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfile } from "./profiles";
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
-import { t } from "../i18n";
+import { t, translate } from "../i18n";
 
 export type SourceKind = "bundled" | "stored" | "none";
 
@@ -69,7 +69,27 @@ export interface LocateDeps {
 }
 
 const describeStored = (copy: StoredCopy) =>
-  copy.where === "opfs" ? `Copy kept in ${hostTerms().here} (${megabytes(copy.bytes)}, from ${copy.from})` : `Copy held for this session (${megabytes(copy.bytes)}, from ${copy.from})`;
+  copy.where === "opfs"
+    ? t("Copy kept in {here} ({size}, from {from})", { here: hostTerms().here, size: megabytes(copy.bytes), from: copy.from })
+    : t("Copy held for this session ({size}, from {from})", { size: megabytes(copy.bytes), from: copy.from });
+
+/**
+ * A stamp's `summary` (`extract.ts#describeExtraction`, plus the play set's sounds) in the
+ * user's language. The stamp keeps it in English — it is written once, by the worker or the
+ * desktop app, and read in whatever language the editor is in later — so it is read back
+ * part by part here; a part this does not know is shown as it is.
+ */
+export function summaryText(summary: string): string {
+  return summary.split(", ").map((part) => {
+    let m: RegExpMatchArray | null;
+    if ((m = part.match(/^(\d+) of (\d+) tilesets$/))) return t("{n} of {total} tilesets", { n: m[1], total: m[2] });
+    if ((m = part.match(/^(\d+) unit graphics$/))) return t("{n, plural, one {# unit graphic} other {# unit graphics}}", { n: Number(m[1]) });
+    if ((m = part.match(/^(\d+) Remastered sprites$/))) return t("{n, plural, one {# Remastered sprite} other {# Remastered sprites}}", { n: Number(m[1]) });
+    if ((m = part.match(/^(\d+) missing$/))) return t("{n} missing", { n: m[1] });
+    if ((m = part.match(/^(\d+) game sounds$/))) return t("{n, plural, one {# game sound} other {# game sounds}}", { n: Number(m[1]) });
+    return part;
+  }).join(", ");
+}
 
 export function megabytes(bytes: number): string {
   return `${(bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0)} MB`;
@@ -87,30 +107,33 @@ export async function locateGameData(deps: LocateDeps, report?: InstallProgressL
   if (!isDefaultProfile(chosen)) {
     const copy = await deps.stored(chosen).catch(() => null);
     if (copy) return { kind: "stored", profile: profileOf(copy), label: describeStored(copy), tried, stored: copy };
-    tried.push(`The "${chosen}" data set has no copy in ${hostTerms().here} — using the game's own`);
+    tried.push(t("The \"{id}\" data set has no copy in {here} — using the game's own", { id: chosen, here: hostTerms().here }));
   }
 
   // 1. This build's own files.
   if (await bundled()) return { kind: "bundled", profile, base: deps.bundledBase, label: t("Bundled with this build"), tried };
-  tried.push("Nothing bundled with this build");
+  tried.push(t("Nothing bundled with this build"));
 
   // 2. A copy an earlier install left here.
   const copy = await deps.stored().catch(() => null);
   if (copy) return { kind: "stored", profile: profileOf(copy), label: describeStored(copy), tried, stored: copy };
-  tried.push(`No copy kept in ${hostTerms().here}`);
+  tried.push(t("No copy kept in {here}", { here: hostTerms().here }));
 
   // 3. The desktop app: the disk, then the files are served as bundled. Silent when it
   //    works — a user whose StarCraft folder is where the game puts it never hears about
   //    any of this.
   if (deps.desktop) {
-    report?.(0, "Looking for a StarCraft installation");
-    const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, label));
+    report?.(0, t("Looking for a StarCraft installation"));
+    // The desktop app's lines are English (its process has no locale); those without a number in them translate.
+    const off = deps.desktop.gameData.onProgress((f, label) => report?.(f, translate(label)));
     try {
       const found = await deps.desktop.gameData.locate();
       if (found.status === "ready") return { kind: "bundled", profile, base: deps.bundledBase, label: t("Extracted from {from}", { from: found.from }), tried, desktop: true, extractedFrom: found.from };
-      tried.push(found.status === "missing" ? `No StarCraft archives in ${found.searched.length} places on this computer` : `Extraction failed: ${found.message}`);
+      tried.push(found.status === "missing"
+        ? t("{n, plural, one {No StarCraft archives in # place on this computer} other {No StarCraft archives in # places on this computer}}", { n: found.searched.length })
+        : t("Extraction failed: {reason}", { reason: found.message }));
     } catch (err) {
-      tried.push(`Desktop search failed: ${err instanceof Error ? err.message : String(err)}`);
+      tried.push(t("Desktop search failed: {reason}", { reason: err instanceof Error ? err.message : String(err) }));
     } finally {
       off();
     }

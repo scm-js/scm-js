@@ -1,4 +1,5 @@
 import { Reader, Writer } from "../binary";
+import { msg } from "../../../i18n";
 
 /* ── UNIT: placed units, 36 bytes each ───────────────────── */
 
@@ -170,13 +171,14 @@ export const ANYWHERE_INDEX = 63;
  * clear — so StarEdit's ticked "Low ground" box is bit 0 *clear*, and 0 means "everywhere".
  */
 export const Elevation = { LowGround: 1, MediumGround: 2, HighGround: 4, LowAir: 8, MediumAir: 16, HighAir: 32 } as const;
+/** `label` is English, shown through `translate`. */
 export const ELEVATIONS: readonly { bit: number; label: string }[] = [
-  { bit: Elevation.LowGround, label: "Low ground" },
-  { bit: Elevation.MediumGround, label: "Medium ground" },
-  { bit: Elevation.HighGround, label: "High ground" },
-  { bit: Elevation.LowAir, label: "Low air" },
-  { bit: Elevation.MediumAir, label: "Medium air" },
-  { bit: Elevation.HighAir, label: "High air" },
+  { bit: Elevation.LowGround, label: msg("Low ground") },
+  { bit: Elevation.MediumGround, label: msg("Medium ground") },
+  { bit: Elevation.HighGround, label: msg("High ground") },
+  { bit: Elevation.LowAir, label: msg("Low air") },
+  { bit: Elevation.MediumAir, label: msg("Medium air") },
+  { bit: Elevation.HighAir, label: msg("High air") },
 ];
 /** All six bits: the mask an elevation word is confined to. */
 export const ELEVATION_MASK = 0x3f;

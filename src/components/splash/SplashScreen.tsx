@@ -5,7 +5,7 @@ import { preloadLogAtom, preloadStepAtom } from "../../atoms/preloadAtoms";
 import { APP_VERSION_SHORT } from "../../version";
 import { removeBootSplash } from "./bootSplash";
 import { PINK, PINK_HI, buildSphere, drawNebula, drawSphereGlow, drawSphereWire, drawStars, generateStars, projectSphere } from "./starfield";
-import { t } from "../../i18n";
+import { t, translate } from "../../i18n";
 
 /* ── Timing ─────────────────────────────────────────────── */
 
@@ -144,7 +144,7 @@ export default function SplashScreen({ solid = false }: { solid?: boolean }) {
                 {line.label}{line.failed ? t(" — unavailable") : ""}
               </div>
             ))}
-            {!step.done && <div className="current">{step.label}</div>}
+            {!step.done && <div className="current">{translate(step.label)}</div>}
             {step.done && <div className="current">{t("Ready")}</div>}
           </div>
           <div className="splash-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>

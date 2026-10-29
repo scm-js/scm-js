@@ -19,6 +19,7 @@ import { scenarioName } from "../formats/chk/scenario";
 import { desktopBridge, type DesktopGameInfo } from "../gamedata/desktop";
 import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHandle } from "./handleStore";
 import { saveBytes } from "./mapIo";
+import { t } from "../i18n";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -147,7 +148,7 @@ export async function writeTestFile(store: Store, bytes: Uint8Array, fileName: s
   }
   const folder = await storedTestFolder();
   if (!folder) return null;
-  if (!(await ensurePermission(folder, "readwrite"))) throw new Error(`The browser did not allow writing into ${folder.name}.`);
+  if (!(await ensurePermission(folder, "readwrite"))) throw new Error(t("The browser did not allow writing into {name}.", { name: folder.name }));
   const file = await folder.getFileHandle(name, { create: true });
   const writable = await file.createWritable();
   await writable.write(bytes);

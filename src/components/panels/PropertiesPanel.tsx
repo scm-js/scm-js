@@ -32,7 +32,7 @@ import { spriteKind } from "../../editor/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { DoodadThumb } from "./DoodadThumb";
-import { heightLabel, hexTile, tileInfo } from "../../formats/tileset/palette";
+import { heightLabel, hexTile, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
 import { UnitUsed } from "../../editor/units";
 import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
@@ -71,15 +71,15 @@ function TerrainProps() {
     <div className="props">
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{terrainName(info, terrain)}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          ? <>{translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>
       <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
       <div className="props-section">{t("Under cursor")}</div>
       <Row k={t("Tile")}>{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
-      <Row k={t("Group")}>{under ? <>{under.label} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>
-      <Row k={t("MegaTile")}>{under ? <span className="mono">{under.megatile >= 0 ? under.megatile : "none"}</span> : dash}</Row>
+      <Row k={t("Group")}>{under && loaded ? <>{tileGroupLabel(loaded.tileset, info.terrain, under.group)} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>
+      <Row k={t("MegaTile")}>{under ? <span className="mono">{under.megatile >= 0 ? under.megatile : t("none")}</span> : dash}</Row>
       <Row k={t("Elevation")}>{under ? heightLabel(under.height) : dash}</Row>
       <Row k={t("Walkable")}>{under ? t("{walkable} / 16 minitiles", { walkable: under.walkable }) : dash}</Row>
       <Row k={t("Buildable")}>{under ? (under.buildable ? t("Yes") : t("No")) : dash}</Row>
@@ -109,9 +109,9 @@ function UnitProps() {
     const used = first.validStates;
     const many = selected.length > 1;
     /** An inline editor for one of the "used" vitals; unused ones show a dash and are set in the dialog. */
-    const vital = (flag: number, key: keyof UnitRecord, label: string, max: number, unit?: string) =>
+    const vital = (flag: number, key: keyof UnitRecord, undoLabel: string, max: number, unit?: string) =>
       used & flag
-        ? <NumberInput value={Number(first[key])} onChange={(v) => tools.updateSelected(`Set ${label.toLowerCase()}`, () => ({ [key]: v }))} min={0} max={max} unit={unit} width={unit ? 96 : 110} />
+        ? <NumberInput value={Number(first[key])} onChange={(v) => tools.updateSelected(undoLabel, () => ({ [key]: v }))} min={0} max={max} unit={unit} width={unit ? 96 : 110} />
         : dash;
     return (
       <div className="props">
@@ -128,11 +128,11 @@ function UnitProps() {
         <Row k={t("Position")}><span className="mono">{first.x}, {first.y}</span> <span className="faint">{t("px · tile {floor}, {floor2}", { floor: Math.floor(first.x / 32), floor2: Math.floor(first.y / 32) })}</span></Row>
         <Row k={t("Type")}>{g.building ? t("Building") : g.flyer ? t("Flyer") : t("Ground unit")}</Row>
         <div className="props-section">{t("Properties")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null}</div>
-        <Row k={t("Hit points")}>{vital(UnitUsed.HitPoints, "hitPointsPercent", "Hit points", 255, "%")}</Row>
-        <Row k={t("Shields")}>{vital(UnitUsed.Shields, "shieldPercent", "Shields", 255, "%")}</Row>
-        <Row k={t("Energy")}>{vital(UnitUsed.Energy, "energyPercent", "Energy", 255, "%")}</Row>
-        <Row k={t("Resources")}>{vital(UnitUsed.Resources, "resourceAmount", "Resources", 0xffffffff)}</Row>
-        <Row k={t("Hangar")}>{vital(UnitUsed.Hangar, "hangarUnits", "Hangar count", 0xffff)}</Row>
+        <Row k={t("Hit points")}>{vital(UnitUsed.HitPoints, "hitPointsPercent", t("Set hit points"), 255, "%")}</Row>
+        <Row k={t("Shields")}>{vital(UnitUsed.Shields, "shieldPercent", t("Set shields"), 255, "%")}</Row>
+        <Row k={t("Energy")}>{vital(UnitUsed.Energy, "energyPercent", t("Set energy"), 255, "%")}</Row>
+        <Row k={t("Resources")}>{vital(UnitUsed.Resources, "resourceAmount", t("Set resources"), 0xffffffff)}</Row>
+        <Row k={t("Hangar")}>{vital(UnitUsed.Hangar, "hangarUnits", t("Set hangar count"), 0xffff)}</Row>
         <div className="span row" style={{ marginTop: 6, gap: 6 }}>
           <Button size="sm" onClick={() => open("unitProperties", { indices: selected })}>{t("Unit Properties…")}</Button>
           <Button size="sm" onClick={() => tools.deleteSelected()} title={t("Delete")}><Trash2 size={12} /></Button>
@@ -157,7 +157,7 @@ function UnitProps() {
         <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>{OWNER_OPTIONS(colors)}</select>
       </Row>
       <Row k={t("Type")}>{g.building ? t("Building") : g.flyer ? t("Flyer") : t("Ground unit")}</Row>
-      <Row k={t("Footprint")}>{tools.tables ? <span className="mono">{g.building ? `${g.placeW / 32} × ${g.placeH / 32} tiles` : `${g.left + g.right + 1} × ${g.up + g.down + 1} px`}</span> : dash}</Row>
+      <Row k={t("Footprint")}>{tools.tables ? <span className="mono">{g.building ? t("{w} × {h} tiles", { w: g.placeW / 32, h: g.placeH / 32 }) : `${g.left + g.right + 1} × ${g.up + g.down + 1} px`}</span> : dash}</Row>
       <Row k={t("Placed")}>{scenario ? scenario.units.filter((u) => u.unitId === activeUnit).length : dash}</Row>
       <div className="span row" style={{ marginTop: 6, gap: 6 }}>
         {placing
@@ -191,7 +191,7 @@ function DoodadProps() {
   const underIndex = scenario ? tools.pickAt(cursor.x, cursor.y) : -1;
   const under = underIndex >= 0 ? scenario!.doodads[underIndex] : null;
   const underDef = under ? catalogue.byId.get(under.doodadId) ?? null : null;
-  const overlayLabel = (kind: "sprite" | "unit", id: number) => (kind === "unit" ? `${unitLabel(id)} (unit #${id})` : `sprite #${id}`);
+  const overlayLabel = (kind: "sprite" | "unit", id: number) => (kind === "unit" ? t("{name} (unit #{id})", { name: unitLabel(id), id }) : t("sprite #{id}", { id }));
 
   if (first) {
     const many = selected.length > 1;
@@ -438,7 +438,7 @@ function LocationProps() {
       <div className="props-section">{t("Elevations")}{many ? <span className="faint"> {t("· edits apply to all {length}", { length: selected.length })}</span> : null} <span className="faint mono">0x{rec.elevationFlags.toString(16).toUpperCase().padStart(2, "0")}</span></div>
       <div className="span" style={{ display: "grid", gridAutoFlow: "column", gridTemplateRows: "repeat(3, auto)", gap: "0 8px" }}>
         {ELEVATIONS.map((e) => (
-          <Check key={e.bit} label={e.label} title={t("Ticked: the location applies on this elevation (its bit is clear in the file)")} checked={(rec.elevationFlags & e.bit) === 0} disabled={anywhere} onChange={(ev) => tools.setElevation(e.bit, ev.target.checked)} />
+          <Check key={e.bit} label={translate(e.label)} title={t("Ticked: the location applies on this elevation (its bit is clear in the file)")} checked={(rec.elevationFlags & e.bit) === 0} disabled={anywhere} onChange={(ev) => tools.setElevation(e.bit, ev.target.checked)} />
         ))}
       </div>
       {anywhere && (

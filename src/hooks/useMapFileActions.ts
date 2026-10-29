@@ -118,7 +118,7 @@ export function openTarget(store: Store, into?: OpenInto): "tab" | "replace" {
  */
 export async function openFileInto(store: Store, file: File, handle: MapFileHandle | null = null, into?: OpenInto, viewOnly: ViewOnly | null = null): Promise<boolean> {
   const target = openTarget(store, into);
-  store.set(statusMessageAtom, `Opening ${file.name}…`);
+  store.set(statusMessageAtom, t("Opening {name}…", { name: file.name }));
   try {
     const doc = await openMapFile(file, handle);
     store.set(loadDocumentAtom, { ...doc, into: target, viewOnly });
@@ -130,13 +130,12 @@ export async function openFileInto(store: Store, file: File, handle: MapFileHand
     const warnings = doc.scenario.warnings.length;
     store.set(
       statusMessageAtom,
-      `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}, ` +
-      `${doc.scenario.units.length} units` +
-      (warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""),
+      t("Opened {name} — {w}×{h}, {units, plural, one {# unit} other {# units}}", { name: file.name, w: doc.scenario.width, h: doc.scenario.height, units: doc.scenario.units.length }) +
+      (warnings > 0 ? t(", {n, plural, one {# warning} other {# warnings}}", { n: warnings }) : ""),
     );
     return true;
   } catch (err) {
-    store.set(statusMessageAtom, `Could not open ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    store.set(statusMessageAtom, t("Could not open {name}: {message}", { name: file.name, message: err instanceof Error ? err.message : String(err) }));
     return false;
   }
 }
@@ -313,7 +312,7 @@ const explained = new Set<KeptPrevious["kind"]>();
  */
 export async function saveDocument(store: Store, req: SaveRequest, write: SaveWriter = saveBytes): Promise<boolean> {
   const scenario = store.get(scenarioAtom);
-  if (!scenario) { store.set(statusMessageAtom, "Nothing to save — open or create a map first."); return false; }
+  if (!scenario) { store.set(statusMessageAtom, t("Nothing to save — open or create a map first.")); return false; }
   // A view-only map is never saved as itself; a copy of it is still the person's to keep.
   const viewOnly = store.get(viewOnlyAtom);
   if (viewOnly && !req.copy) { store.set(statusMessageAtom, viewOnlyMessage(viewOnly)); return false; }
@@ -347,14 +346,14 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     }
     if (outcome.route === "download") {
       const host = hostTerms();
-      store.set(statusMessageAtom, `Downloaded ${outcome.fileName} — ${size}`);
+      store.set(statusMessageAtom, t("Downloaded {fileName} — {size}", { fileName: outcome.fileName, size }));
       store.set(pushToastAtom, {
         kind: "ok",
         title: req.copy ? t("Copy downloaded") : t("Downloaded"),
         detail: t("{fileName} ({size}) is in {downloads}. {Here} cannot write a file back in place, so every save is a new download.", { fileName: outcome.fileName, size, downloads: host.downloads, Here: host.Here }),
       });
     } else {
-      store.set(statusMessageAtom, `Saved ${outcome.fileName} — ${size}`);
+      store.set(statusMessageAtom, t("Saved {fileName} — {size}", { fileName: outcome.fileName, size }));
       store.set(pushToastAtom, { kind: "ok", title: req.copy ? t("Copy saved") : t("Saved"), detail: `${outcome.fileName} (${size})${keptNote(kept.result)}` });
     }
     if (kept.result) {
@@ -380,8 +379,8 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) }, { step: "save" });
-    store.set(statusMessageAtom, `Could not save the ${what}: ${message}`);
-    store.set(pushToastAtom, { kind: "error", title: t("Could not save the {what}", { what }), detail: message });
+    store.set(statusMessageAtom, req.copy ? t("Could not save the copy: {message}", { message }) : t("Could not save the map: {message}", { message }));
+    store.set(pushToastAtom, { kind: "error", title: req.copy ? t("Could not save the copy") : t("Could not save the map"), detail: message });
     return false;
   }
 }
@@ -412,7 +411,7 @@ export async function openRecentInto(store: Store, entry: RecentEntry): Promise<
   try {
     file = await handle.getFile();
   } catch (err) {
-    store.set(statusMessageAtom, `Could not read ${entry.name}: ${err instanceof Error ? err.message : String(err)} — it may have moved.`);
+    store.set(statusMessageAtom, t("Could not read {name}: {message} — it may have moved.", { name: entry.name, message: err instanceof Error ? err.message : String(err) }));
     store.set(recentFilesAtom, store.get(recentFilesAtom).filter((r) => r.name !== entry.name));
     void removeHandle(entry.handleKey!);
     return false;

@@ -5,6 +5,7 @@
  */
 import type { DialogTransfer } from "./api";
 import { hostTerms } from "../editor/platform";
+import { t } from "../i18n";
 
 /** The files and plain text a `DataTransfer` (paste or drop) carries. */
 export function transferOf(dt: DataTransfer | null | undefined): DialogTransfer {
@@ -35,11 +36,11 @@ export function looksLikeImageUrl(text: string): boolean {
 }
 
 async function bitmapOf(blob: Blob): Promise<ImageBitmap> {
-  if (!blob.type.startsWith("image/") && blob.type !== "") throw new Error(`Not an image (${blob.type}).`);
+  if (!blob.type.startsWith("image/") && blob.type !== "") throw new Error(t("Not an image ({type}).", { type: blob.type }));
   try {
     return await createImageBitmap(blob);
   } catch {
-    throw new Error(`The file is not an image the ${hostTerms().noun} can decode.`);
+    throw new Error(t("The file is not an image the {noun} can decode.", { noun: hostTerms().noun }));
   }
 }
 
@@ -48,8 +49,8 @@ function bitmapViaImg(url: string): Promise<ImageBitmap> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => { createImageBitmap(img).then(resolve, () => reject(new Error("The image could not be decoded."))); };
-    img.onerror = () => reject(new Error("The site does not allow this page to read the image (no CORS headers). Save the picture and choose the file, or paste it."));
+    img.onload = () => { createImageBitmap(img).then(resolve, () => reject(new Error(t("The image could not be decoded.")))); };
+    img.onerror = () => reject(new Error(t("The site does not allow this page to read the image (no CORS headers). Save the picture and choose the file, or paste it.")));
     img.src = url;
   });
 }
@@ -63,7 +64,7 @@ function bitmapViaImg(url: string): Promise<ImageBitmap> {
 export async function loadImage(source: Blob | string): Promise<ImageBitmap> {
   if (typeof source !== "string") return bitmapOf(source);
   const text = source.trim();
-  if (!looksLikeImageUrl(text)) throw new Error("Not an image URL — paste a link ending in .png / .jpg / …, or a data: URL.");
+  if (!looksLikeImageUrl(text)) throw new Error(t("Not an image URL — paste a link ending in .png / .jpg / …, or a data: URL."));
   if (/^data:/i.test(text)) {
     const res = await fetch(text);
     return bitmapOf(await res.blob());

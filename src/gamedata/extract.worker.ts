@@ -12,9 +12,15 @@
  * on, the sounds among it), straight from the source into the storage a file at a time. A
  * source that is not a full installation has none and the copy is the editor's alone; so is
  * a copy that could only be kept in memory.
+ *
+ * Nothing here is in the user's language: the locale is the main thread's, never set in this
+ * module instance. A progress line or an error goes back in English with its template and
+ * values (`ExtractText`), which `install.ts#runWorker` translates as it arrives. The problems
+ * stay English; they only reach the console.
  */
 import { isStarEditDownload, memberKey, openArchives, readerFor } from "./archives";
-import { describeExtraction, ExtractError, extractGameData, type GameDataExtraction } from "./extract";
+import { describeExtraction, ExtractError, extractGameData, reportStep, type ExtractProgress, type ExtractText, type GameDataExtraction } from "./extract";
+import { msg } from "../i18n";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
@@ -36,11 +42,13 @@ export interface ExtractRequest {
 }
 
 export type ExtractResponse =
-  | { kind: "progress"; fraction: number; label: string }
+  | { kind: "progress"; fraction: number; label: string; message?: ExtractText }
   | { kind: "done"; stamp: StoredStamp; where: "opfs" | "memory"; problems: string[]; files?: [string, ArrayBuffer][] }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; text?: ExtractText };
 
-const post = (msg: ExtractResponse, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(msg, transfer);
+const post = (reply: ExtractResponse, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(reply, transfer);
+/** Progress over `scale` of the bar from `start`. */
+const progressOver = (start: number, scale: number): ExtractProgress => (f, label, message) => post({ kind: "progress", fraction: start + f * scale, label, ...(message ? { message } : {}) });
 
 self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
   const req = e.data;
@@ -54,30 +62,30 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     /** A file of the source by the game's name for it, for the play set. */
     let member: (name: string) => Promise<Uint8Array | null>;
     if (req.remastered) {
-      post({ kind: "progress", fraction: 0, label: "Opening the installation" });
+      reportStep(progressOver(0, 1), 0, msg("Opening the installation"));
       const { Storage, directoryHandleSource } = await import("kascade");
       const source = Array.isArray(req.remastered)
         ? pickedFilesSource(req.remastered)
         : directoryHandleSource(req.remastered as unknown as Parameters<typeof directoryHandleSource>[0]);
-      if (!source) throw new ExtractError("The folder is not a StarCraft: Remastered installation.");
+      if (!source) throw new ExtractError(msg("The folder is not a StarCraft: Remastered installation."));
       // Reading and extracting are 0–80% of the bar, the write the rest.
       const storage = await Storage.open(source);
-      const read = await extractRemastered(storage, (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      const read = await extractRemastered(storage, progressOver(0, 0.8));
       ({ result, problems, from } = read);
       member = async (name) => (storage.fileInfo(memberKey(name))?.installed ? storage.readFile(memberKey(name)) : null);
     } else {
-      post({ kind: "progress", fraction: 0, label: "Opening the archives" });
+      reportStep(progressOver(0, 1), 0, msg("Opening the archives"));
       staredit = isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
       const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
       problems = opened.problems;
-      if (opened.archives.length === 0) throw new ExtractError(problems[0] ?? "No archive could be opened.");
+      if (opened.archives.length === 0) throw problems[0] ? new Error(problems[0]) : new ExtractError(msg("No archive could be opened."));
 
       const overlay = new Map<string, Uint8Array>();
       for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
 
       // Extraction is 0–80% of the bar, the write the rest.
       const reader = readerFor(opened.archives, overlay.size ? overlay : undefined);
-      result = extractGameData(reader, (f, label) => post({ kind: "progress", fraction: f * 0.8, label }));
+      result = extractGameData(reader, progressOver(0, 0.8));
       member = async (name) => reader(name);
     }
     const stamp: StoredStamp = {
@@ -96,7 +104,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       const written = await writeStoredCopy(
         result.files,
         stamp,
-        (f) => { if (!playing) post({ kind: "progress", fraction: 0.8 + f * 0.08, label: "Saving in the browser" }); },
+        (f) => { if (!playing) reportStep(progressOver(0.8, 0.08), f, msg("Saving in the browser")); },
         req.profile?.id ?? DEFAULT_PROFILE.id,
         async (write) => {
           playing = true;
@@ -106,7 +114,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
               member,
               write,
               { sfxDat: result.files.get("arr/sfxdata.dat"), sfxTbl: result.files.get("arr/sfxdata.tbl"), imagesDat: result.files.get("arr/images.dat"), imagesTbl: result.files.get("arr/images.tbl") },
-              (f, label) => post({ kind: "progress", fraction: 0.88 + f * 0.12, label }),
+              progressOver(0.88, 0.12),
               (path) => result.files.has(path),
               { lighting: req.lighting === true },
             );
@@ -130,6 +138,6 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       post({ kind: "done", stamp, where: "memory", problems, files }, transfer);
     }
   } catch (err) {
-    post({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    post({ kind: "error", message: err instanceof Error ? err.message : String(err), ...(err instanceof ExtractError ? { text: err.text } : {}) });
   }
 };

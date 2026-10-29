@@ -195,8 +195,8 @@ export function OpenMapDialog({ entry }: DialogProps) {
       load({ ...doc, into });
       const warnings = doc.scenario.warnings.length;
       setStatus(
-        `Opened ${file.name} — ${doc.scenario.width}×${doc.scenario.height}` +
-        (warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""),
+        t("Opened {name} — {w}×{h}", { name: file.name, w: doc.scenario.width, h: doc.scenario.height }) +
+        (warnings > 0 ? t(", {n, plural, one {# warning} other {# warnings}}", { n: warnings }) : ""),
       );
       close(entry.key);
     } catch (err) {
@@ -239,7 +239,7 @@ export function OpenMapDialog({ entry }: DialogProps) {
       >
         <Upload size={22} />
         <div><strong>{t("Drop a map file here")}</strong></div>
-        <div className="hint">or</div>
+        <div className="hint">{t("or")}</div>
         <Button disabled={busy} onClick={() => { void pickMapFile(pickerFileTypes(store)).then(accept); }}>{t("Browse…")}</Button>
       </div>
       {error && <p className="error-text">{error}</p>}
@@ -569,8 +569,8 @@ export function ConfirmCloseDialog({ entry }: DialogProps) {
   const [busy, setBusy] = useState(false);
   const pending = (entry.payload?.pending as PendingAction | undefined) ?? { action: "close" };
   const what = pending.action === "new" ? t("creating a new scenario")
-    : pending.action === "open" ? `opening ${pending.file.name}`
-    : pending.action === "quit" ? "leaving" : "closing";
+    : pending.action === "open" ? t("opening {name}", { name: pending.file.name })
+    : pending.action === "quit" ? t("leaving") : t("closing");
   const title = pending.action === "quit" ? t("Quit scmJS") : t("Close Scenario");
 
   // `taken` before the close: an open waiting on this answer (a plugin's `document.open`) watches
@@ -701,7 +701,7 @@ export function ExportImageDialog({ entry }: DialogProps) {
       const out = `${fileName || "scenario"}.png`;
       const outcome = await saveBlob(blob, out);
       if (outcome) {
-        const text = `Exported ${outcome.fileName} — ${size.width}×${size.height}, ${(blob.size / 1024).toFixed(0)} KB`;
+        const text = t("Exported {fileName} — {w}×{h}, {kb} KB", { fileName: outcome.fileName, w: size.width, h: size.height, kb: (blob.size / 1024).toFixed(0) });
         setStatus(text);
         toast({ kind: "ok", title: outcome.route === "download" ? t("Image downloaded") : t("Image exported"), detail: outcome.route === "download" ? t("{text}. It is in {downloads}.", { text, downloads: hostTerms().downloads }) : text });
         close(entry.key);

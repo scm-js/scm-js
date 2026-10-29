@@ -308,7 +308,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                   {!preview && <span className="badge dim"><LoaderCircle size={9} className="spin" />{t("reading plugin.json…")}</span>}
                   {preview?.needsApi != null && <span className="badge warn">{t("needs plugin API {needsApi}", { needsApi: preview.needsApi })}</span>}
                 </div>
-                {manifest?.author && <span className="hint">by {manifest.author}</span>}
+                {manifest?.author && <span className="hint">{t("by {author}", { author: manifest.author })}</span>}
                 {manifest?.description && <span className="hint">{manifest.description}</span>}
               </div>
             </div>
@@ -383,7 +383,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                 label={t("Load from a copy saved here")}
                 hint={
                   builtin
-                    ? BUILTIN_COPY_HINT
+                    ? translate(BUILTIN_COPY_HINT)
                     : localCopyHint()
                 }
                 checked={local && !builtin}
@@ -411,7 +411,7 @@ export function ConfirmPluginDialog({ entry }: DialogProps) {
                           </div>
                         )}
                       </>
-                    : <span className="dim">{where?.base ? <><span className="mono">{t("plugin.ts")}</span> or <span className="mono">{t("plugin.js")}</span> in <span className="mono">{where.base}</span></> : "—"}</span>}
+                    : <span className="dim">{where?.base ? <><span className="mono">plugin.ts</span> {t("or")} <span className="mono">plugin.js</span> {t("in")} <span className="mono">{where.base}</span></> : "—"}</span>}
               </Fact>
             </div>
 
@@ -442,11 +442,11 @@ const NOT_FOUND = msg("Could not find plugin data at that address. Check that th
 function statusLabel(rt: PluginRuntime | undefined, enabled: boolean): { text: string; className: string; busy?: boolean } {
   if (enabled && rt?.status === "loading") return { text: t("loading…"), className: "dim", busy: true };
   const describing = rt?.describing === true;
-  if (!enabled) return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: "off", className: "dim" };
+  if (!enabled) return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: t("off"), className: "dim" };
   switch (rt?.status) {
     case "active": return { text: t("active"), className: "teal" };
     case "error": return { text: t("failed"), className: "error-text" };
-    default: return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: "off", className: "dim" };
+    default: return describing ? { text: t("reading…"), className: "dim", busy: true } : { text: t("off"), className: "dim" };
   }
 }
 
@@ -456,8 +456,8 @@ function contributionSummary(rt: PluginRuntime | undefined): string {
   const parts: string[] = [];
   if (c.menu) parts.push(t("{n, plural, one {# menu item} other {# menu items}}", { n: c.menu }));
   if (c.contextMenu) parts.push(t("{n, plural, one {# context-menu item} other {# context-menu items}}", { n: c.contextMenu }));
-  if (c.hotkeys) parts.push(`${c.hotkeys} hotkey${c.hotkeys === 1 ? "" : "s"}`);
-  if (c.events) parts.push(`${c.events} listener${c.events === 1 ? "" : "s"}`);
+  if (c.hotkeys) parts.push(t("{n, plural, one {# hotkey} other {# hotkeys}}", { n: c.hotkeys }));
+  if (c.events) parts.push(t("{n, plural, one {# listener} other {# listeners}}", { n: c.events }));
   if (c.preferences) parts.push(t("a Preferences page"));
   return parts.length > 0 ? parts.join(", ") : t("no contributions");
 }
@@ -614,7 +614,7 @@ function RegistrySources() {
                 <span className="hint mono" style={{ opacity: 0.7 }}>{u}</span>
                 {held && (
                   <span className="hint">
-                    {t("{length} plugin", { length: held.registry.plugins.length })}{held.registry.plugins.length === 1 ? "" : "s"}
+                    {t("{n, plural, one {# plugin} other {# plugins}}", { n: held.registry.plugins.length })}
                     {held.registry.skipped > 0 && t(", {skipped, plural, one {# entry} other {# entries}} skipped", { skipped: held.registry.skipped })}
                     {t(" · read {toLocaleString}", { toLocaleString: new Date(held.at).toLocaleString() })}
                   </span>
@@ -745,7 +745,7 @@ function BrowsePane({ onManage }: { onManage: (spec: string) => void }) {
     setProblem(null);
     try {
       const preview = await inspectPlugin(entry.spec);
-      if (!preview.manifest) { setProblem(`${NOT_FOUND} ${preview.problem ?? ""}`.trim()); return; }
+      if (!preview.manifest) { setProblem(`${translate(NOT_FOUND)} ${preview.problem ?? ""}`.trim()); return; }
       store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, preview });
     } catch (err) {
       setProblem(err instanceof Error ? err.message : String(err));
@@ -932,10 +932,10 @@ function InstalledPane({ focus }: { focus?: string | null }) {
     setLooking(true);
     try {
       const preview = await inspectPlugin(canonical);
-      if (!preview.manifest) { setProblem(NOT_FOUND); setDetail(preview.problem); return; }
+      if (!preview.manifest) { setProblem(translate(NOT_FOUND)); setDetail(preview.problem); return; }
       store.set(openDialogAtom, "confirmPlugin", { spec: preview.spec, preview, onAdded: () => setSpec("") });
     } catch (err) {
-      setProblem(NOT_FOUND);
+      setProblem(translate(NOT_FOUND));
       setDetail(err instanceof Error ? err.message : String(err));
     } finally {
       setLooking(false);
@@ -1196,7 +1196,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
                     status rather than explanation, and is shown rather than hidden in a tooltip. */}
                 <span
                   className="plugin-copy"
-                  title={builtinPlugin ? BUILTIN_COPY_HINT : localCopyHint()}
+                  title={builtinPlugin ? translate(BUILTIN_COPY_HINT) : localCopyHint()}
                 >
                   <HardDrive size={11} />
                   <Check
@@ -1216,7 +1216,7 @@ function InstalledPane({ focus }: { focus?: string | null }) {
         })}
       </div>
       <p className="hint">
-        {t("To write one, put a")}{" "}<span className="mono">plugin.json</span> {" "}{t("next to a")}{" "}<span className="mono">{t("plugin.ts")}</span> or <span className="mono">{t("plugin.js")}</span> {" "}{t("anywhere {here} can read it. The API is in", { here: hostTerms().here })}{" "}<span className="mono">{t("docs/plugins.md")}</span>.
+        {t("To write one, put a")}{" "}<span className="mono">plugin.json</span> {" "}{t("next to a")}{" "}<span className="mono">plugin.ts</span> {t("or")} <span className="mono">plugin.js</span> {" "}{t("anywhere {here} can read it. The API is in", { here: hostTerms().here })}{" "}<span className="mono">{t("docs/plugins.md")}</span>.
       </p>
     </div>
   );

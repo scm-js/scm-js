@@ -56,21 +56,21 @@ export function StatisticsDialog({ entry }: DialogProps) {
       size="lg"
       tall
       footer={<><Button onClick={() => { void copy(); }}><Copy size={12} /> {copied ? t("Copied") : t("Copy as text")}</Button><Button variant="primary" onClick={() => close(entry.key)}>{t("Close")}</Button></>}
-      footerLeft={<span className="hint">{t("{width} × {height}  {tileset} · {revision} · {sections} sections", { width: s.width, height: s.height, tileset: s.tileset, revision: s.revision, sections: s.sections })}</span>}
+      footerLeft={<span className="hint">{t("{width} × {height}  {tileset} · {revision} · {sections, plural, one {# section} other {# sections}}", { width: s.width, height: s.height, tileset: translate(s.tileset), revision: translate(s.revision), sections: s.sections })}</span>}
     >
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <div className="stack">
           <Group title={t("Objects")}>
             <div className="form">
               <Field label={t("Units")}><span className="mono">{s.units.total}{s.units.buildings !== null && <span className="faint"> · {t("{b} buildings, {m} mobile", { b: s.units.buildings, m: s.units.total - s.units.buildings })}</span>}{s.unownedUnits > 0 && <span className="faint"> · {t("{n} owned past player 12", { n: s.unownedUnits })}</span>}</span></Field>
-              <Field label={t("Resources")}><span className="mono">{t("{toLocaleString} minerals", { toLocaleString: s.resources.minerals.toLocaleString() })}{" "}<span className="faint">({s.resources.fields} fields)</span> · {s.resources.gas.toLocaleString()} gas <span className="faint">({s.resources.geysers} geysers)</span></span></Field>
+              <Field label={t("Resources")}><span className="mono">{t("{minerals} minerals", { minerals: s.resources.minerals.toLocaleString() })}{" "}<span className="faint">{t("({n, plural, one {# field} other {# fields}})", { n: s.resources.fields })}</span> · {t("{gas} gas", { gas: s.resources.gas.toLocaleString() })} <span className="faint">{t("({n, plural, one {# geyser} other {# geysers}})", { n: s.resources.geysers })}</span></span></Field>
               <Field label={t("Doodads")}><span className="mono">{s.doodads}</span></Field>
-              <Field label={t("Sprites")}><span className="mono">{s.sprites.pure + s.sprites.unit} <span className="faint">· {s.sprites.pure} pure, {s.sprites.unit} unit</span></span></Field>
-              <Field label={t("Locations")}><span className="mono">{s.locations} <span className="faint">+ Anywhere</span></span></Field>
-              <Field label={t("Triggers")}><span className="mono">{s.triggers.count} <span className="faint">· {s.triggers.conditions} conditions, {s.triggers.actions} actions, {s.triggers.preserved} preserved, {s.triggers.disabled} disabled</span></span></Field>
-              <Field label={t("Briefing")}><span className="mono">{s.briefings.count} <span className="faint">· {s.briefings.actions} actions</span></span></Field>
-              <Field label={t("Strings")}><span className="mono">{s.strings.set} <span className="faint">of {s.strings.slots} slots ({s.strings.extended ? "STRx" : "STR"})</span></span></Field>
-              <Field label={t("Switches")}><span className="mono">{s.switchesNamed} <span className="faint">named</span></span></Field>
+              <Field label={t("Sprites")}><span className="mono">{s.sprites.pure + s.sprites.unit} <span className="faint">{t("· {pure} pure, {unit} unit", { pure: s.sprites.pure, unit: s.sprites.unit })}</span></span></Field>
+              <Field label={t("Locations")}><span className="mono">{s.locations} <span className="faint">{t("+ Anywhere")}</span></span></Field>
+              <Field label={t("Triggers")}><span className="mono">{s.triggers.count} <span className="faint">{t("· {conditions, plural, one {# condition} other {# conditions}}, {actions, plural, one {# action} other {# actions}}, {preserved} preserved, {disabled} disabled", { conditions: s.triggers.conditions, actions: s.triggers.actions, preserved: s.triggers.preserved, disabled: s.triggers.disabled })}</span></span></Field>
+              <Field label={t("Briefing")}><span className="mono">{s.briefings.count} <span className="faint">{t("· {actions, plural, one {# action} other {# actions}}", { actions: s.briefings.actions })}</span></span></Field>
+              <Field label={t("Strings")}><span className="mono">{s.strings.set} <span className="faint">{t("of {slots} slots ({section})", { slots: s.strings.slots, section: s.strings.extended ? "STRx" : "STR" })}</span></span></Field>
+              <Field label={t("Switches")}><span className="mono">{s.switchesNamed} <span className="faint">{t("named")}</span></span></Field>
               <Field label={t("Sounds")}><span className="mono">{s.sounds} <span className="faint">{t("in the WAV table")}</span></span></Field>
             </div>
           </Group>
@@ -91,8 +91,8 @@ export function StatisticsDialog({ entry }: DialogProps) {
                 {s.players.map((p) => (
                   <tr key={p.slot} className={p.type === "Inactive" && p.units === 0 ? "faint" : ""}>
                     <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(scenario.playerColors, scenario.playerRgb, p.slot), width: 10, height: 10 }} />{p.slot + 1}</span></td>
-                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.type}>{p.type}</td>
-                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.race}>{p.race}</td>
+                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={translate(p.type)}>{translate(p.type)}</td>
+                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={translate(p.race)}>{translate(p.race)}</td>
                     <td className="num">{p.units}</td><td className="num">{na(p.buildings)}</td><td className="num">{p.startLocations}</td>
                   </tr>
                 ))}

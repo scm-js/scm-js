@@ -170,8 +170,8 @@ export function useTerrainTools() {
     isomStroke.current = new Stroke();
     lastDiamond.current = null;
     strokeLabel.current =
-      mode === "rect" ? `Paint ${currentTerrain()?.name ?? "terrain"}`
-        : mode === "isom" ? `Paint ${terrainName(info, currentIsomTerrain() ?? -1)} (isometric)`
+      mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: translate(currentTerrain()!.name) }) : t("Paint terrain"))
+        : mode === "isom" ? t("Paint {terrain} (isometric)", { terrain: translate(terrainName(info, currentIsomTerrain() ?? -1)) })
           : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
     paintAt(x, y, p);
   }, [store, info, currentTerrain, currentIsomTerrain, paintAt]);
@@ -187,7 +187,7 @@ export function useTerrainTools() {
     const changes = s.finish();
     const isom = is?.finish() ?? [];
     if (changes.length === 0 && isom.length === 0) return;
-    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, `${strokeLabel.current} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }));
   }, [store, commitTerrain]);
 
   const isStroking = useCallback(() => stroke.current !== null, []);
@@ -228,7 +228,7 @@ export function useTerrainTools() {
 
     if (changes.length === 0) return;
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+    commitTerrain(scn, { label, changes }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -267,7 +267,7 @@ export function useTerrainTools() {
     }
     applyChanges(scn, changes);
     if (isom && isom.length > 0) applyIsomChanges(scn, isom);
-    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, `${label} — ${changes.length} tile${changes.length === 1 ? "" : "s"}`);
+    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -287,10 +287,10 @@ export function useTerrainTools() {
       setStatus(t("Nothing to replace — no tile matches, or the replacement is what is there already."));
       return 0;
     }
-    const name = (p: TerrainPick) => (p.kind === "tile" ? hexTile(p.id) : terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id));
-    const label = `Replace ${name(from)} with ${name(to)}`;
+    const name = (p: TerrainPick) => (p.kind === "tile" ? hexTile(p.id) : translate(terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id)));
+    const label = t("Replace {from} with {to}", { from: name(from), to: name(to) });
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, `${label} — ${t("{n, plural, one {# tile} other {# tiles}}", { n: changes.length })}${rect ? t(" in the marked area") : ""}`);
+    commitTerrain(scn, { label, changes }, rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
     return changes.length;
   }, [store, loaded, commitTerrain, setStatus]);
 
@@ -319,7 +319,7 @@ export function useTerrainTools() {
         const type = isomTables(loaded.tileset, tilesetIndex(scn)).links[value]?.terrainType ?? 0;
         if (isomTypes.includes(type)) {
           setActiveTerrain(type);
-          setStatus(t("Picked {terrainName}", { terrainName: terrainName(info, type) }));
+          setStatus(t("Picked {terrainName}", { terrainName: translate(terrainName(info, type)) }));
           return;
         }
       }
@@ -328,7 +328,7 @@ export function useTerrainTools() {
       const type = types.find((t) => t.group === (id >> 4 & ~1));
       if (type) {
         setActiveTerrain(type.id);
-        setStatus(t("Picked {name}", { name: type.name }));
+        setStatus(t("Picked {name}", { name: translate(type.name) }));
         return;
       }
       setMode("tile");
@@ -349,16 +349,16 @@ export function useTerrainTools() {
     const at = neighbourOf(anchor, side);
     const changes = placeBlend(scn, anchor, side, id);
     if (!changes) {
-      setStatus(t("Nothing {side} of {x}, {y} — that is off the map", { side, x: anchor.x, y: anchor.y }));
+      setStatus(t("Nothing {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y} — that is off the map", { side, x: anchor.x, y: anchor.y }));
       return;
     }
     setActiveTile(id);
-    const label = `Blend ${hexTile(id)} ${side} of ${anchor.x}, ${anchor.y}`;
+    const label = t("Blend {tile} {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y}", { tile: hexTile(id), side, x: anchor.x, y: anchor.y });
     if (changes.length > 0) {
       applyChanges(scn, changes);
       commitTerrain(scn, { label, changes }, label);
     } else {
-      setStatus(t("{hexTile} is already {side} of {x}, {y}", { hexTile: hexTile(id), side, x: anchor.x, y: anchor.y }));
+      setStatus(t("{hexTile} is already {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y}", { hexTile: hexTile(id), side, x: anchor.x, y: anchor.y }));
     }
     if (store.get(blendFollowAtom)) store.set(blendAnchorAtom, at);
   }, [store, commitTerrain, setActiveTile, setStatus]);

@@ -116,7 +116,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
       onOk={apply}
       guard={guard}
       slot={{ dialog: "stringEditor" }}
-      footerLeft={<span className={count > capacity ? "error-text" : ""}>{t("{count} strings · {unused} unused", { count, unused })}{empty > 0 ? t(" · {empty} empty", { empty }) : ""} {" "}{t("· capacity {toLocaleString} (", { toLocaleString: capacity.toLocaleString() })}{scenario.strings.extended ? "STRx" : "STR"})</span>}
+      footerLeft={<span className={count > capacity ? "error-text" : ""}>{t("{count} strings · {unused} unused", { count, unused })}{empty > 0 ? t(" · {empty} empty", { empty }) : ""} {" "}{t("· capacity {capacity} ({section})", { capacity: capacity.toLocaleString(), section: scenario.strings.extended ? "STRx" : "STR" })}</span>}
     >
       <div className="row">
         <Search size={12} className="faint" />
@@ -419,7 +419,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
       <div className="row">
         <Button size="sm" onClick={() => fileRef.current?.click()} disabled={filled >= WAV_SLOTS || !!busy}><Upload size={12} /> {" "}{t("Import…")}</Button>
         <label className="row" style={{ gap: 6 }}>
-          <span className="dim" style={{ fontSize: 11 }}>as</span>
+          <span className="dim" style={{ fontSize: 11 }}>{t("as")}</span>
           <Select value={preset} options={IMPORT_AS} onChange={(e) => setPreset(e.target.value)} disabled={!!busy} style={{ minWidth: 290 }} title={t("Files are decoded by the {noun} and written as PCM WAV in this format. The game's own sounds are 22050 Hz, 16-bit, mono.", { noun: hostTerms().noun })} />
         </label>
         <Button size="sm" disabled={!canConvert} onClick={() => row && void convertRow(row)} title={target ? t("Re-encode the selected .wav to the chosen format") : t("Choose a format to convert to")}><RefreshCw size={12} /> {" "}{t("Convert")}</Button>
@@ -442,7 +442,7 @@ export function SoundEditorDialog({ entry }: DialogProps) {
             {rows.map((r) => (
               <tr key={r.slot} className={sel === r.slot ? "selected" : ""} onClick={() => setSel(r.slot)} onDoubleClick={() => void play(r)}>
                 <td className="num">{r.slot}</td>
-                <td className="mono">{r.path}{!r.present && <span className="badge warn" style={{ marginLeft: 6 }} title={t("The table lists this path but the archive has no such file")}>missing</span>}{playing === r.member && <span className="badge teal" style={{ marginLeft: 6 }}>playing</span>}</td>
+                <td className="mono">{r.path}{!r.present && <span className="badge warn" style={{ marginLeft: 6 }} title={t("The table lists this path but the archive has no such file")}>{t("missing")}</span>}{playing === r.member && <span className="badge teal" style={{ marginLeft: 6 }}>{t("playing")}</span>}</td>
                 <td className="num">{r.present ? kb(r.size) : "—"}</td>
                 <td>{format(r)}</td>
                 <td className="num">{length(r)}</td>
@@ -495,7 +495,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
               <span className="idx">{i + 1}</span>
               {n ? <span>{n}</span> : <span className="faint">{t("Switch {v}", { v: i + 1 })}</span>}
               <span className="row" style={{ marginLeft: "auto", gap: 4 }}>
-                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title={t("Switch conditions and Set Switch actions")}>{usage[i]} use{usage[i] === 1 ? "" : "s"}</span>}
+                {usage[i] > 0 && <span className="dim" style={{ fontSize: 10 }} title={t("Switch conditions and Set Switch actions")}>{t("{n, plural, one {# use} other {# uses}}", { n: usage[i] })}</span>}
                 {n && <span className="badge teal">{t("named")}</span>}
               </span>
             </>
@@ -509,7 +509,7 @@ export function SwitchesDialog({ entry }: DialogProps) {
               <Button size="sm" disabled={names[sel] === ""} onClick={() => rename(sel, "")} title={t("Back to the default name")}><Eraser size={12} /> {" "}{t("Clear")}</Button>
             </div>
             <label>{t("Used by")}</label>
-            <span className="dim">{usage[sel] > 0 ? `${usage[sel]} condition${usage[sel] === 1 ? "" : "s"} / action${usage[sel] === 1 ? "" : "s"}` : t("not referenced by any trigger")}</span>
+            <span className="dim">{usage[sel] > 0 ? t("{n, plural, one {# condition / action} other {# conditions / actions}}", { n: usage[sel] }) : t("not referenced by any trigger")}</span>
           </div>
           <p className="hint">{t("Names are stored in the string table (SWNM); an identical string is reused, a cleared name goes back to \"Switch N\". Text triggers and the script use the name.")}</p>
         </div>

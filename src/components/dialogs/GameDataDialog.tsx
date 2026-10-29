@@ -11,7 +11,7 @@ import {
 } from "../../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
 import { isRemasteredOrigin, REMASTERED_PROFILE } from "../../gamedata/profiles";
-import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../../gamedata/source";
+import { adoptStoredCopy, resetAssetSource, resolveAssetSource, summaryText, type AssetSource } from "../../gamedata/source";
 import { adoptSource, installDataSetInto, installRemasteredInto, listDataSets, removeDataSet, sameFiles, switchDataSet, turnOnRemasteredGraphics } from "../../services/gameData";
 import { Button, Check, Group, TextInput } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -172,7 +172,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const kept = (where: "opfs" | "memory") => (where === "memory" ? " " + t("{Here} keeps no site data, so the copy lasts until the tab closes.", { Here: hostTerms().Here }) : "");
   // A copy replacing a copy is different files under the same ids, so that one is a switch.
   const installed = (copy: Awaited<ReturnType<typeof installFromFiles>>, from: string) =>
-    adopted(adoptStoredCopy(copy), `Installed ${copy.summary} from ${from}.${kept(copy.where)}`, source?.kind === "stored" || !sameFiles(source, adoptStoredCopy(copy)));
+    adopted(adoptStoredCopy(copy), t("Installed {summary} from {from}.", { summary: summaryText(copy.summary), from }) + kept(copy.where), source?.kind === "stored" || !sameFiles(source, adoptStoredCopy(copy)));
 
   const fromBlizzard = () => run(async () => {
     installed(await installFromZipUrl(BLIZZARD_ZIP_URL, progress), t("Blizzard's StarEdit download"));
@@ -189,7 +189,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const fromRemastered = (folder: RemasteredFolder) => run(async () => {
     const copy = await installFromRemastered(folder, progress, undefined, { lighting });
     turnOnRemasteredGraphics(store);
-    adopted(adoptStoredCopy(copy), t("Installed {summary} from your StarCraft: Remastered installation.", { summary: copy.summary }) + remasteredOn() + kept(copy.where), true);
+    adopted(adoptStoredCopy(copy), t("Installed {summary} from your StarCraft: Remastered installation.", { summary: summaryText(copy.summary) }) + remasteredOn() + kept(copy.where), true);
   });
 
   /** A folder picked through the plain file input: an installation, or a folder to look for the archives in. */
@@ -226,7 +226,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     const id = source?.profile.id ?? DEFAULT_PROFILE.id;
     if (desktop && isDefaultProfile(id)) await desktop.gameData.clear();
     await removeDataSet(store, id);
-    setMessage({ text: "Removed. " + explain(store.get(gameDataSourceAtom)) });
+    setMessage({ text: t("Removed.") + " " + explain(store.get(gameDataSourceAtom)) });
   });
 
   /** Data sets: switch to one, remove one, add one from a folder. */
@@ -242,12 +242,12 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const addFromFolder = (files: File[]) => run(async () => {
     const name = newName.trim();
     const id = profileIdFrom(name);
-    if (!id) throw new Error("Give the data set a name first.");
-    if (sets.some((p) => p.id === id)) throw new Error(`There is already a data set called ${name}.`);
+    if (!id) throw new Error(t("Give the data set a name first."));
+    if (sets.some((p) => p.id === id)) throw new Error(t("There is already a data set called {name}.", { name }));
     const next = await installDataSetInto(store, { id, name }, splitPickedFiles(files), progress);
     setAdding(false);
     setNewName("");
-    setMessage({ text: `Installed ${name}: ${next.stored?.summary ?? next.label}.${kept(next.stored?.where ?? "opfs")}` });
+    setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") });
     toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name }) });
   });
 
@@ -255,7 +255,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
   const addRemastered = (folder: RemasteredFolder) => run(async () => {
     if (!(await isRemasteredFolder(folder))) throw new Error(t("That folder is not a StarCraft: Remastered installation. Choose the folder the game is installed in."));
     const next = await installRemasteredInto(store, folder, progress, { lighting });
-    setMessage({ text: t("Installed {summary} from your StarCraft: Remastered installation.", { summary: next.stored?.summary ?? next.label }) + remasteredOn() + kept(next.stored?.where ?? "opfs") });
+    setMessage({ text: t("Installed {summary} from your StarCraft: Remastered installation.", { summary: next.stored ? summaryText(next.stored.summary) : next.label }) + remasteredOn() + kept(next.stored?.where ?? "opfs") });
     toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name: REMASTERED_PROFILE.name }) + remasteredOn() });
   });
   const chooseRemastered = () => remasteredInput.current?.click();
@@ -328,7 +328,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
                 </div>
                 <input ref={setFolderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void addFromFolder(f); }} />
                 <p className="hint">
-                  {t("A folder holding the mod's files —")}{" "}<span className="mono">arr</span>, <span className="mono">{t("unit")}</span>, <span className="mono">{t("tileset")}</span> {" "}{t("and the rest as loose files or as")}{" "}<span className="mono">{t(".mpq")}</span> {" "}{t("archives — together with")}{" "}<span className="mono">{ARCHIVE_NAMES[0]}</span> and <span className="mono">{ARCHIVE_NAMES[1]}</span>{t(", which the mod's files are laid over. Anything else in the folder is left alone.")}
+                  {t("A folder holding the mod's files —")}{" "}<span className="mono">arr</span>, <span className="mono">{t("unit")}</span>, <span className="mono">{t("tileset")}</span> {" "}{t("and the rest as loose files or as")}{" "}<span className="mono">{t(".mpq")}</span> {" "}{t("archives — together with")}{" "}<span className="mono">{ARCHIVE_NAMES[0]}</span> {t("and")} <span className="mono">{ARCHIVE_NAMES[1]}</span>{t(", which the mod's files are laid over. Anything else in the folder is left alone.")}
                 </p>
               </div>
             ) : (

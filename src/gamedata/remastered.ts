@@ -16,8 +16,9 @@
  */
 import { slimAnim } from "../formats/dat/anim";
 import { memberKey } from "./archives";
-import { ExtractError, EXTRA_TABLES, extractGameData, ICON_FILES, SOUND_TABLES, UNIT_TABLES, type ExtractProgress, type GameDataExtraction } from "./extract";
+import { ExtractError, EXTRA_TABLES, extractGameData, ICON_FILES, reportStep, SOUND_TABLES, UNIT_TABLES, type ExtractProgress, type GameDataExtraction } from "./extract";
 import { REMASTERED_ORIGIN } from "./profiles";
+import { msg } from "../i18n";
 
 export { BUILD_INFO, installRootOf, pickedFilesSource, type PickedFile } from "./remasteredFolder";
 
@@ -56,7 +57,7 @@ const MAX_PASSES = 6;
  */
 export async function extractRemastered(storage: RemasteredStorage, progress?: ExtractProgress): Promise<RemasteredExtraction> {
   if (!storage.hasNames || !storage.fileInfo("arr/units.dat")) {
-    throw new ExtractError("This folder is an installation, but not of StarCraft: Remastered.");
+    throw new ExtractError(msg("This folder is an installation, but not of StarCraft: Remastered."));
   }
   const have = new Map<string, Uint8Array | null>();
   const problems: string[] = [];
@@ -86,7 +87,7 @@ export async function extractRemastered(storage: RemasteredStorage, progress?: E
         }),
       );
       done += batch.length;
-      progress?.((base + (done / total) / 3) * 0.75, `Reading StarCraft: Remastered · ${done} of ${total}`);
+      reportStep(progress, (base + (done / total) / 3) * 0.75, msg("Reading StarCraft: Remastered · {done} of {total}"), { done, total });
     }
 
     const asked = new Set<string>();
@@ -103,6 +104,6 @@ export async function extractRemastered(storage: RemasteredStorage, progress?: E
     wanted = [...asked];
   }
 
-  const result = extractGameData((member) => have.get(memberKey(member)) ?? null, (f, label) => progress?.(0.75 + f * 0.25, label));
+  const result = extractGameData((member) => have.get(memberKey(member)) ?? null, (f, label, m) => progress?.(0.75 + f * 0.25, label, m));
   return { result, problems, from: `${REMASTERED_ORIGIN} ${storage.build.version}`.trim() };
 }

@@ -211,9 +211,7 @@ export function ValidateMapDialog({ entry }: DialogProps) {
       }
       footerLeft={
         <span>
-          {t("{error} error", { error: counts.error })}{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
-          {t("warning")}{counts.warn === 1 ? "" : "s"} {" "}{t("· {info} note", { info: counts.info })}
-          {counts.info === 1 ? "" : "s"}
+          {t("{error, plural, one {# error} other {# errors}} · {warn, plural, one {# warning} other {# warnings}} · {info, plural, one {# note} other {# notes}}", { error: counts.error, warn: counts.warn, info: counts.info })}
         </span>
       }
     >
@@ -296,12 +294,12 @@ export function FindDialog({ entry }: DialogProps) {
     if (!scenario) return [];
     const spriteName = (r: SpriteRecord) => {
       if (spriteKind(r) === "unit") return unitLabel(r.spriteId);
-      return catalogue?.entries[r.spriteId]?.label ?? `Sprite #${r.spriteId}`;
+      return catalogue?.entries[r.spriteId]?.label ?? t("Sprite #{id}", { id: r.spriteId });
     };
     const doodads = peekTileset(tilesetName)?.doodads;
     const doodadName = (d: DoodadRecord) => {
       const def = doodads?.byId.get(d.doodadId);
-      return def ? doodadLabel(def) : `Doodad #${d.doodadId}`;
+      return def ? doodadLabel(def) : t("Doodad #{id}", { id: d.doodadId });
     };
     return findInScenario(scenario, {
       kind,

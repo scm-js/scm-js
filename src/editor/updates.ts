@@ -132,7 +132,7 @@ export function headline(state: UpdateState): Headline {
 /** "58% · 71.4 of 122 MB · 4.2 MB/s", or the empty-ish start of a download. */
 export function progressLabel(progress: UpdateProgress | null): string {
   if (!progress || !progress.total) return t("Starting…");
-  const parts = [`${Math.round(progress.percent)}%`, `${formatBytes(progress.transferred, false)} of ${formatBytes(progress.total)}`];
+  const parts = [`${Math.round(progress.percent)}%`, t("{done} of {total}", { done: formatBytes(progress.transferred, false), total: formatBytes(progress.total) })];
   if (progress.bytesPerSecond > 0) parts.push(`${formatBytes(progress.bytesPerSecond)}/s`);
   return parts.join(" · ");
 }

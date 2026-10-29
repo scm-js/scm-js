@@ -172,19 +172,19 @@ export function updatesFromRegistries(
  */
 export function autoUpdateBlock(install: PluginInstall, opts: { needsApi?: number | null; defaults?: readonly string[] } = {}): string | null {
   const defaults = opts.defaults ?? defaultPlugins().map((d) => d.spec);
-  if (defaults.some((d) => pluginKey(d) === pluginKey(install.spec))) return "a default, which moves with the editor's own releases";
-  if (!install.enabled) return "turned off";
-  if (install.local) return "loaded from a copy saved here";
-  if (opts.needsApi != null && opts.needsApi > PLUGIN_API_VERSION) return `built for a newer plugin API (${opts.needsApi}) than this editor has`;
+  if (defaults.some((d) => pluginKey(d) === pluginKey(install.spec))) return t("a default, which moves with the editor's own releases");
+  if (!install.enabled) return t("turned off");
+  if (install.local) return t("loaded from a copy saved here");
+  if (opts.needsApi != null && opts.needsApi > PLUGIN_API_VERSION) return t("built for a newer plugin API ({needsApi}) than this editor has", { needsApi: opts.needsApi });
   return null;
 }
 
 /* ── The notices ────────────────────────────────────────── */
 
 const listNames = (names: readonly string[]) =>
-  names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  names.length <= 2 ? names.join(t(" and ")) : `${names.slice(0, -1).join(", ")}${t(" and ")}${names[names.length - 1]}`;
 
-const versionLine = (u: PluginUpdate) => (u.from ? `${u.name} ${u.from} to ${u.to}` : `${u.name} to ${u.to}`);
+const versionLine = (u: PluginUpdate) => (u.from ? t("{name} {from} to {to}", { name: u.name, from: u.from, to: u.to }) : t("{name} to {to}", { name: u.name, to: u.to }));
 
 /**
  * The notice for updates found and not installed: what is newer, and a button to the rows
@@ -220,14 +220,18 @@ export function autoUpdateToast(outcome: AutoUpdateOutcome, openPlugins: () => v
   const { installed, skipped, failed } = outcome;
   if (installed.length === 0 && skipped.length === 0 && failed.length === 0) return null;
   const parts: string[] = [];
-  if (installed.length > 0) parts.push(`Updated ${listNames(installed.map(versionLine))}.`);
-  if (failed.length > 0) parts.push(`Could not update ${listNames(failed.map((f) => f.update.name))}: ${failed[0].error}`);
-  if (skipped.length > 0) parts.push(`${listNames(skipped.map((s) => `${s.update.name} ${s.update.to}`))} ${skipped.length === 1 ? "is" : "are"} available; ${skipped.length === 1 ? "it is" : "they are"} left to the row's button, being ${skipped[0].reason}.`);
-  const title = installed.length === 1 ? `${installed[0].name} updated to ${installed[0].to}`
-    : installed.length > 1 ? `${installed.length} plugins updated`
-    : failed.length > 0 ? "A plugin update failed"
-    : skipped.length === 1 ? `${skipped[0].update.name} ${skipped[0].update.to} is available`
-    : `${skipped.length} plugins have newer versions`;
+  if (installed.length > 0) parts.push(t("Updated {list}.", { list: listNames(installed.map(versionLine)) }));
+  if (failed.length > 0) parts.push(t("Could not update {list}: {error}", { list: listNames(failed.map((f) => f.update.name)), error: failed[0].error }));
+  if (skipped.length > 0) {
+    parts.push(t("{n, plural, one {{list} is available; it is left to the row's button, being {reason}.} other {{list} are available; they are left to the row's button, being {reason}.}}", {
+      n: skipped.length, list: listNames(skipped.map((s) => `${s.update.name} ${s.update.to}`)), reason: skipped[0].reason,
+    }));
+  }
+  const title = installed.length === 1 ? t("{name} updated to {version}", { name: installed[0].name, version: installed[0].to })
+    : installed.length > 1 ? t("{n, plural, one {# plugin updated} other {# plugins updated}}", { n: installed.length })
+    : failed.length > 0 ? t("A plugin update failed")
+    : skipped.length === 1 ? t("{name} {version} is available", { name: skipped[0].update.name, version: skipped[0].update.to })
+    : t("{n, plural, one {# plugin has a newer version} other {# plugins have newer versions}}", { n: skipped.length });
   return { kind: failed.length > 0 ? "warn" : "info", title, detail: parts.join(" "), ttl: 0, action: { label: t("Plugins…"), run: openPlugins } };
 }
 
@@ -289,7 +293,7 @@ export async function runUpdatePass(store: Store, mode: PluginUpdateMode, deps: 
       // second opinion — a registry an hour stale may name a version the repository has
       // since replaced, and the check compares commits.
       const got = u.preview ? { to: u.to, preview: u.preview } : offered(await deps.checkForUpdate(u.address, { version: u.from }));
-      if (!got) { outcome.skipped.push({ update: u, reason: "already the newest release by the repository's account" }); continue; }
+      if (!got) { outcome.skipped.push({ update: u, reason: t("already the newest release by the repository's account") }); continue; }
       const block = autoUpdateBlock(install, { needsApi: got.preview.needsApi });
       if (block) { outcome.skipped.push({ update: u, reason: block }); continue; }
       await deps.installPlugin(store, got.preview, { replaces: u.spec, pin: true, local: false });

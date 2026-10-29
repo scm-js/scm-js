@@ -21,10 +21,12 @@
  * interface needs beyond this (fonts, dialogs, console art) is not here: a Remastered
  * installation has not got it, and the play page brings its own.
  *
- * Pure, and importing only what `extract.ts` does.
+ * Pure, and importing only what `extract.ts` does (and `msg`, the marker for its progress lines).
  */
 
 import { ANIM_KEPT_LAYERS, ANIM_LIT_LAYERS, animMember, animPath, slimAnim } from "../formats/dat/anim.ts";
+import { reportStep, type ExtractProgress } from "./extract.ts";
+import { msg } from "../i18n";
 
 /**
  * Bumped when the list grows. 2 (2026-10-12): the pictures of every image, not only the
@@ -177,7 +179,7 @@ export async function copyPlaySet(
   read: (member: string) => Promise<Uint8Array | null>,
   write: (path: string, data: Uint8Array) => Promise<void>,
   tables: { sfxDat: Uint8Array | undefined; sfxTbl: Uint8Array | undefined; imagesDat?: Uint8Array; imagesTbl?: Uint8Array },
-  progress?: (fraction: number, label: string) => void,
+  progress?: ExtractProgress,
   has: (path: string) => boolean = () => false,
   options: { lighting?: boolean } = {},
 ): Promise<PlayStamp | null> {
@@ -203,7 +205,7 @@ export async function copyPlaySet(
   for (const member of pictures) {
     const data = await read(member);
     if (data) { await write(stored(member), data); files++; bytes += data.length; }
-    if (++done % 25 === 0) progress?.(done / total, "Game pictures");
+    if (++done % 25 === 0) reportStep(progress, done / total, msg("Game pictures"));
   }
   for (const image of sprites) {
     const whole = await read(animMember(image));
@@ -216,7 +218,7 @@ export async function copyPlaySet(
       else { files++; bytes += data.length; }
       if (more > 0) lit = true;
     }
-    if (++done % 25 === 0) progress?.(done / total, "Game pictures");
+    if (++done % 25 === 0) reportStep(progress, done / total, msg("Game pictures"));
   }
   if (lit) {
     const data = await read(PLAY_LIGHTS);
@@ -225,9 +227,9 @@ export async function copyPlaySet(
   for (const member of sounds) {
     const data = await read(member);
     if (data) { await write(stored(member), data); heard++; bytes += data.length; }
-    if (++done % 25 === 0) progress?.(done / total, `Game sounds · ${heard} of ${sounds.length}`);
+    if (++done % 25 === 0) reportStep(progress, done / total, msg("Game sounds · {done} of {total}"), { done: heard, total: sounds.length });
   }
-  progress?.(1, "Game sounds");
+  reportStep(progress, 1, msg("Game sounds"));
   // Nearly all of the game's sounds, or the copy is not one to play from: a source whose sounds could not be read
   // (mopaq before 1.6 decoded none of an installation's compressed ones) would otherwise make a silent game. Remastered
   // lacks one of the eleven hundred. (`lit` only where a sprite did keep such a layer: a 1.16 installation has none.)

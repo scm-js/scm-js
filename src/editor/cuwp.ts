@@ -75,9 +75,9 @@ export function applyCuwp(scn: Scenario, table: CuwpTable): string[] {
 /** The label a slot shows in lists and the trigger editor's pick: `3 · HP 50%, cloaked`. */
 export function cuwpSlotLabel(index: number, slot: CuwpSlot | undefined, used?: boolean): string {
   const n = index + 1;
-  if (!slot) return `Slot ${n}`;
+  if (!slot) return t("Slot {n}", { n });
   if (!cuwpSlotActive(slot)) return used ? t("Slot {n} · in use, nothing set", { n }) : t("Slot {n} · empty", { n });
-  return `Slot ${n} · ${describeCuwpSlot(slot)}`;
+  return t("Slot {n} · {summary}", { n, summary: describeCuwpSlot(slot) });
 }
 
 /** A slot patch the way the dialog and the plugin API both apply one: only the named fields move. */

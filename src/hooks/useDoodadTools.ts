@@ -145,9 +145,11 @@ export function useDoodadTools() {
       placed++;
     }
     setSelected([]);
-    const label = placed === 1 ? `Place ${doodadLabel(ghost.def)}` : `Place ${placed} × ${doodadLabel(ghost.def)}`;
+    const label = placed === 1 ? t("Place {name}", { name: doodadLabel(ghost.def) }) : t("Place {n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     commit(opts.asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
-    setStatus(t("Placed {count}{doodad} ({w}×{h}){asTerrain} at tile {x}, {y} — Esc or right-click to stop placing", { count: placed === 1 ? "" : `${placed} × `, doodad: doodadLabel(ghost.def), w: ghost.def.width, h: ghost.def.height, asTerrain: opts.asTerrain ? t(" as terrain") : "", x: ghost.x, y: ghost.y }));
+    const what = placed === 1 ? doodadLabel(ghost.def) : t("{n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
+    const where = { what, w: ghost.def.width, h: ghost.def.height, x: ghost.x, y: ghost.y };
+    setStatus(opts.asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where));
     return true;
   }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
 

@@ -844,7 +844,7 @@ export const commitTerrainAtom = atom(null, (get, set, req: { entry: HistoryEntr
       entry.doodads = [...(entry.doodads ?? []), ...edit.doodads];
       entry.sprites = [...(entry.sprites ?? []), ...edit.sprites];
       set(selectedDoodadsAtom, []);
-      note += `, removed ${stranded.length} doodad${stranded.length === 1 ? "" : "s"}`;
+      note += t(", removed {n, plural, one {# doodad} other {# doodads}}", { n: stranded.length });
     }
   }
   if (get(placementOptionsAtom).removeStranded && loaded && (entry.changes.length > 0 || (entry.doodadTiles?.length ?? 0) > 0)) {

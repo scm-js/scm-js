@@ -17,6 +17,7 @@ import { boundsOf, locationName } from "../editor/locations";
 import { isResource, unitGeometry } from "../editor/units";
 import { drawFogOverlay } from "../components/viewport/fog";
 import type { Rect } from "../editor/terrain";
+import { t } from "../i18n";
 
 /**
  * Rendering the open map to a picture, for File ▸ Export ▸ Image.
@@ -405,7 +406,7 @@ export function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
     canvas.toBlob((blob) => {
       // A canvas past the browser's size limit encodes to nothing rather than throwing.
       if (blob) resolve(blob);
-      else reject(new Error("The image is too large for this browser to encode. Try a smaller scale."));
+      else reject(new Error(t("The image is too large for this browser to encode. Try a smaller scale.")));
     }, "image/png");
   });
 }

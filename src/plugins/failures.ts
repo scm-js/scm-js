@@ -56,7 +56,7 @@ export function pluginFailures(
     const rt = runtimes[p.spec];
     if (rt?.status !== "error") continue;
     const name = rt.manifest?.name ?? cached[p.spec]?.manifest.name ?? specLabel(p.spec);
-    out.push({ spec: p.spec, name, error: rt.error ?? "It did not load." });
+    out.push({ spec: p.spec, name, error: rt.error ?? t("It did not load.") });
   }
   return out;
 }
@@ -66,8 +66,8 @@ const isRemote = (spec: string) => !/^builtin:/i.test(spec.trim());
 
 /** A loader message ends where it ends; the sentence after it needs somewhere to start. */
 const sentence = (text: string) => {
-  const t = text.trim();
-  return t === "" || /[.!?…:]$/.test(t) ? t : `${t}.`;
+  const s = text.trim();
+  return s === "" || /[.!?…:]$/.test(s) ? s : `${s}.`;
 };
 
 /**
@@ -81,20 +81,20 @@ const sentence = (text: string) => {
  */
 export function failureToast(failures: readonly PluginFailure[], openPlugins: () => void): Omit<Toast, "id"> | null {
   if (failures.length === 0) return null;
-  const names = failures.map((f) => f.name);
-  const plural = failures.length > 1;
-  const title = failures.length === 1 ? `${names[0]} did not load`
-    : failures.length === 2 ? `${names[0]} and ${names[1]} did not load`
-    : `${failures.length} plugins did not load`;
+  const n = failures.length;
+  const title = n === 1 ? t("{name} did not load", { name: failures[0].name })
+    : n === 2 ? t("{first} and {second} did not load", { first: failures[0].name, second: failures[1].name })
+    : t("{n, plural, one {# plugin did not load} other {# plugins did not load}}", { n });
   // Where they come from is the part that says what to do about it: a plugin fetched at
   // startup failing usually means the connection, not the plugin.
   const where = failures.every((f) => isRemote(f.spec))
-    ? ` ${plural ? "They are" : "It is"} fetched from ${plural ? "their repositories" : "its repository"} when the editor starts.`
+    ? t("{n, plural, one {It is fetched from its repository when the editor starts.} other {They are fetched from their repositories when the editor starts.}}", { n })
     : "";
+  const first = `${n > 1 ? `${failures[0].name}: ` : ""}${sentence(failures[0].error)}`;
   return {
     kind: "warn",
     title,
-    detail: `${plural ? `${failures[0].name}: ` : ""}${sentence(failures[0].error)}${where} Everything else in the editor works.`,
+    detail: [first, where, t("Everything else in the editor works.")].filter(Boolean).join(" "),
     ttl: 0,
     action: { label: t("Plugins…"), run: openPlugins },
   };

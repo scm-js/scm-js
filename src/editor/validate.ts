@@ -133,7 +133,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   if (missingUms.length > 0) {
     add(scn.triggers.length > 0 ? "error" : "warn", t("Missing {join} — a Use Map Settings game of this map stops as it starts. Melee and the other game types do not need them.", { join: names(missingUms) }), msg("File"), { kind: "dialog", id: "mapRevision" });
   }
-  add("info", t("Map revision: {label} (VER {ver}, {type}, {table}).", { label: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label, ver: scn.fileVersion, type: scn.type, table: scn.strings.extended ? "STRx" : "STR" }), msg("Header"));
+  add("info", t("Map revision: {label} (VER {ver}, {type}, {table}).", { label: translate(MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label), ver: scn.fileVersion, type: scn.type, table: scn.strings.extended ? "STRx" : "STR" }), msg("Header"));
   // What the parser noticed on the way in: a section cut short, a DIM that had to be guessed.
   for (const w of scn.warnings) add("warn", w, msg("File"));
 
@@ -171,7 +171,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   const era = tilesetIndex(scn);
   const tilesetName = translate(TILESETS[era]?.name ?? "") || String(era);
   if (era > 4 && scn.fileVersion < 205) {
-    add("warn", t("The map is on {tileset}, a Brood War tileset, at the revision {label}: StarCraft without Brood War refuses it, so it loads only in Brood War. Choose a Brood War revision, or a StarCraft tileset.", { tileset: tilesetName, label: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label }), msg("File"), { kind: "dialog", id: "mapRevision" });
+    add("warn", t("The map is on {tileset}, a Brood War tileset, at the revision {label}: StarCraft without Brood War refuses it, so it loads only in Brood War. Choose a Brood War revision, or a StarCraft tileset.", { tileset: tilesetName, label: translate(MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label) }), msg("File"), { kind: "dialog", id: "mapRevision" });
   }
   if (era === 2 && !ums) {
     add("warn", t("Installation maps play only as Use Map Settings: the game refuses them for melee and the other game types."), msg("File"));
@@ -336,7 +336,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   const stringOk = (i: number) => i < scn.strings.strings.length;
   const checkTrigger = (trig: TriggerRecord, index: number, where: string, briefing: boolean) => {
     const target: IssueTarget | undefined = briefing ? { kind: "dialog", id: "missionBriefing" } : { kind: "trigger", index };
-    const label = briefing ? `Briefing ${index + 1}` : `Trigger ${index + 1}`;
+    const label = briefing ? t("Briefing {n}", { n: index + 1 }) : t("Trigger {n}", { n: index + 1 });
     if (trig.flags & TriggerFlag.Disabled) add("info", t("{label} is disabled.", { label }), where, target);
     if (!briefing && (trig.flags & TriggerFlag.IgnoreGameEnd)) add("warn", t("{label} has flag 0x02 (Defeat Others): each time its actions run, every other player in the game without a result is defeated, and its own Defeat or Draw never takes effect.", { label }), where, target);
     const checkLocation = (value: number, what: string, condition = false) => {
@@ -540,7 +540,7 @@ export function umsIssues(scn: Scenario): Issue[] {
   const noVictory = humans.filter((p) => !victory.has(p));
   const noDefeat = humans.filter((p) => !defeat.has(p) && ![...ending].some((q) => q !== p && inGame(q)));
   const noObjectives = humans.filter((p) => !objectives.has(p));
-  const list = (ps: number[]) => ps.map((p) => `Player ${p + 1}`).join(", ");
+  const list = (ps: number[]) => ps.map((p) => t("Player {n}", { n: p + 1 })).join(", ");
   if (noVictory.length > 0) issues.push({ level: "warn", text: t("No trigger gives {list} Victory; in a scenario a player wins only when a trigger says so.", { list: list(noVictory) }), where: msg("Triggers"), target: { kind: "dialog", id: "triggerEditor" } });
   if (noDefeat.length > 0) issues.push({ level: "warn", text: t("Nothing makes {list} lose: no Defeat, and no Victory or Draw for another player. A scenario does not end when a player's units are gone.", { list: list(noDefeat) }), where: msg("Triggers"), target: { kind: "dialog", id: "triggerEditor" } });
   if (noObjectives.length > 0) issues.push({ level: "info", text: t("No Set Mission Objectives for {list}; the objectives box will show the melee text.", { list: list(noObjectives) }), where: msg("Triggers"), target: { kind: "dialog", id: "triggerEditor" } });

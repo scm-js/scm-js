@@ -11,6 +11,7 @@ import { decodePcx } from "../dat/pcx";
 import { decodeTbl, decodeTblEntries } from "../dat/tbl";
 import { TEAM_COLOR_ROWS, TEAM_SLOT_COUNT } from "./teamColor";
 import { fetchAsset } from "../../gamedata/source";
+import { t } from "../../i18n";
 import { installNames } from "../../data/units";
 import { namesFromAssets } from "../../data/gameNames";
 import { buildStockSounds, type StockSounds } from "../../editor/stockSounds";
@@ -49,7 +50,7 @@ export interface UnitAssets {
 
 export class UnitAssetsMissingError extends Error {
   constructor(cause?: unknown) {
-    super("Unit data is not available. Help ▸ Game Data… installs it from a StarCraft installation.", { cause });
+    super(t("Unit data is not available. Help ▸ Game Data… installs it from a StarCraft installation."), { cause });
     this.name = "UnitAssetsMissingError";
   }
 }

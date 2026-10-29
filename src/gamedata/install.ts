@@ -18,6 +18,7 @@ import { DEFAULT_PROFILE, isDefaultProfile, normalizeProfile, type GameDataProfi
 import { BUILD_INFO, installRootOf, type PickedFile } from "./remasteredFolder";
 import { forgetStoredFolders, keepInMemory, type StoredCopy } from "./store";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
+import { t, translate } from "../i18n";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -60,8 +61,8 @@ export function pickArchives(files: readonly File[]): File[] {
   if (missing.length > 0) {
     throw new InstallError(
       archives.length === 0
-        ? `No StarCraft archives among the files picked. The editor needs ${ARCHIVE_NAMES.join(" and ")}.`
-        : `${missing.join(" and ")} missing — the editor needs both archives.`,
+        ? t("No StarCraft archives among the files picked. The editor needs {first} and {second}.", { first: ARCHIVE_NAMES[0], second: ARCHIVE_NAMES[1] })
+        : t("{names} missing — the editor needs both archives.", { names: missing.join(", ") }),
     );
   }
   return archives;
@@ -70,7 +71,7 @@ export function pickArchives(files: readonly File[]): File[] {
 /** Extract from the archives and store the result as the game's own data. Resolves with the copy's stamp. */
 export async function installFromFiles(files: readonly File[], progress?: InstallProgress): Promise<StoredCopy> {
   const archives = pickArchives(files);
-  progress?.(0, "Reading the archives");
+  progress?.(0, t("Reading the archives"));
   const inputs: ExtractRequest["archives"] = [];
   for (const file of archives) inputs.push({ name: file.name, bytes: await file.arrayBuffer() });
   return runWorker(inputs, archives.map((f) => f.name).join(" + "), progress);
@@ -148,10 +149,10 @@ const bytesOf = async (data: InstallBytes): Promise<ArrayBuffer> =>
  */
 export async function installDataSet(profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<StoredCopy> {
   const normalized = normalizeProfile(profile);
-  if (!normalized) throw new InstallError(`"${profile.id}" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
+  if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
   const names = input.archives.map((a) => ({ name: a.name }));
   pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
-  progress?.(0, "Reading the archives");
+  progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
   for (const a of orderArchives(input.archives)) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
   const overlay: NonNullable<ExtractRequest["overlay"]> = [];
@@ -159,7 +160,7 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
     if (!isMemberPath(f.path)) continue;
     overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
   }
-  const from = [...archives.map((a) => a.name), ...(overlay.length ? [`${overlay.length} loose file${overlay.length === 1 ? "" : "s"}`] : [])].join(" + ");
+  const from = [...archives.map((a) => a.name), ...(overlay.length ? [t("{n, plural, one {# loose file} other {# loose files}}", { n: overlay.length })] : [])].join(" + ");
   return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay);
 }
 
@@ -170,13 +171,13 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
  * which is the forwarder's whole job.
  */
 export async function installFromZipUrl(url: string, progress?: InstallProgress): Promise<StoredCopy> {
-  progress?.(0, "Reading the download");
+  progress?.(0, t("Reading the download"));
   const entries = await readZipDirectory(httpRangeReader(url)).catch((err) => {
-    throw new InstallError(err instanceof ZipError ? err.message : `${url} could not be read (${err instanceof Error ? err.message : String(err)}).`);
+    throw new InstallError(err instanceof ZipError ? err.message : t("{url} could not be read ({reason}).", { url, reason: err instanceof Error ? err.message : String(err) }));
   });
 
   const { found, missing } = findMembers(entries, ARCHIVE_NAMES);
-  if (missing.length > 0) throw new InstallError(`${url} does not carry ${missing.join(" or ")}.`);
+  if (missing.length > 0) throw new InstallError(t("{url} does not carry {names}.", { url, names: missing.join(", ") }));
 
   // The download is the first half of the bar and the extraction the second, as an install
   // from loose archives has it; within the download, each member is weighted by its size.
@@ -188,10 +189,10 @@ export async function installFromZipUrl(url: string, progress?: InstallProgress)
   const inputs: ExtractRequest["archives"] = [];
   for (const { name, entry } of wanted) {
     const reader = httpRangeReader(url, {
-      onProgress: (received) => progress?.(((doneBytes + received) / total) * 0.5, `Downloading ${name}`),
+      onProgress: (received) => progress?.(((doneBytes + received) / total) * 0.5, t("Downloading {name}", { name })),
     });
     const bytes = await readZipMember(reader, entry).catch((err) => {
-      throw new InstallError(err instanceof ZipError ? err.message : `${name} could not be read from ${url} (${err instanceof Error ? err.message : String(err)}).`);
+      throw new InstallError(err instanceof ZipError ? err.message : t("{name} could not be read from {url} ({reason}).", { name, url, reason: err instanceof Error ? err.message : String(err) }));
     });
     doneBytes += entry.compressedSize;
     inputs.push({ name, bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer });
@@ -234,7 +235,7 @@ export function installFromRemastered(folder: RemasteredFolder, progress?: Insta
     const paths = pickedPaths(folder);
     return installFromPickedRemastered((folder as readonly File[]).map((file, i) => ({ path: paths[i], file })), progress, profile, options);
   }
-  progress?.(0, "Opening the installation");
+  progress?.(0, t("Opening the installation"));
   return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], folder as FileSystemDirectoryHandle, options.lighting);
 }
 
@@ -246,13 +247,13 @@ export function installFromRemastered(folder: RemasteredFolder, progress?: Insta
 export function installFromPickedRemastered(files: readonly PickedFile[], progress?: InstallProgress, profile?: GameDataProfile, options: RemasteredOptions = {}): Promise<StoredCopy> {
   // Only the storage itself goes to the worker: the folder's other files are of no use to it.
   const root = installRootOf(files.map((f) => f.path));
-  if (root === null) return Promise.reject(new InstallError("That folder is not a StarCraft: Remastered installation."));
+  if (root === null) return Promise.reject(new InstallError(t("That folder is not a StarCraft: Remastered installation.")));
   const picked: PickedFile[] = [];
   for (const { path, file } of files) {
     const rel = path.replaceAll("\\", "/");
     if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
   }
-  progress?.(0, "Opening the installation");
+  progress?.(0, t("Opening the installation"));
   return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], picked, options.lighting);
 }
 
@@ -270,30 +271,31 @@ function runWorker(
     try {
       worker = new Worker(new URL("./extract.worker.ts", import.meta.url), { type: "module" });
     } catch (err) {
-      reject(new InstallError(`The extraction worker could not start: ${err instanceof Error ? err.message : String(err)}`));
+      reject(new InstallError(t("The extraction worker could not start: {reason}", { reason: err instanceof Error ? err.message : String(err) })));
       return;
     }
     worker.onerror = (e) => {
       worker.terminate();
-      reject(new InstallError(e.message || "The extraction failed."));
+      reject(new InstallError(e.message || t("The extraction failed.")));
     };
+    // The worker's words are English (its module instance has no locale) with their templates beside them.
     worker.onmessage = (e: MessageEvent<ExtractResponse>) => {
-      const msg = e.data;
-      if (msg.kind === "progress") {
-        progress?.(msg.fraction, msg.label);
+      const reply = e.data;
+      if (reply.kind === "progress") {
+        progress?.(reply.fraction, reply.message ? translate(reply.message.text, reply.message.params) : reply.label);
         return;
       }
       worker.terminate();
-      if (msg.kind === "error") {
-        reject(new InstallError(msg.message));
+      if (reply.kind === "error") {
+        reject(new InstallError(reply.text ? translate(reply.text.text, reply.text.params) : reply.message));
         return;
       }
-      for (const p of msg.problems) console.warn("game data:", p);
+      for (const p of reply.problems) console.warn("game data:", p);
       forgetStoredFolders();
-      if (msg.where === "memory") {
-        keepInMemory(new Map((msg.files ?? []).map(([path, buf]) => [path, new Uint8Array(buf)])), msg.stamp, profile?.id ?? DEFAULT_PROFILE.id);
+      if (reply.where === "memory") {
+        keepInMemory(new Map((reply.files ?? []).map(([path, buf]) => [path, new Uint8Array(buf)])), reply.stamp, profile?.id ?? DEFAULT_PROFILE.id);
       }
-      resolve({ ...msg.stamp, where: msg.where });
+      resolve({ ...reply.stamp, where: reply.where });
     };
     const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);

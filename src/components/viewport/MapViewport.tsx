@@ -482,7 +482,7 @@ export default function MapViewport() {
     // A plugin's pick in progress: the rectangle being dragged, teal so it reads as "not the marked area".
     if (picking && gesture?.kind === "pick" && scenario) {
       const r = tileRect(gesture.from, gesture.to);
-      const label = mapPick?.kind === "tile" ? `${gesture.to.x}, ${gesture.to.y}` : `${r.x1 - r.x0} × ${r.y1 - r.y0} at ${r.x0}, ${r.y0}`;
+      const label = mapPick?.kind === "tile" ? `${gesture.to.x}, ${gesture.to.y}` : t("{w} × {h} at {x}, {y}", { w: r.x1 - r.x0, h: r.y1 - r.y0, x: r.x0, y: r.y0 });
       markedTiles(v, r, "rgba(79,209,197,0.12)", INK.teal, label, INK.teal);
     }
 

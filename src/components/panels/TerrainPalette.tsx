@@ -16,7 +16,7 @@ import { useTileset } from "../../hooks/useTileset";
 import { useIsomStatus } from "../../hooks/useIsom";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { variationsOf } from "../../formats/tileset/terrain";
-import { heightLabel, hexTile, terrainTypes, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
+import { heightLabel, hexTile, terrainTypes, tileGroupLabel, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
 import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, type Side } from "../../editor/blend";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
@@ -182,7 +182,7 @@ function RectTab() {
             </button>
           </Tip>
           {slots.map((slot) => (
-            <button key={slot} className={`variation ${chosen === slot ? "is-active" : ""} ${variations.rare.includes(slot) ? "rare" : ""}`} onClick={() => setVariation(slot)} title={`Variation ${slot}${variations.rare.includes(slot) ? " (rare)" : ""}`}>
+            <button key={slot} className={`variation ${chosen === slot ? "is-active" : ""} ${variations.rare.includes(slot) ? "rare" : ""}`} onClick={() => setVariation(slot)} title={variations.rare.includes(slot) ? t("Variation {slot} (rare)", { slot }) : t("Variation {slot}", { slot })}>
               <TileThumb loaded={loaded} id={(current.group << 4) | slot} size={22} />
             </button>
           ))}
@@ -226,7 +226,10 @@ const KIND_FILTERS: { value: GroupKind | "all"; label: string }[] = [
  * matches a group or CV5 index, anything else is a substring of the group label
  * ("dirt", "edge set 12", "doodad").
  */
-function searchGroups(groups: TileGroupInfo[], query: string): TileGroupInfo[] {
+/** A group as the panel shows it: `label` in the user's language, `english` the name the search also matches. */
+type ShownGroup = TileGroupInfo & { english: string };
+
+function searchGroups(groups: ShownGroup[], query: string): ShownGroup[] {
   const q = query.trim().toLowerCase();
   if (q === "") return groups;
   if (/^0x[0-9a-f]+$/.test(q)) {
@@ -235,9 +238,9 @@ function searchGroups(groups: TileGroupInfo[], query: string): TileGroupInfo[] {
   }
   if (/^\d+$/.test(q)) {
     const n = Number(q);
-    return groups.filter((g) => g.group === n || g.index === n || g.label.toLowerCase().includes(q));
+    return groups.filter((g) => g.group === n || g.index === n || g.label.toLowerCase().includes(q) || g.english.toLowerCase().includes(q));
   }
-  return groups.filter((g) => g.label.toLowerCase().includes(q));
+  return groups.filter((g) => g.label.toLowerCase().includes(q) || g.english.toLowerCase().includes(q));
 }
 
 function SelectedTileFooter({ id }: { id: number }) {
@@ -247,7 +250,7 @@ function SelectedTileFooter({ id }: { id: number }) {
   return (
     <div className="palette-footer">
       <span className="mono">{id} · {hexTile(id)}</span>
-      <span>{ti ? t("{label} · g{group} s{slot}", { label: ti.label, group: ti.group, slot: ti.slot }) : `group ${id >> 4} · slot ${id & 15}`}</span>
+      <span>{ti && loaded ? t("{label} · g{group} s{slot}", { label: tileGroupLabel(loaded.tileset, info.terrain, ti.group), group: ti.group, slot: ti.slot }) : t("group {group} · slot {slot}", { group: id >> 4, slot: id & 15 })}</span>
     </div>
   );
 }
@@ -264,7 +267,7 @@ function TileTab() {
   const [view, setView] = useState<TileView>("groups");
   const [text, setText] = useState<string | null>(null);
 
-  const all = useMemo(() => (loaded ? tileGroups(loaded.tileset, info.terrain) : []), [loaded, info]);
+  const all = useMemo((): ShownGroup[] => (loaded ? tileGroups(loaded.tileset, info.terrain).map((g) => ({ ...g, english: g.label, label: tileGroupLabel(loaded.tileset, info.terrain, g.group, true) })) : []), [loaded, info]);
   const groups = useMemo(
     () => searchGroups(kind === "all" ? all : all.filter((g) => g.kind === kind), query),
     [all, kind, query],
@@ -301,7 +304,7 @@ function TileTab() {
           <span className="k">{t("Slot")}</span><span><NumberInput value={active & 15} onChange={(s) => setActive((active & ~15) | s)} min={0} max={15} width={84} /></span>
           <span className="k">{t("Brush")}</span><span><BrushSelect bare /></span>
           <span className="k">{t("MegaTile")}</span><span className="mono">{ti ? (ti.megatile >= 0 ? ti.megatile : "none") : "—"}</span>
-          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
+          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? t("buildable") : t("unbuildable")}` : "—"}</span>
           <span className="k">{t("Walkable")}</span><span>{ti ? `${ti.walkable} / 16` : "—"}</span>
         </div>
       </div>
@@ -418,9 +421,9 @@ function BlendTab() {
         <TileThumb loaded={loaded} id={anchorId ?? 0} size={64} className="preview" style={{ opacity: anchorId === null ? 0.3 : 1 }} />
         <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
           <span className="k">{t("Anchor")}</span>
-          <span>{at && anchorId !== null ? <span className="mono">{hexTile(anchorId)} <span className="dim">at {at.x}, {at.y}</span></span> : <span className="dim">{t("click a tile on the map")}</span>}</span>
-          <span className="k">{t("Group")}</span><span>{ti ? t("{label} · g{group} s{slot}", { label: ti.label, group: ti.group, slot: ti.slot }) : "—"}</span>
-          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? "buildable" : "unbuildable"}` : "—"}</span>
+          <span>{at && anchorId !== null ? <span className="mono">{hexTile(anchorId)} <span className="dim">{t("at {x}, {y}", { x: at.x, y: at.y })}</span></span> : <span className="dim">{t("click a tile on the map")}</span>}</span>
+          <span className="k">{t("Group")}</span><span>{ti && loaded ? t("{label} · g{group} s{slot}", { label: tileGroupLabel(loaded.tileset, info.terrain, ti.group), group: ti.group, slot: ti.slot }) : "—"}</span>
+          <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? t("buildable") : t("unbuildable")}` : "—"}</span>
           <span className="k" />
           <span>{at && <Button size="sm" onClick={() => setAnchor(null)}>{t("Clear")}</Button>}</span>
         </div>

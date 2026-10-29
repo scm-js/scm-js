@@ -36,7 +36,9 @@ export interface UnitGhost {
 
 function describeProblem(tables: UnitsDat | null, unitId: number, verdict: { problem: PlacementProblem | null; blocker: number }, scn: { units: UnitRecord[] }): string {
   const reason = placementReason(tables, unitId, verdict.problem, verdict.blocker, scn.units);
-  return `Can't place ${unitLabel(unitId)} here: ${reason} (Placement ▸ Check ${verdict.problem === "terrain" ? "terrain" : "collision"})`;
+  return verdict.problem === "terrain"
+    ? t("Can't place {unit} here: {reason} (Placement ▸ Check terrain)", { unit: unitLabel(unitId), reason: reason ?? "" })
+    : t("Can't place {unit} here: {reason} (Placement ▸ Check collision)", { unit: unitLabel(unitId), reason: reason ?? "" });
 }
 
 /**

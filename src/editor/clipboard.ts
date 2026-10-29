@@ -225,14 +225,14 @@ export function copyObjects(scn: Scenario, sel: ObjectSelection, parts: ClipPart
 
 /** What a clip holds, for the palette and the status bar: "12×8 tiles · 5 units · 2 doodads". */
 export function clipSummary(clip: Clip): string {
-  const n = (count: number, noun: string) => (count === 0 ? null : `${count} ${noun}${count === 1 ? "" : "s"}`);
+  const [doodads, units, sprites, locations] = [clip.doodads.length, clip.units.length, clip.sprites.length, clip.locations.length];
   const parts = [
-    clip.tiles ? `${clip.width}×${clip.height} tiles` : `${clip.width}×${clip.height} area`,
-    n(clip.doodads.length, "doodad"),
-    n(clip.units.length, "unit"),
-    n(clip.sprites.length, "sprite"),
-    n(clip.locations.length, "location"),
-    clip.fog ? "fog" : null,
+    clip.tiles ? t("{w}×{h} tiles", { w: clip.width, h: clip.height }) : t("{w}×{h} area", { w: clip.width, h: clip.height }),
+    doodads ? t("{n, plural, one {# doodad} other {# doodads}}", { n: doodads }) : null,
+    units ? t("{n, plural, one {# unit} other {# units}}", { n: units }) : null,
+    sprites ? t("{n, plural, one {# sprite} other {# sprites}}", { n: sprites }) : null,
+    locations ? t("{n, plural, one {# location} other {# locations}}", { n: locations }) : null,
+    clip.fog ? t("fog") : null,
   ];
   return parts.filter((p): p is string => p !== null).join(" · ");
 }

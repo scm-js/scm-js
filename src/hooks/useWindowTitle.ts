@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { useAtomValue } from "jotai";
 import { mapFilePathAtom, mapModifiedAtom, mapNameAtom } from "../atoms/editorAtoms";
 import { scenarioAtom } from "../atoms/documentAtoms";
-import { t } from "../i18n";
+import { msg, t, translate } from "../i18n";
 
 /** What the tab (and, on the desktop, the window) says when nothing is open. */
-export const APP_TITLE = "scmJS — StarCraft Scenario Editor";
+export const APP_TITLE = msg("scmJS — StarCraft Scenario Editor");
 
 /**
  * The title of the document part: the file the map came from when it has one — that is
@@ -28,6 +28,6 @@ export function useWindowTitle() {
   const modified = useAtomValue(mapModifiedAtom);
 
   useEffect(() => {
-    document.title = scenario ? documentTitle(fileName, mapName, modified) : APP_TITLE;
+    document.title = scenario ? documentTitle(fileName, mapName, modified) : translate(APP_TITLE);
   }, [scenario, fileName, mapName, modified]);
 }

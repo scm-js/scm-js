@@ -8,6 +8,7 @@
  * index 0 marks slots the tileset does not use (a few still hold real graphics).
  */
 import type { TerrainName } from "../../data/tilesets";
+import { format, msg, translate, type Params } from "../../i18n";
 import { groupBuildable, groupHeight, megatileForTile, megatileHeight, TileFlag, tileGroupOf, type Cv5Group, type Tileset } from "./decode";
 
 /** Doodad groups mark themselves with index 1. */
@@ -63,9 +64,32 @@ export interface TileGroupInfo {
   slots: number[];
 }
 
+/**
+ * A group's kind and name. `label` is English: it is also the plugin API's `names.tile`,
+ * which stays English like the other names there, so the panels show `tileGroupLabel`.
+ * `halves` adds the L / R of a flat pair, as the palette's group list does.
+ */
+function describeGroup(tileset: Tileset, names: readonly TerrainName[], group: number, halves: boolean, english: boolean): { kind: GroupKind; label: string } {
+  const say = (text: string, params?: Params) => (english ? format(text, params, "en") : translate(text, params));
+  const cv5 = tileset.groups[group];
+  if (!cv5) return { kind: "other", label: say(msg("Unlisted")) };
+  if (cv5.index === DOODAD_INDEX) return { kind: "doodad", label: say(msg("Doodad")) };
+  if (isFlatPair(tileset, group & ~1)) {
+    const name = names.find((n) => n.id === cv5.index)?.name;
+    const label = name ? (english ? name : translate(name)) : say(msg("Terrain {n}"), { n: cv5.index });
+    return { kind: "terrain", label: halves ? `${label} ${group % 2 === 0 ? "L" : "R"}` : label };
+  }
+  if (cv5.index >= 2) return { kind: "edge", label: say(msg("Edge set {n}"), { n: cv5.index }) };
+  return { kind: "other", label: say(msg("Unlisted")) };
+}
+
+/** A group's name in the user's language, for the panels (`TileGroupInfo.label` / `TileInfo.label` in English); `halves` as `tileGroups` has it. */
+export function tileGroupLabel(tileset: Tileset, names: readonly TerrainName[], group: number, halves = false): string {
+  return describeGroup(tileset, names, group, halves, false).label;
+}
+
 /** Every group with at least one drawable megatile, in group order. */
 export function tileGroups(tileset: Tileset, names: readonly TerrainName[]): TileGroupInfo[] {
-  const nameOf = new Map(names.map((n) => [n.id, n.name]));
   const out: TileGroupInfo[] = [];
   for (let g = 0; g < tileset.groups.length; g++) {
     const cv5 = tileset.groups[g];
@@ -75,19 +99,7 @@ export function tileGroups(tileset: Tileset, names: readonly TerrainName[]): Til
       if (m !== 0 && m < tileset.megatileCount) slots.push(s);
     }
     if (slots.length === 0) continue;
-
-    let kind: GroupKind = "other";
-    let label = "Unlisted";
-    if (cv5.index === DOODAD_INDEX) {
-      kind = "doodad";
-      label = "Doodad";
-    } else if (isFlatPair(tileset, g & ~1)) {
-      kind = "terrain";
-      label = `${nameOf.get(cv5.index) ?? `Terrain ${cv5.index}`} ${g % 2 === 0 ? "L" : "R"}`;
-    } else if (cv5.index >= 2) {
-      kind = "edge";
-      label = `Edge set ${cv5.index}`;
-    }
+    const { kind, label } = describeGroup(tileset, names, g, true, true);
     out.push({ group: g, kind, index: cv5.index, label, slots });
   }
   return out;
@@ -107,10 +119,11 @@ export interface TileInfo {
   walkable: number;
 }
 
-const HEIGHT_LABEL = ["Low", "Mid", "High"] as const;
+const HEIGHT_LABEL = [msg("Low"), msg("Mid"), msg("High")] as const;
 
+/** A height in the user's language. */
 export function heightLabel(height: 0 | 1 | 2): string {
-  return HEIGHT_LABEL[height];
+  return translate(HEIGHT_LABEL[height]);
 }
 
 /** Everything the properties panel shows about one MTXM id. */
@@ -121,21 +134,7 @@ export function tileInfo(tileset: Tileset, names: readonly TerrainName[], id: nu
   // Megatile 0 is the null megatile: it "resolves", but there is nothing there.
   const resolved = megatileForTile(tileset, id);
   const megatile = resolved > 0 ? resolved : -1;
-
-  let kind: GroupKind = "other";
-  let label = "Unlisted";
-  if (cv5) {
-    if (cv5.index === DOODAD_INDEX) {
-      kind = "doodad";
-      label = "Doodad";
-    } else if (isFlatPair(tileset, group & ~1)) {
-      kind = "terrain";
-      label = names.find((n) => n.id === cv5.index)?.name ?? `Terrain ${cv5.index}`;
-    } else if (cv5.index >= 2) {
-      kind = "edge";
-      label = `Edge set ${cv5.index}`;
-    }
-  }
+  const { kind, label } = describeGroup(tileset, names, group, false, true);
 
   let walkable = 0;
   if (megatile >= 0) {

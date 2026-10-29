@@ -88,7 +88,7 @@ export default function ViewportHud({ tilesetName, tilesetLoading, unitAssets, d
       {locationsEditing && <span className="hud-chip">{t("locations · drag empty ground to create · snap")}{" "}<b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
       {clipEditing && !clipPasting && (
         <span className="hud-chip">
-          {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> at {clipSelection.x0}, {clipSelection.y0}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
+          {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> {t("at {x}, {y}", { x: clipSelection.x0, y: clipSelection.y0 })}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
         </span>
       )}
       {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · Esc / right-click to stop")}</span>}

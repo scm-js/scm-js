@@ -125,7 +125,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
             </Field>
             <Field label={t("Revision")}>
               <div className="row">
-                <span>{scenario ? MAP_VERSIONS[mapVersionOf(scenario.fileVersion)].label : "—"}</span>
+                <span>{scenario ? translate(MAP_VERSIONS[mapVersionOf(scenario.fileVersion)].label) : "—"}</span>
                 {scenario && <span className="faint mono">VER {scenario.fileVersion} · {scenario.type}</span>}
                 <Button size="sm" onClick={() => open("mapRevision")}>{t("Change…")}</Button>
               </div>
@@ -158,7 +158,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
 /* ── Resize / Crop ──────────────────────────────────────── */
 
 const ANCHORS = [ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, Circle, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight];
-const ANCHOR_NAMES = ["top-left", "top", "top-right", "left", "centre", "right", "bottom-left", "bottom", "bottom-right"];
+const ANCHOR_NAMES = [msg("top-left"), msg("top"), msg("top-right"), msg("left"), msg("centre"), msg("right"), msg("bottom-left"), msg("bottom"), msg("bottom-right")];
 
 /**
  * Scenario ▸ Resize / Crop Map: the whole document moves (editor/resize.ts), so this is
@@ -189,18 +189,18 @@ export function ResizeMapDialog({ entry }: DialogProps) {
   const apply = () => {
     const r = resize({ width: nw, height: nh, anchor, terrainId: terrain, clampLocations: clamp });
     if (!r) return;
-    const dropped = [r.unitsDropped && `${r.unitsDropped} units`, r.spritesDropped && `${r.spritesDropped} sprites`, r.doodadsDropped && `${r.doodadsDropped} doodads`].filter(Boolean).join(", ");
-    setStatus(t("Resized to {w}×{h} ({anchor} anchor)", { w: nw, h: nh, anchor: translate(ANCHOR_NAMES[anchor]) }) + (dropped ? t(" — dropped {what}", { what: dropped }) : "") + (r.locationsClamped ? t(", clamped {n} locations", { n: r.locationsClamped }) : "") + (r.isomRebuilt ? "" : t(" — ISOM is the fill's; Rebuild ISOM once the tileset is loaded")));
+    const dropped = [r.unitsDropped && t("{n, plural, one {# unit} other {# units}}", { n: r.unitsDropped }), r.spritesDropped && t("{n, plural, one {# sprite} other {# sprites}}", { n: r.spritesDropped }), r.doodadsDropped && t("{n, plural, one {# doodad} other {# doodads}}", { n: r.doodadsDropped })].filter(Boolean).join(", ");
+    setStatus(t("Resized to {w}×{h} ({anchor} anchor)", { w: nw, h: nh, anchor: translate(ANCHOR_NAMES[anchor]) }) + (dropped ? t(" — dropped {what}", { what: dropped }) : "") + (r.locationsClamped ? t(", clamped {n, plural, one {# location} other {# locations}}", { n: r.locationsClamped }) : "") + (r.isomRebuilt ? "" : t(" — ISOM is the fill's; Rebuild ISOM once the tileset is loaded")));
   };
 
   const crops = preview ? [
-    preview.unitsDropped && `${preview.unitsDropped} unit${preview.unitsDropped === 1 ? "" : "s"}`,
-    preview.spritesDropped && `${preview.spritesDropped} sprite${preview.spritesDropped === 1 ? "" : "s"}`,
-    preview.doodadsDropped && `${preview.doodadsDropped} doodad${preview.doodadsDropped === 1 ? "" : "s"}`,
+    preview.unitsDropped && t("{n, plural, one {# unit} other {# units}}", { n: preview.unitsDropped }),
+    preview.spritesDropped && t("{n, plural, one {# sprite} other {# sprites}}", { n: preview.spritesDropped }),
+    preview.doodadsDropped && t("{n, plural, one {# doodad} other {# doodads}}", { n: preview.doodadsDropped }),
   ].filter(Boolean) : [];
 
   return (
-    <DialogFrame dialogKey={entry.key} title={t("Resize / Crop Map")} icon={<Maximize size={14} />} size="md" okLabel={t("Resize")} onOk={apply} footerLeft={<span className="mono hint">{w}×{h} → {nw}×{nh}{preview ? ` · offset ${preview.dx}, ${preview.dy}` : ""}</span>}>
+    <DialogFrame dialogKey={entry.key} title={t("Resize / Crop Map")} icon={<Maximize size={14} />} size="md" okLabel={t("Resize")} onOk={apply} footerLeft={<span className="mono hint">{w}×{h} → {nw}×{nh}{preview ? t(" · offset {dx}, {dy}", { dx: preview.dx, dy: preview.dy }) : ""}</span>}>
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <div className="stack">
           <Group title={t("New size")}>
@@ -214,7 +214,7 @@ export function ResizeMapDialog({ entry }: DialogProps) {
             <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
               <div className="anchor">
                 {ANCHORS.map((Icon, i) => (
-                  <button key={i} className={anchor === i ? "selected" : ""} onClick={() => setAnchor(i)} title={ANCHOR_NAMES[i]}><Icon size={12} /></button>
+                  <button key={i} className={anchor === i ? "selected" : ""} onClick={() => setAnchor(i)} title={translate(ANCHOR_NAMES[i])}><Icon size={12} /></button>
                 ))}
               </div>
               <p className="hint">{t("Existing tiles, units and locations keep their position relative to the chosen edge or corner (whole tile pairs, so the offset is even). Content outside the new bounds is cropped.")}</p>
@@ -232,7 +232,7 @@ export function ResizeMapDialog({ entry }: DialogProps) {
             <ul className="hint" style={{ margin: 0, paddingLeft: 16 }}>
               {same && <li>{t("The size is unchanged; nothing will move.")}</li>}
               {!same && <li>{crops.length > 0 ? t("Cropped: {join}.", { join: crops.join(", ") }) : t("No units, sprites or doodads fall outside.")}</li>}
-              {!same && preview && preview.locationsClamped > 0 && <li>{t("{locationsClamped} location", { locationsClamped: preview.locationsClamped })}{preview.locationsClamped === 1 ? "" : "s"} {" "}{t("hang")}{preview.locationsClamped === 1 ? "s" : ""} {" "}{t("past the edge")}{clamp ? t(" and will be pulled inside") : t(" and will stay there")}.</li>}
+              {!same && preview && preview.locationsClamped > 0 && <li>{clamp ? t("{n, plural, one {# location hangs} other {# locations hang}} past the edge and will be pulled inside.", { n: preview.locationsClamped }) : t("{n, plural, one {# location hangs} other {# locations hang}} past the edge and will stay there.", { n: preview.locationsClamped })}</li>}
               {!same && (scenario.isom ? <li>{loaded ? t("ISOM will be rebuilt from the tiles.") : t("The tileset is not loaded, so ISOM will be the fill's lattice — run Rebuild ISOM afterwards.")}</li> : <li>{t("The map has no ISOM section; none is made.")}</li>)}
               <li>{t("This cannot be undone: the undo history is cleared.")}</li>
             </ul>
@@ -309,7 +309,7 @@ export function MapRevisionDialog({ entry }: DialogProps) {
             return (
               <label key={o.id} className="check" style={{ height: "auto", alignItems: "flex-start" }}>
                 <input type="radio" name="rev" checked={v === o.id} onChange={() => pick(o.id)} style={{ marginTop: 3 }} />
-                <span><div>{m.label} (.{m.extension})</div><div className="hint">VER {m.ver} · {m.type} · {o.hint}</div></span>
+                <span><div>{translate(m.label)} (.{m.extension})</div><div className="hint">VER {m.ver} · {m.type} · {o.hint}</div></span>
               </label>
             );
           })}

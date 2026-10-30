@@ -756,6 +756,28 @@
   gap: 6px;
   margin-top: 4px;
 }
+/* In place of the menu bar: one row of its height, so the editor below keeps its place. */
+.surface-error.bar {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  height: var(--h-menubar);
+  padding: 0 8px;
+  overflow: hidden;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-0);
+  white-space: nowrap;
+}
+.surface-error.bar .surface-error-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.surface-error.bar .surface-error-actions {
+  flex-wrap: nowrap;
+  margin-top: 0;
+}
 
 .crash-screen {
   position: fixed;

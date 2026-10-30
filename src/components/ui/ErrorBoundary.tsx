@@ -74,12 +74,12 @@ export function errorText(error: unknown): string {
 }
 
 /** The notice a panel or the map shows in place of itself. */
-function SurfaceError({ error, retry }: { error: unknown; retry: () => void }) {
+function SurfaceError({ error, retry, bar }: { error: unknown; retry: () => void; bar?: boolean }) {
   const openConsole = useSetAtom(debugConsoleAtom);
   return (
-    <div className="surface-error" role="alert">
+    <div className={bar ? "surface-error bar" : "surface-error"} role="alert">
       <p className="surface-error-title">{t("This part of the editor hit an error.")}</p>
-      <p className="surface-error-detail">{errorText(error)}</p>
+      <p className="surface-error-detail" title={bar ? errorText(error) : undefined}>{errorText(error)}</p>
       <div className="surface-error-actions">
         <Button size="sm" onClick={retry}>{t("Try again")}</Button>
         <Button size="sm" onClick={() => openConsole(true)}>{t("Show the log")}</Button>
@@ -88,10 +88,14 @@ function SurfaceError({ error, retry }: { error: unknown; retry: () => void }) {
   );
 }
 
-/** A boundary with the in-place notice: the rest of the editor, the open maps included, is untouched. */
-export function Guarded({ surface, children }: { surface: string; children: ReactNode }) {
+/**
+ * A boundary with the in-place notice: the rest of the editor, the open maps included, is
+ * untouched. `bar` for a strip across the window (the menu bar), whose notice is one row
+ * of its height rather than one that takes the room left over.
+ */
+export function Guarded({ surface, bar, children }: { surface: string; bar?: boolean; children: ReactNode }) {
   return (
-    <ErrorBoundary surface={surface} fallback={(error, retry) => <SurfaceError error={error} retry={retry} />}>
+    <ErrorBoundary surface={surface} fallback={(error, retry) => <SurfaceError error={error} retry={retry} bar={bar} />}>
       {children}
     </ErrorBoundary>
   );

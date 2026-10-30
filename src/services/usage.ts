@@ -277,7 +277,7 @@ export function stackProps(stack: string, components?: string): CountProps | nul
  * Chrome's marks `<html>` and wraps the text in `<font>`, Edge's tags the elements — and React
  * then fails to remove a node that is no longer where it put it (`NotFoundError`).
  */
-function pageTranslated(): boolean {
+export function pageTranslated(): boolean {
   if (typeof document === "undefined") return false;
   const html = document.documentElement;
   return html.classList.contains("translated-ltr") || html.classList.contains("translated-rtl")

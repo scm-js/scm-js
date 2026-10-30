@@ -170,7 +170,7 @@ export default function App() {
       >
         {chrome && (
           <>
-            <MenuBar />
+            <Guarded surface="menu bar" bar><MenuBar /></Guarded>
             {panels.toolbar && <ToolBar />}
             <TabStrip />
             <div className="body">

@@ -4,6 +4,8 @@ import "./devReactTracks";
 // Next, and before anything that reads storage while it is evaluated: on the first visit
 // to scmjs.dev/editor/ it waits for the settings kept under the editor's old address.
 import "./moveIn";
+// Before the first render: a page translator's moved text must not take a panel down.
+import "./domGuard";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Provider } from "jotai";

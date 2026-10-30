@@ -58,9 +58,21 @@ read in the first effect pass is still null.
   `App` over the same store: the maps, the dialog stack and the plugins are all still there,
   `useStartupMap` steps aside because a scenario is open, `usePlugins` re-activates nothing
   already active, and `usePreload` runs again (its `started` is a ref) — a second game-data
-  probe and its log lines, nothing else. The menu bar, toolbar, tab strip and status bar have
-  no boundary of their own and fall to that last one. **A new top-level surface** (a dock, a strip,
+  probe and its log lines, nothing else. The menu bar has its own `Guarded` (2026-10-30, `bar`:
+  the notice is one `--h-menubar` row, not `flex: 1`, which in `.app`'s column would take the
+  editor's height) — a menu's failure took the whole editor to `CrashScreen` before. The toolbar,
+  tab strip and status bar have no boundary of their own and fall to that last one. **A new top-level surface** (a dock, a strip,
   a floating panel host) gets a boundary of its own; anything inside an existing one is covered.
+  **Page translators** (2026-10-30, `src/domGuard.ts`). 0.8.3's counted errors were all
+  `NotFoundError` from react-dom's `removeChild` / `insertBefore` while committing: the
+  properties panel and palette as the layer changed, and Radix's `MenuItemIndicator` (the
+  Layer menu's check mark). Chrome's translator swaps the text nodes React owns for `<font>`
+  wrappers (facebook/react#11538). `domGuard` patches `Node.prototype` so both calls skip a node
+  whose parent is not `this` and `logWarn` it (`call`, `nodeName`, `translated`) — a warning, so
+  it is not an `error` count; the same mismatch from our own code would be a bug, hence the line.
+  `translate="no"` was rejected: the chrome is English and Korean only. `e2e/translated.spec.ts`
+  imitates the translator (and a `MutationObserver` for later text) and switches layers through
+  the menu; without the import it fails with the 0.8.3 error, caught as `surface: menu bar`.
   Logging is not done by any of them; see
   `logging.md`. Checked in headless Chromium with a component rigged to throw in a panel, the
   map and `App` (rig not committed); `e2e/errors.spec.ts` keeps the dialog path.

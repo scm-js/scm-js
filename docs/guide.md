@@ -1755,10 +1755,10 @@ itself off when you next load the editor.
 
 ### When part of the editor fails
 
-If a panel, the palette or the map view hits an error it cannot draw past, that part alone
-is replaced by a short notice with the error in it. Everything else keeps working, your
-maps included. **Try again** draws the part afresh, and **Show the log** opens the debug
-console at the line that says what failed.
+If a panel, the palette, the map view or the menu bar hits an error it cannot draw past,
+that part alone is replaced by a short notice with the error in it. Everything else keeps
+working, your maps included. **Try again** draws the part afresh, and **Show the log**
+opens the debug console at the line that says what failed.
 
 A dialog that fails is closed, and a notice says so with the same **Show the log** button.
 What you had changed in it and not yet applied is lost; what you had applied is in the

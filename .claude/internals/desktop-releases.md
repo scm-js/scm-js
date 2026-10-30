@@ -200,7 +200,9 @@ apart (`log`'s `countFrom`): up to three frames go to the components, `in Xy fil
 because a commit-phase error's own frames are all react-dom (the NotFoundError of 2026-10-26
 was five of them and named no panel). `translated: true` when `pageTranslated()` — Chrome's
 `translated-ltr/rtl` on `<html>`, a `<font>` or Edge's `_msttexthash` inside `#root` — since a
-translator moving text React owns is the usual cause of that NotFoundError. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
+translator moving text React owns is the usual cause of that NotFoundError. Since
+2026-10-30 `domGuard.ts` skips those calls with a log warning instead (`viewport-ui.md`), so these
+counts should stop; a NotFoundError still counted comes from a DOM call the guard does not cover. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
 with frames wait at once (`MAX_STACKS_WAITING`) so a 20-line beacon stays under the worker's 16 KB.
 The frames point into the minified bundle — decoding them needs that release's source maps), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
 items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never

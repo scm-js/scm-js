@@ -81,11 +81,13 @@ export const STR_OFFSET_LIMIT = 0xffff;
 
 /**
  * Where each string goes: offsets by index and the text blobs in file order. Identical
- * strings share one blob, which is what StarEdit does and keeps files small. With
- * `longestLast`, the longest blob goes at the end, which is the layout that lets the most
- * text fit under STR's 64 KB of offsets (only where a string starts has to fit).
+ * strings share one blob, which is what StarEdit does and keeps files small. `packed` is
+ * the layout for a table that does not fit that way: a string whose bytes end another one
+ * points into it rather than having its own blob — a file whose strings start inside other
+ * strings decodes to far more text than it holds, and only this gets it back under STR's
+ * 64 KB — and the longest blob goes at the end, since only where a string starts has to fit.
  */
-function layoutStrings(table: StringTable, longestLast: boolean): { headerSize: number; offsets: number[]; blobs: Uint8Array[] } {
+function layoutStrings(table: StringTable, packed: boolean): { headerSize: number; offsets: number[]; blobs: Uint8Array[] } {
   const { strings, extended, encoding } = table;
   const count = strings.length - 1;
   const width = extended ? 4 : 2;
@@ -96,8 +98,9 @@ function layoutStrings(table: StringTable, longestLast: boolean): { headerSize: 
     const s = strings[i];
     if (s !== null && s !== undefined && !encoded.has(s)) encoded.set(s, encodeText(s, encoding));
   }
-  const order = [...encoded.keys()];
-  if (longestLast && order.length > 1) {
+  const hosts = packed ? suffixHosts(encoded) : new Map<string, string>();
+  const order = [...encoded.keys()].filter((s) => !hosts.has(s));
+  if (packed && order.length > 1) {
     let longest = 0;
     order.forEach((s, i) => { if (encoded.get(s)!.length > encoded.get(order[longest])!.length) longest = i; });
     order.push(...order.splice(longest, 1));
@@ -112,6 +115,7 @@ function layoutStrings(table: StringTable, longestLast: boolean): { headerSize: 
     blobs.push(bytes, new Uint8Array(1));
     next += bytes.length + 1;
   }
+  for (const [s, host] of hosts) at.set(s, at.get(host)! + encoded.get(host)!.length - encoded.get(s)!.length);
   const offsets: number[] = [];
   for (let i = 1; i <= count; i++) {
     const s = strings[i];
@@ -120,7 +124,44 @@ function layoutStrings(table: StringTable, longestLast: boolean): { headerSize: 
   return { headerSize, offsets, blobs };
 }
 
+/**
+ * For each string whose bytes are the end of another string's, the string it can point
+ * into — one that is not itself the end of any other, so it keeps a blob of its own. Sorted
+ * by their bytes read backwards, the strings one is the end of come straight after it.
+ */
+function suffixHosts(encoded: Map<string, Uint8Array>): Map<string, string> {
+  const keys = [...encoded.keys()];
+  const backwards = (a: Uint8Array, b: Uint8Array) => {
+    for (let i = 1; i <= a.length && i <= b.length; i++) {
+      const d = a[a.length - i] - b[b.length - i];
+      if (d !== 0) return d;
+    }
+    return a.length - b.length;
+  };
+  const ends = (short: Uint8Array, long: Uint8Array) => {
+    if (short.length > long.length) return false;
+    for (let i = 1; i <= short.length; i++) if (short[short.length - i] !== long[long.length - i]) return false;
+    return true;
+  };
+  keys.sort((a, b) => backwards(encoded.get(a)!, encoded.get(b)!));
+  const hosts = new Map<string, string>();
+  let host = keys.length - 1;
+  for (let i = keys.length - 2; i >= 0; i--) {
+    if (ends(encoded.get(keys[i])!, encoded.get(keys[i + 1])!)) hosts.set(keys[i], keys[host]);
+    else host = i;
+  }
+  return hosts;
+}
+
 const overflowing = (offsets: number[]) => offsets.filter((o) => o > STR_OFFSET_LIMIT).length;
+
+/** Whether a table needs the packed layout: STR's whose offsets would wrap, or an STRx whose text runs past 64 KB, which only a file whose strings overlap gets to. */
+function needsPacking(extended: boolean, layout: ReturnType<typeof layoutStrings>): boolean {
+  if (!extended) return overflowing(layout.offsets) > 0;
+  let end = layout.headerSize;
+  for (const b of layout.blobs) end += b.length;
+  return end > STR_OFFSET_LIMIT + 1;
+}
 
 /**
  * How many strings would start past what STR's 16-bit offsets reach, so that the game (and
@@ -129,8 +170,8 @@ const overflowing = (offsets: number[]) => offsets.filter((o) => o > STR_OFFSET_
  */
 export function stringTableOverflow(table: StringTable): number {
   if (table.extended) return 0;
-  const plain = overflowing(layoutStrings(table, false).offsets);
-  return plain === 0 ? 0 : overflowing(layoutStrings(table, true).offsets);
+  const plain = layoutStrings(table, false);
+  return needsPacking(false, plain) ? overflowing(layoutStrings(table, true).offsets) : 0;
 }
 
 /**
@@ -140,7 +181,7 @@ export function stringTableOverflow(table: StringTable): number {
 export function encodeStrings(table: StringTable): Uint8Array {
   const { extended } = table;
   let layout = layoutStrings(table, false);
-  if (!extended && overflowing(layout.offsets) > 0) layout = layoutStrings(table, true);
+  if (needsPacking(extended, layout)) layout = layoutStrings(table, true);
   const { headerSize, offsets, blobs } = layout;
 
   const out = new Writer(headerSize + 1024);

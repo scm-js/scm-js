@@ -8,6 +8,7 @@ import { closeDialogAtom, dialogStackAtom, statusMessageAtom, toastsAtom } from 
 import { DEFAULT_SAVE_OPTIONS, type SaveOptions } from "../src/editor/save";
 import { askDialog, saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
 import type { MapFileHandle, SaveOutcome } from "../src/services/mapIo";
+import { logEntries, resetLogForTests } from "../src/editor/log";
 
 const handleNamed = (name: string): MapFileHandle => ({
   name,
@@ -97,6 +98,20 @@ describe("saveDocument", () => {
 
     store.set(scenarioAtom, null);
     expect(await saveDocument(store, { fileName: "x.scx", handle: null, options, copy: false }, dismissed.write)).toBe(false);
+  });
+
+  it("refuses a string table past STR's 64 KB as a warning, and saves one the file kept as it was", async () => {
+    resetLogForTests();
+    const store = openStore();
+    store.get(scenarioAtom)!.strings.strings.push(...Array.from({ length: 700 }, (_, i) => `${i}`.padEnd(100, "x")));
+    const w = writer((fileName, h) => ({ route: "file", fileName, handle: h }));
+    expect(await saveDocument(store, { fileName: "flow.scx", handle: null, options, copy: false }, w.write)).toBe(false);
+    expect(w.calls).toHaveLength(0);
+    expect(store.get(toastsAtom).at(-1)).toMatchObject({ kind: "error", title: "Could not save the map" });
+    expect(logEntries().filter((e) => e.level !== "info").map((e) => e.level)).toEqual(["warn"]);
+
+    store.get(scenarioAtom)!.dirty.delete("STR ");
+    expect(await saveDocument(store, { fileName: "flow.scx", handle: null, options, copy: false }, w.write)).toBe(true);
   });
 
   it("uses the bytes it is handed rather than building again", async () => {

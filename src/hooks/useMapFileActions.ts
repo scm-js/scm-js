@@ -12,9 +12,8 @@ import type { OpenInto } from "../plugins/api";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
 import { createScenario } from "../formats/chk/create";
-import { stringTableOverflow } from "../formats/chk/sections/strings";
-import { strOverflowText } from "../editor/validate";
-import { mapVersionOf, markDirty, parseScenario, serializeScenario, setMapVersion, tilesetIndex } from "../formats/chk/scenario";
+import { strOverflowText, unreachableStrings } from "../editor/validate";
+import { mapVersionOf, markDirty, parseScenario, serializeScenario, setMapVersion, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import type { NewMapVersion } from "../editor/preferences";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
@@ -317,10 +316,20 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
   const viewOnly = store.get(viewOnlyAtom);
   if (viewOnly && !req.copy) { store.set(statusMessageAtom, viewOnlyMessage(viewOnly)); return false; }
   const what = req.copy ? "copy" : "map";
+  const failed = (message: string) => {
+    store.set(statusMessageAtom, req.copy ? t("Could not save the copy: {message}", { message }) : t("Could not save the map: {message}", { message }));
+    store.set(pushToastAtom, { kind: "error", title: req.copy ? t("Could not save the copy") : t("Could not save the map"), detail: message });
+  };
+  // Offsets past 64 KB wrap, and every string after that shows other text; the file on disk stays as it was.
+  // A refusal rather than a failure, so a warning and its own count, not an error.
+  const unreachable = unreachableStrings(scenario);
+  if (unreachable > 0) {
+    logWarn("document", `Did not save the ${what}: strings past the first 64 KB of STR`, { file: baseName(req.fileName), strings: unreachable });
+    count("map.save.refused", { reason: "strOverflow", ...(req.copy ? { copy: true } : {}) });
+    failed(strOverflowText(unreachable));
+    return false;
+  }
   try {
-    // Offsets past 64 KB wrap, and every string after that shows other text; the file on disk stays as it was.
-    const unreachable = stringTableOverflow(scenario.strings);
-    if (unreachable > 0) throw new Error(strOverflowText(unreachable));
     // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
     const built = await buildOutgoing(store, { options: req.options, fileName: req.fileName, purpose: "save", plain: req.bytes });
     const bytes = built.bytes;
@@ -377,12 +386,24 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     }
     return true;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) }, { step: "save" });
-    store.set(statusMessageAtom, req.copy ? t("Could not save the copy: {message}", { message }) : t("Could not save the map: {message}", { message }));
-    store.set(pushToastAtom, { kind: "error", title: req.copy ? t("Could not save the copy") : t("Could not save the map"), detail: message });
+    logError("document", `Could not save the ${what}`, err, { file: baseName(req.fileName) }, { step: "save", ...(err instanceof RangeError ? sizeProps(scenario) : {}) });
+    failed(err instanceof Error ? err.message : String(err));
     return false;
   }
+}
+
+/**
+ * How big the map is, in powers of two of KB, for a save that ran out of room: the file's
+ * CHK as it was read and the text the string table decoded to. Text far past the CHK is a
+ * table whose strings overlap, re-encoded string by string.
+ */
+function sizeProps(scn: Scenario): { chkKB: number; textKB: number } {
+  let chk = scn.chk.trailing?.length ?? 0;
+  for (const s of scn.chk.sections) chk += 8 + s.data.length;
+  let text = 0;
+  for (const s of scn.strings.strings) text += s?.length ?? 0;
+  const kb = (n: number) => 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(1, n / 1024))));
+  return { chkKB: kb(chk), textKB: kb(text) };
 }
 
 /** The Save notice's word on the file it replaced — once a session for each kind, since after that it is expected. */

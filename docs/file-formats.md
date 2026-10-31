@@ -95,7 +95,9 @@ editor shows the `STR` text players see. The editor never renumbers the table on
 since sections it carries as bytes still point at the old numbers; a string that stops
 being used is blanked, not removed. `STR` counts its offsets in 16 bits, so its text must
 fit in 64 KB: Save refuses a map whose strings run past that, and Check Map says which.
-Shorter text, or a Remastered revision with `STRx`, fixes it.
+Shorter text, or a Remastered revision with `STRx`, fixes it. A table the map was opened
+with is written back as the file had it until some text in it changes, so only an edited
+one can be refused.
 
 The table does not say which character encoding its text is in. The editor guesses as the
 game would read it and shows the guess in Scenario ▸ Map Revision, where you can change

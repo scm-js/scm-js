@@ -5,7 +5,7 @@ import {
   isRemasteredRevision, mapVersionOf, markDirty, parseScenario, scenarioDescription, scenarioName,
   serializeScenario, setMapVersion, setScenarioName, tilesetIndex,
 } from "../src/formats/chk/scenario";
-import { strOverflowText, validateScenario } from "../src/editor/validate";
+import { strOverflowText, unreachableStrings, validateScenario } from "../src/editor/validate";
 import { createScenario, requiredSections } from "../src/formats/chk/create";
 import { ANYWHERE_INDEX, isLocationUsed, locationSlots } from "../src/formats/chk/sections/objects";
 import { specFor } from "../src/formats/chk/sections/registry";
@@ -196,6 +196,49 @@ describe("string table", () => {
     const long = { strings: [null, "x".repeat(70000), "after"], extended: false, encoding: "windows-1252" as const };
     expect(stringTableOverflow(long)).toBe(0);
     expect(decodeStrings(encodeStrings(long), false).strings).toEqual(long.strings);
+  });
+
+  it("fits a table whose strings start inside other strings back into its 64 KB", () => {
+    // A 40 KB string and 200 slots pointing into it: legal, but 4 MB once decoded string by string.
+    const count = 201, header = 2 * (count + 1), text = 40000;
+    const file = new Uint8Array(header + text + 1);
+    const view = new DataView(file.buffer);
+    view.setUint16(0, count, true);
+    for (let i = 1; i <= count; i++) view.setUint16(i * 2, header + (i - 1) * 100, true);
+    for (let j = 0; j < text; j++) file[header + j] = 0x61 + (j % 26);
+    const table = decodeStrings(file, false);
+    expect(stringTableOverflow(table)).toBe(0);
+    const encoded = encodeStrings(table);
+    expect(encoded.length).toBe(file.length + 1);
+    expect(decodeStrings(encoded, false).strings).toEqual(table.strings);
+
+    // STRx has no offsets to run out of, but writes the text once too.
+    const wide = { ...table, extended: true };
+    const packed = encodeStrings(wide);
+    expect(packed.length).toBeLessThan(2 * file.length);
+    expect(decodeStrings(packed, true).strings).toEqual(table.strings);
+  });
+
+  it("points a string at the end of another only when the table needs it", () => {
+    const table = { strings: [null, "Marine", "ine", "", "ine"], extended: false, encoding: "windows-1252" as const };
+    const view = (b: Uint8Array) => new DataView(b.buffer, b.byteOffset);
+    const plain = encodeStrings(table);
+    expect(view(plain).getUint16(4, true)).not.toBe(view(plain).getUint16(2, true) + 3);
+    const filler = Array.from({ length: 600 }, (_, i) => `${i}`.padEnd(100, "x"));
+    const big = { ...table, strings: [...table.strings, ...filler, ...filler.map((f) => `#${f}`)] };
+    const packed = encodeStrings(big);
+    expect(view(packed).getUint16(4, true)).toBe(view(packed).getUint16(2, true) + 3);
+    expect(decodeStrings(packed, false).strings).toEqual(big.strings);
+    expect(stringTableOverflow(big)).toBe(0);
+  });
+
+  it("leaves an untouched STR to the file, whatever its strings would take re-encoded", () => {
+    const scn = createScenario({ width: 64, height: 64, era: 0, name: "x" });
+    scn.strings = { strings: [null, ...Array.from({ length: 700 }, (_, i) => `${i}`.padEnd(100, "x"))], extended: false, encoding: "windows-1252" };
+    expect(unreachableStrings(scn)).toBeGreaterThan(0);
+    scn.dirty.delete("STR ");
+    expect(unreachableStrings(scn)).toBe(0);
+    expect(validateScenario(scn).some((i) => i.text.includes("64 KB"))).toBe(false);
   });
 });
 

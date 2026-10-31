@@ -91,7 +91,15 @@ handler is the contract's message to the user — TrigScript throws one for a sc
 compile, a failing test, a block edited by hand — so `stepFailed` logs a *warning* and counts
 `map.build.refused` `{ step, plugin }`; anything else (`TypeError`, a plugin's own class,
 `NoMapError` for an empty return) stays `logError` and an `error` count with its stack. Before
-this, every typo in a script at save time was an editor error on `/admin`. A `running`
+this, every typo in a script at save time was an editor error on `/admin`.
+Same treatment for the STR refusal (2026-10-31, from 0.8.4's `/admin`: ~15 `Error` counts, all
+`throw Error(strOverflowText(…))` inside `saveDocument`, users retrying Save 5–7 times): it is
+checked before the `try` through `unreachableStrings(scn)` (`validate.ts`; 0 unless `STR ` is
+dirty, since an untouched table is emitted byte for byte), logged as a warning and counted
+`map.save.refused` `{ reason: "strOverflow" }`. A `RangeError` from the save (0.8.4 also had 3 from
+`new Uint8Array(total)` in `serializeChk`, cause unknown — counts carry no message) adds `chkKB`
+and `textKB` (powers of two) to the error count: text far past the CHK means a table whose
+strings overlap, re-encoded one by one. A `running`
 WeakSet makes `export()` from inside a step answer the plain map — Magenta 0.9 and TrigScript 2.6
 both call `export()` to feed their own build, so without it the first step to be registered would
 recurse. `builtByAtom` (per document: in `parkRegisters` / `installRegisters`, kept across a

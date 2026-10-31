@@ -1347,10 +1347,13 @@ names, switch names, sound file names, and the text and sounds of trigger action
 The section starts with the number of strings, then one offset per string, counted from
 the start of the section, and then the text. Each string ends with a 0 byte. String
 numbers count from 1: the first offset is string 1. Several strings may share the same
-offset. Because the offsets are 16-bit, every string has to start within the first 64 KB
-of the section; only the last one may run on past it. A table too big for that needs fewer
-or shorter strings, or [`STRx`](#strx) in a Remastered file. scmJS puts the longest string
-last when that makes the table fit, and will not save a table that still does not.
+offset, and a string may start partway into another, sharing its end. Because the offsets
+are 16-bit, every string has to start within the first 64 KB of the section; only the last
+one may run on past it. A table too big for that needs fewer or shorter strings, or
+[`STRx`](#strx) in a Remastered file. When an edited table does not fit, scmJS points each
+string that is the end of another into it and puts the longest string last, and will not
+save a table that still does not fit. A table that has not been edited is saved as it was
+read.
 
 Every read of the map reads `STR` again, and a map without one is shown in the map list as
 *Invalid Scenario*, not under its file name. StarCraft 1.16.1 shows the first 31 bytes of

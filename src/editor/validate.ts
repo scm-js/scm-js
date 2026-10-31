@@ -96,6 +96,14 @@ export function strOverflowText(n: number): string {
   return t("{n, plural, one {# string starts} other {# strings start}} past the first 64 KB of the STR table, which is as far as its offsets reach; the game would show other text in their place. Shorten or remove text, or move the map to a Remastered revision (Scenario ▸ Map Revision), whose STRx table has no such limit.", { n });
 }
 
+/**
+ * How many strings a save would leave out of STR's reach. Only a table the save re-encodes
+ * can: an untouched one is written back as the file had it, whose offsets are all 16-bit.
+ */
+export function unreachableStrings(scn: Scenario): number {
+  return scn.dirty.has("STR ") ? stringTableOverflow(scn.strings) : 0;
+}
+
 /** String slots the editor keeps in an STRx table. */
 export const STRX_CAPACITY = 65535;
 
@@ -284,7 +292,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   if (scn.strings.extended && count > STRX_CAPACITY) add("error", t("{count} strings — the {table} table holds {capacity}.", { count, table: "STRx", capacity: STRX_CAPACITY }), msg("Strings"), { kind: "dialog", id: "stringEditor" });
   // The game has no fixed number of STR strings (1024 is StarEdit's own table); what it cannot
   // do is reach a string that starts past the 16-bit offsets' 64 KB.
-  const unreachable = stringTableOverflow(scn.strings);
+  const unreachable = unreachableStrings(scn);
   if (unreachable > 0) add("error", strOverflowText(unreachable), msg("Strings"), { kind: "dialog", id: "stringEditor" });
   // StarCraft 1.16.1 shows only so many bytes of the names (colour codes count).
   const bytesOf = (index: number) => { const s = getString(scn.strings, index); return s ? encodeText(s, scn.strings.encoding).length : 0; };

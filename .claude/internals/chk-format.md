@@ -265,5 +265,13 @@ Editor audit against the game (2026-10-17, branch `editor-follows-the-game`; pri
   (`saveDocument`) throws `strOverflowText` before writing, so the file on disk stays good; Check
   Map has the same error. Internal round trips (`parseScenario(serializeScenario(…))` in sync, tab
   copies) still wrap — they cannot refuse.
+  2026-10-31: the check refused untouched maps. A file's offsets may point partway into another
+  string (suffix sharing); decoded, each is its own string, and laid out separately a 40 KB
+  table "overflowed" by 199 strings. Now (1) Save and Check Map ask `unreachableStrings(scn)`,
+  0 unless `STR ` is dirty; (2) the fallback layout (`packed`) also points every string whose
+  bytes end another's into it (`suffixHosts`: sort by reversed bytes, a suffix precedes what it
+  ends), so any table decoded from a file fits again once edited; (3) STRx takes `packed` when
+  its plain layout runs past 64 KB, which only overlap produces. The plain layout is still the
+  first choice, so ordinary saves and `tests/maps/` keep their bytes.
 - The "STR holds 1024" Check Map error is gone: 1024 is StarEdit's table, the game read string 1500
   (AUD S1500). STRx keeps its 65,535 check.

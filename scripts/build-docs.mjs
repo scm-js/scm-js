@@ -214,7 +214,7 @@ function main(argv) {
     description: "Guides and the plugin API reference for scmJS, a StarCraft: Brood War map editor that runs in a browser tab.",
     url: `${base}/`,
     section: "Home",
-    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "current-features")?.body ?? "",
+    body: homeHtml(guides, api, base, splitPages(read("README.md")).sections.find((s) => s.slug === "features")?.body ?? "",
       (md) => renderMarkdown(md, { shift: 0, rewriteLink: (h) => resolveLink("README.md", h), tryIt, code: codeOpts })),
   });
 

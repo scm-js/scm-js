@@ -18,11 +18,11 @@ The [user guide](docs/guide.md) covers everything the editor does, starting with
 first map](docs/guide.md#your-first-map). It is also at
 [docs.scmjs.dev](https://docs.scmjs.dev), with a search box.
 
-## Current Features
+## Features
 
-Beyond the terrain, units, locations and triggers every StarCraft editor has, scmJS does
-the following. Items marked *Browse Plugins* are one click away under Plugins ▸ Browse
-Plugins… rather than installed from the start.
+scmJS edits terrain, units, locations and triggers like any StarCraft editor. It also has
+the following. Items marked *Browse Plugins* are not installed at first; add them from
+Plugins ▸ Browse Plugins….
 
 - **Classic or Remastered graphics.** Pointed at a Remastered installation, the editor
   draws with Remastered's terrain, units and moving water; View ▸ Remastered Graphics
@@ -46,26 +46,26 @@ Plugins… rather than installed from the start.
   [ai-engine](https://github.com/scm-js/ai-engine). See [The AI](docs/guide.md#the-ai).
 - **Triggers as a graph.** Trigger Map (*Browse Plugins*) shows which triggers set and
   read each switch, death counter and location, and what is never set, read or run.
-- **The ground as a unit walks it.** View ▸ Walkability (Ctrl+Shift+W) draws islands,
-  regions, chokes with their widths, and distances between start locations.
+- **Walkability.** View ▸ Walkability (Ctrl+Shift+W) draws islands, regions, chokes with
+  their widths, and distances between start locations.
 - **Damaged and protected maps.** Repair checks each map as it opens and fixes what the
   game would; Section Explorer (*Browse Plugins*) shows the file byte by byte. See
   [Protected and damaged maps](docs/file-formats.md#protected-and-damaged-maps).
-- **Nothing lost on save.** Unknown or malformed sections and unnamed archive files are
-  written back as they were read, unless the game would refuse the map as it stands. See
-  [Opening and saving maps](docs/file-formats.md).
+- **Unknown data kept on save.** Unknown or malformed sections and unnamed archive files
+  are written back as they were read, unless the game would refuse the map as it stands.
+  See [Opening and saving maps](docs/file-formats.md).
 - **Terrain from a picture.** File ▸ Import ▸ Terrain from Image… turns an image into
   terrain, cliffs and shores included. See [Plugins](docs/guide.md#plugins).
 - **Stamps.** Save a ramp, a bridge or a mineral line once and lay it down on any map. See
   [Cut, copy and paste](docs/guide.md#cut-copy-and-paste).
 - **Doodads into terrain.** *Convert Doodad to Terrain* turns a doodad into ordinary tiles
   you can edit. See [Doodads](docs/guide.md#doodads).
-- **A recording of the build.** Timelapse (*Browse Plugins*) records the map change by
-  change and exports a GIF or WebM video. See [Plugins](docs/guide.md#plugins).
+- **Timelapse.** Timelapse (*Browse Plugins*) records the map change by change and exports
+  a GIF or WebM video. See [Plugins](docs/guide.md#plugins).
 - **Maps from scmscx.com.** File ▸ Find on scmscx.com… searches the community map archive
   and opens the map you pick. See [Opening a map](docs/guide.md#opening-a-map).
-- **Work kept.** Maps open in tabs, recovery copies of unsaved work, and the version a
-  save replaced kept as a `.bak` or under File ▸ Previous Versions. See
+- **Recovery and backups.** Maps open in tabs, unsaved work has recovery copies, and the
+  version a save replaced is kept as a `.bak` or under File ▸ Previous Versions. See
   [Saving](docs/guide.md#saving) and [Recovery copies](docs/guide.md#recovery-copies).
 - **English or Korean.** Preferences ▸ General switches the language. See [Keyboard and
   preferences](docs/guide.md#keyboard-and-preferences).
@@ -95,12 +95,9 @@ map](docs/guide.md#your-first-map).
 
 ## Documentation
 
-All of this documentation is also a site, [docs.scmjs.dev](https://docs.scmjs.dev), with
-these documents as pages, a search box, and a reference for every call in the plugin API
-generated from the editor's own declarations. It is built from the release the hosted
-editor runs, so the version in its footer is the one at
-[scmjs.dev/editor](https://scmjs.dev/editor/). These files are the source; the site
-renders them.
+The files below are also published at [docs.scmjs.dev](https://docs.scmjs.dev), with a
+search box and a reference for every call in the plugin API. The site is built from the
+same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 
 | Document | Covers |
 | --- | --- |
@@ -108,7 +105,7 @@ renders them.
 | [docs/installing.md](docs/installing.md) | The hosted editor, the desktop app, the container, and getting the game's graphics |
 | [docs/trigscript.md](docs/trigscript.md) | TrigScript, triggers written as TypeScript: the script window, tests, programs that run in the game, examples and the reference |
 | [docs/trigscript-language.md](docs/trigscript-language.md) | The language of TrigScript programs: values, arrays, functions, classes, errors, tasks, units, events, input, text, sounds and libraries |
-| [docs/trigscript-library.md](docs/trigscript-library.md) | The modules that come with TrigScript — maths, chance, timers, signals, menus, cutscenes, fog pictures, pixel screens, music — with an example of each |
+| [docs/trigscript-library.md](docs/trigscript-library.md) | The modules that come with TrigScript (maths, chance, timers, signals, menus, cutscenes, fog pictures, pixel screens, music), with an example of each |
 | [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, what is kept, mods as data sets, and how the pictures are drawn |
 | [docs/file-formats.md](docs/file-formats.md) | What the editor does with a map file: what it preserves, what Save can strip, revisions, protected maps |

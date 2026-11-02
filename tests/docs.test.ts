@@ -104,7 +104,7 @@ describe("links", () => {
   });
 
   it("keeps the README section the home page renders as its feature list", () => {
-    expect(read("README.md")).toContain("\n## Current Features\n");
+    expect(read("README.md")).toContain("\n## Features\n");
   });
 
   it("leaves no README link into the guide pointing at a heading it does not have", () => {

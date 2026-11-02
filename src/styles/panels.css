@@ -434,7 +434,7 @@ body.dock-resizing iframe {
 /* doodad grid */
 .doodad-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--doodad-thumb-w, 56px) + 8px), 1fr));
   gap: 6px;
   padding: 8px;
 }
@@ -460,8 +460,8 @@ body.dock-resizing iframe {
   color: var(--text);
 }
 .doodad .thumb {
-  width: 56px;
-  height: 40px;
+  width: var(--doodad-thumb-w, 56px);
+  height: var(--doodad-thumb-h, 40px);
   border-radius: 2px;
   background: linear-gradient(160deg, var(--bg-5), var(--bg-1));
   box-shadow: var(--bevel-sunken);

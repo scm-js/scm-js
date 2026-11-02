@@ -381,6 +381,10 @@ map, covers another doodad or sits on the wrong terrain. *Place anywhere* drops 
 *Snap to grid* keeps the footprint on StarEdit's two-tile isometric grid, for a move as
 well as a placement. Right-click or Esc stops placing.
 
+The three buttons beside the category list set how large the previews are drawn: small
+fits several to a row, large draws one per row so a doodad's detail can be read. The
+choice is remembered.
+
 Doodads have no names in the game data, so the search box matches what the data does say:
 
 - the category: `bridge`, `temple`, `coastal`;

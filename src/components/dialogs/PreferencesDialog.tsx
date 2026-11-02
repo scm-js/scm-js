@@ -694,6 +694,7 @@ const STORED_LABELS: Record<string, string> = {
   "scmjs.locationSnap": msg("Location snap"),
   "scmjs.placement": msg("Unit placement options"),
   "scmjs.doodadPlacement": msg("Doodad placement options"),
+  "scmjs.doodadThumbSize": msg("Doodad preview size"),
   "scmjs.symmetry": msg("Symmetry options"),
   "scmjs.panels": msg("Panels shown"),
   "scmjs.docks": msg("Panel widths"),

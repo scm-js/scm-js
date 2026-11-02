@@ -67,6 +67,8 @@ export const doodadPlacingAtom = atom<boolean>(false);
 export const selectedDoodadsAtom = atom<number[]>([]);
 /** "Place anywhere" (off) and "Snap to grid" (on) — StarEdit's defaults, remembered (`scmjs.doodadPlacement`). */
 export const doodadPlacementAtom = atomWithStorage<DoodadPlacementOptions>("scmjs.doodadPlacement", DEFAULT_DOODAD_PLACEMENT, mergedStorage(DEFAULT_DOODAD_PLACEMENT), { getOnInit: true });
+/** How large the Doodads palette draws its previews, remembered (`scmjs.doodadThumbSize`). */
+export const doodadThumbSizeAtom = atomWithStorage<"small" | "medium" | "large">("scmjs.doodadThumbSize", "small", createJSONStorage(browserStorage), { getOnInit: true });
 
 /* ── Sprites layer (see editor/sprites.ts) ──────────────── */
 

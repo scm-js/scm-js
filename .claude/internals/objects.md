@@ -38,6 +38,10 @@ the same stamp as terrain-layer changes plus the overlay sprite, no record, one 
 and `sprites`. It is the palette's option only — `tx.placeDoodad` ignores it, since a plugin says what
 it means by calling `convertDoodads`.
 
+The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
+sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the
+grid wraps on. Large is sized to stay one per row at the left dock's 220 px drag minimum.
+
 ### Locations (`src/editor/locations.ts`, `src/hooks/useLocationTools.ts`)
 
 `scenario.locations` is the `MRGN` table — fixed slots (64 original / 255 BW, `locationCapacity`),

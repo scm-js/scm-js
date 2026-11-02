@@ -5,12 +5,15 @@ import {
   ChevronRight,
   CloudFog,
   Clipboard,
+  Grid2x2,
+  Grid3x3,
   Lock,
   Mountain,
   Pencil,
   Plus,
   Search,
   Sparkles,
+  Square,
   SquareDashed,
   Trash2,
   TreePine,
@@ -32,6 +35,7 @@ import {
   doodadCategoryAtom,
   doodadPlacementAtom,
   doodadPlacingAtom,
+  doodadThumbSizeAtom,
   fogModeAtom,
   fogPlayersAtom,
   fogViewPlayerAtom,
@@ -98,6 +102,13 @@ export function shade(hex: string, amt: number) {
 
 /* ── Doodads ────────────────────────────────────────────── */
 
+const DOODAD_THUMB_SIZES = {
+  small: { width: 56, height: 40, label: msg("Small previews"), icon: Grid3x3 },
+  medium: { width: 104, height: 76, label: msg("Medium previews"), icon: Grid2x2 },
+  // One per row at the palette dock's narrowest drag width.
+  large: { width: 176, height: 128, label: msg("Large previews"), icon: Square },
+};
+
 /** What a doodad's overlay draws — the unit's name, or the sprite's label (unit / GRP file name). */
 function doodadOverlayLabel(assets: UnitAssets | null, d: DoodadDef): string | null {
   if (!d.overlay) return null;
@@ -122,6 +133,8 @@ function DoodadPalette() {
   const [placing, setPlacing] = useAtom(doodadPlacingAtom);
   const [options, setOptions] = useAtom(doodadPlacementAtom);
   const [owner, setOwner] = useAtom(unitOwnerAtom);
+  const [thumbSize, setThumbSize] = useAtom(doodadThumbSizeAtom);
+  const thumb = DOODAD_THUMB_SIZES[thumbSize];
   const scenario = useAtomValue(scenarioAtom);
   const { loaded, catalogue } = useDoodadTools();
   const { loaded: assets } = useUnitAssets();
@@ -184,6 +197,14 @@ function DoodadPalette() {
         >
           {categories.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.doodads.length})</option>)}
         </select>
+        {(Object.keys(DOODAD_THUMB_SIZES) as (keyof typeof DOODAD_THUMB_SIZES)[]).map((size) => {
+          const { label, icon: Icon } = DOODAD_THUMB_SIZES[size];
+          return (
+            <Tip key={size} label={translate(label)}>
+              <Button icon size="sm" active={thumbSize === size} onClick={() => setThumbSize(size)} aria-label={translate(label)}><Icon size={13} /></Button>
+            </Tip>
+          );
+        })}
       </div>
       <div className="placement-options" title={t("Placement options")}>
         {option("placeAnywhere", t("Place anywhere"), t("Skip StarEdit's ground check: put any doodad on any terrain, even over another doodad. Off, a doodad only goes where dddata.bin says its tiles fit — ramps on their cliff edge, trees on their ground."))}
@@ -214,7 +235,7 @@ function DoodadPalette() {
                 <span className="faint">{c.doodads.length}</span>
               </div>
             )}
-            <div className="doodad-grid">
+            <div className="doodad-grid" style={{ ["--doodad-thumb-w" as string]: `${thumb.width}px`, ["--doodad-thumb-h" as string]: `${thumb.height}px` }}>
               {c.doodads.map((d) => {
                 const overlay = overlayLabel(d);
                 return (
@@ -224,7 +245,7 @@ function DoodadPalette() {
                     onClick={() => pick(d.id)}
                     title={t("{category} #{id} — {w}×{h} tiles{ramp}{overlay}{ground} — click to place", { category: d.category, id: d.id, w: d.width, h: d.height, ramp: d.ramp ? t(", ramp") : "", overlay: overlay ? `, ${d.overlay!.kind} overlay: ${overlay}` : "", ground: d.required.some((r) => r !== 0) ? "" : t(", any ground") })}
                   >
-                    <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={56} height={40} /></span>
+                    <span className="thumb"><DoodadThumb loaded={loaded} def={d} width={thumb.width} height={thumb.height} /></span>
                     <span className="lbl">#{d.id} · {d.width}×{d.height}</span>
                   </button>
                 );

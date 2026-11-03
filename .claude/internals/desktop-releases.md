@@ -191,7 +191,14 @@ typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `g
 user, which is not an `error`), Test Map, `api.sync.start`
 (`map.share`), the host's menu/context/hotkey `run` wrappers + map buttons (`plugin.use`), file
 types (`file.open`), replays (`replay.open` via `countReplays`: file types, the host's `pickFiles`, and a window capture-phase `drop` listener in `useUsageCounts` that sees drops on plugin panels too; deduped by name+size+date for 10 s), installs/toggles, `adoptSource` (`gamedata`), `log()` at error (`error`: `area`, `type` = `errorKind`, a caller's
-`counted` words — `step` save/prepare/build/pack and `plugin` on the document's three — and
+`counted` words — `step` save/prepare/build/pack and `plugin` on the document's three; on the
+host's plugin sites (2026-11-03) `plugin` = `pluginName(spec)` and `step` = `load` (fetch, API
+check, import, `resolveActivate`) / `activate` (the plugin's own `activate`) / `deactivate` /
+`command` (owner found through the runtimes by `pluginId`) / `button` (map button) / `applies`
+(a build step's `applies()`); `useErrorCapture` sends `step` `uncaught` / `rejection`, and for an
+`ErrorEvent` whose `error` is null `type` = `messageKind(message)`: `ResizeObserver`,
+`cross-origin` ("Script error."), else `string` — the two rows that prompted it were a frameless
+`TypeError` in `plugins` and a bare `string` in `app`, each one person, unattributable — and
 `frame0`…`frame5` from `stackProps`: an identifier-only function name and the file:line:col for the
 editor's own origin or a `raw.githubusercontent.com/scm-js/…` plugin file, the `blob:` mapped back
 through `noteModuleSource` in `browserLoaderDeps`; any other code is `plugin`/`other`; never the

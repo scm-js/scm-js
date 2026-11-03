@@ -305,6 +305,19 @@ export function errorKind(err: unknown): string {
   return /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
 }
 
+/**
+ * What an error event with no error object was, as the counts name it: a word from a fixed
+ * list, never the message. The browser sends only a message for two common things, neither
+ * of them a throw in the editor's code. One is the ResizeObserver notice, when an observer's
+ * callback changes the layout it measured. The other is "Script error.", a throw in a script
+ * from another origin (an extension, say) whose details the browser keeps back.
+ */
+export function messageKind(message: string | undefined): string {
+  if (/^ResizeObserver loop/i.test(message ?? "")) return "ResizeObserver";
+  if (/^Script error\.?$/i.test(message ?? "")) return "cross-origin";
+  return "string";
+}
+
 /** `pluginCountName` with the registries' lists. */
 export const pluginName = (spec: string) => pluginCountName(spec, listed);
 

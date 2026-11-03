@@ -42,7 +42,7 @@ import { resizeScenario, type ResizeResult } from "../editor/resize";
 import { changeTileset, type ChangeTilesetResult } from "../editor/tileset";
 import { baseTerrain } from "../formats/tileset/terrain";
 import { t } from "../i18n";
-import { count } from "../services/usage";
+import { count, countPlacedUnits } from "../services/usage";
 
 /** The open scenario, or null when nothing real is loaded (the skeleton's blank state). */
 export const scenarioAtom = atom<Scenario | null>(null);
@@ -810,12 +810,13 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   countEdit(get, entry);
 });
 
-/** The feature count of an edit: the layer it was made on, what it changed, and the terrain tool or mirror in use. */
+/** The feature count of an edit: the layer it was made on, what it changed, the terrain tool or mirror in use, and the types of the units it placed. */
 function countEdit(get: Getter, entry: HistoryEntry) {
   const layer = get(activeLayerAtom);
   const symmetry = get(symmetryAtom);
   const part = Object.entries(entryParts(entry)).filter(([, on]) => on).map(([k]) => k).join("+") || "other";
   count("edit", { layer, part, ...(layer === "terrain" ? { mode: get(terrainModeAtom) } : {}), ...(symmetry !== "none" ? { symmetry } : {}) });
+  countPlacedUnits(entry.units);
 }
 
 /**

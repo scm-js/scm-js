@@ -185,7 +185,7 @@ props)` gathers lines for 2 min (same name+props → one line with `n`) and hand
 `scmjs.dev` (not `HOSTED_SITE`: the stable build is also the zip, container and desktop bundle). Props are words from fixed lists only — never a file/map name,
 typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,
 `builtin:`, or listed in the *default* registry). Hook sites: `openDialogAtom` (`dialog`),
-`commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), undo/redo, resize, tileset,
+`commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), `countPlacedUnits` from `commitEditAtom`'s `countEdit` (`unit.place` `{ unit }` = the units.dat id, never `unitName`, which a mod's data can set to anything; ids ≥ 228 → `other`; pure adds only, and `count`'s third argument `times` puts a stroke's 40 Zerglings on one line as `n: 40` — added 2026-11-03 for the planned public `/stats` page, whose served-side shape is ai-server's and not this repo's), undo/redo, resize, tileset,
 `openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), `services/mapBuild.ts`
 (`map.build.refused` `{ step, plugin }`: a plain `Error` from a plugin's step, its message to the
 user, which is not an `error`), Test Map, `api.sync.start`

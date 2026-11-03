@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countError, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
+import { count, countError, countPlacedUnits, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
 import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
 import { createStore } from "jotai";
 import { activatePlugin, runCommand } from "../src/plugins/host";
@@ -8,6 +8,7 @@ import type { PluginApi } from "../src/plugins/api";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
+import type { UnitRecord } from "../src/formats/chk/sections/objects";
 
 type Tracked = { name: string; props?: Record<string, unknown> };
 
@@ -53,6 +54,32 @@ describe("feature counts", () => {
       { name: "undo", props: undefined },
     ]);
     expect(waitingCounts()).toEqual([]);
+  });
+
+  it("adds an edit's many uses of one thing to the same line", () => {
+    count("unit.place", { unit: 37 }, 12);
+    count("unit.place", { unit: 37 });
+    count("unit.place", { unit: 37 }, 0);
+    count("unit.place", { unit: 37 }, Number.NaN);
+    expect(waitingCounts()).toEqual([{ name: "unit.place", props: { unit: 37 }, n: 13 }]);
+  });
+
+  it("counts the units an edit placed by type, never a move, and never a name", () => {
+    const unit = (unitId: number) => ({ unitId }) as UnitRecord;
+    countPlacedUnits([
+      { index: 0, before: null, after: unit(37) },
+      { index: 1, before: null, after: unit(37) },
+      { index: 2, before: null, after: unit(176) },
+      { index: 3, before: unit(0), after: unit(0) },
+      { index: 4, before: unit(7), after: null },
+      { index: 5, before: null, after: unit(900) },
+    ]);
+    countPlacedUnits(undefined);
+    expect(waitingCounts()).toEqual([
+      { name: "unit.place", props: { unit: 37 }, n: 2 },
+      { name: "unit.place", props: { unit: 176 }, n: 1 },
+      { name: "unit.place", props: { unit: "other" }, n: 1 },
+    ]);
   });
 
   it("keeps the counts until the site's script is there", () => {

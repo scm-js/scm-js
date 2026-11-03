@@ -113,8 +113,11 @@ export interface Preferences {
    * Tools ▸ Test Map: whether to start the game after writing the map (desktop build), and
    * the game folder to use when the desktop build should not search ("" = search). The
    * browser's folder is a handle in IndexedDB (`services/handleStore.ts`), not here.
+   * `target` is where Test Map, Ctrl+F5 and the toolbar send the map: `"starcraft"`, a
+   * plugin's id for its `ui.testTarget`, or `""` — a plugin's target where there is one
+   * (the browser at scmjs.dev), StarCraft otherwise (`services/testTargets.ts`).
    */
-  testMap: { launch: boolean; dir: string };
+  testMap: { launch: boolean; dir: string; target: string };
   /**
    * The desktop build's in-app updates (`editor/updates.ts`, `desktop/updater.ts`); the
    * browser build shows none of this, having nothing to update. `checkOnStart` asks GitHub
@@ -198,7 +201,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   animateWaterSpeed: 1,
   animateUnitsSpeed: 1,
   classicText: false,
-  testMap: { launch: true, dir: "" },
+  testMap: { launch: true, dir: "", target: "" },
   updates: { checkOnStart: true, nightly: false },
   plugins: { updates: "notify" },
   hotkeys: {},

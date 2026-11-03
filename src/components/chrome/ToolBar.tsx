@@ -32,10 +32,12 @@ import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { IconSelect, Tip } from "../ui";
 import { SymmetryIcon } from "../ui/SymmetryIcon";
 import { SYMMETRY_MODES, symmetryAvailable, type SymmetryMode } from "../../editor/symmetry";
-import { hotkeysAtom } from "../../atoms/preferencesAtoms";
+import { hotkeysAtom, preferencesAtom } from "../../atoms/preferencesAtoms";
+import { pluginTestTargetsAtom } from "../../atoms/pluginAtoms";
+import { resolveTarget, startTest } from "../../services/testTargets";
 import { shortcutOf } from "../../editor/commands";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
-import { translate } from "../../i18n";
+import { pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 function TB({ icon: Icon, label, shortcut, onClick, active, disabled, accent, text }: { icon: ComponentType<{ size?: number }>; label: string; shortcut?: string; onClick?: () => void; active?: boolean; disabled?: boolean; accent?: boolean; text?: ReactNode }) {
@@ -91,6 +93,8 @@ export default function ToolBar() {
   const hotkeys = useAtomValue(hotkeysAtom);
   const key = (command: string) => shortcutOf(hotkeys, command);
   const store = useStore();
+  // Where Test sends the map, for its tooltip (Preferences ▸ Testing).
+  const testTarget = resolveTarget(useAtomValue(preferencesAtom).testMap.target, useAtomValue(pluginTestTargetsAtom));
 
   const dlg = (id: DialogId) => () => open(id);
   // A map open to look at only has nothing to save, undo or edit: those buttons are left out, and
@@ -175,7 +179,13 @@ export default function ToolBar() {
           <Sep />
         </>
       )}
-      <TB icon={Play} label={t("Test Map — write the map where StarCraft lists it")} shortcut={key("tools.testMap")} onClick={() => open("testMap", { run: true })} text={t("Test")} />
+      <TB
+        icon={Play}
+        label={testTarget ? t("Test Map — {target}", { target: pluginText(testTarget.plugin.id, testTarget.spec.menuLabel) }) : t("Test Map — write the map where StarCraft lists it")}
+        shortcut={key("tools.testMap")}
+        onClick={() => { startTest(store); }}
+        text={t("Test")}
+      />
     </div>
   );
 }

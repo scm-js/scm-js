@@ -1326,6 +1326,7 @@ controls in the editor's own style.
 | [Panel](#panels) | `panel(spec)` | Something kept open while the user works: floating, docked right, or in a strip under the map. |
 | [Status item, map button](#status-items-and-map-buttons) | `statusItem(spec)`, `mapButton(spec)` | Something that stays visible without a panel. |
 | [Preferences page](#preferences-pages) | `preferencesPage(spec)` | Your plugin's settings. |
+| [Test target](#test-targets) | `testTarget(spec)` | Somewhere besides StarCraft that Test Map can send the map. |
 | [Dialog slot](#dialog-slots) | `dialogSlot(id, spec)` | A button or row in a built-in dialog's footer. |
 | [Map tool](#map-tools) | `mapTool(spec)` | Taking over the pointer on the map. |
 | [Overlay](#overlays) | `overlay(spec)` | A drawing over the map the user switches on and off. |
@@ -1483,6 +1484,28 @@ Plugins, rather than behind a menu item. One page per plugin.
 
 `api.ui.open("preferences", { page: "plugin:<your id>" })` opens the dialog on your page.
 See [the example in the reference](https://docs.scmjs.dev/api/ui/#preferencespagespec).
+
+### Test targets
+
+Tools ▸ Test Map sends the map to StarCraft. A test target is another place it can go,
+such as the scm-sim plugin's browser tab. With one registered, Edit ▸ Preferences ▸
+Testing gets a **Send the map to** choice between StarCraft and your target, and the Tools
+menu gets an item for each place (your `menuLabel`). The choice decides what Test Map,
+Ctrl+F5 and the toolbar's Test button do. Until the user chooses, it is the first plugin
+target there is. One target per plugin.
+
+- **`run(map)`** is called inside the click or key press, before the map is built. That
+  way a target that opens a window can open it at once: a browser lets a click open a tab,
+  but not something that happens later. `map` resolves with the file as Save would write
+  it, or rejects when a build step fails. A promise `run` returns that rejects is shown to
+  the user as the reason the test did not start. A string it resolves with goes to the
+  status bar.
+- **`settings`** is a `mount` / `apply` / `reset` like a Preferences page's, drawn under
+  your target's label on the Testing page.
+
+Register a target only where it can work. scm-sim registers one only where the play page
+is beside the editor, so the desktop app has StarCraft alone. `api.document.test` always
+goes to StarCraft.
 
 ### Dialog slots
 

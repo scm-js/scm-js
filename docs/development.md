@@ -80,9 +80,9 @@ badly; set `VITE_REACT_TRACKS=1` to turn it on when profiling renders.
 
 ### With the game engine beside it
 
-Tools ▸ Test Map in Browser, and the replay analysis other plugins use, come from the
-[scm-sim plugin](https://github.com/scm-js/plugin-scm-sim). The plugin holds no engine: it
-opens the play page, which has to be on the editor's own origin at `/play/`, as it is on
+Tools ▸ Test in Browser, and the replay analysis other plugins use, come from the [scm-sim
+plugin](https://github.com/scm-js/plugin-scm-sim). The plugin holds no engine: it opens
+the play page, which has to be on the editor's own origin at `/play/`, as it is on
 scmjs.dev. The play page is built from the scm-sim engine repository, which is not public,
 so without it these features do not work in a local build. With a checkout of it, run both
 dev servers and put one origin in front of them:

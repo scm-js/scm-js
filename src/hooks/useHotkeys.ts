@@ -18,6 +18,7 @@ import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
 import { count } from "../services/usage";
+import { STARCRAFT, startTest } from "../services/testTargets";
 
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
@@ -112,7 +113,8 @@ export function useHotkeys() {
         setStatus(mode === "none" ? t("Symmetry off") : t("Symmetry: {mode}", { mode: symmetryLabel(mode) }));
       },
       "tools.triggers": () => open("triggerEditor"),
-      "tools.testMap": () => open("testMap", { run: true }),
+      "tools.testMap": () => startTest(store),
+      "tools.testStarCraft": () => startTest(store, STARCRAFT),
       "tools.preferences": () => open("preferences"),
       "window.next": () => stepDocumentIn(store, 1),
       "window.previous": () => stepDocumentIn(store, -1),

@@ -55,8 +55,8 @@ export const isBuilding = (store: Store) => running.has(store);
 
 const stepId = (e: { plugin: { id: string }; spec: { id: string } }) => `${e.plugin.id}/${e.spec.id}`;
 
-const safely = (what: string, plugin: string, ask: () => boolean) => {
-  try { return ask() === true; } catch (err) { logError("plugins", `${plugin}: ${what} threw`, err); return false; }
+const safely = (what: string, plugin: { name: string; source: string }, ask: () => boolean) => {
+  try { return ask() === true; } catch (err) { logError("plugins", `${plugin.name}: ${what} threw`, err, undefined, { step: "applies", plugin: pluginName(plugin.source) }); return false; }
 };
 
 /** Whether a plugin's throw is the message the contract asks for (`BuildStepSpec.run`: "Throw an `Error`…"), not a bug. */
@@ -88,7 +88,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
   // Inside a step or a plugin's preparation, the map is whatever it is: nothing runs again.
   if (running.has(store)) return { bytes: (await plainOf(req.plain)).plain, builtBy: null, absent: absentNow(), unprepared: [] };
 
-  const before = store.get(pluginBeforeBuildAtom).filter((e) => !e.spec.applies || safely("applies()", e.plugin.name, () => e.spec.applies!()));
+  const before = store.get(pluginBeforeBuildAtom).filter((e) => !e.spec.applies || safely("applies()", e.plugin, () => e.spec.applies!()));
   const unprepared: Outgoing["unprepared"] = [];
   const abort = new AbortController();
   const stopped = new Promise<never>((_, reject) => abort.signal.addEventListener("abort", () => reject(new StoppedError())));
@@ -125,7 +125,7 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
     const out = (more: Partial<Outgoing> = {}): Outgoing => ({ bytes: made.plain, builtBy: null, absent: absentNow(), unprepared, ...more });
     if (abort.signal.aborted) return out({ stopped: true, problem: t("{labels} was stopped.", { labels: before.map((e) => e.spec.label).join(", ") }) });
 
-    const steps = store.get(pluginBuildStepsAtom).filter((e) => safely("the build step's applies()", e.plugin.name, () => e.spec.applies()));
+    const steps = store.get(pluginBuildStepsAtom).filter((e) => safely("the build step's applies()", e.plugin, () => e.spec.applies()));
     if (steps.length === 0) return out();
     labels = steps.map((e) => e.spec.label).join(", ");
     if (req.options.format === "chk") return out({ problem: t("A bare .chk has nowhere to keep the map beside what {labels} makes of it. Save as .scx to get the built map.", { labels }) });

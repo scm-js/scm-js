@@ -29,7 +29,7 @@ import { paintOverView } from "../components/viewport/paint/overView";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginTestTargetsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox, type MaximizedBox,
 } from "../atoms/pluginAtoms";
@@ -1707,7 +1707,8 @@ export function runCommand(store: Store, id: string, args: unknown[] = []): unkn
     if (command.enabled && !command.enabled()) return undefined;
     return command.run(...args);
   } catch (err) {
-    logError("plugins", `Command ${id} failed`, err);
+    const owner = Object.values(store.get(pluginRuntimesAtom)).find((r) => r.manifest && pluginIdOf(r.manifest) === command.pluginId);
+    logError("plugins", `Command ${id} failed`, err, undefined, { step: "command", plugin: owner ? pluginName(owner.spec) : "other" });
     return undefined;
   }
 }
@@ -2522,6 +2523,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         store.set(pluginPreferencesPagesAtom, [...store.get(pluginPreferencesPagesAtom).filter((e) => e.plugin.id !== info.id), { key, plugin: info, spec }]);
         return bag.add(() => store.set(pluginPreferencesPagesAtom, store.get(pluginPreferencesPagesAtom).filter((e) => e.key !== key)), "preferences");
       },
+      testTarget: (spec) => {
+        const key = nextContributionKey();
+        // One target per plugin, as with a Preferences page.
+        store.set(pluginTestTargetsAtom, [...store.get(pluginTestTargetsAtom).filter((e) => e.plugin.id !== info.id), { key, plugin: info, spec }]);
+        return bag.add(() => store.set(pluginTestTargetsAtom, store.get(pluginTestTargetsAtom).filter((e) => e.key !== key)));
+      },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),
       pickFiles: (options = {}) => new Promise<File[]>((resolve) => {
@@ -2712,12 +2719,12 @@ function setRuntime(store: Store, spec: string, patch: Partial<PluginRuntime>) {
   store.set(pluginRuntimesAtom, { ...all, [spec]: { ...prev, ...patch } });
 }
 
-function runDeactivate(d: Deactivate | undefined) {
+function runDeactivate(d: Deactivate | undefined, spec: string) {
   try {
     if (typeof d === "function") d();
     else if (d && typeof d === "object" && typeof d.dispose === "function") d.dispose();
   } catch (err) {
-    logError("plugins", "A plugin's deactivate failed", err);
+    logError("plugins", "A plugin's deactivate failed", err, { spec }, { step: "deactivate", plugin: pluginName(spec) });
   }
 }
 
@@ -2830,6 +2837,8 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
   setRuntime(store, spec, { status: "loading", error: null });
   const stillWanted = () => map.get(spec) === entry;
   const local = loadDepsFor(store, spec, deps);
+  // Which half failed, for the error's count: fetching, checking and importing the code, or the plugin's own `activate`.
+  let step = "load";
   try {
     // The manifest is read first and the module imported only once it is accepted: a plugin
     // this editor cannot run has its top-level code never evaluated.
@@ -2844,8 +2853,10 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
     const info: PluginInfo = { id: pluginIdOf(manifest), name: manifest.name, source: spec, version: manifest.version, icon };
     setRuntime(store, spec, { manifest, icon: icon ?? null });
     const api = createPluginApi(store, info, bag);
-    const result = await resolveActivate(module)(api);
-    if (!stillWanted()) { runDeactivate(result); bag.dispose(); return; }
+    const activate = resolveActivate(module);
+    step = "activate";
+    const result = await activate(api);
+    if (!stillWanted()) { runDeactivate(result, spec); bag.dispose(); return; }
     entry.deactivate = result;
     setRuntime(store, spec, { status: "active", error: null, loadedFrom: local.from, contributions: { ...bag.counts } });
     logInfo("plugins", `${manifest.name} started`, { version: manifest.version, from: spec.startsWith("builtin:") ? "bundled" : local.from, api: manifest.api, spec });
@@ -2853,7 +2864,7 @@ async function loadAndRun(store: Store, spec: string, deps: LoaderDeps, entry: A
     bag.dispose();
     if (stillWanted()) map.delete(spec);
     const message = err instanceof Error ? err.message : String(err);
-    logError("plugins", `${specLabel(spec)} did not load`, err, { spec });
+    logError("plugins", `${specLabel(spec)} did not load`, err, { spec }, { step, plugin: pluginName(spec) });
     setRuntime(store, spec, { status: "error", error: message });
   }
 }
@@ -2951,7 +2962,7 @@ export function deactivatePlugin(store: Store, spec: string) {
     return;
   }
   map.delete(spec);
-  runDeactivate(entry.deactivate);
+  runDeactivate(entry.deactivate, spec);
   entry.bag.dispose();
   setRuntime(store, spec, { status: "disabled", error: null, contributions: { menu: 0, contextMenu: 0, hotkeys: 0, events: 0, preferences: 0 } });
   logInfo("plugins", `${store.get(pluginRuntimesAtom)[spec]?.manifest?.name ?? specLabel(spec)} stopped`, { spec });

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Play } from "lucide-react";
 import { scenarioAtom } from "../../atoms/documentAtoms";
+import { pluginTestTargetsAtom } from "../../atoms/pluginAtoms";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { closeDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { desktopBridge } from "../../gamedata/desktop";
@@ -28,6 +29,8 @@ export function TestMapDialog({ entry }: DialogProps) {
   const setStatus = useSetAtom(statusMessageAtom);
   const toast = useSetAtom(pushToastAtom);
   const bridge = desktopBridge();
+  // With a plugin's place beside it, this dialog is the StarCraft one and says so.
+  const elsewhere = useAtomValue(pluginTestTargetsAtom).length > 0;
   const { info, refresh } = useGameInfo(prefs.testMap.dir);
   const [folder, setFolder] = useTestFolder();
   const [busy, setBusy] = useState(false);
@@ -68,7 +71,7 @@ export function TestMapDialog({ entry }: DialogProps) {
   return (
     <DialogFrame
       dialogKey={entry.key}
-      title={t("Test Map")}
+      title={elsewhere ? t("Test in StarCraft") : t("Test Map")}
       icon={<Play size={14} />}
       size="md"
       okLabel={bridge && prefs.testMap.launch ? t("Write and start") : t("Write")}

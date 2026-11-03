@@ -54,6 +54,10 @@ runs `useMapFileActions.ts#openFileInto` (the store-level half of the hook's `op
 `PendingAction` in the Close Scenario dialog: `runPending` answers through its `done` callback, and a
 dismissal (Cancel, Escape, the ×) is seen from `dialogStackAtom` — the entry leaves without `taken`,
 which `proceed` sets before closing (an unmount effect ran once at mount under React's dev double-mount). `document.export()` is `writeMapBytes` with the archive extras as a `File`,
+`ui.testTarget(spec)` (0.8.6, `pluginTestTargetsAtom`, one per plugin like a Preferences page) is a place
+besides StarCraft Test Map can send the map — `editor-operations.md`, "Test targets"; scm-sim's Test in Browser is the one
+user, and declares the call itself (`src/target.ts`) so it builds against an older types package and falls back to its
+own Tools item on an older editor.
 `document.test(bytes, fileName, { launch })` (2026-09-17, for TrigScript's Build & Test) is `services/testMap.ts#writeTestFile` — `runTestMap`'s
 body over given bytes, `noDownload` so a browser with no test folder answers null rather than downloading a copy the plugin already
 saved — `document.renderImage()` is `exportMapImage` (null without the tileset or a canvas), and

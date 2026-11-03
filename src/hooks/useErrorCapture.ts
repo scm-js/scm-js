@@ -18,6 +18,7 @@
  */
 import { useEffect } from "react";
 import { log, logError } from "../editor/log";
+import { messageKind } from "../services/usage";
 
 // React's development double-mount runs the effect twice; the line belongs to the session.
 let announced = false;
@@ -29,10 +30,10 @@ export function useErrorCapture() {
       // it has no `message` and is not what this is for.
       if (!e.message && !e.error) return;
       const where = e.filename ? `${e.filename.split("/").pop()}:${e.lineno}` : undefined;
-      logError("app", "Uncaught error", e.error ?? e.message, { at: where });
+      logError("app", "Uncaught error", e.error ?? e.message, { at: where }, { step: "uncaught", ...(e.error == null ? { type: messageKind(e.message) } : {}) });
     };
     const onRejection = (e: PromiseRejectionEvent) => {
-      logError("app", "Unhandled promise rejection", e.reason);
+      logError("app", "Unhandled promise rejection", e.reason, undefined, { step: "rejection" });
     };
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onRejection);

@@ -9,7 +9,7 @@
  * atoms; the working copy re-reads whatever a clear touched so OK afterwards does not write
  * the old values straight back.
  */
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronDown,
@@ -32,7 +32,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
-import { pluginHotkeysAtom, pluginPreferencesPagesAtom, pluginRuntimesAtom, type PluginPreferencesPageEntry } from "../../atoms/pluginAtoms";
+import { pluginHotkeysAtom, pluginPreferencesPagesAtom, pluginRuntimesAtom, pluginTestTargetsAtom, type PluginPreferencesPageEntry, type PluginTestTargetEntry } from "../../atoms/pluginAtoms";
+import type { PreferencesPageSpec } from "../../plugins/api";
+import { resolveTarget, STARCRAFT } from "../../services/testTargets";
 import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, withBinding } from "../../editor/commands";
 import { logError } from "../../editor/log";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom } from "../../atoms/editorAtoms";
@@ -65,7 +67,7 @@ import { KEEP_PER_FILE, listPrevious, removePrevious, type PreviousEntry } from 
 import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
-import { LOCALES, msg, t, translate } from "../../i18n";
+import { LOCALES, msg, pluginText, t, translate } from "../../i18n";
 import { count, countingHere } from "../../services/usage";
 import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -164,6 +166,11 @@ export function PreferencesDialog({ entry }: DialogProps) {
   // A plugin's page, once shown, stays mounted (hidden) until the dialog closes, so what
   // the user changed on it is still there for `apply` after they moved to another page.
   const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  // Testing holds the plugins' test targets' settings, so it stays mounted the same way once shown.
+  const [testingShown, setTestingShown] = useState(false);
+  useEffect(() => { if (page === "testing" && !testingShown) setTestingShown(true); }, [page, testingShown]);
+  /** The test targets' settings mounted on Testing, for apply and reset. */
+  const targetSettings = useRef(new Map<number, { name: string; spec: PreferencesPageSpec }>());
   const shownPlugin = page.startsWith("plugin:") ? pluginPages.find((e) => `plugin:${e.plugin.id}` === page) : undefined;
   useEffect(() => {
     if (shownPlugin && !visited.has(shownPlugin.plugin.id)) setVisited(new Set(visited).add(shownPlugin.plugin.id));
@@ -180,11 +187,19 @@ export function PreferencesDialog({ entry }: DialogProps) {
       if (!visited.has(e.plugin.id)) continue;
       try { e.spec.apply?.(); } catch (err) { logError(e.plugin.name, "The Preferences page's apply failed", err); }
     }
+    for (const { name, spec } of targetSettings.current.values()) {
+      try { spec.apply?.(); } catch (err) { logError(name, "The test target's settings apply failed", err); }
+    }
   };
   const reset = () => {
     setW(DEFAULT_WORKING);
     if (shownPlugin) {
       try { shownPlugin.spec.reset?.(); } catch (err) { logError(shownPlugin.plugin.name, "The Preferences page's reset failed", err); }
+    }
+    if (page === "testing") {
+      for (const { name, spec } of targetSettings.current.values()) {
+        try { spec.reset?.(); } catch (err) { logError(name, "The test target's settings reset failed", err); }
+      }
     }
   };
   // After a clear the atoms behind these keys are back on their defaults; follow them.
@@ -202,7 +217,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
     general: () => <GeneralPage w={w} patch={patch} />,
     editing: () => <EditingPage w={w} setW={setW} />,
     view: () => <ViewPage w={w} patch={patch} />,
-    testing: () => <TestingPage w={w} patch={patch} />,
+    // Drawn on its own below, kept mounted once shown.
+    testing: () => null,
     plugins: () => <PluginsPage w={w} patch={patch} onManage={() => open("plugins")} />,
     storage: () => (
       <div className="stack">
@@ -264,7 +280,12 @@ export function PreferencesDialog({ entry }: DialogProps) {
         </nav>
         {/* One container for every page, so a visited plugin page stays mounted while a built-in one shows. */}
         <div className="prefs-page">
-          {!page.startsWith("plugin:") && <div className="prefs-builtin" key={page}>{content[page as PreferencesPage]()}</div>}
+          {!page.startsWith("plugin:") && page !== "testing" && <div className="prefs-builtin" key={page}>{content[page as PreferencesPage]()}</div>}
+          {(page === "testing" || testingShown) && (
+            <div className="prefs-builtin" style={page === "testing" ? undefined : { display: "none" }}>
+              <TestingPage w={w} patch={patch} targetSettings={targetSettings.current} onClose={() => close(entry.key)} />
+            </div>
+          )}
           {page.startsWith("plugin:") && !shownPlugin && <p className="hint">{t("This plugin has no Preferences page, or is not running.")}</p>}
           {pluginPages.filter((e) => visited.has(e.plugin.id) || e === shownPlugin).map((e) => (
             <PluginPreferencesPage key={e.key} entry={e} shown={e === shownPlugin} onClose={() => close(entry.key)} />
@@ -431,7 +452,7 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
         <Section title={t("Privacy")}>
           <Check label={t("Count which parts of the editor are used")} checked={p.counting} onChange={(e) => patch({ counting: e.target.checked })} />
           <Hint>
-            {t("Sends the name of what was used, such as a dialog, a tool or a save, and where in the editor's code an error happened, with no identifier. Nothing of the map is sent: not its name, its contents or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
+            {t("Sends the name of what was used, such as a dialog, a tool, a save or the type of a unit placed, the tileset and size of a map opened or made, and where in the editor's code an error happened, with no identifier. The map itself is never sent: not its name, its text or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
             <a href="https://scmjs.dev/privacy.html" target="_blank" rel="noopener noreferrer">{t("What is counted")}</a>
           </Hint>
         </Section>
@@ -590,14 +611,46 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
 
 /* ── Testing ────────────────────────────────────────────── */
 
-function TestingPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
+type TargetSettings = Map<number, { name: string; spec: PreferencesPageSpec }>;
+
+/**
+ * Where Test Map sends the map, and each place's settings: StarCraft's (the game folder, or
+ * the browser's Maps folder) and those of a plugin's test target (`api.ui.testTarget`).
+ * The choice is shown only when a plugin has added a place — on the desktop there is
+ * StarCraft alone.
+ */
+function TestingPage({ w, patch, targetSettings, onClose }: { w: Working; patch: (p: Partial<Preferences>) => void; targetSettings: TargetSettings; onClose: () => void }) {
   const p = w.prefs;
   const testMap = (tm: Partial<Preferences["testMap"]>) => patch({ testMap: { ...p.testMap, ...tm } });
   const { info, refresh } = useGameInfo(p.testMap.dir);
   const [folder, setFolder] = useTestFolder();
+  const targets = useAtomValue(pluginTestTargetsAtom);
+  const chosen = resolveTarget(p.testMap.target, targets);
+  const label = (e: PluginTestTargetEntry) => pluginText(e.plugin.id, e.spec.label);
+  const choice = targets.length > 0 && (
+    <Section title={t("Test Map")}>
+      <div className="form wide">
+        <Field label={t("Send the map to")}>
+          <Select
+            value={chosen ? chosen.plugin.id : STARCRAFT}
+            onChange={(e) => testMap({ target: e.target.value })}
+            options={[{ value: STARCRAFT, label: t("StarCraft") }, ...targets.map((e) => ({ value: e.plugin.id, label: label(e) }))]}
+          />
+        </Field>
+      </div>
+      <Hint>
+        {chosen ? (chosen.spec.description ? pluginText(chosen.plugin.id, chosen.spec.description) : null) : t("The map is written where the game lists it, under Single Player ▸ Custom Game.")}
+        {" "}{t("This is what Test Map, Ctrl+F5 and the toolbar's Test button do. The Tools menu also has an item for each place, whatever is chosen here.")}
+      </Hint>
+    </Section>
+  );
+  const others = targets.filter((e) => e.spec.settings).map((e) => (
+    <TestTargetSettings key={e.key} entry={e} title={label(e)} registry={targetSettings} onClose={onClose} />
+  ));
   if (isDesktop()) {
     return (
       <div className="stack">
+        {choice}
         <Section title={t("After writing")}>
           <Check label={t("Start StarCraft")} checked={p.testMap.launch} onChange={(e) => testMap({ launch: e.target.checked })} />
           <Hint>{t("The game starts on its menu; the map is under Single Player ▸ Custom Game ▸ scmJS. A running game is not restarted.")}</Hint>
@@ -606,16 +659,51 @@ function TestingPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
           <GameFolderRow dir={p.testMap.dir} info={info} onDir={(dir) => testMap({ dir })} onRefresh={refresh} />
           <Hint>{t("Test Map writes into this installation's Maps folder. Forget goes back to searching the usual places.")}</Hint>
         </Section>
+        {others}
       </div>
     );
   }
   return (
     <div className="stack">
-      <Section title={t("Maps folder")}>
+      {choice}
+      <Section title={targets.length > 0 ? t("StarCraft: Maps folder") : t("Maps folder")}>
         <TestFolderRow folder={folder} onFolder={setFolder} />
-        <Hint>{t("Where Test Map writes; the choice is kept at once. A browser tab cannot start the game, so open the map under Single Player ▸ Custom Game.")}</Hint>
+        <Hint>{t("Where Test Map writes for StarCraft; the choice is kept at once. A browser tab cannot start the game, so open the map under Single Player ▸ Custom Game.")}</Hint>
       </Section>
+      {others}
     </div>
+  );
+}
+
+/**
+ * A test target's own settings: an empty `div` its `settings.mount` fills, as a plugin's
+ * Preferences page does (`PluginPreferencesPage`). In `registry` while mounted, so OK,
+ * Apply and Reset reach it.
+ */
+function TestTargetSettings({ entry, title, registry, onClose }: { entry: PluginTestTargetEntry; title: string; registry: TargetSettings; onClose: () => void }) {
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const spec = entry.spec.settings;
+    if (!host || !spec) return;
+    let cleanup: void | (() => void);
+    try {
+      cleanup = spec.mount(host, { plugin: entry.plugin, close: onClose });
+    } catch (err) {
+      logError(entry.plugin.name, "The test target's settings mount failed", err);
+      host.textContent = err instanceof Error ? err.message : String(err);
+    }
+    registry.set(entry.key, { name: entry.plugin.name, spec });
+    return () => {
+      registry.delete(entry.key);
+      try { cleanup?.(); } catch (err) { logError(entry.plugin.name, "The test target's settings cleanup failed", err); }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host, entry]);
+  return (
+    <section className="prefs-section">
+      <h3>{title}</h3>
+      <div ref={setHost} className="col plugin-prefs-page" style={{ gap: 6 }} />
+    </section>
   );
 }
 

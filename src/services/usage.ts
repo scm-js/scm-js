@@ -27,6 +27,8 @@
  */
 import { copyKind } from "../gamedata/copies";
 import type { AssetSource } from "../gamedata/source";
+import { UNIT_TYPES } from "../formats/dat/dat";
+import type { UnitChange } from "../editor/units";
 import { APP_VERSION } from "../version";
 
 export type CountProps = Record<string, string | number | boolean>;
@@ -56,13 +58,17 @@ const hitsWindow = (): HitsWindow | null => (typeof window === "undefined" ? nul
 const lineKey = (name: string, props: CountProps | undefined) =>
   props ? `${name}\u0000${JSON.stringify(Object.entries(props).sort(([a], [b]) => (a < b ? -1 : 1)))}` : name;
 
-/** Count one use of `name`. The props are a few words from fixed lists, never the user's text. */
-export function count(name: string, props?: CountProps): void {
-  if (!hosted || !on) return;
+/**
+ * Count `times` uses of `name` (one, unless an edit did the same thing many times over). The
+ * props are a few words from fixed lists, never the user's text.
+ */
+export function count(name: string, props?: CountProps, times = 1): void {
+  if (!hosted || !on || !(times >= 1)) return;
+  const n = Math.floor(times);
   const key = lineKey(name, props);
   const line = waiting.get(key);
-  if (line) line.n++;
-  else if (waiting.size < MAX_WAITING) waiting.set(key, { name, props, n: 1 });
+  if (line) line.n += n;
+  else if (waiting.size < MAX_WAITING) waiting.set(key, { name, props, n });
   listen();
   timer ??= setTimeout(flushCounts, FLUSH_MS);
 }
@@ -157,6 +163,22 @@ export function pluginCountName(spec: string, listed: (spec: string) => boolean 
     if (gh) return `${gh[1]}/${gh[2]}`.toLowerCase().slice(0, 64);
   }
   return "other";
+}
+
+/**
+ * Units an edit placed, one `unit.place` line per type with how many: the units.dat id, never
+ * the name, since a mod's data can name a unit anything. A move or a change of properties is
+ * not a placement, and an id outside the game's 228 types is `other`.
+ */
+export function countPlacedUnits(changes: readonly UnitChange[] | undefined): void {
+  if (!changes) return;
+  const placed = new Map<number | "other", number>();
+  for (const c of changes) {
+    if (c.before || !c.after) continue;
+    const id = Number.isInteger(c.after.unitId) && c.after.unitId >= 0 && c.after.unitId < UNIT_TYPES ? c.after.unitId : "other";
+    placed.set(id, (placed.get(id) ?? 0) + 1);
+  }
+  for (const [unit, n] of placed) count("unit.place", { unit }, n);
 }
 
 /** Which plugins the registries list (`useUsageCounts` keeps it current from what Browse last read). */
@@ -303,6 +325,19 @@ export function countError(props: CountProps, stack?: string, components?: strin
 export function errorKind(err: unknown): string {
   if (!(err instanceof Error)) return typeof err;
   return /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
+}
+
+/**
+ * What an error event with no error object was, as the counts name it: a word from a fixed
+ * list, never the message. The browser sends only a message for two common things, neither
+ * of them a throw in the editor's code. One is the ResizeObserver notice, when an observer's
+ * callback changes the layout it measured. The other is "Script error.", a throw in a script
+ * from another origin (an extension, say) whose details the browser keeps back.
+ */
+export function messageKind(message: string | undefined): string {
+  if (/^ResizeObserver loop/i.test(message ?? "")) return "ResizeObserver";
+  if (/^Script error\.?$/i.test(message ?? "")) return "cross-origin";
+  return "string";
 }
 
 /** `pluginCountName` with the registries' lists. */

@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countError, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
+import { count, countError, countPlacedUnits, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
 import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
+import { createStore } from "jotai";
+import { activatePlugin, runCommand } from "../src/plugins/host";
+import type { LoaderDeps } from "../src/plugins/loader";
+import type { PluginApi } from "../src/plugins/api";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
+import type { UnitRecord } from "../src/formats/chk/sections/objects";
 
 type Tracked = { name: string; props?: Record<string, unknown> };
 
@@ -49,6 +54,32 @@ describe("feature counts", () => {
       { name: "undo", props: undefined },
     ]);
     expect(waitingCounts()).toEqual([]);
+  });
+
+  it("adds an edit's many uses of one thing to the same line", () => {
+    count("unit.place", { unit: 37 }, 12);
+    count("unit.place", { unit: 37 });
+    count("unit.place", { unit: 37 }, 0);
+    count("unit.place", { unit: 37 }, Number.NaN);
+    expect(waitingCounts()).toEqual([{ name: "unit.place", props: { unit: 37 }, n: 13 }]);
+  });
+
+  it("counts the units an edit placed by type, never a move, and never a name", () => {
+    const unit = (unitId: number) => ({ unitId }) as UnitRecord;
+    countPlacedUnits([
+      { index: 0, before: null, after: unit(37) },
+      { index: 1, before: null, after: unit(37) },
+      { index: 2, before: null, after: unit(176) },
+      { index: 3, before: unit(0), after: unit(0) },
+      { index: 4, before: unit(7), after: null },
+      { index: 5, before: null, after: unit(900) },
+    ]);
+    countPlacedUnits(undefined);
+    expect(waitingCounts()).toEqual([
+      { name: "unit.place", props: { unit: 37 }, n: 2 },
+      { name: "unit.place", props: { unit: 176 }, n: 1 },
+      { name: "unit.place", props: { unit: "other" }, n: 1 },
+    ]);
   });
 
   it("keeps the counts until the site's script is there", () => {
@@ -187,6 +218,34 @@ describe("error counts", () => {
     odd.name = "my map.scx";
     expect(errorKind(odd)).toBe("other");
     expect(errorKind("thrown text")).toBe("string");
+  });
+
+  it("names what an error event without an error object was, in a word and never its message", () => {
+    expect(messageKind("ResizeObserver loop completed with undelivered notifications.")).toBe("ResizeObserver");
+    expect(messageKind("ResizeObserver loop limit exceeded")).toBe("ResizeObserver");
+    expect(messageKind("Script error.")).toBe("cross-origin");
+    expect(messageKind("Uncaught My Secret Map.scx")).toBe("string");
+    expect(messageKind(undefined)).toBe("string");
+  });
+
+  it("says which plugin an error came from, and whether it was loading, activating or a command", async () => {
+    const store = createStore();
+    const deps: LoaderDeps = {
+      fetchText: async () => { throw new Error("offline"); }, transpile: async (s) => s, createModuleUrl: () => "mem:0", importModule: async () => ({}),
+      builtins: {
+        broken: { manifest: { name: "Broken" }, load: async () => ({ default: () => { throw new TypeError("no such thing"); } }) },
+        future: { manifest: { name: "Future", api: 99 }, load: async () => ({ default: () => {} }) },
+        cmd: { manifest: { name: "Cmd" }, load: async () => ({ default: (api: PluginApi) => { api.commands.register({ id: "go", title: "Go", run: () => { throw new TypeError("x"); } }); } }) },
+      },
+    };
+    await activatePlugin(store, "builtin:broken", deps);
+    await activatePlugin(store, "builtin:future", deps);
+    await activatePlugin(store, "builtin:cmd", deps);
+    runCommand(store, "cmd.go");
+    const errors = waitingCounts().filter((l) => l.name === "error").map((l) => l.props);
+    expect(errors).toContainEqual(expect.objectContaining({ area: "plugins", step: "activate", plugin: "broken", type: "TypeError" }));
+    expect(errors).toContainEqual(expect.objectContaining({ area: "plugins", step: "load", plugin: "future", type: "Error" }));
+    expect(errors).toContainEqual(expect.objectContaining({ area: "plugins", step: "command", plugin: "cmd", type: "TypeError" }));
   });
 
   it("counts a logged error with its area, the caller's words, its kind and its frames", () => {

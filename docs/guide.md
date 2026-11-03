@@ -267,8 +267,9 @@ bottom right says which.
 To try the map, press Ctrl+F5 (Tools ▸ Test Map). The game cannot be handed a map from the
 outside, so the editor writes the map into a `scmJS` folder under the game's *Maps*
 folder, where **Single Player ▸ Custom Game** lists it; the desktop app then starts the
-game as well. In the editor at scmjs.dev, **Tools ▸ Test Map in Browser** plays the map in
-a browser tab instead. See [Test Map](#test-map).
+game as well. In the editor at scmjs.dev, Ctrl+F5 plays the map in a browser tab instead,
+until you choose StarCraft under **Edit ▸ Preferences ▸ Testing**. See [Test
+Map](#test-map).
 
 That is a playable melee map. Triggers, briefings, custom unit settings and everything a
 Use Map Settings map needs are in the sections below.
@@ -886,9 +887,15 @@ Double-click an issue to go to it. The same check runs inside the Save dialog.
 
 ![The Test Map dialog](images/test-map.webp)
 
-Tools ▸ Test Map (Ctrl+F5) hands the map to the game. The game cannot open a map from the
-outside, so the editor writes it into a `scmJS` folder under the game's Maps folder, where
-Single Player ▸ Custom Game lists it.
+Tools ▸ Test Map (Ctrl+F5, or the toolbar's Test button) hands the map to the game. The
+desktop app has one place to send it: StarCraft. The editor at scmjs.dev has two,
+StarCraft and the browser, and **Send the map to** at the top of **Edit ▸ Preferences ▸
+Testing** chooses which one Test Map uses. It is the browser until you choose. The Tools
+menu also has **Test in StarCraft** and **Test in Browser**, which go to that place
+whatever the choice. **Tools ▸ Test Map Settings…** opens that Preferences page.
+
+**StarCraft.** The game cannot open a map from the outside, so the editor writes it into a
+`scmJS` folder under the game's Maps folder, where Single Player ▸ Custom Game lists it.
 
 - **The desktop app** finds the installation (or takes a folder you pick) and starts the
   game as well.
@@ -896,17 +903,18 @@ Single Player ▸ Custom Game lists it.
   and open the map under Single Player ▸ Custom Game.
 - **Firefox and Safari** download the map; move it into the game's Maps folder.
 
-**Tools ▸ Test Map Settings…** opens the dialog to change the folder and whether the game
-starts.
+The folder, and in the desktop app whether the game starts, are under StarCraft on Edit ▸
+Preferences ▸ Testing. The first test in a browser with no folder yet opens a dialog to
+pick one.
 
-**Test Map in Browser.** In the editor at scmjs.dev, **Tools ▸ Test Map in Browser** opens
-the map on the site's play page, scmjs.dev/play, which runs the game in a browser tab. The
-map goes straight from the editor's tab to that one, and testing again sends the new
-version to the same tab. The game runs from your own StarCraft files: the first time, the
-play page asks for the folder StarCraft is installed in. Blizzard's map editor download is
-not enough for it.
+**The browser.** In the editor at scmjs.dev, **Tools ▸ Test in Browser** opens the map on
+the site's play page, scmjs.dev/play, which runs the game in a browser tab. The map goes
+straight from the editor's tab to that one, and testing again sends the new version to the
+same tab. The game runs from your own StarCraft files: the first time, the play page asks
+for the folder StarCraft is installed in. Blizzard's map editor download is not enough for
+it.
 
-How the map is played is set under **Edit ▸ Preferences ▸ Plugins ▸ scm-sim**:
+How the map is played is set under *This browser* on **Edit ▸ Preferences ▸ Testing**:
 
 - **Game type.** *From the map* (the default) plays with the map's own settings when it
   has computer players or units placed beyond the start locations, and as a melee game
@@ -917,8 +925,9 @@ How the map is played is set under **Edit ▸ Preferences ▸ Plugins ▸ scm-si
   name), and for melee the number of **computers** and their race. Where the map fixes a
   slot's race or has fewer places, the map's settings win.
 
-> **Note.** Test Map in Browser comes with the scm-sim plugin and appears only in the editor
-> at scmjs.dev, not in the desktop app or an editor hosted elsewhere.
+> **Note.** Testing in the browser comes with the scm-sim plugin and appears only in the
+> editor at scmjs.dev, not in the desktop app or an editor hosted elsewhere. There, Test Map
+> goes to StarCraft and Preferences ▸ Testing has no choice to make.
 
 ### Saving
 
@@ -1124,7 +1133,7 @@ come installed and on; a few more are a click away in **Plugins ▸ Browse Plugi
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | On | File ▸ Open Replay… | Opens replays over their map; see [Replays](#replays) |
 | [Paint](https://github.com/scm-js/plugin-paint) | On | Tools ▸ Paint… (Ctrl+Shift+P) | Lines, shapes, spray and text, from the palette's pick |
 | [Repair](https://github.com/scm-js/plugin-repair) | On | Tools ▸ Repair Map… | Repairs damaged and protected maps as they open |
-| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test Map in Browser | Plays the map on scmjs.dev/play |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test in Browser | Plays the map on scmjs.dev/play |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | On | Account menu | Your [scmjs.dev account](#your-scmjsdev-account) |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | On | File ▸ Find on scmscx.com… | Searches the scmscx.com map archive |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | On | Tools ▸ Stamp Library… (Ctrl+Shift+L) | Pieces of map kept across maps |
@@ -1157,9 +1166,9 @@ A few that need more than a line:
 - **Timelapse** records one frame per change and plays the recording back with a box
   around each change. Export it as a GIF or a WebM video. Opening the same file again
   carries on the same recording.
-- **scm-sim** is the game engine behind the play page. Besides Test Map in Browser, it is
-  what Aftermath and Walkability use to have the game play a replay or walk a map. It
-  works only in the editor at scmjs.dev.
+- **scm-sim** is the game engine behind the play page. Besides Test in Browser, it is what
+  Aftermath and Walkability use to have the game play a replay or walk a map. It works
+  only in the editor at scmjs.dev.
 ![The Paint panel, drawing a line of the terrain palette's pick](images/paint.webp)
 
 Each plugin's own README, linked in the table, has the details.
@@ -1670,8 +1679,9 @@ zoom keeps the tile under the pointer in place; whether water and units animate 
 fast; whether the map starts out drawn with Remastered's graphics; which cells the status
 bar shows; and whether string previews follow Remastered's colour rule or 1.16.1's.
 
-**Testing**: Test Map's folder, and in the desktop app whether the game starts after the
-map is written.
+**Testing**: where Test Map sends the map (at scmjs.dev, StarCraft or the browser), the
+folder it writes into for StarCraft, in the desktop app whether the game starts after the
+map is written, and how the browser plays the map.
 
 **Plugins**: what to do when an installed plugin has a newer version (tell you, do
 nothing, or install it — see [docs/plugins.md](plugins.md#keeping-a-plugin-up-to-date)),
@@ -1816,9 +1826,9 @@ rely on a feature.
 
 - In Firefox and Safari, every save is a download, and a recent map reopens through File ▸
   Open instead of straight from disk. Chrome, Edge and the desktop app write in place.
-- In a browser, Tools ▸ Test Map writes the map where the game lists it but cannot start
-  the game; in Firefox and Safari it downloads the map. Tools ▸ Test Map in Browser, at
-  scmjs.dev, plays it in a browser tab instead.
+- In a browser, Tools ▸ Test in StarCraft writes the map where the game lists it but
+  cannot start the game; in Firefox and Safari it downloads the map. At scmjs.dev, Test
+  Map plays it in a browser tab unless Preferences ▸ Testing says StarCraft.
 - The Windows zip does not register `.scm`, `.scx` and `.chk`, since nothing is installed.
   A map dragged onto `scmJS.exe` still opens.
 - On macOS the app sees a new version but cannot install it until the app is code-signed,

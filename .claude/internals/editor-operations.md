@@ -61,7 +61,19 @@ without a handle (Firefox, Safari) an entry is listed and reopens through File �
 menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.ts` (`AutoStartsDialog`),
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
-into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above. Aftermath, scm-sim, scmscx.com,
+into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above.
+**Test targets (0.8.6).** Test Map, Ctrl+F5 and the toolbar go through `services/testTargets.ts#startTest`, not
+straight to the dialog: `testMap.target` (`""` = the first `api.ui.testTarget` there is, else StarCraft;
+`"starcraft"`; a plugin id) picks StarCraft (`TestMapDialog` with `run`) or a plugin's target, whose `run` is
+called *synchronously* inside the click with a promise of `testMapBytes` (dynamically imported, off the startup
+path) — scm-sim opens its tab before anything is awaited, which a dialog's effect could not do (pop-up
+blocker). A refusal is a toast and a `logWarn`, not an error count: it is mostly a blocked pop-up. Tools gets
+Test in StarCraft + one item per target only when a target exists; Test Map Settings… is Preferences ▸ Testing
+(page `testing`), which holds the choice, StarCraft's folder rows and each target's `settings` mounted like a
+plugin Preferences page — so Testing, like a visited plugin page, stays mounted (hidden) once shown, and the
+dialog keeps a `targetSettings` map for OK / Apply / Reset. `tools.testStarCraft` is a command with no key.
+`api.document.test` still always goes to StarCraft (TrigScript's Build & Test calls it after an `await`, where
+a tab could not be opened). Aftermath, scm-sim, scmscx.com,
 Repair, Walkability, Terrain from Image, Paint, TrigEdit, TrigScript, Stamp Library and scmjs.dev are default
 plugins, all on but TrigEdit (`src/plugins/defaults.ts`); Melee Wizard and Section Explorer are installed from
 Browse Plugins.

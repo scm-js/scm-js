@@ -31,7 +31,8 @@ import {
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
 import { BUG_REPORT_BUDGET, formatLog, issueUrl, logDropped, logEntries } from "../../editor/log";
-import { pluginMenuItemsAtom, pluginOverlaysAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
+import { pluginMenuItemsAtom, pluginOverlaysAtom, pluginTestTargetsAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
+import { STARCRAFT, startTest } from "../../services/testTargets";
 import { hotkeysAtom } from "../../atoms/preferencesAtoms";
 import { shortcutOf } from "../../editor/commands";
 import type { PluginIcon } from "../../plugins/api";
@@ -198,6 +199,7 @@ function useMenus(): Menu[] {
   const t = useT();
   const open = useSetAtom(openDialogAtom);
   const pluginItems = useAtomValue(pluginMenuItemsAtom);
+  const testTargets = useAtomValue(pluginTestTargetsAtom);
   const hotkeys = useAtomValue(hotkeysAtom);
   const key = (command: string) => shortcutOf(hotkeys, command);
   const overlays = useAtomValue(pluginOverlaysAtom);
@@ -474,8 +476,13 @@ function useMenus(): Menu[] {
         dlg(msg("Check Map…"), "validateMap"),
         dlg(msg("Statistics…"), "statistics"),
         sep,
-        dlgWith(msg("Test Map"), "testMap", { run: true }, key("tools.testMap")),
-        dlg(msg("Test Map Settings…"), "testMap"),
+        // Test Map goes where Preferences ▸ Testing says; each place also has an item of its own once there is more than one.
+        { kind: "item", label: msg("Test Map"), shortcut: key("tools.testMap"), onSelect: () => { startTest(store); } },
+        ...(testTargets.length > 0 ? [
+          { kind: "item", label: msg("Test in StarCraft"), onSelect: () => { startTest(store, STARCRAFT); } } as Item,
+          ...testTargets.map((e): Item => ({ kind: "item", label: e.spec.menuLabel, pluginId: e.plugin.id, onSelect: () => { startTest(store, e.plugin.id); } })),
+        ] : []),
+        dlgWith(msg("Test Map Settings…"), "preferences", { page: "testing" }),
       ],
     },
     {

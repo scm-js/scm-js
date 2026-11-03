@@ -76,6 +76,8 @@ export const COMMANDS: readonly Command[] = [
   { id: "tools.symmetry", label: msg("Symmetry on / off"), group: "tools", defaults: ["M"] },
   { id: "tools.triggers", label: msg("Trigger Editor"), group: "tools", defaults: ["Ctrl+T"] },
   { id: "tools.testMap", label: msg("Test Map"), group: "tools", defaults: ["Ctrl+F5"], inText: true },
+  // Test Map goes where Preferences ▸ Testing says; this one is StarCraft whatever it says. No key until one is given.
+  { id: "tools.testStarCraft", label: msg("Test in StarCraft"), group: "tools", defaults: [], inText: true },
   { id: "tools.preferences", label: msg("Preferences"), group: "tools", defaults: ["Ctrl+,"], inText: true },
   { id: "window.next", label: msg("Next Map"), group: "window", defaults: ["Ctrl+Tab"], webDefaults: [], inText: true },
   { id: "window.previous", label: msg("Previous Map"), group: "window", defaults: ["Ctrl+Shift+Tab"], webDefaults: [], inText: true },

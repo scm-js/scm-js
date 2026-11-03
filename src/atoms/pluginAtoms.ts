@@ -8,7 +8,7 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import type {
-  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewCamera, MapViewPointer, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TriggerClaimSpec } from "../plugins/api";
+  BeforeBuildSpec, BuildStepSpec, ContextItemSpec, ContextMenuContext, ContextSurface, DialogSlotSpec, FileTypeSpec, FlashKind, MapButtonSpec, MapViewCamera, MapViewPointer, MapViewSpec, MapToolSpec, MapToolStopReason, MenuItemSpec, MenuPath, OverlaySpec, PanelHandle, PanelSpec, PickedObject, PickObjectKind, PluginIcon, PluginInfo, PluginManifest, DialogSlotId, PreferencesPageSpec, StatusItemSpec, TestTargetSpec, TriggerClaimSpec } from "../plugins/api";
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
@@ -518,6 +518,17 @@ export interface PluginPreferencesPageEntry {
 }
 
 export const pluginPreferencesPagesAtom = atom<PluginPreferencesPageEntry[]>([]);
+
+/* ── Test targets ───────────────────────────────────────── */
+
+/** One `api.ui.testTarget`: a place Test Map can send the map besides StarCraft, one per plugin (`services/testTargets.ts`). */
+export interface PluginTestTargetEntry {
+  key: number;
+  plugin: PluginInfo;
+  spec: TestTargetSpec;
+}
+
+export const pluginTestTargetsAtom = atom<PluginTestTargetEntry[]>([]);
 
 /* ── View flashes ───────────────────────────────────────── */
 

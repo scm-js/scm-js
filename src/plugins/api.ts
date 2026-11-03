@@ -3194,6 +3194,52 @@ export interface PreferencesPageSpec {
   reset?(): void;
 }
 
+/**
+ * Another place Tools ▸ Test Map can send the map — `ui.testTarget`. The editor's own
+ * target is StarCraft (the file written where the game lists it); a target of a plugin's
+ * is a choice beside it on Edit ▸ Preferences ▸ Testing, a Tools menu item of its own
+ * ("Test in …"), and, when the user picks it there, what Test Map, Ctrl+F5 and the
+ * toolbar's Test button do.
+ *
+ * @example
+ * api.ui.testTarget({
+ *   label: "This browser",
+ *   menuLabel: "Test in Browser",
+ *   description: "Plays the map in a tab of its own.",
+ *   run: (map) => { const tab = window.open("/play/"); void map.then((m) => m && send(tab, m)); },
+ * });
+ */
+export interface TestTargetSpec {
+  /** What the choice is called on Preferences ▸ Testing: "This browser". Translated through the plugin's catalogue. */
+  label: string;
+  /** The Tools menu item that tests here whatever the choice is: "Test in Browser". */
+  menuLabel: string;
+  /** A line under the choice saying what happens. */
+  description?: string;
+  /**
+   * Test the map. It is called inside the click or key press itself, before the map is
+   * built, so a target that opens a window can open it at once — a browser lets a click
+   * open a tab, not what follows it later. `map` resolves with the file as Save would
+   * write it (build steps run, always an archive), or null when there is none; it
+   * rejects when the build fails. A promise this returns that rejects is shown to the
+   * user as the reason the test did not start; what it resolves with is the status-bar
+   * line (nothing is shown for none).
+   */
+  run(map: Promise<TestMapFile | null>): void | Promise<string | void>;
+  /**
+   * The target's own settings, drawn under its label on Preferences ▸ Testing — the same
+   * `mount` / `apply` / `reset` as `PreferencesPageSpec`.
+   */
+  settings?: PreferencesPageSpec;
+}
+
+/** The map a test target is handed. */
+export interface TestMapFile {
+  bytes: Uint8Array;
+  /** The file name the game would list, `.scx` or `.scm`. */
+  name: string;
+}
+
 /** What a preferences page's `mount` is handed. */
 export interface PreferencesPageHost {
   readonly plugin: PluginInfo;
@@ -3481,6 +3527,12 @@ export interface UiApi {
    * Returns the registration; it leaves with `dispose()` or the plugin.
    */
   preferencesPage(spec: PreferencesPageSpec): Disposable;
+  /**
+   * A place Test Map can send the map besides StarCraft — see `TestTargetSpec`. One per
+   * plugin: a second registration takes the first one's place. Returns the registration;
+   * it leaves with `dispose()` or the plugin, and Test Map goes back to StarCraft.
+   */
+  testTarget(spec: TestTargetSpec): Disposable;
   /**
    * Take over the pointer on the map until `stop()`, Esc, a right-click, a map change
    * or another tool. One tool runs at a time — starting one stops the previous — and a

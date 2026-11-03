@@ -29,7 +29,7 @@ import { paintOverView } from "../components/viewport/paint/overView";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../atoms/preferencesAtoms";
 import {
   installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, normalizeCombo, overlayMemoryKey, overlayVisibilityMemory, pluginCodeAtom,
-  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
+  pluginBeforeBuildAtom, pluginBuildStepsAtom, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginTestTargetsAtom, pluginHotkeysAtom, pluginManifestCacheAtom, pluginMenuItemsAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom, pluginPanelsAtom, pluginFileTypesAtom, pluginStatusItemsAtom, pluginTriggerClaimsAtom, type PluginTriggerClaim,
   pluginRuntimesAtom, setOverlayVisibleAtom, viewFlashesAtom, type ViewFlash,
   type BusyBox, type CachedManifest, type MapPickKind, type MapPickResult, type PluginInstall, type PluginRuntime, type TitleBox, type MaximizedBox,
 } from "../atoms/pluginAtoms";
@@ -2522,6 +2522,12 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         // One page per plugin: a second registration takes the first one's place.
         store.set(pluginPreferencesPagesAtom, [...store.get(pluginPreferencesPagesAtom).filter((e) => e.plugin.id !== info.id), { key, plugin: info, spec }]);
         return bag.add(() => store.set(pluginPreferencesPagesAtom, store.get(pluginPreferencesPagesAtom).filter((e) => e.key !== key)), "preferences");
+      },
+      testTarget: (spec) => {
+        const key = nextContributionKey();
+        // One target per plugin, as with a Preferences page.
+        store.set(pluginTestTargetsAtom, [...store.get(pluginTestTargetsAtom).filter((e) => e.plugin.id !== info.id), { key, plugin: info, spec }]);
+        return bag.add(() => store.set(pluginTestTargetsAtom, store.get(pluginTestTargetsAtom).filter((e) => e.key !== key)));
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),

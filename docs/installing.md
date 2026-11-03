@@ -24,10 +24,11 @@ is a download, and File ▸ Open Recent asks for the file again.
 
 The hosted editor, the nightly and the documentation site count visits, and the editor
 counts which of its features are used: the name of a dialog that opened, the layer an edit
-was on, the kind of file a map was saved as. They never send a map, its name, a file name
-or anything you typed, and set no cookies. Preferences ▸ General ▸ Privacy turns the
-counting off, and the site's [privacy page](https://scmjs.dev/privacy.html) says exactly
-what is sent. The desktop app and a copy you host yourself count nothing.
+was on, the type of a unit placed, the tileset and size of a map opened, the kind of file
+a map was saved as. They never send the map itself, its name, a file name or anything you
+typed, and set no cookies. Preferences ▸ General ▸ Privacy turns the counting off, and the
+site's [privacy page](https://scmjs.dev/privacy.html) says exactly what is sent. The
+desktop app and a copy you host yourself count nothing.
 
 ## The desktop app
 

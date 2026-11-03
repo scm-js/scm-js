@@ -61,6 +61,8 @@ export const placementOptionsAtom = atomWithStorage<PlacementOptions>("scmjs.pla
 export const activeDoodadAtom = atom<number>(-1);
 /** Palette category the doodad grid shows; "" = the tileset's first. */
 export const doodadCategoryAtom = atom<string>("");
+/** The doodad palette's search text, kept across layer switches; one for the editor, not per map. */
+export const doodadSearchAtom = atom<string>("");
 /** Whether a click on the map places `activeDoodadAtom` (armed by the palette, disarmed by Esc / right-click). */
 export const doodadPlacingAtom = atom<boolean>(false);
 /** Indices into `scenario.doodads` of the selected doodads; cleared whenever the list is edited under it. */

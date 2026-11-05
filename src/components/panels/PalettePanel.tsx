@@ -134,7 +134,7 @@ function DoodadPalette() {
   const [options, setOptions] = useAtom(doodadPlacementAtom);
   const [owner, setOwner] = useAtom(unitOwnerAtom);
   const [thumbSize, setThumbSize] = useAtom(doodadThumbSizeAtom);
-  const thumb = DOODAD_THUMB_SIZES[thumbSize];
+  const thumb = DOODAD_THUMB_SIZES[thumbSize] ?? DOODAD_THUMB_SIZES.small;
   const scenario = useAtomValue(scenarioAtom);
   const { loaded, catalogue } = useDoodadTools();
   const { loaded: assets } = useUnitAssets();

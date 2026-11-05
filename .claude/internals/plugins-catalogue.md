@@ -606,7 +606,13 @@ the call, the old Tools item and the form on its own page come back (`src/target
 (2026-11-05) `test`, `testCopies` and `debug` — what TrigScript 4's in-game tests, tests of several players and
 debugger call: they sat on the plugin's and the engine's `trigscript-4` branches from 2026-10-16 until then, so
 TrigScript 4.0–4.1 found them missing and hid those features; each needs a play page that answers it
-(`status().tests` / `copies` / `debug`), i.e. a `/play/` deploy from scm-sim after c3f9083. The timeline's types are a copy of scm-sim's
+(`status().tests` / `copies` / `debug`), i.e. a `/play/` deploy from scm-sim after c3f9083. Since 0.14.0
+(2026-11-05) Tools ▸ Debug Triggers in Browser (`src/debug.ts`, logic in `src/debugModel.ts`): the play page framed
+in a bottom panel (`ui.panel({ dock: "bottom", height: 440 })` — the host honours `height` for a bottom panel, though
+`PanelSpec.height`'s comment says floating only) and handed the built map with `debug: true` (scm-sim
+`web/handoff.ts`: copies, passes, rewound, frame back; pause / resume / step / pass / seek in). The built map's TRIG
+rows are matched to the editor's by bytes in the plugin, so no host API was added; rows a build step added open
+nothing. Needs a `/play/` deploy from scm-sim after 54f5aae. The timeline's types are a copy of scm-sim's
 `src/analysis/timeline.ts`; `ReplayTimeline.version` says which form (2, from plugin 0.2.0's contract: a `died` event names the unit the game credited with the kill; 3, from 0.3.0's: `check.parted`, the frame from which the game the engine played is no longer the replay's, the engine having taken replays from 1.18 and Remastered by rewriting them in 1.16.1's form). Nothing in the host's API was added for it.
 
 

@@ -79,6 +79,12 @@ the scrollbar's width cannot fail. `rulers.spec.ts` (the rulers once stretched p
 by the scrollbar's 10px) drops that argument with a file-level
 `test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } })` — a worker option,
 so it cannot go in a `describe`. Checked against the unfixed code: across/down came back 10.
+macOS overlays its scrollbars (no width, so `scrollbars: true` failed there, #111), and a
+`::-webkit-scrollbar` width alone does not help: Chromium ignores the pseudo-element when
+`scrollbar-width` / `scrollbar-color` are set, which `base.css` does on `*`. The spec sets
+both back to `auto` on `.scroller` with `addStyleTag`, and the styled scrollbar takes space
+everywhere. `--enable-features=OverlayScrollbar` emulates overlay scrollbars on Linux: the
+old spec failed under it, the new one passes, and still fails (10) on the unfixed rulers.
 
 Timings on an M-series laptop: 100 tests, ~18 s, 4 skipped (the two payload dialogs × two
 languages). `@playwright/test` is a devDependency; its `playwright` dependency is also what

@@ -13,6 +13,13 @@ test("the rulers are as long as the map view, so a tile's mark sits beside the t
   await editor.dismissGameDataOffer();
 
   const page = editor.page;
+  // Where scrollbars overlay the content (macOS by default) they take no space and there is
+  // nothing to test. A styled ::-webkit-scrollbar always takes space, but the app's
+  // scrollbar-width / scrollbar-color win over it in Chromium, so set those back to auto.
+  await page.addStyleTag({
+    content: `.scroller { scrollbar-width: auto; scrollbar-color: auto; }
+      .scroller::-webkit-scrollbar { width: 10px; height: 10px; }`,
+  });
   await expect.poll(() => page.evaluate(() => {
     const scroller = document.querySelector<HTMLElement>(".scroller")!;
     const top = document.querySelector<HTMLCanvasElement>(".ruler.top canvas")!.getBoundingClientRect();

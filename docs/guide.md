@@ -929,9 +929,28 @@ How the map is played is set under *This browser* on **Edit ▸ Preferences ▸ 
   name), and for melee the number of **computers** and their race. Where the map fixes a
   slot's race or has fewer places, the map's settings win.
 
-> **Note.** Testing in the browser comes with the scm-sim plugin and appears only in the
-> editor at scmjs.dev, not in the desktop app or an editor hosted elsewhere. There, Test Map
-> goes to StarCraft and Preferences ▸ Testing has no choice to make.
+**Debugging triggers.** **Tools ▸ Debug Triggers in Browser** plays the map in a panel
+under the map instead of a tab, always with the map's own settings, and shows what its
+triggers do while you play:
+
+- **Pause**, **Step Frame**, **Next Pass** and **Previous Pass**. A *pass* is one time the
+  game runs the triggers: every 31 frames, or more often while Waits are running out.
+  Going back replays your own orders, so stepping forward again reaches the same game;
+  giving an order after going back plays on from there instead.
+- A timeline with a column for each pass: how many triggers fired (green), were held at an
+  action such as a Wait (amber), or stopped at a condition (grey). Click a column to see
+  that pass.
+- The triggers of the selected pass, each with what happened to it: *fired*, *held at
+  action 2: Wait*, *condition 2 did not hold: Deaths*. The game stops checking a trigger's
+  conditions at the first that does not hold, so that is the one named. Click a trigger to
+  open it in the Trigger Editor. Triggers a build step added, such as a TrigScript
+  program's, are listed but have no row of their own to open.
+
+Run the command again to rebuild the map and start over in the same panel.
+
+> **Note.** Testing and debugging in the browser come with the scm-sim plugin and appear
+> only in the editor at scmjs.dev, not in the desktop app or an editor hosted elsewhere.
+> There, Test Map goes to StarCraft and Preferences ▸ Testing has no choice to make.
 
 ### Saving
 
@@ -1137,7 +1156,7 @@ come installed and on; a few more are a click away in **Plugins ▸ Browse Plugi
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | On | File ▸ Open Replay… | Opens replays over their map; see [Replays](#replays) |
 | [Paint](https://github.com/scm-js/plugin-paint) | On | Tools ▸ Paint… (Ctrl+Shift+P) | Lines, shapes, spray and text, from the palette's pick |
 | [Repair](https://github.com/scm-js/plugin-repair) | On | Tools ▸ Repair Map… | Repairs damaged and protected maps as they open |
-| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test in Browser | Plays the map on scmjs.dev/play |
+| [scm-sim](https://github.com/scm-js/plugin-scm-sim) | On | Tools ▸ Test in Browser, Debug Triggers in Browser | Plays the map on scmjs.dev/play, or under the map with its triggers shown |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | On | Account menu | Your [scmjs.dev account](#your-scmjsdev-account) |
 | [scmscx.com](https://github.com/scm-js/plugin-scm-scx) | On | File ▸ Find on scmscx.com… | Searches the scmscx.com map archive |
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | On | Tools ▸ Stamp Library… (Ctrl+Shift+L) | Pieces of map kept across maps |
@@ -1170,9 +1189,9 @@ A few that need more than a line:
 - **Timelapse** records one frame per change and plays the recording back with a box
   around each change. Export it as a GIF or a WebM video. Opening the same file again
   carries on the same recording.
-- **scm-sim** is the game engine behind the play page. Besides Test in Browser, it is what
-  Aftermath and Walkability use to have the game play a replay or walk a map. It works
-  only in the editor at scmjs.dev.
+- **scm-sim** is the game engine behind the play page. Besides Test in Browser and Debug
+  Triggers in Browser, it is what Aftermath and Walkability use to have the game play a
+  replay or walk a map. It works only in the editor at scmjs.dev.
 ![The Paint panel, drawing a line of the terrain palette's pick](images/paint.webp)
 
 Each plugin's own README, linked in the table, has the details.

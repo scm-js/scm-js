@@ -77,6 +77,11 @@ export const test = base.extend<{ editor: Editor }, { formats: Formats }>({
       return route.continue();
     });
     await page.addInitScript(() => {
+      // The startup check for plugin updates runs five seconds after the plugins start and asks the
+      // registry and GitHub, which a test cannot reach: each refused request is a logged error, so a
+      // test still running then failed. Marked as done just now, it does not run (a test that wants
+      // updates presses Check all for updates).
+      if (!localStorage.getItem("scmjs.plugin-updates")) localStorage.setItem("scmjs.plugin-updates", JSON.stringify({ at: Date.now() }));
       for (const name of ["showOpenFilePicker", "showSaveFilePicker"]) {
         delete (window as unknown as Record<string, unknown>)[name];
         delete (Window.prototype as unknown as Record<string, unknown>)[name];

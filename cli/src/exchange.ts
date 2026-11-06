@@ -1,0 +1,87 @@
+/**
+ * `scmjs map triggers export|import` and `scmjs map strings export|import`: a map's triggers and strings as files,
+ * the forms the editor trades with SCMDraft and TrigEdit — text triggers, `.trg` records, `<index><TAB><text>` strings
+ * — so they can live beside the map in version control, be diffed and edited, and go back in. Writing the map back is
+ * `writeBack`, which keeps the archive's other members and how the scenario was compressed.
+ */
+import { writeFile } from "node:fs/promises";
+import { TriggerTextError } from "../../src/formats/triggers/text";
+import type { OpenedMap } from "../../src/editor/mapFile";
+import { writeMapBytes } from "../../src/editor/mapFile";
+import { applyBriefing, applyTriggers, readBriefing, readTriggers } from "../../src/editor/triggers";
+import { applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggerFormatOf, triggersToText } from "../../src/editor/exchange";
+import { defaultSaveOptions, formatOf } from "../../src/editor/save";
+import { CliError } from "./ui";
+
+export interface TriggerExport {
+  /** How many triggers went out. */
+  count: number;
+  /** The text form, or null when the file is `.trg`. */
+  text: string | null;
+  /** The `.trg` records, or null for text. */
+  bytes: Uint8Array | null;
+}
+
+/** The map's triggers (or its briefing) as text, or as `.trg` records when `fileName` ends in `.trg`. */
+export function exportTriggers(doc: OpenedMap, fileName: string | null, briefing = false): TriggerExport {
+  const triggers = briefing ? readBriefing(doc.scenario) : readTriggers(doc.scenario);
+  if (fileName && triggerFormatOf(fileName) === "trg") return { count: triggers.length, text: null, bytes: encodeTrg(triggers) };
+  return { count: triggers.length, text: triggersToText(doc.scenario, triggers, briefing), bytes: null };
+}
+
+export interface TriggerImport { before: number; after: number; read: number }
+
+/**
+ * Replace the map's triggers (or briefing) with a file's — text or `.trg` by extension — or add them after the
+ * map's own with `append`. Text the map cannot resolve fails with its line, and nothing changes.
+ */
+export function importTriggers(doc: OpenedMap, fileName: string, bytes: Uint8Array, { briefing = false, append = false } = {}): TriggerImport {
+  let read;
+  try {
+    read = readTriggerFile(doc.scenario, fileName, bytes, briefing);
+  } catch (e) {
+    if (e instanceof TriggerTextError) throw new CliError(`${fileName}, ${e.message.replace(/^Line (\d+): /, "line $1: ")}`, "The text form is the trigger window's; docs.scmjs.dev/triggers lists every condition and action.");
+    throw new CliError(`${fileName} is not a trigger file this can read: ${e instanceof Error ? e.message : e}`);
+  }
+  const current = briefing ? readBriefing(doc.scenario) : readTriggers(doc.scenario);
+  const next = append ? [...current, ...read] : read;
+  if (briefing) applyBriefing(doc.scenario, next); else applyTriggers(doc.scenario, next);
+  return { before: current.length, after: next.length, read: read.length };
+}
+
+/** The string table as `<index><TAB><text>` lines. */
+export function exportStrings(doc: OpenedMap): { count: number; text: string } {
+  const text = formatStringTable(doc.scenario.strings);
+  return { count: text === "" ? 0 : text.trimEnd().split("\n").length, text };
+}
+
+export interface StringImportResult { replaced: number; added: number; unchanged: number }
+
+/** Set the strings a file names, in place by index; a line that is not `<index><TAB><text>` fails the import. */
+export function importStrings(doc: OpenedMap, fileName: string, text: string): StringImportResult {
+  const parsed = parseStringTable(text);
+  if (parsed.errors.length > 0) {
+    const first = parsed.errors[0];
+    throw new CliError(`${fileName}, line ${first.line}: ${first.message}${parsed.errors.length > 1 ? ` (and ${parsed.errors.length - 1} more)` : ""}`, "Each line is the string's number, a tab, and its text; # starts a comment.");
+  }
+  const { replaced, added } = applyStringImport(doc.scenario, parsed.entries);
+  return { replaced, added, unchanged: parsed.entries.length - replaced - added };
+}
+
+/**
+ * Write the map to `outPath`, or over the file it came from. The format follows the name's extension (the input's
+ * when the name has none the editor writes); the archive's other members come along; the scenario is compressed
+ * and encrypted as it was opened, as Save As would — the editor's own rule (`defaultSaveOptions`).
+ */
+export async function writeBack(doc: OpenedMap, inputPath: string, outPath: string | null): Promise<{ path: string; bytes: number }> {
+  const path = outPath ?? inputPath;
+  const { format: _format, ...asOpened } = defaultSaveOptions(doc.scenario, doc.origin ?? null, path);
+  const format = formatOf(path) ?? formatOf(inputPath) ?? "scx";
+  const bytes = await writeMapBytes(doc.scenario, { format, extras: doc.extras, stored: doc.stored ?? null, options: asOpened });
+  try {
+    await writeFile(path, bytes);
+  } catch (e) {
+    throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
+  }
+  return { path, bytes: bytes.length };
+}

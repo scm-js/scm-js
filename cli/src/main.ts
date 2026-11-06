@@ -2,11 +2,15 @@
  * scmjs: StarCraft: Brood War maps, replays and bots from the command line. One command, a noun for each kind of
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
+import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
+import { completionScript, SHELLS, type Shell } from "./completion";
+import { diffMaps, printDiff } from "./diff";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { openInScmjs } from "./open";
@@ -15,6 +19,8 @@ import { printReplayInfo, replayReport } from "./replay";
 import { CliError, dot, mark, pc, plural, print, rows, size } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
+/** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
+const TERM_WIDTH = 28;
 
 /** Runs `fn` on each file in turn; a file that fails is said and the rest go on. JSON: one value, or a list for several. */
 async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => Promise<{ data: unknown; lines: string[] }>, rule = true): Promise<unknown[]> {
@@ -83,10 +89,18 @@ export const program = new Command("scmjs")
     styleSubcommandText: (s) => pc.cyan(s),
     styleArgumentText: (s) => pc.yellow(s),
     styleOptionText: (s) => pc.green(s),
-    // A noun lists what it does (`map info|check|open`), so the overview shows every command at once.
+    // A noun lists what it does (`map info|check|open`), so the overview shows every command at once — up to a
+    // width that keeps the descriptions beside them (`map info|check|open|diff|…`); the noun's own help has the rest.
     subcommandTerm: (cmd) => {
       const subs = cmd.commands.map((c) => c.name()).filter((n) => n !== "help");
-      return subs.length ? `${cmd.name()} ${subs.join("|")}` : new Help().subcommandTerm(cmd).replace(" [options]", "");
+      if (!subs.length) return new Help().subcommandTerm(cmd).replace(" [options]", "");
+      let term = cmd.name();
+      for (const [i, sub] of subs.entries()) {
+        const next = `${term}${i ? "|" : " "}${sub}`;
+        if (next.length > TERM_WIDTH - 2 && i < subs.length - 1) return `${term}|…`;
+        term = next;
+      }
+      return term;
     },
     // The overview has the banner (banner.ts); a command's own help is commander's.
     formatHelp: (cmd, helper) => (cmd.parent ? Help.prototype.formatHelp.call(helper, cmd, helper) : rootHelp(cmd, helper, VERSION)),
@@ -124,6 +138,74 @@ map.command("open").description("open a map in the scmJS app, or the editor in y
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
+
+/** A map read for a command that changes it: the input and the parsed document, or a CliError. */
+async function openForEdit(file: string) {
+  const input = await readInput(file);
+  expectKind(input, "map");
+  return { input, doc: await loadMapInput(input) };
+}
+/** `--out` for text: the file, or stdout when there is none. */
+async function emit(text: string, out: string | undefined, said: string): Promise<void> {
+  if (!out) { process.stdout.write(text); return; }
+  await writeFile(out, text);
+  print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
+}
+
+const triggers = map.command("triggers").description("a map's triggers as a text or .trg file, and back")
+  .addHelpText("after", `
+The text form is the trigger window's (docs.scmjs.dev/triggers); a .trg holds the raw records, as SCMDraft trades
+them. Text in a file beside the map can be diffed and edited, and imported back.`);
+triggers.command("export").description("the triggers as text (to stdout), or as .trg with --out x.trg").argument("<map>")
+  .option("--out <file>", "write to this file instead of stdout; .trg writes the raw records")
+  .option("--briefing", "the mission briefing's triggers instead")
+  .action(async (file: string, o: { out?: string; briefing?: boolean }) => {
+    const { doc } = await openForEdit(file);
+    const r = exportTriggers(doc, o.out ?? null, !!o.briefing);
+    if (r.bytes) { await writeFile(o.out!, r.bytes); print(`${mark.ok} ${plural(r.count, "trigger")} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
+    else await emit(r.text!, o.out, plural(r.count, "trigger"));
+  });
+triggers.command("import").description("replace the map's triggers with a text or .trg file's").argument("<map>").argument("<file>", "the triggers: text, or .trg")
+  .option("--out <map>", "write the result here instead of over the map")
+  .option("--append", "add the file's triggers after the map's own instead of replacing them")
+  .option("--briefing", "the mission briefing's triggers instead")
+  .action(async (file: string, from: string, o: { out?: string; append?: boolean; briefing?: boolean }) => {
+    const { input, doc } = await openForEdit(file);
+    const r = importTriggers(doc, from, new Uint8Array(await readFile(from)), { briefing: !!o.briefing, append: !!o.append });
+    const w = await writeBack(doc, input.path, o.out ?? null);
+    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.before, "trigger")} ${pc.dim("→")} ${plural(r.after, "trigger")}${o.append ? pc.dim(` (${r.read} added)`) : ""}${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
+const strings = map.command("strings").description("a map's strings as a text file, and back")
+  .addHelpText("after", `
+One line per string: its number, a tab, its text. Colour codes are written <XX>. Importing sets the numbered
+strings in place and adds any past the end; nothing is renumbered, since triggers and locations hold the numbers.`);
+strings.command("export").description("the strings as <number><TAB><text> lines (to stdout)").argument("<map>")
+  .option("--out <file>", "write to this file instead of stdout")
+  .action(async (file: string, o: { out?: string }) => {
+    const { doc } = await openForEdit(file);
+    const r = exportStrings(doc);
+    await emit(r.text, o.out, plural(r.count, "string"));
+  });
+strings.command("import").description("set the map's strings from such a file").argument("<map>").argument("<file>")
+  .option("--out <map>", "write the result here instead of over the map")
+  .action(async (file: string, from: string, o: { out?: string }) => {
+    const { input, doc } = await openForEdit(file);
+    const r = importStrings(doc, from, await readFile(from, "utf8"));
+    const w = await writeBack(doc, input.path, o.out ?? null);
+    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.replaced, "string")} replaced, ${r.added} added, ${r.unchanged} unchanged${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
+map.command("diff").description("what changed between two maps").argument("<a>").argument("<b>").addOption(json)
+  .option("--all", "list every item; by default a long list is cut at 20")
+  .addHelpText("after", `
+Exits 1 when the maps differ, 0 when they are the same, like diff.`)
+  .action(async (a: string, b: string, o: { json?: boolean; all?: boolean }) => {
+    const [x, y] = await Promise.all([openForEdit(a), openForEdit(b)]);
+    const d = diffMaps({ name: x.input.name, doc: x.doc }, { name: y.input.name, doc: y.doc });
+    print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
+    if (!d.same) process.exitCode = 1;
+  });
 
 const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");
 replay.command("info").description("who played, on what map, for how long, at what APM").argument("<replays...>").addOption(json)
@@ -179,6 +261,16 @@ bot.command("build").description("out/<key>.scmbot, to add on the play page")
   .action(async () => { await runBot(["build"]); });
 bot.command("update").description("the newest toolchain, the one the play page expects")
   .action(async () => { await updateBot(); });
+
+program.command("completion", { hidden: true }).description("a completion script for your shell").argument("<shell>", SHELLS.join("|"))
+  .addHelpText("after", `
+  eval "$(scmjs completion bash)"                        # in ~/.bashrc
+  scmjs completion zsh > ~/.zsh/completions/_scmjs       # a folder on $fpath
+  scmjs completion fish > ~/.config/fish/completions/scmjs.fish`)
+  .action((shell: string) => {
+    if (!(SHELLS as readonly string[]).includes(shell)) throw new CliError(`${shell} is not a shell this knows`, `One of ${SHELLS.join(", ")}.`, 2);
+    process.stdout.write(completionScript(program, shell as Shell));
+  });
 
 program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
   .action(async (o: { json?: boolean }) => {

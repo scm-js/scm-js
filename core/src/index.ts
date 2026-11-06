@@ -15,7 +15,7 @@
 // ── Files ──
 export { openMapBytes, writeMapBytes, type OpenedMap, type WriteOptions } from "../../src/editor/mapFile";
 export { loadMap, readMembers, readExtras, looksLikeMpq, MapLoadError, SCENARIO_PATH, type LoadedMap, type MemberInfo, type StoredMembers, type ArchiveMembers, type ArchiveCompression } from "../../src/formats/mpq/scm";
-export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, formatOf, planSave, type SavePlan, type PlannedSection, type PlannedExtra, type SectionFate, extraKind, type ExtraKind, formatBytes } from "../../src/editor/save";
+export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, formatOf, defaultSaveOptions, planSave, type SavePlan, type PlannedSection, type PlannedExtra, type SectionFate, extraKind, type ExtraKind, formatBytes } from "../../src/editor/save";
 export { type BuiltBy, type BuildManifest, readBuildManifest, restoreBuiltMap, type Restored, BUILD_SOURCE_MEMBER, BUILD_MANIFEST_MEMBER } from "../../src/editor/mapBuild";
 
 // ── The scenario ──
@@ -45,7 +45,7 @@ export { findInScenario, FIND_KINDS, type FindKind, type FindOptions, type FindR
 // ── Triggers and the briefing ──
 export { readTriggers, applyTriggers, readBriefing, applyBriefing, newTrigger, newCondition, newAction, triggerNames, triggerUsage, isPreserved, setPreserved, fingerprintTrigger, sameTriggers, TRIGGER_OWNERS } from "../../src/editor/triggers";
 export { triggersToText, triggersFromText, readTriggerFile, triggerFormatOf, type TriggerFileFormat, encodeTrg, decodeTrg } from "../../src/editor/exchange";
-export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
+export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, TriggerTextError, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
 export { CONDITION_DEFS, ACTION_DEFS, BRIEFING_ACTION_DEFS, conditionDef, conditionDefByName, actionDef, actionDefByName, type ConditionDef, type ActionDef, type ArgDef, type ArgKind, CHOICES, choiceLabel, choiceValue, AI_SCRIPT_NAMES, aiScriptName, aiScriptByName } from "../../src/data/triggerDefs";
 
 // ── Strings and text ──
@@ -67,7 +67,7 @@ export { placeStartLocations, idealStarts, playableCount } from "../../src/edito
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";
 export { UNIT_NAMES, UNIT_TYPE_COUNT, START_LOCATION, unitName, UPGRADE_NAMES, TECH_NAMES, upgradeName, techName, type RaceKey } from "../../src/data/units";
-export { PLAYER_TYPES, PLAYER_RACES, PLAYER_COLORS, playerColorHex, type PlayerColor } from "../../src/data/players";
+export { PLAYER_TYPES, PLAYER_RACES, PLAYER_COLORS, playerTypeLabel, playerRaceLabel, playerColorHex, type PlayerColor } from "../../src/data/players";
 
 // ── Plugins ──
 export { validateManifest, resolveIcon } from "../../src/plugins/loader";

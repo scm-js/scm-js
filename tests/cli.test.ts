@@ -196,7 +196,10 @@ describe("scmjs: the overview", () => {
   it("lists every command in its group, and fits a 24-row terminal", () => {
     const lines = help();
     for (const group of ["Maps and replays:", "Plugins and bots:", "This tool:"]) expect(lines).toContain(group);
-    for (const cmd of program.commands) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
+    for (const cmd of program.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden)) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
+    // A noun with more verbs than fit beside its description shows the first few and an ellipsis; its own help has them all.
+    expect(lines.some((l) => l.startsWith("  map info|check|open|…"))).toBe(true);
+    expect(lines.some((l) => l.includes("completion"))).toBe(false);
     expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
     expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   -h, --help");
     expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);

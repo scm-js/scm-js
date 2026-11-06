@@ -1,17 +1,19 @@
 /**
  * The `scmjs` command's pieces (cli/src, docs/cli.md): what kind a file is, a map's report and its lines, Check Map's
- * lines, and StarCraft text in a terminal. picocolors may write colour (it does under CI), so lines are compared
- * without it.
+ * lines, StarCraft text in a terminal, and the overview's banner. picocolors may write colour (it does under CI), so
+ * lines are compared without it.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { newestLine, olderThan } from "../cli/src/about";
+import { banner, GLOBE, GLOBE_ASCII } from "../cli/src/banner";
 import { dockerArgs } from "../cli/src/bot";
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
 import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceImports } from "../cli/src/plugin";
 import { devPluginSpec } from "../src/plugins/devLink";
+import { program } from "../cli/src/main";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
 import { dot, gameLines, gameText, rows, table, visible } from "../cli/src/ui";
 import { TEST_MAPS_DIR } from "./support/maps";
@@ -169,5 +171,41 @@ describe("scmjs about", () => {
     expect(visible(newestLine("0.8.9", "0.8.9"))).toBe("this one");
     expect(visible(newestLine("0.9.0", "0.8.9"))).toBe("0.8.9 on npm");
     expect(visible(newestLine("0.8.9", null))).toBe("could not ask npm");
+  });
+});
+
+describe("scmjs: the overview", () => {
+  const text = ["scmjs 1.2.3", "scmJS on the command line", "StarCraft: Brood War maps, replays, plugins and bots"];
+  const help = (cmd = program) => visible(cmd.helpInformation()).replace(/\n$/, "").split("\n");
+
+  it("draws the globe beside the title, within 80 columns", () => {
+    for (const ascii of [false, true]) {
+      const lines = plain(banner(text, { ascii }));
+      expect(lines).toHaveLength(GLOBE.length);
+      expect(lines.some((l) => l.endsWith("   scmjs 1.2.3"))).toBe(true);
+      for (const l of lines) expect(l.length, l).toBeLessThanOrEqual(80);
+    }
+    expect(GLOBE_ASCII).toHaveLength(GLOBE.length);
+  });
+
+  it("falls back to ASCII where the marks do, and to the text alone in a narrow terminal", () => {
+    for (const l of [...GLOBE_ASCII, ...plain(banner(text, { ascii: true }))]) expect(l).toMatch(/^[\x20-\x7e]*$/);
+    expect(plain(banner(text, { width: 60 }))).toEqual(text);
+  });
+
+  it("lists every command in its group, and fits a 24-row terminal", () => {
+    const lines = help();
+    for (const group of ["Maps and replays:", "Plugins and bots:", "This tool:"]) expect(lines).toContain(group);
+    for (const cmd of program.commands) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
+    expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
+    expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   -h, --help");
+    expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);
+    for (const l of lines) expect(l.length, l).toBeLessThanOrEqual(80);
+  });
+
+  it("leaves a command's own help plain", () => {
+    const map = program.commands.find((c) => c.name() === "map")!;
+    expect(help(map)[0]).toBe("Usage: scmjs map [options] [command]");
+    expect(help(map).join("\n")).not.toContain(GLOBE[3].trim());
   });
 });

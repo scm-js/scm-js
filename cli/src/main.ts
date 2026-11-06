@@ -5,6 +5,7 @@
 import { relative } from "node:path";
 import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
+import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
@@ -66,7 +67,7 @@ for (const stream of [process.stdout, process.stderr]) {
   stream.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(process.exitCode ?? 0); else throw e; });
 }
 
-const program = new Command("scmjs")
+export const program = new Command("scmjs")
   .description("StarCraft: Brood War maps, replays, plugins and bots from the command line")
   .version(VERSION, "-v, --version", "print the version")
   .helpOption("-h, --help", "show help for a command")
@@ -87,17 +88,9 @@ const program = new Command("scmjs")
       const subs = cmd.commands.map((c) => c.name()).filter((n) => n !== "help");
       return subs.length ? `${cmd.name()} ${subs.join("|")}` : new Help().subcommandTerm(cmd).replace(" [options]", "");
     },
-  })
-  .addHelpText("after", () => `
-${pc.bold("Examples:")}
-  ${pc.dim("$")} scmjs info "(2)Destination.scx"       what a map or a replay holds
-  ${pc.dim("$")} scmjs map check *.scx                 Check Map on every map here
-  ${pc.dim("$")} scmjs replay open game.rep            watch it in the editor
-  ${pc.dim("$")} scmjs plugin new "Base Check"         a plugin for the editor to start from
-  ${pc.dim("$")} scmjs bot new                         a BWAPI bot to start from, for scmjs.dev/play
-  ${pc.dim("$")} scmjs about                           this version, and where things are
-
-${pc.dim("Docs: https://docs.scmjs.dev")}`);
+    // The overview has the banner (banner.ts); a command's own help is commander's.
+    formatHelp: (cmd, helper) => (cmd.parent ? Help.prototype.formatHelp.call(helper, cmd, helper) : rootHelp(cmd, helper, VERSION)),
+  });
 
 program.command("info").description("what a map, replay or bot file holds").helpGroup("Maps and replays:").argument("<files...>", "maps (.scm .scx .chk), replays (.rep) or bots (.scmbot)").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, async (input) => {
@@ -193,11 +186,14 @@ program.command("about").description("this version, any newer one, and links").h
     print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
   });
 
-try {
-  // `scmjs` on its own is a request for the overview, not a mistake.
-  if (process.argv.length <= 2) program.outputHelp();
-  else await program.parseAsync();
-} catch (e) {
-  if (e instanceof CliError) { fail(e); process.exitCode = e.exitCode; }
-  else { process.stderr.write(`${mark.error} ${pc.red("Something went wrong")}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim("  Please report it: https://github.com/scm-js/scm-js/issues")}\n`); process.exitCode = 1; }
+// tests/cli.test.ts imports the program to read its help; only the command runs it.
+if (!process.env.VITEST) {
+  try {
+    // `scmjs` on its own is a request for the overview, not a mistake.
+    if (process.argv.length <= 2) program.outputHelp();
+    else await program.parseAsync();
+  } catch (e) {
+    if (e instanceof CliError) { fail(e); process.exitCode = e.exitCode; }
+    else { process.stderr.write(`${mark.error} ${pc.red("Something went wrong")}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim("  Please report it: https://github.com/scm-js/scm-js/issues")}\n`); process.exitCode = 1; }
+  }
 }

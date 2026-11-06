@@ -13,8 +13,8 @@ scmjs info "(2)Destination.scx"
 ```
 
 Or run it without installing, with `npx`, which fetches it the first time:
-`npx @scm-js/cli info "(2)Destination.scx"`. Every command has `--help`, and
-`scmjs --help` lists them all.
+`npx @scm-js/cli info "(2)Destination.scx"`. Every command has `--help`, and `scmjs` on
+its own, or `scmjs --help`, lists them all beside the scmJS globe.
 
 To update an installed copy, run `npm install -g @scm-js/cli@latest`. `scmjs about` says
 when there is a newer version.
@@ -176,6 +176,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |
+| `cli/src/banner.ts` | The globe and the command list that `scmjs` on its own prints |
 | `core/src/index.ts` | The library's surface; the command imports from the editor only what it exports ([core.md](core.md)) |
 | `src/hooks/` (the opener hand-over) | The editor's half of the hand-over: only a page on the loopback address that opened it is listened to |
 | [@scm-js/replay](https://github.com/scm-js/replay) | The replay reader, shared with the replay viewer plugin |

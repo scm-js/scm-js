@@ -36,6 +36,7 @@ Node's type stripping) and git.
 git clone https://github.com/scm-js/scm-js
 cd scm-js
 npm install
+npm run doctor         # what this machine has and lacks, and what to run about it
 npm run dev            # http://localhost:5173
 ```
 
@@ -104,6 +105,8 @@ npm run dev               # Vite dev server
 npm run dev:site          # one origin over the editor and scm-sim (above)
 npm run build             # tsc -b (the type-check) + vite build → dist/
 npm run preview           # serve dist/ locally
+npm run verify            # what CI runs: lint, tests, build, browser tests (-- --quick: no build or browser)
+npm run doctor            # Node, packages, game data and the browser tests' Chromium on this machine
 npm run lint              # oxlint, with the React hook rules; does not type-check
 npm test                  # vitest, a few seconds, no browser
 npm run test:watch
@@ -758,10 +761,10 @@ Some scenes have their own needs:
   [ATTRIBUTION.md](../ATTRIBUTION.md#maintenance-rule): a provenance comment beside
   adapted algorithms and tables, an entry there naming the source and licence, and the
   original notice kept.
-- **Run what CI runs**: `npm run lint`, `npm test` and `npm run build`, and
-  `npm run test:e2e` after a change to the chrome. With the game data and fixture maps on
-  disk the real-data suites run too, and that is the run that counts for anything under
-  `src/formats/`.
+- **Run what CI runs**: `npm run verify` runs lint, the tests, the build and the browser
+  tests, and ends with a summary for the pull request of what passed and what could not
+  run on your machine. With the game data and fixture maps on disk the real-data suites
+  run too, and that is the run that counts for anything under `src/formats/`.
 - **Plugin API changes are additive.** `PLUGIN_API_VERSION` stays where it is for an
   addition. Document the addition in `docs/plugins.md` and with a doc comment in
   `src/plugins/api.ts`, which the reference is generated from. The example plugin at

@@ -55,6 +55,8 @@ reach, and the traps in them are not visible from the code.
 npm run dev            # Vite dev server, http://localhost:5173
 npm run dev:desktop    # the dev server + Electron against it; closing the window stops both
 npm run build          # tsc -b (type-check) + vite build
+npm run verify         # what CI runs (lint, tests, build, e2e), with a summary for the PR; -- --quick skips build + e2e
+npm run doctor         # what this machine lacks (Node, packages, game data, Chromium) and the command for each
 npm run lint           # oxlint
 npm test               # vitest run (node environment, ~2s)
 npm run test:watch

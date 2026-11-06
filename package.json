@@ -23,6 +23,8 @@
     "bundle:runtimes": "node scripts/bundle-plugin-runtimes.mjs",
     "desktop": "vite build -c desktop/vite.config.ts && electron .",
     "lint": "oxlint",
+    "verify": "node scripts/verify.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

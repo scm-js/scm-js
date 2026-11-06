@@ -3,8 +3,7 @@
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | info | map info|check|open |
 replay info|open`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
-each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot toolchain is meant to move under
-`scmjs bot`), "an impressive UX tool … not overly engineered".
+each kind of thing (`map`, `replay`, `bot`, later `plugin`), "an impressive UX tool … not overly engineered".
 
 ## Design
 
@@ -35,6 +34,15 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
   colour only when `COLORTERM` says truecolor, else drops them; replays colour player names by the replay's colours.
   `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 a missing or
   wrong-kind file. A failing file in a list is reported on stderr and the rest go on.
+
+## Bots (`cli/src/bot.ts`)
+
+`scmjs bot new|init [project]|build` = `docker run --rm -i(t) -v <cwd>:/bot -e SCMBOT_FOLDER=<folder name> [-u uid:gid,
+not on Windows] ghcr.io/scm-js/scmbot <args>` (SCMBOT_IMAGE overrides), stdio inherited, the toolchain's exit code
+passed on; `update` = `docker pull`. Says "not installed" vs "not running" from `docker --version` / `docker version`.
+The toolchain lives in the public github.com/scm-js/scmbot (its README is the guide), mirrored from scm-sim's
+native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany", Docker, Play and Bots in `about`
+(the user's ask). Known: the toolchain's own messages say `scmbot build`, not `scmjs bot build`.
 
 ## Opening (`cli/src/open.ts`)
 

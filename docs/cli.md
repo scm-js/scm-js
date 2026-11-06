@@ -1,8 +1,9 @@
 # The command line
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
-Map on any number of maps, and opens a map or replay in scmJS from a terminal. It reads
-files the way the editor does, so the two agree about every map.
+Map on any number of maps, opens a map or replay in scmJS from a terminal, and builds a
+BWAPI bot of your own for the play page. It reads files the way the editor does, so the
+two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -25,7 +26,9 @@ Or run it without installing, with `npx`, which fetches it the first time:
 | `scmjs map open <map>` | Opens the map in scmJS |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
-| `scmjs about` | This version, the desktop app if it is installed, and where the docs and source are |
+| `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
+| `scmjs bot update` | The newest bot toolchain |
+| `scmjs about` | This version, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 
 Commands that take several files take a pattern too: `scmjs map check *.scx`. A file that
 cannot be read is reported and the rest carry on.
@@ -73,6 +76,30 @@ players in their colours with race, APM and team, the map, the game's length and
 when it was played, and how much chat there was. APM is counted the way the replay viewer
 counts it: everything a player did except chat, until they left.
 
+## Bots
+
+`scmjs bot` builds a [BWAPI](https://github.com/bwapi/bwapi) 4.4.0 bot, the C++ AI modules
+of the bot tournaments, into one `.scmbot` file. You can then play against it at
+[scmjs.dev/play](https://scmjs.dev/play/): **Options → Community bots → Add a bot from a
+file…**, then choose it for a computer. It needs
+[Docker](https://docs.docker.com/get-docker/): the toolchain is a Docker image, downloaded
+the first time, which takes a few GB.
+
+Run the commands in your bot's folder:
+
+```sh
+scmjs bot init      # scmbot.json, read from the bot's Visual Studio project
+scmjs bot build     # out/<key>.scmbot
+```
+
+With no bot yet, `scmjs bot new` writes one to start from, which mines, trains workers and
+builds supply. A build needs a licence file for the bot (`LICENSE`, any licence you
+choose), since it goes into every build and is shown with the bot.
+
+`scmjs bot update` fetches the newest toolchain, the one the play page expects. The guide
+to the toolchain, with what it does for code written for Visual Studio and the fields of
+`scmbot.json`, is at [github.com/scm-js/scmbot](https://github.com/scm-js/scmbot).
+
 ## Opening files in scmJS
 
 `scmjs map open` and `scmjs replay open` open the file in the scmJS desktop app if it is
@@ -108,6 +135,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/main.ts` | The commands, their help and options, and running a command over several files |
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
+| `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |
 | `src/hooks/` (the opener hand-over) | The editor's half of the hand-over: only a page on the loopback address that opened it is listened to |
 | [@scm-js/replay](https://github.com/scm-js/replay) | The replay reader, shared with the replay viewer plugin |

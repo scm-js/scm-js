@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { dockerArgs } from "../cli/src/bot";
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
 import { gameLines, gameText, rows, table, visible } from "../cli/src/ui";
@@ -67,5 +68,15 @@ describe("scmjs: terminal text", () => {
   it("rows line up, drop empty values and keep a group's gap", () => {
     expect(plain(rows([["Map", "64 × 64"], ["Built by", null], null, ["Strings", "20"]]))).toEqual(["  Map      64 × 64", "", "  Strings  20"]);
     expect(plain(table([["1", "Human", "Terran"], ["12", "Computer", "Zerg"]]))).toEqual(["    1   Human     Terran", "    12  Computer  Zerg"]);
+  });
+});
+
+describe("scmjs bot", () => {
+  it("runs the toolchain in the bot's folder, named, as the person running it", () => {
+    expect(dockerArgs({ folder: "/home/a/ZergRush", args: ["build"], image: "img", tty: true, user: "1000:1000" }))
+      .toEqual(["run", "--rm", "-it", "-v", "/home/a/ZergRush:/bot", "-e", "SCMBOT_FOLDER=ZergRush", "-u", "1000:1000", "img", "build"]);
+    // Windows (Docker Desktop maps the files itself) and no terminal (a script, CI)
+    expect(dockerArgs({ folder: "/x/b", args: ["init", "b.vcxproj"], image: "img", tty: false, user: null }))
+      .toEqual(["run", "--rm", "-i", "-v", "/x/b:/bot", "-e", "SCMBOT_FOLDER=b", "img", "init", "b.vcxproj"]);
   });
 });

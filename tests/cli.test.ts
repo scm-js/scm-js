@@ -7,12 +7,13 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { newestLine, olderThan } from "../cli/src/about";
 import { dockerArgs } from "../cli/src/bot";
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
 import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceImports } from "../cli/src/plugin";
 import { devPluginSpec } from "../src/plugins/devLink";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
-import { gameLines, gameText, rows, table, visible } from "../cli/src/ui";
+import { dot, gameLines, gameText, rows, table, visible } from "../cli/src/ui";
 import { TEST_MAPS_DIR } from "./support/maps";
 
 /** The lines as the reader sees them, without colour. */
@@ -152,5 +153,21 @@ describe("the editor's ?plugin-dev= link", () => {
     expect(devPluginSpec("http://[::1]:8080/")).toBe("http://[::1]:8080/");
     for (const bad of [null, "", "https://127.0.0.1:5310/", "http://127.0.0.1/", "http://evil.example:5310/", "http://127.0.0.2:5310/", "http://127.0.0.1:5310/other/", "http://user@127.0.0.1:5310/", "http://127.0.0.1:5310/?x=1", "javascript:alert(1)", "http://localhost.evil.example:80/"])
       expect(devPluginSpec(bad), String(bad)).toBeNull();
+  });
+});
+
+describe("scmjs about", () => {
+  it("compares versions as numbers", () => {
+    expect(olderThan("0.8.9", "0.8.10")).toBe(true);
+    expect(olderThan("0.9.0", "0.8.10")).toBe(false);
+    expect(olderThan("0.8.9", "0.8.9")).toBe(false);
+    expect(olderThan("0.8.9-dev", "0.8.9")).toBe(false);
+    expect(olderThan("1.0.0", "1.0.1+build")).toBe(true);
+  });
+  it("offers the update only when npm has a newer version", () => {
+    expect(visible(newestLine("0.8.9", "0.9.0"))).toBe(`0.9.0${visible(dot)}npm install -g @scm-js/cli@latest`);
+    expect(visible(newestLine("0.8.9", "0.8.9"))).toBe("this one");
+    expect(visible(newestLine("0.9.0", "0.8.9"))).toBe("0.8.9 on npm");
+    expect(visible(newestLine("0.8.9", null))).toBe("could not ask npm");
   });
 });

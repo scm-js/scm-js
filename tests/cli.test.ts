@@ -74,9 +74,9 @@ describe("scmjs: terminal text", () => {
 describe("scmjs bot", () => {
   it("runs the toolchain in the bot's folder, named, as the person running it", () => {
     expect(dockerArgs({ folder: "/home/a/ZergRush", args: ["build"], image: "img", tty: true, user: "1000:1000" }))
-      .toEqual(["run", "--rm", "-it", "-v", "/home/a/ZergRush:/bot", "-e", "SCMBOT_FOLDER=ZergRush", "-u", "1000:1000", "img", "build"]);
+      .toEqual(["run", "--rm", "-it", "-v", "/home/a/ZergRush:/bot", "-e", "SCMBOT_FOLDER=ZergRush", "-e", "SCMBOT_COMMAND=scmjs bot", "-u", "1000:1000", "img", "build"]);
     // Windows (Docker Desktop maps the files itself) and no terminal (a script, CI)
     expect(dockerArgs({ folder: "/x/b", args: ["init", "b.vcxproj"], image: "img", tty: false, user: null }))
-      .toEqual(["run", "--rm", "-i", "-v", "/x/b:/bot", "-e", "SCMBOT_FOLDER=b", "img", "init", "b.vcxproj"]);
+      .toEqual(["run", "--rm", "-i", "-v", "/x/b:/bot", "-e", "SCMBOT_FOLDER=b", "-e", "SCMBOT_COMMAND=scmjs bot", "img", "init", "b.vcxproj"]);
   });
 });

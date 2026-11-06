@@ -17,13 +17,14 @@ export function dockerVersion(): string | null {
 }
 
 /**
- * `docker run`'s arguments: the folder mounted at /bot, its name given for `new` (the toolchain sees only /bot), and
- * on Linux and macOS the files written as the person running this rather than as root.
+ * `docker run`'s arguments: the folder mounted at /bot, its name given for `new` (the toolchain sees only /bot), this
+ * command's name for the toolchain's messages, and on Linux and macOS the files written as the person running this
+ * rather than as root.
  */
 export function dockerArgs(o: { folder: string; args: string[]; image: string; tty: boolean; user: string | null }): string[] {
   return [
     "run", "--rm", ...(o.tty ? ["-it"] : ["-i"]),
-    "-v", `${o.folder}:/bot`, "-e", `SCMBOT_FOLDER=${basename(o.folder)}`,
+    "-v", `${o.folder}:/bot`, "-e", `SCMBOT_FOLDER=${basename(o.folder)}`, "-e", "SCMBOT_COMMAND=scmjs bot",
     ...(o.user ? ["-u", o.user] : []),
     o.image, ...o.args,
   ];

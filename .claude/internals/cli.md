@@ -42,7 +42,7 @@ not on Windows] ghcr.io/scm-js/scmbot <args>` (SCMBOT_IMAGE overrides), stdio in
 passed on; `update` = `docker pull`. Says "not installed" vs "not running" from `docker --version` / `docker version`.
 The toolchain lives in the public github.com/scm-js/scmbot (its README is the guide), mirrored from scm-sim's
 native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany", Docker, Play and Bots in `about`
-(the user's ask). Known: the toolchain's own messages say `scmbot build`, not `scmjs bot build`.
+(the user's ask). `SCMBOT_COMMAND=scmjs bot` makes the toolchain's messages say `scmjs bot build` (scmbot#1).
 
 ## Opening (`cli/src/open.ts`)
 

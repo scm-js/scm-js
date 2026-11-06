@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   ChevronDown,
@@ -35,6 +35,7 @@ import {
   doodadCategoryAtom,
   doodadPlacementAtom,
   doodadPlacingAtom,
+  doodadSearchAtom,
   doodadThumbSizeAtom,
   fogModeAtom,
   fogPlayersAtom,
@@ -138,12 +139,19 @@ function DoodadPalette() {
   const scenario = useAtomValue(scenarioAtom);
   const { loaded, catalogue } = useDoodadTools();
   const { loaded: assets } = useUnitAssets();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useAtom(doodadSearchAtom);
   const colors = scenario?.playerColors;
   const categories = catalogue.categories;
   const current = categories.find((c) => c.name === category) ?? categories[0] ?? null;
   const pick = (id: number) => { setActive(id); setPlacing(true); };
   const activeDef = catalogue.byId.get(active);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const revealActive = useRef(true);
+  const clearSearch = () => {
+    revealActive.current = true;
+    setQuery("");
+    if (activeDef) setCategory(activeDef.category);
+  };
   const overlayLabel = (d: DoodadDef) => doodadOverlayLabel(assets, d);
 
   const q = query.trim().toLowerCase();
@@ -157,6 +165,11 @@ function DoodadPalette() {
     };
     return categories.map((c) => ({ ...c, doodads: c.doodads.filter(matches) })).filter((c) => c.doodads.length > 0);
   }, [q, current, categories, assets]);
+  useEffect(() => {
+    if (!revealActive.current || categories.length === 0) return;
+    revealActive.current = false;
+    scrollRef.current?.querySelector(".doodad.selected")?.scrollIntoView({ block: "nearest" });
+  }, [shown, categories]);
   const matchCount = shown.reduce((n, c) => n + c.doodads.length, 0);
   const option = (key: keyof typeof options, label: string, title: string) => (
     <Check label={label} title={title} checked={options[key]} onChange={(e) => setOptions({ ...options, [key]: e.target.checked })} />
@@ -180,12 +193,12 @@ function DoodadPalette() {
             className="input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            onKeyDown={(e) => { if (e.key === "Escape") clearSearch(); }}
             placeholder={t("Search doodads… (ramp, bridge, #12)")}
             aria-label={t("Search doodads")}
             disabled={categories.length === 0}
           />
-          {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label={t("Clear search")}><X size={11} /></button>}
+          {query !== "" && <button className="clear" onClick={clearSearch} aria-label={t("Clear search")}><X size={11} /></button>}
         </div>
         <select
           className="select grow"
@@ -211,7 +224,7 @@ function DoodadPalette() {
         {option("snapToGrid", t("Snap to grid"), t("Keep the doodad's left column on an even tile, the two-tile isometric grid StarEdit places every doodad on and the requirement tables are drawn for. This is not the View ▸ Grid Settings spacing — it is always two tiles."))}
         {option("asTerrain", t("Place as terrain"), t("Lay the doodad's tiles down as plain terrain, with no doodad record: the same as placing it and then choosing Convert to Terrain. An overlay is placed as an ordinary sprite. The tiles can then be painted over piece by piece, but the doodad cannot be selected or moved as one."))}
       </div>
-      <div className="palette-scroll">
+      <div className="palette-scroll" ref={scrollRef}>
         {!loaded && (
           <div className="hint" style={{ padding: 8 }}>
             {t("Doodads come from the tileset graphics. Help ▸ Game Data… installs them from a StarCraft installation.")}

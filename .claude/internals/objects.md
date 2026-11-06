@@ -42,6 +42,12 @@ The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, smal
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the
 grid wraps on. Large is sized to stay one per row at the left dock's 220 px drag minimum.
 
+The palette's search is `doodadSearchAtom`, a plain atom so it survives the layer switch that
+unmounts `DoodadPalette`; it is editor-wide (not in `parkRegisters`) and not stored. Picking a
+search hit does not move `doodadCategoryAtom`, so clearing the search (✕ / Esc) sets the category to
+the active doodad's, or the grid would fall back to a category that does not hold it. On mount and
+after that clear, the palette scrolls `.doodad.selected` into view once the catalogue has loaded.
+
 ### Locations (`src/editor/locations.ts`, `src/hooks/useLocationTools.ts`)
 
 `scenario.locations` is the `MRGN` table — fixed slots (64 original / 255 BW, `locationCapacity`),

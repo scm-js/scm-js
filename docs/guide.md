@@ -395,6 +395,11 @@ Doodads have no names in the game data, so the search box matches what the data 
 - `ramp`, for anything whose tiles are ramp tiles (StarEdit files ramps under cliffs and
   walls).
 
+The search stays in the box when you switch to another layer and back, and the palette
+scrolls to the doodad you picked. Clearing the search (✕ or Esc) opens the picked doodad's
+category, so it stays in view; choosing a category from the list leaves the search and
+shows that category instead.
+
 A placed doodad stays whole — its tiles, its record and any canopy or door overlay — and
 removing one restores the ground underneath. When you want the tiles without the doodad —
 a ramp to touch up piece by piece, a cliff edge to paint into — right-click it and choose

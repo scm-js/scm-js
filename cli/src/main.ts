@@ -93,9 +93,9 @@ ${pc.bold("Examples:")}
 
 ${pc.dim("Docs: https://docs.scmjs.dev")}`);
 
-program.command("about").description("this version of scmjs, and where things are").addOption(json)
-  .action((o: { json?: boolean }) => {
-    const r = aboutReport();
+program.command("about").description("this version of scmjs, whether there is a newer one, and where things are").addOption(json)
+  .action(async (o: { json?: boolean }) => {
+    const r = await aboutReport();
     print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
   });
 

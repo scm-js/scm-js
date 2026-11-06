@@ -35,6 +35,11 @@ each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool â€
   `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 a missing or
   wrong-kind file. A failing file in a list is reported on stderr and the rest go on.
 
+`about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout, nothing else in the CLI touches the network) and
+shows **Newest**: the install line when this is older (`olderThan`, numeric x.y.z), "this one", "<v> on npm" for a
+build from a clone, or "could not ask npm". Only `about` asks, so no command is slowed or nags (the user's ask,
+2026-11-06, after "how do they update").
+
 ## Bots (`cli/src/bot.ts`)
 
 `scmjs bot new|init [project]|build` = `docker run --rm -i(t) -v <cwd>:/bot -e SCMBOT_FOLDER=<folder name> [-u uid:gid,

@@ -16,6 +16,9 @@ Or run it without installing, with `npx`, which fetches it the first time:
 `npx @scm-js/cli info "(2)Destination.scx"`. Every command has `--help`, and
 `scmjs --help` lists them all.
 
+To update an installed copy, run `npm install -g @scm-js/cli@latest`. `scmjs about` says
+when there is a newer version.
+
 ## Commands
 
 | Command | What it does |
@@ -31,7 +34,7 @@ Or run it without installing, with `npx`, which fetches it the first time:
 | `scmjs plugin check` | What the editor would make of the plugin: its manifest, files and imports |
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
-| `scmjs about` | This version, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
+| `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 
 Commands that take several files take a pattern too: `scmjs map check *.scx`. A file that
 cannot be read is reported and the rest carry on.

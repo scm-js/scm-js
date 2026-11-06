@@ -3,7 +3,7 @@
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
 import { relative } from "node:path";
-import { Command, Option } from "commander";
+import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
@@ -72,6 +72,7 @@ const program = new Command("scmjs")
   .helpOption("-h, --help", "show help for a command")
   .addOption(new Option("--no-color", "plain text, no colour (also NO_COLOR=1)"))
   .showSuggestionAfterError()
+  .commandsGroup("This tool:")
   .helpCommand("help [command]", "show help for a command")
   .configureOutput({ outputError: (text, write) => write(text.replace(/^error: /, `${mark.error} `)) })
   .showHelpAfterError(pc.dim("(scmjs --help lists the commands)"))
@@ -81,6 +82,11 @@ const program = new Command("scmjs")
     styleSubcommandText: (s) => pc.cyan(s),
     styleArgumentText: (s) => pc.yellow(s),
     styleOptionText: (s) => pc.green(s),
+    // A noun lists what it does (`map info|check|open`), so the overview shows every command at once.
+    subcommandTerm: (cmd) => {
+      const subs = cmd.commands.map((c) => c.name()).filter((n) => n !== "help");
+      return subs.length ? `${cmd.name()} ${subs.join("|")}` : new Help().subcommandTerm(cmd).replace(" [options]", "");
+    },
   })
   .addHelpText("after", () => `
 ${pc.bold("Examples:")}
@@ -93,19 +99,13 @@ ${pc.bold("Examples:")}
 
 ${pc.dim("Docs: https://docs.scmjs.dev")}`);
 
-program.command("about").description("this version of scmjs, whether there is a newer one, and where things are").addOption(json)
-  .action(async (o: { json?: boolean }) => {
-    const r = await aboutReport();
-    print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
-  });
-
-program.command("info").description("what a map, replay or bot file holds").argument("<files...>", "maps (.scm .scx .chk), replays (.rep) or bots (.scmbot)").addOption(json)
+program.command("info").description("what a map, replay or bot file holds").helpGroup("Maps and replays:").argument("<files...>", "maps (.scm .scx .chk), replays (.rep) or bots (.scmbot)").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, async (input) => {
     const kind = expectKind(input, "map", "replay", "bot");
     return kind === "map" ? mapInfo(input) : kind === "replay" ? replayInfo(input) : botInfo(input);
   }));
 
-const map = program.command("map").description("read, check and open maps");
+const map = program.command("map").description("read, check and open maps").helpGroup("Maps and replays:");
 map.command("info").description("a map's size, players, units, triggers and its check").argument("<maps...>").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, mapInfo));
 map.command("check").description("Check Map, as the editor's: errors, then warnings")
@@ -132,7 +132,7 @@ map.command("open").description("open a map in the scmJS app, or the editor in y
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
 
-const replay = program.command("replay").description("read and open replays");
+const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");
 replay.command("info").description("who played, on what map, for how long, at what APM").argument("<replays...>").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, replayInfo));
 replay.command("open").description("watch a replay in the scmJS app, or the editor in your browser").argument("<replay>")
@@ -140,7 +140,7 @@ replay.command("open").description("watch a replay in the scmJS app, or the edit
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
 
-const plugin = program.command("plugin").description("write a plugin for the editor: start one, check it, run it");
+const plugin = program.command("plugin").description("start, check and run a plugin for the editor").helpGroup("Plugins and bots:");
 plugin.command("new").description("a plugin to start from, in a new folder").argument("[name]", "the plugin's name, such as \"Base Check\"")
   .option("--dir <folder>", "the folder to write it in (default plugin-<id>)")
   .action((name: string | undefined, o: { dir?: string }) => {
@@ -172,7 +172,7 @@ plugin.command("dev").description("the editor with your plugin, reloaded on ever
     await devPlugin({ dir: folder, port, open: o.open, editor: o.editor });
   });
 
-const bot = program.command("bot").description("build your own BWAPI bot for scmjs.dev/play (needs Docker)")
+const bot = program.command("bot").description("build a BWAPI bot for scmjs.dev/play (Docker)").helpGroup("Plugins and bots:")
   .addHelpText("after", () => `
 Run these in your bot's folder. The toolchain is a Docker image, downloaded the first time.
 A built bot is added on the play page: Options → Community bots → Add a bot from a file…
@@ -187,8 +187,16 @@ bot.command("build").description("out/<key>.scmbot, to add on the play page")
 bot.command("update").description("the newest toolchain, the one the play page expects")
   .action(async () => { await updateBot(); });
 
+program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
+  .action(async (o: { json?: boolean }) => {
+    const r = await aboutReport();
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
+  });
+
 try {
-  await program.parseAsync();
+  // `scmjs` on its own is a request for the overview, not a mistake.
+  if (process.argv.length <= 2) program.outputHelp();
+  else await program.parseAsync();
 } catch (e) {
   if (e instanceof CliError) { fail(e); process.exitCode = e.exitCode; }
   else { process.stderr.write(`${mark.error} ${pc.red("Something went wrong")}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim("  Please report it: https://github.com/scm-js/scm-js/issues")}\n`); process.exitCode = 1; }

@@ -66,6 +66,13 @@ export const SOURCES = [
     blurb: "Installing plugins, writing your first one, the core concepts, putting things on screen, and a tour of the API.",
   },
   {
+    id: "cli",
+    file: "docs/cli.md",
+    title: "Command line",
+    blurb: "scmjs in a terminal: what a map or replay holds, Check Map over many maps, and opening a file in scmJS.",
+    pageTitle: "StarCraft maps and replays on the command line",
+  },
+  {
     id: "triggers",
     file: "docs/triggers.md",
     title: "Trigger reference",

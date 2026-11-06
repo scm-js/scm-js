@@ -35,7 +35,9 @@
     "build:plugin-types": "node scripts/build-plugin-types.mjs",
     "docs:reference": "node scripts/reference-docs.mjs",
     "build:docs": "node scripts/build-plugin-types.mjs && node scripts/build-docs.mjs",
-    "publish:plugin-types": "node scripts/publish-plugin-api.mjs"
+    "publish:plugin-types": "node scripts/publish-plugin-api.mjs",
+    "build:cli": "node scripts/build-cli.mjs",
+    "cli": "node scripts/build-cli.mjs --quiet && node cli/dist/scmjs.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -50,15 +52,18 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@scm-js/replay": "^1.0.0",
     "@types/node": "^22.20.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "commander": "^15.0.0",
     "dts-bundle-generator": "^9.5.1",
     "electron": "^44.1.1",
     "electron-builder": "^26.15.3",
     "marked": "^18.0.11",
     "oxlint": "^1.79.0",
+    "picocolors": "^1.1.1",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
   },

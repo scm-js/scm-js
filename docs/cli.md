@@ -4,14 +4,16 @@
 Map on any number of maps, and opens a map or replay in scmJS from a terminal. It reads
 files the way the editor does, so the two agree about every map.
 
-You need Node.js 22.12 or newer. Run it with `npx`, which fetches it the first time:
+You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
 ```sh
-npx scmjs info "(2)Destination.scx"
+npm install -g @scm-js/cli
+scmjs info "(2)Destination.scx"
 ```
 
-Or install it once with `npm install -g scmjs`, and type `scmjs` from then on. Every
-command has `--help`, and `scmjs --help` lists them all.
+Or run it without installing, with `npx`, which fetches it the first time:
+`npx @scm-js/cli info "(2)Destination.scx"`. Every command has `--help`, and
+`scmjs --help` lists them all.
 
 ## Commands
 

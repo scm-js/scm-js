@@ -1,7 +1,8 @@
 # The `scmjs` command line
 
-`cli/` is the npm package `scmjs` (not published yet, 2026-11-05): `npx scmjs about | info | map info|check|open |
-replay info|open`. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | info | map info|check|open |
+replay info|open`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot toolchain is meant to move under
 `scmjs bot`), "an impressive UX tool … not overly engineered".
 
@@ -63,5 +64,5 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
 ## Next (proposed to the user)
 
 `map unpack|pack|diff`, `map triggers export|import`, `map trigscript build`, `map render`, `map run` (the plugin API
-headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. Publishing `scmjs` to npm
-is the user's step (`cd cli && npm publish`, prepack builds).
+headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. Publishing is the user's step: `cd cli && npm
+publish --browser=false` in their own terminal (security key; the `!` prompt cannot do 2FA), prepack builds.

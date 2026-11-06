@@ -1,5 +1,5 @@
 // Builds the `scmjs` command (cli/, docs/cli.md) into one file, cli/dist/scmjs.mjs: its code, the editor's code it
-// reads maps and replays with, and its two libraries, so `npx scmjs` downloads nothing more. Its version is the
+// reads maps and replays with, and its two libraries, so `npx @scm-js/cli` downloads nothing more. Its version is the
 // editor's (package.json), written into cli/package.json too. Beside it, THIRD-PARTY-NOTICES.txt carries the license
 // of every package compiled in (scripts/lib/notices.mjs).
 //   npm run build:cli                   then: node cli/dist/scmjs.mjs --help

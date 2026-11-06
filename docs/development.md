@@ -119,6 +119,7 @@ npm run build:docs        # the documentation site → docs-site/
 npm run vendor:plugins    # bring plugins/ up to date (predev and prebuild run it)
 npm run bundle:runtimes   # copy the default plugins' runtimes into dist/ (desktop and image builds)
 npm run build:plugin-types    # the plugin typings → plugin-api/
+npm run dev:desktop       # the dev server and the desktop app against it, in one command
 npm run desktop           # run the desktop app against dist/
 npm run build:desktop     # installers for this OS → release/
 npm run build:image       # the container image, tagged scmjs
@@ -487,10 +488,18 @@ while a map has unsaved changes, and holds the updater. `preload.ts` exposes tha
 page as `window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
 
 ```sh
+npm run dev:desktop             # the dev server and the app against it, in one command
 npm run desktop                 # bundle the main process and run Electron against dist/
-SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against the dev server instead
+SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against a dev server you started
 npm run build:desktop           # web build + main bundle + electron-builder for this OS
 ```
+
+`npm run dev:desktop` starts the dev server, waits until it answers, then opens the app on
+it. Closing the window or Ctrl+C stops both. Anything after `--` goes to Electron
+(`npm run dev:desktop -- --remote-debugging-port=9222`), and `DEV_DESKTOP_PORT` moves it
+off
+5173. The page reloads on edits as it does in a browser, but the main process and the
+preload are bundled once at launch, so a change under `desktop/` needs the app restarted.
 
 `npm run build:desktop` takes the platform, architectures and targets on the command line;
 with none it builds this OS with the targets `electron-builder.yml` lists, which is what

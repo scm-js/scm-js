@@ -53,6 +53,7 @@ reach, and the traps in them are not visible from the code.
 
 ```sh
 npm run dev            # Vite dev server, http://localhost:5173
+npm run dev:desktop    # the dev server + Electron against it; closing the window stops both
 npm run build          # tsc -b (type-check) + vite build
 npm run lint           # oxlint
 npm test               # vitest run (node environment, ~2s)

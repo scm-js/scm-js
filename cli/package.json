@@ -1,0 +1,37 @@
+{
+  "name": "scmjs",
+  "version": "0.8.8",
+  "description": "StarCraft: Brood War maps and replays from the command line: what a map or replay holds, Check Map, and opening them in scmJS",
+  "keywords": [
+    "starcraft",
+    "brood war",
+    "map",
+    "replay",
+    "scm",
+    "scx",
+    "rep",
+    "cli"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "scmjs": "dist/scmjs.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scm-js/scm-js.git",
+    "directory": "cli"
+  },
+  "homepage": "https://docs.scmjs.dev",
+  "bugs": "https://github.com/scm-js/scm-js/issues",
+  "scripts": {
+    "prepack": "cd .. && node scripts/build-cli.mjs"
+  }
+}

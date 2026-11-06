@@ -23,6 +23,7 @@ import { useErrorCapture } from "./hooks/useErrorCapture";
 import { useUsageCounts } from "./hooks/useUsageCounts";
 import { droppedHandle } from "./services/mapIo";
 import { handFilesToPlugins } from "./plugins/fileTypes";
+import { useOpenerHandoff } from "./hooks/useOpenerHandoff";
 import { TooltipProvider } from "./components/ui";
 import { Guarded } from "./components/ui/ErrorBoundary";
 import MenuBar from "./components/chrome/MenuBar";
@@ -91,6 +92,7 @@ export default function App() {
   useCloseGuard();
   useRecovery();
   useDesktopFiles();
+  useOpenerHandoff();
   useUpdateCheck();
   useWhatsNew();
   useUsageCounts();

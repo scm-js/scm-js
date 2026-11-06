@@ -15,6 +15,7 @@ Each topic is written down in one place:
 | Triggers, conditions and actions | [triggers.md](triggers.md) |
 | TrigScript, the trigger scripting language | [trigscript.md](trigscript.md), [trigscript-language.md](trigscript-language.md) for the language of programs, and [trigscript-library.md](trigscript-library.md) for its standard library; the compiler is in the [TrigScript plugin](https://github.com/scm-js/plugin-trigscript)'s repository |
 | Where the graphics come from, data sets, how they are drawn | [game-data.md](game-data.md) |
+| The `scmjs` command line | [cli.md](cli.md) |
 | Using and writing plugins, the plugin API | [plugins.md](plugins.md), and the reference at [docs.scmjs.dev/api](https://docs.scmjs.dev/api/) |
 | Each plugin's internals | its own repository's README |
 | Running, building, releasing, contributing | this file |
@@ -121,14 +122,16 @@ npm run build:plugin-types    # the plugin typings → plugin-api/
 npm run desktop           # run the desktop app against dist/
 npm run build:desktop     # installers for this OS → release/
 npm run build:image       # the container image, tagged scmjs
+npm run build:cli         # the scmjs command → cli/dist/scmjs.mjs
+npm run cli -- map info a.scx     # the scmjs command, built and run (docs/cli.md)
 ```
 
 `npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
-main process (`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`). The app
-config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax` (so
-`import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
-parameter properties). Lint, the tests and the build run on every pull request and every
-push to `main`.
+main process and the command line (`tsconfig.app.json`, `tsconfig.node.json`,
+`tsconfig.desktop.json`, `tsconfig.cli.json`). The app config is strict: `noUnusedLocals`,
+`noUnusedParameters`, `verbatimModuleSyntax` (so `import type` for types) and
+`erasableSyntaxOnly` (so no enums and no constructor parameter properties). Lint, the
+tests and the build run on every pull request and every push to `main`.
 
 ## Repository layout
 

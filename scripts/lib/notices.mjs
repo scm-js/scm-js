@@ -79,6 +79,24 @@ export function cliNotices(root, names, version) {
   ].join("\n");
 }
 
+/**
+ * `@scm-js/core`'s notices (scripts/build-core.mjs): the packages compiled into the library,
+ * found from the bundle's modules as the command's are. mopaq is a dependency rather than
+ * compiled in, so the list is usually empty and no file is written.
+ */
+export function coreNotices(root, names, version) {
+  return [
+    `Third-party notices for @scm-js/core ${version}\n`,
+    "@scm-js/core is MIT-licensed (LICENSE). It is built from scmJS's own code and the packages",
+    "below, whose license texts this file carries. Who wrote what is in ATTRIBUTION.md:",
+    "https://github.com/scm-js/scm-js/blob/main/ATTRIBUTION.md",
+    "",
+    "No StarCraft game data is included.",
+    "",
+    ...packageNotices(root, names),
+  ].join("\n");
+}
+
 /** The whole notices file as text. Throws when a dependency ships no license file. */
 export function buildNotices(root) {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));

@@ -73,6 +73,13 @@ export const SOURCES = [
     pageTitle: "StarCraft maps and replays on the command line",
   },
   {
+    id: "core",
+    file: "docs/core.md",
+    title: "Library",
+    blurb: "@scm-js/core: the editor's map code as an npm package — open a map, read and change its triggers, strings, units and settings, run Check Map, write it back.",
+    pageTitle: "StarCraft maps in Node.js with @scm-js/core",
+  },
+  {
     id: "triggers",
     file: "docs/triggers.md",
     title: "Trigger reference",

@@ -1,0 +1,74 @@
+/**
+ * `@scm-js/core`: the editor's reading, checking and editing of StarCraft maps, as a library.
+ *
+ * This file is the package's whole public surface. Everything it names is the code the
+ * editor itself runs — the same modules, built from the same tree (`scripts/build-core.mjs`)
+ * — so a map reads and writes here exactly as it does in scmJS of the same version. Nothing
+ * here reaches the browser: `tests/core.test.ts` walks the modules behind these exports and
+ * refuses a value import of the UI (`atoms/`, `components/`, `hooks/`, the plugin host, React,
+ * Jotai), and the declaration bundle refuses a type from them. `docs/core.md` is the guide.
+ *
+ * Adding to the surface is one line here. Taking from it is a breaking change for whoever
+ * imports the name, so an export stays once released, or goes with a note in the guide.
+ */
+
+// ── Files ──
+export { openMapBytes, writeMapBytes, type OpenedMap, type WriteOptions } from "../../src/editor/mapFile";
+export { loadMap, readMembers, readExtras, looksLikeMpq, MapLoadError, SCENARIO_PATH, type LoadedMap, type MemberInfo, type StoredMembers, type ArchiveMembers, type ArchiveCompression } from "../../src/formats/mpq/scm";
+export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, formatOf, planSave, type SavePlan, type PlannedSection, type PlannedExtra, type SectionFate, extraKind, type ExtraKind, formatBytes } from "../../src/editor/save";
+export { type BuiltBy, type BuildManifest, readBuildManifest, restoreBuiltMap, type Restored, BUILD_SOURCE_MEMBER, BUILD_MANIFEST_MEMBER } from "../../src/editor/mapBuild";
+
+// ── The scenario ──
+export {
+  parseScenario, serializeScenario, type Scenario, type SectionName, MODELLED_SECTIONS,
+  scenarioName, scenarioDescription, setScenarioName, setScenarioDescription, markDirty,
+  type MapVersion, MAP_VERSIONS, mapVersionOf, isExpansion, isRemasteredRevision, setMapVersion,
+  type TilesetIndex, tilesetIndex, setTextEncoding, setExtendedStrings,
+} from "../../src/formats/chk/scenario";
+export { createScenario, type CreateScenarioOptions, type GameKind, requiredSections, REQUIRED_SECTIONS } from "../../src/formats/chk/create";
+export { parseChk, serializeChk, type ChkFile, type ChkSection } from "../../src/formats/chk/reader";
+export { type TextEncoding, TEXT_ENCODINGS, DEFAULT_TEXT_ENCODING } from "../../src/formats/text/encoding";
+
+// Section records, as `Scenario` holds them.
+export type { UnitRecord, SpriteRecord, DoodadRecord, LocationRecord } from "../../src/formats/chk/sections/objects";
+export type { ConditionRecord, ActionRecord, TriggerRecord, ReadonlyTrigger } from "../../src/formats/chk/sections/triggers";
+export { PlayerType, PlayerRace, ColorMode, ForceFlag, PLAYER_SLOTS, FORCE_SLOTS, type Forces, type PlayerRgb } from "../../src/formats/chk/sections/players";
+export type { UnitSettings, UnitAvailability, UpgradeSettings, UpgradeRestrictions, TechSettings, TechRestrictions } from "../../src/formats/chk/sections/settings";
+export type { StringTable } from "../../src/formats/chk/sections/strings";
+export type { CuwpSlot } from "../../src/formats/chk/sections/cuwp";
+
+// ── Describing and checking ──
+export { mapStatistics, statisticsText, type MapStatistics, type PlayerStatistics } from "../../src/editor/statistics";
+export { validateScenario, issueCounts, type Issue, type IssueLevel, type IssueTarget, type ValidateContext, UNIT_LIMIT, STRX_CAPACITY } from "../../src/editor/validate";
+export { findInScenario, FIND_KINDS, type FindKind, type FindOptions, type FindResult } from "../../src/editor/find";
+
+// ── Triggers and the briefing ──
+export { readTriggers, applyTriggers, readBriefing, applyBriefing, newTrigger, newCondition, newAction, triggerNames, triggerUsage, isPreserved, setPreserved, fingerprintTrigger, sameTriggers, TRIGGER_OWNERS } from "../../src/editor/triggers";
+export { triggersToText, triggersFromText, readTriggerFile, triggerFormatOf, type TriggerFileFormat, encodeTrg, decodeTrg } from "../../src/editor/exchange";
+export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
+export { CONDITION_DEFS, ACTION_DEFS, BRIEFING_ACTION_DEFS, conditionDef, conditionDefByName, actionDef, actionDefByName, type ConditionDef, type ActionDef, type ArgDef, type ArgKind, CHOICES, choiceLabel, choiceValue, AI_SCRIPT_NAMES, aiScriptName, aiScriptByName } from "../../src/data/triggerDefs";
+
+// ── Strings and text ──
+export { readStrings, applyStrings, stringUsages, unusedStrings, deleteUnused, stringCapacity, type StringUsage, type StringUsageKind } from "../../src/editor/strings";
+export { formatStringTable, parseStringTable, applyStringImport, escapeStringText, unescapeStringText, type StringImport } from "../../src/editor/exchange";
+export { plainText, runsOf, TEXT_CODES, textCode } from "../../src/editor/textColors";
+
+// ── Units, locations and settings ──
+export { addUnits, removeUnits, updateUnits, moveUnits, applyUnitChanges, makeUnit, nextSerial, unitAt, unitsInBox, isResource, type UnitChange, MINERAL_FIELD_IDS, VESPENE_GEYSER, DEFAULT_MINERALS, DEFAULT_GAS } from "../../src/editor/units";
+export { addLocation, editLocation, removeLocations, moveLocations, applyLocationChanges, locationName, usedLocations, placedLocations, locationCapacity, type Bounds, type LocationChange, type LocationPatch, ANYWHERE_NAME } from "../../src/editor/locations";
+export {
+  readPlayerSettings, applyPlayerSettings, type PlayerSettings, readForceSettings, applyForceSettings, type ForceSettings, forceName,
+  readUnitSettings, applyUnitSettings, readUpgradeSettings, applyUpgradeSettings, readTechSettings, applyTechSettings,
+  changeMapVersion, changeTextEncoding, unitCustomName, internString,
+} from "../../src/editor/settings";
+export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
+export { placeStartLocations, idealStarts, playableCount } from "../../src/editor/startLocations";
+
+// ── Names and tables ──
+export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";
+export { UNIT_NAMES, UNIT_TYPE_COUNT, START_LOCATION, unitName, UPGRADE_NAMES, TECH_NAMES, upgradeName, techName, type RaceKey } from "../../src/data/units";
+export { PLAYER_TYPES, PLAYER_RACES, PLAYER_COLORS, playerColorHex, type PlayerColor } from "../../src/data/players";
+
+// ── Plugins ──
+export { validateManifest, resolveIcon } from "../../src/plugins/loader";
+export { PLUGIN_API_VERSION, type PluginManifest, type PluginIcon } from "../../src/plugins/api";

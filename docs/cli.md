@@ -159,6 +159,8 @@ when the app is installed.
   2 when a file was missing or was the wrong kind for the command.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
+- For what the commands do not do — a script that edits maps, a check of your own — the
+  same functions are the [`@scm-js/core` library](core.md); the command is built on them.
 
 ## In the source
 
@@ -174,6 +176,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |
+| `core/src/index.ts` | The library's surface; the command imports from the editor only what it exports ([core.md](core.md)) |
 | `src/hooks/` (the opener hand-over) | The editor's half of the hand-over: only a page on the loopback address that opened it is listened to |
 | [@scm-js/replay](https://github.com/scm-js/replay) | The replay reader, shared with the replay viewer plugin |
 | `scripts/build-cli.mjs` | Builds `cli/dist/scmjs.mjs` |

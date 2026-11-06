@@ -10,8 +10,9 @@ the game's own tileset graphics, and writes playable archives back. `docs/guide.
 guide (what each layer does, and what is and is not implemented) — read it first; `README.md` is the
 repository's short front page (what it is, what it does, how to start); the install guide is `docs/installing.md`; the TrigScript guide is `docs/trigscript.md`, with its language guide `docs/trigscript-language.md` and library guide `docs/trigscript-library.md`; the technical companions are `docs/triggers.md` (the trigger reference), `docs/file-formats.md`,
 `docs/chk-format.md` (the section-by-section reference), `docs/game-data.md`, `docs/plugins.md`,
-`docs/cli.md` (the `scmjs` command line) and `docs/development.md`. Keep all thirteen current when behaviour
-changes — the twelve under `docs/` are also the
+`docs/cli.md` (the `scmjs` command line), `docs/core.md` (the `@scm-js/core` library) and `docs/development.md`.
+Keep all fourteen current when behaviour
+changes — the thirteen under `docs/` are also the
 documentation *site* (`npm run build:docs` → docs.scmjs.dev), which renders them rather
 than holding anything of its own.
 
@@ -48,6 +49,7 @@ reach, and the traps in them are not visible from the code.
 | `services/preload.ts`, `usePreload`, the splash, `devReactTracks.ts` | `startup.md` |
 | `e2e/**`, `playwright.config.ts` — the browser tests | `e2e.md` |
 | `cli/**`, `scripts/build-cli.mjs`, `useOpenerHandoff` — the `scmjs` command | `cli.md` |
+| `core/**`, `scripts/build-core.mjs`, `src/editor/mapFile.ts` — the `@scm-js/core` package; adding an export, what may not reach the UI | `core.md` |
 
 ## Commands
 

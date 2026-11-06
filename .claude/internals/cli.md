@@ -64,5 +64,8 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
 ## Next (proposed to the user)
 
 `map unpack|pack|diff`, `map triggers export|import`, `map trigscript build`, `map render`, `map run` (the plugin API
-headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. Publishing is the user's step: `cd cli && npm
-publish --browser=false` in their own terminal (security key; the `!` prompt cannot do 2FA), prepack builds.
+headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. **Publishing is CI's** (2026-11-06, at the user's ask): `build.yml`'s `cli` job, on the stable channel
+only (a release tag), runs `build:cli` (stamps the version), checks it equals the release's, skips a version npm
+has, and `npm publish`es by trusted publishing over OIDC with provenance, like `plugin-api`. Needs a trusted
+publisher on npmjs.com for @scm-js/cli: scm-js/scm-js, `build.yml`, no environment, direct publish allowed. 0.8.8
+was published by hand (security key: own terminal, `--browser=false`).

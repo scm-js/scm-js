@@ -70,6 +70,7 @@ any new job that runs on `ci` needs the same), `nightly` (a daily cron, skipped 
 installers on ONE rolling prerelease whose `nightly` tag is force-moved and whose assets are
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).
+The `cli` job publishes `@scm-js/cli` to npm on `v*` tags only (its version is the editor's; see `cli.md`).
 **Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was
 main's HEAD, which was the one artifact whose version nobody could get back to) — which needs the
 `github-pages` **environment** to allow the tag: its deployment policy listed the `main` branch alone,

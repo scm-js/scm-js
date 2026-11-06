@@ -38,6 +38,17 @@ each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool �
   colour only when `COLORTERM` says truecolor, else drops them; replays colour player names by the replay's colours.
   `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 a missing or
   wrong-kind file. A failing file in a list is reported on stderr and the rest go on.
+- **The overview's banner** (`cli/src/banner.ts`, 2026-11-06, the user's "the scmjs wireframe in ascii art"): only
+  the root help (`scmjs`, `--help`, `help`) — `configureHelp({ formatHelp })` in main.ts sends `!cmd.parent` to
+  `rootHelp` and everything else to `Help.prototype.formatHelp`, so `scmjs map --help` is commander's. `GLOBE` is
+  the app mark (favicon.svg / AppLogo.tsx, the splash's sphere) in braille, 16 × 8 cells: starfield.ts's
+  `buildSphere(6, 8)` (the logo's own 12 segments are a blur at this size), rotY 0.3, rotX −0.45, near half only
+  plus the outline, rasterised to 32 × 32 dots by a throwaway script and pasted in as a literal; blank cells are
+  spaces, not U+2800. Coloured #a06cf0 with truecolor, else magenta. `GLOBE_ASCII` (hand-drawn, `=` for the bright
+  equator) replaces it where `ui.ts`'s `unicode` is false; with the text wider than the terminal the globe is left
+  out. The root help is held to 23 lines (a 24-row terminal keeps the globe on screen): the options are one line and
+  the old Examples block went (docs/cli.md has examples). main.ts exports `program` and skips running it under
+  `VITEST`, so tests/cli.test.ts reads the real help.
 
 `about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout, nothing else in the CLI touches the network) and
 shows **Newest**: the install line when this is older (`olderThan`, numeric x.y.z), "this one", "<v> on npm" for a

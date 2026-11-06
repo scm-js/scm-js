@@ -8,7 +8,7 @@ import { TEXT_CODES } from "../../src/editor/textColors";
 export { pc };
 
 /** Unicode marks, where the terminal can be expected to draw them (the old Windows console cannot). */
-const unicode = process.platform !== "win32" || !!process.env.WT_SESSION || process.env.TERM_PROGRAM === "vscode" || !!process.env.CI;
+export const unicode = process.platform !== "win32" || !!process.env.WT_SESSION || process.env.TERM_PROGRAM === "vscode" || !!process.env.CI;
 
 export const mark = {
   ok: pc.green(unicode ? "✔" : "√"),

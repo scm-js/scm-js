@@ -17,6 +17,10 @@ each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool �
   left alone). It is a devDependency here, bundled into the CLI; the editor app does not import it. APM in
   `cli/src/replay.ts` copies Aftermath's `analysis.ts` rule (no system/chat/leave; until the player left) so the
   two agree (227 vs 226 before).
+- **On `@scm-js/core`'s surface** (2026-11-06, `core.md`): `tests/core.test.ts` refuses any `import { … } from
+  "../../src/…"` in `cli/src` that is not a name `core/src/index.ts` exports from that module, so the command stays a
+  thin layer over the library and a new need is an export first. Maps are opened with `openMapBytes`
+  (`src/editor/mapFile.ts`, the byte-level half of `openMapFile`) into an `OpenedMap`, not a `LoadedDocument`.
 - **One file.** `scripts/build-cli.mjs` is a Vite SSR build with `ssr.noExternal: true` and `codeSplitting: false`
   (rolldown's name for inlineDynamicImports) → `cli/dist/scmjs.mjs` (~670 KB, shebang). commander, picocolors and
   @scm-js/replay are devDependencies of the root bundled in, so the published package has no dependencies and `npx` fetches one file.

@@ -2,7 +2,7 @@
 import { MAP_VERSIONS, mapVersionOf, scenarioDescription, scenarioName } from "../../src/formats/chk/scenario";
 import { mapStatistics, type MapStatistics } from "../../src/editor/statistics";
 import { issueCounts, validateScenario, type Issue } from "../../src/editor/validate";
-import type { LoadedDocument } from "../../src/atoms/documentAtoms";
+import type { OpenedMap } from "../../src/editor/mapFile";
 import type { Input } from "./files";
 import { dot, gameLines, gameText, mark, num, pc, plural, rows, size, table, visible } from "./ui";
 
@@ -24,7 +24,7 @@ export interface MapReport {
   usedSlots: number[];
 }
 
-export function mapReport(input: Input, doc: LoadedDocument): MapReport {
+export function mapReport(input: Input, doc: OpenedMap): MapReport {
   const scn = doc.scenario;
   const statistics = mapStatistics(scn, null, null, null);
   return {

@@ -262,6 +262,10 @@ jobs:
         run: npx vitest run tests/plugin-network.test.ts
         env:
           SCMJS_NETWORK_TESTS: "1"
+      # The library's bundle and its one declarations file (core/, docs/core.md): a type
+      # that stops bundling should fail the push, not the release's `core` job below.
+      - name: Build the library
+        run: npm run build:core
       # Built on every channel, including the one that ships nothing: a broken bundle
       # should fail the push that broke it, not the tag a fortnight later. It is also the
       # bundle the release zip, the container image and the nightly site all carry —
@@ -463,6 +467,49 @@ jobs:
             exit 0
           fi
           node dist/scmjs.mjs --version
+          npm publish
+
+  # `@scm-js/core`, the editor's map code as a library (core/, docs/core.md), on npm. Built
+  # from the same source as the editor and the command, versioned with them and published
+  # the same way as `cli` above: stable channel only, version checked against the release,
+  # a version npm already has left alone, trusted publishing over OIDC. The trusted
+  # publisher on npmjs.com for @scm-js/core names this repository and `build.yml`.
+  core:
+    name: Publish the library
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: |
+          npm install -g npm@latest
+          npm --version
+      - run: npm run build:core
+      - name: Publish
+        working-directory: core
+        run: |
+          set -e
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "${{ needs.channel.outputs.version }}" ]; then
+            echo "::error::core/package.json says $VERSION, the release is ${{ needs.channel.outputs.version }}"
+            exit 1
+          fi
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME $VERSION is already on npm; nothing to publish."
+            exit 0
+          fi
+          node --input-type=module -e "import('./dist/index.mjs').then((m) => { if (typeof m.openMapBytes !== 'function') throw new Error('no openMapBytes'); console.log(Object.keys(m).length, 'exports'); })"
           npm publish
 
   pages:

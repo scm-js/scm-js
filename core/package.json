@@ -1,0 +1,51 @@
+{
+  "name": "@scm-js/core",
+  "version": "0.8.9",
+  "description": "StarCraft: Brood War maps in Node.js and the browser, as the scmJS editor reads and writes them: open .scm/.scx/.chk, triggers, strings, units, locations, settings, Check Map, and write the map back",
+  "keywords": [
+    "starcraft",
+    "brood war",
+    "map",
+    "scm",
+    "scx",
+    "chk",
+    "mpq",
+    "triggers",
+    "scmjs"
+  ],
+  "license": "MIT",
+  "author": "Jeany",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scm-js/scm-js.git",
+    "directory": "core"
+  },
+  "homepage": "https://docs.scmjs.dev/core/",
+  "bugs": "https://github.com/scm-js/scm-js/issues",
+  "dependencies": {
+    "mopaq": "^1.6.2"
+  },
+  "scripts": {
+    "prepack": "cd .. && node scripts/build-core.mjs"
+  }
+}

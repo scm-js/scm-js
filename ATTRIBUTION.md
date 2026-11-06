@@ -213,6 +213,13 @@ Its build (`scripts/build-cli.mjs`) writes their license texts into
 `cli/dist/THIRD-PARTY-NOTICES.txt`, which the published package carries. The list is read
 from the modules the bundle holds, so a new import cannot go in without its license.
 
+### In the `@scm-js/core` library
+
+The library (`core/`, [docs/core.md](docs/core.md)) is built from the editor's own code
+with [mopaq](https://github.com/jeany55/mopaq) as its one dependency, installed rather than
+compiled in. Its build (`scripts/build-core.mjs`) writes `core/dist/THIRD-PARTY-NOTICES.txt`
+only when a package's code is in the bundle, which today none is.
+
 ### Plugin runtimes
 
 Two default plugins load large parts of themselves at run time instead of compiling them

@@ -1,10 +1,9 @@
 /** Reading what the person named: what kind of file it is, and a map or replay out of it, as the editor reads them. */
 import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { openMapFile } from "../../src/services/mapIo";
+import { openMapBytes, type OpenedMap } from "../../src/editor/mapFile";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { detectFormat, parseReplay, type Replay } from "@scm-js/replay";
-import type { LoadedDocument } from "../../src/atoms/documentAtoms";
 import { CliError } from "./ui";
 
 export type FileKind = "map" | "replay" | "bot";
@@ -32,9 +31,9 @@ export function kindOf(name: string, bytes: Uint8Array): FileKind | null {
   return null;
 }
 
-export async function loadMapInput(input: Input): Promise<LoadedDocument> {
+export async function loadMapInput(input: Input): Promise<OpenedMap> {
   try {
-    return await openMapFile(new File([input.bytes as BlobPart], input.name));
+    return await openMapBytes(input.bytes, input.name);
   } catch (e) {
     throw new CliError(`${input.name} is not a map this can read: ${e instanceof Error ? e.message : e}`);
   }

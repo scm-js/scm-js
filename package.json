@@ -40,7 +40,8 @@
     "build:docs": "node scripts/build-plugin-types.mjs && node scripts/build-docs.mjs",
     "publish:plugin-types": "node scripts/publish-plugin-api.mjs",
     "build:cli": "node scripts/build-cli.mjs",
-    "cli": "node scripts/build-cli.mjs --quiet && node cli/dist/scmjs.mjs"
+    "cli": "node scripts/build-cli.mjs --quiet && node cli/dist/scmjs.mjs",
+    "build:core": "node scripts/build-core.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

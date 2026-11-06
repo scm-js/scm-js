@@ -489,8 +489,18 @@ page as `window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
 ```sh
 npm run desktop                 # bundle the main process and run Electron against dist/
 SCMJS_DEV_URL=http://localhost:5173 npm run desktop    # against the dev server instead
+scripts/dev-desktop.sh          # the dev server and Electron together (macOS, Linux)
+npm run dev:desktop             # the same on any OS
 npm run build:desktop           # web build + main bundle + electron-builder for this OS
 ```
+
+Against the dev server the page picks up edits as the browser does. The main process and
+the preload are bundled once at launch, so a change to either needs Electron restarted.
+`scripts/dev-desktop.sh` starts Vite, waits until it answers, then runs Electron with
+`SCMJS_DEV_URL` set; closing the window or Ctrl-C stops both, and its arguments go to
+Electron (`--remote-debugging-port=9222`, say). `npm run dev:desktop` does the same
+through `concurrently`, `wait-on` and `cross-env`, so it also runs on Windows, but takes
+no arguments for Electron.
 
 `npm run build:desktop` takes the platform, architectures and targets on the command line;
 with none it builds this OS with the targets `electron-builder.yml` lists, which is what

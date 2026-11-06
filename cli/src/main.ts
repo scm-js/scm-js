@@ -1,13 +1,15 @@
 /**
  * scmjs: StarCraft: Brood War maps, replays and bots from the command line. One command, a noun for each kind of
- * thing (`map`, `replay`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
+ * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
+import { relative } from "node:path";
 import { Command, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { openInScmjs } from "./open";
+import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { CliError, dot, mark, pc, plural, print, rows, size } from "./ui";
 
@@ -65,7 +67,7 @@ for (const stream of [process.stdout, process.stderr]) {
 }
 
 const program = new Command("scmjs")
-  .description("StarCraft: Brood War maps, replays and bots from the command line")
+  .description("StarCraft: Brood War maps, replays, plugins and bots from the command line")
   .version(VERSION, "-v, --version", "print the version")
   .helpOption("-h, --help", "show help for a command")
   .addOption(new Option("--no-color", "plain text, no colour (also NO_COLOR=1)"))
@@ -85,6 +87,7 @@ ${pc.bold("Examples:")}
   ${pc.dim("$")} scmjs info "(2)Destination.scx"       what a map or a replay holds
   ${pc.dim("$")} scmjs map check *.scx                 Check Map on every map here
   ${pc.dim("$")} scmjs replay open game.rep            watch it in the editor
+  ${pc.dim("$")} scmjs plugin new "Base Check"         a plugin for the editor to start from
   ${pc.dim("$")} scmjs bot new                         a BWAPI bot to start from, for scmjs.dev/play
   ${pc.dim("$")} scmjs about                           this version, and where things are
 
@@ -136,6 +139,38 @@ replay.command("open").description("watch a replay in the scmJS app, or the edit
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
+
+const plugin = program.command("plugin").description("write a plugin for the editor: start one, check it, run it");
+plugin.command("new").description("a plugin to start from, in a new folder").argument("[name]", "the plugin's name, such as \"Base Check\"")
+  .option("--dir <folder>", "the folder to write it in (default plugin-<id>)")
+  .action((name: string | undefined, o: { dir?: string }) => {
+    const made = newPlugin({ name, dir: o.dir });
+    const rel = relative(process.cwd(), made.dir) || ".";
+    print(`${mark.ok} ${pc.bold(name ?? rel)} written in ${pc.cyan(rel)}${dot}${plural(made.files.length, "file")}`, "",
+      pc.dim("  Next:"), `    cd ${rel.includes(" ") ? JSON.stringify(rel) : rel}`, "    npm install", `    npm start            ${pc.dim("the editor with your plugin, reloaded each time you save")}`, "",
+      pc.dim("  plugin.ts is the plugin; plugin.json describes it. Guide: https://docs.scmjs.dev/plugins/"));
+  });
+plugin.command("check").description("what the editor would make of the plugin")
+  .argument("[folder]", "the plugin's folder", ".").addOption(json)
+  .option("--all", "list notes too, not only errors and warnings")
+  .option("--strict", "fail on warnings as well as errors")
+  .addHelpText("after", `\nExits 1 when the editor would not load it (or on warnings, with --strict): fit for a CI step.`)
+  .action((folder: string, o: { json?: boolean; all?: boolean; strict?: boolean }) => {
+    const c: PluginCheck = checkPlugin(folder);
+    if (c.issues.some((i) => i.level === "error" || (o.strict && i.level === "warn"))) process.exitCode = 1;
+    print(...(o.json ? [JSON.stringify(c, null, 2)] : printPluginCheck(c, !!o.all)));
+  });
+plugin.command("dev").description("the editor with your plugin, reloaded on every save")
+  .argument("[folder]", "the plugin's folder", ".")
+  .option("--port <port>", "the port to serve it on; the editor remembers the plugin by it", "5310")
+  .option("--no-open", "do not open the editor; print its address instead")
+  .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL), such as a local one").hideHelp())
+  .addHelpText("after", `\nBuilds it first when plugin.json names a "build" and package.json has a build script.`)
+  .action(async (folder: string, o: { port: string; open: boolean; editor?: string }) => {
+    const port = Number(o.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new CliError(`--port ${o.port} is not a port`, null, 2);
+    await devPlugin({ dir: folder, port, open: o.open, editor: o.editor });
+  });
 
 const bot = program.command("bot").description("build your own BWAPI bot for scmjs.dev/play (needs Docker)")
   .addHelpText("after", () => `

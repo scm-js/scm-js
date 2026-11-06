@@ -392,3 +392,18 @@ screen — so a link cannot put an arbitrary address in front of the user, even 
 confirmation. The rest of the address (`playground=`) is left for the plugin, which reads and strips it
 in `activate`; after an install from the link the new plugin activates with it still there.
 
+
+### `?plugin-dev=` (`plugins/devLink.ts`, `hooks/usePluginDev.ts`, 2026-11-06)
+
+`scmjs plugin dev` (cli/src/plugin.ts) serves a plugin folder on `http://127.0.0.1:<port>/` (default 5310, so the
+install keeps one spec) and opens the editor with `?plugin-dev=<that>`. `devPluginSpec` accepts only plain http on
+127.0.0.1 / localhost / [::1], an explicit port, the root path, no query or credentials, and returns
+`http://<host>/`, the exact spec Manage Plugins stores for that address (parseSpec keeps `display` as typed). Unlike
+`?plugin=`, the link to a non-scm-js address is taken, because a loopback address is a program the person runs; it
+still goes through `confirmPlugin` when not installed (the trust screen), `enableWithRequirements` when off, and
+`reloadPlugin` when on. Then an `EventSource` on `<spec>__scmjs/events`: `reload` → `reloadPlugin` + "Reloaded
+{name}" toast (only while active), `failed` → error toast with esbuild's first lines; closed after three errors in a
+row (the command stopped). The spec is read at module load (StrictMode, as `useOpenerHandoff`), and the parameter
+stays in the address so a page reload keeps reloading. Checked with headless Chromium against `npx vite`: install,
+edit → reload with the new menu label, syntax error → toast, fix → reload; no page errors. Chrome's local-network
+prompt and Safari's mixed-content rule apply as for pasting a localhost address into Manage Plugins.

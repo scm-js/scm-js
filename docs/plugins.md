@@ -399,7 +399,17 @@ can keep working there until the plugin is ready for its own folder.
 
 ### Step 5: load it from your machine
 
-Serve the folder, with cross-origin requests allowed so the editor can fetch from it:
+With the [scmjs command](cli.md#plugins), in the plugin's folder:
+
+```sh
+npx @scm-js/cli plugin dev
+```
+
+It serves the folder, opens the editor with the plugin, and reloads it each time you save
+a file. The first time, the editor asks you to add it.
+
+Without it, serve the folder, with cross-origin requests allowed so the editor can fetch
+from it:
 
 ```sh
 npx serve --cors .
@@ -478,7 +488,9 @@ server to talk to or a variable defined elsewhere.
 
 ### Starting a plugin
 
-Start from [Hello World](https://github.com/scm-js/plugin-hello-world), or from a snippet
+`npx @scm-js/cli plugin new "My Plugin"` writes a plugin to start from in a new folder,
+set up as the project's own plugins are (see [the command line](cli.md#plugins)). Or start
+from [Hello World](https://github.com/scm-js/plugin-hello-world), or from a snippet
 exported from the playground. Hello World's `plugin.ts` is about ninety lines, mostly
 comments. The repository also has a Korean catalogue (`ko.ts`) with the test that keeps it
 complete, and the typings, type-check, build and CI described below.
@@ -545,7 +557,10 @@ example.
 
 ### Loading it from your machine
 
-Serve the plugin's folder with cross-origin requests allowed:
+`npx @scm-js/cli plugin dev` in the plugin's folder serves it, opens the editor with it,
+and reloads it each time you save. It runs `npm run build` first, and again on each
+change, when `plugin.json` names a `build`. Or serve the folder yourself, with
+cross-origin requests allowed:
 
 ```sh
 npx serve --cors .

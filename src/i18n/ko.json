@@ -2994,6 +2994,8 @@
   "Closed {name} — {next} is in front.": "{name}을(를) 닫음 — {next}이(가) 앞에 있습니다.",
   "Closed the scenario — File ▸ New or Open to continue.": "시나리오를 닫음 — 파일 ▸ 새로 만들기 또는 열기로 계속하세요.",
   "A copy of {name} to edit — Save asks where to keep it.": "편집할 {name}의 사본 — 저장할 때 위치를 묻습니다.",
+  "Reloaded {name}": "{name}{name|을} 다시 불러왔습니다",
+  "{name} did not build": "{name}{name|을} 빌드하지 못했습니다",
   "The link uses the {name} plugin, which is turned off.": "이 링크는 꺼져 있는 {name} 플러그인을 사용합니다.",
   "Turn It On": "켜기",
   "Preparing workspace": "작업 공간 준비 중",

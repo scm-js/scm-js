@@ -1148,6 +1148,14 @@ Open several replays of one map and **Map stats** takes them together: how each 
 location did, which bases were taken and when, where the fights happened, and the ground
 no unit ever entered.
 
+### Play From Here
+
+In the editor at scmjs.dev, **Play From Here** on the replay's timeline opens the replay
+on the play page at the moment shown, seen as the player picked in the **Vision** menu.
+The game stops there. Take one of the players and play on alone, against a community bot,
+or with others who join by an invite. Going back to an earlier moment watches the replay
+again.
+
 > **Note.** In the desktop app and an editor hosted elsewhere, Aftermath works from the
 > players' orders alone: there is no Replay view and no analysis.
 

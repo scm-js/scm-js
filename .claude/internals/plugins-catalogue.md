@@ -612,7 +612,9 @@ in a bottom panel (`ui.panel({ dock: "bottom", height: 440 })` — the host hono
 `PanelSpec.height`'s comment says floating only) and handed the built map with `debug: true` (scm-sim
 `web/handoff.ts`: copies, passes, rewound, frame back; pause / resume / step / pass / seek in). The built map's TRIG
 rows are matched to the editor's by bytes in the plugin, so no host API was added; rows a build step added open
-nothing. Needs a `/play/` deploy from scm-sim after 54f5aae. The timeline's types are a copy of scm-sim's
+nothing. Needs a `/play/` deploy from scm-sim after 54f5aae. Since 0.15.0 (2026-11-05, pinned in 0.8.9) `playReplay({ replay, name, frame, player })`: the replay
+opened on the play page paused at `frame`, through the player's eyes, Watch Replay menu open (scm-sim's handoff, deployed
+2026-11-06); Aftermath 0.18.0's **Play From Here** on the timeline calls it when the service has it. The timeline's types are a copy of scm-sim's
 `src/analysis/timeline.ts`; `ReplayTimeline.version` says which form (2, from plugin 0.2.0's contract: a `died` event names the unit the game credited with the kill; 3, from 0.3.0's: `check.parted`, the frame from which the game the engine played is no longer the replay's, the engine having taken replays from 1.18 and Remastered by rewriting them in 1.16.1's form). Nothing in the host's API was added for it.
 
 

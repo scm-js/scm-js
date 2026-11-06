@@ -82,6 +82,33 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   `/__scmjs/events`; fs.watch recursive, debounced, ignoring node_modules/.git and the build's file and folder (a
   removed dist/ otherwise built twice). The editor's half: plugins-loading.md, `?plugin-dev=`.
 
+## Maps in git (`cli/src/exchange.ts`, `diff.ts`, `completion.ts`) — 2026-11-06, first slice on `@scm-js/core`
+
+- `map triggers export|import [--briefing] [--append] [--out]`, `map strings export|import [--out]`: the editor's
+  `exchange.ts` (`triggersToText`/`readTriggerFile`/`encodeTrg`, `formatStringTable`/`parseStringTable`/
+  `applyStringImport`) behind `exportTriggers`/`importTriggers`/`exportStrings`/`importStrings`. Text to stdout unless
+  `--out`; `.trg` by extension needs `--out`. A `TriggerTextError` becomes a CliError "file, line N: …" and nothing
+  is written. **`writeBack`** writes in place unless `--out`, with `defaultSaveOptions(scn, origin, path)` — the
+  editor's own Save As rule (as-opened compression + encryption, StarEdit layout for a bare .chk), extras and stored
+  members carried — format from the output name's extension, else the input's.
+- `map diff a b [--json] [--all]`: `diffMaps` → groups header/players/forces (field a→b), units (multiset by the
+  record minus `serial`), locations (by index; unplaced both sides = nothing), triggers + briefing (multiset by
+  `fingerprintTrigger`, text by `summarizeTrigger` cut at 110), strings (by index; **null and "" are one thing** — a
+  string appended past the end pads the table with gaps that come back as "" on reopen, which read as 79 additions
+  before), members (name-normalised, byte compare), sections (**bytes as they would be written**:
+  `parseChk(serializeScenario(s))`, since `scn.chk.sections` holds the bytes as parsed and an in-memory edit only
+  marks dirty — the first version compared `scn.chk.sections` and saw no change after an edit). Exit 1 when
+  different, like diff(1); docs say so under exit codes. Lists cut at 20 unless `--all`.
+- `completion bash|zsh|fish` (**hidden** from the overview so the root help stays within 23 lines; documented, and
+  `scmjs help completion`): `commandTree(program)` walks commander (`cmd.options` minus hidden, `cmd.commands`
+  minus `_hidden`/help) and three generators write the scripts, so a new command is in them with no list. bash:
+  nested `case` on the typed path → `compgen -W`, else files; `bash -n` in the test. zsh: one function per command,
+  `_arguments -C` + `_describe`. fish: `__fish_seen_subcommand_from` chains; options as `-l`/`-s`. zsh/fish are not
+  syntax-checked here (neither shell is on this machine).
+- **Overview term cap** (`main.ts` `TERM_WIDTH` 28): a noun with many verbs shows `map info|check|open|…` so the
+  description column stays beside it and the banner's 80×23 holds; the noun's own help lists all. The test in
+  cli.test.ts skips hidden commands and asserts the ellipsis.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and
@@ -109,9 +136,9 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 
 ## Next (proposed to the user)
 
-`map unpack|pack|diff`, `map triggers export|import`, `map trigscript build`, `map render`, `map run` (the plugin API
-headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. **Publishing is CI's** (2026-11-06, at the user's ask): `build.yml`'s `cli` job, on the stable channel
-only (a release tag), runs `build:cli` (stamps the version), checks it equals the release's, skips a version npm
-has, and `npm publish`es by trusted publishing over OIDC with provenance, like `plugin-api`. Needs a trusted
-publisher on npmjs.com for @scm-js/cli: scm-js/scm-js, `build.yml`, no environment, direct publish allowed. 0.8.8
-was published by hand (security key: own terminal, `--browser=false`).
+Done 2026-11-06: triggers/strings export-import, diff, completions (above), on `@scm-js/core` (`core.md`). Still
+proposed: `map unpack|pack`, `map build` (TrigScript headless — a spike first), `map run` (the plugin API headless),
+`map render`, `bot run` (a headless game through scm-sim), `setup --from` for the game files. **Publishing is CI's**
+(2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
+release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`
+and `core`. 0.8.8 was published by hand (security key: own terminal, `--browser=false`); every version since from CI.

@@ -21,7 +21,11 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
   (rolldown's name for inlineDynamicImports) → `cli/dist/scmjs.mjs` (~670 KB, shebang). commander, picocolors and
   @scm-js/replay are devDependencies of the root bundled in, so the published package has no dependencies and `npx` fetches one file.
   The version is the editor's (`package.json`), written into `cli/package.json` by the build; commit and build date
-  are `define`d. commander 15 needs Node ≥ 22.12 (`engines`).
+  are `define`d. **Licences**: the build's `scmjs-cli-notices` plugin reads the bundle's module ids for
+  `node_modules/<pkg>` and writes `cli/dist/THIRD-PARTY-NOTICES.txt` with `cliNotices` (`scripts/lib/notices.mjs`,
+  throws on a package with no licence file); `cli/LICENSE` is a copy of the root one. Today: @scm-js/replay,
+  commander, fflate (via mopaq), mopaq, picocolors; ATTRIBUTION.md has a table for them. Added 2026-11-06 just
+  before the first publish, which had gone without either (the publish failed on 2FA first). commander 15 needs Node ≥ 22.12 (`engines`).
 - **Type-checked** by `tsconfig.cli.json` (in `tsc -b`'s references): `types: node, vite/client`, `cli/src` only
   (it pulls in the `src/` files it imports). `tests/cli.test.ts` covers the pieces; `npm run cli -- …` runs it.
 - **Output** (`cli/src/ui.ts`): picocolors decides colour (`NO_COLOR`, `FORCE_COLOR`, `--no-color`, a pipe). Marks

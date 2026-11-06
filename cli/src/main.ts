@@ -1,9 +1,10 @@
 /**
- * scmjs: StarCraft: Brood War maps and replays from the command line. One command, a noun for each kind of thing
- * (`map`, `replay`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
+ * scmjs: StarCraft: Brood War maps, replays and bots from the command line. One command, a noun for each kind of
+ * thing (`map`, `replay`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
 import { Command, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
+import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { openInScmjs } from "./open";
@@ -64,7 +65,7 @@ for (const stream of [process.stdout, process.stderr]) {
 }
 
 const program = new Command("scmjs")
-  .description("StarCraft: Brood War maps and replays from the command line")
+  .description("StarCraft: Brood War maps, replays and bots from the command line")
   .version(VERSION, "-v, --version", "print the version")
   .helpOption("-h, --help", "show help for a command")
   .addOption(new Option("--no-color", "plain text, no colour (also NO_COLOR=1)"))
@@ -84,6 +85,7 @@ ${pc.bold("Examples:")}
   ${pc.dim("$")} scmjs info "(2)Destination.scx"       what a map or a replay holds
   ${pc.dim("$")} scmjs map check *.scx                 Check Map on every map here
   ${pc.dim("$")} scmjs replay open game.rep            watch it in the editor
+  ${pc.dim("$")} scmjs bot new                         a BWAPI bot to start from, for scmjs.dev/play
   ${pc.dim("$")} scmjs about                           this version, and where things are
 
 ${pc.dim("Docs: https://docs.scmjs.dev")}`);
@@ -134,6 +136,21 @@ replay.command("open").description("watch a replay in the scmJS app, or the edit
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
+
+const bot = program.command("bot").description("build your own BWAPI bot for scmjs.dev/play (needs Docker)")
+  .addHelpText("after", () => `
+Run these in your bot's folder. The toolchain is a Docker image, downloaded the first time.
+A built bot is added on the play page: Options → Community bots → Add a bot from a file…
+
+${pc.dim(`Guide: ${BOT_GUIDE}`)}`);
+bot.command("new").description("a bot to start from, in this folder")
+  .action(async () => { await runBot(["new"]); });
+bot.command("init").description("scmbot.json from the bot's Visual Studio project").argument("[project]", "the .vcxproj, when the folder has several")
+  .action(async (project?: string) => { await runBot(project ? ["init", project] : ["init"]); });
+bot.command("build").description("out/<key>.scmbot, to add on the play page")
+  .action(async () => { await runBot(["build"]); });
+bot.command("update").description("the newest toolchain, the one the play page expects")
+  .action(async () => { await updateBot(); });
 
 try {
   await program.parseAsync();

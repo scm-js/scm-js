@@ -1,7 +1,7 @@
 {
   "name": "@scm-js/cli",
   "version": "0.8.8",
-  "description": "StarCraft: Brood War maps and replays from the command line: what a map or replay holds, Check Map, and opening them in scmJS",
+  "description": "StarCraft: Brood War maps, replays and bots from the command line: what a map or replay holds, Check Map, opening them in scmJS, and building a BWAPI bot for the play page",
   "keywords": [
     "starcraft",
     "brood war",
@@ -10,9 +10,12 @@
     "scm",
     "scx",
     "rep",
-    "cli"
+    "cli",
+    "bwapi",
+    "bot"
   ],
   "license": "MIT",
+  "author": "Jeany",
   "type": "module",
   "bin": {
     "scmjs": "dist/scmjs.mjs"

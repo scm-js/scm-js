@@ -415,6 +415,56 @@ jobs:
             node scripts/publish-plugin-api.mjs --push
           fi
 
+  # `@scm-js/cli`, the `scmjs` command (cli/, docs/cli.md), on npm. Its version is the
+  # editor's, so it goes out with each numbered release and with nothing else: a stable
+  # run is a tag whose package.json says X.Y.Z, and `build:cli` writes that into
+  # cli/package.json before the publish. A version npm already has is left alone, so a
+  # release run dispatched again does not fail here.
+  #
+  # Authenticated like `plugin-api` above, by trusted publishing over OIDC with no token
+  # (and so no `registry-url` on setup-node either). The trusted publisher on npmjs.com for
+  # @scm-js/cli names this repository and `build.yml`, no environment, and allows
+  # publishing directly; with staging only, npm answers 403 "OIDC permission denied for
+  # this action". Provenance comes with the OIDC publish.
+  cli:
+    name: Publish the command line
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      # Trusted publishing needs npm 11.5.1 or newer; the runner's Node 22 ships npm 10.x.
+      - run: |
+          npm install -g npm@latest
+          npm --version
+      - run: npm run build:cli
+      - name: Publish
+        working-directory: cli
+        run: |
+          set -e
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "${{ needs.channel.outputs.version }}" ]; then
+            echo "::error::cli/package.json says $VERSION, the release is ${{ needs.channel.outputs.version }}"
+            exit 1
+          fi
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME $VERSION is already on npm; nothing to publish."
+            exit 0
+          fi
+          node dist/scmjs.mjs --version
+          npm publish
+
   pages:
     name: Deploy Pages
     needs: [channel, web]

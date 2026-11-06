@@ -21,6 +21,7 @@
     "build:image": "npm run build && node scripts/bundle-plugin-runtimes.mjs dist && docker build -f docker/Dockerfile -t scmjs .",
     "bundle:runtimes": "node scripts/bundle-plugin-runtimes.mjs",
     "desktop": "vite build -c desktop/vite.config.ts && electron .",
+    "dev:desktop": "concurrently -k -s first -n vite,electron \"npm run dev -- --strictPort\" \"wait-on http://localhost:5173 && cross-env SCMJS_DEV_URL=http://localhost:5173 npm run desktop\"",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
@@ -58,6 +59,8 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
     "commander": "^15.0.0",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
     "dts-bundle-generator": "^9.5.1",
     "electron": "^44.1.1",
     "electron-builder": "^26.15.3",
@@ -65,7 +68,8 @@
     "oxlint": "^1.79.0",
     "picocolors": "^1.1.1",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wait-on": "^9.5.1"
   },
   "engines": {
     "node": ">=22.18.0"

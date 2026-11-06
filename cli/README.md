@@ -1,14 +1,18 @@
-# scmjs
+# @scm-js/cli
 
-StarCraft: Brood War maps and replays from the command line, by [scmJS](https://scmjs.dev/editor/).
+StarCraft: Brood War maps and replays from the command line, by [scmJS](https://scmjs.dev/editor/). It installs the
+`scmjs` command:
 
 ```sh
-npx scmjs info "(2)Destination.scx"     # what a map or replay holds
-npx scmjs map check maps/*.scx          # Check Map, as the editor runs it; exits 1 on errors
-npx scmjs replay info game.rep          # players, races, APM, map, length
-npx scmjs replay open game.rep          # watch it in scmJS: the desktop app, or the editor in your browser
-npx scmjs about
+npm install -g @scm-js/cli
+scmjs info "(2)Destination.scx"     # what a map or replay holds
+scmjs map check maps/*.scx          # Check Map, as the editor runs it; exits 1 on errors
+scmjs replay info game.rep          # players, races, APM, map, length
+scmjs replay open game.rep          # watch it in scmJS: the desktop app, or the editor in your browser
+scmjs about
 ```
+
+Or without installing it: `npx @scm-js/cli info "(2)Destination.scx"`.
 
 Every command has `--help` and `--json`. Needs Node.js 22.12 or newer.
 

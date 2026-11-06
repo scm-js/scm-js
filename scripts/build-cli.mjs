@@ -1,11 +1,13 @@
 // Builds the `scmjs` command (cli/, docs/cli.md) into one file, cli/dist/scmjs.mjs: its code, the editor's code it
-// reads maps and replays with, and its two libraries, so `npx scmjs` downloads nothing more. Its version is the
-// editor's (package.json), written into cli/package.json too.
+// reads maps and replays with, and its two libraries, so `npx @scm-js/cli` downloads nothing more. Its version is the
+// editor's (package.json), written into cli/package.json too. Beside it, THIRD-PARTY-NOTICES.txt carries the license
+// of every package compiled in (scripts/lib/notices.mjs).
 //   npm run build:cli                   then: node cli/dist/scmjs.mjs --help
 //   npm run cli -- map info a.scx       built and run in one step (--quiet: no line about the build)
 import { execFileSync } from "node:child_process";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { build } from "vite";
+import { cliNotices } from "./lib/notices.mjs";
 
 const version = JSON.parse(readFileSync("package.json", "utf8")).version;
 let commit = "";
@@ -26,6 +28,21 @@ await build({
     __SCMJS_COMMIT__: JSON.stringify(commit),
     __SCMJS_BUILT__: JSON.stringify(new Date().toISOString().slice(0, 10)),
   },
+  plugins: [{
+    // The packages the bundle holds, from its modules' paths: node_modules/<name> or node_modules/@scope/<name>.
+    name: "scmjs-cli-notices",
+    generateBundle(_, bundle) {
+      const names = new Set();
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== "chunk") continue;
+        for (const id of chunk.moduleIds) {
+          const m = /node_modules\/((?:@[^/]+\/)?[^/]+)\/(?!.*node_modules\/)/.exec(id.replace(/\\/g, "/"));
+          if (m) names.add(m[1]);
+        }
+      }
+      this.emitFile({ type: "asset", fileName: "THIRD-PARTY-NOTICES.txt", source: cliNotices(".", [...names].sort(), version) });
+    },
+  }],
   ssr: { noExternal: true, target: "node" },
   build: {
     ssr: "cli/src/main.ts",

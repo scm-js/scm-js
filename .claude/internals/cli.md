@@ -1,7 +1,8 @@
 # The `scmjs` command line
 
-`cli/` is the npm package `scmjs` (not published yet, 2026-11-05): `npx scmjs about | info | map info|check|open |
-replay info|open`. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | info | map info|check|open |
+replay info|open`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot toolchain is meant to move under
 `scmjs bot`), "an impressive UX tool … not overly engineered".
 
@@ -21,7 +22,11 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
   (rolldown's name for inlineDynamicImports) → `cli/dist/scmjs.mjs` (~670 KB, shebang). commander, picocolors and
   @scm-js/replay are devDependencies of the root bundled in, so the published package has no dependencies and `npx` fetches one file.
   The version is the editor's (`package.json`), written into `cli/package.json` by the build; commit and build date
-  are `define`d. commander 15 needs Node ≥ 22.12 (`engines`).
+  are `define`d. **Licences**: the build's `scmjs-cli-notices` plugin reads the bundle's module ids for
+  `node_modules/<pkg>` and writes `cli/dist/THIRD-PARTY-NOTICES.txt` with `cliNotices` (`scripts/lib/notices.mjs`,
+  throws on a package with no licence file); `cli/LICENSE` is a copy of the root one. Today: @scm-js/replay,
+  commander, fflate (via mopaq), mopaq, picocolors; ATTRIBUTION.md has a table for them. Added 2026-11-06 just
+  before the first publish, which had gone without either (the publish failed on 2FA first). commander 15 needs Node ≥ 22.12 (`engines`).
 - **Type-checked** by `tsconfig.cli.json` (in `tsc -b`'s references): `types: node, vite/client`, `cli/src` only
   (it pulls in the `src/` files it imports). `tests/cli.test.ts` covers the pieces; `npm run cli -- …` runs it.
 - **Output** (`cli/src/ui.ts`): picocolors decides colour (`NO_COLOR`, `FORCE_COLOR`, `--no-color`, a pipe). Marks
@@ -59,5 +64,5 @@ each kind of thing (`map`, `replay`, later `plugin`, `bot` — scm-sim's scmbot 
 ## Next (proposed to the user)
 
 `map unpack|pack|diff`, `map triggers export|import`, `map trigscript build`, `map render`, `map run` (the plugin API
-headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. Publishing `scmjs` to npm
-is the user's step (`cd cli && npm publish`, prepack builds).
+headless), `plugin new|dev|test`, `bot …` from scm-sim, `setup --from` for the game files. Publishing is the user's step: `cd cli && npm
+publish --browser=false` in their own terminal (security key; the `!` prompt cannot do 2FA), prepack builds.

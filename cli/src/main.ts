@@ -58,6 +58,11 @@ async function botInfo(input: Input) {
   ] };
 }
 
+// Output piped into something that stops reading (`| head`): stop quietly, as other commands do, not with a stack.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(process.exitCode ?? 0); else throw e; });
+}
+
 const program = new Command("scmjs")
   .description("StarCraft: Brood War maps and replays from the command line")
   .version(VERSION, "-v, --version", "print the version")

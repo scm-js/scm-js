@@ -196,6 +196,23 @@ web zip, the installers, the hosted sites and the container image all carry them
 list is read from `package.json`'s dependencies and from the vendored plugins rather than
 kept by hand, and a dependency with no license file fails the build.
 
+### In the `scmjs` command
+
+The command line (`cli/`) is built into one file from the editor's own code and these
+packages:
+
+| Project | Use | License |
+| --- | --- | --- |
+| [Commander.js](https://github.com/tj/commander.js) | the commands, their options and help | MIT, copyright 2011 TJ Holowaychuk |
+| [picocolors](https://github.com/alexeyraspopov/picocolors) | colour in the terminal | ISC, Oleksii Raspopov, Kostiantyn Denysov, Anton Verinov |
+| [@scm-js/replay](https://github.com/scm-js/replay) | reading replays | MIT, copyright 2026 scmJS |
+| [mopaq](https://github.com/jeany55/mopaq) | reading MPQ archives | MIT, copyright 2026 Jeany |
+| [fflate](https://github.com/101arrowz/fflate), through mopaq | zlib decompression | MIT, copyright Arjun Barrett |
+
+Its build (`scripts/build-cli.mjs`) writes their license texts into
+`cli/dist/THIRD-PARTY-NOTICES.txt`, which the published package carries. The list is read
+from the modules the bundle holds, so a new import cannot go in without its license.
+
 ### Plugin runtimes
 
 Two default plugins load large parts of themselves at run time instead of compiling them

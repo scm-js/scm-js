@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error - plain .mjs build script, imported for its pure parts.
-import { buildNotices, bundledDependencies, vendoredPlugins, withRuntimeNotices } from "../scripts/lib/notices.mjs";
+import { buildNotices, bundledDependencies, cliNotices, vendoredPlugins, withRuntimeNotices } from "../scripts/lib/notices.mjs";
 
 const root = join(import.meta.dirname, "..");
 
@@ -35,6 +35,17 @@ describe("third-party notices", () => {
   it("points at ATTRIBUTION.md and says no game data is inside", () => {
     expect(text).toContain("ATTRIBUTION.md");
     expect(text).toContain("No StarCraft game data is included");
+  });
+});
+
+describe("the scmjs command's notices", () => {
+  it("carries each bundled package's license, and fails on one without", () => {
+    const text: string = cliNotices(root, ["commander", "picocolors"], "1.2.3");
+    expect(text.startsWith("Third-party notices for scmjs 1.2.3")).toBe(true);
+    expect(text).toMatch(/^commander \d/m);
+    expect(text).toMatch(/^picocolors \d/m);
+    expect(text).toContain("ATTRIBUTION.md");
+    expect(() => cliNotices(root, ["no-such-package"], "1.2.3")).toThrow(/no license file/);
   });
 });
 

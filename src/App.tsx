@@ -15,6 +15,7 @@ import { useWhatsNew } from "./hooks/useWhatsNew";
 import { useStartupMap } from "./hooks/useStartupMap";
 import { usePlugins } from "./hooks/usePlugins";
 import { usePluginLink } from "./hooks/usePluginLink";
+import { usePluginDev } from "./hooks/usePluginDev";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useRecovery } from "./hooks/useRecovery";
 import { useCloseGuard } from "./hooks/useCloseGuard";
@@ -88,6 +89,7 @@ export default function App() {
   useStartupMap();
   usePlugins();
   usePluginLink();
+  usePluginDev();
   useWindowTitle();
   useCloseGuard();
   useRecovery();

@@ -47,7 +47,7 @@ function detach(command: string, args: string[]): void {
 }
 
 /** The person's browser at `url` (none with `BROWSER=none`, as other tools take it). */
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
   if (process.env.BROWSER === "none") return;
   if (process.platform === "win32") detach("cmd.exe", ["/c", "start", "", url]);
   else if (process.platform === "darwin") detach("open", [url]);

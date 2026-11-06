@@ -3,7 +3,7 @@
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | info | map info|check|open |
 replay info|open`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
-each kind of thing (`map`, `replay`, `bot`, later `plugin`), "an impressive UX tool … not overly engineered".
+each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
 ## Design
 
@@ -43,6 +43,24 @@ passed on; `update` = `docker pull`. Says "not installed" vs "not running" from 
 The toolchain lives in the public github.com/scm-js/scmbot (its README is the guide), mirrored from scm-sim's
 native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany", Docker, Play and Bots in `about`
 (the user's ask). `SCMBOT_COMMAND=scmjs bot` makes the toolchain's messages say `scmjs bot build` (scmbot#1).
+
+## Plugins (`cli/src/plugin.ts`)
+
+- `plugin new [name] [--dir]` writes `plugin-<id>/` from `pluginFiles`: Hello World's layout (manifest with
+  `build: dist/plugin.js`, `plugin.ts` with a Tools item and a pane, `ko.ts` + `tests/ko.test.ts`, tsconfig as Hello
+  World's, the shared `scm-js/.github` plugin CI without `secrets: inherit` (its push falls back to GITHUB_TOKEN),
+  README, MIT LICENSE with `git config user.name`). package.json has `start: scmjs plugin dev`, `check: scmjs plugin
+  check` and `@scm-js/cli ^<this version>` as a devDependency. Verified: npm install, test, typecheck, build pass.
+  Trap: a comment in the starter that says `t("…")` is read by the catalogue test as a string.
+- `plugin check [folder]` = the loader's view: `validateManifest`, api vs PLUGIN_API_VERSION, icon (`resolveIcon`
+  against a fake base to tell a file), entry, build present and newer than the sources; with no build, relative
+  imports followed (`./x.js` → x.ts, dir/index) and package imports refused, as the source loader does. `--json`,
+  `--all`, `--strict`, exit 1.
+- `plugin dev [folder] [--port 5310] [--no-open]`: `npm run build` first and on change when the manifest names a
+  build and package.json has the script (else the source is served as is), then the check; a loopback server with
+  CORS, `access-control-allow-private-network`, no-store, no node_modules/.git, nothing outside the folder; SSE at
+  `/__scmjs/events`; fs.watch recursive, debounced, ignoring node_modules/.git and the build's file and folder (a
+  removed dist/ otherwise built twice). The editor's half: plugins-loading.md, `?plugin-dev=`.
 
 ## Opening (`cli/src/open.ts`)
 

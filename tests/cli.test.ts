@@ -3,11 +3,14 @@
  * lines, and StarCraft text in a terminal. picocolors may write colour (it does under CI), so lines are compared
  * without it.
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { dockerArgs } from "../cli/src/bot";
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
+import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceImports } from "../cli/src/plugin";
+import { devPluginSpec } from "../src/plugins/devLink";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
 import { gameLines, gameText, rows, table, visible } from "../cli/src/ui";
 import { TEST_MAPS_DIR } from "./support/maps";
@@ -78,5 +81,76 @@ describe("scmjs bot", () => {
     // Windows (Docker Desktop maps the files itself) and no terminal (a script, CI)
     expect(dockerArgs({ folder: "/x/b", args: ["init", "b.vcxproj"], image: "img", tty: false, user: null }))
       .toEqual(["run", "--rm", "-i", "-v", "/x/b:/bot", "-e", "SCMBOT_FOLDER=b", "-e", "SCMBOT_COMMAND=scmjs bot", "img", "init", "b.vcxproj"]);
+  });
+});
+
+describe("scmjs plugin", () => {
+  const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-plugin-"));
+
+  it("names a plugin and its folder", () => {
+    expect(pluginId("Base Check")).toBe("base-check");
+    expect(pluginId("  Ünits ++ Tools ")).toBe("units-tools");
+    expect(nameFromFolder("/x/plugin-base-check")).toBe("Base Check");
+    expect(nameFromFolder("scmjs-plugin-trigger_tools")).toBe("Trigger Tools");
+  });
+
+  it("writes a plugin that loads once it is built", () => {
+    const dir = join(tmp(), "plugin-base-check");
+    const made = newPlugin({ name: "Base Check", dir });
+    expect(made.files).toEqual(expect.arrayContaining(["plugin.json", "plugin.ts", "ko.ts", "tests/ko.test.ts", "package.json", "tsconfig.json", ".github/workflows/ci.yml", "LICENSE"]));
+    const manifest = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf8"));
+    expect(manifest).toMatchObject({ name: "Base Check", id: "base-check", entry: "plugin.ts", build: "dist/plugin.js", api: 1 });
+    // Not built yet: the editor would load dist/plugin.js and fail.
+    expect(checkPlugin(dir).issues.filter((i) => i.level === "error").map((i) => i.message)).toEqual([expect.stringContaining("dist/plugin.js is not there")]);
+    mkdirSync(join(dir, "dist"));
+    writeFileSync(join(dir, "dist/plugin.js"), "export default () => {};\n");
+    const c = checkPlugin(dir);
+    expect(c.issues.filter((i) => i.level !== "info")).toEqual([]);
+    expect(c.loads).toBe("dist/plugin.js");
+    // The starter's strings are all in its catalogue, as its own test checks.
+    const source = readFileSync(join(dir, "plugin.ts"), "utf8");
+    const keys = [...source.matchAll(/\b(?:t|msg)\("((?:[^"\\]|\\.)*)"/g)].map((m) => JSON.parse(`"${m[1]}"`));
+    const ko = readFileSync(join(dir, "ko.ts"), "utf8");
+    for (const k of keys) expect(ko, k).toContain(JSON.stringify(k));
+    expect(() => newPlugin({ name: "Base Check", dir })).toThrow(/not empty/);
+  });
+
+  it("follows the source as the editor would when there is no build", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "plugin.json"), JSON.stringify({ name: "Src", api: 1 }));
+    writeFileSync(join(dir, "plugin.ts"), 'import type { PluginApi } from "@scm-js/plugin-api";\nimport { a } from "./lib";\n// import x from "nowhere";\nexport default (api: PluginApi) => a(api);\n');
+    writeFileSync(join(dir, "lib.ts"), 'import { b } from "./missing.js";\nimport lodash from "lodash";\nexport const a = (x: unknown) => b(x, lodash);\n');
+    const errors = checkPlugin(dir).issues.filter((i) => i.level === "error").map((i) => i.message);
+    expect(errors).toEqual(["lib.ts imports ./missing.js, which is not there", 'lib.ts imports the package "lodash"']);
+  });
+
+  it("refuses what the editor would refuse in the manifest", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "plugin.json"), JSON.stringify({ name: "Later", api: 99, entry: "plugin.ts", icon: "art/mark.png" }));
+    writeFileSync(join(dir, "plugin.ts"), "export default () => {};\n");
+    const errors = checkPlugin(dir).issues.filter((i) => i.level === "error").map((i) => i.message);
+    expect(errors).toEqual(["It needs plugin API 99; the editor provides 1", "The icon art/mark.png is not in the folder"]);
+    writeFileSync(join(dir, "plugin.json"), JSON.stringify({ description: "no name" }));
+    expect(checkPlugin(dir).issues[0]).toMatchObject({ level: "error", message: expect.stringContaining("needs a \"name\"") });
+  });
+
+  it("reads imports, leaving type-only ones and comments out", () => {
+    expect(sourceImports('import type { A } from "pkg";\nexport type { B } from "./b";\nimport x from "./x";\nconst y = await import("./y");\n/* import z from "z" */\nexport { c } from "./c";\n'))
+      .toEqual(["./x", "./y", "./c"]);
+  });
+
+  it("gives the editor the address it serves the plugin on", () => {
+    expect(devEditorUrl("https://scmjs.dev/editor/", "http://127.0.0.1:5310/")).toBe("https://scmjs.dev/editor/?plugin-dev=http%3A%2F%2F127.0.0.1%3A5310%2F");
+    expect(devPluginSpec(new URL(devEditorUrl("http://localhost:5173/?nosplash", "http://127.0.0.1:5310/")).searchParams.get("plugin-dev"))).toBe("http://127.0.0.1:5310/");
+  });
+});
+
+describe("the editor's ?plugin-dev= link", () => {
+  it("takes only a plugin served on this machine, at the root of a port", () => {
+    expect(devPluginSpec("http://127.0.0.1:5310/")).toBe("http://127.0.0.1:5310/");
+    expect(devPluginSpec("http://localhost:3000")).toBe("http://localhost:3000/");
+    expect(devPluginSpec("http://[::1]:8080/")).toBe("http://[::1]:8080/");
+    for (const bad of [null, "", "https://127.0.0.1:5310/", "http://127.0.0.1/", "http://evil.example:5310/", "http://127.0.0.2:5310/", "http://127.0.0.1:5310/other/", "http://user@127.0.0.1:5310/", "http://127.0.0.1:5310/?x=1", "javascript:alert(1)", "http://localhost.evil.example:80/"])
+      expect(devPluginSpec(bad), String(bad)).toBeNull();
   });
 });

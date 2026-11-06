@@ -1,9 +1,9 @@
 # The command line
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
-Map on any number of maps, opens a map or replay in scmJS from a terminal, and builds a
-BWAPI bot of your own for the play page. It reads files the way the editor does, so the
-two agree about every map.
+Map on any number of maps, opens a map or replay in scmJS from a terminal, helps you write
+a plugin, and builds a BWAPI bot of your own for the play page. It reads files the way the
+editor does, so the two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -26,6 +26,9 @@ Or run it without installing, with `npx`, which fetches it the first time:
 | `scmjs map open <map>` | Opens the map in scmJS |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
+| `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
+| `scmjs plugin dev` | Opens the editor with your plugin, and reloads it each time you save |
+| `scmjs plugin check` | What the editor would make of the plugin: its manifest, files and imports |
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs about` | This version, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
@@ -75,6 +78,35 @@ for example) are not run here. The editor runs them once you have given it the g
 players in their colours with race, APM and team, the map, the game's length and speed,
 when it was played, and how much chat there was. APM is counted the way the replay viewer
 counts it: everything a player did except chat, until they left.
+
+## Plugins
+
+`scmjs plugin new "Base Check"` writes a plugin to start from in `plugin-base-check/`: its
+manifest, a `plugin.ts` that adds a Tools menu item, the Korean catalogue and the test
+that keeps it complete, the typings, the build and the CI that every scm-js plugin uses.
+Then:
+
+```sh
+cd plugin-base-check
+npm install
+npm start
+```
+
+`npm start` runs `scmjs plugin dev`. It builds the plugin, serves its folder on your own
+computer and opens the editor with it. The first time, the editor asks you to add the
+plugin, as for any plugin. After that, each time you save a file it builds the plugin
+again and the editor reloads it. A build that fails is shown in the terminal and in the
+editor, and nothing is reloaded until it is fixed. Ctrl+C stops it.
+
+The editor remembers the plugin by its address, `http://127.0.0.1:5310/`, so it is the
+same plugin next time. `--port` serves it on another port, and `--no-open` prints the
+editor's address instead of opening it.
+
+`scmjs plugin check` reads the folder the way the editor loads it and says what would go
+wrong: a manifest it would refuse, an API version it does not have, a missing icon, entry
+or build, a build older than its source, and, for a plugin without a build, imports of
+files that are not there or of npm packages. It exits with 1 when the editor would not
+load the plugin, so it can stop a CI step. The [plugin guide](plugins.md) covers the rest.
 
 ## Bots
 
@@ -136,6 +168,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
+| `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
+| `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |
 | `src/hooks/` (the opener hand-over) | The editor's half of the hand-over: only a page on the loopback address that opened it is listened to |
 | [@scm-js/replay](https://github.com/scm-js/replay) | The replay reader, shared with the replay viewer plugin |

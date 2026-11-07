@@ -8,6 +8,7 @@ import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
+import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { diffMaps, printDiff } from "./diff";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
@@ -194,6 +195,24 @@ strings.command("import").description("set the map's strings from such a file").
     const r = importStrings(doc, from, await readFile(from, "utf8"));
     const w = await writeBack(doc, input.path, o.out ?? null);
     print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.replaced, "string")} replaced, ${r.added} added, ${r.unchanged} unchanged${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
+map.command("build").description("apply the map's TrigScript script and build its programs, as Save does").argument("<map>").addOption(json)
+  .option("--out <map>", "write the built map here instead of over the map")
+  .option("--check", "compile (and test, with --test) and write nothing")
+  .option("--test", "run the script's tests first; a failing test refuses the build")
+  .addHelpText("after", `
+The script is the one the map keeps (Triggers ▸ TrigScript… in the editor). Its trigger() calls go into the trigger
+list and its program()s are built into the file, with the map as you edit it kept beside them, so it opens in the
+editor as it was. Needs TypeScript on this computer: npm install typescript. Exits 1 when the script does not
+compile, a test fails or the build is refused; nothing is written then.`)
+  .action(async (file: string, o: { json?: boolean; out?: string; check?: boolean; test?: boolean }) => {
+    const { input, doc } = await openForEdit(file);
+    const typescript = await loadTypeScript();
+    const r = await buildMap(doc, input.path, typescript, { check: !!o.check, test: !!o.test, out: o.out ?? null });
+    if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+    else print(...printBuild(input.name, r));
+    if (!r.ok) process.exitCode = 1;
   });
 
 map.command("diff").description("what changed between two maps").argument("<a>").argument("<b>").addOption(json)

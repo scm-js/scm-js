@@ -60,6 +60,8 @@ passes Check Map (a fresh map has eight Human slots and fails on start locations
 
 ## Next
 
-`docs/cli.md`'s slices against this: `map triggers export|import`, `map strings`, `map diff`. A `@scm-js/core`
+Done 2026-11-06 (both CLI slices): `map triggers export|import`, `map strings`, `map diff`, `map build` — the last
+added `readSwitchNames`, `soundList`, `buildChk`/`keptExtras`/`buildMapFile` and `packBuiltMap` to the entry (the
+save plan and the built-file packer, so a script can do what Save does; `cli.md`). A `@scm-js/core`
 alias inside the repository for new code and the plugin host (towards `scmjs map run`). A browser smoke (the
 package claims to bundle; untested in a page).

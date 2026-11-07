@@ -252,6 +252,12 @@ jobs:
       # changed"). The other channels never meet it: their version carries a run number.
       - run: npm version --no-git-tag-version --allow-same-version "${{ needs.channel.outputs.version }}"
       - run: npm run lint
+      # The command's `map build` bundles the TrigScript compiler from the vendored plugin
+      # source (`plugins/`, not in the repository): its tests skip without it, so the source
+      # is fetched first. The same step is `prebuild`'s; a copy of the pinned spec is kept.
+      - run: npm run vendor:plugins
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm test
       # The default plugins are compiled into the bundle rather than fetched at startup
       # (`scripts/vendor-plugins.mjs`, run by `prebuild`), which is worth 890 KB gzipped
@@ -451,7 +457,11 @@ jobs:
       - run: |
           npm install -g npm@latest
           npm --version
+      # `build-cli.mjs` vendors the plugins itself when `plugins/` is missing (the compiler
+      # `map build` bundles); the token keeps that off the anonymous rate limit.
       - run: npm run build:cli
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish
         working-directory: cli
         run: |

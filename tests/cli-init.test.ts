@@ -103,10 +103,11 @@ describe("scmjs init", () => {
     expect(readmeText("Maps", [{ file: "(2)a|b.scx", name: "A\x03|B", width: 64, height: 96, tileset: "Ice", players: 2, script: false }])).toContain("| A\\|B | [(2)a\\|b.scx](%282%29a%7Cb.scx) | 64 × 96 | Ice | 2 |");
   });
 
-  it("is in the command list, hidden from the 23-line overview", () => {
+  it("is in the command list, under Maps and replays", () => {
     const init = program.commands.find((c) => c.name() === "init");
     expect(init).toBeDefined();
-    expect((init as unknown as { _hidden: boolean })._hidden).toBe(true);
+    expect((init as unknown as { _hidden?: boolean })._hidden).toBeFalsy();
+    expect(init!.helpGroup()).toBe("Maps and replays:");
     expect(init!.options.map((o) => o.long)).toEqual(["--json", "--print", "--git", "--force"]);
   });
 

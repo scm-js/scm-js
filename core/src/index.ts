@@ -66,12 +66,19 @@ export { soundList, type SoundRow } from "../../src/editor/sounds";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";
+// Terrain and doodads as the editor lays them: the isometric brush (it needs the tileset's CV5 to say which tile joins
+// which), a doodad checked against StarEdit's rule and placed, and the symmetry modes' maps (`scmjs map generate`).
+export { paintIsom, paintIsomDiamonds, checkIsom, hasIsom, isomTables, diamondAt, type Diamond, type IsomEdit } from "../../src/editor/isom";
+export { applyChanges, type TileChange } from "../../src/editor/terrain";
+export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
+export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";
 // The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).
 export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } from "../../src/formats/tileset/terrain";
 
 // ── The game's own files, decoded ──
 // The library carries none of them: these read what a person brings from their own copy of the game (`scmjs map preview`).
-export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, TileFlag, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { buildDoodadCatalogue, type DoodadCatalogue, type DoodadDef } from "../../src/formats/tileset/doodads";
 export { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
 export { unitGeometry, type UnitGeometry } from "../../src/editor/units";
 export { displayColorHex } from "../../src/data/players";

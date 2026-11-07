@@ -1508,8 +1508,8 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
   is `stdin.scx` or `stdin.chk` by its bytes, and is written back in the same form.
 - Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed, a
   merge had conflicts it was not told how to settle, nothing matched a search, a build did
-  not go through, a map test failed or something went wrong, 2 when a file was missing or was the wrong kind
-  for the command, or an option was not one.
+  not go through, a map test failed or something went wrong, 2 when a file was missing or
+  was the wrong kind for the command, or an option was not one.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
 - For what the commands do not do — a script that edits maps, a check of your own — the

@@ -18,6 +18,7 @@ import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { printRun, runOnMap } from "./run";
 import { CliError, dot, mark, pc, plural, print, rows, size } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
@@ -250,6 +251,23 @@ compile, a test fails or the build is refused; nothing is written then.`)
     if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
     else print(...printBuild(input.name, r));
     if (!r.ok) process.exitCode = 1;
+  });
+
+map.command("run").description("run a plugin, or a script written like one, over a map with the plugin API").argument("<plugin>", "a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL").argument("<map>").addOption(json)
+  .option("--command <id>", "after it starts, run this command of its (the id it registered)")
+  .option("--arg <value...>", "arguments for --command")
+  .option("--out <map>", "write the changed map here instead of over the map")
+  .option("--dry-run", "say what would change, as map diff does, and write nothing")
+  .addHelpText("after", `
+The plugin gets the editor's plugin API (docs.scmjs.dev/plugins) with the map open and no editor around it: what it
+would show — its status line, toasts, log — is printed here, and dialogs show nothing. A script is a file exporting
+activate(api), like a plugin's entry; a .ts needs TypeScript installed. The map is written back only when the
+plugin changed it. Exits 1 when the plugin does not load or throws.`)
+  .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean }) => {
+    const { input, doc } = await openForEdit(file);
+    const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+    else print(...printRun(input.name, r, { dryRun: !!o.dryRun }));
   });
 
 map.command("diff").description("what changed between two maps").argument("<a>").argument("<b>").addOption(json)

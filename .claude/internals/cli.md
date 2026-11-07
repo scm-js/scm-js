@@ -154,6 +154,27 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   + `--check`, programs (reopen: `builtBy` TrigScript, source restored, raw CHK has the payload's triggers), `.chk`
   refusal, no script. E2E from `/tmp` with the dist worked first time.
 
+## Plugins over a map (`cli/src/run.ts`) — 2026-11-06, third slice
+
+- `scmjs map run <plugin> <map> [--command id] [--arg v...] [--out] [--dry-run] [--json]`: `runHeadless` from
+  `src/plugins/headless.ts` (design and traps in `plugins-host.md`, "The host without the editor"); the Node half
+  (`nodeLoaderDeps`, `sourceFor`) is in `run.ts`, since the editor's tree has no Node types. The target is
+  `sourceFor`: an existing path → `file:` source (folder → `plugin.json`, `.json` → manifest, script extension →
+  entry), else `parseSpec` (github:/URL). Events (status, toasts, log lines that are not the host's own info) are
+  printed live in text mode and kept in the outcome for `--json`. After `activate` (and the command), `modified()`
+  decides: changed → `diffMaps` against the input bytes reopened, for the one-line summary (`summarizeDiff`) and the
+  full `--dry-run` listing; written with `writeBack` unless `--dry-run`; `--out` writes even an unchanged map (asked
+  for). Errors: loader's `PluginLoadError` → CliError with the `plugin check` hint; a throw in `activate` → "failed in
+  activate: …"; an unknown command lists the plugin's own. `activate`'s return is its deactivation, not a result
+  (the test first expected data from it — wrong); only `--command`'s return is `result`.
+- **Bundle trap**: the first build with the host in it was 6.2 MB (from 3.1): `host.ts` imports `builtin.ts`, whose
+  `import.meta.glob` of every vendored plugin's `plugin.ts` is inlined whole by `codeSplitting: false` — TrigScript's
+  workspace, Aftermath, the AI assistant, React. `build-cli.mjs`'s `scmjs-cli-leave-out` plugin resolves
+  `src/plugins/builtin.ts` to empty tables and `ko.json` to `{}` (as `build-core.mjs` does): 3.66 MB, i.e. the host
+  and atoms cost ~0.5 MB. React (~50 KB) is still in: `host.ts` and `services/gameData.ts` import helpers from
+  `hooks/useDoodadTools|useSpriteTools|useMapFileActions`, which import React and jotai's hooks, so aliasing `jotai`
+  to `jotai/vanilla` breaks the build (tried) — moving those helpers out of the hook files would take it out. `tests/cli-run.test.ts` (5 tests): sources, a JS plugin folder (events, diff, written, reopen), `--command` +
+  `--dry-run` + unknown command, an unchanged map and a `.ts` script through TypeScript, and the failure messages.
 ## The archive as a folder (`cli/src/archive.ts`) — 2026-11-06
 
 - `map unpack <map> [--out dir] [--list]` / `map pack <dir> [--out map] [--compression m]`, on two new core exports
@@ -205,7 +226,7 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 ## Next (proposed to the user)
 
 Done 2026-11-06: triggers/strings export-import, diff, completions, `map build` (above), on `@scm-js/core`
-(`core.md`), `map unpack|pack` (above; `map run` is PR #134). Still proposed: `map run` (the plugin API headless),
+(`core.md`), `map run`, `map unpack|pack` (above). Still proposed:
 `map render`, `bot run` (a headless game through scm-sim), `setup --from` for the game files. **Publishing is CI's**
 (2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
 release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`

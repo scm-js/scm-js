@@ -537,3 +537,19 @@ binds them only while a replay's tab is in front; a reorder of `useHotkeys` that
 built-in keys first would break it. A focused `<select>` counts as typing, so a plugin that
 wants its keys back after a menu choice blurs the menu.
 
+### The host without the editor (`src/plugins/headless.ts`, 2026-11-06)
+
+`scmjs map run` (`cli.md`) is `createPluginApi` over a fresh Jotai store under Node — what `tests/plugins.test.ts`
+had been doing all along, which is why no spike was needed. `headlessStore(doc)` is `loadDocumentAtom` on an
+`OpenedMap`; `documentOf` reads it back (`scenarioAtom`, `archiveExtrasAtom`, `archiveStoredAtom`, `builtByAtom`);
+`modified()` is `mapModifiedAtom`. `attachSinks` subscribes to `statusMessageAtom`, `toastsAtom` and `subscribeLog`
+so the surfaces that would draw are reported; dialogs/panels/map views register into their atoms and nothing reads
+them (`addMapView` already guards `document.createElement`; `pickFiles` answers `[]`). Code loads through the
+editor's own `loader.ts` with deps the caller brings: the CLI's `nodeLoaderDeps` (`cli/src/run.ts`) reads `file:`
+from disk, else `fetch`es; TypeScript via `transpileTs` with the TypeScript it found (`loadTypeScript`); modules
+written to a temp folder as `.mjs` and `import()`ed. **Nothing Node's in this file**: it is in `tsconfig.app.json`
+(no Node types) — the first cut had `node:fs` here and `tsc -b` refused it. `loadPlugin` now takes a parsed `PluginSource` as well as a spec, because `parseSpec` has no words for
+a folder on disk (`sourceFor` makes the `file:` source). Commands run through the registered `run` itself, not
+`runCommand`, so a throw reaches the terminal instead of the log. `api.document.save()` is not made to work here:
+the CLI writes the document with `writeBack`. Layering: `tests/core.test.ts` lets `cli/src/run.ts` import this one
+module beyond the library's entry (`HOST_EXCEPTION`); the host stays the editor's.

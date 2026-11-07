@@ -19,6 +19,7 @@ import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewM
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
+import { diffPicture } from "./diffpicture";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
@@ -579,16 +580,33 @@ their own StarCraft files and no account. Waits up to five minutes for the page.
 map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)
   .option("--all", "list every item; by default a long list is cut at 20")
   .option("--rev <revision>", "compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is")
+  .option("--picture", "draw the maps with the changes marked, with your copy of the game's graphics (as map preview)")
+  .option("--out <picture.png>", "with --picture: write a PNG instead; - for standard output")
+  .option("--side-by-side", "with --picture: the first map, the changes and the second map in one picture")
+  .option("--scale <n>", `with --picture: pixels a tile, ${PNG_SCALES.join(", ")} in a PNG (4 by default)`)
+  .option("--width <columns>", "with --picture: the terminal picture's width in characters")
+  .option("--blocks", "with --picture: colour blocks, even in kitty or iTerm2")
+  .option("--starcraft <folder>", "with --picture: your installation of StarCraft (SCMJS_STARCRAFT)")
   .addHelpText("after", `
 Exits 1 when the maps differ, 0 when they are the same, like diff.
   scmjs map diff old.scx new.scx
-  scmjs map diff --rev HEAD~1 maps/ridge.scx     # what the last commit changed in the map`)
-  .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; rev?: string }) => {
+  scmjs map diff --rev HEAD~1 maps/ridge.scx     # what the last commit changed in the map
+  scmjs map diff old.scx new.scx --picture --out diff.png --side-by-side`)
+  .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; rev?: string; picture?: boolean; out?: string; sideBySide?: boolean; scale?: string; width?: string; blocks?: boolean; starcraft?: string }) => {
     if (o.rev ? b !== undefined : b === undefined) throw new CliError(o.rev ? "--rev compares one map with its earlier version: give the map alone" : "Two maps to compare, or one with --rev <revision>", null, 2);
+    const picture = !!o.picture || o.out !== undefined || !!o.sideBySide;
+    const pictureOnly = (["scale", "width", "blocks", "starcraft"] as const).find((k) => o[k] !== undefined);
+    if (!picture && pictureOnly) throw new CliError(`--${pictureOnly} is the picture's: add --picture`, null, 2);
+    const piped = o.out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the picture both want standard output", "Write the PNG to a file with --out, or leave --json off.", 2);
     const fromRev = async () => { const input = revisionInput(o.rev!, a); expectKind(input, "map"); return { input, doc: await loadMapInput(input) }; };
     const [x, y] = await Promise.all([o.rev ? fromRev() : openForEdit(a), openForEdit(o.rev ? a : b!)]);
     const d = diffMaps({ name: x.input.name, doc: x.doc }, { name: y.input.name, doc: y.doc });
-    print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
+    if (picture) {
+      const { report, lines } = await diffPicture(x, y, o);
+      if (o.json) print(JSON.stringify({ ...d, picture: report }, null, 2));
+      else say(piped, ...lines);
+    } else print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;
   });
 

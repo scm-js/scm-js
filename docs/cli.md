@@ -48,7 +48,7 @@ when there is a newer version.
 | `scmjs map strings prune <map>` | Drops the strings nothing in the map refers to |
 | `scmjs map set <map>` | The map's name, description, revision or text encoding |
 | `scmjs map resize <map>` | Scenario ▸ Resize: the map to another size, anchored |
-| `scmjs map diff <a> <b>` | What changed between two maps, or since a git revision with `--rev` |
+| `scmjs map diff <a> <b>` | What changed between two maps, or since a git revision with `--rev`; `--picture` draws where |
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
 | `scmjs map run <plugin> <map>` | Runs a plugin, or a script written like one, over the map with the plugin API |
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
@@ -475,6 +475,48 @@ scmjs map diff --rev main maps/ridge.scx       # what this branch changed
 The map is read through `git show` at that revision, so this works wherever `git diff`
 does; a file that is not in a repository, or not at that revision, is refused with git's
 own words.
+
+`--picture` shows where the map changed rather than what. It draws the second map as
+[`map preview`](#a-picture-of-a-map) does, with your copy of StarCraft, the ground that
+did not change darkened: tiles that changed are tinted magenta, units added are green
+boxes, units removed red ones, and a unit moved a few tiles (the same type and owner) is a
+yellow box with a frame where it was and a line between them. A unit edited where it stood
+is yellow too. Locations that changed are outlined: green when added, red where one was,
+yellow where it is now. When one map was resized, the tiles only one of them has are
+striped grey. Start locations, mineral fields and geysers are drawn for finding your way,
+with start locations and geysers in greys so their colours do not read as changes. Under
+the picture a line counts it all:
+
+```
+a.scx → b.scx  128 × 128 · twilight · StarCraft: Remastered 1.23.10.13515
+..$M$$$.............::::::::$M$:RR:::::::::::::...     ..:$$$$$:
+.$$:@@MM........ .....:::::$$::::::::::::::....     ..:::..::.$$
+...:@@MM.......    .::.::::::::::::::::::.....    ...:::...AA...
+  …
+. $$$$$.. ....:::....  ....:$$xxx::$$:... .....:::..............
+.$$.3@  .......:::.........:$$:::::::.....   ...:::::......1@.$$
+  …
+A +3 units  R −1 units  M ~3 units moved  x ~24 tiles  # ~0 locations
+```
+
+That is the form without colour, where the letters stand for the marks: `A` added, `R`
+removed, `M` moved or edited, `x` a changed tile, `/` a tile only one map has, `#` a
+location. In colour it is the picture itself, two pixels a character as `map preview`
+draws it. `--out diff.png` writes a PNG at `--scale` pixels a tile (4 by default), and
+`--side-by-side` puts the first map, the changes and the second map in one picture,
+`a | changes | b` — in the terminal too when it is wide enough for three pictures of 32
+columns, else the changes alone. `--json` adds what was drawn to the comparison: how many
+tiles, units and locations changed, and the box of tiles round the changed ones.
+
+```sh
+scmjs map diff old.scx new.scx --picture
+scmjs map diff --rev main maps/ridge.scx --picture --side-by-side --out review.png
+```
+
+Tiles are compared by position, so a map resized with its content moved to another side
+shows every tile as changed. Maps of two tilesets cannot be drawn as one picture: they are
+drawn side by side with nothing marked, and the command says so. The exit code is the
+comparison's, 1 when the maps differ, picture or not.
 
 ## Building a TrigScript map
 

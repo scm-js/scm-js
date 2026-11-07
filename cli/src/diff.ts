@@ -102,22 +102,30 @@ function multiset<T>(as: readonly T[], bs: readonly T[], key: (t: T) => string, 
 }
 
 const owner = (o: number) => (o === 11 ? "Neutral" : o < 8 ? `Player ${o + 1}` : `Owner ${o}`);
-const unitKey = (u: UnitRecord) => JSON.stringify({ ...u, serial: 0 });
+/** A unit as `map diff` matches it: the whole record but its serial number. */
+export const unitKey = (u: UnitRecord) => JSON.stringify({ ...u, serial: 0 });
 const unitText = (u: UnitRecord) => `${unitName(u.unitId)} (${owner(u.owner)}) at ${u.x},${u.y}${u.resourceAmount ? `, ${u.resourceAmount.toLocaleString("en-US")} resources` : ""}`;
 
-function locations(a: Scenario, b: Scenario): Entry[] {
-  const out: Entry[] = [];
+const locationText = (s: Scenario, i: number) => { const l = s.locations[i]; return `${plainText(locationName(s, i))} ${l.left},${l.top}–${l.right},${l.bottom}${l.elevationFlags ? ` flags ${l.elevationFlags}` : ""}`; };
+
+/** Locations by slot: placed on one side only (added, removed), or on both with another name, place or flags (changed). */
+export function locationChanges(a: Scenario, b: Scenario): { index: number; change: Change }[] {
+  const out: { index: number; change: Change }[] = [];
   const n = Math.max(a.locations.length, b.locations.length);
   const placed = (s: Scenario, i: number) => { const l = s.locations[i]; return !!l && (l.left !== l.right || l.top !== l.bottom); };
-  const text = (s: Scenario, i: number) => { const l = s.locations[i]; return `${plainText(locationName(s, i))} ${l.left},${l.top}–${l.right},${l.bottom}${l.elevationFlags ? ` flags ${l.elevationFlags}` : ""}`; };
   for (let i = 0; i < n; i++) {
     const pa = placed(a, i), pb = placed(b, i);
     if (!pa && !pb) continue;
-    if (pa && !pb) out.push({ change: "removed", text: `${i}: ${text(a, i)}` });
-    else if (!pa && pb) out.push({ change: "added", text: `${i}: ${text(b, i)}` });
-    else if (text(a, i) !== text(b, i)) out.push({ change: "changed", text: `${i}`, a: text(a, i), b: text(b, i) });
+    if (pa && !pb) out.push({ index: i, change: "removed" });
+    else if (!pa && pb) out.push({ index: i, change: "added" });
+    else if (locationText(a, i) !== locationText(b, i)) out.push({ index: i, change: "changed" });
   }
   return out;
+}
+
+function locations(a: Scenario, b: Scenario): Entry[] {
+  return locationChanges(a, b).map(({ index: i, change }) =>
+    change === "changed" ? { change, text: `${i}`, a: locationText(a, i), b: locationText(b, i) } : { change, text: `${i}: ${locationText(change === "removed" ? a : b, i)}` });
 }
 
 function triggers(a: Scenario, b: Scenario, briefing: boolean): Entry[] {

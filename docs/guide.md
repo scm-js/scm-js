@@ -1256,6 +1256,10 @@ None of it is required. The editor works completely without an account, and it s
 nothing to scmjs.dev until you use one of these features; there is no request at startup
 unless you are already signed in.
 
+The `scmjs` command line can sign in too, and make a copy link or an edit link from a map
+file on your computer ([Sharing a map from the
+terminal](cli.md#sharing-a-map-from-the-terminal)).
+
 All of it lives in the scmjs.dev plugin, which is installed and on from the start. If you
 would rather not see the Account menu at all, turn the plugin off in Plugins ▸ Manage
 Plugins….

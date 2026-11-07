@@ -32,6 +32,8 @@ import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
+import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
+import { printShare, shareMap } from "./share";
 import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
@@ -547,6 +549,27 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
     if (!d.same) process.exitCode = 1;
   });
 
+map.command("share").description("a link to the map on scmjs.dev: a copy anyone can open, or --edit to edit it together").argument("<map>", "the map, or - for standard input").addOption(json)
+  .option("--name <name>", "the map's name on your account and in the link; the scenario's name by default")
+  .option("--note <text>", "a note for this revision, as My Maps shows it")
+  .option("--edit", "a link to edit the map together (Account ▸ Share this Map…), not a copy")
+  .option("--keep <how long>", "with --edit: keep it open day, week, month or forever after its last edit; by default it is open until everyone leaves")
+  .option("--new", "store it as a new map even when your account has one with this file name")
+  .option("--no-picture", "upload no picture for the link's card")
+  .option("--starcraft <folder>", "your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addHelpText("after", `
+Needs a scmjs.dev account: scmjs login. A copy link stores the map on your account (My Maps) as a new map, or as a
+new revision of the map there with the same file name, and links that revision: whoever opens it gets a copy in
+their editor. --edit opens the map for editing together instead; whoever opens that link edits it with you.
+  scmjs map share ridge.scx
+  scmjs map share ridge.scx --edit --keep week`)
+  .action(async (path: string, o: { json?: boolean; name?: string; note?: string; edit?: boolean; keep?: string; new?: boolean; picture?: boolean; starcraft?: string }) => {
+    const input = await readInput(path);
+    expectKind(input, "map");
+    const r = await shareMap(input, await loadMapInput(input), o);
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printShare(r)));
+  });
+
 const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");
 replay.command("info").description("who played, on what map, for how long, at what APM").argument("<replays...>").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, replayInfo));
@@ -666,6 +689,33 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`)
     if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
     if (r.exitCode) process.exitCode = r.exitCode;
   });
+
+// A scmjs.dev account. Hidden from the overview, which is held to 23 lines: `map share` (under `map …`) and the
+// doctor's scmjs.dev row say `scmjs login`, and `scmjs help account` lists it all.
+const signIn = async (o: { provider?: string }) => {
+  const r = await login({ provider: o.provider, say: (page, provider) => print(`${mark.info} Signing in with ${provider} in your browser`, pc.dim(`  If nothing opens, go to ${page}`)) });
+  print(`${mark.ok} Signed in to ${serverLabel(r.server)} as ${pc.bold(r.account.name ?? "(no name)")}`, pc.dim(`  The session is kept in ${r.file}; scmjs logout ends it.`));
+};
+const signOut = async () => {
+  const r = await logout();
+  if (!r.was) { print(`${mark.info} Not signed in`); return; }
+  print(`${mark.ok} Signed out of ${serverLabel(r.was.server)}${r.was.name ? ` (${r.was.name})` : ""}`, r.told ? null : pc.dim(`  The server could not be reached to end the session there; ${r.file} is deleted.`));
+};
+const providerOption = () => new Option("--provider <name>", `the sign-in to use: ${PROVIDERS.join(", ")}`).default("discord");
+const account = program.command("account", { hidden: true }).description("your scmjs.dev account: sign in, see it, sign out")
+  .addHelpText("after", `
+The sign-in opens Discord in your browser, as the editor's does (--provider google or battlenet for the others). The
+session is kept in your configuration folder (~/.config/scmjs/session.json; SCMJS_SESSION names another file), and
+scmjs logout ends it. scmjs login and scmjs logout are the same as account login and account logout.`);
+account.command("show", { isDefault: true }).description("who you are, the storage you use and the maps you are sharing").addOption(json)
+  .action(async (o: { json?: boolean }) => {
+    const r = await accountReport();
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printAccount(r)));
+  });
+account.command("login").description("sign in to scmjs.dev in your browser").addOption(providerOption()).action(signIn);
+account.command("logout").description("end the session and delete its file").action(signOut);
+program.command("login", { hidden: true }).description("sign in to scmjs.dev in your browser (scmjs account login)").addOption(providerOption()).action(signIn);
+program.command("logout", { hidden: true }).description("sign out of scmjs.dev (scmjs account logout)").action(signOut);
 
 program.command("completion", { hidden: true }).description("a completion script for your shell").argument("<shell>", SHELLS.join("|"))
   .addHelpText("after", `

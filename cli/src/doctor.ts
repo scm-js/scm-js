@@ -16,6 +16,7 @@ import { cacheRoot, findGameCopy } from "./botrun";
 import { findTypeScript } from "./build";
 import { RUNNERS, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
+import { readSession, serverLabel, serverUrl, sessionPath } from "./account";
 import { CliError, columns, mark, pc, visible } from "./ui";
 
 /** The Node this package's `engines` asks for (cli/package.json). */
@@ -169,6 +170,17 @@ export function desktopAppCheck(): Check {
     : { what: "Desktop app", state: "ok", detail: pc.dim("not installed"), note: "scmjs map open and replay open use the editor in your browser instead; the app is at https://scmjs.dev/editor/#download" };
 }
 
+/**
+ * Whether a scmjs.dev session is kept here (`scmjs login`), read from the session file alone — no request: the name
+ * is the one the sign-in gave. Not signed in is no problem, so the state is `ok` either way, as Claude Code's.
+ */
+export function scmjsDevCheck(file = sessionPath(), server = serverUrl()): Check {
+  const what = "scmjs.dev";
+  const s = readSession(file);
+  if (s && s.server === server) return { what, state: "ok", detail: `signed in as ${s.name ?? "(no name)"}${pc.dim(` · ${file}`)}`, path: file };
+  return { what, state: "ok", detail: pc.dim(s ? `not signed in to ${serverLabel(server)}` : "not signed in"), note: "scmjs map share makes links to maps with it.", fix: "scmjs login" };
+}
+
 export async function versionCheck(): Promise<Check> {
   const latest = await newestVersion();
   if (latest === null) return { what: "scmjs", state: "ok", detail: `${VERSION}${pc.dim(" · could not ask npm for a newer one")}` };
@@ -177,7 +189,7 @@ export async function versionCheck(): Promise<Check> {
 }
 
 export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolean }> {
-  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), desktopAppCheck(), mcpCheck()];
+  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), desktopAppCheck(), mcpCheck(), scmjsDevCheck()];
   return { checks, blocked: checks.some((c) => c.state === "bad") };
 }
 
@@ -249,7 +261,7 @@ export function readyLines(ready: Ready[], checks: Check[] = []): string[] {
 
 /** The groups the checks are shown in; a check that is fine and belongs in the title (Node, scmjs) is not a row. */
 const GROUPS: { title: string; whats: string[] }[] = [
-  { title: "Tools", whats: ["TypeScript", "Docker", "Desktop app", "MCP"] },
+  { title: "Tools", whats: ["TypeScript", "Docker", "Desktop app", "MCP", "scmjs.dev"] },
   { title: "The game", whats: ["StarCraft", "Game engine"] },
 ];
 /** The value column: the detail with its path taken out, in a few words. */
@@ -279,7 +291,7 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = pr
     lines.push(`${head}${tail ? ` ${tail}` : ""}`.trimEnd());
     // What is wrong and what to do about it, under the row; Claude Code's "not added" is not wrong, so only the line to run.
     if (c.state !== "ok") { if (c.note) lines.push(pc.dim(`      ${c.note}`)); if (c.fix) lines.push(`      ${c.fix}`); }
-    else if (c.what === "MCP" && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
+    else if ((c.what === "MCP" || c.what === "scmjs.dev") && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
   };
   // Node and scmjs are rows only when something is wrong with them.
   const first = [node, self].filter((c): c is Check => !!c && c.state !== "ok");

@@ -54,6 +54,7 @@ when there is a newer version.
 | `scmjs map trace <map>` | Runs the map's triggers in the game with nobody playing: which fired, how often, which never did and what said no |
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
+| `scmjs map share <map>` | A link to the map on scmjs.dev: a copy anyone can open, or with `--edit` a link to edit it together |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay map <replay>` | The map the replay was played on, written out as a map file |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
@@ -64,6 +65,8 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
+| `scmjs login`, `scmjs logout` | Signs in to your scmjs.dev account in the browser, and out again |
+| `scmjs account` | Who you are signed in as, the storage you use and the maps you are sharing |
 | `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the game engine, the desktop app, Claude Code, the command for each thing missing, and which commands are ready |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
@@ -633,6 +636,71 @@ that the game ended at the replay's end.
 A replay from any version plays; one from a game that held more units at once than 1.16.1
 allows is refused, as the play page refuses it.
 
+## Sharing a map from the terminal
+
+`scmjs map share ridge.scx` does what the editor's **Account ▸ Copy Link to This Map…**
+does, from the file: the map is saved to your scmjs.dev account and you get a link anyone
+can open a copy of it with, in their own editor and without signing in. The copy is
+theirs; nothing they do changes yours. The guide's [Giving someone a
+copy](guide.md#giving-someone-a-copy) says what such a link does.
+
+```
+$ scmjs map share ridge.scx
+https://scmjs.dev/editor/map/sJ5Z3w12SFSoLCD6zej-b46a
+Ridge · 128 × 128 · 61 KB · revision 1, a new map on your account
+Anyone with the link opens a copy in their editor, without signing in.
+```
+
+The link comes first, on a line of its own, so `scmjs map share ridge.scx | head -1` is
+just the link. When your account already has a map with the same file name, the file is
+saved as its next revision rather than a new map, and the line says which; `--new` makes a
+new map anyway. Sharing a file that is already on the account unchanged stores nothing
+again and gives the link it had. The link opens the revision you shared, so a link you
+have posted does not change when you share the map again. `--name` names the map on your
+account (the scenario's name otherwise), `--note` is the revision's note, and `-` reads
+the map from a pipe. Account ▸ My Maps… in the editor lists the map with its revisions and
+links, and removes them.
+
+With a copy of StarCraft on the computer (as for `map preview`), the command draws the
+map's picture for the link's card; without one the map goes up without a picture and the
+card shows its size instead. `--no-picture` leaves it out.
+
+`--edit` makes a link to edit the map together instead, as **Account ▸ Share this Map…**
+does: whoever opens it edits the same map with you, each in their own editor (see the
+guide's [Editing a map together](guide.md#editing-a-map-together)). It is open until
+everyone has left it, and closes after a while if nobody comes. `--keep day`, `week`,
+`month` or `forever` keeps it open that long after its last edit, saved on your account as
+a map of its own, or as the next revision of the one with the same file name, as the Share
+dialog's *Keep it open* does.
+
+```
+$ scmjs map share ridge.scx --edit --keep week
+https://scmjs.dev/editor/share/49vlCkKoYvMJGzIah5I0Vo_y
+Ridge · 128 × 128 · 61 KB · shared for editing, kept open for a week after its last edit, stored on your account
+Anyone with the link edits the map with you in their editor, without signing in.
+```
+
+Both need a scmjs.dev account (the guide's [Your scmjs.dev
+account](guide.md#your-scmjsdev-account)). `scmjs login` signs in: it opens a page in your
+browser, which opens Discord's sign-in as the editor does (`--provider google` or
+`battlenet` for the others), and the command says who signed in once you have approved it.
+With `BROWSER=none` it prints the page's address for you to open. The sign-in waits two
+minutes. Until you sign in, `map share` says "Sign in first: scmjs login" and exits
+with 2.
+
+The session is kept in a file only you can read: `~/.config/scmjs/session.json`, or
+`%APPDATA%\scmjs\session.json` on Windows. `scmjs logout` ends the session on scmjs.dev
+and deletes the file. `scmjs account` (also `scmjs account show`, beside `account login`
+and `account logout`) says who you are signed in as, how much of your storage is in use,
+and the maps you are sharing for editing with their links; `--json` prints it as JSON. A
+refusal from scmjs.dev, such as a full storage or too many maps shared at once, is said in
+scmjs.dev's own words. Nothing else of the command talks to scmjs.dev.
+
+| Setting | Effect |
+| --- | --- |
+| `SCMJS_SESSION` | Another file for the session |
+| `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own; its links carry its address for the editor |
+
 ## For AI tools
 
 `scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
@@ -783,8 +851,9 @@ the command for each thing missing: TypeScript for `map build` and a plugin writ
 TypeScript, Docker for `bot new|build`, a copy of StarCraft for the commands that play the
 game (`bot run`, `replay watch`, `map trace`, `map cost` and `map preview`), the game
 engine those commands use, the desktop app for `map open`, whether Claude Code has been
-given `scmjs mcp`, and whether npm has a newer scmjs. It ends with the commands this
-computer can run now, and for each one that cannot, the one thing it lacks.
+given `scmjs mcp`, whether you are signed in to scmjs.dev for `map share`, and whether npm
+has a newer scmjs. It ends with the commands this computer can run now, and for each one
+that cannot, the one thing it lacks.
 
 ```
 scmjs 0.9.0 · the newest · Node v24.13.0 · linux x64
@@ -797,6 +866,8 @@ scmjs 0.9.0 · the newest · Node v24.13.0 · linux x64
   ✔ Desktop app  scmJS.exe      /mnt/c/Users/you/AppData/Local/Programs/scmJS/scmJS.exe
   · Claude Code  scmjs mcp not added
       claude mcp add scmjs -- npx -y @scm-js/cli mcp
+  · scmjs.dev    not signed in
+      scmjs login
 
   The game
   ✔ StarCraft    Remastered     /mnt/c/Program Files (x86)/StarCraft
@@ -816,11 +887,11 @@ The MCP line only looks for `scmjs mcp` among the servers Claude Code was told a
 every folder or for the folder you run the doctor in. Not having it is not a problem, and
 if Claude Code is not on this computer the line just says so.
 
-A thing that is fine but simply not there, the desktop app or Claude Code, gets a dot
-rather than a tick, and only what is missing has lines under it saying what to do. When
-every command can run, the last line says so in one; otherwise it lists the commands that
-cannot and the one thing each lacks. `--json` prints the same checks and the ready list as
-JSON.
+A thing that is fine but simply not there, the desktop app, Claude Code or a scmjs.dev
+sign-in, gets a dot rather than a tick, and only what is missing has lines under it saying
+what to do. When every command can run, the last line says so in one; otherwise it lists
+the commands that cannot and the one thing each lacks. `--json` prints the same checks and
+the ready list as JSON.
 
 Nothing is changed. The command exits with 1 only when Node itself is older than the
 command needs.
@@ -883,6 +954,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
+| `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
+| `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |

@@ -620,6 +620,24 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
 - Not built: start-location numbers inside the PNG (no font), sprites/doodads' overlays, fog, locations, a `doctor`
   line naming this command, the MCP tool (the pure functions are ready for it).
 
+## `replay map`, and the picture over MCP (`cli/src/replaymap.ts`, `mcp.ts`) — 2026-11-07, before the release
+
+- **`scmjs replay map <rep> [--out map|-] [--force]`**: `rep.chk` (what `@scm-js/replay` parses out of the replay —
+  the game's own copy of the scenario) written **as it is**, no parse/re-encode, with `writeArchiveBytes(chk,
+  {pkware, encrypt, listfile})` (a fresh map's save rule) or bare for `.chk`; parsed only to name and measure it.
+  Default `<replay>.scx` beside it; exists → exit 2 unless `--force`; `--out -` through `writeOutput`. A replay holds
+  no members (sounds), so a map whose triggers play a WAV checks with the "not in the archive" warning — docs say so.
+  Measured on legacy_cp949.rep: 투혼 1.3, 117 KB archive, the bare chk 4.1 MB (the map pads its STR).
+- **`map_preview` tool** returns MCP **image content** (`{type: "image", data: base64, mimeType: "image/png"}`) plus a
+  text line of facts and `structuredContent` (size, tileset, picture, counts, ms) — the reason `preview.ts` was split
+  into pure functions. `scale` 1–8 (schema `max(8)` and a CliError for 3/5/6/7; 8 px a tile on 256 × 256 is 2048 px,
+  ~1 MB of base64, which is as much as a model should be sent). `starcraft` as the game tools take it. **`replay_map`
+  tool** = the command (`out`, `force`); `-` is refused by the `tool()` wrapper as everywhere.
+- Tests: `tests/cli-mcp.test.ts` — `replay_map` from a replay stub (`{chk}` is all `writeReplayMap` reads, and `kindOf`
+  must see a replay: the stub file is written with a real header? no — the test calls through a temp `.rep` only where
+  a real one is on the machine, `describe.skipIf`), `map_preview` against the copy of the game (`skipIf(!findGameCopy)`),
+  the no-copy failure as `isError`. `tests/cli-replaymap.test.ts` covers `writeReplayMap` with a stub replay.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

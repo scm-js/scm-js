@@ -48,6 +48,7 @@ when there is a newer version.
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
+| `scmjs replay map <replay>` | The map the replay was played on, written out as a map file |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
@@ -562,6 +563,13 @@ players in their colours with race, APM and team, the map, the game's length and
 when it was played, and how much chat there was. APM is counted the way the replay viewer
 counts it: everything a player did except chat, until they left.
 
+`scmjs replay map game.rep` writes out the map the replay was played on: a replay carries
+the scenario the game loaded, whole, so the map is there whether or not you still have the
+file. It goes beside the replay with its name and `.scx`, or to `--out`, as a bare `.chk`
+or an archive like a new map's, and opens in the editor like any map. Only the scenario is
+in a replay: a map's sounds and other files are not, so Check Map may say a sound is
+missing. `--out -` pipes it: `scmjs replay map game.rep --out - | scmjs map info -`.
+
 ### Watching a replay
 
 `scmjs replay watch game.rep` plays the replay in the terminal. The game is the play
@@ -789,22 +797,25 @@ Other tools take the same thing as JSON in their MCP settings:
 The tool then has `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff`,
 `map_triggers_export` and `map_triggers_import`, `map_strings_export`,
 `map_strings_import` and `map_strings_prune`, `map_set`, `map_resize`, `map_new`,
-`map_build`, `map_run`, `map_trace`, `map_cost`, `replay_info` and `doctor`: each the
-command of the same name, taking the same arguments by name and answering with the
-command's text and its `--json` data. A map reads as the editor reads it, so what the
-model is told is what the editor would show, and triggers travel as the [trigger window's
-text form](triggers.md), which the model can edit and import back. Tools that change a map
-write over it unless given `out`, the same as the commands, so keep your maps in git or
-hand the tool copies. `map_run` runs a plugin, which is code, with your privileges, as
-`scmjs map run` does; the tool asks you before it calls anything, and you can leave that
-one unapproved.
+`map_build`, `map_run`, `map_preview`, `map_trace`, `map_cost`, `replay_info`,
+`replay_map` and `doctor`: each the command of the same name, taking the same arguments by
+name and answering with the command's text and its `--json` data; `map_preview` answers
+with the picture itself, so a model that can see images sees the map. A map reads as the
+editor reads it, so what the model is told is what the editor would show, and triggers
+travel as the [trigger window's text form](triggers.md), which the model can edit and
+import back. Tools that change a map write over it unless given `out`, the same as the
+commands, so keep your maps in git or hand the tool copies. `map_run` runs a plugin, which
+is code, with your privileges, as `scmjs map run` does; the tool asks you before it calls
+anything, and you can leave that one unapproved.
 
+`map_preview` draws with your copy of the game's graphics as `scmjs map preview` does, and
 `map_trace` and `map_cost` run the map in the game as `scmjs map trace` and `map cost` do,
-so they need your copy of StarCraft and fetch the engine the first time. A run takes a few
-seconds, and a run is at most ten minutes of play. `doctor` tells the model whether the
-game and the engine are there and what you would need to install, so it can say so rather
-than fail. When the game is not in one of the usual places, the model can pass its folder
-as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP settings.
+so the three need your copy of StarCraft, and the two runs fetch the engine the first
+time. A run takes a few seconds, and a run is at most ten minutes of play. `doctor` tells
+the model whether the game and the engine are there and what you would need to install, so
+it can say so rather than fail. When the game is not in one of the usual places, the model
+can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP
+settings.
 
 ## In scripts
 
@@ -851,6 +862,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
+| `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |

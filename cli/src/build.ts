@@ -15,7 +15,6 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -29,14 +28,15 @@ import { locationName, usedLocations } from "../../src/editor/locations";
 import { forceName, internString, readUnitSettings, unitCustomName } from "../../src/editor/settings";
 import { readSwitchNames } from "../../src/editor/switches";
 import { soundList } from "../../src/editor/sounds";
-import { buildChk, defaultSaveOptions, formatOf, keptExtras, planSave } from "../../src/editor/save";
+import { buildChk, defaultSaveOptions, keptExtras, planSave } from "../../src/editor/save";
 import { packBuiltMap } from "../../src/editor/mapBuild";
 import type { CompileResult, ScriptDiagnostic } from "../../plugins/trigscript/compiler/compiler";
 import type { ScriptNames } from "../../plugins/trigscript/compiler/names";
 import type { VorbisEncoder } from "../../plugins/trigscript/compiler/vorbis";
 import type { TestWorld } from "../../plugins/trigscript/compiler/testing";
 import type { ScriptSettings } from "../../plugins/trigscript/script";
-import { writeBack } from "./exchange";
+import { outputFormat, writeBack, writeOutput } from "./exchange";
+import { STDIO, toStdout } from "./files";
 import { CliError, dot, mark, pc, plural, size } from "./ui";
 
 /**
@@ -299,15 +299,15 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   doc.extras = plan.extras;
   outcome.block = { start: plan.block.start, count: plan.block.count };
 
-  const path = options.out ?? inputPath;
   if (compiled.ir.length === 0) {
     outcome.written = await writeBack(doc, inputPath, options.out ?? null);
     return outcome;
   }
   // Programs: the build lays them into the scenario as Save would write it, and the file keeps the source beside.
-  const format = formatOf(path) ?? formatOf(inputPath) ?? "scx";
+  const path = toStdout(inputPath, options.out) ? STDIO : options.out ?? inputPath;
+  const format = outputFormat(doc, inputPath, options.out ?? null);
   if (format === "chk") throw new CliError("A bare .chk has nowhere to keep the map beside what TrigScript makes of it.", "Write an .scx instead: --out map.scx.");
-  const saveOptions = { ...defaultSaveOptions(scn, doc.origin ?? null, path), format };
+  const saveOptions = { ...defaultSaveOptions(scn, doc.origin ?? null, path === STDIO ? doc.fileName : path), format };
   const savePlan = planSave(scn, doc.extras, saveOptions, doc.stored ?? null);
   const sourceChk = buildChk(savePlan);
   const own = buildOwnMap({ chk: sourceChk, compiled: { ir: compiled.ir, strings: compiled.strings, input: compiled.input, triggers: [] }, settings: { heapCells: settings.heapCells, stackDepth: settings.stackDepth } });
@@ -316,12 +316,7 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   outcome.warnings = own.warnings;
   const kept = savePlan.stored?.kept ? savePlan.stored.members : null;
   const bytes = await packBuiltMap({ sourceChk, extras: keptExtras(savePlan, doc.extras), stored: kept, built: own.chk, steps: [{ id: "trigscript/build", label: "TrigScript" }], options: saveOptions });
-  try {
-    await writeFile(path, bytes);
-  } catch (e) {
-    throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
-  }
-  outcome.written = { path, bytes: bytes.length };
+  outcome.written = await writeOutput(bytes, path);
   return outcome;
 }
 

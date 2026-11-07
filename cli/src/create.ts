@@ -5,7 +5,6 @@
  * base-ground ids, which is what the editor writes too when it has no game data; the editor fills the tiles' looks
  * in when it next saves. The variation of the fill is seeded, so the same arguments give the same bytes.
  */
-import { writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { createScenario } from "../../src/formats/chk/create";
 import { MAP_VERSIONS, mapVersionOf, setMapVersion, type MapVersion } from "../../src/formats/chk/scenario";
@@ -17,6 +16,8 @@ import { baseTerrain, flatTerrain } from "../../src/formats/tileset/terrain";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../src/data/tilesets";
 import { writeMapBytes } from "../../src/editor/mapFile";
 import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
+import { writeOutput } from "./exchange";
+import { STDIO } from "./files";
 import { CliError } from "./ui";
 
 export const NEW_VERSIONS = ["broodwar", "remastered"] as const satisfies readonly MapVersion[];
@@ -91,14 +92,10 @@ export function newScenario(o: NewMapOptions) {
 export async function writeNewMap(path: string, o: NewMapOptions): Promise<NewMapResult> {
   const { scenario, starts, info } = newScenario(o);
   const format = formatOf(path) ?? (MAP_VERSIONS[o.version].extension as MapFormat);
-  const { format: _f, ...options } = defaultSaveOptions(scenario, null, path);
+  const { format: _f, ...options } = defaultSaveOptions(scenario, null, path === STDIO ? null : path);
   const bytes = await writeMapBytes(scenario, { format, options });
-  try {
-    await writeFile(path, bytes);
-  } catch (e) {
-    throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
-  }
-  return { path, bytes: bytes.length, starts, width: o.width, height: o.height, tileset: info.name, version: MAP_VERSIONS[o.version].label };
+  const w = await writeOutput(bytes, path);
+  return { path: w.path, bytes: w.bytes, starts, width: o.width, height: o.height, tileset: info.name, version: MAP_VERSIONS[o.version].label };
 }
 
 /** The map's name when none is given: the file's, without its extension. */

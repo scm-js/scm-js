@@ -45,7 +45,7 @@ export async function readInput(path: string, stdin: Readable = process.stdin): 
 }
 
 /** A bare scenario starts with a section name: four bytes of capitals, digits or spaces (`VER `, `TYPE`, `MTXM`). */
-function looksLikeChk(bytes: Uint8Array): boolean {
+export function looksLikeChk(bytes: Uint8Array): boolean {
   if (bytes.length < 8) return false;
   for (const b of bytes.subarray(0, 4)) if (!((b >= 0x41 && b <= 0x5a) || (b >= 0x30 && b <= 0x39) || b === 0x20)) return false;
   return true;

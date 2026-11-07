@@ -98,6 +98,20 @@ Positions are in pixels (a tile is 32). The `null` passed to `makeUnit` is the u
 from the game data; without it a unit gets no default resources or hit points, which is
 what a start location needs anyway.
 
+**By hand.** A field of the scenario can also be set directly, as long as the section it
+is written to is marked with `markDirty(scn, "SIDE")`; an unmarked change is not saved.
+The unit, upgrade and technology tables are each written to one or both of a pair (`UNIS`
+and `UNIx`, …) depending on the map's revision and what the file has already, and
+`unitSettingsSections(scn)`, `upgradeSettingsSections`, `upgradeRestrictionSections`,
+`techSettingsSections` and `techRestrictionSections` name the ones to mark.
+
+```js
+scn.playerRaces[0] = PlayerRace.Protoss;
+markDirty(scn, "SIDE");
+// after a change to scn.unitSettings:
+markDirty(scn, ...unitSettingsSections(scn));
+```
+
 ## Triggers as text
 
 `triggersToText` gives the triggers in the text form the editor's trigger window and the

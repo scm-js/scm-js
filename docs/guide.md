@@ -934,6 +934,11 @@ How the map is played is set under *This browser* on **Edit ▸ Preferences ▸ 
   name), and for melee the number of **computers** and their race. Where the map fixes a
   slot's race or has fewer places, the map's settings win.
 
+**Keeping the game.** **Save Replay** in the play page's Game Menu saves the game you are
+playing as a replay file, as far as it has been played. When the game ends, the play page
+offers it again beside **Watch the Replay**, **Analyse in the Editor**, which opens the
+replay in a new editor tab with Aftermath, and **Play Again**.
+
 **Debugging triggers.** **Tools ▸ Debug Triggers in Browser** plays the map in a panel
 under the map instead of a tab, always with the map's own settings, and shows what its
 triggers do while you play:
@@ -1155,6 +1160,11 @@ on the play page at the moment shown, seen as the player picked in the **Vision*
 The game stops there. Take one of the players and play on alone, against a community bot,
 or with others who join by an invite. Going back to an earlier moment watches the replay
 again.
+
+Once you have taken a player, **Save Replay** in the Game Menu saves the whole game as one
+replay: the original up to your moment, and what you played after it. **Try Again From
+Here** in the Watch Replay menu goes back to the moment you took over, with the same bot
+on the other side, and the end of the game offers it too.
 
 > **Note.** In the desktop app and an editor hosted elsewhere, Aftermath works from the
 > players' orders alone: there is no Replay view and no analysis.

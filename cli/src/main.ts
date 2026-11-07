@@ -118,7 +118,8 @@ export const program = new Command("scmjs")
       let term = cmd.name();
       for (const [i, sub] of subs.entries()) {
         const next = `${term}${i ? "|" : " "}${sub}`;
-        if (next.length > TERM_WIDTH - 2 && i < subs.length - 1) return `${term}|…`;
+        // The last verb too: a term past the width widens the column and wraps every description.
+        if (next.length > TERM_WIDTH - 2 && i > 0) return `${term}|…`;
         term = next;
       }
       return term;

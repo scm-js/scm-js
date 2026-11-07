@@ -94,7 +94,7 @@ export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inp
 const temporary = new Set<string>();
 
 /** A copy `gameMap` wrote, deleted with its folder; anything else is left alone. */
-function removeGameMap(path: string): void {
+export function removeGameMap(path: string): void {
   if (!temporary.delete(path)) return;
   try { rmSync(dirname(path), { recursive: true, force: true }); } catch { /* the temporary folder is the system's to clear */ }
 }

@@ -205,6 +205,7 @@ main :not(pre) > code {
   overflow-wrap: break-word;
 }
 main a code { color: var(--teal); }
+main :not(pre) > code.nw { white-space: nowrap; }
 
 pre {
   margin: 0 0 16px;

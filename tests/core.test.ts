@@ -6,7 +6,7 @@
  * the command stays a thin layer over the library. And the entry itself opens, checks, rewrites and reopens the
  * committed maps.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as core from "../core/src/index";
@@ -116,7 +116,8 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
     const api = exported();
     const strays: string[] = [];
     const cli = join(root, "cli/src");
-    for (const name of ["about", "archive", "bot", "botrun", "build", "completion", "create", "diff", "doctor", "dump", "edit", "engine", "exchange", "files", "find", "gamefiles", "main", "map", "mcp", "open", "paint", "plugin", "png", "preview", "replay", "replaymap", "report", "run", "trace", "ui", "watch", "weigh"].map((n) => join(cli, `${n}.ts`))) {
+    // Every module of the command (the list is read, not kept, so a new command needs no line here).
+    for (const name of readdirSync(cli).filter((f) => f.endsWith(".ts")).sort().map((f) => join(cli, f))) {
       const text = readFileSync(name, "utf8");
       for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.\.\/\.\.\/src\/[^"']+)["']/g)) {
         const file = resolveModule(name, m[2]);

@@ -71,6 +71,7 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
+| `scmjs bot ladder <bots…> --maps <maps…>` | Plays bots against each other and the game's computer on every map: a table with Elo, the head-to-head and every game's replay |
 | `scmjs init [folder]` | Sets a folder of maps up for git and GitHub: `git diff` reads maps as text, a workflow checks them on every push, a README lists them |
 | `scmjs login`, `scmjs logout` | Signs in to your scmjs.dev account in the browser, and out again |
 | `scmjs account` | Who you are signed in as, the storage you use and the maps you are sharing |
@@ -795,9 +796,9 @@ for `export` the file each sound went to.
 
 ## Playing the game: what those commands need
 
-`map trace`, `map cost`, `map rush`, `map test`, `replay watch` and `bot run` run the game
-itself, and `map preview` draws with its graphics. They need two things on your computer,
-and nothing on a build server:
+`map trace`, `map cost`, `map rush`, `map test`, `replay watch`, `bot run` and
+`bot ladder` run the game itself, and `map preview` draws with its graphics. They need two
+things on your computer, and nothing on a build server:
 
 - **The game engine**, the play page's, about 25 MB, fetched from scmjs.dev the first time
   a command needs it and kept in your cache folder (`~/.cache/scmjs` on Linux, the
@@ -1410,7 +1411,77 @@ files a bot writes between games (its `bwapi-data/write`), as the play page does
 bot's own text is printed as it comes, and `--json` keeps everything as data. The command
 exits with 1 when the bot printed errors, and 2 when the game could not start.
 
-One bot plays a game; bots against each other is not there yet.
+### A ladder for bots
+
+`scmjs bot ladder` plays bots against each other and against the game's own computer,
+every pairing on every map, and keeps every game's replay. Name the bots, `computer` for
+the game's computer, and the maps:
+
+```sh
+scmjs bot ladder out/mybot.scmbot:p ../rival/out/rival.scmbot computer --maps "(2)Destination.scx" "(4)Python.scx" --races tzp
+```
+
+A race after a colon is the race that side always plays: `mybot.scmbot:p`, `computer:t`. A
+side with none plays each race of `--races` in turn (`z`, `t`, `p`, and `r` for random,
+which the game draws from the seed); `computer` on its own is then one computer for each
+of those races. Two bots play each other twice on each map, once each as the first player
+of the lobby; a bot plays each computer once. `--games 3` plays each of those three times
+with the seeds 1, 2 and 3, or `--seeds 4,9` names them. The same seed, bots and map give
+the same game, so a ladder run again after you change your bot shows what the change did.
+
+A line comes as each game ends, then the standing:
+
+```
+30 games · McRave, UAlbertaBot, ExampleAIModule, Terran computer, Protoss computer, Zerg computer · 2 maps · ladder-2026-11-07-1017
+ 3/30 ✔ McRave Z beat ExampleAIModule T on (2)Binary Burghs.scx · seed 1 · 10:36  mcrave-vs-example_binary-burghs_ZvT_seed1.rep
+ 1/30 ✔ UAlbertaBot P beat McRave Z on (2)Binary Burghs.scx · seed 1 · 11:32  mcrave-vs-ualbertabot_binary-burghs_ZvP_seed1.rep
+ …
+20/30 ▲ McRave Z and Terran computer T undecided on (2)Ice Floes.scx · seed 1 · 16:48 (the frame limit)  mcrave-vs-computer-t_ice-floes_ZvT_seed1.rep
+
+Standing
+  #                    Elo   Games  Won  Lost  Undecided  Length  ms a frame  Longest  > 55 ms
+  1  UAlbertaBot       1618  14     12   2     0          7:49    0.69        246 ms   14
+  2  McRave            1581  14     9    2     3          12:30   6.96        4309 ms  24
+  3  Terran computer   1502  6      2    2     2          10:06   -           -        -
+  …
+```
+
+**Elo** starts every side at 1500 and moves it by up to 32 points a game, a game the frame
+limit stopped counting as a draw. The games are counted in the order they were scheduled,
+so the same ladder gives the same ratings however the games were run. **Length** is the
+average game, **ms a frame** the time the bot took to think each frame on average,
+**Longest** its slowest frame (the first, where most bots read the map, is usually it) and
+**> 55 ms** the frames over the 55 milliseconds the bot tournaments allow. The time is
+counted, not enforced: the bot runs in WebAssembly beside a game that is itself translated
+code, so it is slower here than in the real game. With three sides or more, a head-to-head
+table follows, each row's wins and losses against each column.
+
+Everything goes in a folder of its own, `ladder-<date>-<time>` where you ran the command,
+or the one `--out` names: a replay for each game, named by the two sides in lobby order,
+the map, the races and the seed (`mybot-vs-computer-t_destination_PvT_seed1.rep`), so a
+loss opens with `scmjs replay watch` or `scmjs replay open`; `ladder.json`, the whole
+result as data (`--json` prints the same); and `bwapi-data/`, what each bot wrote to its
+`bwapi-data/write` folder, which it reads again before its next game, as the tournaments
+do. Nothing is kept from a game in which the bot's copy failed. `--data folder` keeps
+those files somewhere that outlasts one ladder.
+
+Two bots are two copies of the game, one bot in each, kept in step on your computer: each
+frame both bots' orders go to both copies, so a slow bot slows the game as it would in the
+tournaments, and the two copies are checked against each other as they go. A game against
+the computer is one copy. A frame of a replay holds only so many orders, so two bots share
+that room: orders past a bot's half wait for the next frame, as they would in the real
+game with its turn full, and the replay plays back as the game that was played. An
+original StarCraft map (from before Brood War) is played converted to Brood War, so that
+its replay plays back too. `--frames` stops a game nobody has won (50,000 by default,
+about 35 minutes of play) and `--parallel 4` plays four games at once, which suits a
+computer with the cores and memory: a game takes about 1.5 GB for each bot in it. With
+games side by side, a bot's files from one game are not always in the next.
+
+A bot whose copy fails (it threw, ran out of memory, or took longer than `--timeout`
+seconds over one frame: 60 by default, and at least five minutes for its first, where it
+reads the map) has left the game, and the other side wins. The command exits with 1 when a
+game could not be played or a bot's copy failed, so a script can tell a broken bot from a
+losing one.
 
 ## Opening files in scmJS
 
@@ -1433,11 +1504,11 @@ when the app is installed.
 `scmjs doctor` says what is on this computer of what the commands need beyond Node, and
 the command for each thing missing: TypeScript for `map build` and a plugin written in
 TypeScript, Docker for `bot new|build`, a copy of StarCraft for the commands that play the
-game (`bot run`, `replay watch`, `map trace`, `map cost` and `map preview`), the game
-engine those commands use, the desktop app for `map open`, whether Claude Code has been
-given `scmjs mcp`, whether you are signed in to scmjs.dev for `map share`, and whether npm
-has a newer scmjs. It ends with the commands this computer can run now, and for each one
-that cannot, the one thing it lacks.
+game (`bot run`, `bot ladder`, `replay watch`, `map trace`, `map cost` and `map preview`),
+the game engine those commands use, the desktop app for `map open`, whether Claude Code
+has been given `scmjs mcp`, whether you are signed in to scmjs.dev for `map share`, and
+whether npm has a newer scmjs. It ends with the commands this computer can run now, and
+for each one that cannot, the one thing it lacks.
 
 ```
 scmjs 0.9.0 · the newest · Node v24.13.0 · linux x64
@@ -1551,6 +1622,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
+| `cli/src/ladder.ts` | The ladder: the sides read off the command line, the schedule and the replays' names, scm-sim's match runner run for each game, Elo, the standing and the head-to-head |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept |

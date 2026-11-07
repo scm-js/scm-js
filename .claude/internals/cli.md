@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test |
-replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -229,7 +229,88 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   server (gzip bodies, cache hit second time, 404); a stand-in runner script (`.cjs`, prints the protocol) through
   `runBotGame` with live lines; the failure paths. The real runner was exercised by hand (and scm-sim's own test).
 - Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
-  a replay of the game saved out (the engine records commands; a `--replay` is a natural next step).
+  a replay of the game saved out (the engine records commands; a `--replay` is a natural next step). Both came with
+  `bot ladder` (below): the relay is local, in scm-sim's match runner.
+
+## A ladder: `bot ladder` (`cli/src/ladder.ts`, `engine.ts`) — 2026-11-07
+
+`scmjs bot ladder <bots…> --maps <maps…> [--races r] [--games 1 | --seeds a,b] [--frames 50000] [--out] [--data]
+[--parallel 1] [--starcraft] [--engine] [--json]`: every pairing of the sides on every map, a line as each game ends, then
+the standing (Elo, games, won/lost/undecided, average length, the bot's ms a frame, its longest frame, frames over
+55 ms) and, with three sides or more, the head-to-head. A fork built both ends (scm-sim branch `bot-ladder`).
+
+- **The spike's answer: local lockstep works, no server.** One BWAPI build fits a game's memory, so two bots are two
+  copies of the game, each a process with one bot. scm-sim's `src/bwapi/match.ts` (the **match runner**) starts a seat
+  a bot (its own file again, `--seat k`) and is itself the relay over the seats' stdin/stdout: each frame a seat runs
+  its bot's `think`, sends that frame's commands, waits for the relay's `turn` (protocol.ts's message, one frame a turn)
+  and steps it with `ExactNetEngine.stepTurn` — the page's path for a community bot in a game between people
+  (`seatBwapiBot` with `net`: BWAPI shared, commands captured). No clock: a turn closes when every seat has sent, so
+  the game is the same however fast each bot is. Hashes every 24 frames and the two replays are compared. Evidence:
+  McRave vs UAlbertaBot to the end (16,387 frames), 683 comparisons equal, replays byte-identical; the real ladder
+  below compared every game's copies the same way. The hosted relay was never needed (and would be wrong for a ladder:
+  its clock makes the turn a command lands in depend on timing).
+- **One path for both kinds of game**: a bot against the computer is the same runner with one seat (the computer is
+  the game's own, `opponents`), so the CLI has one runner and one protocol. JSON lines: `start` {map, copy, seed,
+  players [{side, slot, kind, name, race, …}], seats, ms}, `text` {side, text}, `progress` (with `--every`; the ladder
+  passes 0), `end` {frame, players, decided, winner (side index), by victory|left|frames|desync, bots [{state
+  ended|left|failed|crashed, frames, ms, maxMs, over55, over1s, over10s, commands, kept}], replay {file, bytes, agreed},
+  hashes {compared, differedAt}, ms}, `error`. Runner args: `<map> --bot "file|race|datadir" --computer race --seed
+  --frames --every --replay`. Exit 0, 1 a bot's copy failed, 2 could not start.
+- **The relay ends the game for all seats at one frame**: 48 frames (`SETTLE_FRAMES`) after a seat reports it decided
+  (every side has an outcome, or one won; BWAPI calls `onEnd` within 36), or the frame limit; a hash mismatch ends it
+  as `desync` (counted by nobody's Elo). A seat that dies, or gives no turn for 60 s (300 s for frame 0, the bots'
+  map analysis), is a player who left: `gone` in the next turn; by "left"; its bot `crashed`. Learning files: a seat
+  reads `datadir` into `bwapi-data/read`, writes back what `keepable` keeps after `onEnd`, nothing when its copy failed.
+- **The CLI half**: `RUNNERS.match` (`matchRunner`/`match-<hash>.mjs`, `scripts/bundle-match-run.mjs` → deploy-play stages
+  it); doctor's `RUNNER_COMMANDS.match = "bot ladder"` and a ready row. `ladder.ts`: `parseEntrants` (a `.scmbot`'s
+  header gives key and name; `:race` only when the text after the last colon is a race, for Windows paths; `computer`
+  expands to one entrant a race of `--races`; duplicates get `-2` keys and labels), `schedule` (seeds outermost, then
+  maps, pairs, races, seats: bot vs bot both lobby orders, a bot first against the computer, no computer pairs; rounds
+  first so a ladder cut short is even), `replayName` (`<a>-vs-<b>_<map>_<RvR>_seed<n>.rep`, `-2` when taken),
+  `eloRatings` (1500, K 32, undecided ½, in **schedule order** so `--parallel` changes nothing; desync and unplayed
+  games skipped), `standings`, `headToHead`, `playGame` (one runner process), `runLadder` (a pool of `--parallel`
+  workers; `ladder.json` beside the replays), `ladderJson`, `printLadder`. Default folder `ladder-YYYY-MM-DD-HHMM` in the
+  cwd (`-2`… when taken): a date alone collides twice a day; the replays, `ladder.json` and `bwapi-data/<key>/` (the
+  learning files) together make one ladder something to keep or delete whole. `--json` sends the live lines to stderr.
+  Exit 1 when a game was not played, went out of step, or a bot's copy failed; a loss is not a failure. An engine
+  build that lacks only a runner says "Fetching the newer runners", not "about 25 MB".
+- **Original 1.00 maps**: main.ts opens each `--maps` with `openForEdit` and `trace.ts#gameMap` (VER 59 → a temp
+  Brood War copy, removed in a `finally`); the replay is named after the map given. Why: the game *starts* a VER 59
+  melee map from its own archive (the runner hands the map's own archive unless a member is zlib/bzip2 or the scenario
+  is Remastered's — `mapBytes`' rewrite of a VER 59 map hits 0x1D007C20, the unlifted storm path `map trace` met), but
+  the replay runner cannot play a VER 59 replay (same address), and a ladder's point is watching the losses.
+- **Replays that play back (found by the first real ladder)**: `replay watch` of McRave–UAlbertaBot on Binary Burghs
+  said "the game parted from the replay at 9:41"; the game's replay reads a frame into 544 bytes (scm-sim
+  `stream.ts` FRAME_BYTES) and two busy bots recorded frames of 629–697 (each turn holds 480). scm-sim's
+  `TurnFeed.recordRoom` (default unlimited, the page unchanged) now caps a turn as recorded, and the match runner gives
+  each bot 544 / bots; the rest waits a turn. Checked frame by frame on a 20,727-frame McRave–UAlbertaBot game: the live
+  hashes and the replay's played back are the same at every frame. Every other replay of that ladder watched to the
+  same winner (frames ≤ 510 bytes). The play page's Save Replay of two busy bots between people still can record such
+  frames — a note for scm-sim, not changed.
+- **A bot that never gets going**: McRave does not finish its start on (2)Midnight Lagoon in five minutes (the plain
+  bot runner neither), so the first ladder's McRave games there ended "no answer for 300 s". A lone seat that dies now
+  ends as the computer's win (`by: "left"`, the bot `crashed`, no replay) rather than an error, and `--timeout <s>`
+  (default 60; the first frame max(timeout, 300)) is passed to the runner.
+- **Traps met**: tests/maps/melee.scx has no resources (the generated maps carry nothing of Blizzard's), so bots
+  "stall" there at 0 minerals — not a desync, the replay agreed; use real maps. The replay header's date is the seed
+  (offset 8 is the game's seed, the start time in a real game), so a ladder's replays say 1970. scm-sim's main
+  checkout had an empty node_modules (the worktree's link pointed at it): unlinked and `npm ci` in the worktree.
+- **Measured, the real run** (the built CLI, a staged deploy of scm-sim `bot-ladder` served by `python3 -m
+  http.server` over `dist-play`, `SCMJS_PLAY_URL`/`SCMJS_CACHE` pointed at it, the user's Remastered copy):
+  `bot ladder mcrave.scmbot:z ualbertabot.scmbot:p example.scmbot:t computer --races tpz --maps "(2)Binary Burghs.scx"
+  "(2)Ice Floes.scx" --frames 24000 --parallel 6` (bots built into `.scmbot` from scm-sim's `data/bots` with
+  `writeBundle`): 30 games in 9 min 24 s; 6,248 hash comparisons, none different; all 30 replays agreed between the
+  copies; every McRave–UAlbertaBot replay (largest frames exactly 544 bytes) and the others tried watched to the game's
+  own winner. UAlbertaBot 1618 (12-2), McRave 1581 (9-2-3, 6.96 ms a frame, its start 4.3 s), the computers ~1475–1502,
+  ExampleAIModule 1335 (0-14). A seat takes ~1.3 GB resident (10 GB reserved); 6 games at once was fine on 24 cores and
+  30 GB. Learning folders filled as expected (McRave's per-opponent `…_BASIL_2026_1 Learning.txt`, UAlbertaBot's
+  `<opponent>.txt`).
+- `tests/cli-bot-ladder.test.ts` (13): races and entrants (paths with colons, duplicates, errors), the schedule and
+  names, the ladder folder, Elo maths (K/2 between equals, draws, skipped games, order independence), the standing and
+  head-to-head lines, the game lines, and `runLadder` over a stand-in match runner (`.cjs`: winner by seed, `crash*`
+  bot files die, `broken*` maps refused; writes the replay and notes games in the data folders), `--parallel`, and the
+  failure paths (no map, no copy, a deploy before the match runner). scm-sim's `tests/bwapi-match.test.ts`: the relay
+  over stand-in seats, and two example bots on the served files when present.
 
 ## Replays in the terminal (`cli/src/watch.ts`, `engine.ts`) — 2026-11-06
 

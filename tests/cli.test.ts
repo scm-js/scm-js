@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { newestLine, olderThan } from "../cli/src/about";
 import { banner, GLOBE, GLOBE_ASCII } from "../cli/src/banner";
 import { dockerArgs } from "../cli/src/bot";
+import { doctorJson, engineCheck, nodeCheck, printDoctor, type Check } from "../cli/src/doctor";
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
 import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceImports } from "../cli/src/plugin";
 import { devPluginSpec } from "../src/plugins/devLink";
@@ -174,6 +175,35 @@ describe("scmjs about", () => {
   });
 });
 
+describe("scmjs doctor", () => {
+  it("holds Node to the package's engines", () => {
+    expect(nodeCheck("v20.19.0").state).toBe("bad");
+    expect(nodeCheck("v22.12.0").state).toBe("ok");
+    expect(nodeCheck().state).toBe("ok");
+  });
+  it("knows an engine that was never fetched, and says so without alarm", () => {
+    const c = engineCheck(mkdtempSync(join(tmpdir(), "scmjs-doctor-")));
+    expect(c.state).toBe("ok");
+    expect(visible(c.detail)).toBe("not fetched yet");
+    expect(c.note).toContain("scmjs bot run");
+  });
+  it("prints each check with its mark and fix, and the JSON without colour", () => {
+    const checks: Check[] = [
+      { what: "Node", state: "ok", detail: "v22.12.0" },
+      { what: "TypeScript", state: "warn", detail: "not found", fix: "npm install typescript", note: "scmjs map build compiles with it." },
+    ];
+    const lines = plain(printDoctor({ checks, blocked: false }));
+    expect(lines[2]).toMatch(/^✔ Node +v22\.12\.0$/);
+    expect(lines[3]).toMatch(/^▲ TypeScript +not found$/);
+    expect(lines[4]).toBe("    scmjs map build compiles with it.");
+    expect(lines[5]).toBe("    npm install typescript");
+    expect(lines.at(-1)).toMatch(/need nothing more/);
+    expect(plain(printDoctor({ checks: [{ what: "Node", state: "bad", detail: "v20" }], blocked: true })).at(-1)).toMatch(/^✖ /);
+    const j = doctorJson({ checks: [{ what: "Node", state: "ok", detail: "\x1b[2mv22\x1b[0m" }], blocked: false });
+    expect(j.checks[0].detail).toBe("v22");
+  });
+});
+
 describe("scmjs: the overview", () => {
   const text = ["scmjs 1.2.3", "scmJS on the command line", "StarCraft: Brood War maps, replays, plugins and bots"];
   const help = (cmd = program) => visible(cmd.helpInformation()).replace(/\n$/, "").split("\n");
@@ -198,7 +228,7 @@ describe("scmjs: the overview", () => {
     for (const group of ["Maps and replays:", "Plugins and bots:", "This tool:"]) expect(lines).toContain(group);
     for (const cmd of program.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden)) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
     // A noun with more verbs than fit beside its description shows the first few and an ellipsis; its own help has them all.
-    expect(lines.some((l) => l.startsWith("  map info|check|open|…"))).toBe(true);
+    expect(lines.some((l) => /^ {2}map info\|check\|open\|(\w+\|)*…/.test(l))).toBe(true);
     expect(lines.some((l) => l.includes("completion"))).toBe(false);
     expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
     expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   -h, --help");

@@ -60,6 +60,11 @@ passes Check Map (a fresh map has eight Human slots and fails on start locations
 
 ## Next
 
+Done 2026-11-07 (the DX slice: `map new|dump|find`, `doctor`): added `flatTerrain`/`baseTerrain`/`DIRT`
+(`formats/tileset/terrain.ts` — works with a null tileset, dirt ids, so it is not "needs the tileset"),
+`DEFAULT_START_PLACEMENT` + its types, `DEFAULT_PLACEMENT`/`PlacementOptions` (placement.ts was already in the walk
+via `placeStartLocations`). `cli.md` "New, dump, find, doctor".
+
 Done 2026-11-06 (both CLI slices): `map triggers export|import`, `map strings`, `map diff`, `map build` — the last
 added `readSwitchNames`, `soundList`, `buildChk`/`keptExtras`/`buildMapFile` and `packBuiltMap` to the entry (the
 save plan and the built-file packer, so a script can do what Save does; `cli.md`); `map unpack|pack` added

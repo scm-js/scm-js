@@ -2,6 +2,7 @@
  * scmjs: StarCraft: Brood War maps, replays and bots from the command line. One command, a noun for each kind of
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Command, Help, Option } from "commander";
@@ -12,15 +13,19 @@ import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
+import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
+import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { diffMaps, printDiff } from "./diff";
+import { dumpMap, printDump } from "./dump";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
+import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { printRun, runOnMap } from "./run";
-import { CliError, dot, mark, pc, plural, print, rows, size } from "./ui";
+import { CliError, dot, mark, num, pc, plural, print, rows, size } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
 /** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
@@ -29,19 +34,19 @@ const TERM_WIDTH = 28;
 /** Runs `fn` on each file in turn; a file that fails is said and the rest go on. JSON: one value, or a list for several. */
 async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => Promise<{ data: unknown; lines: string[] }>, rule = true): Promise<unknown[]> {
   const results: unknown[] = [];
-  let first = true;
+  let printed = false;
   for (const path of paths) {
     try {
       const { data, lines } = await fn(await readInput(path));
       results.push(data);
-      if (!asJson) { if (!first) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); }
+      // A file with nothing to say (no match in `find`) prints nothing, and no separator either.
+      if (!asJson && lines.length) { if (printed) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); printed = true; }
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
       if (asJson) results.push({ file: path, error: e.message });
-      else { if (!first) print(""); fail(e); }
+      else { if (printed) print(""); fail(e); printed = true; }
       process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
     }
-    first = false;
   }
   if (asJson) print(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
   return results;
@@ -142,6 +147,68 @@ map.command("open").description("open a map in the scmJS app, or the editor in y
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
+
+map.command("new").description("a new map: flat ground, start locations laid out, the file written").argument("<map>", "the file to write: .scx, .scm or .chk").addOption(json)
+  .option("--size <WxH>", "width and height, each 64, 96, 128, 192 or 256", "128x128")
+  .option("--tileset <name>", "badlands, platform, install, ashworld, jungle, desert, ice or twilight", "badlands")
+  .option("--name <text>", "the map's name; the file's by default")
+  .option("--description <text>", "the map's description", "")
+  .option("--players <n>", "start locations for players 1 to n, as Auto-place lays them; the other slots closed", "0")
+  .option("--layout <how>", `${LAYOUTS.join(" or ")}: how the start locations are laid out`, "ring")
+  .option("--terrain <id>", "the terrain to fill with, by its ISOM id; the tileset's base ground by default")
+  .option("--version <which>", `${NEW_VERSIONS.join(" or ")}: the file's revision`, "broodwar")
+  .option("--force", "overwrite a file that is there")
+  .addHelpText("after", `
+The map File ▸ New makes: flat ground, eight open slots (or n, with --players) and nothing else. Without the game's
+graphics the ground is written by its ids, as the editor does without game data, and opens as it should. The same
+arguments give the same file. Exits 2 when the file is there (--force overwrites it) or an option is not one.`)
+  .action(async (file: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout: string; terrain?: string; version: string; force?: boolean }) => {
+    const { width, height } = parseSize(o.size);
+    const tileset = parseTileset(o.tileset);
+    if (!(NEW_VERSIONS as readonly string[]).includes(o.version)) throw new CliError(`--version takes ${NEW_VERSIONS.join(" or ")}, not "${o.version}"`, null, 2);
+    if (!(LAYOUTS as readonly string[]).includes(o.layout)) throw new CliError(`--layout takes ${LAYOUTS.join(" or ")}, not "${o.layout}"`, null, 2);
+    const players = Number(o.players);
+    if (!Number.isInteger(players) || players < 0 || players > 8) throw new CliError(`--players takes 0 to 8, not "${o.players}"`, null, 2);
+    const terrain = o.terrain === undefined ? undefined : Number(o.terrain);
+    if (terrain !== undefined && !(Number.isInteger(terrain) && terrain >= 0)) throw new CliError(`--terrain takes an ISOM id, not "${o.terrain}"`, null, 2);
+    if (existsSync(file) && !o.force) throw new CliError(`${file} is there already`, "--force overwrites it.", 2);
+    const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? nameFromFile(file), description: o.description, version: o.version as NewMapVersion, terrain, players, layout: o.layout as (typeof LAYOUTS)[number] });
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${r.tileset}${dot}${r.version}${r.starts ? `${dot}${plural(r.starts, "start location")}` : ""}${dot}${size(r.bytes)}`);
+  });
+
+map.command("dump").description("the whole map as text, for git diff and grep").argument("<map>").addOption(json)
+  .addHelpText("after", `
+Everything the map holds, in one stable text form: the header, players, every unit and location, the triggers in the
+trigger window's text, the strings, the archive's other files and the sections. To have git show a map's changes as
+this text (git diff, git log -p, git show), once in the repository:
+  git config diff.scmjs.textconv "scmjs map dump"
+  git config diff.scmjs.xfuncname "^## "
+  printf '*.scx diff=scmjs\\n*.scm diff=scmjs\\n*.chk diff=scmjs\\n' >> .gitattributes`)
+  .action(async (file: string, o: { json?: boolean }) => {
+    const { input, doc } = await openForEdit(file);
+    const d = dumpMap(doc, input.name);
+    if (o.json) print(JSON.stringify(d, null, 2));
+    else process.stdout.write(printDump(d, doc.scenario));
+  });
+
+map.command("find").description("search units, locations, strings and triggers across maps").argument("<text>", "what to look for; a number matches an id, slot or index too").argument("<maps...>").addOption(json)
+  .option("--in <kinds>", `which of ${KINDS.join(", ")} to search, with commas between; all by default`)
+  .option("--case", "match case")
+  .addHelpText("after", `
+Edit ▸ Find over any number of maps: a unit, location, sprite or doodad whose name holds the text, a string or a
+trigger whose text does. Prints what matched and where. Exits 1 when nothing matched in any map, like grep.`)
+  .action(async (text: string, files: string[], o: { json?: boolean; in?: string; case?: boolean }) => {
+    const kinds = parseKinds(o.in);
+    let found = 0;
+    await eachFile(files, !!o.json, async (input) => {
+      expectKind(input, "map");
+      const hits = findInMap(await loadMapInput(input), input.name, text, kinds, !!o.case);
+      found += hits.length;
+      return { data: { file: input.name, matches: hits.length, hits: hits.map(({ file: _f, ...h }) => h) }, lines: hits.length ? [`${pc.bold(input.name)}  ${pc.dim(`${num(hits.length)} ${hits.length === 1 ? "match" : "matches"}`)}`, ...printHits(hits)] : [] };
+    }, false);
+    if (!found) { if (!o.json) print(pc.dim(`Nothing in ${plural(files.length, "map")} matches "${text}"`)); process.exitCode = Math.max(Number(process.exitCode ?? 0), 1); }
+  });
 
 /** A map read for a command that changes it: the input and the parsed document, or a CliError. */
 async function openForEdit(file: string) {
@@ -366,6 +433,16 @@ program.command("completion", { hidden: true }).description("a completion script
   .action((shell: string) => {
     if (!(SHELLS as readonly string[]).includes(shell)) throw new CliError(`${shell} is not a shell this knows`, `One of ${SHELLS.join(", ")}.`, 2);
     process.stdout.write(completionScript(program, shell as Shell));
+  });
+
+program.command("doctor").description("what this computer has for each command").helpGroup("This tool:").addOption(json)
+  .addHelpText("after", `
+TypeScript (map build, a .ts plugin), Docker (bot new|build), a copy of StarCraft and the game engine (bot run), the
+desktop app (map open), and whether npm has a newer scmjs. Nothing is changed. Exits 1 only when Node is too old.`)
+  .action(async (o: { json?: boolean }) => {
+    const r = await doctorReport();
+    print(...(o.json ? [JSON.stringify(doctorJson(r), null, 2)] : printDoctor(r)));
+    if (r.blocked) process.exitCode = 1;
   });
 
 program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)

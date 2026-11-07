@@ -55,7 +55,7 @@ terrain. Everything else is a function that reads or changes one.
 | Files | `openMapBytes`, `writeMapBytes`; `loadMap` and `readMembers` for the archive itself; `parseScenario` and `serializeScenario` for a bare scenario; `createScenario` for a new map |
 | Describing | `scenarioName`, `scenarioDescription`, `mapVersionOf`, `mapStatistics`, `statisticsText`, `findInScenario` |
 | Check Map | `validateScenario`, `issueCounts` — every rule the editor runs that needs no game data |
-| Triggers | `readTriggers` / `applyTriggers`, `readBriefing` / `applyBriefing`, `newTrigger`, `newCondition`, `newAction`, `triggerNames`, `triggerUsage`; the text form, `triggersToText` / `triggersFromText`; `.trg` files, `encodeTrg` / `decodeTrg`; the condition and action definitions |
+| Triggers | `readTriggers` / `applyTriggers`, `readBriefing` / `applyBriefing`, `newTrigger`, `newCondition`, `newAction`, `triggerNames`, `triggerUsage`, `triggerComment`; the numbers a record holds, by name (`ConditionType`, `ActionType`, `PlayerGroup`, `Comparison`, `SwitchState`, `SwitchAction`, `SetModifier`, `ResourceType`, `UnitClass`); the text form, `triggersToText` / `triggersFromText`; `.trg` files, `encodeTrg` / `decodeTrg`; the condition and action definitions |
 | Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes |
 | Units | `addUnits`, `removeUnits`, `updateUnits`, `moveUnits`, `makeUnit`, `unitAt`, `unitsInBox`, `isResource` |
 | Locations | `addLocation`, `editLocation`, `removeLocations`, `moveLocations`, `locationName`, `usedLocations` |

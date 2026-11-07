@@ -36,7 +36,7 @@ export interface Check {
 }
 
 /** The commands each runner plays, as the doctor names them. */
-export const RUNNER_COMMANDS: Record<RunnerKind, string> = { bot: "bot run", replay: "replay watch", map: "map trace|cost" };
+export const RUNNER_COMMANDS: Record<RunnerKind, string> = { bot: "bot run", replay: "replay watch", map: "map trace|cost", match: "bot ladder" };
 const KINDS = Object.keys(RUNNERS) as RunnerKind[];
 
 /** "a", "a and b", "a, b and c". */
@@ -118,7 +118,7 @@ export function engineCheck(cache = cacheRoot(), at = process.env.SCMJS_PLAY_URL
   const build = builds[0];
   const runners = runnersIn(join(dir, build));
   const missing = KINDS.filter((k) => !runners.includes(k));
-  const command = missing.includes("replay") ? "scmjs replay watch <replay>" : missing.includes("map") ? "scmjs map trace <map>" : "scmjs bot run <bot> <map>";
+  const command = missing.includes("replay") ? "scmjs replay watch <replay>" : missing.includes("map") ? "scmjs map trace <map>" : missing.includes("match") ? "scmjs bot ladder <bots…> --maps <map>" : "scmjs bot run <bot> <map>";
   return {
     what, state: missing.length ? "warn" : "ok",
     detail: `build ${build}${builds.length > 1 ? ` (the newest of ${builds.length})` : ""}${pc.dim(` · ${dir}`)}`,
@@ -208,6 +208,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
   { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },
   { commands: RUNNER_COMMANDS.map, needs: ["StarCraft", "map"] },
+  { commands: RUNNER_COMMANDS.match, needs: ["StarCraft", "match"] },
 ];
 
 /**

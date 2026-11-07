@@ -1,10 +1,10 @@
 /**
- * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
- * lifted game, the one the play page runs; its files (the module, the base image, the interface pack) and the
- * runners that drive a game from a terminal are fetched once from the play page's address — `play/engine/current.json`
- * names the current build and its runners — and kept under the user's cache folder. The game's own files come from the
- * player's installation of StarCraft, Remastered or 1.16.1, found in the usual places or named with `--starcraft`;
- * nothing of the game is fetched or carried.
+ * The game engine for the commands that play: `scmjs bot run`, `bot ladder`, `scmjs replay watch`, `scmjs map trace`, `map cost`,
+ * `map rush` and `map test`. The engine is scm-sim's lifted game, the one the play page runs; its files (the module,
+ * the base image, the interface pack) and the runners that drive a game from a terminal are fetched once from the play
+ * page's address — `play/engine/current.json` names the current build and its runners — and kept under the user's cache
+ * folder. The game's own files come from the player's installation of StarCraft, Remastered or 1.16.1, found in the
+ * usual places or named with `--starcraft`; nothing of the game is fetched or carried.
  *
  * A runner is run in a process of its own (one game a process: the lifted game takes its memory when its module is
  * first imported) and speaks JSON lines, which each command turns into the terminal's.
@@ -23,7 +23,8 @@ export const PLAY_URL = "https://scmjs.dev/play";
 export const RUNNERS = {
   bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
   replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
-  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost)" },
+  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost, rush and test)" },
+  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder" },
 } as const;
 export type RunnerKind = keyof typeof RUNNERS;
 
@@ -40,6 +41,9 @@ export interface EngineCurrent {
   /** The map runner (`scmjs map trace|cost`), in a deploy that has one. */
   mapRunner?: string;
   mapRunnerBytes?: number;
+  /** The match runner (`scmjs bot ladder`: two bots, or a bot and the computer), in a deploy that has one. */
+  matchRunner?: string;
+  matchRunnerBytes?: number;
 }
 
 /** The user's cache folder for scmjs: XDG's, Windows's local app data, else `~/.cache`. */
@@ -105,7 +109,9 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const runners = runnersNamed(current);
   const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
-  if (missing.length) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
+  // (A build fetched before a runner was deployed lacks only that runner: a small fetch, said as such.)
+  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
+  else if (missing.length) say(`${pc.dim(`Fetching the newer runners from ${base} → ${dir}`)}`);
   for (const name of missing) {
     const bytes = await fetchBytes(`${base}/engine/${current.build}/${name}`);
     // Written whole or not at all: a half file would be taken for the engine next time.

@@ -26,25 +26,27 @@ function cacheWith(builds: Record<string, { files: string[]; age: number }>): st
 
 describe("scmjs doctor: the engine's runners", () => {
   it("knows each runner by the names ensureEngine fetches them under", () => {
-    const dir = join(cacheWith({ b: { files: ["run-0a1b.mjs", "replay-2c3d.mjs", "map.cjs", "map-ff.mjs.part"], age: 0 } }), "engine", "b");
-    expect(runnersIn(dir)).toEqual(["bot", "replay", "map"]);
+    const dir = join(cacheWith({ b: { files: ["run-0a1b.mjs", "replay-2c3d.mjs", "map.cjs", "map-ff.mjs.part", "match-0e.mjs"], age: 0 } }), "engine", "b");
+    expect(runnersIn(dir)).toEqual(["bot", "replay", "map", "match"]);
     expect(runnersIn(join(dir, "nothing"))).toEqual([]);
   });
 
   it("reads the newest build, and says which runners it lacks and what fetches them", () => {
-    const cache = cacheWith({ old: { files: ["run-aa.mjs", "replay-bb.mjs", "map-cc.mjs"], age: 3600 }, new: { files: ["run-dd.mjs", "replay-ee.mjs"], age: 0 } });
+    const cache = cacheWith({ old: { files: ["run-aa.mjs", "replay-bb.mjs", "map-cc.mjs", "match-ff.mjs"], age: 3600 }, new: { files: ["run-dd.mjs", "replay-ee.mjs", "match-11.mjs"], age: 0 } });
     const c = engineCheck(cache, undefined);
     expect(c.state).toBe("warn");
     expect(visible(c.detail)).toBe(`build new (the newest of 2) · ${join(cache, "engine")}`);
-    expect(c.engine).toEqual({ dir: join(cache, "engine", "new"), build: "new", runners: ["bot", "replay"] });
-    expect(c.note).toBe("Runners for bot run and replay watch; none for map trace|cost in this build.");
+    expect(c.engine).toEqual({ dir: join(cache, "engine", "new"), build: "new", runners: ["bot", "replay", "match"] });
+    expect(c.note).toBe("Runners for bot run, replay watch and bot ladder; none for map trace|cost in this build.");
     expect(c.fix).toBe("scmjs map trace <map> fetches it once the play page has one");
   });
 
   it("has nothing to fix when the build holds every runner", () => {
-    const c = engineCheck(cacheWith({ b: { files: ["run-1.mjs", "replay-2.mjs", "map-3.mjs"], age: 0 } }), undefined);
+    const c = engineCheck(cacheWith({ b: { files: ["run-1.mjs", "replay-2.mjs", "map-3.mjs", "match-4.mjs"], age: 0 } }), undefined);
     expect(c.state).toBe("ok");
-    expect(c.note).toBe("Runners for bot run, replay watch and map trace|cost.");
+    expect(c.note).toBe("Runners for bot run, replay watch, map trace|cost and bot ladder.");
+    const before = engineCheck(cacheWith({ b: { files: ["run-1.mjs", "replay-2.mjs", "map-3.mjs"], age: 0 } }), undefined);
+    expect(before.fix).toBe("scmjs bot ladder <bots…> --maps <map> fetches it once the play page has one");
     expect(c.fix).toBeUndefined();
   });
 
@@ -78,23 +80,23 @@ describe("scmjs doctor: what is ready", () => {
       engine(["bot", "replay"]),
     ])).toEqual({
       "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate": "ok", "bot new|build": "Docker",
-      "bot run": "ok", "replay watch": "ok", "map trace|cost": "engine runner",
+      "bot run": "ok", "replay watch": "ok", "map trace|cost": "engine runner", "bot ladder": "engine runner",
     });
   });
 
   it("names the copy of the game before the runner, waits for no engine never fetched, and blocks all on Node", () => {
     const r = by([{ what: "StarCraft", state: "warn", detail: "not found" }, engine([], null)]);
-    expect([r["bot run"], r["map trace|cost"], r["map preview|generate"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "ok"]);
+    expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
     expect(by([engine([], null)])["map trace|cost"]).toBe("ok");
-    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(9).fill("Node"));
+    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(10).fill("Node"));
   });
 
   it("lists only what is not ready, with the one thing it lacks, in 80 columns; the JSON has every group", () => {
     const checks: Check[] = [{ what: "Docker", state: "warn", detail: "not found" }, { what: "TypeScript", state: "warn", detail: "not found" }, engine(["bot"])];
     const lines = readyLines(readiness(checks), checks).map(visible);
-    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine"]);
+    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine", "  ✖ bot ladder      no runner for it in the fetched engine"]);
     for (const l of lines) expect(columns(l), l).toBeLessThanOrEqual(80);
-    expect(readyLines(readiness([engine(["bot", "replay", "map"])])).map(visible)).toEqual(["  ✔ Every command is ready on this computer."]);
+    expect(readyLines(readiness([engine(["bot", "replay", "map", "match"])])).map(visible)).toEqual(["  ✔ Every command is ready on this computer."]);
     expect(shortPath("/home/me/.cache/scmjs", 30, "/home/me")).toBe("~/.cache/scmjs");
     expect(shortPath("/a/very/long/path/to/somewhere", 12, "/home/me")).toBe("…o/somewhere");
     const j = doctorJson({ checks: [engine(["bot"])], blocked: false });

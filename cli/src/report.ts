@@ -1,8 +1,8 @@
 /**
  * `scmjs map check --format github|junit|sarif`: Check Map's findings in the forms CI reads, so a problem shows where
  * the pull request is read rather than in a log — GitHub's workflow annotations, JUnit XML for everything that takes
- * test results, SARIF for code-scanning tools. The text and JSON forms stay in main.ts; these are pure functions of
- * the reports, one per map.
+ * test results, SARIF for code-scanning tools. `scmjs map test` gives its scenarios in the same three forms. The text
+ * and JSON forms stay in main.ts; these are pure functions of the reports, one per map.
  */
 import { relative } from "node:path";
 import type { Issue, IssueLevel } from "../../src/editor/validate";
@@ -69,6 +69,67 @@ export function sarifJson(reports: CheckReport[], version: string): string {
       tool: { driver: { name: "scmjs map check", version, informationUri: "https://docs.scmjs.dev/cli/", rules: [...rules].map(([id, name]) => ({ id, name, shortDescription: { text: `Check Map: ${name}` } })) } },
       results,
     }],
+  };
+  return JSON.stringify(log, null, 2) + "\n";
+}
+
+/* ── `scmjs map test`'s results in the same forms ──────────── */
+
+/** One scenario of `map test`, as the formats need it: where it is written, and what did not hold. */
+export interface TestCaseReport {
+  name: string;
+  /** The tests file and the line the scenario's name is on. */
+  file: string;
+  line: number | null;
+  ok: boolean;
+  ms: number;
+  failures: { kind: string; what: string; actual: string }[];
+  /** The replay kept of a scenario that failed. */
+  replay: string | null;
+}
+/** A map's test run: the map as given, and its scenarios. */
+export interface TestReport { map: string; name: string; cases: TestCaseReport[] }
+
+const failureText = (f: TestCaseReport["failures"][number]) => `${f.what} — ${f.actual}`;
+const replayNote = (c: TestCaseReport) => (c.replay ? `replay: ${reportPath(c.replay)} (scmjs replay open ${reportPath(c.replay)})` : "");
+
+/** An error annotation per expectation that did not hold, on the scenario's line of its tests file. */
+export function githubTestAnnotations(reports: TestReport[]): string[] {
+  return reports.flatMap((r) => r.cases.flatMap((c) => c.failures.map((f) => annotation("error", { file: reportPath(c.file), line: c.line ? String(c.line) : "", title: `${r.name || reportPath(r.map)} · ${c.name}` }, [failureText(f), replayNote(c)].filter(Boolean).join("\n")))));
+}
+
+/** JUnit XML: a test suite per map, a test case per scenario, failed with every expectation that did not hold. */
+export function junitTestXml(reports: TestReport[]): string {
+  const all = reports.flatMap((r) => r.cases), failures = all.filter((c) => !c.ok).length;
+  const time = (ms: number) => (ms / 1000).toFixed(3);
+  const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<testsuites name="scmjs map test" tests="${all.length}" failures="${failures}">`];
+  for (const r of reports) {
+    const failed = r.cases.filter((c) => !c.ok).length;
+    out.push(`  <testsuite name="${xml(r.name || reportPath(r.map))}" tests="${r.cases.length}" failures="${failed}" time="${time(r.cases.reduce((n, c) => n + c.ms, 0))}">`);
+    for (const c of r.cases) {
+      out.push(`    <testcase name="${xml(c.name)}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(c.file))}"${c.line ? ` line="${c.line}"` : ""} time="${time(c.ms)}">`);
+      if (!c.ok) out.push(`      <failure message="${xml(`${c.failures.length} expectation${c.failures.length === 1 ? "" : "s"} did not hold`)}">${xml([...c.failures.map(failureText), replayNote(c)].filter(Boolean).join("\n"))}</failure>`);
+      out.push(`    </testcase>`);
+    }
+    out.push(`  </testsuite>`);
+  }
+  out.push(`</testsuites>`, "");
+  return out.join("\n");
+}
+
+/** SARIF 2.1.0: a rule per kind of expectation, a result per one that did not hold, at the scenario's line. */
+export function sarifTestJson(reports: TestReport[], version: string): string {
+  const rules = new Set<string>();
+  const results = reports.flatMap((r) => r.cases.flatMap((c) => c.failures.map((f) => {
+    rules.add(f.kind);
+    return {
+      ruleId: `scmjs/test-${f.kind}`, level: "error", message: { text: [`${r.name || reportPath(r.map)} · ${c.name}: ${failureText(f)}`, replayNote(c)].filter(Boolean).join("\n") },
+      locations: [{ physicalLocation: { artifactLocation: { uri: reportPath(c.file), uriBaseId: "%SRCROOT%" }, ...(c.line ? { region: { startLine: c.line } } : {}) } }],
+    };
+  })));
+  const log = {
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json", version: "2.1.0",
+    runs: [{ tool: { driver: { name: "scmjs map test", version, informationUri: "https://docs.scmjs.dev/cli/", rules: [...rules].map((k) => ({ id: `scmjs/test-${k}`, name: k, shortDescription: { text: `A map test's ${k} expectation` } })) } }, results }],
   };
   return JSON.stringify(log, null, 2) + "\n";
 }

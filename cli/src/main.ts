@@ -11,7 +11,8 @@ import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
-import { costReport, gameMap, printCost, printTrace, runMapInGame, traceReport } from "./trace";
+import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
+import { costReport, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
@@ -36,7 +37,8 @@ import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { parseClock, watchReplay, watchSummary } from "./watch";
-import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
+import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitXml, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { defaultOut, defaultTests, readMapForTests, readTests, runTests, testHeader, testJson, testSummary, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
@@ -652,6 +654,50 @@ Exits 2 when the game could not start.`)
     else print("", ...printRush(input.name, r));
   });
 
+map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
+  .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
+  .option("--out <folder>", "where the replays of failing scenarios go (<map>.tests/ beside the map)")
+  .option("--frames <n>", "frames a scenario runs when it does not say (24 a second)", "2400")
+  .option("--seed <n>", "the game's seed when a scenario does not say; the same seed and map give the same game", "1")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+A tests file holds scenarios: what the game starts with (units made, switches set, resources), what happens at a
+frame (units killed, a switch flipped, your units ordered somewhere, a chat line), how long it runs, and what must
+hold at the end (a trigger fired or never did, a switch, a death count, units in a location, a line shown, who won).
+Each scenario is one game with nobody playing but the steps; one that fails says what did not hold and keeps its
+replay. Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
+The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.scmjs.dev/cli/ has the file's form.`)
+  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; starcraft?: string; engine?: string }) => {
+    if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
+    const format: Format = o.json ? "json" : (o.format as Format);
+    const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
+    const input = await readInput(file);
+    expectKind(input, "map");
+    if (input.path === STDIO && !testFiles.length) throw new CliError("A map read from standard input has no tests beside it: name the tests file.", null, 2);
+    const files = testFiles.length ? testFiles : [defaultTests(input.path)];
+    const map = await readMapForTests(input.bytes);
+    const scenarios: PlannedScenario[] = [];
+    for (const f of files) {
+      if (!existsSync(f)) throw new CliError(`No tests file ${f}`, testFiles.length ? null : `A map's tests are in ${relative(process.cwd(), f) || f} beside it, or name the file: scmjs map test ${file} <tests.json>. docs.scmjs.dev/cli/ has the file's form.`, 2);
+      scenarios.push(...readTests(f, await readFile(f, "utf8"), map.chk, defaults));
+    }
+    if (!scenarios.length) throw new CliError(`${files.join(", ")} ${files.length === 1 ? "has" : "have"} no scenarios.`, null, 2);
+    const text = format === "text";
+    if (text && scenarios[0].converted) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War`));
+    const run = await runTests(input.name, scenarios, map, {
+      out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine,
+      live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
+    });
+    if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
+    if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
+    else if (format === "github") print(...githubTestAnnotations([report]));
+    else if (format === "junit") process.stdout.write(junitTestXml([report]));
+    else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
+    else print("", testSummary(run));
+  });
+
 map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)
   .option("--out <picture.png>", "write a PNG instead; - for standard output")
   .option("--scale <n>", `pixels a tile: ${PNG_SCALES.join(", ")} in a PNG (4 by default); in the terminal a pixel is half a character`)
@@ -919,10 +965,11 @@ plugin.command("dev").description("the editor with your plugin, reloaded on ever
     await devPlugin({ dir: folder, port, open: o.open, editor: o.editor });
   });
 
-const bot = program.command("bot").description("build a BWAPI bot for scmjs.dev/play (Docker)").helpGroup("Plugins and bots:")
+const bot = program.command("bot").description("build a BWAPI bot, play it, run a ladder").helpGroup("Plugins and bots:")
   .addHelpText("after", () => `
-Run these in your bot's folder. The toolchain is a Docker image, downloaded the first time.
-A built bot is added on the play page: Options → Community bots → Add a bot from a file…
+new, init, build and update run in your bot's folder; the toolchain is a Docker image, downloaded the
+first time. A built bot is added on the play page: Options → Community bots → Add a bot from a file…
+run and ladder play it here, with your copy of StarCraft and the play page's engine.
 
 ${pc.dim(`Guide: ${BOT_GUIDE}`)}`);
 bot.command("new").description("a bot to start from, in this folder")
@@ -953,6 +1000,54 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`)
     });
     if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
     if (r.exitCode) process.exitCode = r.exitCode;
+  });
+
+bot.command("ladder").description("a round robin of bots and the game's computer over maps: a table, Elo and every replay")
+  .argument("<bots...>", "bots (.scmbot files) and computer; a race after a colon: mybot.scmbot:p, computer:t").addOption(json)
+  .requiredOption("--maps <maps...>", "the maps to play on")
+  .option("--races <letters>", "the races a side plays when it has none of its own: z, t, p and r (random)", "r")
+  .option("--games <n>", "games of each pairing on each map, in each race, a seed each (1, 2, 3, …)", "1")
+  .option("--seeds <list>", "the seeds to play, comma separated, in place of --games")
+  .option("--frames <n>", "stop a game nobody has won after this many frames (24 a second)", "50000")
+  .option("--out <folder>", "where the replays and ladder.json go (default: ladder-<date>-<time> here)")
+  .option("--data <folder>", "where each bot keeps its files between games (default: the ladder's folder)")
+  .option("--parallel <n>", "games played at once", "1")
+  .option("--timeout <seconds>", "how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)", "60")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Every pairing plays on every map: a bot against the computer once a seed, two bots both ways round (who is first in
+the lobby). Two bots are two copies of the game, one a bot, kept in step on this computer. A line as each game ends,
+then the standing with Elo, each bot's time a frame, and the head-to-head. Each game's replay is saved in the
+ladder's folder for scmjs replay watch. Exits 1 when a game could not be played or a bot's copy failed.
+
+  scmjs bot ladder out/mybot.scmbot:p computer --maps "(2)Boxer.scm" --races tzp --games 3
+  scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000`)
+  .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; starcraft?: string; engine?: string }) => {
+    const races = parseRaces(o.races);
+    const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(`--${name} ${v} is not a whole number of ${least} or more`, null, 2); return n; };
+    const games = count(o.games, "games");
+    const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => count(x, "seeds", 0)) : Array.from({ length: games }, (_, k) => k + 1);
+    const entrants = parseEntrants(specs, races);
+    const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
+    // A map in the original 1.00 form is played as Brood War (as map trace does), so that its replays play back.
+    const play = new Map<string, string>();
+    for (const m of o.maps) {
+      const { input, doc } = await openForEdit(m);
+      const game = await gameMap(doc, input.path, input.name);
+      if (game.path !== m) play.set(m, game.path);
+      if (game.converted) say(pc.dim(`${input.name} is an original StarCraft map: it is played converted to Brood War.`));
+    }
+    let r;
+    try {
+      r = await runLadder(entrants, {
+        maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
+        starcraft: o.starcraft, engine: o.engine, live: say,
+      });
+    } finally { for (const p of play.values()) removeGameMap(p); }
+    if (o.json) print(JSON.stringify(ladderJson(r), null, 2));
+    else printLadder(r);
+    if (r.results.some((x) => !x.end || x.end.by === "desync" || x.end.bots.some((b) => b.state === "crashed" || b.state === "failed"))) process.exitCode = 1;
   });
 
 // A scmjs.dev account. Hidden from the overview, which is held to 23 lines: `map share` (under `map …`) and the

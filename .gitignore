@@ -39,3 +39,6 @@ fixtures
 # The demo video's recordings and cuts (scripts/trailer.mjs, scripts/trailer-cut.mjs): gigabytes of frames.
 /trailer/build/
 # The patterns above have no trailing slash so that a symlink at the same path is ignored too (a worktree links them).
+
+# Replays of failed `scmjs map test` scenarios, kept beside the map they tested
+*.tests/

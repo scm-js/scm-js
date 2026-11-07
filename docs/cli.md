@@ -741,11 +741,10 @@ one unapproved.
 
 `map_trace` and `map_cost` run the map in the game as `scmjs map trace` and `map cost` do,
 so they need your copy of StarCraft and fetch the engine the first time. A run takes a few
-seconds; a trace runs at most ten minutes of play, a cost at most 200 seconds. `doctor`
-tells the model whether the game and the engine are there and what you would need to
-install, so it can say so rather than fail. When the game is not in one of the usual
-places, the model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in
-the tool's MCP settings.
+seconds, and a run is at most ten minutes of play. `doctor` tells the model whether the
+game and the engine are there and what you would need to install, so it can say so rather
+than fail. When the game is not in one of the usual places, the model can pass its folder
+as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP settings.
 
 ## In scripts
 

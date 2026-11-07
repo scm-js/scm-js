@@ -75,12 +75,11 @@ const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>) => asyn
 };
 
 /**
- * The longest run each game tool takes. A trace of ten minutes of play is a few seconds and its result a line per
- * trigger. A cost's result carries five numbers a frame, and the runner ends with `process.exit` straight after writing
- * it: past about 64 KB the end of that line can be lost in the pipe, and the run fails with "stopped without a result"
- * (scm-sim's runMap.ts; the command meets it too at `--frames 14400` on ums.scx). So the cost stops at 200 seconds.
+ * The longest run each game tool takes: ten minutes of play, a few seconds of running. A trace's result is a line
+ * per trigger; a cost's carries five numbers a frame (about 150 KB of structured data at the cap), which is as much
+ * as a model should be handed in one result.
  */
-export const MAX_FRAMES = { trace: 24 * 60 * 10, cost: 24 * 200 } as const;
+export const MAX_FRAMES = { trace: 24 * 60 * 10, cost: 24 * 60 * 10 } as const;
 /** The run the commands make by default (`--frames 2400`): 100 seconds of play. */
 const FRAMES = 2400;
 /** Columns for a trigger's text in the trace and cost tables: wider than a terminal, since nobody wraps them. */

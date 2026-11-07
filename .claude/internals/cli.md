@@ -452,13 +452,11 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
 - **`-` is refused** on `path`, `out`, `a`, `b` and `paths` by the `tool()` wrapper: to the commands it is
   stdin/stdout, which are the protocol here — `map_info` on `-` would have read the client's messages as a map and
   hung, `out: "-"` would have written a map into the stream. Found while adding the game tools; applies to every tool.
-- **Trap: the map runner loses a big result.** scm-sim's `runMap.ts` writes the `end` line and calls `process.exit(0)`
-  at once; a write to a pipe past ~64 KB is still queued then and is dropped, so the CLI sees no `end` ("the runner
-  stopped without a result (exit 0)"). The trace's end is small (a line per copy); the cost's carries five numbers a
-  frame. On ums.scx through the server: 9,600 frames (98 KB) came through, 14,400 failed three times out of three;
-  `scmjs map cost --frames 14400` fails the same way, and a trigger-heavy map would fail sooner. Hence
-  `MAX_FRAMES = { trace: 14400, cost: 4800 }`. The fix is the runner's: `process.stdout.write(line, () =>
-  process.exit(0))` (or set `exitCode` and return); then raise the cost cap.
+- **Trap (fixed in scm-sim #41, deployed 2026-11-07): the runners lost a big result.** All three runners wrote the
+  `end` line and called `process.exit(0)` at once; a write to a pipe past ~64 KB is still queued then and is dropped,
+  so the CLI saw no `end` ("the runner stopped without a result (exit 0)") — on ums.scx a cost of 9,600 frames (98 KB)
+  came through and 14,400 failed three times out of three. The runners now exit from the write's callback; verified
+  live (14,400 frames, 147 KB, complete). `MAX_FRAMES` is ten minutes for both tools now, for the result's size.
 - **Trap: a `deploy-play.mjs` staging folder is gzipped** (`dist-play/play/engine/<build>/*` are .gz bytes under plain
   names, for the host to serve with Content-Encoding). `--engine <that folder>` / `SCMJS_PLAY_URL=<folder>` hands the
   runner gzip and it dies with "SyntaxError: Invalid or unexpected token" (shown as "stopped without a result (exit

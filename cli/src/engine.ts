@@ -1,5 +1,5 @@
 /**
- * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
+ * The game engine for the commands that play: `scmjs bot run`, `bot ladder`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
  * lifted game, the one the play page runs; its files (the module, the base image, the interface pack) and the
  * runners that drive a game from a terminal are fetched once from the play page's address — `play/engine/current.json`
  * names the current build and its runners — and kept under the user's cache folder. The game's own files come from the
@@ -24,6 +24,7 @@ export const RUNNERS = {
   bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
   replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
   map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost)" },
+  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder" },
 } as const;
 export type RunnerKind = keyof typeof RUNNERS;
 
@@ -40,6 +41,9 @@ export interface EngineCurrent {
   /** The map runner (`scmjs map trace|cost`), in a deploy that has one. */
   mapRunner?: string;
   mapRunnerBytes?: number;
+  /** The match runner (`scmjs bot ladder`: two bots, or a bot and the computer), in a deploy that has one. */
+  matchRunner?: string;
+  matchRunnerBytes?: number;
 }
 
 /** The user's cache folder for scmjs: XDG's, Windows's local app data, else `~/.cache`. */

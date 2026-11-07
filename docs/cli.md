@@ -43,9 +43,9 @@ when there is a newer version.
 | `scmjs map dump <map>` | The whole map as text, for `git diff` and `grep` |
 | `scmjs map find <text> <maps…>` | Edit ▸ Find across maps: units, locations, strings, triggers |
 | `scmjs map fetch <words…>` | Searches scmscx.com, the community's map database, and downloads a map with `--id` or `--first` |
-| `scmjs map triggers export|import` | A map's triggers as a text or `.trg` file, and back |
-| `scmjs map strings export|import` | A map's strings as a text file, and back |
-| `scmjs map strings prune <map>` | Drops the strings nothing in the map refers to |
+| `scmjs map triggers export|import|edit` | A map's triggers as a text or `.trg` file, and back; `edit` opens them in your editor |
+| `scmjs map strings export|import|edit|prune` | A map's strings as a text file, and back; `prune` drops the ones nothing refers to |
+| `scmjs map sounds [export] <map>` | The sounds the map carries, listed, or written out as WAV and Ogg files |
 | `scmjs map set <map>` | The map's name, description, revision or text encoding |
 | `scmjs map resize <map>` | Scenario ▸ Resize: the map to another size, anchored |
 | `scmjs map diff <a> <b>` | What changed between two maps, or since a git revision with `--rev`; `--picture` draws where |
@@ -231,6 +231,33 @@ the end; nothing is renumbered, since the map's triggers and locations hold the 
 
 A map written back keeps everything else — its sounds and other files, and the way the
 scenario was compressed — as Save does in the editor.
+
+### Editing them in place
+
+`edit` does the export, the editing and the import in one step:
+
+```sh
+scmjs map triggers edit mymap.scx
+scmjs map strings edit mymap.scx --editor "code --wait"
+```
+
+The text goes into a file of its own, which opens in your editor; the command waits until
+the editor is closed. If you saved a change, the text is imported as `import` reads it and
+the map is written back over itself, or to `--out other.scx`. If you saved nothing, or
+only a comment, the map is left alone and the command says nothing changed.
+
+Text that does not read — a condition the map does not know, a line in the strings that is
+not a number and a tab — is not imported, and the map is left alone. The error gives the
+line, and the file you edited stays where it was with your changes in it; the command
+prints its path and the `import` line that brings it in once you have fixed it, so the
+work is not lost.
+
+The editor is `--editor`, else the `VISUAL` or `EDITOR` setting, as git uses them, else
+Notepad on Windows and vi elsewhere. An editor that opens a window has to be told to wait
+for it to close, or the command sees the file unchanged at once: `code --wait`, `subl -w`,
+`gedit -s`. `triggers edit --briefing` edits the mission briefing's triggers. As with
+`strings import`, a line you take out of the strings leaves that string as it is in the
+map; `strings prune` is the way to drop strings.
 
 ## A map as text, and in git
 
@@ -620,6 +647,31 @@ the `scmjs/` members holding the source, and packs back into the same built map.
 packed file is opened as a map before it is written, so a folder whose scenario is not one
 is refused rather than written.
 
+## A map's sounds
+
+`scmjs map sounds ridge.scx` lists the sounds the map carries: the entries of its WAV
+table (the Sound Editor's list), and any other file in the archive that is a sound. Each
+line gives the slot, the length, the format, the size and the triggers that play it.
+
+```
+$ scmjs map sounds "(8)StarCraft Fortress.scm"
+(8)StarCraft Fortress.scm · 15 sounds, 1.0 MB
+    1  staredit\wav\combeep0.wav     0.4 s · 22050 Hz · 16-bit · mono · 17 KB  14 actions
+    2  staredit\wav\1assualt.wav     1.4 s · 22050 Hz · 16-bit · mono · 61 KB  3 actions
+    …
+```
+
+`scmjs map sounds export ridge.scx` writes them into a folder, `ridge-sounds` beside the
+map unless `--out` names another, as files any player opens. A sound comes out as the file
+that went into the map: the compression StarEdit and the game use for sounds inside an
+archive is undone on the way, and a WAV or Ogg is otherwise written as it is. Two sounds
+with one file name get `-2`, `-3` after it.
+
+A name in the WAV table that the map does not carry is listed and not written; that is not
+an error. A name under `sound\` is one of the game's own sounds, which plays from the
+game's files with nothing in the map, and is listed as such. `--json` gives the list, and
+for `export` the file each sound went to.
+
 ## Playing the game: what those commands need
 
 `map trace`, `map cost`, `map rush`, `replay watch` and `bot run` run the game itself, and
@@ -818,7 +870,8 @@ Opening a lobby needs a scmjs.dev account, so the page asks you to sign in when 
 not, and opens the lobby once you have; the first time, it asks for the game's files too,
 as the play page always does. The people you send the link to need their own StarCraft
 files and no account. The command waits up to five minutes for the page, and `--json`
-prints the link, the invite code and what the page said on the way.
+prints the link, the invite code and what the page said on the way. `--qr` draws the link
+as a QR code under it, for the people beside you to open on a phone.
 
 ## Replays
 
@@ -898,8 +951,9 @@ new map anyway. Sharing a file that is already on the account unchanged stores n
 again and gives the link it had. The link opens the revision you shared, so a link you
 have posted does not change when you share the map again. `--name` names the map on your
 account (the scenario's name otherwise), `--note` is the revision's note, and `-` reads
-the map from a pipe. Account ▸ My Maps… in the editor lists the map with its revisions and
-links, and removes them.
+the map from a pipe. `--qr` draws the link as a QR code under it, for a phone; the link
+stays the first line. Account ▸ My Maps… in the editor lists the map with its revisions
+and links, and removes them.
 
 With a copy of StarCraft on the computer (as for `map preview`), the command draws the
 map's picture for the link's card; without one the map goes up without a picture and the
@@ -932,9 +986,10 @@ The session is kept in a file only you can read: `~/.config/scmjs/session.json`,
 `%APPDATA%\scmjs\session.json` on Windows. `scmjs logout` ends the session on scmjs.dev
 and deletes the file. `scmjs account` (also `scmjs account show`, beside `account login`
 and `account logout`) says who you are signed in as, how much of your storage is in use,
-and the maps you are sharing for editing with their links; `--json` prints it as JSON. A
-refusal from scmjs.dev, such as a full storage or too many maps shared at once, is said in
-scmjs.dev's own words. Nothing else of the command talks to scmjs.dev.
+and the maps you are sharing for editing with their links, each also as a QR code with
+`--qr`; `--json` prints it as JSON. A refusal from scmjs.dev, such as a full storage or
+too many maps shared at once, is said in scmjs.dev's own words. Nothing else of the
+command talks to scmjs.dev.
 
 | Setting | Effect |
 | --- | --- |
@@ -946,7 +1001,13 @@ Maps ▸ Replays; up to 8 MB each, counted with your maps) and the command print
 `https://scmjs.dev/editor/replay/<token>`, which anyone opens to watch it in the editor's
 replay viewer, with a card showing the map and the players where links get one. The map's
 picture on the card is drawn from the map the replay carries, when your copy of the game
-is here; `--note` adds a note, and the same replay shared again gives the link it has.
+is here; `--note` adds a note, `--qr` draws the link as a QR code under it, and the same
+replay shared again gives the link it has.
+
+The QR code is drawn with half-block characters, two rows of the code to a line, black on
+white where the terminal shows colour. Without colour it is drawn for a dark terminal,
+light marks on the dark background, which phone cameras read too. On the old Windows
+console, which has no such characters, it is drawn with `#`, twice as wide.
 
 
 ## For AI tools
@@ -1197,6 +1258,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/init.ts` | A folder of maps set up for git and GitHub: the lines and files it lacks, the workflow and README made from the maps, the git settings |
 | `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
+| `cli/src/texteditor.ts` | `triggers edit` and `strings edit`: the editor chosen and started, the file kept when the text does not read |
+| `cli/src/sounds.ts` | The map's sounds: the WAV table joined with the archive's members, their lengths, the files written |
+| `cli/src/qr.ts` | The QR encoder for `--qr` and its drawing in the terminal |
 | `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |

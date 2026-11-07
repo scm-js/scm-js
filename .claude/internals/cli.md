@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|sounds|diff|build|run|unpack|pack|trace|cost|rush |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -967,6 +967,66 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - Checked 2026-11-05 against `npx vite` with headless Chromium: `ums.scx` opened ("Opened ums.scx — 64×64, 21
   units"), `legacy_cp949.rep` opened in Aftermath (view-only, timeline, APM 276/227). The desktop launch from WSL
   was not run (it would open the app on the user's screen).
+
+## Cheap wins: `triggers|strings edit`, `--qr`, `map sounds` (`texteditor.ts`, `qr.ts`, `sounds.ts`) — 2026-11-07
+
+- **`map triggers edit` / `map strings edit [--editor] [--out] [--briefing]`** (`editInEditor`): the export written to
+  `<tmpdir>/scmjs-edit-XXXX/<map>.triggers.txt` (`.briefing.txt`, `.strings.txt`), the editor run with stdio
+  inherited, then `importTriggers`/`importStrings` — the same parser and errors as `import` — and `writeBack` in
+  place (`--out` for elsewhere; `-` refused both ways, the editor needs the terminal). **Editor choice** (`editorCommand`):
+  `--editor`, `VISUAL`, `EDITOR` (git's order), else `notepad` / `vi`. **Spawn** (`editorSpawn`): an existing path or a
+  bare word (`/^[\w@%+=:,./\\-]+$/`) runs as is; anything else (`code --wait`, a quoted path) runs as git does,
+  `sh -c '<editor> "$@"' <editor> <file>`, so the file stays one argument; **on Windows always `shell: true`** (unless
+  an existing `.exe`), since `code` is `code.cmd` and Node refuses a `.cmd` without a shell. SIGINT is ignored while
+  the editor runs (git's habit: Ctrl-C in vi must not kill the command and strand the file). **"Nothing changed"**:
+  the text equal after CRLF→LF and `trimEnd` (vi adds a final newline, Notepad may write CRLF), *or* the import gives
+  the same triggers (`sameTriggers`; a comment-only edit) / no string replaced or added — the map is then not
+  written. **Kept file**: a parse error (exit 1) or an editor that exits non-zero keeps the file and the hint says
+  `The map is unchanged; your text is kept in <path>. Fix it there, then: scmjs map triggers import "<map>"
+  "<path>"`; an editor that never started (ENOENT, exit 2) removes it. The error message names the file by its base
+  name (`ums.triggers.txt, line 3: …`), the hint by its path. Tests (`tests/cli-edit.test.ts`, 8) use a stand-in Node
+  script given as `--editor '"<node>" "<script>" <mode>'`, which goes through the `sh -c` path; they pass `dir` so
+  kept files land in the test's folder. Tried by hand on a copy of ums.scx: same/comment → nothing changed, drop a
+  trigger → 3 → 2 written, broken text → kept + exit 1, `EDITOR=nonexistent` → exit 2, `--editor false` → exit 1.
+- **`--qr`** on `map share`, `replay share`, `map play` (after the "Lobby open" line, through `playInLobby`'s `qr`)
+  and `account [show]` (each shared room's name, then its code). **Own encoder, no package**: an npm QR package
+  would have meant a devDependency in the shared node_modules, a notices entry and an ATTRIBUTION row for ~250 lines
+  of well-known algorithm; `qr.ts` is adapted from Project Nayuki's library (MIT, credited in ATTRIBUTION.md under
+  "Adapted code", its copyright in the MIT notice list) — byte mode, L/M, versions 1–40, mask by the standard's four
+  penalty rules. **Checked once by hand** (scratchpad, not in the repo): module-for-module equal to `qrcode@1.5.4`
+  for every mask × both levels × eight texts of 11 to 2,300 bytes, up to version 40 (byte mode forced), its automatic mask choice equal too, and jsQR
+  1.4.0 decoding both the matrix and the *terminal lines read back into pixels* (colour, plain and ASCII). The test
+  pins the `https://scmjs.dev` matrix, capacities (M v1–10 = 14…213, v40 = 2331; L v40 = 2953), the "HELLO WORLD"
+  1-M Reed–Solomon codewords, format bits M0/L0, version bits 7, and that the half blocks read back to the modules.
+  **Drawing** (`qrLines`): two rows a line with `▀▄█`, a quiet zone of 2 (4 is the standard's; phones read 2 and the
+  width matters); with colour the line is wrapped in `ESC[30;107m` (black on bright white) so a dark theme does not
+  invert it; without colour the *light* modules are the marks, i.e. drawn for a dark terminal (qrencode's UTF8
+  convention; phones read the inverted code). ASCII fallback (`unicode` false): `##` per module, one line a row —
+  74 columns for a plain share link, 90 for one with `?scmjs-server=`. Under the first line, so `| head -1` is
+  still the link; `--json` ignores `--qr`. **Not run against scmjs.dev**: no session on this machine; the share,
+  play and account tests check the lines.
+- **`map sounds [list] <map>` and `map sounds export <map> [--out]`** (`readSounds`/`exportSounds`): `readArchive`
+  (not `openMapBytes`: a built map's sounds are the archive's as is) + `parseScenario(chk)` + `soundList` joined
+  with `stored.unreadable`; then every other member that is audio by extension (`.wav/.ogg/.mp3`) or magic (RIFF…
+  WAVE, OggS, ID3/MPEG sync). **mopaq does the decoding inside `readMembers`** (1.6.x: Huffman + IMA ADPCM sectors),
+  so "decoded through mopaq" needs no code here; the campaign fixtures prove it — StarCraft Fortress's
+  `1assualt.wav` is 62,416 bytes stored in 19,143 (3.3:1, the ADPCM path; the first sector is plain or PKWARE) and
+  comes out a 16-bit PCM WAV of 1.4 s. Lengths: `parseWavHeader`+`wavDuration` (+`wavFormatLabel`, now on core's
+  entry), Ogg from the last page's granule over the Vorbis rate (Opus: 48 kHz less pre-skip). A WAV-table name the
+  archive lacks is `missing` (`stock` when under `sound\`: the game's own), one it holds but could not decode is
+  `unreadable`; neither is fatal. Files: `fileFor(basename)`, the extension the bytes call for when the name has
+  none, `-2`/`-3` on a clash (case-insensitive); the folder is made only when something is written (default
+  `<map>-sounds` beside it). Seven of the 22 fixture maps carry sounds (15 in StarCraft Fortress); all came out
+  playable (`file`: Microsoft PCM). Tests: `tests/cli-sounds.test.ts` (5) on ums.scx's tone and a map made from it
+  with an Ogg, a second `tone.wav`, a missing entry and a stock path.
+- **Rows.** The root overview is unchanged at 23 lines: all three live under `map …`, `replay …` and `account …`,
+  which the overview already shows as one row each. In `scmjs map --help` the term width for a noun's own help is
+  `TERM_WIDTH + 2` (`subcommandTerm` checks `cmd.parent?.parent`), so `triggers export|import|edit` is whole beside
+  `strings export|import|edit|…` and the column did not widen. In docs/cli.md's Commands table `strings prune` was
+  folded into the strings row (`export|import|edit|prune`) and that row went to `map sounds`.
+- `@scm-js/core` gained `parseWavHeader`, `wavDuration`, `wavFormatLabel`, `WavInfo` (`core.md`).
+- Not built: an MCP tool for sounds or edit (edit needs a terminal; sounds export would want a folder), sounds
+  *import* (the Sound Editor's conversion needs Web Audio), re-edit on a parse error (`crontab -e`'s "try again?").
 
 ## Next (proposed to the user)
 

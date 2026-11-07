@@ -27,7 +27,7 @@ describe("scmjs map play", () => {
     process.env.BROWSER = "none";
     const lines: string[] = [];
     let page = "";
-    const done = playInLobby(input(), { play: "http://play.test/", live: (l) => lines.push(visible(l)), onAddress: (a) => { page = a; }, timeout: 10_000 });
+    const done = playInLobby(input(), { play: "http://play.test/", qr: true, live: (l) => lines.push(visible(l)), onAddress: (a) => { page = a; }, timeout: 10_000 });
     while (!page) await new Promise((r) => setTimeout(r, 10));
     const { html, file } = await pageSays(page, [
       { type: "scmjs.waiting", reason: "sign-in", message: "Sign in to open a lobby" },
@@ -41,6 +41,9 @@ describe("scmjs map play", () => {
     expect(r).toEqual({ link: "https://scmjs.dev/play/?game=invite1abc", invite: "invite1abc", name: "melee.scx", waited: ["Sign in to open a lobby"], error: null });
     expect(lines.some((l) => l.includes("Sign in to open a lobby"))).toBe(true);
     expect(lines.some((l) => l.includes("Lobby open") && l.includes("invite1abc"))).toBe(true);
+    // --qr: the link's code follows it, in half blocks.
+    const at = lines.findIndex((l) => l.includes("Lobby open"));
+    expect(lines[at + 1]).toMatch(/[█▀▄]/u);
   });
 
   it("keeps the page's error when no lobby came, and the link when a retry on the page worked", async () => {

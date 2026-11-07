@@ -233,6 +233,10 @@ describe("scmjs logout and scmjs account", () => {
     expect(text).toMatch(/Storage +12 KB of 250\.0 MB · 2 maps, 3 revisions/);
     expect(text).toMatch(/Shared +1 of 5 at once/);
     expect(text).toContain(`Ridge  kept open for a week  https://scmjs.dev/editor/share/inv1234567890123456789012?scmjs-server=${encodeURIComponent(base)}`);
+    // --qr: the shared map's name, then its link's code.
+    const withQr = printAccount(r, undefined, { qr: true }).map(visible);
+    expect(withQr.length).toBeGreaterThan(printAccount(r).length + 10);
+    expect(withQr[withQr.indexOf("  Ridge") + 1]).toMatch(/^ {2}[█▀▄ ]+$/u);
     signedIn({ session: "sess-old" });
     const e = await caught(accountReport({ server: base, file }));
     expect([e.message, e.hint, e.exitCode]).toEqual(["That session has ended. Sign in again, or start a trial.", "scmjs login signs in again.", 2]);

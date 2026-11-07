@@ -109,7 +109,7 @@ them; `--tileset` one of badlands, platform, install, ashworld, jungle, desert, 
 twilight; `--name` the map's name, the file's without its extension by default, and
 `--description` its description. `--players 2` lays down start locations for players 1 and
 2 as Tools ▸ Auto-place would, in a ring (`--layout corners` puts them in the corners) and
-closes the other slots, so the map passes Check Map as it is. `--version remastered`
+closes the other slots, so the map passes Check Map as it is. `--revision remastered`
 writes a Remastered revision. A `.chk` name writes the bare scenario. The command refuses
 to write over a file that is there unless you pass `--force`.
 

@@ -155,21 +155,22 @@ map.command("new").description("a new map: flat ground, start locations laid out
   .option("--description <text>", "the map's description", "")
   .option("--players <n>", "start locations for players 1 to n, as Auto-place lays them; the other slots closed", "0")
   .option("--layout <how>", `${LAYOUTS.join(" or ")}: how the start locations are laid out`, "ring")
-  .option("--version <which>", `${NEW_VERSIONS.join(" or ")}: the file's revision`, "broodwar")
+  // Not --version: that is the program's own flag, and commander answers it wherever it appears.
+  .option("--revision <which>", `${NEW_VERSIONS.join(" or ")}: the file's revision`, "broodwar")
   .option("--force", "overwrite a file that is there")
   .addHelpText("after", `
 The map File ▸ New makes: flat ground, eight open slots (or n, with --players) and nothing else. Without the game's
 graphics the ground is written by its ids, as the editor does without game data, and opens as it should. The same
 arguments give the same file. Exits 2 when the file is there (--force overwrites it) or an option is not one.`)
-  .action(async (file: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout: string; version: string; force?: boolean }) => {
+  .action(async (file: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout: string; revision: string; force?: boolean }) => {
     const { width, height } = parseSize(o.size);
     const tileset = parseTileset(o.tileset);
-    if (!(NEW_VERSIONS as readonly string[]).includes(o.version)) throw new CliError(`--version takes ${NEW_VERSIONS.join(" or ")}, not "${o.version}"`, null, 2);
+    if (!(NEW_VERSIONS as readonly string[]).includes(o.revision)) throw new CliError(`--revision takes ${NEW_VERSIONS.join(" or ")}, not "${o.revision}"`, null, 2);
     if (!(LAYOUTS as readonly string[]).includes(o.layout)) throw new CliError(`--layout takes ${LAYOUTS.join(" or ")}, not "${o.layout}"`, null, 2);
     const players = Number(o.players);
     if (!Number.isInteger(players) || players < 0 || players > 8) throw new CliError(`--players takes 0 to 8, not "${o.players}"`, null, 2);
     if (existsSync(file) && !o.force) throw new CliError(`${file} is there already`, "--force overwrites it.", 2);
-    const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? nameFromFile(file), description: o.description, version: o.version as NewMapVersion, players, layout: o.layout as (typeof LAYOUTS)[number] });
+    const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? nameFromFile(file), description: o.description, version: o.revision as NewMapVersion, players, layout: o.layout as (typeof LAYOUTS)[number] });
     if (o.json) { print(JSON.stringify(r, null, 2)); return; }
     print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${r.tileset}${dot}${r.version}${r.starts ? `${dot}${plural(r.starts, "start location")}` : ""}${dot}${size(r.bytes)}`);
   });

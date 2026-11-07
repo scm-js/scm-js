@@ -252,8 +252,9 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
 - **`map new <map>`**: `newScenario` = the editor's `newMapInto` without the store: `flatTerrain(baseTerrain(null), null, seeded(1), era)` — **the fill is seeded** (mulberry32) so the same
   arguments give the same bytes (tested), unlike the editor's `Math.random`; **no `--terrain`**: `baseTerrain(null,
   id)` returns `DIRT` whatever the id (a terrain's tiles need the tileset's groups), so the option the first commit
-  had was a silent no-op and went (CI-review fix); `createScenario`; `setMapVersion` for `--version
-  remastered`; `--players n` = `placeStartLocations(scn, null, null, {…DEFAULT_START_PLACEMENT, replace: false,
+  had was a silent no-op and went (CI-review fix); `createScenario`; `setMapVersion` for `--revision
+  remastered` (**not `--version`**: commander answers the program's own flag wherever it appears — found when `map
+  set --version` printed 0.8.11); `--players n` = `placeStartLocations(scn, null, null, {…DEFAULT_START_PLACEMENT, replace: false,
   placement: DEFAULT_PLACEMENT})` **and slots n..7 set Inactive** via read/applyPlayerSettings — the editor leaves
   eight Human slots, but a Human slot without a start location is a Check Map error in melee, and a terminal scaffold
   should pass `map check` as written. Written with `defaultSaveOptions(scn, null, path)` (pkware + encrypt, the Save

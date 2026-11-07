@@ -12,6 +12,7 @@ import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
 import { costReport, gameMap, printCost, printTrace, runMapInGame, traceReport } from "./trace";
+import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
@@ -508,6 +509,28 @@ on average where the triggers ran and at the most, against what a frame can carr
     const r = await runMapInGame(game.path, "cost", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify({ ...costReport(input.name, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
     else print("", ...printCost(input.name, doc.scenario, r, { all: !!o.all }));
+  });
+
+map.command("rush").description("the ground distance between the start locations, walked by the game's own pathing").argument("<map>").addOption(json)
+  .option("--unit <name>", "the unit walked: Zergling, Dragoon, a units.dat id…", "SCV")
+  .option("--seed <n>", "the game's seed; the same seed and map give the same walks", "12345")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--limit <frames>", "frames a walk may take before it is given up").default("10000").hideHelp())
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The game walks the unit from each start location to every other, as a player's unit would go when sent there, and
+each walk is timed. Prints a table with the starts as rows and columns: the pixels walked and the seconds it took at
+Fastest, then the shortest and longest of them beside the straight line, and any walk that did not arrive (no ground
+between two starts is an island map). The engine and your copy of StarCraft are needed, as for scmjs map trace.
+Exits 2 when the game could not start.`)
+  .action(async (file: string, o: { json?: boolean; unit: string; seed: string; limit: string; starcraft?: string; engine?: string }) => {
+    const unit = unitByName(o.unit);
+    const { input, doc } = await openForEdit(file);
+    const game = await gameMap(doc, input.path, input.name);
+    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
+    const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
+    else print("", ...printRush(input.name, r));
   });
 
 map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)

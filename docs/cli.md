@@ -9,9 +9,9 @@ code, so the two agree about every map, and it does what a terminal is good for:
   strings as files beside the map, what differs between two maps or two revisions, Check
   Map's findings as the annotations a pull request shows, commands that chain in a pipe.
 - **The game.** A map's triggers run in the game itself to see which fire and what they
-  cost, a replay played in the terminal, a map drawn with the game's own graphics, a
-  TrigScript map built as Save builds it, a plugin run over a map with no editor around
-  it.
+  cost, the distance between its start locations walked by the game's own pathing, a
+  replay played in the terminal, a map drawn with the game's own graphics, a TrigScript
+  map built as Save builds it, a plugin run over a map with no editor around it.
 - **AI tools.** The same commands as an MCP server, so Claude Code and its like can read,
   check and change your maps.
 - **Plugins and bots.** A plugin started, checked and reloaded on every save; a BWAPI bot
@@ -54,6 +54,7 @@ when there is a newer version.
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
 | `scmjs map trace <map>` | Runs the map's triggers in the game with nobody playing: which fired, how often, which never did and what said no |
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
+| `scmjs map rush <map>` | How far apart the start locations are by ground: a unit walked by the game from each to every other, timed |
 | `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay map <replay>` | The map the replay was played on, written out as a map file |
@@ -574,7 +575,7 @@ is refused rather than written.
 
 ## Playing the game: what those commands need
 
-`map trace`, `map cost`, `replay watch` and `bot run` run the game itself, and
+`map trace`, `map cost`, `map rush`, `replay watch` and `bot run` run the game itself, and
 `map preview` draws with its graphics. They need two things on your computer, and nothing
 on a build server:
 
@@ -646,6 +647,59 @@ shows a program's cost line by line.
 A map in the original StarCraft 1.00 form is run as Brood War, as the editor would convert
 it; the Blizzard campaign maps are not something the engine runs yet. Exits 2 when the
 game could not start.
+
+## How far apart the start locations are
+
+`scmjs map rush` measures how long a rush takes between each pair of start locations. The
+game itself walks a unit from each start location to every other, by the way a unit sent
+there in a game would take, and times each walk. An SCV is walked unless you name another
+unit with `--unit`, by its name in the editor (`"Zerg Zergling"`), without the race
+(`Zergling`, `Dragoon`) or by its number in units.dat. The table has the starts as rows
+(walked from) and columns (walked to), each with where it is on the map as a clock face
+from the middle:
+
+```
+$ scmjs map rush "(4)Fighting Spirit.scx" --unit Zergling
+(4)Fighting Spirit.scx 128 × 128, jungle · 4 start locations · a Zergling walked 12 times · Remastered files
+  1 → 2  4,722 px, 38.0 s
+  …
+
+✔ (4)Fighting Spirit.scx: a Zergling walked between 4 start locations by the game · 12 walks · 4.0 s
+
+  from ╲ to                    1                 2                 3                 4
+  1 1 o'clock                  –  4,722 px, 38.0 s  5,553 px, 45.7 s  4,543 px, 37.0 s
+  2 11 o'clock  4,793 px, 38.6 s                 –  4,674 px, 37.3 s  5,658 px, 45.4 s
+  3 8 o'clock   5,560 px, 45.0 s  4,875 px, 39.1 s                 –  4,697 px, 37.7 s
+  4 4 o'clock   4,596 px, 37.4 s  5,770 px, 45.9 s  4,686 px, 37.6 s                 –
+
+  Shortest 1 → 4: 4,543 px (142 tiles), 37.0 s · air 3,520 px, 1.29× the straight line
+  Longest  4 → 2: 5,770 px (180 tiles), 45.9 s · air 5,001 px, 1.15× the straight line
+```
+
+The pixels are what the unit walked (32 to a tile) and the seconds are game time at
+Fastest. The unit sets out five tiles from its start toward the middle of the map and
+stops at the edge of the town hall at the other start — a neutral Nexus stands on every
+start while the walks run, so the way ends where a real rush ends, at the base. The two
+directions between a pair can differ by a second or so: the way out of each base is not
+the same. The shortest and longest walks are set beside the straight line between the two
+start locations, the distance a flyer goes. When the terminal is too narrow for both
+figures, the seconds and the pixels come as two tables.
+
+A walk that does not arrive is a finding too. Two starts with no ground between them — an
+island map, or ground the terrain walls off — are said to have no way; on a map where no
+two starts are joined, the report says so and lists the straight lines instead. A unit
+that stops short (a wall of minerals or buildings the map places, say), stands stuck, or
+is still walking after seven minutes of game time is named with how far from the base it
+ended.
+
+The walks run in one game, with nobody else in it; about four seconds for a four-player
+map and fifteen for an eight-player one of 256 × 256. `--seed` changes the game's luck (a
+unit stepping round another); the default is the one the editor's Walkability plugin uses,
+so the two agree. `--json` gives every walk and the matrix as data. A building or a flyer
+is refused (exit 2), as is a map with fewer than two start locations. Like `map trace`, it
+needs the game engine and your own copy of StarCraft ([what those commands
+need](#playing-the-game-what-those-commands-need)); a map in the StarCraft 1.00 form is
+walked as Brood War.
 
 ## A picture of a map
 
@@ -1013,6 +1067,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
+| `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |
 | `cli/src/gamefiles.ts` | Files out of your copy of the game: a Remastered installation's storage, a 1.16.1 copy's archives in the game's order |

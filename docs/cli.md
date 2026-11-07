@@ -45,6 +45,7 @@ when there is a newer version.
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
+| `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
 | `scmjs plugin dev` | Opens the editor with your plugin, and reloads it each time you save |
 | `scmjs plugin check` | What the editor would make of the plugin: its manifest, files and imports |
@@ -441,6 +442,46 @@ players in their colours with race, APM and team, the map, the game's length and
 when it was played, and how much chat there was. APM is counted the way the replay viewer
 counts it: everything a player did except chat, until they left.
 
+### Watching a replay
+
+`scmjs replay watch game.rep` plays the replay in the terminal. The game is the play
+page's engine, and the replay plays in it as the game itself plays it; what you see is a
+minimap redrawn as it goes, a dot for every unit in its player's colour, buildings as
+blocks, mineral fields and geysers dim, and the ground shaded where the terminal has
+24-bit colour. Under it: the clock and frame, a line per player with minerals, gas,
+supply, units alive and APM so far, and the last three lines of chat as they were said.
+Space pauses, `+` and `-` double and halve the speed, `q` stops and leaves the last
+picture on screen.
+
+```
+legacy_cp949.rep 128 × 128 · jungle                  8:09 frame 11,643  8×
+ ⡀ ⠐             ⠐  ⡠⠐⠔⠐⠄⠡                       ⠄⡀⠈⠄
+⠨⡂                ⠄      ⠈            ⢀          ⡁⡀ ⡈⡐⣸⡂
+⠈⠦                                  ⢴⡇⡄          ⠄  ⢨ ⡾⠂
+                                    ⠱⠄⡠⠁
+  …
+⠰⡣⠲⠠⠂  ⡠          ⢀⠞                                  ⠰⡂
+⠈⢯⠈⢀⠂⡀           ⠁                  ⠠                 ⢨⠂
+
+■ Question  P  270/211  78/98  75 units  293 APM
+■ Drywater  T  273/308  38/58  51 units  237 APM
+```
+
+`--speed 4` plays at four times the game's Fastest (8 by default; the engine runs a
+ten-minute game in a few seconds, so any speed holds), `--from 6:30` starts there, and
+`--size 80x30` sets the picture's size in characters, where by default it fills as much of
+the terminal as the map's shape allows. Into a pipe or a file there is no picture: a line
+per player every minute of game (`--every` sets the frames between lines), the chat
+between them, and with `--json` a line of JSON per frame with every unit's place, for a
+script or a plot. The players' names, colours, chat and APM come from the replay file
+itself, read as `replay info` reads it; the figures and the picture from the game.
+
+What it needs is what `bot run` needs: the engine, about 25 MB, fetched from the play page
+the first time and kept in your cache folder, and your own installation of StarCraft,
+Remastered or 1.16.1, found in the usual places or named with `--starcraft`. A replay from
+any version plays; one from a game that held more units at once than 1.16.1 allows is
+refused, as the play page refuses it.
+
 ## Plugins
 
 `scmjs plugin new "Base Check"` writes a plugin to start from in `plugin-base-check/`: its
@@ -614,7 +655,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
-| `cli/src/botrun.ts` | A bot's game with no page: the engine fetched into the cache, the copy of the game found, scm-sim's runner run and its lines worded |
+| `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
+| `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
+| `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |

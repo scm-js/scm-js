@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush|test |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -659,6 +659,88 @@ line. A fork built both ends (scm-sim branch `map-rush`).
   every pair apart, ~3 s.
 - **Not built**: an MCP tool (`map_rush`); the path itself (the runner keeps a point every 64 frames and does not send
   it); several units in one run; the editor's own Walkability numbers are the same code but not compared here.
+
+## Unit tests for triggers: `map test` (`cli/src/maptest.ts`) — 2026-11-07
+
+`scmjs map test <map> [tests…] [--format text|json|github|junit|sarif] [--json] [--out] [--frames] [--seed]
+[--starcraft] [--engine]`: scenarios from a JSON file (`<map>.tests.json` beside the map by default), each one game
+with setup, timed steps, a frame count and expectations; a replay of each failed scenario. A fork built both ends
+(scm-sim branch `map-test`, PR on jeany55/scm-sim). Sample: `tests/maps/ums.tests.json` (three scenarios, the third
+fails for a real reason: ums.scx has no ground, so a Marine is unplaceable).
+
+- **JSON, not YAML**: no dependency (the bundle is one file, `ssr.noExternal`), `JSON.parse` is exact, map makers see
+  JSON in every `--json`, editors validate it. Comments would be nice; not worth a parser. A top-level list is taken as
+  the scenarios; top-level `frames`/`seed` are defaults.
+- **The decision that shaped it: setup and timed effects are triggers of the map copy, not memory writes.** The runner
+  could poke switches/deaths/resources or call the game's action routines between frames (`testGame.ts#action` does,
+  for TrigScript's tests), but a replay records only the command stream: a poked game would not play back as it ran.
+  So `planScenario` builds a copy from **the archive as stored** (`readArchive`, not `openMapBytes`: a built map keeps
+  its built triggers, which is what the game runs; `map trace` hands the file as is for the same reason), prepends the
+  setup (one trigger per 64 actions, condition Always, owned by `firstInGame` — the first OWNR 5/6 slot, whose list the
+  game walks first) and appends one trigger per timed effect with `Elapsed Time ≥ ceil(at / 16)` (scm-sim's measured
+  rule: a game second is 16 frames at every speed, and "elapsed time at least k" first holds at the pass whose frame's
+  sixteenth is k, so an effect never lands before its frame; it lands on the first pass once the clock gets there,
+  passes 31 frames apart). Map rows in the trace are shifted by the setup's count when judged; numbers in the report are
+  the map's. **No strings are added** (no Comment on the test's triggers) so STR/STRx stays byte-identical — an EUD
+  payload placed in the strings is not moved; a raw `action` that names text does intern, the user's choice. Checked:
+  two Magenta EUD probe maps (probe-6-units, eud-3-reads) show the same lines and fire the same first trigger with and
+  without a prepended setup. A program that counts on its triggers' places could still notice; not seen.
+- **Verbs**: setup/steps share `create`, `kill`, `remove`, `give`, `switch` (+`state`), `minerals`/`gas`/`deaths`
+  (number sets, `"+n"`/`"-n"` add/subtract), `action` (the trigger window's text form, parsed by `parseTriggers` inside a
+  wrapper trigger — any action). Steps add `order` (move/attack/patrol/stop/hold, the person's units of a type in a
+  location) and `chat` — **the runner's**, the person's own commands, so they are in the replay's stream. Names go
+  through `triggerNames(scn)` (units incl. classes and custom names, locations, switches) with `rush.ts#unitByName` as
+  the fallback ("Marine" without the race); triggers by the number trace prints or the Comment (`triggerComment`, new
+  in core with the trigger enums `ConditionType`, `ActionType`, `PlayerGroup`, … — docs/core.md lists them). Every
+  error is a CliError exit 2 naming the file, scenario and path (`"ums.tests.json: "x": setup[0].location: the map has
+  no location "Moon" (it has "Base", …)`), raised before any game starts.
+- **Expectations** (`judge`, pure): trigger fired (Compare: number = exactly, `">= n"` etc., true/false), switch,
+  deaths, minerals/gas, units (a count query the runner answers), text (substring of `plainText` of any line shown),
+  outcome (per player 1–8, `"none"`), ended. Each result is `{what, ok, actual}` with words both ways ("trigger #2 fired —
+  it never fired: Bring (condition 1) said no last, at frame 591", the trace's own explanation).
+- **The runner's half** (scm-sim `src/exact/mapTest.ts`, `runMap.ts --test <spec.json> --replay <out.rep>`; the trace
+  fold moved to `src/exact/traceFold.ts` for both): `startMapGame`, `installEud` as the trace, the trace folded per
+  frame; steps handed over while the game stands at their frame (orders as `RenderCommand`s through
+  `ExactLiveEngine.step`, twelve units a command; the units picked by centre in the location as the game's table has
+  it *now*; chat as testGame's 0x5C command through `queueCommand`); text from `triggerView()` every frame (capped at
+  500). **The end is read with the game's own condition routines**: a 20-byte condition record of ours in `L.alloc`
+  memory, `callAt(table 0x515A98[type], ecx = record)` with the current player set to the person and the registers put
+  back — Bring with a location, Command without — binary-searched on "at least k" for the count (≈ 11 calls a query), so
+  "in the location" is exactly the map's own rule (the unit box, the location's elevation flags, carried units). Switches
+  (0x58DC40), deaths (0x58A364, non-zero only), minerals/gas (0x57F0F0 rows) read directly; outcomes `outcomeOf`.
+  Replay: `liveReplay(game, map.chk)` — the classic scenario the game ran, with the test's triggers. Protocol `start`
+  {mode: "test", …, localPlayer}, `end` {mode, frame, ended, reason, passes, trace, observed {switches, deaths,
+  resources, counts, texts, outcomes, steps}, replay, ms}. **An older runner ignores `--test`** and its start has no mode:
+  the CLI kills it and says "a map runner from before map test" (tested with the trace's stand-in, which is one).
+- **The CLI's run** (`runTests`): one temp folder a scenario (copy via `writeArchiveBytes` uncompressed with the
+  archive's members — the runner rewrites it pkware anyway; spec.json; game.rep), one runner process a scenario
+  (one game a process), the failed scenario's replay copied to `--out` (default `<map>.tests/` beside the map; `slug` of
+  the name, NFC not NFKD — NFKD split Hangul into jamo in the test), the temp folder removed in `finally`. Lines live per
+  scenario; the header waits for the first `start` (map size, copy kind). "the game said:" lines are the `WARNING:`
+  lines the game printed (unplaceable units), which explain most surprises. Formats in `report.ts`
+  (`githubTestAnnotations` with `line=` — the scenario name's line in its file, found by `JSON.stringify(name)` in the
+  text — `junitTestXml` a case per scenario with `time`, `sarifTestJson` a rule per expectation kind).
+- **CI: no step.** The engine needs the player's game files; a step that skipped without them would be green on every
+  GitHub runner and mean nothing. `workflowText` adds a comment saying so, with the line for a self-hosted runner;
+  `IGNORE_LINES` gained `*.tests/` (and this repository's .gitignore too, since the sample sits in tests/maps/).
+- **Measured** (Remastered copy, staged deploy `node scripts/deploy-play.mjs --no-bots` in the scm-sim worktree,
+  `python3 -m http.server` over dist-play, `SCMJS_PLAY_URL=http://127.0.0.1:8765/play`, a scratch `SCMJS_CACHE`):
+  ums.scx's three scenarios in 5.6 s (≈ 1.9 s each: 1.5 s load, 0.3 s start, the frames); the failed one's replay reads
+  with `replay info` (600 frames, scmjs vs Surtur Brood) and plays back to its end with scm-sim's replay runner; the
+  replay's map (`replay map`) has the setup trigger first. **Fidelity**: a scenario with a chat line, a Carrier ordered
+  to the middle and the switch set at 0:05, failed on purpose (expects defeat), ends in victory at frame 234 live and its
+  kept replay, played by scm-sim's replay runner, ends at 234 with outcomes victory/defeat, `by` "victory". original.scm (converted), remastered.scx, melee.scx,
+  hybrid.scm each pass a setup + step smoke scenario. scm-sim `tests/exact-map-test.test.ts`: three Marines ordered
+  from location 1 to 2 by a step all counted there by Bring, the trigger waiting for them fires, chat shown.
+- Overview unchanged (23 lines; `test` is under `map …`); `RUNNER_COMMANDS.map` still "map trace|cost" (doctor's tests
+  pin it); `RUNNERS.map.command` now names trace, cost, rush and test. `tests/cli-map-test.test.ts` (8): the small
+  forms, planning (the triggers, the spec, the words), the refusals, the sample, judging, the stand-in runner
+  (`FAKE_TEST_RUNNER` in tests/support/mapRunner.ts: answers from `SCMJS_TEST_ANSWER`, logs specs to `SCMJS_TEST_SPECS`),
+  the three formats.
+- **Not built**: a player leaving (the game has one person; a departure is `net.ts`'s, a game between people); the
+  computers' commands; expectations at a frame (only the end, and text/trigger counts over the whole run); an MCP tool
+  (`map_test`); running scenarios in parallel (one process each would work; memory per game ~ the lifted image);
+  the replay's start date is 0 (1969 in `replay info`) — `saveReplay.ts` leaves it, as the play page's Save Replay does.
 
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 

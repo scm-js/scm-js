@@ -12,21 +12,25 @@ import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
 import { costReport, gameMap, printCost, printTrace, runMapInGame, traceReport } from "./trace";
+import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
+import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
+import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { serveStdio } from "./mcp";
-import { openInScmjs } from "./open";
+import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
@@ -223,7 +227,7 @@ Everything the map holds, in one stable text form: the header, players, every un
 trigger window's text, the strings, the archive's other files and the sections. To have git show a map's changes as
 this text (git diff, git log -p, git show), once in the repository:
   git config diff.scmjs.textconv "scmjs map dump"
-  git config diff.scmjs.xfuncname "^## "
+  git config diff.scmjs.xfuncname "^## .*"
   printf '*.scx diff=scmjs\\n*.scm diff=scmjs\\n*.chk diff=scmjs\\n' >> .gitattributes`)
   .action(async (file: string, o: { json?: boolean }) => {
     const { input, doc } = await openForEdit(file);
@@ -509,6 +513,28 @@ on average where the triggers ran and at the most, against what a frame can carr
     else print("", ...printCost(input.name, doc.scenario, r, { all: !!o.all }));
   });
 
+map.command("rush").description("the ground distance between the start locations, walked by the game's own pathing").argument("<map>").addOption(json)
+  .option("--unit <name>", "the unit walked: Zergling, Dragoon, a units.dat id…", "SCV")
+  .option("--seed <n>", "the game's seed; the same seed and map give the same walks", "12345")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--limit <frames>", "frames a walk may take before it is given up").default("10000").hideHelp())
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The game walks the unit from each start location to every other, as a player's unit would go when sent there, and
+each walk is timed. Prints a table with the starts as rows and columns: the pixels walked and the seconds it took at
+Fastest, then the shortest and longest of them beside the straight line, and any walk that did not arrive (no ground
+between two starts is an island map). The engine and your copy of StarCraft are needed, as for scmjs map trace.
+Exits 2 when the game could not start.`)
+  .action(async (file: string, o: { json?: boolean; unit: string; seed: string; limit: string; starcraft?: string; engine?: string }) => {
+    const unit = unitByName(o.unit);
+    const { input, doc } = await openForEdit(file);
+    const game = await gameMap(doc, input.path, input.name);
+    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
+    const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
+    else print("", ...printRush(input.name, r));
+  });
+
 map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)
   .option("--out <picture.png>", "write a PNG instead; - for standard output")
   .option("--scale <n>", `pixels a tile: ${PNG_SCALES.join(", ")} in a PNG (4 by default); in the terminal a pixel is half a character`)
@@ -533,6 +559,21 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
     else say(piped, ...lines);
   });
 
+map.command("play").description("a lobby on the play page with this map, and its invite link to send around").argument("<map>").addOption(json)
+  .addOption(new Option("--play <url>", "the play page's address (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Opens scmjs.dev/play in your browser with the map and asks it for a lobby; the page is the host, and the link it
+reports is printed here. The page asks you to sign in to scmjs.dev when you are not (opening a lobby needs an
+account; joining one does not), and for the game's files the first time. The people you send the link to need
+their own StarCraft files and no account. Waits up to five minutes for the page.`)
+  .action(async (file: string, o: { json?: boolean; play?: string }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const r = await playInLobby(input, { play: o.play, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+    if (!r.link) throw new CliError(r.error ?? "The page opened no lobby", "Invite Players on the play page opens one by hand.");
+  });
+
 map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)
   .option("--all", "list every item; by default a long list is cut at 20")
   .option("--rev <revision>", "compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is")
@@ -549,6 +590,50 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
     if (!d.same) process.exitCode = 1;
   });
 
+map.command("fetch").description("search scmscx.com, the community's map database, and download a map").argument("[words...]", "what to search for: a map's name, words in its description, a file name").addOption(json)
+  .option("--limit <n>", `how many of the best matches to list, 1 to ${MAX_LIMIT}`, String(DEFAULT_LIMIT))
+  .option("--id <id>", "download this map: its id from the list, or its address on the site")
+  .option("--first", "download the best match for the words")
+  .option("--out <path>", "the file to write, or a folder to write it in (the site's file name); - for standard output")
+  .option("--force", "overwrite a file that is there")
+  .option("--open", "open the map in scmJS once it is downloaded, as scmjs map open does")
+  .addHelpText("after", `
+The maps come from scmscx.com (${SCMSCX}), where people have shared StarCraft maps for years; they are their
+makers', and the site's. The list shows the best matches with their size, tileset, players, downloads and id; --id
+or --first downloads one, named as the site names the file, into this folder or --out. The file is opened as the
+editor opens it before it is written, so what arrives is a map. Exits 1 when nothing matched or the site did not
+answer (within 10 seconds), 2 when the file is there already (--force overwrites it).
+  scmjs map fetch lost temple
+  scmjs map fetch --id B8V7fdyj --out maps/
+  scmjs map fetch lost temple --first --open
+  scmjs map fetch fastest --first --out - | scmjs map info -`)
+  .action(async (words: string[], o: { json?: boolean; limit?: string; id?: string; first?: boolean; out?: string; force?: boolean; open?: boolean }) => {
+    const text = words.join(" ").trim();
+    if (o.id && text) throw new CliError("--id downloads one map: give the id or the words, not both", null, 2);
+    if (!o.id && !text) throw new CliError("What to search for, or --id <id>", "scmjs map fetch lost temple", 2);
+    const download = !!(o.id || o.first);
+    if (!download && (o.out || o.force || o.open)) throw new CliError("--out, --force and --open are for a download", "Add --first for the best match, or --id <id> from the list.", 2);
+    const piped = download && o.out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Write the map to a file with --out, or leave --json off.", 2);
+    if (piped && o.open) throw new CliError("--open needs the map in a file", "Leave --out - off, or name a file or folder.", 2);
+    const site = scmscx();
+    if (!download) {
+      const r = await searchMaps(site, text, parseLimit(o.limit));
+      print(...(o.json ? [JSON.stringify(searchJson(r), null, 2)] : printSearch(r)));
+      if (!r.maps.length) process.exitCode = 1;
+      return;
+    }
+    let id = o.id ? mapIdFrom(o.id) : null;
+    if (!id) {
+      const best = (await site.search(text)).rows[0];
+      if (!best) { if (!o.json) say(piped, pc.dim(`Nothing on scmscx.com matches "${text}"`)); process.exitCode = 1; return; }
+      id = best.id;
+    }
+    const r = await fetchMap(site, id, { out: o.out, force: o.force });
+    if (o.json) print(JSON.stringify(fetchJson(r), null, 2));
+    else say(piped, ...printFetched(r));
+    if (o.open) await openInScmjs({ path: r.written.path, name: r.report.file.name, bytes: new Uint8Array(await readFile(r.written.path)), kind: "map" }, {});
+  });
 map.command("share").description("a link to the map on scmjs.dev: a copy anyone can open, or --edit to edit it together").argument("<map>", "the map, or - for standard input").addOption(json)
   .option("--name <name>", "the map's name on your account and in the link; the scenario's name by default")
   .option("--note <text>", "a note for this revision, as My Maps shows it")
@@ -726,6 +811,32 @@ program.command("completion", { hidden: true }).description("a completion script
     if (!(SHELLS as readonly string[]).includes(shell)) throw new CliError(`${shell} is not a shell this knows`, `One of ${SHELLS.join(", ")}.`, 2);
     process.stdout.write(completionScript(program, shell as Shell));
   });
+
+// Hidden from the overview, which holds 23 lines (banner.ts); `scmjs help init`, `map --help` and docs/cli.md name it.
+program.command("init", { hidden: true }).description("a folder of maps set up for git and GitHub: maps diff as text, a check on each push, a README")
+  .argument("[folder]", "the folder the maps are in", ".").addOption(json)
+  .option("--print", "print what would be written, to paste by hand, and write nothing")
+  .option("--git", "git init the folder when it is in no git repository (never done without it)")
+  .option("--force", "replace a README.md or workflow that is there, and set a git setting that holds another value")
+  .addHelpText("after", `
+Writes what is not there yet:
+  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff
+  .gitignore                  *.bak, the copy the desktop app's Save keeps
+  .github/workflows/maps.yml  map check on every push and pull request (and map build --check for maps with a
+                              TrigScript script), with this version of scmjs pinned
+  README.md                   the maps, and the commands to check, dump and diff them
+and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, which are per clone.
+.gitattributes and .gitignore get only the lines they lack; nothing else that is there is changed without --force.
+Exits 2 when there is no such folder.`)
+  .action(async (folder: string, o: { json?: boolean; print?: boolean; git?: boolean; force?: boolean }) => {
+    const r = await initFolder(folder, { print: !!o.print, git: !!o.git, force: !!o.force });
+    if (o.json) print(JSON.stringify({ ...r, files: r.files.map(({ content, ...f }) => (o.print ? { ...f, content } : f)) }, null, 2));
+    else if (o.print) process.stdout.write(printRecipe(r));
+    else print(...printInit(r));
+  });
+map.addHelpText("after", `
+scmjs init [folder] sets a folder of maps up for git and GitHub: git diff shows a map's changes as text, a workflow
+checks the maps on every push, and a README lists them (scmjs help init).`);
 
 program.command("doctor").description("what this computer has for each command").helpGroup("This tool:").addOption(json)
   .addHelpText("after", `

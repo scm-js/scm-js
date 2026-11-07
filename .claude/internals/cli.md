@@ -123,7 +123,8 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   `window.open`s the editor with `?handoff=1` (a button if the popup is blocked). The editor
   (`src/hooks/useOpenerHandoff.ts`) posts `scmjs.ready` to its opener; the page answers **every** ready with
   `scmjs.open` {files:[{name, bytes}]}; the editor accepts it only from `window.opener` with a loopback origin
-  (`http://127.0.0.1|localhost|[::1]:port`), once, opens it like a drop (`openGivenFiles`), and posts
+  (`http://127.0.0.1|localhost|[::1]:port`) or the editor's own origin (scmjs.dev/play's "Analyse in the Editor"
+  after a game, scm-sim `web/replayFile.ts`), once, opens it like a drop (`openGivenFiles`), and posts
   `scmjs.taken`, which the page forwards to the command, which exits. Why this way round: a hosted page fetching
   from localhost meets Chrome's local-network-access prompt and Safari's mixed-content block; a loopback page
   posting to the window it opened meets neither. No COOP header on scmjs.dev, which this depends on (window.opener).

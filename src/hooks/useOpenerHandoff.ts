@@ -9,6 +9,8 @@ type Store = ReturnType<typeof useStore>;
 
 /** The pages that may hand the editor files: one on this machine's loopback address (`scmjs map open`). */
 const LOOPBACK = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+$/;
+/** …or a page of the editor's own site (scmjs.dev/play hands over a game it saved as a replay). */
+const mayHandOver = (origin: string) => LOOPBACK.test(origin) || origin === window.location.origin;
 
 /**
  * Whether this page was opened to be handed a file: read once, as the page loads (the effect takes `?handoff` out of
@@ -38,7 +40,8 @@ export async function openGivenFiles(store: Store, files: File[], handle: MapFil
 /**
  * `scmjs map open` / `scmjs replay open` in a browser (cli/src/open.ts): the command serves a page on the loopback
  * address that opens the editor with `?handoff`; the editor says it is ready, the page posts it the file, and the
- * editor opens it as a dropped file. Only that page, the one that opened this window, is listened to.
+ * editor opens it as a dropped file. The site's play page does the same with a game saved as a replay ("Analyse in
+ * the Editor"), from the editor's own origin. Only the page that opened this window is listened to.
  */
 export function useOpenerHandoff() {
   const store = useStore();
@@ -48,7 +51,7 @@ export function useOpenerHandoff() {
     const url = new URL(window.location.href);
     if (url.searchParams.has("handoff")) { url.searchParams.delete("handoff"); window.history.replaceState(window.history.state, "", url); }
     const onMessage = (e: MessageEvent) => {
-      if (e.source !== opener || !LOOPBACK.test(e.origin)) return;
+      if (e.source !== opener || !mayHandOver(e.origin)) return;
       const data = e.data as { type?: string; files?: { name?: unknown; bytes?: unknown }[] } | null;
       if (data?.type !== "scmjs.open" || !Array.isArray(data.files)) return;
       const files = data.files
@@ -60,7 +63,7 @@ export function useOpenerHandoff() {
       void openGivenFiles(store, files).finally(() => opener.postMessage({ type: "scmjs.taken" }, e.origin));
     };
     window.addEventListener("message", onMessage);
-    // (Nothing in it: any page may know the editor is ready, only a loopback one is listened to.)
+    // (Nothing in it: any page may know the editor is ready, only a loopback one or the site's own is listened to.)
     opener.postMessage({ type: "scmjs.ready" }, "*");
     return () => window.removeEventListener("message", onMessage);
   }, [store]);

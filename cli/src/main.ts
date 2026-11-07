@@ -822,6 +822,7 @@ bot.command("ladder").description("a round robin of bots and the game's computer
   .option("--out <folder>", "where the replays and ladder.json go (default: ladder-<date>-<time> here)")
   .option("--data <folder>", "where each bot keeps its files between games (default: the ladder's folder)")
   .option("--parallel <n>", "games played at once", "1")
+  .option("--timeout <seconds>", "how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)", "60")
   .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
   .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
   .addHelpText("after", `
@@ -832,7 +833,7 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
 
   scmjs bot ladder out/mybot.scmbot:p computer --maps "(2)Boxer.scm" --races tzp --games 3
   scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000`)
-  .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; starcraft?: string; engine?: string }) => {
+  .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; starcraft?: string; engine?: string }) => {
     const races = parseRaces(o.races);
     const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(`--${name} ${v} is not a whole number of ${least} or more`, null, 2); return n; };
     const games = count(o.games, "games");
@@ -849,7 +850,7 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
     let r;
     try {
       r = await runLadder(entrants, {
-        maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"),
+        maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
         starcraft: o.starcraft, engine: o.engine, live: say,
       });
     } finally { for (const p of play.values()) removeGameMap(p); }

@@ -109,7 +109,9 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const runners = runnersNamed(current);
   const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
-  if (missing.length) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
+  // (A build fetched before a runner was deployed lacks only that runner: a small fetch, said as such.)
+  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
+  else if (missing.length) say(`${pc.dim(`Fetching the newer runners from ${base} → ${dir}`)}`);
   for (const name of missing) {
     const bytes = await fetchBytes(`${base}/engine/${current.build}/${name}`);
     // Written whole or not at all: a half file would be taken for the engine next time.

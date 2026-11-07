@@ -329,6 +329,8 @@ export interface LadderOptions {
   data?: string;
   /** Games at once. */
   parallel?: number;
+  /** Seconds a bot may think over one frame before its copy is taken for hung (the runner's default 60; its first frame five minutes at least). */
+  timeout?: number;
   starcraft?: string;
   engine?: string;
   /** Each game's line as it ends, and the engine's fetch. */
@@ -361,10 +363,11 @@ export function ladderFolder(dir: string, now: Date): string {
 }
 
 /** One game: the runner started on it, its lines read until its end. */
-export async function playGame(runner: string, engine: Engine, copy: string, entrants: readonly Entrant[], g: ScheduledGame, o: { out: string; data: string; frames?: number; node?: string; text?: (who: string, text: string) => void; play?: ReadonlyMap<string, string> }): Promise<GameResult> {
+export async function playGame(runner: string, engine: Engine, copy: string, entrants: readonly Entrant[], g: ScheduledGame, o: { out: string; data: string; frames?: number; timeout?: number; node?: string; text?: (who: string, text: string) => void; play?: ReadonlyMap<string, string> }): Promise<GameResult> {
   const replay = join(o.out, g.replay);
   const args = [resolve(o.play?.get(g.map) ?? g.map), "--engine", engine.dir, "--starcraft", copy, "--seed", String(g.seed), "--every", "0", "--replay", replay];
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
+  if (o.timeout !== undefined) args.push("--timeout", String(o.timeout));
   g.sides.forEach((e, k) => {
     const x = entrants[e];
     if (x.kind === "computer") args.push("--computer", RACE_WORD[g.races[k]]);
@@ -412,7 +415,7 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const worker = async () => {
     while (next < games.length) {
       const g = games[next++];
-      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, node: o.node, text: o.text, play: o.play });
+      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play });
       results.push(r);
       say(gameLine(r, entrants, games.length));
     }

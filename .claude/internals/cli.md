@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack |
-replay info|open | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -229,6 +229,57 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   `runBotGame` with live lines; the failure paths. The real runner was exercised by hand (and scm-sim's own test).
 - Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
   a replay of the game saved out (the engine records commands; a `--replay` is a natural next step).
+
+## Replays in the terminal (`cli/src/watch.ts`, `engine.ts`) — 2026-11-06
+
+`scmjs replay watch <rep> [--speed x] [--from m:ss] [--size WxH] [--every n] [--json] [--starcraft] [--engine]`: the
+first of the "things people can see" slice (the user: "replay watch first"), the demo that gets screenshotted.
+
+- **The engine's half is scm-sim's `src/exact/runReplay.ts`** (PR jeany55/scm-sim, branch `replay-runner`), modelled on
+  the bot runner: the served engine files + the player's copy of the game (`src/exact/gameCopy.ts`, the copy-reading
+  helpers run.ts had, as a module; run.ts keeps its own copy because its program block runs when its module is the
+  entry — importing run.ts into another bundle would run *both* programs), `applyInputs({ replay })` + `runStart({})`
+  as `web.ts#startExactReplayInPage` does, `ExactReplayEngine` + `ReplayWatch`. JSON lines: `start` (map, frames,
+  players, copy, **terrain** = a char a tile from the game's tile flags, `0` unwalkable / `1` low / `2` middle / `3` high
+  — OpenBW's `tile_t::flags` in the high half of each dword at `ADDR.tileFlags`), `frame` (per player minerals, gas,
+  supply used/available, units alive; `units` = x, y in map pixels, owner, class 0 other/1 worker/2 army/3 building/4
+  resource, four numbers a unit, the visible list only, subunits skipped), `end` (frame, ended, check from
+  `ReplayWatch`). **Paced by standard input**: with no `--every`, each line read is a number of frames to step before
+  the next `frame`; EOF or anything else ends it. So the terminal asks for exactly what the next picture needs and the
+  game never runs ahead (Linux pipes would block a free runner anyway, Windows pipes would not). `--every N` runs free
+  for a dump. Bundled by `scripts/bundle-replay-run.mjs` (esbuild, ~210 KB), staged by `deploy-play.mjs` as
+  `play/engine/<build>/replay-<hash>.mjs` and named `replayRunner` (+ `replayRunnerBytes`) in `current.json`; `runner`
+  stays the bot's. Measured: load 1.5 s + start 0.4 s, ~3,700 frames/s stepping with no snapshot; legacy_cp949.rep
+  (10:08) end to end in 5.6 s free. `tests/exact-replay-run.test.ts` plays 1,000 frames of it (skips without the engine
+  or a copy).
+- **`cli/src/engine.ts`** is what `botrun.ts` had for the engine and the copy of the game, shared: `cacheRoot`,
+  `ensureEngine` (now fetches **every** runner `current.json` names — `RUNNERS` maps kind → key + file pattern + command;
+  a folder without current.json is searched for `run-*`/`replay-*`), `runnerFor(engine, kind)` (a CliError naming the
+  command when the deploy had none), `findGameCopy`, `startRunner` (the child process, stdin a pipe when paced).
+  botrun.ts re-exports the old names so doctor.ts and the tests are untouched. A sibling slice (`map trace|cost`) adds
+  its `mapRunner` the same way.
+- **The picture (`watch.ts`)**: `fitPicture` keeps the map's shape, ≤ 2 dots a tile, within the terminal less the
+  lines around it (title, blank, a line per player, three of chat). `drawMinimap` lights dots at `floor(tile × scale)`,
+  a 2 × 2 block for a building when scale ≥ 1, weighs owners per cell (building 3, army 2, worker 1, resources 0.5 in
+  their own bucket) and colours the cell by the heaviest: 24-bit via the replay's `#rrggbb` where `COLORTERM` says so,
+  else `nearestAnsi` of xterm's sixteen; resources grey `#6f7a86`; the **ground as a background shade** by level
+  (truecolor only), none where unwalkable. Empty cells are spaces, not U+2800 (as the banner). ASCII where ui.ts's
+  `unicode` is false: `#` building, `o` unit, `.` resource. `pictureLines` is always the same height so the redraw
+  (`\x1b[nA` + `\x1b[2K` a line) lands; the cursor is hidden while drawing. Keys in raw mode: q/Esc/Ctrl-C stop, space
+  pauses, +/- double/halve the speed (0.25–64). Pacing: `fps` 12 pictures a second, `round(24 × speed / fps)` frames
+  a step. **The replay's own part** comes from `@scm-js/replay` as `replay info`'s does: `sidesOf` joins the runner's
+  slots to the replay's names and colours; `Tally` walks the commands up to the frame for chat (by `player` id) and APM
+  (Aftermath's rule, not chat/leave/system, until the player left). Not a TTY: `summaryLine` every `--every` frames
+  (1,440 = a minute) with chat lines between, or `--json` lines (start with the sides, frames with `units`, end).
+- `tests/cli-watch.test.ts` (14): the geometry (a 64 × 64 map at one dot a tile, dot by dot), colours (24-bit, sixteen,
+  none, ASCII), the layout's height and text, the clock, `Tally`, `ensureEngine`'s runners, and the driver over a
+  stand-in runner speaking the protocol: pipe, JSON, and the terminal path with a `PassThrough` as the keys (`+` then
+  `q`, the frame count checks the pacing). Verified for real: the built CLI over a staged folder (symlinks to
+  data/lifted + the bundled runner + a current.json) in a `script(1)` pseudo-terminal at 100 × 44 — 72 × 36 cells, 30
+  redraws from 7:30 to the end at 64×, blue/brown/grey dots and 1,116 background shades in the capture.
+- **Not in this slice**: the replay runner does not report who left or won (the CLI shows 0/0 for a player who left);
+  no terrain in a terminal without 24-bit colour; `--view` (whose fog) is in the runner but not the command (the
+  picture shows everyone); one dot per unit whatever its size.
 
 ## New, dump, find, doctor (`cli/src/create.ts`, `dump.ts`, `find.ts`, `doctor.ts`) — 2026-11-07, the DX slice
 

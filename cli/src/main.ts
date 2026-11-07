@@ -26,6 +26,7 @@ import { serveStdio } from "./mcp";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
 import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
@@ -480,6 +481,31 @@ replay.command("open").description("watch a replay in the scmJS app, or the edit
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
   .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
+replay.command("watch").description("play a replay in the terminal: the minimap, each player's figures, the chat").argument("<replay>").addOption(json)
+  .option("--speed <x>", "how fast, against the game's Fastest (24 frames a second)", "8")
+  .option("--from <m:ss>", "start the game here")
+  .option("--size <WxH>", "the picture's size in characters; as much of the terminal as the map fills by default")
+  .option("--every <frames>", "frames between lines when the output is not a terminal", "1440")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy of
+StarCraft, Remastered or 1.16.1. The replay plays as the game plays it, drawn as a minimap: a dot a unit in its
+player's colour, buildings as blocks, resources dim. Keys: space pauses, + and - change the speed, q stops. Into a
+pipe or a file it prints a line per minute of game instead (--every), or JSON lines with --json.`)
+  .action(async (file: string, o: { json?: boolean; speed: string; from?: string; size?: string; every: string; starcraft?: string; engine?: string }) => {
+    const input = await readInput(file);
+    expectKind(input, "replay");
+    const replay = await loadReplayInput(input);
+    const speed = Number(o.speed);
+    if (!(speed > 0 && speed <= 64)) throw new CliError(`--speed takes a number from 0.25 to 64, not "${o.speed}"`, null, 2);
+    const every = Number(o.every);
+    if (!Number.isInteger(every) || every < 1) throw new CliError(`--every takes a number of frames, not "${o.every}"`, null, 2);
+    let size: { cols: number; rows: number } | undefined;
+    if (o.size) { const m = /^(\d+)x(\d+)$/i.exec(o.size); if (!m || Number(m[1]) < 8 || Number(m[2]) < 4) throw new CliError(`--size takes WxH in characters, 8x4 or more, not "${o.size}"`, null, 2); size = { cols: Number(m[1]), rows: Number(m[2]) }; }
+    const r = await watchReplay(input, replay, { speed, from: o.from ? parseClock(o.from) : undefined, size, every, json: !!o.json, starcraft: o.starcraft, engine: o.engine });
+    if (!o.json) print(watchSummary(input, r));
+  });
 
 const plugin = program.command("plugin").description("start, check and run a plugin for the editor").helpGroup("Plugins and bots:");
 plugin.command("new").description("a plugin to start from, in a new folder").argument("[name]", "the plugin's name, such as \"Base Check\"")

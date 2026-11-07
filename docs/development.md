@@ -752,6 +752,27 @@ Some scenes have their own needs:
   `scripts/lib/guide-scmjs-mock.mjs`, which the script starts itself. When a dialog
   changes, change the scene; when a canned answer no longer fits, change the mock.
 
+### Command line screenshots
+
+The command line guide's pictures, `docs/images/cli-*.webp`, are made by
+`scripts/cli-screenshots.mjs`. It builds `scmjs`, runs real commands with colour forced
+on, draws their output as a terminal in headless Chromium, and writes WebP files. Its
+inputs are the generated maps in `tests/maps/`, maps `scmjs map generate` makes, and
+replays the game engine saves; never point it at a Blizzard or community map.
+
+```sh
+node scripts/cli-screenshots.mjs                       # → docs/images/cli-*.webp
+node scripts/cli-screenshots.mjs --only map-info,map-check
+node scripts/cli-screenshots.mjs --play-url http://127.0.0.1:8766/play --bots ~/bots
+```
+
+The map pictures need a copy of StarCraft, and the pictures of commands that run the game
+need the play page's engine too: `--play-url` points at a staged play page when the newest
+runners are not deployed yet. The ladder and the replay picture need built bots (`--bots`,
+a folder with `ualbertabot.scmbot` and `example.scmbot`). A picture whose inputs are
+missing is skipped and its file left as it is. The terminal for `replay watch` comes from
+util-linux's `script`, so that picture is taken on Linux.
+
 ## Contributing
 
 - **Keep the documents current.** The eleven guides under `docs/` are the documentation

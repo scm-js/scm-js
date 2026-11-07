@@ -106,6 +106,15 @@ fails on a picture the guide names that is not on disk. `scripts/guide-screensho
 regenerates them against the dev server and the fixture maps (Playwright and sharp,
 installed ad hoc, not dependencies — `docs/development.md#guide-screenshots`); re-run it
 when the chrome changes, and never commit a picture that shows anything but the editor.
+`scripts/cli-screenshots.mjs` (2026-11-07) is its sibling for `docs/cli.md`'s `cli-*.webp`: it runs the built
+`scmjs` with `FORCE_COLOR=1`/`COLORTERM=truecolor` on `tests/maps/*`, maps `map generate` makes and the engine's
+replays, plays the output into a small terminal emulator (SGR, CR/LF, cursor up/down, `2K`, OSC/APC skipped; ▀▄█
+painted as two-colour gradients so half-block pictures have no seams), renders the cells in DejaVu Sans Mono and
+screenshots them at 2× in headless Chromium. WebP comes from the page's own `canvas.toDataURL("image/webp", 1)`,
+which Chromium writes lossless (VP8L) at quality 1, so the script needs only Playwright, not sharp; the coloured-cell
+pictures (`map preview`, `replay watch`) and the PNGs commands write go at 0.9. `replay watch` runs under
+`script -qfec` for a pty and is quit with `q` after six seconds. The QR picture is the encoder (`cli/src/qr.ts`,
+loaded with Vite's `ssrLoadModule`) on a fixed link, since a real `map share` needs a session.
 The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-menu`,
 `assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
 `generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a

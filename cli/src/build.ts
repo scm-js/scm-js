@@ -92,7 +92,8 @@ export async function loadTypeScript(from = process.cwd()): Promise<TypeScriptMo
   return { ts, path, version: ts.version, lib: libText(dirname(path)) };
 }
 
-function findTypeScript(from: string): string | null {
+/** Where `typescript` is: the working directory's project, beside the command, then the global folder; null when nowhere. */
+export function findTypeScript(from: string): string | null {
   const tries: (() => string)[] = [
     () => createRequire(join(resolve(from), "package.json")).resolve("typescript"),
     () => createRequire(import.meta.url).resolve("typescript"),

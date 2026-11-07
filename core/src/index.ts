@@ -64,7 +64,10 @@ export {
 export { readSwitchNames } from "../../src/editor/switches";
 export { soundList, type SoundRow } from "../../src/editor/sounds";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
-export { placeStartLocations, idealStarts, playableCount } from "../../src/editor/startLocations";
+export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
+export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";
+// The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).
+export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } from "../../src/formats/tileset/terrain";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

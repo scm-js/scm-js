@@ -60,7 +60,7 @@ terrain. Everything else is a function that reads or changes one.
 | Units | `addUnits`, `removeUnits`, `updateUnits`, `moveUnits`, `makeUnit`, `unitAt`, `unitsInBox`, `isResource` |
 | Locations | `addLocation`, `editLocation`, `removeLocations`, `moveLocations`, `locationName`, `usedLocations` |
 | Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding` |
-| The map | `resizeScenario`, `placeStartLocations`, `setScenarioName`, `setScenarioDescription` |
+| The map | `resizeScenario`, `placeStartLocations`, `setScenarioName`, `setScenarioDescription`; `flatTerrain` and `baseTerrain`, the flat ground a new map is filled with |
 | Names | `unitName`, `upgradeName`, `techName`, `TILESETS`, `PLAYER_TYPES`, `PLAYER_RACES`, `PLAYER_COLORS` |
 | Plugins | `validateManifest`, `PLUGIN_API_VERSION` — what the editor checks a plugin's manifest for |
 

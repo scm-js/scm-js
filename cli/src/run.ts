@@ -121,7 +121,9 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
       status: (text) => note({ kind: "status", level: "info", text }),
       // Plain text in the event (it goes into --json too); the colour is the printed line's.
       toast: (t) => note({ kind: "toast", level: toastLevel(t.kind), text: t.detail ? `${t.title}: ${t.detail}` : t.title }),
-      log: (e: LogEntry) => { if (e.level !== "info" || e.source !== "plugins") note({ kind: "log", level: e.level, text: `${e.source}: ${e.message}` }); },
+      // Warnings and errors only: the info tier is the host's own trace of the plugin ("Update: Rename", a command's
+      // timing), which the status line already said; a plugin's api.log goes to the console, which is this terminal.
+      log: (e: LogEntry) => { if (e.level !== "info") note({ kind: "log", level: e.level, text: `${e.source}: ${e.message}` }); },
     });
   } catch (e) {
     if (e instanceof CliError) throw e;

@@ -1,12 +1,13 @@
 # The command line
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
-Map on any number of maps, takes a map's triggers and strings out as text and puts them
-back, says what changed between two maps, builds a TrigScript map the way Save does, runs
-a plugin over a map, takes a map's archive apart into a folder and puts it back, opens a
-map or replay in scmJS from a terminal, helps you write a plugin, and builds a BWAPI bot
-of your own for the play page. It reads files the way the editor does, so the two agree
-about every map.
+Map on any number of maps, makes a new map, searches maps, writes a map out as text so git
+can show its changes, takes a map's triggers and strings out as text and puts them back,
+says what changed between two maps, builds a TrigScript map the way Save does, runs a
+plugin over a map, takes a map's archive apart into a folder and puts it back, opens a map
+or replay in scmJS from a terminal, helps you write a plugin, builds a BWAPI bot of your
+own for the play page, and says what your computer has for each of those. It reads files
+the way the editor does, so the two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -30,6 +31,9 @@ when there is a newer version.
 | `scmjs map info <maps…>` | A map's size, tileset, players, units, triggers and strings, and its check in one line |
 | `scmjs map check <maps…>` | Check Map, as the editor runs it: errors first, then warnings |
 | `scmjs map open <map>` | Opens the map in scmJS |
+| `scmjs map new <map>` | A new map: flat ground, start locations laid out, the file written |
+| `scmjs map dump <map>` | The whole map as text, for `git diff` and `grep` |
+| `scmjs map find <text> <maps…>` | Edit ▸ Find across maps: units, locations, strings, triggers |
 | `scmjs map triggers export|import` | A map's triggers as a text or `.trg` file, and back |
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
 | `scmjs map diff <a> <b>` | What changed between two maps |
@@ -44,6 +48,7 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
+| `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the desktop app, and the command for each thing missing |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
 
@@ -86,6 +91,33 @@ scmjs map check maps/*.scx --strict
 Checks that need the game's graphics or unit data (units standing where they cannot walk,
 for example) are not run here. The editor runs them once you have given it the game data.
 
+## A new map
+
+`scmjs map new ridge.scx` writes the map File ▸ New makes: flat ground, eight open slots
+and nothing else, 128 × 128 Badlands unless you say otherwise.
+
+```sh
+scmjs map new maps/ridge.scx --size 96x64 --tileset jungle --players 2
+```
+
+```
+✔ maps/ridge.scx: 96 × 64 · Jungle World · Brood War 1.04 · 2 start locations · 3.0 KB
+```
+
+`--size` is the width and height, each 64, 96, 128, 192 or 256, as the New dialog offers
+them; `--tileset` one of badlands, platform, install, ashworld, jungle, desert, ice and
+twilight; `--name` the map's name, the file's without its extension by default, and
+`--description` its description. `--players 2` lays down start locations for players 1 and
+2 as Tools ▸ Auto-place would, in a ring (`--layout corners` puts them in the corners) and
+closes the other slots, so the map passes Check Map as it is. `--revision remastered`
+writes a Remastered revision. A `.chk` name writes the bare scenario. The command refuses
+to write over a file that is there unless you pass `--force`.
+
+Without the game's graphics the ground is written by its ids, as the editor does when it
+has no game data; the map opens as it should and the editor fills the tiles' looks in when
+it saves. The same arguments give the same file, byte for byte, so a map made in a build
+step is the same map every time.
+
 ## Triggers and strings as files
 
 A map's triggers and strings can live beside it as text — in version control, where a
@@ -118,6 +150,86 @@ the end; nothing is renumbered, since the map's triggers and locations hold the 
 
 A map written back keeps everything else — its sounds and other files, and the way the
 scenario was compressed — as Save does in the editor.
+
+## A map as text, and in git
+
+`scmjs map dump ridge.scx` prints the whole map as text: the header, the players and
+forces, every unit and location, the triggers in the trigger window's text form, the
+strings as `map strings export` writes them, the archive's other files with their sizes
+and hashes, and the sections with their sizes. Nothing is cut. It is one stable form of
+the map, the same twice over for the same file, so it can be searched with `grep`, kept
+beside a map for reading, or given to git.
+
+```
+# ridge.scx — scmjs map dump 1
+
+## Map
+  Name         Ridge
+  Size         96 × 64
+  Tileset      Jungle World
+  …
+## Units (14)
+  Start Location  Player 1  336,1744
+  Mineral Field (Type 1)  Neutral  176,1552  resources 1500
+  …
+## Triggers (3)
+Trigger("Player 1"){
+Conditions:
+	Always();
+…
+```
+
+A map file is binary, so `git diff` says only that it changed. Told to read maps through
+this command, git shows what changed in them instead, in `git diff`, `git log -p`,
+`git show` and the pull requests of tools that honour `.gitattributes`. Once, in the
+repository:
+
+```sh
+git config diff.scmjs.textconv "scmjs map dump"
+git config diff.scmjs.xfuncname "^## "
+printf '*.scx diff=scmjs\n*.scm diff=scmjs\n*.chk diff=scmjs\n' >> .gitattributes
+```
+
+```
+$ git diff
+--- a/ridge.scx
++++ b/ridge.scx
+@@ -100,7 +100,7 @@ ## Strings (20)
+   2	Hold the base.
+-  3	Force 1
++  3	Renegades
+   4	Force 2
+```
+
+The second line makes each hunk's heading the part of the map it is in.
+`git config diff.scmjs.cachetextconv true` keeps the text of each version so a long
+`git log -p` does not read every map again. The `.gitattributes` lines are committed, so
+everyone who clones gets them; the two `git config` lines are per clone (`--global` sets
+them for every repository on your computer). `--json` gives the same data as JSON, with
+the units and triggers as the records the editor holds.
+
+## Searching maps
+
+`scmjs map find <text> <maps…>` is Edit ▸ Find over any number of maps: a unit, location,
+sprite or doodad whose name holds the text, a string or a trigger whose text does, and a
+number matches a unit id, location slot, string number or trigger number too.
+
+```sh
+scmjs map find "Marine" maps/*.scx
+```
+
+```
+ums.scx  4 matches
+  unit     Test Marine  Player 1 · 14, 50
+  string   Test Marine  String #13
+  string   Bring a Marine to the middle.  String #17
+  trigger  Trigger 1  Bring a Marine to the middle.
+```
+
+`--in strings,triggers` searches only those kinds (of units, locations, sprites, doodads,
+strings, triggers and briefing), and `--case` matches case. A map with no match prints
+nothing. The command exits with 1 when nothing matched in any map, like `grep`, so a
+script can ask whether any map still says something.
 
 ## Comparing two maps
 
@@ -210,14 +322,14 @@ scmjs map run ../plugin-repair maps/ridge.scx --command repair --dry-run
 ```
 
 What the plugin would have shown is printed as it happens: its status line, its toasts and
-what it logged. Dialogs and panels register and show nothing, and asking for a file
-answers none. `--command <id>` runs one of the commands the plugin registered after it
-started, with `--arg` values as its arguments; what the command returned is in `--json`.
-The map is written back only when the plugin changed it (`--out` writes it elsewhere, and
-writes even an unchanged map), and the closing line says what changed in the terms of
-`map diff`. `--dry-run` prints that comparison in full and writes nothing. A plugin that
-is TypeScript source needs TypeScript installed, as `map build` does; a built plugin or a
-JavaScript script needs nothing more.
+the warnings and errors in its log. Dialogs and panels register and show nothing, and
+asking for a file answers none. `--command <id>` runs one of the commands the plugin
+registered after it started, with `--arg` values as its arguments; what the command
+returned is in `--json`. The map is written back only when the plugin changed it (`--out`
+writes it elsewhere, and writes even an unchanged map), and the closing line says what
+changed in the terms of `map diff`. `--dry-run` prints that comparison in full and writes
+nothing. A plugin that is TypeScript source needs TypeScript installed, as `map build`
+does; a built plugin or a JavaScript script needs nothing more.
 
 This is the editor's own plugin host, so a plugin's logic runs here exactly as it does in
 the editor and a plugin can be tried from a terminal, or run over many maps from a shell
@@ -357,6 +469,34 @@ when the app is installed.
 | `SCMJS_APP` | The desktop app's path, where it was installed somewhere unusual |
 | `BROWSER=none` | Opens no browser: the command prints the page's address for you to open |
 
+## What this computer has
+
+`scmjs doctor` says what is on this computer of what the commands need beyond Node, and
+the command for each thing missing: TypeScript for `map build` and a plugin written in
+TypeScript, Docker for `bot new|build`, a copy of StarCraft and the fetched engine for
+`bot run`, the desktop app for `map open`, and whether npm has a newer scmjs.
+
+```
+scmjs doctor  what this computer has for each command
+
+✔ Node         v24.13.0 · linux x64
+✔ scmjs        0.8.12 · the newest
+▲ TypeScript   not found
+    scmjs map build and a .ts plugin under scmjs map run compile with it.
+    npm install typescript   (in the map's project, or npm install -g typescript)
+✔ Docker       29.1.3
+▲ StarCraft    not found
+    scmjs bot run plays with your own installation's files.
+    scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)
+✔ Game engine  not fetched yet
+✔ Desktop app  not installed
+
+✔ scmjs info, check, dump, diff and the rest need nothing more; the rest is for the commands named
+```
+
+Nothing is changed. The command exits with 1 only when Node itself is older than the
+command needs.
+
 ## Completions
 
 `scmjs completion bash`, `zsh` or `fish` prints a completion script for the shell, made
@@ -372,9 +512,9 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 
 - `--json` prints what a command found as JSON: one object for one file, a list for
   several. The text output may change between versions, so scripts should use `--json`.
-- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed, a
-  build did not go through or something went wrong, 2 when a file was missing or was the
-  wrong kind for the command.
+- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed,
+  nothing matched a search, a build did not go through or something went wrong, 2 when a
+  file was missing or was the wrong kind for the command, or an option was not one.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
 - For what the commands do not do — a script that edits maps, a check of your own — the
@@ -391,6 +531,10 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath |
+| `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
+| `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
+| `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |
+| `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
 | `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |

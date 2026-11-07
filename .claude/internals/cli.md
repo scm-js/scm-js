@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | info | map info|check|open |
-replay info|open`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|triggers|strings|diff|build|run|unpack|pack |
+replay info|open | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -156,6 +156,13 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 
 ## Plugins over a map (`cli/src/run.ts`) — 2026-11-06, third slice
 
+- **Flaky CI fixed 2026-11-07 (run 42333075108 on #137; main's run after #134 failed the same way):** the log wakes
+  listeners on a `setTimeout` (coalesced), so whether the host's `logInfo(info.name, "Update: Rename")` records
+  reached the sink before `dispose()` was timing — 4 events locally, 6 on CI. Two changes: `attachSinks`'s detach
+  **flushes** the log first (deterministic, tested with a `logWarn` before detach), and `run.ts` prints only
+  `warn`/`error` entries — the info tier is the host's own trace (edit records, command timing), which the status line
+  already said; `api.log` is `console.log`, so a plugin's own output reaches the terminal regardless.
+
 - `scmjs map run <plugin> <map> [--command id] [--arg v...] [--out] [--dry-run] [--json]`: `runHeadless` from
   `src/plugins/headless.ts` (design and traps in `plugins-host.md`, "The host without the editor"); the Node half
   (`nodeLoaderDeps`, `sourceFor`) is in `run.ts`, since the editor's tree has no Node types. The target is
@@ -222,6 +229,48 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   `runBotGame` with live lines; the failure paths. The real runner was exercised by hand (and scm-sim's own test).
 - Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
   a replay of the game saved out (the engine records commands; a `--replay` is a natural next step).
+
+## New, dump, find, doctor (`cli/src/create.ts`, `dump.ts`, `find.ts`, `doctor.ts`) — 2026-11-07, the DX slice
+
+The user asked for "suggestions on how to improve our cli tool … for DX and technical people" and took the first
+slice proposed: four thin layers on existing library code, plus a git recipe.
+
+- **`map dump <map> [--json]`**: the whole map as one stable text (`dumpMap` → `MapDump`, `printDump`): header,
+  players, forces, units in **file order** (`unitLine`: name, owner, pixel x,y, and only the properties the record
+  says are set), used locations, triggers and briefing in the trigger window's full text (`triggersToText`, so
+  `map triggers import` could take the part back), strings as `formatStringTable`, members with size + sha1 prefix,
+  sections as they would be written (`sectionBytes`, the same gather `diff.ts` uses — moved here, exported). Every
+  part is printed even when empty (`(none)`) so two dumps line up. No colour ever (it is for files and git), first
+  line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly). **The git recipe**
+  (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## "`
+  (hunk headers name the part), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
+  `git log -p` show a string change as text; git's temp blob keeps the basename so `kindOf` sees the bytes anyway.
+- **`map find <text> <maps…> [--in kinds] [--case] [--json]`**: `findInScenario` per kind in `FIND_KINDS` order with
+  `limit: Infinity`; exit 1 when nothing matched in any map (grep's rule — docs say so under exit codes). A map with
+  no hit returns `lines: []`, and **`eachFile` now prints no separator for a file that printed nothing** (`printed`
+  replaces `first`) — the only change to the shared loop. Sprites/doodads match ids only here (no game data names).
+- **`map new <map>`**: `newScenario` = the editor's `newMapInto` without the store: `flatTerrain(baseTerrain(null), null, seeded(1), era)` — **the fill is seeded** (mulberry32) so the same
+  arguments give the same bytes (tested), unlike the editor's `Math.random`; **no `--terrain`**: `baseTerrain(null,
+  id)` returns `DIRT` whatever the id (a terrain's tiles need the tileset's groups), so the option the first commit
+  had was a silent no-op and went (CI-review fix); `createScenario`; `setMapVersion` for `--revision
+  remastered` (**not `--version`**: commander answers the program's own flag wherever it appears — found when `map
+  set --version` printed 0.8.11); `--players n` = `placeStartLocations(scn, null, null, {…DEFAULT_START_PLACEMENT, replace: false,
+  placement: DEFAULT_PLACEMENT})` **and slots n..7 set Inactive** via read/applyPlayerSettings — the editor leaves
+  eight Human slots, but a Human slot without a start location is a Check Map error in melee, and a terminal scaffold
+  should pass `map check` as written. Written with `defaultSaveOptions(scn, null, path)` (pkware + encrypt, the Save
+  dialog's rule for a fresh map); `.chk` = bare scenario. Refuses an existing file without `--force` (exit 2). New
+  core exports for it: `flatTerrain`/`baseTerrain`/`DIRT` (`formats/tileset/terrain.ts`, DOM-free, dirt ids without
+  a tileset), `DEFAULT_START_PLACEMENT`/`StartLayout`, `DEFAULT_PLACEMENT`/`PlacementOptions` (placement.ts was
+  already in the walk through startLocations).
+- **`doctor [--json]`**: `Check { what, state ok|warn|bad, detail, fix?, note? }` for Node (≥ `NODE_MIN` 22.12.0,
+  the only `bad`), scmjs vs npm (`newestVersion`, the one other network call besides `about`), TypeScript
+  (`findTypeScript`, now exported from build.ts; version from the `typescript` package.json up the path), Docker
+  (`dockerVersion`, else `docker --version` for installed-not-running), StarCraft (`findGameCopy`), the engine cache
+  (`cacheRoot()/engine/<build>/`), the desktop app. Exit 1 only on `bad`. Modelled on `scripts/doctor.mjs`.
+- **Overview**: `doctor` took the 23rd line, so the blank line between the banner and the first group went
+  (banner.ts; the globe's bottom row, which carries no text, separates them). Its description had to fit one line
+  (col width ≈ 47): "what this computer has for each command". The `map` term is now `map info|check|open|new|…`;
+  the test takes any verbs before the ellipsis. `tests/core.test.ts`'s list of cli modules has the four new names.
 
 ## Opening (`cli/src/open.ts`)
 

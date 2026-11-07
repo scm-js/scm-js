@@ -61,7 +61,8 @@ export function rootHelp(cmd: Command, helper: Help, version: string, opts: { as
     `${helper.styleTitle("Usage:")} ${helper.styleUsage(helper.commandUsage(cmd))}`,
     `${helper.styleTitle("Docs:")}  ${pc.cyan("https://docs.scmjs.dev")}`,
   ], { width: helper.helpWidth ?? 80, ...opts });
-  out.push("");
+  // No blank line here: the globe's own bottom row, below the text, keeps the groups off the title, and the overview
+  // is held to 23 lines (a 24-row terminal keeps the globe on screen).
   const groups = helper.groupItems([...cmd.commands], helper.visibleCommands(cmd), (sub) => sub.helpGroup() || "Commands:");
   for (const [heading, commands] of groups) {
     out.push(...helper.formatItemList(heading, commands.map((sub) =>

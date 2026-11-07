@@ -7,6 +7,8 @@ StarCraft: Brood War maps and replays from the command line, by [scmJS](https://
 npm install -g @scm-js/cli
 scmjs info "(2)Destination.scx"     # what a map or replay holds
 scmjs map check maps/*.scx          # Check Map, as the editor runs it; exits 1 on errors
+scmjs map dump ridge.scx            # the whole map as text: git's textconv for maps
+scmjs map find "Marine" maps/*.scx  # Edit ▸ Find across maps
 scmjs replay info game.rep          # players, races, APM, map, length
 scmjs replay open game.rep          # watch it in scmJS: the desktop app, or the editor in your browser
 scmjs about

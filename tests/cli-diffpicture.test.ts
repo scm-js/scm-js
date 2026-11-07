@@ -22,7 +22,7 @@ import {
   ADDED_COLOR, asciiOverlay, GAP_COLOR, changePicture, diffChanges, diffLegend, diffPicture, MOVED_COLOR, PAD_COLOR, REMOVED_COLOR, sideBySide, TILE, TILE_COLOR, unitChanges,
 } from "../cli/src/diffpicture";
 import { asciiShades } from "../cli/src/paint";
-import type { CliError } from "../cli/src/ui";
+import { visible, type CliError } from "../cli/src/ui";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-diffpicture-"));
 
@@ -235,8 +235,8 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
     const starcraft = copy();
     const shown = await diffPicture(opened("a.scx", a), opened("b.scx", b), { starcraft }, ascii);
     expect(shown.report).toMatchObject({ layout: "changes", picture: { form: "ascii", columns: 79, rows: 40 }, counts: { tiles: 1, unitsAdded: 1 }, bounds: { tiles: { x: 3, y: 0, width: 1, height: 1 } } });
-    expect(shown.lines[0]).toMatch(/^a\.scx → b\.scx {2}64 × 64 · jungle · StarCraft 1\.16\.1/);
-    expect(shown.lines.at(-1)).toBe("A +1 units  R −0 units  x ~1 tiles  # ~0 locations");
+    expect(visible(shown.lines[0])).toMatch(/^a\.scx → b\.scx {2}64 × 64 · jungle · StarCraft 1\.16\.1/);
+    expect(visible(shown.lines.at(-1) ?? "")).toBe("A +1 units  R −0 units  x ~1 tiles  # ~0 locations");
     expect(shown.lines.slice(1, -1).join("\n")).toContain("A");
 
     // Too narrow for three: the changes alone, and it says so.
@@ -246,7 +246,7 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
 
     const three = await diffPicture(opened("a.scx", a), opened("b.scx", b), { starcraft, sideBySide: true }, wide);
     expect(three.report).toMatchObject({ layout: "side-by-side", picture: { form: "blocks", width: 3 * 51 + 4 } });
-    expect(three.lines[1]).toMatch(/a\.scx {46,}changes {44,}b\.scx/);
+    expect(visible(three.lines[1])).toMatch(/a\.scx {46,}changes {44,}b\.scx/);
   });
 
   it("maps of two tilesets: side by side, nothing marked, and it says so", async () => {
@@ -262,7 +262,7 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
     const sink = new PassThrough();
     const got: Buffer[] = [];
     sink.on("data", (c: Buffer) => got.push(c));
-    const written = await diffPicture(opened("a.scx", a), opened("b.scx", b), { out: "-", scale: "2", sideBySide: true }, ascii, sink);
+    const written = await diffPicture(opened("a.scx", a), opened("b.scx", b), { starcraft: copy(), out: "-", scale: "2", sideBySide: true }, ascii, sink);
     expect(written.report.picture).toEqual({ form: "png", width: 3 * 128 + 2 * 4, height: 192, scale: 2 });
     expect(written.report.out?.bytes).toBe(Buffer.concat(got).length);
     expect(Buffer.concat(got).subarray(1, 4).toString()).toBe("PNG");

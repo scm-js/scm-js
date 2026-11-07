@@ -189,6 +189,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: "replay info|open", needs: [] },
   { commands: "mcp", needs: [] },
   { commands: "map build", needs: ["TypeScript"] },
+  { commands: "map preview", needs: ["StarCraft"] },
   { commands: "bot new|build", needs: ["Docker"] },
   { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
   { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },

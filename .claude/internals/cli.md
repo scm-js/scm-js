@@ -530,6 +530,7 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
   is; the campaign maps (engine). (The `doctor` line for the map runner came with `cli-doctor`.)
+
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 
 `scmjs map preview <map> [--out p.png|-] [--scale n] [--width cols] [--no-units] [--blocks] [--starcraft] [--json]`.

@@ -63,11 +63,15 @@ export function rootHelp(cmd: Command, helper: Help, version: string, opts: { as
   ], { width: helper.helpWidth ?? 80, ...opts });
   // No blank line here: the globe's own bottom row, below the text, keeps the groups off the title, and the overview
   // is held to 23 lines (a 24-row terminal keeps the globe on screen).
+  // The groups follow one another with no blank line between (each row is a command the 23 lines have room for
+  // only then); the one blank line is before Options.
   const groups = helper.groupItems([...cmd.commands], helper.visibleCommands(cmd), (sub) => sub.helpGroup() || "Commands:");
   for (const [heading, commands] of groups) {
-    out.push(...helper.formatItemList(heading, commands.map((sub) =>
-      helper.formatItem(helper.styleSubcommandTerm(helper.subcommandTerm(sub)), termWidth, helper.styleSubcommandDescription(helper.subcommandDescription(sub)), helper)), helper));
+    const list = helper.formatItemList(heading, commands.map((sub) =>
+      helper.formatItem(helper.styleSubcommandTerm(helper.subcommandTerm(sub)), termWidth, helper.styleSubcommandDescription(helper.subcommandDescription(sub)), helper)), helper);
+    out.push(...list.filter((l) => l !== ""));
   }
+  out.push("");
   out.push(`${helper.styleTitle("Options:")} ${helper.visibleOptions(cmd).map((o) => helper.styleOptionTerm(helper.optionTerm(o))).join("   ")}`, "");
   return out.join("\n");
 }

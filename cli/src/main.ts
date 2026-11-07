@@ -804,7 +804,7 @@ const signOut = async () => {
   print(`${mark.ok} Signed out of ${serverLabel(r.was.server)}${r.was.name ? ` (${r.was.name})` : ""}`, r.told ? null : pc.dim(`  The server could not be reached to end the session there; ${r.file} is deleted.`));
 };
 const providerOption = () => new Option("--provider <name>", `the sign-in to use: ${PROVIDERS.join(", ")}`).default("discord");
-const account = program.command("account", { hidden: true }).description("your scmjs.dev account: sign in, see it, sign out")
+const account = program.command("account").description("sign in to scmjs.dev, see your account, sign out").helpGroup("This tool:")
   .addHelpText("after", `
 The sign-in opens Discord in your browser, as the editor's does (--provider google or battlenet for the others). The
 session is kept in your configuration folder (~/.config/scmjs/session.json; SCMJS_SESSION names another file), and
@@ -830,7 +830,7 @@ program.command("completion", { hidden: true }).description("a completion script
   });
 
 // Hidden from the overview, which holds 23 lines (banner.ts); `scmjs help init`, `map --help` and docs/cli.md name it.
-program.command("init", { hidden: true }).description("a folder of maps set up for git and GitHub: maps diff as text, a check on each push, a README")
+program.command("init").description("set a folder of maps up for git and GitHub").helpGroup("Maps and replays:")
   .argument("[folder]", "the folder the maps are in", ".").addOption(json)
   .option("--print", "print what would be written, to paste by hand, and write nothing")
   .option("--git", "git init the folder when it is in no git repository (never done without it)")

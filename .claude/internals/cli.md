@@ -415,10 +415,10 @@ report, `printRecipe` the paste-able text. Writes:
 Paths in the report (and `--json`'s `files[].path`) are **from the folder** — from the cwd they were
 `../../../../tmp/…` in the tests. Exit 2 for a missing folder or a file.
 
-**Hidden from the overview** (`{ hidden: true }`, as `completion`): the root help was already at 23 lines and a
-top-level row would make 24; the user asked for `scmjs init`, not `map init`. Found by `scmjs help init`, the `map`
-noun's help (`map.addHelpText("after", …)` names it) and docs/cli.md. Being hidden it is also **not in the shell
-completions** (`commandTree` skips hidden). `doctor`'s Ready table unchanged (init needs nothing beyond git, optional).
+**In the overview** under "Maps and replays:" (a one-line description: a wrapped one costs a row). It was hidden at
+first — the root help was at 23 lines — until the blank lines between the groups went (see "The overview's rows"
+below); the user asked for `scmjs init`, not `map init`. The `map` noun's help (`map.addHelpText("after", …)`) names
+it too. `doctor`'s Ready table unchanged (init needs nothing beyond git, optional).
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
@@ -865,11 +865,11 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - **Links**: `https://scmjs.dev/editor/map/<token>` / `share/<invite>`, plus `?scmjs-server=<server>` when
   `SCMJS_SERVER` is not api.scmjs.dev (the plugin's `linkTo` rule), so a link made against a local server opens there.
   Output: the link alone on the first line (`| head -1`), the facts, a dim line of what the link does.
-- **Overview**: it was at exactly 23 lines, so `account` (verbs `show` default, `login`, `logout`) and the `login` /
-  `logout` shortcuts are **hidden** (as `completion`); `map share` is under `map …`. Found by: `map share` without a
-  session says `scmjs login`, the doctor's row says it, `scmjs help account`, docs. Hidden commands are not in the
-  completion scripts either (`commandTree` skips `_hidden`). A visible `account login|logout|…` row needs a line freed
-  first.
+- **Overview**: `account show|login|logout` is a row under "This tool:" (one-line description); the `login` / `logout`
+  shortcuts stay **hidden** (as `completion`), since the account row names them; `map share` is under `map …`. Found
+  by: `map share` without a session says `scmjs login`, the doctor's row says it, `scmjs help account`, docs. Hidden
+  commands are not in the completion scripts either (`commandTree` skips `_hidden`). The rows for `init` and `account`
+  came from dropping the blank lines between the groups — see "The overview's rows".
 - **Doctor**: `scmjsDevCheck(file, server)` reads the file only — "signed in as Ann" + the file's path, or a dim `·
   not signed in` (`not signed in to scmjs.dev` for a session from another server) with `scmjs login` under it, state
   `ok` either way like Claude Code's; in `Tools`; `readiness` untouched.
@@ -930,3 +930,11 @@ Done 2026-11-06: triggers/strings export-import, diff, completions, `map build` 
 (2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
 release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`
 and `core`. 0.8.8 was published by hand (security key: own terminal, `--browser=false`); every version since from CI.
+
+## The overview's rows (`cli/src/banner.ts`) — 2026-11-07
+
+`rootHelp` prints the three groups **with no blank line between them**; the one blank line is before Options. That
+freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cli.test.ts` holds the count), which
+`init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
+description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
+command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.

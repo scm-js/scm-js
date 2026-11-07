@@ -4,7 +4,7 @@
  */
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { relative } from "node:path";
+import { basename, relative } from "node:path";
 import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
@@ -12,7 +12,7 @@ import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
-import { costReport, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceReport } from "./trace";
+import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
@@ -38,7 +38,7 @@ import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitXml, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
-import { defaultOut, defaultTests, readMapForTests, readTests, runTests, testHeader, testJson, testSummary, type PlannedScenario } from "./maptest";
+import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
@@ -601,35 +601,77 @@ const gameOptions = (cmd: Command) => cmd
   .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp());
 interface GameOptions { json?: boolean; frames: string; every: string; seed: string; all?: boolean; starcraft?: string; engine?: string }
 
-gameOptions(map.command("trace").description("run the map's triggers in the game with nobody playing: what fired, what never did").argument("<map>").addOption(json))
+/** `--replay` and `--order` for map trace and map cost. */
+interface ReplayOptions { replay?: string; order?: boolean }
+
+/**
+ * What map trace and map cost run: the map with nobody playing, or with `--replay` the replay's game — on its own
+ * map, or on the map named in place of it (said when the two differ: a changed map can make the replay go out of
+ * step). `--frames` left at its default runs a replay to its end.
+ */
+async function gameRun(file: string | undefined, o: GameOptions & ReplayOptions, cmd: Command) {
+  if (o.order && !o.replay) throw new CliError("--order lists the firings of a replay's game: use it with --replay.", null, 2);
+  if (!o.replay) {
+    if (!file) throw new CliError("Name a map, or a replay with --replay.", null, 2);
+    const { input, doc } = await openForEdit(file);
+    const game = await gameMap(doc, input.path, input.name);
+    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
+    return { name: input.name, scenario: doc.scenario, map: game.path as string | null, replay: undefined, frames: whole(o.frames, "frames", 1), extra: {} };
+  }
+  const replayInput = await readInput(o.replay);
+  expectKind(replayInput, "replay");
+  if (replayInput.path === STDIO) throw new CliError("--replay takes a replay file, not standard input.", null, 2);
+  const rep = await loadReplayInput(replayInput);
+  const named = file ? await openForEdit(file) : null;
+  const run = await replayRun(rep, named && { doc: named.doc, path: named.input.path, name: named.input.name, bytes: named.input.bytes });
+  if (!o.json) {
+    if (run.converted) print(pc.dim(`${named ? named.input.name : `The map in ${replayInput.name}`} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is played instead`));
+    if (named && run.differs) print(`${mark.warn} ${named.input.name} differs from the map in the replay ${pc.dim(`(${run.differs})`)}. A changed map can make the replay go out of step: when a unit a player clicked is not there, the game plays on with commands meant for another game. The trace says if that happens.`);
+  }
+  const frames = cmd.getOptionValueSource("frames") === "default" ? undefined : whole(o.frames, "frames", 1);
+  return { name: replayInput.name, scenario: run.scenario, map: run.map, replay: replayInput.path, frames, extra: { replayFile: replayInput.name, map: named?.input.name ?? null, differs: run.differs } };
+}
+
+/** `--every`: a replay's game is long, so left at its default a progress line comes a minute of play apart (1,440 frames at 24 a second). */
+const everyOf = (o: GameOptions & ReplayOptions, cmd: Command) => (o.replay && cmd.getOptionValueSource("every") === "default" ? 1440 : whole(o.every, "every"));
+
+const replayFlags = (cmd: Command) => cmd
+  .option("--replay <file>", "play a replay's game instead: its players' commands, on its own map or on the map named")
+  .option("--order", "with --replay, list every firing in the order the game ran it");
+
+replayFlags(gameOptions(map.command("trace").description("run the map's triggers in the game with nobody playing: what fired, what never did").argument("[map]", "the map; with --replay, played in place of the replay's own").addOption(json)))
   .addHelpText("after", `
 The game itself runs the map as Use Map Settings, your seat idle and the computers as the map has them, for the
 frames given, and every condition it asks and action it runs is noted. Prints each trigger with how often it fired,
 when first and last and whose it is, then the ones that never fired and which condition said no last. The engine is
 fetched once from the play page (about 25 MB) and the game's own files come from your copy of StarCraft, as for
-scmjs bot run. Exits 2 when the game could not start.`)
-  .action(async (file: string, o: GameOptions) => {
-    const { input, doc } = await openForEdit(file);
-    const game = await gameMap(doc, input.path, input.name);
-    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
-    const r = await runMapInGame(game.path, "trace", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
-    if (o.json) print(JSON.stringify({ ...traceReport(input.name, doc.scenario, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
-    else print("", ...printTrace(input.name, doc.scenario, r, { all: !!o.all }));
+scmjs bot run. Exits 2 when the game could not start.
+
+With --replay the game is the replay's: its players' commands are played to its end (or --frames), and the first
+and last firings are the game's clock. With a map named as well, that map is played in place of the replay's own,
+to test a fixed map against the game in a bug report.
+  scmjs map trace --replay report.rep --order
+  scmjs map trace fixed.scx --replay report.rep`)
+  .action(async (file: string | undefined, o: GameOptions & ReplayOptions, cmd: Command) => {
+    const g = await gameRun(file, o, cmd);
+    const r = await runMapInGame(g.map, "trace", { frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, replay: g.replay, order: o.order, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ ...traceReport(g.name, g.scenario, r), ...g.extra, engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
+    else print("", ...printTrace(g.name, g.scenario, r, { all: !!o.all }));
   });
 
-gameOptions(map.command("cost").description("what the map's triggers cost Remastered a frame, in milliseconds").argument("<map>").addOption(json))
+replayFlags(gameOptions(map.command("cost").description("what the map's triggers cost Remastered a frame, in milliseconds").argument("[map]", "the map; with --replay, played in place of the replay's own").addOption(json)))
   .addOption(new Option("--weigh <module>", "the weigher to hand the game instead of the one beside the command").hideHelp())
   .addHelpText("after", `
 The game runs the map as scmjs map trace does, and every trigger the game passes and every condition and action it
 runs is weighed as Remastered charges for it (TrigScript's model, measured on the real game). Says what a frame costs
-on average where the triggers ran and at the most, against what a frame can carry, then the costliest triggers.`)
-  .action(async (file: string, o: GameOptions & { weigh?: string }) => {
-    const { input, doc } = await openForEdit(file);
-    const game = await gameMap(doc, input.path, input.name);
-    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
-    const r = await runMapInGame(game.path, "cost", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, live: o.json ? undefined : (line) => print(line) });
-    if (o.json) print(JSON.stringify({ ...costReport(input.name, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
-    else print("", ...printCost(input.name, doc.scenario, r, { all: !!o.all }));
+on average where the triggers ran and at the most, against what a frame can carry, then the costliest triggers.
+With --replay, the cost of the replay's game, as map trace --replay plays it.`)
+  .action(async (file: string | undefined, o: GameOptions & ReplayOptions & { weigh?: string }, cmd: Command) => {
+    if (o.order) throw new CliError("--order is map trace's: map cost lists the costliest triggers.", null, 2);
+    const g = await gameRun(file, o, cmd);
+    const r = await runMapInGame(g.map, "cost", { frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, replay: g.replay, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ ...costReport(g.name, r), ...g.extra, engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
+    else print("", ...printCost(g.name, g.scenario, r, { all: !!o.all }));
   });
 
 map.command("rush").description("the ground distance between the start locations, walked by the game's own pathing").argument("<map>").addOption(json)
@@ -654,11 +696,12 @@ Exits 2 when the game could not start.`)
     else print("", ...printRush(input.name, r));
   });
 
-map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
+const test = map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
   .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
   .option("--out <folder>", "where the replays of failing scenarios go (<map>.tests/ beside the map)")
   .option("--frames <n>", "frames a scenario runs when it does not say (24 a second)", "2400")
   .option("--seed <n>", "the game's seed when a scenario does not say; the same seed and map give the same game", "1")
+  .option("-u, --update", "a scenario driven by a replay: write what the game gives now into the expectations that no longer hold")
   .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
   .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
   .addHelpText("after", `
@@ -666,9 +709,11 @@ A tests file holds scenarios: what the game starts with (units made, switches se
 frame (units killed, a switch flipped, your units ordered somewhere, a chat line), how long it runs, and what must
 hold at the end (a trigger fired or never did, a switch, a death count, units in a location, a line shown, who won).
 Each scenario is one game with nobody playing but the steps; one that fails says what did not hold and keeps its
-replay. Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
+replay. A scenario may name a replay instead ("replay": "game.rep"): its players' commands are the game, played on
+this map; scmjs map test record makes one from a replay, and -u writes in what such a scenario's game gives now.
+Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
 The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.scmjs.dev/cli/ has the file's form.`)
-  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; starcraft?: string; engine?: string }) => {
+  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; starcraft?: string; engine?: string }) => {
     if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
     const format: Format = o.json ? "json" : (o.format as Format);
     const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
@@ -686,9 +731,11 @@ The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.s
     const text = format === "text";
     if (text && scenarios[0].converted) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War`));
     const run = await runTests(input.name, scenarios, map, {
-      out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine,
+      out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine, update: !!o.update,
       live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
     });
+    const written = o.update ? updateTests(run.scenarios) : [];
+    if (text) for (const w of written) print(`${pc.cyan("✎")} ${plural(w.expectations, "expectation")} written into ${relative(process.cwd(), w.file) || w.file}`);
     if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
     const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
     if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
@@ -696,6 +743,36 @@ The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.s
     else if (format === "junit") process.stdout.write(junitTestXml([report]));
     else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
     else print("", testSummary(run));
+  });
+
+test.command("record").description("a scenario from a replay: the game played on the map, its end written as expectations to trim").argument("<map>").argument("<replay>").addOption(json)
+  .option("--name <name>", "the scenario's name (the replay's file name by default); a scenario of that name is written anew")
+  .option("--tests <file>", "the tests file to write into (<map>.tests.json beside the map)")
+  .option("--frames <n>", "frames to play (the replay's length by default)")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The replay's players' commands are played on the map, as scmjs map trace --replay plays them, and the end of the
+game is written into the tests file as a scenario: the replay (from the tests file's folder), the frames, and what
+the game ended with — how often each trigger fired, the switches, the lines shown, each player's outcome, units,
+minerals, gas and deaths. Delete the expectations you do not care about; scmjs map test runs the scenario against
+the map as it is then, and scmjs map test -u writes in what has changed.
+  scmjs map test record bunker.scx bug-report.rep --name "bunker fills at 7:30"`)
+  .action(async (file: string, replayFile: string, o: { json?: boolean; name?: string; tests?: string; frames?: string; starcraft?: string; engine?: string }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const replayInput = await readInput(replayFile);
+    expectKind(replayInput, "replay");
+    if (input.path === STDIO || replayInput.path === STDIO) throw new CliError("map test record writes beside the map and names the replay's file: give both as files.", null, 2);
+    const rep = await loadReplayInput(replayInput);
+    const players = rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => ({ slot: p.index, name: p.name, computer: p.type === 1 }));
+    const map = await readMapForTests(input.bytes);
+    const r = await recordTest(input.name, map, { path: replayInput.path, frames: rep.header.frames, players }, o.tests ?? defaultTests(input.path), {
+      name: o.name ?? basename(replayInput.name).replace(/\.rep$/i, ""), frames: o.frames === undefined ? undefined : whole(o.frames, "frames", 1),
+      out: defaultOut(input.path), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
+    });
+    if (o.json) print(JSON.stringify(r, null, 2));
+    else print(...recordLines(r));
   });
 
 map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)

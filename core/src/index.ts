@@ -30,7 +30,7 @@ export {
 } from "../../src/formats/chk/scenario";
 export { createScenario, type CreateScenarioOptions, type GameKind, requiredSections, REQUIRED_SECTIONS } from "../../src/formats/chk/create";
 export { parseChk, serializeChk, type ChkFile, type ChkSection } from "../../src/formats/chk/reader";
-export { type TextEncoding, TEXT_ENCODINGS, DEFAULT_TEXT_ENCODING } from "../../src/formats/text/encoding";
+export { type TextEncoding, TEXT_ENCODINGS, DEFAULT_TEXT_ENCODING, decodeText } from "../../src/formats/text/encoding";
 
 // Section records, as `Scenario` holds them.
 export type { UnitRecord, SpriteRecord, DoodadRecord, LocationRecord } from "../../src/formats/chk/sections/objects";

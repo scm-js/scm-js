@@ -849,8 +849,8 @@ StarCraft, so it does not run on GitHub's own runners; the workflow `scmjs init`
 leaves it out and says how to run it on a runner of your own that has the game.
 
 What it cannot do yet: a player leaving (you are the only person in the game) and the
-computers' own commands. A death count, switch or text is read for the whole game; units
-are counted at the end.
+computers' own commands. The text shown and how often a trigger fired cover the whole
+game; everything else is read when the scenario ends.
 
 ## How far apart the start locations are
 

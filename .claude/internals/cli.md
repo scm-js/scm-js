@@ -859,6 +859,75 @@ npm ask and the engine fetch), only when the command is run; nothing cached.
   `/api/uiv2/random`, the minimap in the terminal (`map preview` needs the game's tileset; the site's PNG could be
   shown with `paint.ts`), an MCP tool, a progress line for a big download, paging past the first 300 rows.
 
+## scmjs.dev from the terminal: `login`, `logout`, `account`, `map share` (`account.ts`, `share.ts`) — 2026-11-07
+
+Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`POST /v1/auth/start { cli: true }`).
+
+- **The sign-in** is the editor's popup flow with `open.ts`'s loopback page as the opener. The command serves
+  `http://127.0.0.1:<random port>/<random token>`, and **asks `POST /v1/auth/start { provider, returnOrigin: <that
+  origin>, cli: true }` itself** (Node: no Origin header) before opening the browser; the page gets the provider's URL
+  baked in, `window.open`s it as a named popup (no `noopener` — the callback posts to `window.opener`; a button when
+  the browser blocks a window it opens by itself), takes the `scmjs-ai-auth` message only from the server's origin and
+  that popup, and POSTs `{session}` to `/<token>/session` (refused unless `Origin` is the page's own). The command
+  checks the session with `GET /v1/account` (kind must be `account`) before keeping it, and answers the page's POST
+  with the name or the error, so the tab says "Signed in as Ann" or why not. Two minutes (`SIGN_IN_TIMEOUT_MS`); the
+  server's state lives 10. `BROWSER=none` prints the address (`openBrowser`). **Why the command, not the page, asks for
+  the start:** the page then never calls the server, so **no CORS change at all** — the narrowest option. The server
+  accepts a loopback return origin only for `cli: true` (any port, plain http, 127.0.0.1/localhost/[::1]), refuses
+  `cli: true` with an Origin header (a web page cannot claim to be the command), and never lets `cli` reach a
+  non-loopback origin; `allowedOrigins` is untouched. The callback page drops "go back to the editor" for a loopback
+  origin.
+- **The session file** (`sessionPath`): `SCMJS_SESSION`, else `%APPDATA%\scmjs\session.json` on Windows, else
+  `$XDG_CONFIG_HOME|~/.config/scmjs/session.json` (macOS too). `{ server, session, name, provider, savedAt }`, written
+  via `.part` + rename, file 600 and folder 700 (chmod after write: `writeFileSync`'s `mode` applies only to a new
+  file). **A session is sent only to the server it came from**: `requireSession(server)` refuses a file whose `server`
+  differs from `SCMJS_SERVER` ("Sign in first: scmjs login", exit 2, the hint names both) — so a local-server session
+  never reaches api.scmjs.dev. `logout` POSTs `/v1/auth/logout` to the file's own server (unreachable is no reason to
+  keep the file) and deletes it. `account` refreshes the stored name when the provider's changed, since the doctor's
+  row reads the name from the file and makes no request.
+- **`Client`**: JSON or FormData, bearer, `AbortSignal.timeout` (30 s, 120 s for uploads and rooms), refusals as
+  `CliError(server's message + "Try again in N seconds.")`; 401/`unauthorized` → exit 2 with "scmjs login signs in
+  again."; an unreachable server says the `cause.code` (`ECONNREFUSED`; fetch's own refusal of a "bad port" such as 9
+  says "bad port"). `missingOk` turns a 404 into null for a server without that part (rooms off, maps off).
+- **`map share <map>`**: `GET /v1/maps`, the newest map whose head `fileName` equals this one (case-insensitive) — the
+  server has no "same map" notion, the file name is the CLI's rule (`--new` skips it). Same sha256 as its head →
+  nothing uploaded, `GET /v1/maps/:id` and the existing link to that revision reused (else one made); else `POST
+  /v1/maps/:id/revisions` or `POST /v1/maps` (multipart: `file`, `fileName`, `name` on create only, `note`, `meta`,
+  `picture`), then `POST /v1/maps/:id/links { revision: head }` — pinned, the editor dialog's default. `meta` as the
+  plugin's `metaOf`: plain scenario name (`visible(gameText())`), `tilesetOf` id (not the display name — the first run
+  sent "Badlands"), seated/human slots from `playerTypes` (1,2,3,5,6 / 2,6), units, triggers, a 1 px/tile PNG
+  thumbnail ≤ 150 KB. **The picture** is `previewPng` at `clamp(floor(512 / max(w,h)), 1, 8)` px a tile, halved until
+  ≤ 900 KB (the server takes 1 MB, PNG or JPEG), only when `findGameCopy` finds a copy; none → uploaded without one
+  (the server makes no card; the guide already says such a link's card shows the size), and the third line says
+  why. A `--starcraft` folder that is not a copy is an error, not a silent "no picture". A map from `-` is named
+  `<scenario name>.scx|.chk` (`shareFileName`), since `stdin.scx` would match every piped map.
+- **`--edit [--keep day|week|month|forever]`**: `POST /v1/rooms { name, map: base64 }` (live: nothing else — the
+  server's `create` reads only those) or with `keepDays` 1/7/30/null (the plugin's `KEEP_CHOICES`; "Until everyone
+  leaves" = no `keepDays`) plus `fileName`, `note`, `meta`, `picture` base64 and `mapId` of the same-file-name map, so
+  a kept room is that map's next revision as in the editor. Rooms take MPQs only (`mapLooksRight`): a bare `.chk` is
+  packed with `writeArchiveBytes` first. **Trap: a live room the CLI opens has nobody in it** — the editor's owner
+  joins at once, the command does not — so the server's idle sweep (`rooms.idleMinutes`, 30 on the example config)
+  closes it if nobody comes; the line says "if nobody comes, it closes after a while".
+- **Links**: `https://scmjs.dev/editor/map/<token>` / `share/<invite>`, plus `?scmjs-server=<server>` when
+  `SCMJS_SERVER` is not api.scmjs.dev (the plugin's `linkTo` rule), so a link made against a local server opens there.
+  Output: the link alone on the first line (`| head -1`), the facts, a dim line of what the link does.
+- **Overview**: it was at exactly 23 lines, so `account` (verbs `show` default, `login`, `logout`) and the `login` /
+  `logout` shortcuts are **hidden** (as `completion`); `map share` is under `map …`. Found by: `map share` without a
+  session says `scmjs login`, the doctor's row says it, `scmjs help account`, docs. Hidden commands are not in the
+  completion scripts either (`commandTree` skips `_hidden`). A visible `account login|logout|…` row needs a line freed
+  first.
+- **Doctor**: `scmjsDevCheck(file, server)` reads the file only — "signed in as Ann" + the file's path, or a dim `·
+  not signed in` (`not signed in to scmjs.dev` for a session from another server) with `scmjs login` under it, state
+  `ok` either way like Claude Code's; in `Tools`; `readiness` untouched.
+- **Verified end to end (2026-11-07)**: a local ai-server (PGlite, maps in memory, kept rooms, a fake Discord whose
+  token/userinfo answer through `fetch`) on 127.0.0.1:18787; the built command with `BROWSER=none` printed the page;
+  headless Chromium opened it, the page opened the popup by itself, `context.route("https://discord.com/**")` sent it
+  straight to the callback with the state, the callback posted to the loopback page, the command printed "Signed in
+  ... as Ann", the file was `-rw-------`. Then `map share` (new map, unchanged, a pipe), `--edit`, `--keep week`,
+  `account`, `doctor`, `logout` (the old session then 401), and the errors. `tests/cli-share.test.ts` (16) does the same
+  against an `http.createServer` stand-in. Not built: an MCP tool for sharing, a `--follow` link (the newest
+  revision), listing or removing links and maps (`account maps`), ending a shared room from the terminal.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

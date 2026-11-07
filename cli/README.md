@@ -12,6 +12,7 @@ scmjs map find "Marine" maps/*.scx  # Edit ▸ Find across maps
 scmjs map trace ridge.scx           # the triggers run in the game: which fired, which never did and why
 scmjs map preview ridge.scx         # the map as a picture, in the terminal or as a PNG
 scmjs map play ridge.scx            # a lobby on scmjs.dev/play with the map; the invite link printed
+scmjs map share ridge.scx           # a scmjs.dev link anyone can open a copy with (scmjs login first)
 scmjs replay info game.rep          # players, races, APM, map, length
 scmjs replay watch game.rep         # the replay played in the terminal
 scmjs replay map game.rep           # the map it was played on, written out beside it

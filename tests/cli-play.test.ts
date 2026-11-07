@@ -35,7 +35,7 @@ describe("scmjs map play", () => {
     ]);
     const r = await done;
     expect(html).toContain("lobby = true");
-    expect(html).toContain('"handoff=1"'.replace(/"/g, "") );
+    expect(html).toContain("handoff=1");
     expect(html).toContain("/message");
     expect(file).toEqual(input().bytes);
     expect(r).toEqual({ link: "https://scmjs.dev/play/?game=invite1abc", invite: "invite1abc", name: "melee.scx", waited: ["Sign in to open a lobby"], error: null });

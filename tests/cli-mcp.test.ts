@@ -155,7 +155,7 @@ describe("scmjs mcp", () => {
     try {
       const r = await call("doctor", {});
       expect(r.isError).toBeFalsy();
-      expect(text(r)).toMatch(/^scmjs doctor /);
+      expect(text(r)).toMatch(/^scmjs (doctor|\S+ ·).*Node v/);
       expect(text(r)).not.toMatch(/\x1b\[/);
       const checks = r.structuredContent?.checks as { what: string; state: string; detail: string }[];
       expect(checks.map((c) => c.what)).toEqual(expect.arrayContaining(["Node", "StarCraft", "Game engine"]));

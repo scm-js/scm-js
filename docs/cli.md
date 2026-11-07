@@ -787,25 +787,23 @@ given `scmjs mcp`, and whether npm has a newer scmjs. It ends with the commands 
 computer can run now, and for each one that cannot, the one thing it lacks.
 
 ```
-scmjs doctor  what this computer has of what the commands need
+scmjs 0.9.0 · the newest · Node v24.13.0 · linux x64
 
-✔ Node         v24.13.0 · linux x64
-✔ scmjs        0.8.11 · the newest
-✔ TypeScript   6.0.3 · ~/maps/node_modules/typescript/lib/typescript.js
-✔ Docker       29.1.3
-✔ StarCraft    Remastered · /mnt/c/Program Files (x86)/StarCraft
-▲ Game engine  build 1248410ad2a0 · ~/.cache/scmjs/engine
-    Runners for bot run; none for replay watch and map trace|cost in this build.
-    scmjs replay watch <replay> fetches them once the play page has them
-✔ Desktop app  /mnt/c/Users/you/AppData/Local/Programs/scmJS/scmJS.exe
-✔ MCP          not registered
-    scmjs mcp lets Claude Code read, check and change maps with these commands.
-    claude mcp add scmjs -- npx -y @scm-js/cli mcp
+  Tools
+  ✔ TypeScript   6.0.3          ~/maps/node_modules/typescript
+  ▲ Docker       not found
+      scmjs bot new|init|build run the bot toolchain in it.
+      https://docs.docker.com/get-docker/
+  ✔ Desktop app  scmJS.exe      /mnt/c/Users/you/AppData/Local/Programs/scmJS/scmJS.exe
+  · Claude Code  scmjs mcp not added
+      claude mcp add scmjs -- npx -y @scm-js/cli mcp
 
-Ready on this computer
-  ✔ map info|check|…   ✔ replay info|open   ✔ mcp   ✔ map build
-  ✔ bot new|build   ✔ bot run   ✖ replay watch (engine runner)
-  ✖ map trace|cost (engine runner)
+  The game
+  ✔ StarCraft    Remastered     /mnt/c/Program Files (x86)/StarCraft
+  ✔ Game engine  1248410ad2a0   ~/.cache/scmjs/engine
+
+  Not ready
+  ✖ bot new|build  Docker not found
 ```
 
 The game engine is fetched from the play page the first time a command needs it, and kept.
@@ -818,7 +816,11 @@ The MCP line only looks for `scmjs mcp` among the servers Claude Code was told a
 every folder or for the folder you run the doctor in. Not having it is not a problem, and
 if Claude Code is not on this computer the line just says so.
 
-`--json` prints the same checks and the ready list as JSON.
+A thing that is fine but simply not there, the desktop app or Claude Code, gets a dot
+rather than a tick, and only what is missing has lines under it saying what to do. When
+every command can run, the last line says so in one; otherwise it lists the commands that
+cannot and the one thing each lacks. `--json` prints the same checks and the ready list as
+JSON.
 
 Nothing is changed. The command exits with 1 only when Node itself is older than the
 command needs.

@@ -29,7 +29,7 @@ export function ansi256(r: number, g: number, b: number): number {
 }
 
 /** The SGR parameters for a colour as foreground (38) or background (48). */
-function sgr(layer: 38 | 48, [r, g, b]: Rgb, depth: Exclude<Depth, "none">): string {
+export function sgr(layer: 38 | 48, [r, g, b]: Rgb, depth: Exclude<Depth, "none">): string {
   return depth === "truecolor" ? `${layer};2;${r};${g};${b}` : `${layer};5;${ansi256(r, g, b)}`;
 }
 
@@ -89,9 +89,10 @@ const ASCII_MARK: Record<Mark["kind"], string> = { start: "", building: "#", uni
 /**
  * The picture as ASCII: a character a cell (two pixel rows), its shade from how bright the cell is against the rest
  * of the picture, the marks as `#` `o` `$` and start locations' numbers; coloured where the terminal takes colour,
- * plain text where it does not.
+ * plain text where it does not. `overlay` puts a character of its own in a cell (row × width + column), over
+ * everything else — `map diff --picture`'s marks for what changed.
  */
-export function asciiShades(pic: Picture, marks: Mark[], depth: Depth): string[] {
+export function asciiShades(pic: Picture, marks: Mark[], depth: Depth, overlay?: ReadonlyMap<number, { ch: string; color: string }>): string[] {
   const rows = Math.ceil(pic.height / 2);
   const chars: string[] = Array.from({ length: rows * pic.width }, () => " ");
   const colors: Rgb[] = Array.from({ length: rows * pic.width }, (): Rgb => [0, 0, 0]);
@@ -117,6 +118,7 @@ export function asciiShades(pic: Picture, marks: Mark[], depth: Depth): string[]
     }
   }
   for (const [cell, m] of labelCells(pic, marks)) { chars[cell] = m.label!; colors[cell] = hexRgb(m.color); }
+  for (const [cell, o] of overlay ?? []) { chars[cell] = o.ch; colors[cell] = hexRgb(o.color); }
   const lines: string[] = [];
   for (let row = 0; row < rows; row++) {
     let line = "", last = "";

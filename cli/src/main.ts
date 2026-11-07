@@ -11,6 +11,7 @@ import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { runBotGame } from "./botrun";
+import { costReport, gameMap, printCost, printTrace, runMapInGame, traceReport } from "./trace";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
@@ -421,6 +422,52 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`)
     const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
     else print(...printRun(input.name, r, { dryRun: !!o.dryRun }));
+  });
+
+/** `--frames`, `--every`, `--seed`: whole numbers, or exit 2. */
+function whole(value: string, name: string, least = 0): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < least) throw new CliError(`--${name} takes a whole number${least ? ` of ${least} or more` : ""}, not "${value}"`, null, 2);
+  return n;
+}
+const gameOptions = (cmd: Command) => cmd
+  .option("--frames <n>", "frames to run (24 a second); the game may end sooner", "2400")
+  .option("--every <n>", "frames between progress lines; 0 for none", "600")
+  .option("--seed <n>", "the game's seed; the same seed and map give the same run", "1")
+  .option("--all", "list every trigger; by default a long list is cut")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp());
+interface GameOptions { json?: boolean; frames: string; every: string; seed: string; all?: boolean; starcraft?: string; engine?: string }
+
+gameOptions(map.command("trace").description("run the map's triggers in the game with nobody playing: what fired, what never did").argument("<map>").addOption(json))
+  .addHelpText("after", `
+The game itself runs the map as Use Map Settings, your seat idle and the computers as the map has them, for the
+frames given, and every condition it asks and action it runs is noted. Prints each trigger with how often it fired,
+when first and last and whose it is, then the ones that never fired and which condition said no last. The engine is
+fetched once from the play page (about 25 MB) and the game's own files come from your copy of StarCraft, as for
+scmjs bot run. Exits 2 when the game could not start.`)
+  .action(async (file: string, o: GameOptions) => {
+    const { input, doc } = await openForEdit(file);
+    const game = await gameMap(doc, input.path);
+    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
+    const r = await runMapInGame(game.path, "trace", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ ...traceReport(input.name, doc.scenario, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
+    else print("", ...printTrace(input.name, doc.scenario, r, { all: !!o.all }));
+  });
+
+gameOptions(map.command("cost").description("what the map's triggers cost Remastered a frame, in milliseconds").argument("<map>").addOption(json))
+  .addOption(new Option("--weigh <module>", "the weigher to hand the game instead of the one beside the command").hideHelp())
+  .addHelpText("after", `
+The game runs the map as scmjs map trace does, and every trigger the game passes and every condition and action it
+runs is weighed as Remastered charges for it (TrigScript's model, measured on the real game). Says what a frame costs
+on average where the triggers ran and at the most, against what a frame can carry, then the costliest triggers.`)
+  .action(async (file: string, o: GameOptions & { weigh?: string }) => {
+    const { input, doc } = await openForEdit(file);
+    const game = await gameMap(doc, input.path);
+    if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
+    const r = await runMapInGame(game.path, "cost", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ ...costReport(input.name, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
+    else print("", ...printCost(input.name, doc.scenario, r, { all: !!o.all }));
   });
 
 map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)

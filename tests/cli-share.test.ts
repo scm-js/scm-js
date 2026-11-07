@@ -135,8 +135,9 @@ describe("the session file", () => {
   });
 
   it("refuses every account command without one: Sign in first, exit 2, and nothing sent", async () => {
-    for (const p of [share(input("ums.scx")), share(input("ums.scx"), { edit: true }), accountReport({ server: base, file })]) {
-      const e = await caught(p);
+    // Thunks: a promise made early would reject with nobody listening while the one before it is awaited.
+    for (const run of [() => share(input("ums.scx")), () => share(input("ums.scx"), { edit: true }), () => accountReport({ server: base, file })]) {
+      const e = await caught(run());
       expect([e.message, e.exitCode]).toEqual(["Sign in first: scmjs login", 2]);
     }
     expect(seen).toEqual([]);

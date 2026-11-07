@@ -69,7 +69,7 @@ export const SOURCES = [
     id: "cli",
     file: "docs/cli.md",
     title: "Command line",
-    blurb: "scmjs in a terminal: what a map or replay holds, Check Map over many maps, and opening a file in scmJS.",
+    blurb: "scmjs in a terminal: what a map or replay holds, Check Map and maps as text for git and CI, a map's triggers run in the game, a replay watched in the terminal, and the same commands as an MCP server for AI tools.",
     pageTitle: "StarCraft maps and replays on the command line",
   },
   {

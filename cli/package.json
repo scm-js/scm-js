@@ -1,18 +1,22 @@
 {
   "name": "@scm-js/cli",
   "version": "0.8.11",
-  "description": "StarCraft: Brood War maps, replays and bots from the command line: what a map or replay holds, Check Map, opening them in scmJS, and building a BWAPI bot for the play page",
+  "description": "StarCraft: Brood War maps, replays and bots from the command line: what a map or replay holds, Check Map and maps as text for git and CI, a map's triggers run in the game, a replay watched in the terminal, the map commands as an MCP server for AI tools, and building a BWAPI bot for the play page",
   "keywords": [
-    "starcraft",
+    "bot",
     "brood war",
+    "bwapi",
+    "cli",
     "map",
+    "mcp",
+    "minimap",
+    "model context protocol",
+    "rep",
     "replay",
     "scm",
     "scx",
-    "rep",
-    "cli",
-    "bwapi",
-    "bot"
+    "starcraft",
+    "trigger"
   ],
   "license": "MIT",
   "author": "Jeany",

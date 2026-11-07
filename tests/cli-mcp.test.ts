@@ -6,7 +6,7 @@
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,14 @@ type Result = { content: { type: string; text?: string }[]; structuredContent?: 
 
 const text = (r: Result) => r.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-mcp-"));
+
+/** Whether a process is still there. */
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+/** `get`'s first answer that is not null, asked every 25 ms for up to five seconds. */
+async function until<T>(get: () => T | null): Promise<T> {
+  for (let i = 0; i < 200; i++) { const v = get(); if (v !== null) return v; await new Promise((r) => setTimeout(r, 25)); }
+  throw new Error("waited five seconds for nothing");
+}
 
 /** A server and the SDK's client, linked in memory. */
 async function connected(options?: McpOptions) {
@@ -203,6 +211,25 @@ describe("scmjs mcp: the game tools", () => {
       expect(data.rows).toHaveLength(2);
       expect(data.series.ns).toHaveLength(308);
       expect(data.series.weighed).toBe(true);
+    } finally { stderr.mockRestore(); await client.close(); }
+  });
+
+  it("a cancelled request stops the game: the runner is killed, and the server goes on answering", async () => {
+    const { client, call } = await connected({ engine: stagedEngine(tmp()).dir });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const slow = join(tmp(), "slow.scx");    // the stand-in starts it and waits to be killed
+    copyFileSync(ums, slow);
+    try {
+      const stop = new AbortController();
+      const run = call("map_trace", { path: slow, starcraft: classicCopy(tmp()) }, { signal: stop.signal });
+      const pid = await until(() => (existsSync(`${slow}.pid`) ? Number(readFileSync(`${slow}.pid`, "utf8")) : null));
+      expect(alive(pid)).toBe(true);
+      stop.abort();
+      await expect(run).rejects.toThrow();
+      // The client gives up at once; the server hears the cancellation and kills the runner.
+      expect(await until(() => (alive(pid) ? null : true))).toBe(true);
+      const after = await call("map_info", { path: ums });
+      expect(after.isError).toBeFalsy();
     } finally { stderr.mockRestore(); await client.close(); }
   });
 

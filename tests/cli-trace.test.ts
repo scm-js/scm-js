@@ -5,9 +5,9 @@
  * needs the lifted game and a copy of StarCraft, which CI has not got. The weigher itself (cli/src/weigh.ts) is
  * checked where the plugin's source is vendored.
  */
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureEngine } from "../cli/src/engine";
 import { costReport, gameMap, printCost, printTrace, runMapInGame, summarizeRows, traceReport, weighModule, type CopyLine } from "../cli/src/trace";
@@ -19,6 +19,14 @@ import { classicCopy, stagedEngine } from "./support/mapRunner";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-trace-"));
 const plain = (lines: string[]) => lines.map(visible);
+
+/** The stand-in runner's process id, once it has written it beside the map (`slow.scx`). */
+async function runnerPid(file: string): Promise<number> {
+  for (let i = 0; i < 200 && !existsSync(file); i++) await new Promise((r) => setTimeout(r, 25));
+  return Number(readFileSync(file, "utf8"));
+}
+/** Whether a process is still there. */
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 const ums = async () => (await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx")).scenario;
 
@@ -52,6 +60,45 @@ describe("scmjs map trace | cost: the runner", () => {
     expect(bw.path).toMatch(/original\.scx$/);
     expect(mapVersionOf((await openMapBytes(new Uint8Array(readFileSync(bw.path)), "original.scx")).scenario.fileVersion)).toBe("broodwar");
     expect(mapVersionOf(original.scenario.fileVersion)).toBe("original");
+  });
+
+  it("deletes the copy it handed the game once the runner has ended, whether the run worked or not", async () => {
+    const staged = stagedEngine(tmp()), copy = classicCopy(tmp());
+    const ums = await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx");
+    const piped = await gameMap(ums, "-", "stdin.scx");
+    expect(existsSync(piped.path)).toBe(true);
+    await runMapInGame(piped.path, "trace", { engine: staged.dir, starcraft: copy, frames: 62 });
+    expect(existsSync(dirname(piped.path))).toBe(false);
+    // A run the game refused, and one that never started (no copy of the game).
+    const refused = await gameMap(ums, "-", "bad.scx");
+    await expect(runMapInGame(refused.path, "trace", { engine: staged.dir, starcraft: copy })).rejects.toThrow(/did not take this map/);
+    expect(existsSync(dirname(refused.path))).toBe(false);
+    const original = await openMapBytes(new Uint8Array(readFileSync(testMap("original.scm"))), "original.scm");
+    const converted = await gameMap(original, testMap("original.scm"));
+    await expect(runMapInGame(converted.path, "trace", { engine: staged.dir, starcraft: tmp() })).rejects.toThrow(/not a copy of StarCraft/);
+    expect(existsSync(dirname(converted.path))).toBe(false);
+    // The person's own map is never touched.
+    const own = join(tmp(), "own.scx");
+    copyFileSync(testMap("ums.scx"), own);
+    expect(await gameMap(ums, own)).toEqual({ path: own, converted: false });
+    await runMapInGame(own, "trace", { engine: staged.dir, starcraft: copy, frames: 62 });
+    expect(existsSync(own)).toBe(true);
+  });
+
+  it("stops the game when the run is cancelled, and fails saying so", async () => {
+    const staged = stagedEngine(tmp()), copy = classicCopy(tmp());
+    const ums = await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx");
+    const slow = await gameMap(ums, "-", "slow.scx");
+    const stop = new AbortController();
+    const run = runMapInGame(slow.path, "trace", { engine: staged.dir, starcraft: copy, signal: stop.signal });
+    const pid = await runnerPid(`${slow.path}.pid`);
+    expect(alive(pid)).toBe(true);
+    stop.abort();
+    await expect(run).rejects.toThrow(/^The run was cancelled/);
+    expect(alive(pid)).toBe(false);
+    expect(existsSync(dirname(slow.path))).toBe(false);
+    // Cancelled before it started: no runner at all.
+    await expect(runMapInGame(testMap("ums.scx"), "trace", { engine: staged.dir, starcraft: copy, signal: AbortSignal.abort() })).rejects.toThrow(/cancelled/);
   });
 
   it("runs the trace, words it live and reports each trigger against the map's own", async () => {

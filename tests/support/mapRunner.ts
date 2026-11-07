@@ -9,7 +9,8 @@ import { join } from "node:path";
 /**
  * A runner that prints what scm-sim's does, from its arguments: a start, progress lines and an end whose trace is three
  * copies for ums.scx's three triggers (row 0 fired every pass, row 1 fired once and done, row 2 failed on its Bring
- * condition), and whose cost weighs when --weigh names a file.
+ * condition), and whose cost weighs when --weigh names a file. A map named `bad.scx` is refused; one named `slow.scx`
+ * starts, writes the runner's process id beside the map (`slow.scx.pid`) and then waits to be killed, for a run to cancel.
  */
 export const FAKE_RUNNER = `
 const fs = require("node:fs");
@@ -22,6 +23,7 @@ if (has("weigh") && !fs.existsSync(flag("weigh"))) { say({ kind: "error", messag
 if (require("node:path").basename(args[0]) === "bad.scx") { say({ kind: "error", message: "the game did not take this map" }); process.exit(2); }
 const frames = Number(flag("frames") ?? 2400), every = Number(flag("every") ?? 600), seed = Number(flag("seed") ?? 1);
 say({ kind: "start", map: { name: require("node:path").basename(args[0]), width: 64, height: 64, tileset: "badlands" }, copy: "classic", seed, rows: 3, copies: 3, remastered: false, ms: { load: 1, start: 2 } });
+if (require("node:path").basename(args[0]) === "slow.scx") { fs.writeFileSync(args[0] + ".pid", String(process.pid)); setInterval(() => {}, 1000); return; }
 for (let f = every; every && f <= frames; f += every) say({ kind: "progress", frame: f, passes: Math.floor(f / 31), ms: { game: f / 10 } });
 const passes = Math.floor(frames / 31);
 const trace = has("no-trace") ? null : [

@@ -63,6 +63,16 @@ async function trigscript() {
 }
 type TrigScript = Awaited<ReturnType<typeof trigscript>>;
 
+/**
+ * Whether the map keeps a TrigScript script (files under `trigscript\`, the libraries' copies aside), as the plugin
+ * reads it; null when this build of the command has no compiler to ask (a clone without the vendored plugins).
+ */
+export async function hasScript(extras: ReadonlyMap<string, Uint8Array>): Promise<boolean | null> {
+  let script: typeof import("../../plugins/trigscript/script");
+  try { script = await import("../../plugins/trigscript/script"); } catch { return null; }
+  return Object.keys(script.readFiles(extras)).length > 0;
+}
+
 /** TypeScript, found on this computer. */
 export interface TypeScriptModule {
   ts: typeof TS;

@@ -399,7 +399,7 @@ can keep working there until the plugin is ready for its own folder.
 
 ### Step 5: load it from your machine
 
-With the [scmjs command](cli.md#plugins), in the plugin's folder:
+With the [scmjs command](cli.md#writing-a-plugin), in the plugin's folder:
 
 ```sh
 npx @scm-js/cli plugin dev
@@ -493,11 +493,11 @@ server to talk to or a variable defined elsewhere.
 ### Starting a plugin
 
 `npx @scm-js/cli plugin new "My Plugin"` writes a plugin to start from in a new folder,
-set up as the project's own plugins are (see [the command line](cli.md#plugins)). Or start
-from [Hello World](https://github.com/scm-js/plugin-hello-world), or from a snippet
-exported from the playground. Hello World's `plugin.ts` is about ninety lines, mostly
-comments. The repository also has a Korean catalogue (`ko.ts`) with the test that keeps it
-complete, and the typings, type-check, build and CI described below.
+set up as the project's own plugins are (see [the command line](cli.md#writing-a-plugin)).
+Or start from [Hello World](https://github.com/scm-js/plugin-hello-world), or from a
+snippet exported from the playground. Hello World's `plugin.ts` is about ninety lines,
+mostly comments. The repository also has a Korean catalogue (`ko.ts`) with the test that
+keeps it complete, and the typings, type-check, build and CI described below.
 
 ### The two files
 

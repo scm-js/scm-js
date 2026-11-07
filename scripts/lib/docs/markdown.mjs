@@ -126,6 +126,13 @@ export function renderMarkdown(source, { rewriteLink = (h) => h, shift = 0, head
         if (html === null && !url) return false;
         return `${withTryIt(`<pre><code class="language-${escapeText(name)}">${html ?? escapeText(text)}\n</code></pre>`, url)}\n`;
       },
+      // A short code span with no space in it (`--frames`, `map_info`) never breaks: a browser
+      // otherwise breaks it after a hyphen, which in a table's narrow first column leaves `--`
+      // on a line of its own. Longer spans keep breaking where they can.
+      codespan({ text }) {
+        if (text.length > 24 || /\s/.test(text)) return false;
+        return `<code class="nw">${escapeText(text)}</code>`;
+      },
       heading({ tokens, depth }) {
         const inner = this.parser.parseInline(tokens);
         const level = Math.min(6, Math.max(1, depth + shift));

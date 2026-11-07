@@ -4,7 +4,7 @@ scmJS runs in a web browser, as a desktop app for Windows, macOS and Linux, or f
 container on your own server. Whichever you choose, the editor needs StarCraft's graphics,
 which are not shipped with it: on first use it asks for your StarCraft folder and reads
 them from there once. This page covers each way of running the editor and that first
-question. The [user guide](guide.md) starts once the editor is open.
+question, and the command line. The [user guide](guide.md) starts once the editor is open.
 
 ## In the browser
 
@@ -123,6 +123,19 @@ image](game-data.md#the-container-image).
 
 Each release also has `scmJS-web.zip`, the same editor as plain files. Unpack it at the
 root of any static web server.
+
+## On the command line
+
+`scmjs` is scmJS in a terminal: it reads, checks, changes and shares maps and replays
+without the editor's window. It needs Node.js 22.12 or newer. Run it without installing:
+
+```sh
+npx @scm-js/cli info "(2)Ridge.scx"
+```
+
+or install it once with `npm install -g @scm-js/cli` and type `scmjs` from then on. The
+commands that draw a map or run the game read your StarCraft folder directly, so they need
+no extracted graphics. The [command line guide](cli.md) has the rest.
 
 ## The graphics
 

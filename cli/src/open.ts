@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { Input } from "./files";
+import { qrFor } from "./qr";
 import { CliError, mark, pc, print } from "./ui";
 
 export const EDITOR_URL = "https://scmjs.dev/editor/";
@@ -126,13 +127,13 @@ export interface LobbyOutcome { link: string | null; invite: string | null; name
  * invite link, printed here for the person to send around. The page asks the person to sign in or to give it the
  * game's files when it must; what it says meanwhile is printed too.
  */
-export async function playInLobby(input: Input, options: { play?: string; live?: (line: string) => void; onAddress?: (page: string) => void; timeout?: number } = {}): Promise<LobbyOutcome> {
+export async function playInLobby(input: Input, options: { play?: string; live?: (line: string) => void; onAddress?: (page: string) => void; timeout?: number; qr?: boolean } = {}): Promise<LobbyOutcome> {
   const out: LobbyOutcome = { link: null, invite: null, name: null, waited: [], error: null };
   const say = options.live ?? (() => {});
   await handOver(input, options.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_PAGE_URL, {
     lobby: true, timeout: options.timeout ?? 300_000, what: "the play page", onAddress: options.onAddress,
     onMessage: (m) => {
-      if (m.type === "scmjs.invite") { out.link = String(m.link ?? ""); out.invite = String(m.invite ?? ""); out.name = typeof m.name === "string" ? m.name : null; out.error = null; say(`${mark.ok} ${pc.bold("Lobby open")}: send this link to the people you want to play with\n  ${pc.cyan(out.link)}`); }
+      if (m.type === "scmjs.invite") { out.link = String(m.link ?? ""); out.invite = String(m.invite ?? ""); out.name = typeof m.name === "string" ? m.name : null; out.error = null; say(`${mark.ok} ${pc.bold("Lobby open")}: send this link to the people you want to play with\n  ${pc.cyan(out.link)}`); if (options.qr && out.link) say(["", ...qrFor(out.link), ""].join("\n")); }
       else if (m.type === "scmjs.waiting") { const text = String(m.message ?? m.reason ?? "waiting"); out.waited.push(text); say(`${mark.info} ${text}${m.reason === "sign-in" ? pc.dim(" (sign in on the page; the lobby opens after)") : ""}`); }
       else if (m.type === "scmjs.error") { out.error = String(m.message ?? "the page could not open a lobby"); say(`${mark.warn} ${out.error}${pc.dim(" (Invite Players on the page tries again)")}`); }
     },

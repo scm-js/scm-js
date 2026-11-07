@@ -60,6 +60,9 @@ passes Check Map (a fresh map has eight Human slots and fails on start locations
 
 ## Next
 
+Done 2026-11-07 (`map sounds`): `parseWavHeader`, `wavDuration`, `wavFormatLabel` and `WavInfo` from
+`formats/wav.ts` (pure; its one import is `t` for the format label's words). `cli.md` "Cheap wins".
+
 Done 2026-11-07 (the DX slice: `map new|dump|find`, `doctor`): added `flatTerrain`/`baseTerrain`/`DIRT`
 (`formats/tileset/terrain.ts` — works with a null tileset, dirt ids, so it is not "needs the tileset"),
 `DEFAULT_START_PLACEMENT` + its types, `DEFAULT_PLACEMENT`/`PlacementOptions` (placement.ts was already in the walk

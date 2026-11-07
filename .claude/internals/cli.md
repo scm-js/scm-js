@@ -304,6 +304,26 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   the end), then `applyStrings(deleteUnused(…))`. `--dry-run` lists and writes nothing; lists cut at 20 unless `--all`.
 - `tests/core.test.ts` cli list: + `edit`, `report`. Overview unchanged (23 lines; the new verbs are under `map`'s `…`).
 
+## Pipes: `-` for standard input and output (`files.ts`, `exchange.ts`) — 2026-11-06
+
+- **`readInput("-")`** reads all of stdin (a `Readable` parameter for tests); empty → CliError exit 2. A pipe has no
+  name, so the kind is from the bytes alone: `kindOf("", bytes)` (MPQ magic, replay, `SCMBOT1`) else `looksLikeChk`
+  (four bytes of `A-Z0-9 ` — a section name, `VER `/`TYPE`/`MTXM`) → `map`. The input is `{ path: "-", name:
+  "stdin.scx" | "stdin.chk" | "stdin.rep" }`; the **name carries the form** so `writeBack` can write it back as it came.
+- **`toStdout(inputPath, out)`** = `out === "-"` or (no `out` and input `-`): a filter writes where it read. `writeBack`
+  takes an optional `Writable`; `writeOutput(bytes, path, stdout?)` is the one writer (file, or the stream for `-`),
+  used by `writeBack`, `build.ts`'s packed map and `create.ts` (`map new -`). `outputFormat(doc, inputPath, out)` =
+  `formatOf(out) ?? formatOf(inputPath) ?? formatOf(doc.fileName) ?? (origin ? "scx" : "chk")` — the last two are the
+  pipe's cases; `defaultSaveOptions` gets `doc.fileName` in place of `-` so a bare chk keeps StarEdit's layout rule.
+- **main.ts**: `piping(input, o)` says whether the map takes stdout (not with `--dry-run`) and **refuses `--json`**
+  there (exit 2: both want the pipe); `say(piped, …lines)` sends a writing command's words to **stderr** while the map
+  has stdout (`run`'s live lines too); `outName(w)` prints "standard output" for `-`. `map set` and `strings prune`
+  **always write when piped**, changed or not — the next step needs a map. `map new -` skips the exists check and
+  names the map "Untitled Scenario". `unpack -` defaults its folder to `stdin`. Text exports treat `--out -` as none.
+- Verified by hand with the built file: `cat ums.scx | map set - | map resize - | map strings prune - | map info -`,
+  a bare chk through `info -`, `map new - | map check -`, the `--json` refusal and the empty pipe.
+  `tests/cli-pipes.test.ts` (4) covers the readers/writers with streams.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

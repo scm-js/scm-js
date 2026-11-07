@@ -10,6 +10,7 @@ import { TEXT_ENCODINGS, type TextEncoding } from "../../src/formats/text/encodi
 import { resizeScenario, type ResizeResult } from "../../src/editor/resize";
 import { baseTerrain } from "../../src/formats/tileset/terrain";
 import { applyStrings, deleteUnused, stringUsages, unusedStrings } from "../../src/editor/strings";
+import { unescapeStringText } from "../../src/editor/exchange";
 import { plainText } from "../../src/editor/textColors";
 import { CliError } from "./ui";
 
@@ -19,11 +20,15 @@ export const ENCODINGS = TEXT_ENCODINGS.map((e) => e.id);
 export interface HeaderOptions { name?: string; description?: string; version?: string; encoding?: string }
 export interface FieldChange { field: string; from: string; to: string }
 
-/** Sets what is given, and says what changed; a version or encoding that is not one is refused with the list. */
-export function setHeader(doc: OpenedMap, o: HeaderOptions): FieldChange[] {
+/**
+ * Sets what is given, and says what changed; a version or encoding that is not one is refused with the list. A name
+ * or description is read as `map strings import` reads a line: `<03>` and the like are the game's colour codes.
+ */
+export function setHeader(doc: OpenedMap, given: HeaderOptions): FieldChange[] {
   const scn = doc.scenario;
   const out: FieldChange[] = [];
-  if (o.version !== undefined && !(VERSIONS as string[]).includes(o.version)) throw new CliError(`--version takes ${VERSIONS.join(", ")}, not "${o.version}"`, null, 2);
+  const o = { ...given, name: given.name === undefined ? undefined : unescapeStringText(given.name), description: given.description === undefined ? undefined : unescapeStringText(given.description) };
+  if (o.version !== undefined && !(VERSIONS as string[]).includes(o.version)) throw new CliError(`--revision takes ${VERSIONS.join(", ")}, not "${o.version}"`, null, 2);
   if (o.encoding !== undefined && !(ENCODINGS as string[]).includes(o.encoding)) throw new CliError(`--encoding takes ${ENCODINGS.join(", ")}, not "${o.encoding}"`, null, 2);
   if (o.name !== undefined) {
     const from = scenarioName(scn) ?? "";
@@ -66,11 +71,14 @@ export function resizeMap(doc: OpenedMap, o: { width: number; height: number; an
 
 export interface PrunedString { index: number; text: string }
 
-/** Strings nothing refers to, blanked (never renumbered: the rest keep their places) and the trailing blanks dropped. */
+/**
+ * Strings nothing refers to, blanked (never renumbered: the rest keep their places) and the trailing blanks dropped.
+ * An empty slot is a gap the table keeps so the numbers after it hold, not a string, so it is neither listed nor counted.
+ */
 export function pruneStrings(doc: OpenedMap, { dryRun = false } = {}): PrunedString[] {
   const scn = doc.scenario;
   const usages = stringUsages(scn);
-  const removed = unusedStrings(scn, usages).map((index) => ({ index, text: plainText(scn.strings.strings[index] ?? "") }));
+  const removed = unusedStrings(scn, usages).filter((index) => scn.strings.strings[index] !== "").map((index) => ({ index, text: plainText(scn.strings.strings[index] ?? "") }));
   if (!dryRun && removed.length) applyStrings(scn, deleteUnused(scn.strings.strings, usages), usages);
   return removed;
 }

@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|triggers|strings|diff|build|run|unpack|pack |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack |
 replay info|open | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -271,6 +271,38 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   (banner.ts; the globe's bottom row, which carries no text, separates them). Its description had to fit one line
   (col width ≈ 47): "what this computer has for each command". The `map` term is now `map info|check|open|new|…`;
   the test takes any verbs before the ellipsis. `tests/core.test.ts`'s list of cli modules has the four new names.
+
+## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
+
+The second DX slice (the user's "go for it" on the second suggestion round), stacked on the first (#137's branch).
+
+- **`map check --format text|json|github|junit|sarif`** (`report.ts`, pure functions of `CheckReport { file: path as
+  given, name, issues, failed }`). `--json` = `--format json`. **github**: `::error|warning|notice file=…,title=<map ·
+  where>::text` with the runner's escaping (`%`→`%25`, newlines →`%0A`; `:`/`,` in properties →`%3A`/`%2C`), info =
+  notice. **junit**: a testcase per map (`name` = the map's name or the path, `classname`/`file` = the path), a
+  `<failure message="N errors, M warnings">` holding every finding when `failed`, else `<system-out>`. **sarif** 2.1.0:
+  a rule per `where` (`scmjs/<slug>`), results at `artifactLocation.uri` = path with `uriBaseId %SRCROOT%`, levels
+  error/warning/note. `reportPath` = relative to cwd with `/`. The levels stay Check Map's: `--strict` changes `failed`
+  and the exit code, not the annotation kinds. **`eachFile` gained `silent`** (collect, print nothing) for this and
+  for `info --table`; results carry `{file, error}` for a file that failed, filtered out before formatting.
+- **`map info --table`**: one row per map (File, Name, Size, Tileset, Version, Players = used slots, Units, Triggers,
+  Check) via `ui.table`. **`ui.table` now pads by terminal columns** (`columns()`: Hangul/CJK/kana/full-width = 2), since
+  the test map "Test Remastered 리마스터" misaligned the column — `rows()` still pads by `.length` (labels are ASCII).
+- **`map diff --rev <rev> <map>`** (`diff.ts#revisionInput`): `git -C <dir> rev-parse --show-toplevel`, then `git -C
+  <root> show <rev>:<path from root, '/'>` into an `Input` named `<rev>:<basename>` (kind from the bytes). git's own
+  first stderr line is the hint; exit 2. `[b]` is optional now and the pairing is checked (`--rev` with two maps, or
+  one map without it, is refused). Test makes a temp repository; `describe.skipIf(!hasGit)`.
+- **`map set`** (`edit.ts#setHeader`): `--name/--description` read through `unescapeStringText` (`<03>` = colour, as
+  the string files); `--revision` (**not `--version`**, which commander answers as the program's flag — found when it
+  printed 0.8.11; `map new` was renamed too on the #137 branch) → `changeMapVersion`; `--encoding` → `changeTextEncoding`.
+  Says each field's from → to; writes only when something changed (or `--out`). Nothing given = exit 2.
+- **`map resize`** (`resizeMap`): `resizeScenario` with `fill: baseTerrain(null)`, `tileset: null`, `era: scn.era`,
+  `random: () => 0.5` — the editor without game data; anchors by name (`ANCHORS`, centre default 4 as the dialog);
+  `--no-clamp` ↔ the dialog's clamp (default on). Same size = exit 2. `--size` reuses `create.ts#parseSize`.
+- **`map strings prune`** (`pruneStrings`): `unusedStrings(scn, usages)` **minus empty slots** (`""` is a gap the
+  table keeps, same as diff/dump's null = "" rule — the first run listed nineteen blank lines after an import past
+  the end), then `applyStrings(deleteUnused(…))`. `--dry-run` lists and writes nothing; lists cut at 20 unless `--all`.
+- `tests/core.test.ts` cli list: + `edit`, `report`. Overview unchanged (23 lines; the new verbs are under `map`'s `…`).
 
 ## Opening (`cli/src/open.ts`)
 

@@ -34,11 +34,20 @@ export function rows(pairs: ([string, string | null | undefined | false] | null)
   return shown.map((p) => (p ? `${" ".repeat(indent)}${pc.dim(p[0].padEnd(width))}  ${p[1].split("\n").join("\n" + " ".repeat(indent + width + 2))}` : ""));
 }
 
-/** A table's lines: columns padded to their widest cell (measured without colour), none after the last. */
+/** A table's lines: columns padded to their widest cell (measured as the terminal shows it), none after the last. */
 export function table(cells: string[][], indent = 4): string[] {
   const widths: number[] = [];
-  for (const r of cells) r.forEach((c, i) => { widths[i] = Math.max(widths[i] ?? 0, visible(c).length); });
-  return cells.map((r) => " ".repeat(indent) + r.map((c, i) => (i === r.length - 1 ? c : c + " ".repeat(widths[i] - visible(c).length))).join("  ").trimEnd());
+  for (const r of cells) r.forEach((c, i) => { widths[i] = Math.max(widths[i] ?? 0, columns(c)); });
+  return cells.map((r) => " ".repeat(indent) + r.map((c, i) => (i === r.length - 1 ? c : c + " ".repeat(widths[i] - columns(c)))).join("  ").trimEnd());
+}
+
+// Hangul, CJK, kana and the full-width forms take two columns in a terminal; a map's name is often Korean.
+const WIDE = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u;
+/** The columns a string takes in the terminal, without its colour codes. */
+export function columns(s: string): number {
+  let n = 0;
+  for (const ch of visible(s)) n += WIDE.test(ch) ? 2 : 1;
+  return n;
 }
 
 // eslint-disable-next-line no-control-regex -- the terminal's colour codes

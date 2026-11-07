@@ -54,7 +54,7 @@ describe("scmjs map run", () => {
     expect(r.result).toBeNull();
     expect(r.modified).toBe(true);
     // The status line follows each edit too, as it does in the editor.
-    expect(r.events.map((e) => e.text)).toEqual(["Renaming the map", "Rename", "Add a marine", "Done · one marine more"]);
+    expect(r.events.map((e) => e.text)).toEqual(["Renaming the map", "Rename", "Add a marine", "Done: one marine more"]);
     expect(lines).toHaveLength(4);
     expect(summarizeDiff(r.diff!)).toBe("1 setting changed, 1 unit added, 1 string changed");
     expect(r.written?.path).toBe(out);

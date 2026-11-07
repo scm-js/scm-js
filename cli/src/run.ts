@@ -119,7 +119,8 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
   try {
     host = await runHeadless(source, doc, deps, {
       status: (text) => note({ kind: "status", level: "info", text }),
-      toast: (t) => note({ kind: "toast", level: toastLevel(t.kind), text: t.detail ? `${t.title}${dot}${t.detail}` : t.title }),
+      // Plain text in the event (it goes into --json too); the colour is the printed line's.
+      toast: (t) => note({ kind: "toast", level: toastLevel(t.kind), text: t.detail ? `${t.title}: ${t.detail}` : t.title }),
       log: (e: LogEntry) => { if (e.level !== "info" || e.source !== "plugins") note({ kind: "log", level: e.level, text: `${e.source}: ${e.message}` }); },
     });
   } catch (e) {

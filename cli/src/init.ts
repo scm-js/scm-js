@@ -1,6 +1,7 @@
 /**
  * `scmjs init [folder]`: a folder of maps made a project that git and GitHub look after — the `.gitattributes` lines
- * and `git config` settings that make `git diff` read maps through `scmjs map dump`, a workflow that runs Check Map
+ * and `git config` settings that make `git diff` read maps through `scmjs map dump` and `git merge` merge them through
+ * `scmjs map merge`, a workflow that runs Check Map
  * (and the TrigScript build, for maps with a script) on every push and pull request, a README listing the maps, and a
  * `.gitignore` for the `.bak` files the desktop app's Save leaves beside a map and the replays `map test` keeps.
  * Nothing that is there is overwritten: the line files get only the lines they lack, the README and the workflow are
@@ -19,13 +20,17 @@ import { CliError, dot, gameText, mark, pc, plural, table, visible } from "./ui"
 /** The maps a folder holds, by extension. */
 const MAP_FILE = /\.(scx|scm|chk)$/i;
 
-/** The settings `git diff` needs to read maps through the command; per clone, so set in the repository. */
+/** The settings `git diff` and `git merge` need to go through the command; per clone, so set in the repository. */
 export const GIT_SETTINGS: readonly (readonly [key: string, value: string])[] = [
   ["diff.scmjs.textconv", "scmjs map dump"],
   // The whole heading line: git puts what the expression matched in the hunk header, so the 0.9.0 recipe's "^## "
   // gave a bare "##" there.
   ["diff.scmjs.xfuncname", "^## .*"],
   ["diff.scmjs.cachetextconv", "true"],
+  // git's merge driver: %O the common ancestor, %A ours (the result is left there), %B theirs, %P the path, for what
+  // the command says. Exit 0 is merged; anything else is a conflict, and git leaves %A as the command left it (ours).
+  ["merge.scmjs.name", "StarCraft maps, part by part (scmjs map merge)"],
+  ["merge.scmjs.driver", "scmjs map merge %O %A %B --out %A --name %P"],
 ];
 
 /** Values an earlier recipe gave, replaced without --force since they were the command's own. */
@@ -34,9 +39,9 @@ const OLD_SETTINGS: Readonly<Record<string, readonly string[]>> = { "diff.scmjs.
 /** A setting as the `git config` line to type, the value quoted when a shell would split or read it. */
 export const configLine = ([key, value]: readonly [string, string]) => `git config ${key} ${/^[\w.-]+$/.test(value) ? value : `"${value}"`}`;
 
-/** `.gitattributes`: every map read through the `scmjs` diff driver. */
-export const ATTRIBUTE_LINES = ["*.scx diff=scmjs", "*.scm diff=scmjs", "*.chk diff=scmjs"];
-const ATTRIBUTE_COMMENT = "# Maps show in git diff as text, through scmjs map dump (scmjs init sets the git config)";
+/** `.gitattributes`: every map read through the `scmjs` diff driver, and merged through its merge driver. */
+export const ATTRIBUTE_LINES = ["*.scx diff=scmjs", "*.scm diff=scmjs", "*.chk diff=scmjs", "*.scx merge=scmjs", "*.scm merge=scmjs", "*.chk merge=scmjs"];
+const ATTRIBUTE_COMMENT = "# Maps show in git diff as text (scmjs map dump) and git merge merges them (scmjs map merge); scmjs init sets the git config";
 
 /**
  * `.gitignore`: only what is left beside a map without being asked for by name. The commands write a map back in place
@@ -243,10 +248,18 @@ export function readmeText(title: string, maps: readonly InitMap[]): string {
     `scmjs map diff --rev HEAD ${quoted}`,
     "```",
     "",
+    "When two branches change the same map, `git merge` merges it part by part through `scmjs map merge`. If both",
+    "changed the same thing differently, git stops on the map and the command lists what clashed; settle it with",
+    "one side's version, then `git add` the map:",
+    "",
+    "```sh",
+    `scmjs map merge ${quoted} --ours`,
+    "```",
+    "",
     "## After cloning",
     "",
-    "`git diff` and `git log -p` show what changed inside a map once each clone has these settings. `scmjs init` sets",
-    "them (and writes nothing that is already here), or by hand:",
+    "`git diff` and `git log -p` show what changed inside a map, and `git merge` merges maps, once each clone has these",
+    "settings. `scmjs init` sets them (and writes nothing that is already here), or by hand:",
     "",
     "```sh",
     ...GIT_SETTINGS.map(configLine),
@@ -255,14 +268,19 @@ export function readmeText(title: string, maps: readonly InitMap[]): string {
   ].join("\n");
 }
 
-/** The lines of `want` that `text` lacks; for `.gitattributes`, a pattern that already names a diff driver counts as there. */
+/**
+ * The lines of `want` that `text` lacks; for `.gitattributes`, a pattern that already names the attribute the line
+ * sets (`diff`, `merge`) counts as there — someone's own driver for it is left alone.
+ */
 export function missingLines(text: string, want: readonly string[], attributes = false): string[] {
   const have = text.split(/\r?\n/).map((l) => l.trim().replace(/\s+/g, " ")).filter((l) => l && !l.startsWith("#"));
   return want.filter((w) => {
     if (have.includes(w)) return false;
     if (!attributes) return true;
-    const pattern = w.split(" ")[0];
-    return !have.some((l) => l.split(" ")[0] === pattern && /(^|\s)-?!?diff(=|\s|$)/.test(l.slice(pattern.length) + " "));
+    const [pattern, attribute] = w.split(" ");
+    const name = attribute.replace(/=.*$/, "");
+    const names = new RegExp(`(^|\\s)-?!?${name}(=|\\s|$)`);
+    return !have.some((l) => l.split(" ")[0] === pattern && names.test(l.slice(pattern.length) + " "));
   });
 }
 
@@ -324,7 +342,7 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     const path = join(dir, name);
     const text = existsSync(path) ? readFileSync(path, "utf8") : null;
     const lack = missingLines(text ?? "", want, attributes);
-    const what = attributes ? "maps diff as text" : "the .bak files Save leaves, map test's replays";
+    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves, map test's replays";
     if (!lack.length) { files.push({ path: show(path), state: "kept", detail: "has the lines already", content: want.join("\n") + "\n" }); continue; }
     const content = appendLines(text ?? "", lack, comment);
     if (!o.print) writeFileSync(path, content);
@@ -359,7 +377,7 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     return { key, value, state: "set", current };
   });
   if (!repository) notes.push("Not in a git repository, so the git settings were not made: run scmjs init again after git init (or now with --git), or set them by hand (scmjs init --print).");
-  else if (settings.some((s) => s.state !== "kept") && !onPath("scmjs")) notes.push("git diff runs scmjs map dump, and scmjs is not on PATH here: npm install -g @scm-js/cli.");
+  else if (settings.some((s) => s.state !== "kept") && !onPath("scmjs")) notes.push("git diff runs scmjs map dump and git merge runs scmjs map merge, and scmjs is not on PATH here: npm install -g @scm-js/cli.");
   if (repository && prefix) notes.push(`The workflow is at the repository's top, where GitHub reads it, and checks ${prefix}/ from there.`);
   if (!maps.length) notes.push("No maps in the folder yet: the workflow checks *.scx, and fails until there is one.");
   if (maps.some((m) => m.script === null)) notes.push("This build of scmjs has no TrigScript compiler, so maps with a script were not looked for.");
@@ -393,10 +411,15 @@ export function printInit(r: InitResult): string[] {
   const rowsOut: string[][] = r.files.map((f) => f.state === "kept"
     ? [pc.dim(`· ${f.path}`), pc.dim(`${STATE_WORD[f.state]}: ${f.detail}`)]
     : [`${mark.ok} ${f.path}`, f.state === "added" ? f.detail : `${STATE_WORD[f.state]}: ${f.detail}`]);
-  const short = (k: string) => k.replace("diff.scmjs.", "");
-  const set = r.git.filter((g) => g.state === "set"), kept = r.git.filter((g) => g.state === "kept");
-  if (set.length) rowsOut.push([`${mark.ok} git config diff.scmjs`, `set: ${set.map((g) => short(g.key)).join(", ")}`]);
-  if (kept.length) rowsOut.push([pc.dim("· git config diff.scmjs"), pc.dim(`left alone: ${kept.map((g) => short(g.key)).join(", ")} already so`)]);
+  // One row per group of settings (`diff.scmjs`, `merge.scmjs`) and state, with the keys' last parts.
+  const group = (k: string) => k.slice(0, k.lastIndexOf("."));
+  const short = (k: string) => k.slice(k.lastIndexOf(".") + 1);
+  for (const prefix of new Set(r.git.map((g) => group(g.key)))) {
+    const of = r.git.filter((g) => group(g.key) === prefix);
+    const set = of.filter((g) => g.state === "set"), kept = of.filter((g) => g.state === "kept");
+    if (set.length) rowsOut.push([`${mark.ok} git config ${prefix}`, `set: ${set.map((g) => short(g.key)).join(", ")}`]);
+    if (kept.length) rowsOut.push([pc.dim(`· git config ${prefix}`), pc.dim(`left alone: ${kept.map((g) => short(g.key)).join(", ")} already so`)]);
+  }
   for (const g of r.git.filter((x) => x.state === "other")) rowsOut.push([`${mark.warn} git config ${g.key}`, `left alone: it is "${g.current}" (--force sets "${g.value}")`]);
   return [
     `${pc.bold(showFolder(r.folder))}${dot}${plural(r.maps.length, "map")}${scripts ? pc.dim(` (${scripts} with a TrigScript script)`) : ""}${dot}${where}`,

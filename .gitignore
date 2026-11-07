@@ -1,5 +1,5 @@
 # Dependencies
-node_modules/
+node_modules
 
 # Build
 dist/
@@ -15,20 +15,20 @@ release/
 .env*
 
 # Local StarCraft data + map fixtures (not redistributable)
-fixtures/
+fixtures
 
 # Extracted Blizzard game data (regenerate with `npm run extract`)
-/public/tileset/
-/public/arr/
-/public/game/
-/public/scripts/
-/public/unit/
+/public/tileset
+/public/arr
+/public/game
+/public/scripts
+/public/unit
 
 # Plugin API declarations (regenerate with `npm run build:plugin-types`)
 /plugin-api/
 
 # Default plugins vendored into the desktop build (regenerate with `npm run vendor:plugins`)
-/plugins/
+/plugins
 
 # Plugin runtimes downloaded for the desktop and container builds (scripts/bundle-plugin-runtimes.mjs)
 /plugin-runtimes/
@@ -38,6 +38,7 @@ fixtures/
 
 # The demo video's recordings and cuts (scripts/trailer.mjs, scripts/trailer-cut.mjs): gigabytes of frames.
 /trailer/build/
+# The patterns above have no trailing slash so that a symlink at the same path is ignored too (a worktree links them).
 
 # Replays of failed `scmjs map test` scenarios, kept beside the map they tested
 *.tests/

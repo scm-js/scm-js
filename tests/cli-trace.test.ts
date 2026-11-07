@@ -10,9 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureEngine } from "../cli/src/engine";
-import { costReport, printCost, printTrace, runMapInGame, summarizeRows, traceReport, weighModule, type CopyLine } from "../cli/src/trace";
+import { costReport, gameMap, printCost, printTrace, runMapInGame, summarizeRows, traceReport, weighModule, type CopyLine } from "../cli/src/trace";
 import { CliError, visible } from "../cli/src/ui";
 import { openMapBytes } from "../src/editor/mapFile";
+import { mapVersionOf } from "../src/formats/chk/scenario";
 import { testMap } from "./support/maps";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-trace-"));
@@ -86,6 +87,21 @@ describe("scmjs map trace | cost: the runner", () => {
     // The cost needs the weigher: a named module that is not there, and none beside the source.
     await expect(runMapInGame(join(dir, "m.scx"), "cost", { engine: staged.dir, starcraft: copy, weigh: join(dir, "none.mjs") })).rejects.toThrow(/No file/);
     expect(() => weighModule()).toThrow(CliError);
+  });
+
+  it("hands the game a file: the map itself, a copy of one read from a pipe, a Brood War copy of a StarCraft 1.00 map", async () => {
+    const ums = await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx");
+    expect(await gameMap(ums, testMap("ums.scx"))).toEqual({ path: testMap("ums.scx"), converted: false });
+    const piped = await gameMap(ums, "-", "stdin.scx");
+    expect(piped.converted).toBe(false);
+    expect(piped.path).toMatch(/stdin\.scx$/);
+    expect((await openMapBytes(new Uint8Array(readFileSync(piped.path)), "stdin.scx")).scenario.triggers).toHaveLength(3);
+    const original = await openMapBytes(new Uint8Array(readFileSync(testMap("original.scm"))), "original.scm");
+    const bw = await gameMap(original, testMap("original.scm"));
+    expect(bw.converted).toBe(true);
+    expect(bw.path).toMatch(/original\.scx$/);
+    expect(mapVersionOf((await openMapBytes(new Uint8Array(readFileSync(bw.path)), "original.scx")).scenario.fileVersion)).toBe("broodwar");
+    expect(mapVersionOf(original.scenario.fileVersion)).toBe("original");
   });
 
   it("runs the trace, words it live and reports each trigger against the map's own", async () => {

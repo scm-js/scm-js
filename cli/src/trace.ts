@@ -69,17 +69,19 @@ export function weighModule(named?: string): string {
 }
 
 /**
- * The file the game is handed: the map itself, or — for a map in the original StarCraft 1.00 form, which reaches code
- * the engine has not lifted — a copy converted to Brood War as Scenario ▸ Map Properties converts it, written in a
- * temporary folder. The document is not changed.
+ * The file the game is handed: the map itself; a map read from standard input written out, since the runner reads a
+ * file; and a map in the original StarCraft 1.00 form, which reaches code the engine has not lifted, as a copy
+ * converted to Brood War the way Scenario ▸ Map Properties converts it. Copies go in a temporary folder; the document
+ * is not changed.
  */
-export async function gameMap(doc: OpenedMap, inputPath: string): Promise<{ path: string; converted: boolean }> {
-  if (mapVersionOf(doc.scenario.fileVersion) !== "original") return { path: inputPath, converted: false };
+export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inputPath): Promise<{ path: string; converted: boolean }> {
+  const converted = mapVersionOf(doc.scenario.fileVersion) === "original";
+  if (!converted && inputPath !== "-") return { path: inputPath, converted: false };
   const copy = parseScenario(serializeScenario(doc.scenario));
-  changeMapVersion(copy, "broodwar");
-  const path = join(mkdtempSync(join(tmpdir(), "scmjs-game-")), inputPath.replace(/^.*[\\/]/, "").replace(/\.scm$/i, "") + ".scx");
-  writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras }));
-  return { path, converted: true };
+  if (converted) changeMapVersion(copy, "broodwar");
+  const path = join(mkdtempSync(join(tmpdir(), "scmjs-game-")), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
+  writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras, stored: doc.stored ?? null }));
+  return { path, converted };
 }
 
 /** The start line as the terminal's. */

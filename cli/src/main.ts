@@ -483,7 +483,7 @@ fetched once from the play page (about 25 MB) and the game's own files come from
 scmjs bot run. Exits 2 when the game could not start.`)
   .action(async (file: string, o: GameOptions) => {
     const { input, doc } = await openForEdit(file);
-    const game = await gameMap(doc, input.path);
+    const game = await gameMap(doc, input.path, input.name);
     if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
     const r = await runMapInGame(game.path, "trace", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify({ ...traceReport(input.name, doc.scenario, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
@@ -498,7 +498,7 @@ runs is weighed as Remastered charges for it (TrigScript's model, measured on th
 on average where the triggers ran and at the most, against what a frame can carry, then the costliest triggers.`)
   .action(async (file: string, o: GameOptions & { weigh?: string }) => {
     const { input, doc } = await openForEdit(file);
-    const game = await gameMap(doc, input.path);
+    const game = await gameMap(doc, input.path, input.name);
     if (game.converted && !o.json) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead`));
     const r = await runMapInGame(game.path, "cost", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify({ ...costReport(input.name, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));

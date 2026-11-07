@@ -10,9 +10,9 @@
  * The runner speaks JSON lines — start, progress, end — kept here and worded against the map's own triggers, read
  * with the editor's code so a row is shown as the trigger window shows it.
  */
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -48,6 +48,8 @@ export interface MapRunOptions {
   live?: (line: string) => void;
   /** Each progress line as it comes, unworded (the MCP server's progress notifications). */
   onProgress?: (line: TraceProgressLine) => void;
+  /** Stops the run when it fires (an MCP client cancelling its request): the runner is killed and the run fails as cancelled. */
+  signal?: AbortSignal;
   node?: string;
 }
 
@@ -73,8 +75,9 @@ export function weighModule(named?: string): string {
 /**
  * The file the game is handed: the map itself; a map read from standard input written out, since the runner reads a
  * file; and a map in the original StarCraft 1.00 form, which reaches code the engine has not lifted, as a copy
- * converted to Brood War the way Scenario ▸ Map Properties converts it. Copies go in a temporary folder; the document
- * is not changed.
+ * converted to Brood War the way Scenario ▸ Map Properties converts it. Copies go in a temporary folder of their own,
+ * which `runMapInGame` deletes once the runner has ended, whether the run succeeded or not (the MCP server runs for
+ * hours); the document is not changed.
  */
 export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inputPath): Promise<{ path: string; converted: boolean }> {
   const converted = mapVersionOf(doc.scenario.fileVersion) === "original";
@@ -82,8 +85,18 @@ export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inp
   const copy = parseScenario(serializeScenario(doc.scenario));
   if (converted) changeMapVersion(copy, "broodwar");
   const path = join(mkdtempSync(join(tmpdir(), "scmjs-game-")), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
-  writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras, stored: doc.stored ?? null }));
+  temporary.add(path);
+  try { writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras, stored: doc.stored ?? null })); } catch (e) { removeGameMap(path); throw e; }
   return { path, converted };
+}
+
+/** The copies `gameMap` wrote, until the run they were for has ended. */
+const temporary = new Set<string>();
+
+/** A copy `gameMap` wrote, deleted with its folder; anything else is left alone. */
+function removeGameMap(path: string): void {
+  if (!temporary.delete(path)) return;
+  try { rmSync(dirname(path), { recursive: true, force: true }); } catch { /* the temporary folder is the system's to clear */ }
 }
 
 /** The start line as the terminal's. */
@@ -96,6 +109,12 @@ export function wordStart(l: TraceStartLine): string {
  * or the cost (with the weigher). The engine is fetched when it is not cached.
  */
 export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRunOptions = {}): Promise<MapRunOutcome> {
+  try { return await runMap(map, what, o); } finally { removeGameMap(map); }
+}
+
+const cancelled = () => new CliError("The run was cancelled: the game was stopped before it finished.", null);
+
+async function runMap(map: string, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
   if (!existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
@@ -110,18 +129,26 @@ export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRu
   let start: TraceStartLine | null = null, end: TraceEndLine | null = null;
   const progress: TraceProgressLine[] = [];
   let error: string | null = null;
+  if (o.signal?.aborted) throw cancelled();
   const child = startRunner(runner, args, { node: o.node });
+  // Listened for from the start, so a runner that ends at once (or is killed) is not missed.
+  const exited = new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
+  const stop = () => { child.kill(); };
+  o.signal?.addEventListener("abort", stop, { once: true });
   let stderr = "";
   child.stderr!.on("data", (d) => { stderr += d; });
-  for await (const raw of createInterface({ input: child.stdout! })) {
-    let l: MapRunnerLine;
-    try { l = JSON.parse(raw) as MapRunnerLine; } catch { continue; }
-    if (l.kind === "start") { start = l; o.live?.(wordStart(l)); }
-    else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
-    else if (l.kind === "end") end = l;
-    else if (l.kind === "error") error = l.message;
-  }
-  const exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
+  try {
+    for await (const raw of createInterface({ input: child.stdout! })) {
+      let l: MapRunnerLine;
+      try { l = JSON.parse(raw) as MapRunnerLine; } catch { continue; }
+      if (l.kind === "start") { start = l; o.live?.(wordStart(l)); }
+      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
+      else if (l.kind === "end") end = l;
+      else if (l.kind === "error") error = l.message;
+    }
+  } finally { o.signal?.removeEventListener("abort", stop); }
+  const exitCode = await exited;
+  if (o.signal?.aborted) throw cancelled();
   if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
   if (!end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };

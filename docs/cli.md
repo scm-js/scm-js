@@ -625,6 +625,11 @@ between them, and with `--json` a line of JSON per frame with every unit's place
 script or a plot. The players' names, colours, chat and APM come from the replay file
 itself, read as `replay info` reads it; the figures and the picture from the game.
 
+A player who leaves the game shows as `left at 10:05` on their line from then on, instead
+of the zeros the game keeps for them. When the replay has played to its end, the last line
+says who won (`Question won`), or, when nobody had won by the time the recording stopped,
+that the game ended at the replay's end.
+
 A replay from any version plays; one from a game that held more units at once than 1.16.1
 allows is refused, as the play page refuses it.
 

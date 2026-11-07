@@ -22,9 +22,20 @@ import { CliError, columns, dot, duration, gameText, mark, num, pc, truecolor, u
 
 export interface WatchPlayer { slot: number; name: string; race: string; type: number }
 export interface WatchStart { kind: "start"; map: { name: string; width: number; height: number; tileset: string }; frames: number; players: WatchPlayer[]; copy: string; terrain: string; ms: { load: number; start: number } }
-/** `players`: per player, minerals, gas, supply used, supply available, units alive. `units`: x, y (map pixels), owner, class, four numbers a unit. */
-export interface WatchFrame { kind: "frame"; frame: number; players: [number, number, number, number, number][]; units: number[] }
-export interface WatchEnd { kind: "end"; frame: number; ended: boolean; reason: string | null; check: { named: number; gone: number; ahead: number; parted: number | null }; ms: { game: number; load: number; start: number; total: number } }
+/**
+ * `players`: per player, minerals, gas, supply used, supply available, units alive. `units`: x, y (map pixels), owner,
+ * class, four numbers a unit. `left`, once someone has left: per player the frame they left at, or null (a runner from
+ * before it was added never sends it).
+ */
+export interface WatchFrame { kind: "frame"; frame: number; players: [number, number, number, number, number][]; units: number[]; left?: (number | null)[] }
+/**
+ * The runner's last line. `left`, `outcomes` (per player, what the game decided) and `by` (a side won, or the replay
+ * ran out) came later: a runner deployed before them leaves them out.
+ */
+export interface WatchEnd {
+  kind: "end"; frame: number; ended: boolean; reason: string | null; check: { named: number; gone: number; ahead: number; parted: number | null }; ms: { game: number; load: number; start: number; total: number };
+  left?: (number | null)[]; outcomes?: ("victory" | "defeat" | "draw" | null)[]; by?: "victory" | "replay" | null;
+}
 export type WatchLine = WatchStart | WatchFrame | WatchEnd | { kind: "error"; message: string };
 
 /** What a unit is on the picture: the runner's classes. */
@@ -162,6 +173,8 @@ export interface View {
   chat: { frame: number; name: string; color: string; text: string }[];
   speed: number;
   paused: boolean;
+  /** Per side, the frame they left the game at, or null while they play on. */
+  left?: (number | null)[];
 }
 
 const RACE_LETTER: Record<string, string> = { zerg: "Z", terran: "T", protoss: "P" };
@@ -178,12 +191,21 @@ export function pictureLines(v: View, o: PictureOptions): string[] {
   const out = [title + " ".repeat(gap) + right, ...drawMinimap({ ...start.map, terrain: start.terrain }, frame.units, v.sides, o), ""];
   const color = o.color ?? pc.isColorSupported;
   const swatch = (s: Side) => (color ? `${fg(s.color, o.full ?? truecolor)}■\x1b[39m` : "■");
+  // A player who left has no figures (the game keeps zeros for them): "left at m:ss" across the three columns instead.
+  const gone = (k: number) => v.left?.[k] ?? null;
   const cells = v.sides.map((s, k) => {
     const p = frame.players[k] ?? [0, 0, 0, 0, 0];
-    return [`${swatch(s)} ${gameText(s.name)}`, RACE_LETTER[s.race] ?? "?", `${num(p[0])}${pc.dim("/")}${num(p[1])}`, `${p[2]}${pc.dim("/")}${p[3]}`, pc.dim(`${num(p[4])} units`), pc.dim(`${num(v.apm[k] ?? 0)} APM`)];
+    const at = gone(k);
+    const figures = at === null ? [`${num(p[0])}${pc.dim("/")}${num(p[1])}`, `${p[2]}${pc.dim("/")}${p[3]}`, pc.dim(`${num(p[4])} units`)] : [pc.yellow(`left at ${clock(at)}`), "", ""];
+    return [`${swatch(s)} ${gameText(s.name)}`, RACE_LETTER[s.race] ?? "?", ...figures, pc.dim(`${num(v.apm[k] ?? 0)} APM`)];
   });
-  const widths = cells[0]?.map((_, i) => Math.max(...cells.map((r) => columns(r[i])))) ?? [];
-  for (const r of cells) out.push(r.map((c, i) => c + " ".repeat(Math.max(0, widths[i] - columns(c)))).join("  ").trimEnd());
+  const playing = cells.filter((_, k) => gone(k) === null);
+  const widths = cells[0]?.map((_, i) => Math.max(0, ...(i >= 2 && i <= 4 ? playing : cells).map((r) => columns(r[i])))) ?? [];
+  const pad = (c: string, w: number) => c + " ".repeat(Math.max(0, w - columns(c)));
+  for (const [k, r] of cells.entries()) {
+    if (gone(k) === null) { out.push(r.map((c, i) => pad(c, widths[i])).join("  ").trimEnd()); continue; }
+    out.push([pad(r[0], widths[0]), pad(r[1], widths[1]), pad(r[2], widths[2] + widths[3] + widths[4] + 4), pad(r[5], widths[5])].join("  ").trimEnd());
+  }
   const said = v.chat.slice(-3);
   for (let i = 0; i < 3; i++) {
     const c = said[i];
@@ -194,7 +216,10 @@ export function pictureLines(v: View, o: PictureOptions): string[] {
 
 /** One line for a frame where there is no terminal to draw in: the clock, then each player's figures. */
 export function summaryLine(v: View): string {
-  return `${pc.bold(clock(v.frame.frame).padStart(5))}  ${v.sides.map((s, k) => { const p = v.frame.players[k] ?? [0, 0, 0, 0, 0]; return `${gameText(s.name)} ${RACE_LETTER[s.race] ?? "?"} ${pc.dim(`${p[0]}/${p[1]}`)} ${p[2]}/${p[3]} ${pc.dim(`${p[4]}u ${v.apm[k]} APM`)}`; }).join(pc.dim("  |  "))}`;
+  return `${pc.bold(clock(v.frame.frame).padStart(5))}  ${v.sides.map((s, k) => {
+    const p = v.frame.players[k] ?? [0, 0, 0, 0, 0], at = v.left?.[k] ?? null;
+    return `${gameText(s.name)} ${RACE_LETTER[s.race] ?? "?"} ${at === null ? `${pc.dim(`${p[0]}/${p[1]}`)} ${p[2]}/${p[3]} ${pc.dim(`${p[4]}u ${v.apm[k]} APM`)}` : `${pc.yellow(`left at ${clock(at)}`)} ${pc.dim(`${v.apm[k]} APM`)}`}`;
+  }).join(pc.dim("  |  "))}`;
 }
 
 /* ── The replay's own part: colours, chat, APM ───────────────── */
@@ -237,6 +262,8 @@ export class Tally {
     }
     return said;
   }
+  /** The frame each side left at by the replay's own commands, as far as they have been taken in; null for one still playing. */
+  leftBy(): (number | null)[] { return [...this.left]; }
   apm(frame: number): number[] {
     return this.sides.map((_, k) => { const end = this.left[k] ?? frame; return end > 0 ? Math.round(this.actions[k] / ((end * FRAME_MS) / 60000)) : 0; });
   }
@@ -288,6 +315,8 @@ export interface WatchOutcome {
   frame: number;
   /** Stopped by a key, not by the replay's end. */
   stopped: boolean;
+  /** The players as the picture named them. */
+  sides?: Side[];
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -350,18 +379,24 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   const start = first;
   const sides = sidesOf(start, replay);
   const tally = new Tally(replay, sides);
-  const outcome: WatchOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, start, end: null, pictures: 0, frame: 0, stopped: false };
+  const outcome: WatchOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, start, end: null, pictures: 0, frame: 0, stopped: false, sides };
   if (o.json) out(JSON.stringify({ ...start, kind: "start", players: sides.map((s, k) => ({ ...s, type: start.players[k].type })) }) + "\n");
 
   let said: View["chat"] = [];
-  const view = (frame: WatchFrame, paused = false): View => { said = tally.advance(frame.frame); return { start, frame, sides, apm: tally.apm(frame.frame), chat: tally.chat, speed, paused }; };
+  // Who left: the runner says, from the game's own player records; a runner from before that is said is answered by the
+  // replay's own leave commands, which the game follows.
+  const view = (frame: WatchFrame, paused = false): View => {
+    said = tally.advance(frame.frame);
+    const byReplay = tally.leftBy();
+    return { start, frame, sides, apm: tally.apm(frame.frame), chat: tally.chat, speed, paused, left: sides.map((_, k) => frame.left?.[k] ?? byReplay[k]) };
+  };
 
   if (!paced) {
     for (let l = await r.next(); l; l = await r.next()) {
       if (l.kind === "frame") {
         const v = view(l);
         outcome.pictures++; outcome.frame = l.frame;
-        if (o.json) out(JSON.stringify({ kind: "frame", frame: l.frame, clock: clock(l.frame), players: sides.map((s, k) => { const p = l.players[k]; return { slot: s.slot, name: s.name, race: s.race, minerals: p[0], gas: p[1], supplyUsed: p[2], supplyAvailable: p[3], units: p[4], apm: v.apm[k] }; }), chat: said.map(({ frame, name, text }) => ({ frame, name, text })), units: l.units }) + "\n");
+        if (o.json) out(JSON.stringify({ kind: "frame", frame: l.frame, clock: clock(l.frame), players: sides.map((s, k) => { const p = l.players[k], at = v.left?.[k] ?? null; return { slot: s.slot, name: s.name, race: s.race, minerals: p[0], gas: p[1], supplyUsed: p[2], supplyAvailable: p[3], units: p[4], apm: v.apm[k], ...(at === null ? {} : { left: at }) }; }), chat: said.map(({ frame, name, text }) => ({ frame, name, text })), units: l.units }) + "\n");
         else { for (const c of said) out(`${pc.dim(clock(c.frame).padStart(5))}  ${gameText(c.name)}${pc.dim(":")} ${gameText(c.text)}\n`); out(summaryLine(v) + "\n"); }
       } else if (l.kind === "end") { outcome.end = l; if (o.json) out(JSON.stringify(l) + "\n"); }
       else if (l.kind === "error") { await r.exit(); throw new CliError(l.message); }
@@ -427,7 +462,18 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
 export function watchSummary(input: Input, r: WatchOutcome): string {
   const where = `${clock(r.frame)} ${pc.dim(`(frame ${num(r.frame)} of ${num(r.start.frames)})`)}`;
   const kept = r.end?.check.parted !== null && r.end?.check.parted !== undefined ? `${dot}${pc.yellow(`the game parted from the replay at ${clock(r.end.check.parted)}`)}` : "";
-  return `${r.stopped ? mark.info : mark.ok} ${pc.bold(input.name)}: ${r.stopped ? "stopped at" : r.end?.ended ? "watched to the end," : "watched to"} ${where}${kept}${r.end ? `${dot}${pc.dim(`${(r.end.ms.total / 1000).toFixed(1)} s`)}` : ""}`;
+  return `${r.stopped ? mark.info : mark.ok} ${pc.bold(input.name)}: ${r.stopped ? "stopped at" : r.end?.ended ? "watched to the end," : "watched to"} ${where}${kept}${r.stopped ? "" : endedBy(r)}${r.end ? `${dot}${pc.dim(`${(r.end.ms.total / 1000).toFixed(1)} s`)}` : ""}`;
+}
+
+/** How the game ended, where the runner says (one deployed before it did says nothing): who won, or that the replay ran out. */
+function endedBy(r: WatchOutcome): string {
+  const end = r.end;
+  if (!end?.ended) return "";
+  const names = (r.sides ?? r.start.players).map((s) => gameText(s.name));
+  const won = (end.outcomes ?? []).flatMap((o, k) => (o === "victory" && names[k] ? [names[k]] : []));
+  if (won.length) return `${dot}${pc.green(`${won.join(" and ")} won`)}`;
+  if (end.by === "replay") return `${dot}ended at the replay's end`;
+  return "";
 }
 
 /** For `--json` and the tests: a picture as plain text, no colour. */

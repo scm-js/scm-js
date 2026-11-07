@@ -136,10 +136,15 @@ function readdirSafe(dir: string): string[] {
   try { return readdirSync(dir); } catch { return []; }
 }
 
-/** What a folder is: a StarCraft: Remastered installation, a 1.16.1 one, or neither (the runner's own rule). */
+/**
+ * What a folder is: a StarCraft: Remastered installation, a 1.16.1 one, or neither (the runner's own rule). A 1.16.1
+ * copy's StarDat.mpq and BrooDat.mpq are taken in any case, the folder listed once: a Linux file system tells
+ * `StarDat.mpq` from `stardat.mpq`, and copies from old discs have capitals.
+ */
 export function gameCopyKind(folder: string): "remastered" | "classic" | null {
   if (existsSync(join(folder, ".build.info"))) return "remastered";
-  if (existsSync(join(folder, "StarDat.mpq")) && existsSync(join(folder, "BrooDat.mpq"))) return "classic";
+  const names = new Set(readdirSafe(folder).map((n) => n.toLowerCase()));
+  if (names.has("stardat.mpq") && names.has("broodat.mpq")) return "classic";
   return null;
 }
 

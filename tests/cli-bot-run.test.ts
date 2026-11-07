@@ -65,6 +65,21 @@ describe("scmjs bot run", () => {
     expect(() => findGameCopy(tmp())).toThrow(/not a copy of StarCraft/);
   });
 
+  it("finds a 1.16.1 copy whatever the case of its archives' names", () => {
+    const lower = tmp();
+    for (const f of ["stardat.mpq", "broodat.mpq"]) writeFileSync(join(lower, f), "mpq");
+    expect(gameCopyKind(lower)).toBe("classic");
+    expect(findGameCopy(lower)).toEqual({ folder: lower, kind: "classic" });
+    const upper = tmp();
+    for (const f of ["STARDAT.MPQ", "BrooDat.mpq", "patch_rt.mpq"]) writeFileSync(join(upper, f), "mpq");
+    expect(gameCopyKind(upper)).toBe("classic");
+    expect(gameCopyKind(classicCopy(tmp()))).toBe("classic");
+    const one = tmp();
+    writeFileSync(join(one, "stardat.mpq"), "mpq");
+    expect(gameCopyKind(one)).toBeNull();
+    expect(gameCopyKind(join(one, "not-there"))).toBeNull();
+  });
+
   it("takes an engine from a staged folder, and fetches one into the cache from the page's address", async () => {
     const staged = stagedEngine(tmp());
     const local = await ensureEngine(staged.dir);

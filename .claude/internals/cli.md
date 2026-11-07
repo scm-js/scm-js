@@ -355,6 +355,40 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   the end), then `applyStrings(deleteUnused(…))`. `--dry-run` lists and writes nothing; lists cut at 20 unless `--all`.
 - `tests/core.test.ts` cli list: + `edit`, `report`. Overview unchanged (23 lines; the new verbs are under `map`'s `…`).
 
+## MCP server (`cli/src/mcp.ts`) — 2026-11-06, the user's pick from the "wow" list
+
+- **`scmjs mcp`** = the map commands as Model Context Protocol tools on stdio, built on the official
+  `@modelcontextprotocol/sdk` (`McpServer` + `StdioServerTransport`, zod schemas → JSON Schema) rather than a
+  hand-written JSON-RPC loop: protocol negotiation, `ping`, errors and the client for the tests come with it. Cost:
+  the bundle 3.66 → 4.49 MB (SDK, zod 4, zod-to-json-schema, ajv with its four helpers — all MIT/ISC/BSD, in
+  ATTRIBUTION.md's CLI table and the notices). `createMcpServer()` returns `{ server, tools }` so the start line and
+  the test know the count without reaching into the SDK's privates.
+- **One tool per command, the command's functions underneath**: `map_info|check|dump|find|diff`, `map_triggers_export|
+  import`, `map_strings_export|import|prune`, `map_set|resize|new|build|run`, `replay_info` — each calls the same
+  module the commander action does (`mapReport`, `dumpMap`, `importTriggers`, `writeBack`, …), never main.ts, so the
+  two cannot drift in what they do, only in how they print. A result is `content: [{text}]` = the command's lines
+  with `visible()` stripping colour (picocolors is on when the client's pipe looks like a TTY to nobody, but strip
+  anyway), plus `structuredContent` = the `--json` shape (`toJson`: Uint8Array → array, Map → object). No
+  `outputSchema`s: the shapes are the command's TypeScript types and would be a second copy to keep. Triggers and
+  strings go **inline as text** (`text` argument; `.trg` bytes are not offered) — that is the point: the model edits
+  the trigger window's text and imports it. `annotations`: `readOnlyHint` on the readers, `destructiveHint` on the
+  writers, `openWorldHint` on `map_run` (it loads code from github:/URLs). `instructions` (exported `INSTRUCTIONS`)
+  tell the client how the tools fit; docs/cli.md "For AI tools" says the same for people.
+- **Failures are results, not protocol errors**: a `CliError` → `isError: true` with message + hint, so the model
+  can act on "No file x / Check the name"; an SDK-level error would only say the tool failed. `map_build` with
+  `ok: false` is also `isError` (compile errors as text).
+- **stdout is the protocol.** `serveStdio` points `console.log|info|debug|warn|error` at stderr before serving
+  (the headless plugin host's `api.log` is `console.log`; a plugin's print would otherwise corrupt the stream), and
+  the modules called never `print()` themselves (main.ts does the printing — the reason the split existed).
+  `StdioServerTransport` does not close on stdin's end, so `serveStdio` waits on `process.stdin` `end` (or the
+  server's `onclose`) and closes the server; without it Node exited with 13 "unsettled top-level await".
+- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (`program.createCommand("help")`
+  + `_hidden`, `addHelpCommand`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
+- `tests/cli-mcp.test.ts` (7): the SDK `Client` over `InMemoryTransport.createLinkedPair()` — tool list with
+  descriptions, annotations and instructions; info/dump; check; triggers export → import `--append` to `out` → diff;
+  strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
+  calls) was run by hand against the built file.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

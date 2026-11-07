@@ -22,6 +22,7 @@ import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
+import { serveStdio } from "./mcp";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
@@ -95,7 +96,6 @@ export const program = new Command("scmjs")
   .addOption(new Option("--no-color", "plain text, no colour (also NO_COLOR=1)"))
   .showSuggestionAfterError()
   .commandsGroup("This tool:")
-  .helpCommand("help [command]", "show help for a command")
   .configureOutput({ outputError: (text, write) => write(text.replace(/^error: /, `${mark.error} `)) })
   .showHelpAfterError(pc.dim("(scmjs --help lists the commands)"))
   .configureHelp({
@@ -120,6 +120,12 @@ export const program = new Command("scmjs")
     // The overview has the banner (banner.ts); a command's own help is commander's.
     formatHelp: (cmd, helper) => (cmd.parent ? Help.prototype.formatHelp.call(helper, cmd, helper) : rootHelp(cmd, helper, VERSION)),
   });
+
+// `scmjs help map` works, but the row is not in the overview: `-h, --help` is on the same screen, and the 23 lines
+// (a 24-row terminal keeps the globe on screen) go to the commands.
+const helpCommand = program.createCommand("help").argument("[command]").description("show help for a command");
+(helpCommand as unknown as { _hidden: boolean })._hidden = true;
+program.addHelpCommand(helpCommand);
 
 program.command("info").description("what a map, replay or bot file holds").helpGroup("Maps and replays:").argument("<files...>", "maps (.scm .scx .chk), replays (.rep) or bots (.scmbot)").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, async (input) => {
@@ -560,6 +566,18 @@ desktop app (map open), and whether npm has a newer scmjs. Nothing is changed. E
     print(...(o.json ? [JSON.stringify(doctorJson(r), null, 2)] : printDoctor(r)));
     if (r.blocked) process.exitCode = 1;
   });
+
+program.command("mcp").description("these commands as an MCP server, for AI tools").helpGroup("This tool:")
+  .addHelpText("after", `
+Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
+Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
+map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
+map_set, map_resize, map_new, map_build, map_run and replay_info. Paths are files on this computer, relative to the
+folder the tool started it in. Claude Code, in your maps folder:
+  claude mcp add scmjs -- npx -y @scm-js/cli mcp
+Anything else takes the same thing as JSON:
+  { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)
+  .action(async () => { await serveStdio(); });
 
 program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
   .action(async (o: { json?: boolean }) => {

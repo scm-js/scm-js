@@ -16,7 +16,8 @@ import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceI
 import { devPluginSpec } from "../src/plugins/devLink";
 import { program } from "../cli/src/main";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
-import { dot, gameLines, gameText, rows, table, visible } from "../cli/src/ui";
+import { columns, dot, gameLines, gameText, rows, table, visible } from "../cli/src/ui";
+import { githubAnnotations, junitXml, sarifJson, type CheckReport } from "../cli/src/report";
 import { TEST_MAPS_DIR } from "./support/maps";
 
 /** The lines as the reader sees them, without colour. */
@@ -71,6 +72,15 @@ describe("scmjs: terminal text", () => {
     expect(gameText("\x03Lost \x04Temple\x13")).toBe("Lost Temple");
     expect(gameText("a\nb\tc")).toBe("a b c");
     expect(gameLines("Players: 2\r\n\r\n\r\n\x06Ice\x01 is nice")).toBe("Players: 2\n\nIce is nice");
+  });
+  it("a table pads by the columns a cell takes, Korean counting two a character", () => {
+    expect(columns("ab")).toBe(2);
+    expect(columns("리마스터")).toBe(8);
+    expect(columns("\x1b[1m한\x1b[0m!")).toBe(3);
+    // Both first cells take 13 columns; the Korean one is four code units shorter than the room it fills.
+    const lines = plain(table([["Test 리마스터", "x"], ["Test Melee", "y"]], 0));
+    expect(lines[1].indexOf("y") - lines[0].indexOf("x")).toBe(4);
+    expect(lines[0].indexOf("x")).toBe(11);
   });
   it("rows line up, drop empty values and keep a group's gap", () => {
     expect(plain(rows([["Map", "64 × 64"], ["Built by", null], null, ["Strings", "20"]]))).toEqual(["  Map      64 × 64", "", "  Strings  20"]);
@@ -172,6 +182,44 @@ describe("scmjs about", () => {
     expect(visible(newestLine("0.8.9", "0.8.9"))).toBe("this one");
     expect(visible(newestLine("0.9.0", "0.8.9"))).toBe("0.8.9 on npm");
     expect(visible(newestLine("0.8.9", null))).toBe("could not ask npm");
+  });
+});
+
+describe("scmjs map check --format", () => {
+  const reports: CheckReport[] = [
+    { file: "maps/ridge.scx", name: "Ridge: the sequel", failed: true, issues: [
+      { level: "error", text: "No start location for Player 1 (slot is Human): 100% sure.\nSecond line", where: "Players" },
+      { level: "warn", text: "Nothing makes Player 1 lose", where: "Triggers" },
+      { level: "info", text: "Map revision: Brood War 1.04 <VER 205>", where: "Header" },
+    ] },
+    { file: "maps/ok.scx", name: "", failed: false, issues: [] },
+  ];
+
+  it("writes GitHub workflow annotations, one a finding, escaped as the runner reads them", () => {
+    const lines = githubAnnotations(reports);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe("::error file=maps/ridge.scx,title=Ridge%3A the sequel · Players::No start location for Player 1 (slot is Human): 100%25 sure.%0ASecond line");
+    expect(lines[1]).toMatch(/^::warning file=maps\/ridge\.scx,title=Ridge%3A the sequel · Triggers::Nothing makes/);
+    expect(lines[2]).toMatch(/^::notice /);
+  });
+
+  it("writes JUnit with a case per map, failed when the check failed it", () => {
+    const xml = junitXml(reports);
+    expect(xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<testsuites name="scmjs map check" tests="2" failures="1">/);
+    expect(xml).toContain('<testcase name="Ridge: the sequel" classname="maps/ridge.scx" file="maps/ridge.scx">');
+    expect(xml).toContain('<failure message="1 error, 1 warning">error: No start location for Player 1 (slot is Human): 100% sure.\nSecond line (Players)\nwarning: Nothing makes Player 1 lose (Triggers)\nnote: Map revision: Brood War 1.04 &lt;VER 205&gt; (Header)</failure>');
+    expect(xml).toContain('<testcase name="maps/ok.scx" classname="maps/ok.scx" file="maps/ok.scx">\n    </testcase>');
+    expect(xml.match(/<testcase /g)).toHaveLength(2);
+  });
+
+  it("writes SARIF 2.1.0 with a rule per area and a result per finding at the map's file", () => {
+    const log = JSON.parse(sarifJson(reports, "1.2.3")) as { version: string; runs: { tool: { driver: { name: string; version: string; rules: { id: string }[] } }; results: { ruleId: string; level: string; message: { text: string }; locations: { physicalLocation: { artifactLocation: { uri: string } } }[] }[] }[] };
+    expect(log.version).toBe("2.1.0");
+    expect(log.runs[0].tool.driver).toMatchObject({ name: "scmjs map check", version: "1.2.3" });
+    expect(log.runs[0].tool.driver.rules.map((r) => r.id)).toEqual(["scmjs/players", "scmjs/triggers", "scmjs/header"]);
+    expect(log.runs[0].results.map((r) => r.level)).toEqual(["error", "warning", "note"]);
+    expect(log.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe("maps/ridge.scx");
+    expect(log.runs[0].results[1].message.text).toBe("Nothing makes Player 1 lose");
   });
 });
 

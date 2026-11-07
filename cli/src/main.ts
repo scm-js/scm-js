@@ -15,24 +15,29 @@ import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
-import { diffMaps, printDiff } from "./diff";
+import { diffMaps, printDiff, revisionInput } from "./diff";
 import { dumpMap, printDump } from "./dump";
+import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
-import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
+import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
-import { CliError, dot, mark, num, pc, plural, print, rows, size } from "./ui";
+import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
 /** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
 const TERM_WIDTH = 28;
 
-/** Runs `fn` on each file in turn; a file that fails is said and the rest go on. JSON: one value, or a list for several. */
-async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => Promise<{ data: unknown; lines: string[] }>, rule = true): Promise<unknown[]> {
+/**
+ * Runs `fn` on each file in turn; a file that fails is said and the rest go on. JSON: one value, or a list for
+ * several. `silent` prints nothing and only collects, for a command that lays the results out itself afterwards.
+ */
+async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => Promise<{ data: unknown; lines: string[] }>, rule = true, silent = false): Promise<unknown[]> {
   const results: unknown[] = [];
   let printed = false;
   for (const path of paths) {
@@ -40,7 +45,7 @@ async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => 
       const { data, lines } = await fn(await readInput(path));
       results.push(data);
       // A file with nothing to say (no match in `find`) prints nothing, and no separator either.
-      if (!asJson && lines.length) { if (printed) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); printed = true; }
+      if (!silent && !asJson && lines.length) { if (printed) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); printed = true; }
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
       if (asJson) results.push({ file: path, error: e.message });
@@ -48,7 +53,7 @@ async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => 
       process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
     }
   }
-  if (asJson) print(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
+  if (asJson && !silent) print(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
   return results;
 }
 
@@ -123,22 +128,45 @@ program.command("info").description("what a map, replay or bot file holds").help
 
 const map = program.command("map").description("read, check and open maps").helpGroup("Maps and replays:");
 map.command("info").description("a map's size, players, units, triggers and its check").argument("<maps...>").addOption(json)
-  .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, mapInfo));
+  .option("--table", "one row per map, for a folder of them")
+  .action(async (files: string[], o: { json?: boolean; table?: boolean }) => {
+    if (!o.table || o.json) { await eachFile(files, !!o.json, mapInfo); return; }
+    const reports = (await eachFile(files, true, mapInfo, true, true)).filter((r): r is MapReport => !!r && !("error" in (r as object)));
+    if (!reports.length) return;
+    print(...table([
+      ["File", "Name", "Size", "Tileset", "Version", "Players", "Units", "Triggers", "Check"].map((h) => pc.dim(h)),
+      ...reports.map((r) => [r.file.name, gameText(r.name) || pc.italic("Untitled"), `${r.width} × ${r.height}`, r.tileset, r.version, String(r.usedSlots.length), num(r.statistics.units.total), num(r.statistics.triggers.count), issueLine(r.issues)]),
+    ], 0));
+  });
 map.command("check").description("Check Map, as the editor's: errors, then warnings")
   .argument("<maps...>").addOption(json)
   .option("--all", "list notes too, not only errors and warnings")
   .option("--strict", "fail on warnings as well as errors")
-  .addHelpText("after", `\nExits 1 when a map has errors (or warnings, with --strict): fit for a CI step.`)
-  .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean }) => {
-    const reports = await eachFile(files, !!o.json, async (input) => {
+  .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
+  .addHelpText("after", `
+Exits 1 when a map has errors (or warnings, with --strict): fit for a CI step. In a GitHub workflow,
+  - run: npx @scm-js/cli map check maps/*.scx --strict --format github
+puts each finding on the pull request itself.`)
+  .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean; format: string }) => {
+    if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
+    const format: Format = o.json ? "json" : (o.format as Format);
+    const machine = format !== "text" && format !== "json";
+    const reports = await eachFile(files, format === "json" || machine, async (input) => {
       expectKind(input, "map");
       const r = mapReport(input, await loadMapInput(input));
       const failed = r.issues.some((i) => i.level === "error" || (o.strict && i.level === "warn"));
       if (failed) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
       const lines = printIssues(r.issues, !!o.all);
-      return { data: { file: r.file.name, name: r.name, issues: r.issues.filter((i) => o.all || i.level !== "info") }, lines: [`${pc.bold(input.name)}  ${issueLine(r.issues)}`, ...lines] };
-    }, false) as { issues?: unknown[] }[];
-    if (!o.json && files.length > 1) {
+      const data: CheckReport = { file: input.path, name: r.name, issues: r.issues.filter((i) => o.all || i.level !== "info"), failed };
+      return { data, lines: [`${pc.bold(input.name)}  ${issueLine(r.issues)}`, ...lines] };
+    }, false, machine) as { issues?: unknown[] }[];
+    if (machine) {
+      const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
+      if (format === "github") print(...githubAnnotations(ok));
+      else process.stdout.write(format === "junit" ? junitXml(ok) : sarifJson(ok, VERSION));
+      return;
+    }
+    if (format === "text" && files.length > 1) {
       const bad = Number(process.exitCode ?? 0) ? reports.filter((r) => (r as { issues?: { level: string }[] }).issues?.some((i) => i.level === "error" || (o.strict && i.level === "warn"))).length : 0;
       print("", bad ? `${mark.error} ${plural(bad, "map")} of ${files.length} failed the check` : `${mark.ok} ${plural(files.length, "map")} checked, none failed`);
     }
@@ -221,6 +249,45 @@ async function emit(text: string, out: string | undefined, said: string): Promis
   print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
 }
 
+map.command("set").description("the map's name, description, revision or text encoding").argument("<map>").addOption(json)
+  .option("--name <text>", "the map's name")
+  .option("--description <text>", "the map's description")
+  .option("--revision <which>", `the file's revision: ${VERSIONS.join(", ")}`)
+  .option("--encoding <id>", `the text encoding: ${ENCODINGS.join(", ")}`)
+  .option("--out <map>", "write the result here instead of over the map")
+  .addHelpText("after", `
+Scenario ▸ Map Properties from the terminal: what is given is set, the rest is left. Nothing is written when nothing
+changed. A revision change does what the editor's does (the string table's form, the colour section the revision
+needs); the encoding is how the map's text is written for 1.16.1, where Remastered reads UTF-8.`)
+  .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string }) => {
+    if (o.name === undefined && o.description === undefined && o.revision === undefined && o.encoding === undefined) throw new CliError("Nothing to set", "--name, --description, --revision or --encoding, any of them.", 2);
+    const { input, doc } = await openForEdit(file);
+    const changes = setHeader(doc, { name: o.name, description: o.description, version: o.revision, encoding: o.encoding });
+    const w = changes.length || o.out ? await writeBack(doc, input.path, o.out ?? null) : null;
+    if (o.json) { print(JSON.stringify({ file: input.name, changes, written: w }, null, 2)); return; }
+    if (!changes.length) { print(`${mark.ok} ${pc.bold(input.name)}: nothing changed${w ? `${dot}written to ${pc.cyan(w.path)}` : ""}`); return; }
+    print(`${mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${c.field} ${pc.red(c.from || pc.dim("(none)"))} ${pc.dim("→")} ${pc.green(c.to || pc.dim("(none)"))}`).join(dot)}${dot}written to ${pc.cyan(w!.path)}${dot}${size(w!.bytes)}`);
+  });
+
+map.command("resize").description("Scenario ▸ Resize: the map to another size, anchored").argument("<map>").addOption(json)
+  .requiredOption("--size <WxH>", "the new width and height, each 64, 96, 128, 192 or 256")
+  .option("--anchor <where>", `${Object.keys(ANCHORS).filter((k) => k !== "centre").join(", ")}: which part of the map stays`, "center")
+  .option("--no-clamp", "leave locations that hang past the new edge where the shift put them")
+  .option("--out <map>", "write the result here instead of over the map")
+  .addHelpText("after", `
+The map is moved under the anchor; what falls outside is dropped (units, sprites, doodads) or pulled inside
+(locations, unless --no-clamp), and new ground is the tileset's base terrain. Says what was dropped.`)
+  .action(async (file: string, o: { json?: boolean; size: string; anchor: string; clamp: boolean; out?: string }) => {
+    const { width, height } = parseSize(o.size);
+    const anchor = parseAnchor(o.anchor);
+    const { input, doc } = await openForEdit(file);
+    const r = resizeMap(doc, { width, height, anchor, clampLocations: o.clamp });
+    const w = await writeBack(doc, input.path, o.out ?? null);
+    if (o.json) { print(JSON.stringify({ file: input.name, ...r, written: w }, null, 2)); return; }
+    const dropped = [r.unitsDropped && plural(r.unitsDropped, "unit"), r.spritesDropped && plural(r.spritesDropped, "sprite"), r.doodadsDropped && plural(r.doodadsDropped, "doodad")].filter(Boolean).join(", ");
+    print(`${mark.ok} ${pc.bold(input.name)}: ${r.from.width} × ${r.from.height} ${pc.dim("→")} ${r.to.width} × ${r.to.height}${dropped ? `${dot}${pc.yellow(`${dropped} dropped`)}` : ""}${r.locationsClamped ? `${dot}${plural(r.locationsClamped, "location")} pulled inside` : ""}${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
 const triggers = map.command("triggers").description("a map's triggers as a text or .trg file, and back")
   .addHelpText("after", `
 The text form is the trigger window's (docs.scmjs.dev/triggers); a .trg holds the raw records, as SCMDraft trades
@@ -263,6 +330,26 @@ strings.command("import").description("set the map's strings from such a file").
     const r = importStrings(doc, from, await readFile(from, "utf8"));
     const w = await writeBack(doc, input.path, o.out ?? null);
     print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.replaced, "string")} replaced, ${r.added} added, ${r.unchanged} unchanged${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
+strings.command("prune").description("drop the strings nothing in the map refers to").argument("<map>").addOption(json)
+  .option("--dry-run", "list them and write nothing")
+  .option("--all", "list every string dropped; by default a long list is cut at 20")
+  .option("--out <map>", "write the result here instead of over the map")
+  .addHelpText("after", `
+The editor's Delete Unused: a string no trigger, location, name, force, sound or setting refers to is blanked. Nothing
+is renumbered, so what the triggers hold stays right; blank slots at the end of the table are dropped.`)
+  .action(async (file: string, o: { json?: boolean; dryRun?: boolean; all?: boolean; out?: string }) => {
+    const { input, doc } = await openForEdit(file);
+    const removed = pruneStrings(doc, { dryRun: !!o.dryRun });
+    const w = removed.length && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
+    if (o.json) { print(JSON.stringify({ file: input.name, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+    if (!removed.length) { print(`${mark.ok} ${pc.bold(input.name)}: every string is referred to`); return; }
+    const limit = o.all ? Infinity : 20;
+    const show = (t: string) => { const p = t.replace(/\s+/g, " "); return p.length > 70 ? `${p.slice(0, 67)}…` : p; };
+    print(`${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${plural(removed.length, "unused string")}${o.dryRun ? " would be dropped" : " dropped"}${w ? `${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}` : ""}`,
+      ...removed.slice(0, limit).map((r) => `  ${pc.dim(String(r.index).padStart(4))}  ${show(r.text)}`),
+      ...(removed.length > limit ? [pc.dim(`  … and ${num(removed.length - limit)} more (--all lists them)`)] : []));
   });
 
 map.command("unpack").description("a map's archive as a folder: the scenario, its sounds, scripts and other files").argument("<map>").addOption(json)
@@ -336,12 +423,17 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`)
     else print(...printRun(input.name, r, { dryRun: !!o.dryRun }));
   });
 
-map.command("diff").description("what changed between two maps").argument("<a>").argument("<b>").addOption(json)
+map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)
   .option("--all", "list every item; by default a long list is cut at 20")
+  .option("--rev <revision>", "compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is")
   .addHelpText("after", `
-Exits 1 when the maps differ, 0 when they are the same, like diff.`)
-  .action(async (a: string, b: string, o: { json?: boolean; all?: boolean }) => {
-    const [x, y] = await Promise.all([openForEdit(a), openForEdit(b)]);
+Exits 1 when the maps differ, 0 when they are the same, like diff.
+  scmjs map diff old.scx new.scx
+  scmjs map diff --rev HEAD~1 maps/ridge.scx     # what the last commit changed in the map`)
+  .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; rev?: string }) => {
+    if (o.rev ? b !== undefined : b === undefined) throw new CliError(o.rev ? "--rev compares one map with its earlier version: give the map alone" : "Two maps to compare, or one with --rev <revision>", null, 2);
+    const fromRev = async () => { const input = revisionInput(o.rev!, a); expectKind(input, "map"); return { input, doc: await loadMapInput(input) }; };
+    const [x, y] = await Promise.all([o.rev ? fromRev() : openForEdit(a), openForEdit(o.rev ? a : b!)]);
     const d = diffMaps({ name: x.input.name, doc: x.doc }, { name: y.input.name, doc: y.doc });
     print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;

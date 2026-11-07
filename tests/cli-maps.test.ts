@@ -17,7 +17,8 @@ import { PlayerType } from "../src/formats/chk/sections/players";
 import { START_LOCATION } from "../src/data/units";
 import { commandTree, completionScript, SHELLS } from "../cli/src/completion";
 import { nameFromFile, newScenario, parseSize, parseTileset, writeNewMap, type NewMapOptions } from "../cli/src/create";
-import { diffMaps, printDiff } from "../cli/src/diff";
+import { diffMaps, printDiff, revisionInput } from "../cli/src/diff";
+import { parseAnchor, pruneStrings, resizeMap, setHeader } from "../cli/src/edit";
 import { dumpMap, printDump, sectionBytes, unitLine } from "../cli/src/dump";
 import { findInMap, KINDS, parseKinds, printHits } from "../cli/src/find";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "../cli/src/exchange";
@@ -230,6 +231,78 @@ describe("scmjs map new", () => {
     expect(Buffer.from(readFileSync(twice.path)).equals(readFileSync(r.path))).toBe(true);
     const chk = await writeNewMap(join(dir, "bare.chk"), base);
     expect((await openMapBytes(new Uint8Array(readFileSync(chk.path)), "bare.chk")).scenario.width).toBe(96);
+  });
+});
+
+describe("scmjs map set", () => {
+  it("sets what is given, reads colour codes as the string files do, and says what changed", async () => {
+    const doc = await open("melee.scx");
+    const changes = setHeader(doc, { name: "Ridge <03>two", version: "remastered", encoding: "euc-kr" });
+    expect(changes.map((c) => c.field)).toEqual(["Name", "Version", "Text encoding"]);
+    expect(changes[0]).toEqual({ field: "Name", from: "Test Melee", to: "Ridge two" });
+    expect(scenarioName(doc.scenario)).toBe("Ridge \x03two");
+    expect(doc.scenario.fileVersion).toBe(206);
+    expect(doc.scenario.strings.encoding).toBe("euc-kr");
+    expect(setHeader(doc, { name: "Ridge <03>two" })).toEqual([]);
+    expect(() => setHeader(doc, { version: "nope" })).toThrow(CliError);
+    expect(() => setHeader(doc, { encoding: "ascii" })).toThrow(CliError);
+    const reopened = await openMapBytes(await writeBack(doc, "x.scx", join(tmp(), "set.scx")).then((w) => new Uint8Array(readFileSync(w.path))), "set.scx");
+    expect(scenarioName(reopened.scenario)).toBe("Ridge \x03two");
+  });
+});
+
+describe("scmjs map resize", () => {
+  it("resizes under an anchor, says what fell off, and refuses the same size", async () => {
+    const doc = await open("ums.scx");
+    const r = resizeMap(doc, { width: 96, height: 64, anchor: parseAnchor("top-left"), clampLocations: true });
+    expect([r.from, r.to]).toEqual([{ width: 64, height: 64 }, { width: 96, height: 64 }]);
+    expect([doc.scenario.width, doc.scenario.height, doc.scenario.tiles.length]).toEqual([96, 64, 96 * 64]);
+    expect(r.unitsDropped).toBe(0);
+    expect(doc.scenario.units).toHaveLength(21);
+    const s = resizeMap(doc, { width: 64, height: 64, anchor: parseAnchor("bottom-right"), clampLocations: true });
+    expect(s.to).toEqual({ width: 64, height: 64 });
+    expect(doc.scenario.units.length).toBe(21 - s.unitsDropped);
+    expect(() => resizeMap(doc, { width: 64, height: 64, anchor: 4, clampLocations: true })).toThrow(/already/);
+    expect(parseAnchor("Center")).toBe(4);
+    expect(() => parseAnchor("middle")).toThrow(CliError);
+  });
+});
+
+describe("scmjs map strings prune", () => {
+  it("drops the strings nothing refers to, never an empty slot, and keeps the numbers", async () => {
+    const doc = await open("ums.scx");
+    expect(pruneStrings(doc, { dryRun: true }).map((r) => r.text)).toEqual(["Force 1", "Force 2"]);
+    importStrings(doc, "s.txt", "40\tdead\n");
+    const removed = pruneStrings(doc);
+    expect(removed.map((r) => [r.index, r.text])).toEqual([[3, "Force 1"], [4, "Force 2"], [40, "dead"]]);
+    expect(doc.scenario.strings.strings[3]).toBeNull();
+    expect(doc.scenario.strings.strings[13]).toBe("Test Marine");
+    expect(doc.scenario.strings.strings.length).toBeLessThanOrEqual(21);
+    expect(pruneStrings(doc)).toEqual([]);
+  });
+});
+
+const hasGit = spawnSync("git", ["--version"]).status === 0;
+describe.skipIf(!hasGit)("scmjs map diff --rev", () => {
+  it("reads the map as a revision has it and compares it with the file", async () => {
+    const dir = tmp();
+    const file = join(dir, "ridge.scx");
+    writeFileSync(file, readFileSync(testMap("ums.scx")));
+    const git = (...args: string[]) => spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    git("add", "ridge.scx");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "one");
+    const doc = await open("ums.scx");
+    importStrings(doc, "s.txt", "3\tRenamed\n");
+    await writeBack(doc, file, null);
+    const then = revisionInput("HEAD", file);
+    expect(then).toMatchObject({ name: "HEAD:ridge.scx", kind: "map" });
+    const d = diffMaps({ name: then.name, doc: await openMapBytes(then.bytes, then.name) }, { name: "ridge.scx", doc: await openMapBytes(new Uint8Array(readFileSync(file)), "ridge.scx") });
+    expect(d.strings).toEqual([{ change: "changed", text: "3", a: "Force 1", b: "Renamed" }]);
+    expect(() => revisionInput("HEAD", join(dir, "nowhere.scx"))).toThrow(/has no nowhere\.scx/);
+    const loose = join(tmp(), "loose.scx");
+    writeFileSync(loose, readFileSync(testMap("ums.scx")));
+    expect(() => revisionInput("HEAD", loose)).toThrow(/not in a git repository/);
   });
 });
 

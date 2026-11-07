@@ -28,15 +28,18 @@ when there is a newer version.
 | Command | What it does |
 | --- | --- |
 | `scmjs info <files…>` | What a map, replay or bot file holds, whichever it is |
-| `scmjs map info <maps…>` | A map's size, tileset, players, units, triggers and strings, and its check in one line |
-| `scmjs map check <maps…>` | Check Map, as the editor runs it: errors first, then warnings |
+| `scmjs map info <maps…>` | A map's size, tileset, players, units, triggers and strings, and its check in one line; `--table` for a folder of maps |
+| `scmjs map check <maps…>` | Check Map, as the editor runs it: errors first, then warnings; `--format github`, `junit` or `sarif` for CI |
 | `scmjs map open <map>` | Opens the map in scmJS |
 | `scmjs map new <map>` | A new map: flat ground, start locations laid out, the file written |
 | `scmjs map dump <map>` | The whole map as text, for `git diff` and `grep` |
 | `scmjs map find <text> <maps…>` | Edit ▸ Find across maps: units, locations, strings, triggers |
 | `scmjs map triggers export|import` | A map's triggers as a text or `.trg` file, and back |
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
-| `scmjs map diff <a> <b>` | What changed between two maps |
+| `scmjs map strings prune <map>` | Drops the strings nothing in the map refers to |
+| `scmjs map set <map>` | The map's name, description, revision or text encoding |
+| `scmjs map resize <map>` | Scenario ▸ Resize: the map to another size, anchored |
+| `scmjs map diff <a> <b>` | What changed between two maps, or since a git revision with `--rev` |
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
 | `scmjs map run <plugin> <map>` | Runs a plugin, or a script written like one, over the map with the plugin API |
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
@@ -80,6 +83,14 @@ Triggers, a briefing, locations, a sound and unit settings.
 
 The map's name and description keep their colours when your terminal supports full colour.
 
+`--table` prints one row per map instead, for a folder of them:
+
+```
+File            Name            Size     Tileset       Version         Players  Units  Triggers  Check
+ridge.scx       Ridge           96 × 64  Jungle World  Brood War 1.04  2        14     0         ✔ no problems
+outpost.scx     Outpost         64 × 64  Badlands      Brood War 1.04  2        21     3         ▲ 1 warning
+```
+
 `scmjs map check` lists what Check Map finds, each with where it is in the map. `--all`
 adds the notes as well, and `--strict` fails a map on warnings too. The command exits with
 1 when a map fails, so it can stop a build:
@@ -90,6 +101,18 @@ scmjs map check maps/*.scx --strict
 
 Checks that need the game's graphics or unit data (units standing where they cannot walk,
 for example) are not run here. The editor runs them once you have given it the game data.
+
+`--format github` prints each finding as a GitHub Actions annotation, so a workflow that
+checks the maps of a pull request puts them on the pull request itself, beside the file,
+rather than in the job's log:
+
+```yaml
+- run: npx @scm-js/cli map check maps/*.scx --strict --format github
+```
+
+`--format junit` writes JUnit XML, one test case per map, for every CI system that takes
+test results, and `--format sarif` writes SARIF 2.1.0 for code-scanning tools (GitHub's
+`upload-sarif` action, for one). The exit code is the same whatever the format.
 
 ## A new map
 
@@ -117,6 +140,42 @@ Without the game's graphics the ground is written by its ids, as the editor does
 has no game data; the map opens as it should and the editor fills the tiles' looks in when
 it saves. The same arguments give the same file, byte for byte, so a map made in a build
 step is the same map every time.
+
+## Changing a map from the terminal
+
+Three of the Scenario menu's edits that a script wants without the editor. Each writes the
+map back over itself, or to `--out other.scx`, as the trigger and string imports do, and
+keeps everything else in the file as it was.
+
+`scmjs map set` is Map Properties: what is given is set, the rest is left, and nothing is
+written when nothing changed.
+
+```sh
+scmjs map set ridge.scx --name "Ridge <04>2.1" --description "Final for the tournament."
+scmjs map set ridge.scx --revision remastered
+scmjs map set ridge.scx --encoding euc-kr
+```
+
+A name or description reads `<XX>` as the game's colour codes, as the string files do.
+`--revision` is one of original, hybrid, broodwar, remastered and remasteredHybrid, and
+changes what the editor's revision change does; `--encoding` is how the map's text is
+written for 1.16.1 (utf-8, euc-kr, shift_jis, gbk, big5, windows-1251 or windows-1252),
+where Remastered reads UTF-8.
+
+`scmjs map resize ridge.scx --size 128x96` is Scenario ▸ Resize. `--anchor` says which
+part of the map stays (center by default; top-left, top, top-right, left, right,
+bottom-left, bottom or bottom-right), what falls outside the new edge is dropped and said,
+and locations that hang past it are pulled inside unless you pass `--no-clamp`. New ground
+is the tileset's base terrain.
+
+```
+✔ ridge.scx: 96 × 64 → 128 × 96 · written to ridge.scx · 4.1 KB
+```
+
+`scmjs map strings prune ridge.scx` is the string editor's Delete Unused: a string no
+trigger, location, name, force, sound or setting refers to is blanked, and the blank slots
+at the end of the table dropped. Nothing is renumbered, so what the triggers hold stays
+right. `--dry-run` lists what would go and writes nothing.
 
 ## Triggers and strings as files
 
@@ -261,6 +320,18 @@ A trigger that changed shows as the old one removed and the new one added. Long 
 cut at twenty; `--all` lists everything. The command exits with 1 when the maps differ and
 0 when they are the same, like `diff`, so a script can ask whether a step changed
 anything.
+
+`--rev` compares a map with the version git has of it, so one command says what a commit
+changed in a map, or what is not committed yet:
+
+```sh
+scmjs map diff --rev HEAD~1 maps/ridge.scx     # what the last commit changed
+scmjs map diff --rev main maps/ridge.scx       # what this branch changed
+```
+
+The map is read through `git show` at that revision, so this works wherever `git diff`
+does; a file that is not in a repository, or not at that revision, is refused with git's
+own words.
 
 ## Building a TrigScript map
 
@@ -530,7 +601,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/main.ts` | The commands, their help and options, and running a command over several files |
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
-| `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath |
+| `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath; a map read from a git revision |
+| `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
+| `cli/src/report.ts` | Check Map's findings as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
 | `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
 | `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |

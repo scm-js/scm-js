@@ -17,7 +17,10 @@ import { TILESETS } from "../../src/data/tilesets";
 import { playerRaceLabel, playerTypeLabel } from "../../src/data/players";
 import { unitName } from "../../src/data/units";
 import { TEXT_ENCODINGS } from "../../src/formats/text/encoding";
-import { mark, num, pc, size } from "./ui";
+import { spawnSync } from "node:child_process";
+import { basename, dirname, relative, resolve } from "node:path";
+import { kindOf, type Input } from "./files";
+import { CliError, mark, num, pc, size } from "./ui";
 
 export type Change = "added" | "removed" | "changed";
 
@@ -225,4 +228,23 @@ export function printDiff(d: MapDiff, all = false): string[] {
 function counts(es: Entry[]): string {
   const n = (c: Change) => es.filter((e) => e.change === c).length;
   return [n("added") && `+${n("added")}`, n("removed") && `−${n("removed")}`, n("changed") && `~${n("changed")}`].filter(Boolean).join(" ");
+}
+
+/**
+ * The map as it was at a git revision (`--rev HEAD~1`): `git show <rev>:<path from the repository's root>`, read as
+ * an Input named `<rev>:<file>`. A path outside a repository, a revision that is not one, or a file the revision
+ * does not have is refused with git's own words.
+ */
+export function revisionInput(rev: string, file: string): Input {
+  const git = (args: string[]) => spawnSync("git", args, { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
+  const top = git(["-C", dirname(resolve(file)), "rev-parse", "--show-toplevel"]);
+  if (top.error) throw new CliError("git is not installed, or not on PATH", "--rev reads the map's earlier version through git.", 2);
+  if (top.status !== 0) throw new CliError(`${file} is not in a git repository`, top.stderr.toString().trim() || null, 2);
+  const root = top.stdout.toString().trim();
+  const path = relative(root, resolve(file)).split("\\").join("/");
+  const shown = git(["-C", root, "show", `${rev}:${path}`]);
+  if (shown.status !== 0) throw new CliError(`git has no ${path} at ${rev}`, shown.stderr.toString().trim().split("\n")[0] || null, 2);
+  const bytes = new Uint8Array(shown.stdout);
+  const name = `${rev}:${basename(file)}`;
+  return { path: name, name, bytes, kind: kindOf(file, bytes) };
 }

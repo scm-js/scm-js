@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -569,6 +569,51 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   after the loop, which could miss a `close` that came first). The stand-in runner (`tests/support/mapRunner.ts`)
   takes a map named `slow.scx`: it writes its pid beside the map (`slow.scx.pid`) and waits to be killed — no `--sleep`
   flag, since `runMapInGame` passes no free arguments to the runner.
+
+## Start to start: `map rush` (`cli/src/rush.ts`) — 2026-11-07
+
+`scmjs map rush <map> [--unit <name>] [--seed n] [--json]`: the ground distance between every pair of start locations
+by the game's own pathing — a unit walked from each start to every other, frames, pixels, outcome, beside the straight
+line. A fork built both ends (scm-sim branch `map-rush`).
+
+- **The runner is the map runner's `--rush` mode, not a fourth bundle.** scm-sim's `src/exact/mapGame.ts` is
+  `runMap.ts`'s start (mapBytes → the copy's files → install → `applyInputs`/`runStart` → `attach`) as a module, with an
+  `edit(chk, files)` hook; `runMap.ts` uses it for trace/cost and dispatches `--rush` (`--unit <id>`, `--limit
+  <frames>`, `--seed`, default `ANALYSIS_SEED` 12345) to `src/exact/mapRush.ts`. Why one runner: the start is the same
+  code (the zlib/pkware rewrite, the file-search stand-ins, the terrain check), no `current.json` key, no `RUNNERS` kind
+  and no `doctor` line. The price: **a runner from before ignores `--rush` and runs the triggers**, so its `start` has no
+  `mode` — `rush.ts` kills it and says "a map runner from before map rush" (tested with the trace's stand-in, which is
+  exactly such a runner). `RUNNER_COMMANDS.map` still reads "map trace|cost" (cli-doctor and cli-mcp tests pin the
+  wording; doctor cannot tell a runner's modes apart anyway).
+- **One game for every start** (one game a process; `scripts/pathing.ts` needed a process per start). The walks are
+  `src/analysis/pathing.ts`'s: `pathingScenario` (neutral Nexus on every start, Create Unit for P1 at location 1 =
+  `testPoint`, five tiles toward the middle), `walkUnits` (its own StateKeeper moment once the unit exists, a restore
+  before each walk). `mapRush.ts` takes a `StateKeeper` moment **before the first turn**; for each later start it
+  restores it and moves location 1 in the game's own table (`0x58DC60`, left/top/right/bottom) to that start's point
+  before the trigger has run. Measured identical to a game started for that start alone, to the frame and pixel
+  (Fighting Spirit, Crescent Moon; scm-sim `tests/exact-map-rush-fresh.test.ts` pins the numbers a fresh game gives, and
+  `exact-map-rush.test.ts` the rush's). OWNR slot 1 is made Human in the copy (the unit is P1's; a map giving slot 1 to a
+  computer would seat the person elsewhere) and the runner fails if the person is not in slot 1. `WalkHooks.walked` now
+  gets the walk as a third argument (additive) so a `walk` line goes out as each ends. units.dat's flags are read from
+  the copy before the game starts, so a flyer/building is refused in ~1.3 s.
+- **Protocol**: `start` {mode: "rush", map, copy, seed, unit, starts [{owner, x, y}], walks, ms}, `walk` {from, to
+  (slots 0–7), unit, outcome, frames, travelled, off (px from the start walked to at the end), regions, air (start to
+  start), at (where it set out), ms}, `end` {mode, walks, ms {load, start, walk, total}}, `error`.
+- **The CLI**: `unitByName` (an id; the editor's name or without "Terran/Zerg/Protoss", case and spaces folded; else a
+  unique prefix; else CliError listing up to six, exit 2 — "Siege Tank" is four). The map goes through `trace.ts#gameMap`
+  (a 1.00 map such as Lost Temple is converted; `removeGameMap` is now exported for `runRush`'s `finally`). Report:
+  starts labelled by player and `clockOf` (the angle from the middle as a clock hour — geometric, so Lost Temple's
+  left base reads 8, not the 9 people may call it), matrix cells "px, s" right-aligned, split into a seconds and a
+  pixels table when wider than the terminal (8 starts at 100 columns); shortest/longest of the arrived by frames, with
+  air and the ratio; `apart` pairs merged both ways ("No ground joins 1 ↔ 3"), every pair apart → "an island map" and
+  the straight lines; other outcomes one line each. Seconds = frames × 42 ms. The runner's "does not walk" becomes
+  "The Mutalisk does not walk", exit 2.
+- **Measured** (Remastered copy, staged deploy over `python3 -m http.server`, fresh cache): Lost Temple (1.00, converted)
+  SCV 12 walks 3.9 s, shortest 3 → 4 30.5 s, longest 1 → 4 53.8 s; Destination Zergling 41.9 / 42.9 s, 2.8 s; Fighting
+  Spirit Zergling 37.0–45.9 s, 4.2 s; Octopus (8 starts, 256 × 256) 56 walks 15.9 s; Sapphire Isles and Archipelago
+  every pair apart, ~3 s.
+- **Not built**: an MCP tool (`map_rush`); the path itself (the runner keeps a point every 64 frames and does not send
+  it); several units in one run; the editor's own Walkability numbers are the same code but not compared here.
 
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 

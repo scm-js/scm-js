@@ -1,6 +1,6 @@
 {
   "name": "@scm-js/core",
-  "version": "0.8.11",
+  "version": "0.9.0",
   "description": "StarCraft: Brood War maps in Node.js and the browser, as the scmJS editor reads and writes them: open .scm/.scx/.chk, triggers, strings, units, locations, settings, Check Map, and write the map back",
   "keywords": [
     "starcraft",

@@ -3,8 +3,9 @@
 `scmjs` is scmJS on the command line. It reads and writes map files with the editor's own
 code, so the two agree about every map, and it does what a terminal is good for:
 
-- **Maps.** What a map holds, Check Map over any number of maps, a new map, a search
-  across maps, the Scenario menu's edits, a map's archive as a folder and back.
+- **Maps.** What a map holds, Check Map over any number of maps, a new map, a playable
+  melee map from a seed, a search across maps, the Scenario menu's edits, a map's archive
+  as a folder and back.
 - **Maps in git and CI.** A map as text so `git diff` shows what changed, triggers and
   strings as files beside the map, what differs between two maps or two revisions, Check
   Map's findings as the annotations a pull request shows, commands that chain in a pipe.
@@ -40,6 +41,7 @@ when there is a newer version.
 | `scmjs map check <maps…>` | Check Map, as the editor runs it: errors first, then warnings; `--format github`, `junit` or `sarif` for CI |
 | `scmjs map open <map>` | Opens the map in scmJS |
 | `scmjs map new <map>` | A new map: flat ground, start locations laid out, the file written |
+| `scmjs map generate <map>` | A symmetric melee map from a seed: mains on high ground with a ramp, naturals, free bases, an open middle; walked and checked before it is written |
 | `scmjs map dump <map>` | The whole map as text, for `git diff` and `grep` |
 | `scmjs map find <text> <maps…>` | Edit ▸ Find across maps: units, locations, strings, triggers |
 | `scmjs map fetch <words…>` | Searches scmscx.com, the community's map database, and downloads a map with `--id` or `--first` |
@@ -162,6 +164,109 @@ Without the game's graphics the ground is written by its ids, as the editor does
 has no game data; the map opens as it should and the editor fills the tiles' looks in when
 it saves. The same arguments give the same file, byte for byte, so a map made in a build
 step is the same map every time.
+
+## A map from a seed
+
+`scmjs map generate` makes a melee map to play: a main on high ground for each player with
+one ramp down to a natural, free bases where there is room, and a middle of low ground
+broken up by mesas, lakes and patches of the tileset's other ground. Every player's bases
+are copies of one another, and the command walks the map before it writes it to show that
+they are as far apart as they should be.
+
+```sh
+scmjs map generate "(2)Jungle Duel.scx" --seed 1207
+scmjs map generate "(4)Crossing.scx" --players 4 --tileset desert --seed 2026
+```
+
+```
+✔ (4)Crossing.scx: 128 × 128 · Desert · 4 players · seed 2026 · 32 KB
+  Laid out   mirrored both ways · open · 4 ramps · 2 free bases
+  Balance    walks the symmetry makes equal differ by 2.4% start to start, 1.8% to the free bases
+  Check Map  no errors or warnings
+  Layout     the first layout tried · StarCraft: Remastered 1.23.10.13515
+
+    Player  Main                  Natural               Minerals  Gas     To the middle
+    1       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  72 tiles
+    2       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  71 tiles
+    3       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  73 tiles
+    4       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  70 tiles
+
+  Ground distance start to start, in tiles (a straight line in brackets)
+        P1         P2         P3         P4
+    P1  –          143 (120)  96 (88)    122 (82)
+    P2  143 (120)  –          123 (82)   93 (88)
+    P3  96 (88)    123 (82)   –          143 (120)
+    P4  122 (82)   93 (88)    143 (120)  –
+```
+
+**It needs your copy of StarCraft**, Remastered or 1.16.1, found as `map preview` finds it
+(or named with `--starcraft`). The ground is painted with the editor's isometric brush,
+which takes the tileset's terrain table to know which tile joins which, and the ramps are
+the tileset's own, described in its files. Nothing of the game is fetched or kept, and
+without a copy the command says so and writes nothing.
+
+The options:
+
+- `--players` 2, 3, 4, 6 or 8 (2 by default). Three players get the four-player layout
+  with the fourth main and natural left without a start location, for anyone to take.
+- `--size` 128 × 128 by default, 192 × 192 for eight players. Each side is 96, 128, 192 or
+  256, and at least 96 for two players, 128 for three to six and 192 for eight: the bases
+  are a fixed size, so a small map runs out of room.
+- `--tileset` jungle by default, or badlands, platform, ashworld, desert, ice or twilight.
+  Installation is not offered: none of its ground can be built on.
+- `--symmetry` how the players' halves or quarters relate. `rotational`, the default,
+  turns two players half round the centre; four and eight players are mirrored both ways.
+  `mirror-x` mirrors left to right, `mirror-y` top to bottom, and `diagonal` (two players
+  on a square map) across the diagonal. Six players are three a side (top and bottom, with
+  `mirror-y`, on a map 192 wide or more).
+- `--style open` (the default) keeps the ways out of the naturals clear; `--style chokes`
+  lays more and bigger mesas, two of them either side of each natural's way out.
+- `--seed` the number the map is made from. The same seed and options with the same copy
+  of the game give the same file, byte for byte; without `--seed` the command picks one
+  and prints it, so a map you like can be made again.
+- `--name` the map's name, the file's without its extension by default; `--force` writes
+  over a file that is there; `--json` prints the summary as JSON; `-` as the file writes
+  the map to standard output.
+
+What a map has. Each main is a plateau with the start location and nine mineral fields of
+1,500 and a geyser of 5,000 behind the town hall, away from the ramp. The ramp leads down
+to the natural, seven fields and a geyser, laid so the mineral line stands off the way up
+the ramp and the way to the middle. Free bases have six fields and a geyser. Resources are
+laid as the Melee Wizard lays them: each field three tiles from the town hall, the closest
+the game allows, the line wrapping round the hall's corners, the geyser past one end.
+Every cliff and shore is drawn as StarEdit draws it, and each ramp is placed where
+StarEdit's own placement rule takes it, then kept only if a unit can walk up it.
+
+StarCraft's ramps all lead down to the south: no tileset has one up a north-facing cliff.
+So a player's bases are never turned upside down with the map. A player at the bottom has
+their main above their ramp, as a player at the top does, and the foot of the ramp stands
+where the symmetry puts it. Every walk out of a main goes down its ramp, so the walks from
+the mains match: start to start they agree to within a few percent. The walks to the free
+bases agree less closely, since a bottom player's main stands between its ramp and the
+ground above it; the summary gives both numbers.
+
+Before the file is written the map passes Check Map, and every start location is walked to
+every other, and to every free base, over the ground a unit can walk, with mineral fields
+and geysers in the way. Walks the symmetry makes equal are compared: a pair of starts
+against its mirror image, and each player's walks to the free bases against those of the
+player it mirrors. A layout that fails is thrown away and the next one tried, twelve at
+most; when none is within 8% the closest is written, its balance is marked "unbalanced"
+and the first line has a warning instead of a tick. When no layout passes, nothing is
+written and the command exits 1.
+
+The distances in the tables are the command's own walk, in tiles: to the middle of the map
+for each player, and start to start beside the straight line. `--rush` then walks an SCV
+between the starts in the game itself, as
+[`map rush`](#how-far-apart-the-start-locations-are) does, which needs the game engine as
+that command does.
+
+What it does not lay: trees, rocks and other doodads besides the ramps; a third level of
+ground; bridges; neutral buildings and critters. Open the map in scmJS to add them, and
+look at it first with `scmjs map preview`:
+
+```sh
+scmjs map preview "(4)Crossing.scx" --out crossing.png --scale 8
+```
 
 ## Changing a map from the terminal
 
@@ -622,15 +727,15 @@ is refused rather than written.
 
 ## Playing the game: what those commands need
 
-`map trace`, `map cost`, `map rush`, `replay watch` and `bot run` run the game itself, and
-`map preview` draws with its graphics. They need two things on your computer, and nothing
-on a build server:
+`map trace`, `map cost`, `map rush`, `replay watch` and `bot run` run the game itself,
+`map preview` draws with its graphics and `map generate` lays its ground with them. They
+need two things on your computer, and nothing on a build server:
 
 - **The game engine**, the play page's, about 25 MB, fetched from scmjs.dev the first time
   a command needs it and kept in your cache folder (`~/.cache/scmjs` on Linux, the
   equivalent elsewhere; `SCMJS_CACHE` moves it). Each command drives it with a runner of
   its own, and a copy fetched before the play page had a runner is completed the next
-  time. `map preview` needs no engine.
+  time. `map preview` and `map generate` (without `--rush`) need no engine.
 - **Your own installation of StarCraft**, Remastered or 1.16.1, for the game's own files:
   found in the usual places, or named with `--starcraft <folder>` or `SCMJS_STARCRAFT`.
   Nothing of the game is fetched or carried.
@@ -1097,11 +1202,11 @@ when the app is installed.
 `scmjs doctor` says what is on this computer of what the commands need beyond Node, and
 the command for each thing missing: TypeScript for `map build` and a plugin written in
 TypeScript, Docker for `bot new|build`, a copy of StarCraft for the commands that play the
-game (`bot run`, `replay watch`, `map trace`, `map cost` and `map preview`), the game
-engine those commands use, the desktop app for `map open`, whether Claude Code has been
-given `scmjs mcp`, whether you are signed in to scmjs.dev for `map share`, and whether npm
-has a newer scmjs. It ends with the commands this computer can run now, and for each one
-that cannot, the one thing it lacks.
+game (`bot run`, `replay watch`, `map trace`, `map cost`, `map preview` and
+`map generate`), the game engine those commands use, the desktop app for `map open`,
+whether Claude Code has been given `scmjs mcp`, whether you are signed in to scmjs.dev for
+`map share`, and whether npm has a newer scmjs. It ends with the commands this computer
+can run now, and for each one that cannot, the one thing it lacks.
 
 ```
 scmjs 0.9.0 · the newest · Node v24.13.0 · linux x64
@@ -1194,6 +1299,10 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
 | `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
 | `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |
+| `cli/src/generate.ts` | A map from a seed: the plan on the isometric lattice, the base complex and its copies, the ground painted a terrain at a time, the ramps tried until one walks, the walks and checks |
+| `cli/src/generatecmd.ts` | `map generate`'s options, the tileset read from your copy of the game, the summary and its JSON |
+| `cli/src/bases.ts` | Where a base's resources go: the Melee Wizard plugin's layout |
+| `src/editor/isom.ts` | The isometric brush, which `map generate` paints with |
 | `cli/src/init.ts` | A folder of maps set up for git and GitHub: the lines and files it lacks, the workflow and README made from the maps, the git settings |
 | `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
